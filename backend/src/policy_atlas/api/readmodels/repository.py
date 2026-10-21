@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+import html
 import uuid
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from functools import cmp_to_key
 from typing import Any, Literal, cast
 
+import structlog
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.api.contract import (
     EVIDENCE_STATUS_INCLUDED,
     ArtefactOut,
+    AuthorityOut,
     AuthorshipOut,
     BlockOut,
     CaseStudyCardOut,
@@ -27,28 +31,49 @@ from policy_atlas.api.contract import (
     CoverageSnapshotOut,
     DecisionOut,
     EvidenceItemOut,
+    EvidenceProfileOut,
+    ExclusionOut,
     FacetGroupsOut,
     FindingOut,
     FunnelOut,
     GapOut,
     GroupOut,
     GroupsOut,
+    GuessOut,
     IcfFindingOut,
+    InScopeOut,
     IofFindingOut,
     IofStatisticsOut,
+    JudgementOut,
     LandscapeOut,
+    LeverTypeOut,
+    LonglistCountsOut,
+    LonglistOut,
+    LonglistThemeOut,
     MostRelevantNoteOut,
+    OptionDesignOut,
+    OptionDocumentOut,
+    OptionOut,
+    OptionProfileOut,
+    OptionRecordOut,
+    OptionSummaryOut,
+    OutcomeCountOut,
+    OutcomeCountsOut,
     Page,
     PageMeta,
+    ProfileLineOut,
     ReferenceOut,
+    RelationOut,
     SectionOut,
     SourceDossierOut,
+    SourceRecordsOut,
     SourceTagOut,
     ThemeOut,
     ThemeRefItemOut,
     ThemeRefOut,
     ThemeSourceOut,
 )
+from policy_atlas.api.contract.read_models import EvaluatedCountryOut, PlaceSentenceOut
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
 from policy_atlas.core.schema import (
     GROUPING_FACETS,
@@ -56,15 +81,23 @@ from policy_atlas.core.schema import (
     annotation,
     artefact,
     block,
+    capability_run,
     characterisation_result,
     chunk,
     citation,
     event_log,
     evidence_scope,
     extraction_result,
+    finding_reference_union,
     grouping_result,
     implementation_context_finding,
     intervention_outcome_finding,
+    intervention_profile_record,
+    longlist_result,
+    option,
+    option_membership,
+    option_relation,
+    runs,
     search_coverage_record,
     selection_result,
     source_appraisal_result,
@@ -73,12 +106,63 @@ from policy_atlas.core.schema import (
     source_snapshot,
     source_tag,
     synthesis_result,
+    task_link,
+    task_plan,
     task_source_snapshot,
     tss_owns_snapshot,
 )
 from policy_atlas.evidence_search.assess.appraise import SCORE_LABELS
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
+from policy_atlas.evidence_search.extract.extract import record_ids_by_profile
+from policy_atlas.evidence_search.extract.interventions_records import (
+    PROFILE_ID as INTERVENTIONS_PROFILE_ID,
+)
 from policy_atlas.evidence_search.extract.quote_verify import build_basis, locate_unique_span
+from policy_atlas.options_scoping.labels import DocumentLabels, labels_for_snapshots
+from policy_atlas.options_scoping.longlist.coverage import (
+    ROLE_BUCKETS,
+    CoverageMember,
+    document_key,
+    empty_coverage,
+    fold_kind,
+    fold_lookup,
+    fold_programme_names,
+    normalise_doi,
+    option_coverage,
+    plan_outcome_named,
+    stored_folds,
+)
+from policy_atlas.options_scoping.longlist.lever_types import (
+    LEVER_TYPE_KEYS,
+    LEVER_TYPES,
+    TAXONOMY_VERSION,
+)
+from policy_atlas.options_scoping.longlist.where_tried import (
+    NOT_STATED,
+    country_level,
+    document_where,
+    resolve_country,
+)
+from policy_atlas.options_scoping.longlist_intent import longlist_plan_data
+from policy_atlas.options_scoping.option_profile.option_profile import PLACE_SENTENCES_KEY
+from policy_atlas.options_scoping.option_profile.place_sentences import (
+    PlaceDocument,
+    group_places,
+    metadata_year,
+    place_detail,
+    place_name,
+    template_sentence,
+)
+from policy_atlas.runtime.capability_registry import (
+    OPTIONS_SCOPING,
+    expect_scoping_plan,
+    latest_approved_plan_row,
+    validate_plan,
+)
+from policy_atlas.runtime.scoping_plan import (
+    PROFILE_LINE_KEYS,
+    ScopingPlan,
+)
 from policy_atlas.runtime.steering_events import canonical_actor
 from policy_atlas.runtime.steering_history import steering_history
 
@@ -89,7 +173,8 @@ def _metadata_text(metadata: Mapping[str, Any], key: str) -> str | None:
 
 
 def _title(metadata: Mapping[str, Any], locator: str) -> str:
-    return _metadata_text(metadata, "title") or locator
+    title = _metadata_text(metadata, "title")
+    return html.unescape(title) if title else locator
 
 
 def _abstract_fields(
@@ -106,6 +191,236 @@ def _abstract_fields(
 def _year(metadata: Mapping[str, Any]) -> int | None:
     value = metadata.get("publication_year", metadata.get("year"))
     return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+@dataclass(frozen=True)
+class _LineRecord:
+    """One intervention record behind a document line (task 046, amendment 4, R81; S30)."""
+
+    record_id: uuid.UUID
+    role: str
+    created_at: Any
+    programme_name: str | None
+    unit: str | None
+    outcome: str | None
+    outcome_tag: str | None
+    study_country: str | None
+    study_geography: str | None
+    setting: str | None = None
+
+
+@dataclass(frozen=True)
+class _LineContext:
+    """What a document line's record fields are read through: the list's folds, the plan."""
+
+    tried_on: Mapping[str, str]
+    measures: Mapping[str, str]
+    plan_outcomes: Sequence[str]
+
+
+def _line_context(
+    option_profile: object, plan_outcomes: Sequence[str]
+) -> _LineContext:
+    """The stored folding maps (none before the profile has run) and the plan's outcomes."""
+    folds = stored_folds(option_profile)
+    return _LineContext(
+        tried_on=fold_lookup(folds, "tried_on") or {},
+        measures=fold_lookup(folds, "measures") or {},
+        plan_outcomes=list(plan_outcomes),
+    )
+
+
+def clean_text(value: str | None) -> str | None:
+    """Collapse a text's whitespace; ``None`` when nothing is left."""
+    if value is None:
+        return None
+    text = " ".join(value.split())
+    return text or None
+
+
+def _folded_name(name: str | None, names: Mapping[str, str] | None) -> str | None:
+    """The group's shown spelling of a programme name (task 046, amendment 4, R88; S33)."""
+    if name is None or names is None:
+        return name
+    return names.get(name, name)
+
+
+def _first_line_record(records: Sequence[_LineRecord]) -> _LineRecord:
+    """The record a document line's fields come from: by role order, then its words.
+
+    The same rule as the profile step's ``place_sentences._first_member``, so
+    the document line and the place sentence read one record (review of task
+    046, 2026-10-12); a membership row carries no creation time.
+    """
+    rank = {role: index for index, role in enumerate(ROLE_BUCKETS)}
+    return min(
+        records,
+        key=lambda record: (
+            rank.get(record.role, len(rank)),
+            tuple(
+                clean_text(value) or ""
+                for value in (
+                    record.programme_name,
+                    record.unit,
+                    record.outcome,
+                    record.setting,
+                    record.study_geography,
+                    record.study_country,
+                )
+            ),
+            str(record.record_id),
+        ),
+    )
+
+
+def _record_line_fields(
+    records: Sequence[_LineRecord],
+    top: str,
+    context: _LineContext,
+    names: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """A document line's record fields from its member records under the option (S30).
+
+    The first record by role order (:data:`ROLE_BUCKETS`, the option
+    profile's order), then ``created_at``, then record id supplies them:
+    the raw programme name; the unit through the Tried on map; the plan
+    outcome's text when the outcome tag names one, else the outcome through
+    the Measures map (the record's own word when a map lacks it); the
+    geography when it is a place below the document's top level (not the
+    record's own country, not under "multiple countries"). No record (a
+    linked finding) gives no fields and a count of 0 (contract review C6).
+
+    Args:
+        records: The document's member records under the option, DOI twins
+            together.
+        top: The document's top level.
+        context: The folds and the plan.
+        names: The option's programme-name fold (``fold_programme_names``
+            over every member record); the raw name when ``None``.
+
+    Returns:
+        ``programme_name`` · ``tried_on_kind`` · ``measured`` ·
+        ``place_detail`` · ``records_count``.
+    """
+    if not records:
+        return {
+            "programme_name": None,
+            "tried_on_kind": None,
+            "measured": None,
+            "place_detail": None,
+            "records_count": 0,
+        }
+    first = _first_line_record(records)
+    measured = plan_outcome_named(first.outcome_tag, context.plan_outcomes)
+    if measured is None:
+        measured = fold_kind(context.measures, first.outcome)
+    detail = place_detail(first.study_country, first.study_geography, top)
+    return {
+        "programme_name": _folded_name(clean_text(first.programme_name), names),
+        "tried_on_kind": fold_kind(context.tried_on, first.unit),
+        "measured": measured,
+        "place_detail": detail,
+        "records_count": len(records),
+    }
+
+
+#: One record behind a document: ``(document key, document, quality score,
+#: (study_country, study_geography), the intervention record or ``None`` for a
+#: linked finding)``.
+_DocumentEntry = tuple[
+    str, OptionDocumentOut, int | None, tuple[str | None, str | None], _LineRecord | None
+]
+
+
+@dataclass(frozen=True)
+class _DocumentLine:
+    """One collapsed document line with what the place sentences read beside it.
+
+    The first record's own ``unit``, ``setting``, ``outcome`` and
+    ``study_geography`` (task 046, amendment 4, S31) and the quality score.
+    """
+
+    document: OptionDocumentOut
+    quality_score: int | None
+    unit: str | None = None
+    setting: str | None = None
+    outcome: str | None = None
+    study_geography: str | None = None
+
+
+def _collapse_document_lines(
+    entries: list[_DocumentEntry], context: _LineContext | None = None
+) -> list[_DocumentLine]:
+    """One entry per document (task 046, amendment 3, R67), best first.
+
+    Args:
+        entries: ``(document key, document, quality score, (study_country,
+            study_geography), record)`` per record.
+        context: The folds and the plan the record fields are read through
+            (task 046, amendment 4, S30); ``None`` reads them with no folds
+            and no plan.
+
+    Returns:
+        One document per key: the task's own row as its id when any record
+        has one, the highest role, the where-tried top level of all its
+        records (R59, R72; a geography that is the record's own country is
+        that country, S32), the first record's fields (S30), ordered
+        evaluated first, then quality score descending (unrated last), then
+        title and id; beside each, its quality score and its first record's
+        own words (S31).
+    """
+    context = context or _LineContext(tried_on={}, measures={}, plan_outcomes=())
+    rank = {role: index for index, role in enumerate(ROLE_BUCKETS)}
+    groups: dict[str, list[tuple[OptionDocumentOut, int | None]]] = {}
+    places: dict[str, list[tuple[str | None, str | None]]] = {}
+    line_records: dict[str, list[_LineRecord]] = {}
+    names = fold_programme_names(
+        name
+        for _key, _doc, _score, _place, record in entries
+        if record is not None and (name := clean_text(record.programme_name)) is not None
+    )
+    for key, document, score, place, record in entries:
+        groups.setdefault(key, []).append((document, score))
+        places.setdefault(key, []).append(country_level(*place))
+        if record is not None:
+            line_records.setdefault(key, []).append(record)
+    merged: list[_DocumentLine] = []
+    for key, group in groups.items():
+        best_role = min((doc.role for doc, _ in group), key=lambda role: rank[role])
+        own = [item for item in group if item[0].task_source_snapshot_id is not None]
+        document, score = min(
+            own or group,
+            key=lambda item: (
+                -(item[1] if item[1] is not None else -1),
+                item[0].title.casefold(),
+                str(item[0].task_source_snapshot_id or ""),
+            ),
+        )
+        top, _countries = document_where(places[key])
+        records = line_records.get(key, [])
+        fields = _record_line_fields(records, top, context, names)
+        first = _first_line_record(records) if records else None
+        merged.append(
+            _DocumentLine(
+                document=document.model_copy(update={"role": best_role, "place": top, **fields}),
+                quality_score=score,
+                unit=clean_text(first.unit) if first is not None else None,
+                setting=clean_text(first.setting) if first is not None else None,
+                outcome=clean_text(first.outcome) if first is not None else None,
+                study_geography=(
+                    clean_text(first.study_geography) if first is not None else None
+                ),
+            )
+        )
+    merged.sort(
+        key=lambda line: (
+            line.document.role != "evaluated",
+            -(line.quality_score if line.quality_score is not None else -1),
+            line.document.title.casefold(),
+            str(line.document.task_source_snapshot_id or ""),
+        )
+    )
+    return merged
 
 
 def _venue(metadata: Mapping[str, Any]) -> str | None:
@@ -200,8 +515,19 @@ def _url(metadata: Mapping[str, Any], source_locator: str | None = None) -> str 
 GEOGRAPHY_NOT_REPORTED = "Not reported"
 
 
-def _geography(metadata: Mapping[str, Any]) -> str | None:
-    """Read provider publication geography when the acquired snapshot carries it."""
+def publication_country(metadata: Mapping[str, Any]) -> str | None:
+    """Read a document's publication country from its snapshot metadata.
+
+    Shared by the source-geography chart and the options-scoping in-scope
+    check (task 045, S9). The value is the provider's own: an ISO-3166
+    alpha-2 code from OpenAlex, an Overton display name ("UK") from Overton.
+
+    Args:
+        metadata: The snapshot's envelope metadata.
+
+    Returns:
+        The publication country, or ``None`` when the provider sent none.
+    """
     direct = _metadata_text(metadata, "publication_country")
     if direct is not None:
         return direct
@@ -464,25 +790,17 @@ def landscape_out(
         )
         .where(task_source_snapshot.c.task_source_snapshot_id.in_(relevant_ids))
     ).all()
-    classifications = latest_row_by_id(
-        conn.execute(
-            select(
-                source_classification_result.c.task_source_snapshot_id,
-                source_classification_result.c.primary_evidence_type,
-                source_classification_result.c.classified_at,
-            ).where(source_classification_result.c.task_id == task_id)
-        ).all(),
-        "task_source_snapshot_id",
-        "classified_at",
+    labels = labels_for_snapshots(
+        conn, task_id=task_id, tss_ids=[row.task_source_snapshot_id for row in base_rows]
     )
     types: Counter[str] = Counter()
     years: Counter[str] = Counter()
     geographies: Counter[str] = Counter()
     for row in base_rows:
         metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
-        classification = classifications.get(row.task_source_snapshot_id)
-        if classification is not None:
-            types[classification.primary_evidence_type] += 1
+        label = labels.get(row.task_source_snapshot_id)
+        if label is not None and label.evidence_type is not None:
+            types[label.evidence_type] += 1
         year = _year(metadata)
         if year is not None:
             years[str(year)] += 1
@@ -491,7 +809,7 @@ def landscape_out(
         # residual always equal the population drawn — at either scope, because
         # base_rows is already narrowed. An authorship country is never
         # substituted here; the slim authorships answer a different question.
-        geography = _geography(metadata)
+        geography = publication_country(metadata)
         geographies[geography if geography is not None else GEOGRAPHY_NOT_REPORTED] += 1
     characterisation = conn.execute(
         select(characterisation_result.c.themes)
@@ -702,27 +1020,10 @@ def evidence_page(
     ).all()
     screens = _effective_screens(conn, task_id)
     screen_reasons, classification_reasons = _source_reason_maps(conn, task_id)
-    classifications = latest_row_by_id(
-        conn.execute(
-            select(
-                source_classification_result.c.task_source_snapshot_id,
-                source_classification_result.c.primary_evidence_type,
-                source_classification_result.c.classified_at,
-            ).where(source_classification_result.c.task_id == task_id)
-        ).all(),
-        "task_source_snapshot_id",
-        "classified_at",
-    )
-    appraisals = latest_row_by_id(
-        conn.execute(
-            select(
-                source_appraisal_result.c.task_source_snapshot_id,
-                source_appraisal_result.c.quality_score,
-                source_appraisal_result.c.appraised_at,
-            ).where(source_appraisal_result.c.task_id == task_id)
-        ).all(),
-        "task_source_snapshot_id",
-        "appraised_at",
+    # One resolver for every label reader (task 045, S5): own rows, then a
+    # linked task's pinned walk for an inherited document, else absent.
+    labels = labels_for_snapshots(
+        conn, task_id=task_id, tss_ids=[row.task_source_snapshot_id for row in rows]
     )
     extracted = set(
         conn.execute(
@@ -793,11 +1094,11 @@ def evidence_page(
             continue
         if themed_sources is not None and row.task_source_snapshot_id not in themed_sources:
             continue
-        classification = classifications.get(row.task_source_snapshot_id)
-        appraisal = appraisals.get(row.task_source_snapshot_id)
+        label = labels.get(row.task_source_snapshot_id)
+        quality_score = label.quality_score if label is not None else None
         item_origin = _origin(row.origin, metadata)
-        evidence_type_value = classification.primary_evidence_type if classification else None
-        tier = SCORE_LABELS.get(appraisal.quality_score) if appraisal else None
+        evidence_type_value = label.evidence_type if label is not None else None
+        tier = SCORE_LABELS.get(quality_score) if quality_score is not None else None
         year_value = _year(metadata)
         if origin is not None and item_origin != origin:
             continue
@@ -843,7 +1144,7 @@ def evidence_page(
                     abstract=abstract,
                     abstract_source=abstract_source,
                 ),
-                appraisal.quality_score if appraisal is not None else None,
+                quality_score,
             )
         )
     if sort is not None:
@@ -1094,7 +1395,7 @@ def findings_page(
                     stratum_qualifiers=cast(list[dict[str, str]], row["stratum_qualifiers"]),
                     effect_basis=row["effect_basis"],
                     study_geography=row["study_geography"],
-                    population=row["population"],
+                    unit=row["unit"],
                     setting=row["setting"],
                     study_design=row["study_design"],
                 )
@@ -1108,7 +1409,7 @@ def findings_page(
                     context_label=row["context_label"],
                     intervention=row["intervention"],
                     outcome=row["outcome"],
-                    population=row["population"],
+                    unit=row["unit"],
                     setting=row["setting"],
                     study_geography=row["study_geography"],
                     study_design=row["study_design"],
@@ -1184,6 +1485,16 @@ def _finding_groups(conn: Connection, task_id: uuid.UUID) -> dict[uuid.UUID, dic
     return result
 
 
+#: The user's direct actions on the longlist (task 045, contract deliverable 9:
+#: "every direct action is logged as the user's turn in History"). Written by
+#: :mod:`policy_atlas.api.longlist_actions`, for the buttons and the chat verbs
+#: alike.
+OPTION_ADDED = "option.added"
+OPTION_EXCLUDED = "option.excluded"
+OPTION_INCLUDED = "option.included"
+OPTION_EVENT_KINDS: tuple[str, ...] = (OPTION_ADDED, OPTION_EXCLUDED, OPTION_INCLUDED)
+
+
 # The allowlisted audit events. The four lifecycle kinds appear under BOTH
 # generations: `event_log` is append-only, so rows written before task 038 say
 # `project.renamed` / `project.archived` and must still reach the read model.
@@ -1197,12 +1508,39 @@ _EVENT_KINDS = {
     "run.finished",
     "run.interrupted",
     "plan.approved",
+    *OPTION_EVENT_KINDS,
 } | both_generations(*LIFECYCLE_EVENT_KINDS)
 
 
-def _event_decision(row: Any) -> DecisionOut:
+def _option_event_summary(event_type: str, payload: Mapping[str, Any]) -> str:
+    """One History sentence naming the verb, the option and the reason."""
+    name = str(payload.get("option_name") or "an option")
+    reason = payload.get("reason")
+    verb = {
+        OPTION_ADDED: "Added the option",
+        OPTION_EXCLUDED: "Excluded the option",
+        OPTION_INCLUDED: "Included the option",
+    }[event_type]
+    again = " again" if event_type == OPTION_INCLUDED else ""
+    sentence = f"{verb} \u201c{name}\u201d{again}."
+    if isinstance(reason, str) and reason.strip():
+        sentence = f"{sentence[:-1]}: {reason.strip()}"
+    return sentence
+
+
+def _event_decision(row: Any, walk_id: uuid.UUID | None = None) -> DecisionOut:
     payload = row.payload if isinstance(row.payload, Mapping) else {}
     actor = payload.get("actor") if isinstance(payload.get("actor"), str) else None
+    if row.event_type in OPTION_EVENT_KINDS:
+        return DecisionOut(
+            sequence=int(row.sequence),
+            occurred_at=row.occurred_at,
+            kind=row.event_type,
+            summary=_option_event_summary(row.event_type, payload),
+            decided_by=cast(Any, "user") if actor else None,
+            detail=dict(payload),
+            capability_run_id=walk_id,
+        )
     text = {
         "component.completed": "Completed an evidence-search step.",
         "component.failed": "An evidence-search step failed.",
@@ -1227,7 +1565,44 @@ def _event_decision(row: Any) -> DecisionOut:
         summary=text,
         decided_by=cast(Any, "user") if actor else None,
         detail=dict(payload),
+        capability_run_id=walk_id,
     )
+
+
+def walks_of_event_runs(
+    conn: Connection,
+    task_id: uuid.UUID,
+    rows: Iterable[Mapping[Any, Any]],
+    event_types: Collection[str] | None = None,
+) -> dict[uuid.UUID, uuid.UUID]:
+    """Each event's component run → the walk it belongs to, in one query (task 045).
+
+    Args:
+        conn: Open database connection.
+        task_id: The task.
+        rows: ``event_log`` rows as mappings.
+        event_types: Only these events' runs, when given.
+
+    Returns:
+        Component run id → walk id, for runs that belong to a walk.
+    """
+    run_ids = {
+        row["run_id"]
+        for row in rows
+        if row.get("run_id") is not None
+        and (event_types is None or row["event_type"] in event_types)
+    }
+    if not run_ids:
+        return {}
+    return {
+        run_id: walk_id
+        for run_id, walk_id in conn.execute(
+            select(runs.c.run_id, runs.c.capability_run_id)
+            .where(runs.c.task_id == task_id)
+            .where(runs.c.run_id.in_(run_ids))
+        )
+        if walk_id is not None
+    }
 
 
 def decisions_page(
@@ -1243,7 +1618,11 @@ def decisions_page(
         .mappings()
         .all()
     )
-    decision_events: list[DecisionOut] = [_event_decision(row) for row in allowed]
+    walks = walks_of_event_runs(conn, task_id, allowed)
+    decision_events: list[DecisionOut] = [
+        _event_decision(row, walks.get(row.run_id) if row.run_id is not None else None)
+        for row in allowed
+    ]
     for story in steering_history(conn, task_id):
         for event in story["events"]:
             if event["event_type"] != "steering.decision":
@@ -1261,6 +1640,9 @@ def decisions_page(
                     if decided_by in {"user", "agent", "standing_default"}
                     else None,
                     detail=dict(payload),
+                    # A steering event's walk is its story's key, never an
+                    # event_log.run_id join (see runtime.steering_history).
+                    capability_run_id=story["capability_run_id"],
                 )
             )
     decision_events.sort(key=lambda item: item.sequence, reverse=True)
@@ -1356,6 +1738,20 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
         else []
     )
     snapshots = {row.source_snapshot_id for row in citation_rows}
+    # The cited snapshot's own basis (task 046) — not envelope-resolved: it
+    # says whether THIS quote's snapshot is full text or an abstract only.
+    text_basis_by_snapshot = (
+        {
+            row.source_snapshot_id: row.text_basis
+            for row in conn.execute(
+                select(source_snapshot.c.source_snapshot_id, source_snapshot.c.text_basis).where(
+                    source_snapshot.c.source_snapshot_id.in_(snapshots)
+                )
+            )
+        }
+        if snapshots
+        else {}
+    )
     # Bibliographic authority is the document's ENVELOPE snapshot; a cited
     # full-text snapshot is only the textual authority (its metadata carries
     # fetch facts, never a title). Every display read resolves through the
@@ -1396,29 +1792,12 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
         if envelope_ids
         else {}
     )
-    appraisal = latest_row_by_id(
-        conn.execute(
-            select(
-                source_appraisal_result.c.task_source_snapshot_id,
-                source_appraisal_result.c.quality_score,
-                source_appraisal_result.c.appraised_at,
-            ).where(source_appraisal_result.c.task_id == task_id)
-        ).all(),
-        "task_source_snapshot_id",
-        "appraised_at",
-    )
-    # The classified evidence type is the appraisal rubric's scoring input —
-    # surfaced with the label so the UI can say WHY a citation carries a band.
-    citation_classifications = latest_row_by_id(
-        conn.execute(
-            select(
-                source_classification_result.c.task_source_snapshot_id,
-                source_classification_result.c.primary_evidence_type,
-                source_classification_result.c.classified_at,
-            ).where(source_classification_result.c.task_id == task_id)
-        ).all(),
-        "task_source_snapshot_id",
-        "classified_at",
+    # The appraisal tier and the classified evidence type (the rubric's
+    # scoring input, surfaced with the label so the UI can say WHY a citation
+    # carries a band) — both through the label resolver (task 045, S5), over
+    # the documents the citations can resolve to.
+    citation_labels = labels_for_snapshots(
+        conn, task_id=task_id, tss_ids=set(tss_to_envelope)
     )
     citations_by_annotation: dict[uuid.UUID, list[Any]] = {}
     for row in citation_rows:
@@ -1445,7 +1824,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                 refs[doc_key] = len(refs) + 1
                 reference_order.append(doc_key)
             source_meta, locator_text = meta.get(_envelope_id(snapshot_id), ({}, "Unknown source"))
-            score_row = appraisal.get(tss_id) if tss_id is not None else None
+            label = citation_labels.get(tss_id) if tss_id is not None else None
             payload = row_payload
             claim_citations.append(
                 CitationOut(
@@ -1460,15 +1839,11 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                     grounding_rationale=cast(str, payload.get("rationale"))
                     if isinstance(payload.get("rationale"), str)
                     else None,
-                    appraisal_label=SCORE_LABELS.get(score_row.quality_score)
-                    if score_row
+                    appraisal_label=SCORE_LABELS.get(label.quality_score)
+                    if label is not None and label.quality_score is not None
                     else None,
-                    evidence_type=(
-                        classification_row.primary_evidence_type
-                        if tss_id is not None
-                        and (classification_row := citation_classifications.get(tss_id)) is not None
-                        else None
-                    ),
+                    evidence_type=label.evidence_type if label is not None else None,
+                    text_basis=text_basis_by_snapshot.get(snapshot_id),
                 )
             )
         claim_type = (
@@ -1666,6 +2041,12 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
         if isinstance(raw_full_report_intro, str) and raw_full_report_intro.strip() != ""
         else None
     )
+    # What kind of artefact this is and how deep its pass went, exactly as the
+    # roll-up recorded them (task 044, C18): "baseline" / "scoping pass" for an
+    # options-scoping baseline, absent for every Evidence search report. The
+    # Result view reads these words; it never derives them.
+    raw_template = raw_counts.get("template") if isinstance(raw_counts, Mapping) else None
+    raw_depth_label = raw_counts.get("depth_label") if isinstance(raw_counts, Mapping) else None
 
     return ArtefactOut(
         artefact_id=artefact_row["artefact_id"],
@@ -1684,6 +2065,8 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
         references=refs_out,
         most_relevant_notes=mrs_notes_out,
         full_report_intro=full_report_intro_out,
+        template=raw_template if isinstance(raw_template, str) else None,
+        depth_label=raw_depth_label if isinstance(raw_depth_label, str) else None,
     )
 
 
@@ -2343,34 +2726,7 @@ def source_dossier_out(
         status, reason = "screened_out", screen.screen_basis
     else:
         status, reason = "found", None
-    classification = latest_row_by_id(
-        conn.execute(
-            select(
-                source_classification_result.c.task_source_snapshot_id,
-                source_classification_result.c.primary_evidence_type,
-                source_classification_result.c.classified_at,
-            ).where(
-                source_classification_result.c.task_id == task_id,
-                source_classification_result.c.task_source_snapshot_id == source_id,
-            )
-        ).all(),
-        "task_source_snapshot_id",
-        "classified_at",
-    ).get(source_id)
-    appraisal = latest_row_by_id(
-        conn.execute(
-            select(
-                source_appraisal_result.c.task_source_snapshot_id,
-                source_appraisal_result.c.quality_score,
-                source_appraisal_result.c.appraised_at,
-            ).where(
-                source_appraisal_result.c.task_id == task_id,
-                source_appraisal_result.c.task_source_snapshot_id == source_id,
-            )
-        ).all(),
-        "task_source_snapshot_id",
-        "appraised_at",
-    ).get(source_id)
+    label = labels_for_snapshots(conn, task_id=task_id, tss_ids=[source_id]).get(source_id)
     provider_value = metadata.get("provider_fields")
     provider: Mapping[str, Any] = provider_value if isinstance(provider_value, Mapping) else {}
     abstract, abstract_source = _abstract_fields(metadata)
@@ -2393,8 +2749,10 @@ def source_dossier_out(
         origin=_origin(row["origin"], metadata),
         status=cast(Any, status),
         status_reason=reason,
-        evidence_type=classification.primary_evidence_type if classification else None,
-        appraisal_tier=SCORE_LABELS.get(appraisal.quality_score) if appraisal else None,
+        evidence_type=label.evidence_type if label is not None else None,
+        appraisal_tier=SCORE_LABELS.get(label.quality_score)
+        if label is not None and label.quality_score is not None
+        else None,
         cited=cited,
         url=_url(metadata, row["source_locator"]),
         screen_confidence=screen.screen_decision_confidence if screen else None,
@@ -2423,6 +2781,131 @@ def source_dossier_out(
         tags=tags,
         cited_in=_source_cited_in(conn, task_id, source_id),
         authorships=_authorships(metadata),
+    )
+
+
+def source_records_out(
+    conn: Connection,
+    task_id: uuid.UUID,
+    source_id: uuid.UUID,
+    *,
+    option_id: uuid.UUID | None = None,
+) -> SourceRecordsOut:
+    """A document's intervention profile records under the options (R67).
+
+    The source dossier's slot on an options-scoping task (task 046,
+    amendment 3): every record of the document that is a member of an option
+    of this task, one entry per (option, record), in the record's own words.
+    The document's DOI twins among this task's member documents count as the
+    document (the documents list collapses them, R67). Every read is keyed by
+    ``task_id``, so a source row, an option or a record of another task
+    yields nothing; the route's read grade has already decided the task.
+
+    Args:
+        conn: Open database connection. Read-only.
+        task_id: The task, already authorised by the route.
+        source_id: This task's document row (``task_source_snapshot_id``).
+        option_id: Only this option's records, when given. A merged
+            duplicate's id reads as its kept option, as the card does.
+
+    Returns:
+        The records; empty when the document has none under the option(s),
+        when ``source_id`` is not this task's row, or when ``option_id`` is not
+        an option of this task.
+    """
+    empty = SourceRecordsOut(task_source_snapshot_id=source_id)
+    if option_id is not None:
+        found = conn.execute(
+            select(option.c.option_id, option.c.merged_into_option_id).where(
+                option.c.task_id == task_id, option.c.option_id == option_id
+            )
+        ).one_or_none()
+        if found is None:
+            return empty
+        option_id = found.merged_into_option_id or found.option_id
+    tss, om, ipr = task_source_snapshot, option_membership, intervention_profile_record
+    with_metadata = tss.join(
+        source_snapshot, source_snapshot.c.source_snapshot_id == tss.c.source_snapshot_id
+    )
+    opened = conn.execute(
+        select(source_snapshot.c.metadata)
+        .select_from(with_metadata)
+        .where(tss.c.task_id == task_id, tss.c.task_source_snapshot_id == source_id)
+    ).one_or_none()
+    if opened is None:
+        return empty
+    documents = {source_id}
+    doi = normalise_doi(_as_mapping(opened.metadata))
+    if doi is not None:
+        members = (
+            select(om.c.task_source_snapshot_id)
+            .where(om.c.task_id == task_id, om.c.unit_kind == "interventions")
+            .scalar_subquery()
+        )
+        documents.update(
+            row.task_source_snapshot_id
+            for row in conn.execute(
+                select(tss.c.task_source_snapshot_id, source_snapshot.c.metadata)
+                .select_from(with_metadata)
+                .where(tss.c.task_id == task_id, tss.c.task_source_snapshot_id.in_(members))
+            )
+            if normalise_doi(_as_mapping(row.metadata)) == doi
+        )
+    query = (
+        select(
+            om.c.option_id,
+            option.c.name,
+            ipr.c.record_id,
+            ipr.c.intervention,
+            ipr.c.setting,
+            ipr.c.unit,
+            ipr.c.outcome,
+            ipr.c.study_geography,
+            ipr.c.role,
+            ipr.c.created_at,
+        )
+        .select_from(
+            om.join(ipr, (ipr.c.record_id == om.c.unit_id) & (ipr.c.task_id == om.c.task_id))
+            .join(
+                option,
+                (option.c.option_id == om.c.option_id) & (option.c.task_id == om.c.task_id),
+            )
+        )
+        .where(om.c.task_id == task_id)
+        .where(om.c.unit_kind == "interventions")
+        .where(om.c.task_source_snapshot_id.in_(documents))
+        .where(option.c.merged_into_option_id.is_(None))
+        .where(ipr.c.role.in_(ROLE_BUCKETS))
+    )
+    if option_id is not None:
+        query = query.where(om.c.option_id == option_id)
+    rank = {role: index for index, role in enumerate(ROLE_BUCKETS)}
+    rows = sorted(
+        conn.execute(query),
+        key=lambda r: (
+            r.name.casefold(),
+            str(r.option_id),
+            rank[r.role],
+            r.created_at,
+            str(r.record_id),
+        ),
+    )
+    return SourceRecordsOut(
+        task_source_snapshot_id=source_id,
+        records=[
+            OptionRecordOut(
+                option_id=r.option_id,
+                option_name=r.name,
+                record_id=r.record_id,
+                intervention=r.intervention,
+                setting=r.setting,
+                unit=r.unit,
+                outcome=r.outcome,
+                study_geography=r.study_geography,
+                role=cast(Any, r.role),
+            )
+            for r in rows
+        ],
     )
 
 
@@ -2700,3 +3183,1271 @@ def _chunk_metadata(
         )
     ).scalar_one_or_none()
     return metadata if isinstance(metadata, Mapping) else {}
+
+
+# --- The options-scoping longlist (task 045, S12; contract deliverables 9, 11) ---
+#
+# Assembled, never written (D15): the option rows as they stand, the latest
+# ``longlist_result`` (themes, coverage, judgements, guesses, counts) and the
+# membership rows behind "Show the documents". Read-only and deterministic;
+# the same rows always give the same read model.
+
+#: The ``judgements`` key of constrain's deterministic in-scope record —
+#: ``options_scoping.constrain.constrain.IN_SCOPE_EVIDENCE_KEY``, not imported
+#: because that module's in-scope check imports :func:`publication_country`
+#: from here. Pinned equal by a test.
+LONGLIST_IN_SCOPE_KEY = "in_scope_evidence"
+#: The ``judgements`` key of constrain's authority label (task 046, S18) —
+#: ``options_scoping.constrain.constrain.AUTHORITY_KEY``, not imported for the
+#: same reason. It holds no verdict and is never a judgement. Pinned equal by
+#: a test.
+LONGLIST_AUTHORITY_KEY = "authority"
+
+#: The default screens' ids, in the order the card lists them.
+_SCREEN_ORDER: tuple[str, ...] = ("relevant", "distinct", "in_scope")
+_VERDICTS = frozenset({"passes", "breaks", "cannot_check"})
+_LEANINGS = frozenset({"likely_meets", "likely_falls_short", "cannot_say"})
+_DOCUMENT_ROLES = frozenset({"evaluated", "described", "recommended", "mentioned"})
+#: The role a linked finding's kind implies (the longlist component's rule).
+_LINKED_FINDING_ROLE: dict[str, str] = {"iof": "evaluated", "icf": "described"}
+_PROFILE_MARKS = frozenset({"less", "more"})
+#: The two lines that state a fact, not a comparison: never marked (R37).
+_UNMARKED_LINES = frozenset({"who_decides", "dependencies"})
+_AUTHORITY_LABELS = frozenset({"within_your_power", "needs_action_by", "unclear"})
+log = structlog.get_logger()
+
+
+def _as_mapping(value: object) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _count(value: object) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _evaluated_countries_out(raw: object) -> list[EvaluatedCountryOut]:
+    """Coverage's ``evaluated_countries``, read defensively (an older stored record has none)."""
+    out: list[EvaluatedCountryOut] = []
+    for item in raw if isinstance(raw, list) else []:
+        entry = _as_mapping(item)
+        country = entry.get("country")
+        if isinstance(country, str) and country:
+            out.append(
+                EvaluatedCountryOut(country=country, documents=_count(entry.get("documents")))
+            )
+    return out
+
+
+def _found_as(merged: list[str] | None, folded: object) -> list[str]:
+    """The merged duplicates' names, then the folded seeds' (coverage ``folded``).
+
+    De-duplicated on the case-folded name, the first spelling kept (task 046,
+    amendment 3, R63).
+    """
+    names = [*(merged or []), *(_string_list(folded))]
+    out: dict[str, str] = {}
+    for name in names:
+        out.setdefault(name.casefold(), name)
+    return list(out.values())
+
+
+def _lever_reason(result: Any | None, option_id: uuid.UUID) -> str | None:
+    """The lever reason the longlist provenance recorded for an option (R29).
+
+    ``provenance["lever_reason"]`` is ``{option_id: text}``, written by the
+    longlist component beside the runner-up (a kept typing's reason is
+    carried forward from an earlier build) — task 046.
+    """
+    if result is None:
+        return None
+    reasons = _as_mapping(_as_mapping(result.provenance).get("lever_reason"))
+    reason = reasons.get(str(option_id))
+    return reason if isinstance(reason, str) and reason.strip() else None
+
+
+def _latest_longlist_row(conn: Connection, task_id: uuid.UUID) -> Any | None:
+    """The task's latest ``longlist_result`` row (a longlist exists iff one does)."""
+    return conn.execute(
+        select(longlist_result)
+        .where(longlist_result.c.task_id == task_id)
+        .order_by(
+            longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
+        )
+        .limit(1)
+    ).one_or_none()
+
+
+def _scoping_plan_version(
+    conn: Connection, task_id: uuid.UUID, version: int | None
+) -> tuple[int, ScopingPlan | None] | None:
+    """One plan version (``None``: the current approved one) and its scoping plan.
+
+    Returns:
+        ``(version, plan)`` — ``plan`` is ``None`` when the payload is not a
+        valid scoping plan — or ``None`` when there is no such version.
+    """
+    row = (
+        latest_approved_plan_row(conn, task_id)
+        if version is None
+        else conn.execute(
+            select(task_plan.c.version, task_plan.c.payload)
+            .where(task_plan.c.task_id == task_id)
+            .where(task_plan.c.version == version)
+        ).mappings().one_or_none()
+    )
+    if row is None:
+        return None
+    try:
+        plan = expect_scoping_plan(validate_plan(OPTIONS_SCOPING, row["payload"]))
+    except ValueError:
+        return int(row["version"]), None
+    return int(row["version"]), plan
+
+
+def _option_rows(
+    conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID | None = None
+) -> list[Any]:
+    """The task's options on the list: a merged duplicate is left out."""
+    query = (
+        select(option)
+        .where(option.c.task_id == task_id)
+        .where(option.c.merged_into_option_id.is_(None))
+    )
+    if option_id is not None:
+        query = query.where(option.c.option_id == option_id)
+    return list(conn.execute(query.order_by(option.c.created_at, option.c.option_id)))
+
+
+def _also_found_as(
+    conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID | None = None
+) -> dict[uuid.UUID, list[str]]:
+    """Each kept option's merged duplicates' names, oldest first (one option's, when given)."""
+    query = select(option.c.merged_into_option_id, option.c.name).where(
+        option.c.task_id == task_id,
+        option.c.merged_into_option_id.is_not(None)
+        if option_id is None
+        else option.c.merged_into_option_id == option_id,
+    )
+    out: dict[uuid.UUID, list[str]] = {}
+    for kept, name in conn.execute(query.order_by(option.c.created_at, option.c.option_id)):
+        out.setdefault(kept, []).append(name)
+    return out
+
+
+def _option_relations(
+    conn: Connection, task_id: uuid.UUID, names: Mapping[uuid.UUID, str]
+) -> dict[uuid.UUID, list[RelationOut]]:
+    """Each option's relations, from its own side.
+
+    A ``part_of`` row points from the component to the package: the
+    component reads ``part_of`` the package, the package ``has_part`` the
+    component.
+    """
+    out: dict[uuid.UUID, list[RelationOut]] = {}
+    rows = conn.execute(
+        select(option_relation.c.from_option_id, option_relation.c.to_option_id)
+        .where(option_relation.c.task_id == task_id, option_relation.c.kind == "part_of")
+        .order_by(option_relation.c.created_at, option_relation.c.relation_id)
+    )
+    for row in rows:
+        component, package = row.from_option_id, row.to_option_id
+        out.setdefault(component, []).append(
+            RelationOut(
+                kind="part_of", other_option_id=package, other_name=names.get(package, "")
+            )
+        )
+        out.setdefault(package, []).append(
+            RelationOut(
+                kind="has_part", other_option_id=component, other_name=names.get(component, "")
+            )
+        )
+    return out
+
+
+def _design_record(result: Any | None, column: str, row: Any) -> Mapping[str, Any]:
+    """The result's ``judgements`` or ``guesses`` entry for the option's design version."""
+    if result is None:
+        return {}
+    by_option = _as_mapping(_as_mapping(getattr(result, column)).get(str(row.option_id)))
+    return _as_mapping(by_option.get(str(row.design_version)))
+
+
+def _in_scope_out(record: Mapping[str, Any]) -> InScopeOut | None:
+    check = _as_mapping(record.get(LONGLIST_IN_SCOPE_KEY))
+    restriction = check.get("restriction")
+    if not isinstance(restriction, str) or not restriction:
+        return None
+    return InScopeOut(
+        restriction=restriction,
+        in_scope_documents=_count(check.get("in_scope_documents")),
+        documents=_count(check.get("documents")),
+    )
+
+
+def _exclusion_out(row: Any) -> ExclusionOut | None:
+    """Why an excluded option is excluded; ``None`` for an included one.
+
+    An included option may still carry a ``by: "user"`` record — the marker a
+    user's *include again* leaves so constrain never re-excludes it — which is
+    never shown.
+    """
+    if row.state != "excluded":
+        return None
+    raw = _as_mapping(row.exclusion)
+    if not raw:
+        return None
+    return ExclusionOut(
+        constraint=str(raw.get("constraint") or ""),
+        reason=str(raw.get("reason") or ""),
+        by="user" if raw.get("by") == "user" else "constrain",
+    )
+
+
+def _string_list(value: object) -> list[str]:
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+
+def _profile_out(entry: Mapping[str, Any], option_id: uuid.UUID) -> OptionProfileOut | None:
+    """The option's profile from its ``option_profile`` entry (R36, R37, R41).
+
+    Served only when the entry holds all eight lines, each with a sentence;
+    otherwise ``None`` and a warning. A mark that is not ``less`` or ``more``
+    is ``None``; ``who_decides`` and ``dependencies`` never carry one.
+    """
+    if not entry:
+        return None
+    stored = _as_mapping(entry.get("lines"))
+    lines: list[ProfileLineOut] = []
+    for key in PROFILE_LINE_KEYS:
+        line = _as_mapping(stored.get(key))
+        sentence = line.get("sentence")
+        if not isinstance(sentence, str) or not sentence.strip():
+            log.warning("readmodel.option_profile_incomplete", option_id=str(option_id))
+            return None
+        mark = line.get("mark")
+        lines.append(
+            ProfileLineOut(
+                key=cast(Any, key),
+                sentence=sentence,
+                mark=cast(Any, mark)
+                if mark in _PROFILE_MARKS and key not in _UNMARKED_LINES
+                else None,
+            )
+        )
+    setting = _as_mapping(entry.get("setting"))
+    settings = [
+        value
+        for value in (setting.get("main"), setting.get("second"))
+        if isinstance(value, str) and value.strip()
+    ]
+    return OptionProfileOut(lines=lines, settings=settings)
+
+
+def _authority_out(record: Mapping[str, Any]) -> AuthorityOut | None:
+    """The authority label constrain wrote under ``judgements`` (R43), or ``None``."""
+    entry = _as_mapping(record.get(LONGLIST_AUTHORITY_KEY))
+    label = entry.get("label")
+    if label not in _AUTHORITY_LABELS:
+        return None
+    body, reason = entry.get("body"), entry.get("reason")
+    return AuthorityOut(
+        label=cast(Any, label),
+        body=body if isinstance(body, str) and body.strip() else None,
+        reason=reason if isinstance(reason, str) and reason.strip() else None,
+    )
+
+
+def _outcome_counts_out(raw: object) -> OutcomeCountsOut:
+    """Coverage's ``outcome_counts``, read defensively (R42)."""
+    counts = _as_mapping(raw)
+    by_outcome: list[OutcomeCountOut] = []
+    listed = counts.get("by_outcome")
+    for item in listed if isinstance(listed, list) else []:
+        entry = _as_mapping(item)
+        outcome = entry.get("outcome")
+        if isinstance(outcome, str) and outcome:
+            by_outcome.append(
+                OutcomeCountOut(
+                    outcome=outcome,
+                    documents=_count(entry.get("documents")),
+                    evaluated=_count(entry.get("evaluated")),
+                )
+            )
+    return OutcomeCountsOut(
+        evaluating_documents=_count(counts.get("evaluating_documents")),
+        by_outcome=by_outcome,
+    )
+
+
+def _option_summary_fields(
+    row: Any,
+    coverage: Mapping[str, Any],
+    relations: list[RelationOut],
+    record: Mapping[str, Any],
+    profile_entry: Mapping[str, Any],
+    *,
+    search_pending: bool = False,
+    from_section: str | None = None,
+    also_found_as: list[str] | None = None,
+    lever_reason: str | None = None,
+    outcomes_total: int = 0,
+) -> dict[str, Any]:
+    return {
+        "option_id": row.option_id,
+        "name": row.name,
+        "description": row.description,
+        "outcomes_served": _string_list(row.outcomes),
+        "origin": row.origin,
+        "state": row.state,
+        "exclusion": _exclusion_out(row),
+        "no_in_scope_evidence": bool(row.no_in_scope_evidence),
+        "primary_lever_type": row.primary_lever_type,
+        "lever_none_fits_reason": row.lever_none_fits_reason,
+        "lever_reason": lever_reason,
+        "secondary_lever_types": _string_list(row.secondary_lever_types),
+        "ambition": row.ambition if row.ambition in _PROFILE_MARKS else None,
+        "ambition_reason": row.ambition_reason,
+        "profile": _profile_out(profile_entry, row.option_id),
+        "authority": _authority_out(record),
+        "taxonomy_version": row.taxonomy_version,
+        "document_count": _count(coverage.get("documents")),
+        "evaluated_count": _count(_as_mapping(coverage.get("role")).get("evaluated")),
+        "relations": relations,
+        "search_pending": search_pending,
+        "from_section": from_section,
+        "also_found_as": _found_as(also_found_as, coverage.get("folded")),
+        "evaluated_countries": _evaluated_countries_out(coverage.get("evaluated_countries")),
+        "outcomes_evaluated": _count(coverage.get("outcomes_evaluated")),
+        "outcomes_total": outcomes_total,
+    }
+
+
+def _report_sections(
+    conn: Connection, task_id: uuid.UUID, rows: Iterable[Any]
+) -> dict[uuid.UUID, str]:
+    """The report section each *from your evidence search* option came from (F3).
+
+    ``suggest`` records it in its run's ``component.completed`` summary under
+    ``report_sections`` (``{option_id: heading}``); the option row's
+    ``created_by_run_id`` names that run.
+    """
+    wanted = {
+        row.option_id: row.created_by_run_id
+        for row in rows
+        if row.origin == "from_evidence_search" and row.created_by_run_id is not None
+    }
+    if not wanted:
+        return {}
+    sections: dict[str, Any] = {}
+    for (payload,) in conn.execute(
+        select(event_log.c.payload)
+        .where(event_log.c.task_id == task_id)
+        .where(event_log.c.run_id.in_(set(wanted.values())))
+        .where(event_log.c.event_type == "component.completed")
+        .order_by(event_log.c.sequence)
+    ):
+        summary = _as_mapping(payload)
+        if summary.get("component") == "suggest":
+            sections.update(_as_mapping(summary.get("report_sections")))
+    out: dict[uuid.UUID, str] = {}
+    for oid in wanted:
+        heading = sections.get(str(oid))
+        if isinstance(heading, str) and heading.strip():
+            out[oid] = heading
+    return out
+
+
+def _option_coverage(result: Any | None, option_id: uuid.UUID) -> Mapping[str, Any]:
+    """The option's coverage in the result; an option added since has none yet."""
+    if result is not None:
+        coverage = _as_mapping(result.coverage).get(str(option_id))
+        if isinstance(coverage, Mapping):
+            return coverage
+    return empty_coverage()
+
+
+def _walk_of_run(conn: Connection, task_id: uuid.UUID, run_id: uuid.UUID) -> uuid.UUID | None:
+    value = conn.execute(
+        select(runs.c.capability_run_id).where(runs.c.run_id == run_id, runs.c.task_id == task_id)
+    ).scalar_one_or_none()
+    return value if isinstance(value, uuid.UUID) else None
+
+
+@dataclass(frozen=True)
+class _AddedSearch:
+    """An option added since the build, read through its own option search.
+
+    ``pending`` while that walk is running or paused; ``units`` once it has
+    ended (empty when it found nothing): one row per intervention profile
+    record the search found, with its document's snapshot fields.
+    """
+
+    pending: bool
+    units: tuple[Any, ...] = ()
+
+
+def _added_searches(
+    conn: Connection,
+    task_id: uuid.UUID,
+    option_ids: Collection[uuid.UUID],
+) -> dict[uuid.UUID, _AddedSearch]:
+    """Each given option's latest parentless option search, and what it found.
+
+    An option added after the build (the verb *add*, ``POST /options``) has an
+    option search of its own — a walk with no parent under a ``targeted``
+    intent record naming the option — but nothing assigns its records to the
+    option until the next build. Until then the read model reads them
+    straight from that scope: its latest intervention-profile roll-up (the
+    records the profile wrote over the scope's screened-in documents, the set
+    the longlist component reads), comparators left out. The longlist walk's
+    own children are never read here: their records are the build's to assign.
+
+    Args:
+        conn: Open database connection. Read-only.
+        task_id: The task.
+        option_ids: The options to look up (those with no membership row and
+            no coverage in the latest build).
+
+    Returns:
+        One entry per option that has such a search.
+    """
+    if not option_ids:
+        return {}
+    wanted = {str(oid) for oid in option_ids}
+    walks = conn.execute(
+        select(
+            capability_run.c.status,
+            capability_run.c.evidence_scope_id,
+            evidence_scope.c.context["option_id"].astext.label("option_id"),
+        )
+        .select_from(
+            capability_run.join(
+                evidence_scope,
+                (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+                & (evidence_scope.c.task_id == capability_run.c.task_id),
+            )
+        )
+        .where(capability_run.c.task_id == task_id)
+        .where(capability_run.c.parent_capability_run_id.is_(None))
+        .where(evidence_scope.c.purpose == "targeted")
+        .where(evidence_scope.c.context["option_id"].astext.in_(wanted))
+        .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
+    ).all()
+    latest: dict[uuid.UUID, Any] = {}
+    for walk in walks:
+        latest.setdefault(uuid.UUID(walk.option_id), walk)
+    ended = {
+        oid: walk.evidence_scope_id
+        for oid, walk in latest.items()
+        if walk.status not in ("running", "paused")
+    }
+    record_ids: dict[uuid.UUID, list[uuid.UUID]] = {}
+    if ended:
+        scopes = set(ended.values())
+        rollups = conn.execute(
+            select(extraction_result.c.evidence_scope_id, extraction_result.c.docs)
+            .where(extraction_result.c.task_id == task_id)
+            .where(extraction_result.c.evidence_scope_id.in_(scopes))
+            .order_by(
+                extraction_result.c.created_at.desc(),
+                extraction_result.c.extraction_result_id.desc(),
+            )
+        )
+        # Newest first, read lazily: stop once every scope has its roll-up.
+        for rollup in rollups:
+            if len(record_ids) == len(scopes):
+                break
+            if rollup.evidence_scope_id in record_ids:
+                continue
+            docs = rollup.docs if isinstance(rollup.docs, list) else []
+            ids = record_ids_by_profile([d for d in docs if isinstance(d, Mapping)]).get(
+                INTERVENTIONS_PROFILE_ID
+            )
+            if ids is None:
+                continue
+            parsed: list[uuid.UUID] = []
+            for raw in ids:
+                try:
+                    parsed.append(uuid.UUID(str(raw)))
+                except ValueError:
+                    continue
+            record_ids[rollup.evidence_scope_id] = parsed
+    units_by_scope: dict[uuid.UUID, list[Any]] = {}
+    all_ids = {rid for ids in record_ids.values() for rid in ids}
+    if all_ids:
+        # One extraction record can be listed by several searches' roll-ups
+        # (a shared document): credit it to every scope that lists it (A5).
+        scopes_of: dict[uuid.UUID, list[uuid.UUID]] = {}
+        for scope, ids in record_ids.items():
+            for rid in ids:
+                scopes_of.setdefault(rid, []).append(scope)
+        ipr = intervention_profile_record
+        rows = conn.execute(
+            select(
+                ipr.c.record_id,
+                ipr.c.extraction_record_id,
+                ipr.c.role,
+                ipr.c.unit,
+                ipr.c.setting,
+                ipr.c.outcome,
+                ipr.c.study_geography,
+                ipr.c.unit_tag,
+                ipr.c.outcome_tag,
+                ipr.c.intervention,
+                ipr.c.programme_name,
+                ipr.c.study_country,
+                ipr.c.created_at,
+                source_extraction_record.c.task_source_snapshot_id,
+                source_extraction_record.c.basis,
+                source_snapshot.c.metadata,
+                source_snapshot.c.source_locator,
+            )
+            .select_from(
+                ipr.join(
+                    source_extraction_record,
+                    (source_extraction_record.c.extraction_record_id == ipr.c.extraction_record_id)
+                    & (source_extraction_record.c.task_id == ipr.c.task_id),
+                )
+                .join(
+                    task_source_snapshot,
+                    (task_source_snapshot.c.task_source_snapshot_id
+                     == source_extraction_record.c.task_source_snapshot_id)
+                    & (task_source_snapshot.c.task_id == ipr.c.task_id),
+                )
+                .join(
+                    source_snapshot,
+                    source_snapshot.c.source_snapshot_id
+                    == task_source_snapshot.c.source_snapshot_id,
+                )
+            )
+            .where(ipr.c.task_id == task_id)
+            .where(ipr.c.extraction_record_id.in_(all_ids))
+            .where(ipr.c.role != "comparator")
+            .order_by(source_extraction_record.c.task_source_snapshot_id, ipr.c.record_id)
+        ).all()
+        for row in rows:
+            if row.role not in _DOCUMENT_ROLES:
+                continue
+            for scope in scopes_of[row.extraction_record_id]:
+                units_by_scope.setdefault(scope, []).append(row)
+    return {
+        oid: _AddedSearch(
+            pending=oid not in ended,
+            units=tuple(units_by_scope.get(ended[oid], ())) if oid in ended else (),
+        )
+        for oid in latest
+    }
+
+
+def _search_labels(
+    conn: Connection, task_id: uuid.UUID, searches: Iterable[_AddedSearch]
+) -> dict[uuid.UUID, DocumentLabels]:
+    """The labels of every document the given added searches found, in one read."""
+    tss_ids = {unit.task_source_snapshot_id for search in searches for unit in search.units}
+    return labels_for_snapshots(conn, task_id=task_id, tss_ids=tss_ids) if tss_ids else {}
+
+
+def _members_by_option(conn: Connection, task_id: uuid.UUID) -> set[uuid.UUID]:
+    """The task's options that hold at least one membership row."""
+    return {
+        oid
+        for (oid,) in conn.execute(
+            select(option_membership.c.option_id)
+            .where(option_membership.c.task_id == task_id)
+            .distinct()
+        )
+    }
+
+
+def _needs_search_read(
+    rows: Iterable[Any], result: Any | None, members: set[uuid.UUID]
+) -> list[uuid.UUID]:
+    """Options with no membership row and no coverage in the latest build."""
+    coverage = _as_mapping(result.coverage) if result is not None else {}
+    return [
+        row.option_id
+        for row in rows
+        if row.option_id not in members and str(row.option_id) not in coverage
+    ]
+
+
+def _search_coverage(
+    conn: Connection,
+    task_id: uuid.UUID,
+    search: _AddedSearch,
+    plan_outcomes: Sequence[str] = (),
+    *,
+    labels: Mapping[uuid.UUID, DocumentLabels],
+    folds: Mapping[str, Mapping[str, str]] | None = None,
+    where_country: str | None = None,
+) -> Mapping[str, Any]:
+    """An added option's coverage from its own search's records (DOI-collapsed).
+
+    The list's stored folding maps give its kinds (task 046, amendment 3, S21);
+    the plan's Where country leads its evaluated countries (amendment 4, S29).
+    """
+    if not search.units:
+        return empty_coverage()
+    return option_coverage(
+        [
+            CoverageMember(
+                unit_kind="interventions",
+                doc_key=document_key(
+                    doi=normalise_doi(_as_mapping(unit.metadata)),
+                    document_id=unit.task_source_snapshot_id,
+                ),
+                tss_id=unit.task_source_snapshot_id,
+                role=unit.role,
+                basis=unit.basis,
+                flagged=False,
+                unit=unit.unit,
+                setting=unit.setting,
+                outcome=unit.outcome,
+                study_geography=unit.study_geography,
+                intervention=unit.intervention,
+                unit_tag=unit.unit_tag,
+                outcome_tag=unit.outcome_tag,
+                programme_name=unit.programme_name,
+                study_country=unit.study_country,
+            )
+            for unit in search.units
+        ],
+        labels=labels,
+        plan_outcomes=plan_outcomes,
+        folds=folds,
+        where_country=where_country,
+    )
+
+
+def _search_documents(
+    search: _AddedSearch, context: _LineContext, labels: Mapping[uuid.UUID, DocumentLabels]
+) -> list[_DocumentLine]:
+    """An added option's documents from its own search, collapsed per document."""
+    out: list[_DocumentEntry] = []
+    for unit in search.units:
+        tss_id = unit.task_source_snapshot_id
+        metadata = _as_mapping(unit.metadata)
+        label = labels.get(tss_id)
+        evidence_type, tier = _label_fields(label)
+        title = _title(metadata, unit.source_locator)
+        out.append(
+            (
+                document_key(doi=normalise_doi(metadata), document_id=tss_id),
+                OptionDocumentOut(
+                    task_source_snapshot_id=tss_id,
+                    title=title,
+                    role=cast(Any, unit.role),
+                    evidence_type=evidence_type,
+                    tier=tier,
+                    year=metadata_year(metadata),
+                ),
+                label.quality_score if label is not None else None,
+                (unit.study_country, unit.study_geography),
+                _LineRecord(
+                    record_id=unit.record_id,
+                    role=unit.role,
+                    created_at=unit.created_at,
+                    programme_name=unit.programme_name,
+                    unit=unit.unit,
+                    outcome=unit.outcome,
+                    outcome_tag=unit.outcome_tag,
+                    study_country=unit.study_country,
+                    study_geography=unit.study_geography,
+                    setting=unit.setting,
+                ),
+            )
+        )
+    return _collapse_document_lines(out, context)
+
+
+def _plan_outcomes(plan: ScopingPlan | None) -> list[str]:
+    return [outcome.text for outcome in plan.outcomes] if plan is not None else []
+
+
+def _plan_where_country(plan: ScopingPlan | None) -> str | None:
+    """The plan's Where as one country's short name, or ``None`` (task 046, amendment 4, S29a)."""
+    resolved = resolve_country(plan.where.text) if plan is not None else None
+    return resolved[1] if resolved is not None else None
+
+
+def _plan_target_unit(plan: ScopingPlan | None) -> str | None:
+    """The plan's target unit as the folding call read it (place stripped)."""
+    if plan is None:
+        return None
+    target_unit = longlist_plan_data(plan)["target_unit"]
+    return target_unit if isinstance(target_unit, str) else None
+
+
+def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
+    """Assemble the task's longlist, or ``None`` when no longlist exists.
+
+    The latest ``longlist_result`` (by ``created_at``, the ``artefact_out``
+    idiom) supplies the themes, the coverage and the run counts; every option
+    row of the task is listed as it stands, so an option the user excluded or
+    added since the build reads as it is now.
+
+    Args:
+        conn: Open database connection. Read-only.
+        task_id: The options-scoping task.
+
+    Returns:
+        The longlist, or ``None`` (the route's 404) before the first build.
+    """
+    result = _latest_longlist_row(conn, task_id)
+    if result is None:
+        return None
+    rows = _option_rows(conn, task_id)
+    by_id = {row.option_id: row for row in rows}
+    relations = _option_relations(conn, task_id, {row.option_id: row.name for row in rows})
+    built_from = _scoping_plan_version(conn, task_id, int(result.plan_version))
+
+    themes: list[LonglistThemeOut] = []
+    themed: list[uuid.UUID] = []
+    for raw in result.themes if isinstance(result.themes, list) else []:
+        theme = _as_mapping(raw)
+        try:
+            theme_id = uuid.UUID(str(theme.get("theme_id")))
+        except ValueError:
+            continue
+        option_ids: list[uuid.UUID] = []
+        for value in _string_list(theme.get("option_ids")):
+            try:
+                oid = uuid.UUID(value)
+            except ValueError:
+                continue
+            if oid in by_id and oid not in themed:
+                option_ids.append(oid)
+                themed.append(oid)
+        themes.append(
+            LonglistThemeOut(
+                theme_id=theme_id,
+                name=str(theme.get("name") or ""),
+                description=str(theme.get("description") or ""),
+                option_ids=option_ids,
+            )
+        )
+    themed_set = set(themed)
+    unthemed = [row.option_id for row in rows if row.option_id not in themed_set]
+    searches = _added_searches(
+        conn, task_id, _needs_search_read(rows, result, _members_by_option(conn, task_id))
+    )
+    plan_outcomes = _plan_outcomes(built_from[1] if built_from else None)
+    where_country = _plan_where_country(built_from[1] if built_from else None)
+    folds = stored_folds(result.option_profile)
+    sections = _report_sections(conn, task_id, rows)
+    merged = _also_found_as(conn, task_id)
+    search_labels = _search_labels(conn, task_id, searches.values())
+
+    def coverage_of(oid: uuid.UUID) -> Mapping[str, Any]:
+        search = searches.get(oid)
+        if search is not None:
+            return _search_coverage(
+                conn,
+                task_id,
+                search,
+                plan_outcomes,
+                labels=search_labels,
+                folds=folds,
+                where_country=where_country,
+            )
+        return _option_coverage(result, oid)
+
+    options = [
+        OptionSummaryOut(
+            **_option_summary_fields(
+                by_id[oid],
+                coverage_of(oid),
+                relations.get(oid, []),
+                _design_record(result, "judgements", by_id[oid]),
+                _design_record(result, "option_profile", by_id[oid]),
+                search_pending=oid in searches and searches[oid].pending,
+                from_section=sections.get(oid),
+                also_found_as=merged.get(oid),
+                lever_reason=_lever_reason(result, oid),
+                outcomes_total=len(plan_outcomes),
+            )
+        )
+        for oid in [*themed, *unthemed]
+    ]
+    counts = LonglistCountsOut(
+        options=len(rows),
+        themes=len(themes),
+        included=sum(1 for row in rows if row.state == "included"),
+        excluded=sum(1 for row in rows if row.state == "excluded"),
+        no_in_scope=sum(
+            1 for row in rows if row.state == "included" and row.no_in_scope_evidence
+        ),
+        none_fits=sum(
+            1
+            for row in rows
+            if row.primary_lever_type is None
+            and row.lever_none_fits_reason is not None
+        ),
+    )
+    taxonomy = _as_mapping(result.provenance).get("taxonomy_version")
+    return LonglistOut(
+        run_id=result.run_id,
+        capability_run_id=_walk_of_run(conn, task_id, result.run_id),
+        plan_version=int(result.plan_version),
+        counts=counts,
+        themes=themes,
+        unthemed_option_ids=unthemed,
+        options=options,
+        lever_types=list(LEVER_TYPE_KEYS),
+        lever_type_definitions=[
+            LeverTypeOut(key=lever.key, definition=lever.definition) for lever in LEVER_TYPES
+        ],
+        # ponytail: the current taxonomy only; no v1-typed list was ever deployed.
+        lever_type_definitions_by_version={
+            TAXONOMY_VERSION: [
+                LeverTypeOut(key=lever.key, definition=lever.definition) for lever in LEVER_TYPES
+            ]
+        },
+        taxonomy_version=taxonomy if isinstance(taxonomy, str) else TAXONOMY_VERSION,
+    )
+
+
+def _constraint_order(constraint_id: str) -> tuple[int, int, str]:
+    """Requirements by number, then the three screens, then anything else."""
+    prefix, _, number = constraint_id.partition("-")
+    if prefix == "req" and number.isdigit():
+        return 0, int(number), constraint_id
+    if constraint_id in _SCREEN_ORDER:
+        return 1, _SCREEN_ORDER.index(constraint_id), constraint_id
+    if prefix == "pref" and number.isdigit():
+        return 2, int(number), constraint_id
+    return 3, 0, constraint_id
+
+
+def _judgements_out(record: Mapping[str, Any]) -> list[JudgementOut]:
+    out: list[JudgementOut] = []
+    for constraint_id in sorted(record, key=_constraint_order):
+        if constraint_id in (LONGLIST_IN_SCOPE_KEY, LONGLIST_AUTHORITY_KEY):
+            continue
+        entry = _as_mapping(record[constraint_id])
+        verdict = entry.get("verdict")
+        if verdict not in _VERDICTS:
+            continue
+        out.append(
+            JudgementOut(
+                constraint_id=constraint_id,
+                constraint_text=str(entry.get("constraint_text") or constraint_id),
+                verdict=cast(Any, verdict),
+                reason=str(entry.get("reason") or ""),
+            )
+        )
+    return out
+
+
+def _guesses_out(record: Mapping[str, Any]) -> list[GuessOut]:
+    out: list[GuessOut] = []
+    for constraint_id in sorted(record, key=_constraint_order):
+        entry = _as_mapping(record[constraint_id])
+        leaning = entry.get("leaning")
+        guess = entry.get("guess")
+        if leaning not in _LEANINGS or not isinstance(guess, str):
+            continue
+        out.append(
+            GuessOut(
+                constraint_id=constraint_id,
+                constraint_text=str(entry.get("constraint_text") or constraint_id),
+                guess=guess,
+                leaning=cast(Any, leaning),
+            )
+        )
+    return out
+
+
+def _evidence_profile(coverage: Mapping[str, Any]) -> EvidenceProfileOut:
+    return EvidenceProfileOut(
+        outcome_counts=_outcome_counts_out(coverage.get("outcome_counts")),
+    )
+
+
+def _design_out(row: Any) -> OptionDesignOut:
+    raw = _as_mapping(row.design)
+    return OptionDesignOut(
+        name=str(raw.get("name") or row.name),
+        description=str(raw.get("description") or row.description),
+        design_features=_string_list(raw.get("design_features")),
+        outcomes_served=_string_list(raw.get("outcomes_served")) or _string_list(row.outcomes),
+        assumed=_string_list(raw.get("assumed")),
+        version=int(row.design_version),
+    )
+
+
+def _label_fields(label: DocumentLabels | None) -> tuple[str | None, str | None]:
+    if label is None or label.provenance == "absent":
+        return None, None
+    tier = SCORE_LABELS.get(label.quality_score) if label.quality_score is not None else None
+    return label.evidence_type, tier
+
+
+def _option_documents(
+    conn: Connection, task_id: uuid.UUID, members: Sequence[Any], context: _LineContext
+) -> list[_DocumentLine]:
+    """The documents behind an option, one per document (DOI twins collapsed, R67).
+
+    Own records resolve through this task's document row; a linked task's
+    finding resolves through the source task's document row (the reach the
+    longlist component already has through the link) and, where the task
+    holds the same snapshot, this task's row for its labels. Each line
+    carries its first member record's fields (task 046, amendment 4, S30).
+    ``members`` are the option's membership rows.
+    """
+    if not members:
+        return []
+    own_ids = [m.unit_id for m in members if m.unit_kind == "interventions"]
+    records = (
+        {
+            row.record_id: row
+            for row in conn.execute(
+                select(
+                    intervention_profile_record.c.record_id,
+                    intervention_profile_record.c.role,
+                    intervention_profile_record.c.study_geography,
+                    intervention_profile_record.c.study_country,
+                    intervention_profile_record.c.unit,
+                    intervention_profile_record.c.setting,
+                    intervention_profile_record.c.outcome,
+                    intervention_profile_record.c.outcome_tag,
+                    intervention_profile_record.c.programme_name,
+                    intervention_profile_record.c.created_at,
+                )
+                .where(intervention_profile_record.c.task_id == task_id)
+                .where(intervention_profile_record.c.record_id.in_(own_ids))
+            )
+        }
+        if own_ids
+        else {}
+    )
+    linked = [m for m in members if m.unit_kind in _LINKED_FINDING_ROLE]
+    findings: dict[tuple[uuid.UUID, uuid.UUID], Any] = {}
+    if linked:
+        fru = finding_reference_union
+        source_tss = task_source_snapshot.alias("source_tss")
+        for row in conn.execute(
+            select(
+                fru.c.finding_id,
+                fru.c.task_id,
+                fru.c.kind,
+                fru.c.study_geography,
+                source_snapshot.c.source_snapshot_id,
+                source_snapshot.c.metadata,
+                source_snapshot.c.source_locator,
+            )
+            .select_from(
+                fru.join(
+                    source_extraction_record,
+                    (source_extraction_record.c.extraction_record_id == fru.c.extraction_record_id)
+                    & (source_extraction_record.c.task_id == fru.c.task_id),
+                )
+                .join(
+                    source_tss,
+                    (source_tss.c.task_source_snapshot_id
+                     == source_extraction_record.c.task_source_snapshot_id)
+                    & (source_tss.c.task_id == fru.c.task_id),
+                )
+                .join(
+                    source_snapshot,
+                    source_snapshot.c.source_snapshot_id == source_tss.c.source_snapshot_id,
+                )
+            )
+            .where(fru.c.task_id.in_({m.unit_task_id for m in linked}))
+            .where(fru.c.finding_id.in_([m.unit_id for m in linked]))
+            # Only a task this one is linked from (S2): a membership row's
+            # task id is not trusted on its own.
+            .where(
+                select(task_link.c.link_id)
+                .where(task_link.c.target_task_id == task_id)
+                .where(task_link.c.source_task_id == fru.c.task_id)
+                .exists()
+            )
+        ):
+            findings[(row.task_id, row.finding_id)] = row
+    own_by_snapshot = (
+        {
+            row.source_snapshot_id: row.task_source_snapshot_id
+            for row in conn.execute(
+                select(
+                    task_source_snapshot.c.source_snapshot_id,
+                    task_source_snapshot.c.task_source_snapshot_id,
+                )
+                .where(task_source_snapshot.c.task_id == task_id)
+                .where(
+                    task_source_snapshot.c.source_snapshot_id.in_(
+                        {row.source_snapshot_id for row in findings.values()}
+                    )
+                )
+            )
+        }
+        if findings
+        else {}
+    )
+    member_tss = {m.task_source_snapshot_id for m in members if m.task_source_snapshot_id}
+    documents = (
+        {
+            row.task_source_snapshot_id: row
+            for row in conn.execute(
+                select(
+                    task_source_snapshot.c.task_source_snapshot_id,
+                    source_snapshot.c.metadata,
+                    source_snapshot.c.source_locator,
+                )
+                .select_from(
+                    task_source_snapshot.join(
+                        source_snapshot,
+                        source_snapshot.c.source_snapshot_id
+                        == task_source_snapshot.c.source_snapshot_id,
+                    )
+                )
+                .where(task_source_snapshot.c.task_id == task_id)
+                .where(task_source_snapshot.c.task_source_snapshot_id.in_(member_tss))
+            )
+        }
+        if member_tss
+        else {}
+    )
+    labels = labels_for_snapshots(
+        conn, task_id=task_id, tss_ids=member_tss | set(own_by_snapshot.values())
+    )
+
+    out: list[_DocumentEntry] = []
+    for member in members:
+        if member.unit_kind == "interventions":
+            record = records.get(member.unit_id)
+            document = documents.get(member.task_source_snapshot_id)
+            if record is None or document is None or record.role not in _DOCUMENT_ROLES:
+                continue
+            tss_id = member.task_source_snapshot_id
+            label = labels.get(tss_id)
+            role, geography = record.role, record.study_geography
+            country: str | None = record.study_country
+            metadata, locator = _as_mapping(document.metadata), document.source_locator
+            doc_id: uuid.UUID = tss_id
+            line_record: _LineRecord | None = _LineRecord(
+                record_id=record.record_id,
+                role=record.role,
+                created_at=record.created_at,
+                programme_name=record.programme_name,
+                unit=record.unit,
+                outcome=record.outcome,
+                outcome_tag=record.outcome_tag,
+                study_country=record.study_country,
+                study_geography=record.study_geography,
+                setting=record.setting,
+            )
+        else:
+            finding = findings.get((member.unit_task_id, member.unit_id))
+            if finding is None:
+                continue
+            tss_id = own_by_snapshot.get(finding.source_snapshot_id)
+            label = labels.get(tss_id) if tss_id is not None else None
+            role, geography = _LINKED_FINDING_ROLE[member.unit_kind], finding.study_geography
+            country = None  # a linked finding carries no study_country
+            metadata, locator = _as_mapping(finding.metadata), finding.source_locator
+            doc_id = tss_id if tss_id is not None else finding.source_snapshot_id
+            line_record = None  # a linked finding has no intervention record (C6)
+        evidence_type, tier = _label_fields(label)
+        title = _title(metadata, locator)
+        out.append(
+            (
+                document_key(doi=normalise_doi(metadata), document_id=doc_id),
+                OptionDocumentOut(
+                    task_source_snapshot_id=tss_id,
+                    title=title,
+                    role=cast(Any, role),
+                    evidence_type=evidence_type,
+                    tier=tier,
+                    year=metadata_year(metadata),
+                ),
+                label.quality_score if label is not None else None,
+                (country, geography),
+                line_record,
+            )
+        )
+    return _collapse_document_lines(out, context)
+
+
+def _place_documents(lines: Sequence[_DocumentLine]) -> list[PlaceDocument]:
+    """The evaluating documents of an option's lines, as the place sentences read them (S31).
+
+    The read side's input builder: each ``evaluated`` line with its first
+    record's words, its top level resolved to one display name.
+    """
+    out: list[PlaceDocument] = []
+    for line in lines:
+        doc = line.document
+        if doc.role != "evaluated":
+            continue
+        out.append(
+            PlaceDocument(
+                doc_key=str(doc.task_source_snapshot_id or doc.title),
+                role=doc.role,
+                place=place_name(doc.place or NOT_STATED),
+                programme_name=doc.programme_name,
+                unit=line.unit,
+                tried_on_kind=doc.tried_on_kind,
+                setting=line.setting,
+                outcome=line.outcome,
+                measured=doc.measured,
+                study_geography=line.study_geography,
+                place_detail=doc.place_detail,
+                tier=doc.tier,
+                quality_score=line.quality_score,
+                evidence_type=doc.evidence_type,
+                year=doc.year,
+                title=doc.title,
+            )
+        )
+    return out
+
+
+def _place_sentences_out(
+    stored: object,
+    lines: Sequence[_DocumentLine],
+    *,
+    where_country: str | None,
+    target_unit: str | None = None,
+) -> list[PlaceSentenceOut]:
+    """The card's place sentences (task 046, amendment 4, R80; S31; PA4-15).
+
+    The coverage's stored ``place_sentences`` when it holds the key; else
+    (an added option read from its own search, a row the profile step has not
+    run on) template sentences built from the option's document lines now,
+    ``generated`` false. No model runs on a read.
+    """
+    if isinstance(stored, list):
+        out: list[PlaceSentenceOut] = []
+        for entry in stored:
+            if not isinstance(entry, Mapping):
+                continue
+            place, sentence = entry.get("place"), entry.get("sentence")
+            if not isinstance(place, str) or not isinstance(sentence, str):
+                continue
+            out.append(
+                PlaceSentenceOut(
+                    place=place,
+                    sentence=sentence,
+                    generated=entry.get("generated") is True,
+                    where=entry.get("where") is True,
+                )
+            )
+        return out
+    return [
+        PlaceSentenceOut(
+            place=group.place,
+            sentence=template_sentence(group, target_unit=target_unit),
+            generated=False,
+            where=group.is_where,
+        )
+        for group in group_places(_place_documents(lines), where_country=where_country)
+    ]
+
+
+def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> OptionOut | None:
+    """Assemble one option's card, or ``None`` when the task holds no such option.
+
+    Assembled from the passes' outputs, no writer (D15): the option row, its
+    coverage, judgements and guesses in the latest ``longlist_result`` for
+    its current design version (D10), and its membership rows. An option
+    added since the last build reads with an empty profile.
+
+    Args:
+        conn: Open database connection. Read-only.
+        task_id: The options-scoping task.
+        option_id: The option. A merged duplicate's id reads as its kept
+            option's card, so a link to it keeps working.
+
+    Returns:
+        The card, or ``None`` (the route's 404).
+    """
+    kept = conn.execute(
+        select(option.c.merged_into_option_id).where(
+            option.c.task_id == task_id, option.c.option_id == option_id
+        )
+    ).scalar_one_or_none()
+    if kept is not None:
+        option_id = kept
+    rows = _option_rows(conn, task_id, option_id)
+    if not rows:
+        return None
+    row = rows[0]
+    result = _latest_longlist_row(conn, task_id)
+    names = {
+        oid: name
+        for oid, name in conn.execute(
+            select(option.c.option_id, option.c.name).where(option.c.task_id == task_id)
+        )
+    }
+    relations = _option_relations(conn, task_id, names).get(option_id, [])
+    judgements = _design_record(result, "judgements", row)
+    plan_row = _scoping_plan_version(
+        conn, task_id, int(result.plan_version) if result is not None else None
+    )
+    plan = plan_row[1] if plan_row is not None else None
+    plan_outcomes = _plan_outcomes(plan)
+    context = _line_context(
+        result.option_profile if result is not None else None, plan_outcomes
+    )
+    members = list(
+        conn.execute(
+            select(option_membership)
+            .where(option_membership.c.task_id == task_id)
+            .where(option_membership.c.option_id == option_id)
+        )
+    )
+    search = _added_searches(
+        conn, task_id, _needs_search_read(rows, result, {m.option_id for m in members})
+    ).get(option_id)
+    target_unit, where_country = _plan_target_unit(plan), _plan_where_country(plan)
+    if search is not None:
+        labels = _search_labels(conn, task_id, [search])
+        coverage = _search_coverage(
+            conn,
+            task_id,
+            search,
+            plan_outcomes,
+            labels=labels,
+            folds=stored_folds(result.option_profile if result is not None else None),
+            where_country=where_country,
+        )
+        lines = _search_documents(search, context, labels)
+    else:
+        coverage = _option_coverage(result, option_id)
+        lines = _option_documents(conn, task_id, members, context)
+    documents = [line.document for line in lines]
+    place_sentences = _place_sentences_out(
+        coverage.get(PLACE_SENTENCES_KEY),
+        lines,
+        target_unit=target_unit,
+        where_country=where_country,
+    )
+    design = _design_out(row)
+    return OptionOut(
+        **_option_summary_fields(
+            row,
+            coverage,
+            relations,
+            judgements,
+            _design_record(result, "option_profile", row),
+            search_pending=search is not None and search.pending,
+            from_section=_report_sections(conn, task_id, rows).get(option_id),
+            also_found_as=_also_found_as(conn, task_id, option_id).get(option_id),
+            lever_reason=_lever_reason(result, option_id),
+            outcomes_total=len(plan_outcomes),
+        ),
+        design=design,
+        design_features=list(design.design_features),
+        evidence=_evidence_profile(coverage),
+        judgements=_judgements_out(judgements),
+        guesses=_guesses_out(_design_record(result, "guesses", row)),
+        in_scope=_in_scope_out(judgements),
+        documents=documents,
+        run_id=result.run_id if result is not None else None,
+        capability_run_id=(
+            _walk_of_run(conn, task_id, result.run_id) if result is not None else None
+        ),
+        plan_version=int(result.plan_version) if result is not None else None,
+        place_sentences=place_sentences,
+    )

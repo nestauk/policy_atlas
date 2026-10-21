@@ -27,6 +27,6 @@ timestamp: 2026-10-14
 
 # Citations
 
-- [045 verification § Test changes and § Review findings](../tasks/045-bedrock-local-route/verification.md)
+- [053 verification § Test changes and § Review findings](../tasks/053-bedrock-local-route/verification.md)
 - `backend/tests/core/test_image_hygiene.py`; `backend/tests/evidence_search/synthesis/test_synthesis_tools.py` `FakeEmbedder`
 - Related: [wire-field-additions-break-all-construction-sites](wire-field-additions-break-all-construction-sites.md)

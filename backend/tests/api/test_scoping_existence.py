@@ -1,0 +1,296 @@
+"""What exists and what is active, for an options-scoping task (task 045, S15).
+
+Owner at the plan gate: "scoping readers see what exists and what is active".
+``TaskOut`` gains ``active_run`` (any running or paused walk, children
+included) and ``has_longlist``; ``latest_run`` stays as it was for the
+Evidence search and, for a scoping task, skips child walks and option
+searches. The admission fences consider parentless walks only, so a running
+or finished child never becomes the task's latest run and never blocks a
+user action.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
+
+from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.engine import Engine
+
+from policy_atlas.core.schema import (
+    artefact,
+    capability_run,
+    longlist_result,
+    runs,
+    task_plan,
+)
+from tests.api.resource_support import (
+    api_client,
+    create_scoping_task,
+    create_task,
+    remove_committed_tasks,  # noqa: F401 — autouse
+    to_ready,
+)
+from tests.api.test_task_agent_scoping import _overrides
+from tests.helpers import seed_walk
+
+_T0 = datetime(2026, 9, 22, 9, 0, tzinfo=UTC)
+
+
+def _walk(
+    engine: Engine,
+    task_id: str,
+    *,
+    purpose: str | None,
+    status: str,
+    minutes: int,
+    parent: uuid.UUID | None = None,
+    capability: str = "options_scoping",
+) -> uuid.UUID:
+    """Commit an intent record of ``purpose`` and one walk under it."""
+    with engine.begin() as conn:
+        return seed_walk(
+            conn,
+            uuid.UUID(task_id),
+            capability=capability,
+            purpose=purpose,
+            status=status,
+            parent=parent,
+            intent="intent",
+            scope_created_at=_T0,
+            started_at=_T0 + timedelta(minutes=minutes),
+            ended_at=_T0,
+        ).walk_id
+
+
+def _get(client: TestClient, headers: dict[str, str], task_id: str) -> dict[str, Any]:
+    response = client.get(f"/api/v1/tasks/{task_id}", headers=headers)
+    assert response.status_code == 200, response.text
+    return dict(response.json())
+
+
+def _listed(client: TestClient, headers: dict[str, str], task_id: str) -> dict[str, Any]:
+    response = client.get("/api/v1/tasks?page=1&page_size=100", headers=headers)
+    assert response.status_code == 200, response.text
+    return next(item for item in response.json()["data"] if item["task_id"] == task_id)
+
+
+# --- latest_run, active_run, has_longlist ------------------------------------------
+
+
+def test_a_child_walk_is_never_the_task_s_latest_run(engine: Engine, tmp_path: Path) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        baseline = _walk(engine, task_id, purpose="baseline", status="succeeded", minutes=0)
+        longlist = _walk(engine, task_id, purpose="longlist", status="running", minutes=5)
+        child = _walk(
+            engine, task_id, purpose="targeted", status="running", minutes=6, parent=longlist
+        )
+        body = _get(client, owner, task_id)
+        assert body["latest_run"]["capability_run_id"] == str(longlist)
+        # Active: any running or paused walk, children included — the latest.
+        assert body["active_run"]["capability_run_id"] == str(child)
+        assert body["has_longlist"] is False
+
+        # Finished, the child still never becomes "the task's run".
+        with engine.begin() as conn:
+            conn.execute(
+                capability_run.update()
+                .where(capability_run.c.capability_run_id.in_([child, longlist]))
+                .values(status="succeeded", ended_at=_T0)
+            )
+        body = _get(client, owner, task_id)
+        assert body["latest_run"]["capability_run_id"] == str(longlist)
+        assert body["active_run"] is None
+        # The listing reads the same way.
+        listed = _listed(client, owner, task_id)
+        assert listed["latest_run"]["capability_run_id"] == str(longlist)
+        assert listed["active_run"] is None
+        assert baseline != longlist
+
+
+def test_a_parentless_option_search_is_never_the_latest_run(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The chat verb *add* starts a targeted walk with no parent (ADR 0039 d5)."""
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        longlist = _walk(engine, task_id, purpose="longlist", status="succeeded", minutes=0)
+        added = _walk(engine, task_id, purpose="targeted", status="running", minutes=5)
+        body = _get(client, owner, task_id)
+        assert body["latest_run"]["capability_run_id"] == str(longlist)
+        assert body["active_run"]["capability_run_id"] == str(added)
+        # The runs read says what each walk is, so the thread can tell an
+        # option search from the task's own walks (task 045, S12).
+        runs = client.get(f"/api/v1/tasks/{task_id}/runs", headers=owner)
+        assert runs.status_code == 200
+        by_id = {row["capability_run_id"]: row for row in runs.json()["data"]}
+        assert by_id[str(longlist)]["purpose"] == "longlist"
+        assert by_id[str(longlist)]["parent_capability_run_id"] is None
+        assert by_id[str(added)]["purpose"] == "targeted"
+        child = _walk(
+            engine, task_id, purpose="targeted", status="running", minutes=6, parent=longlist
+        )
+        one = client.get(f"/api/v1/tasks/{task_id}/runs/{child}", headers=owner).json()
+        assert one["parent_capability_run_id"] == str(longlist)
+        assert one["purpose"] == "targeted"
+
+
+def test_the_parentless_runs_read_lists_the_task_own_walks_only(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A13: ``?parentless=true`` drops children and option searches, so the plan
+    document finds the baseline however many option searches ran after it."""
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        baseline = _walk(engine, task_id, purpose=None, status="succeeded", minutes=0)
+        longlist = _walk(engine, task_id, purpose="longlist", status="succeeded", minutes=1)
+        _walk(engine, task_id, purpose="targeted", status="succeeded", minutes=2, parent=longlist)
+        _walk(engine, task_id, purpose="targeted", status="succeeded", minutes=3)
+        every = client.get(f"/api/v1/tasks/{task_id}/runs", headers=owner).json()
+        own = client.get(
+            f"/api/v1/tasks/{task_id}/runs", headers=owner, params={"parentless": "true"}
+        ).json()
+        assert every["pagination"]["total_items"] == 4
+        assert [row["capability_run_id"] for row in own["data"]] == [str(longlist), str(baseline)]
+        assert own["pagination"]["total_items"] == 2
+
+
+def test_has_longlist_is_the_existence_of_a_longlist_result(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        assert _get(client, owner, task_id)["has_longlist"] is False
+        walk = _walk(engine, task_id, purpose="longlist", status="succeeded", minutes=0)
+        tid = uuid.UUID(task_id)
+        run_id = uuid.uuid4()
+        with engine.begin() as conn:
+            scope_id = conn.execute(
+                select(capability_run.c.evidence_scope_id).where(
+                    capability_run.c.capability_run_id == walk
+                )
+            ).scalar_one()
+            conn.execute(
+                runs.insert().values(
+                    run_id=run_id,
+                    task_id=tid,
+                    status="succeeded",
+                    started_at=_T0,
+                    capability_run_id=walk,
+                )
+            )
+            conn.execute(
+                longlist_result.insert().values(
+                    longlist_result_id=uuid.uuid4(),
+                    task_id=tid,
+                    evidence_scope_id=scope_id,
+                    run_id=run_id,
+                    plan_version=1,
+                    themes=[],
+                    coverage={},
+                    judgements={},
+                    guesses=[],
+                    option_profile={},
+                    counts={},
+                    provenance={},
+                    created_at=_T0,
+                )
+            )
+        assert _get(client, owner, task_id)["has_longlist"] is True
+        assert _listed(client, owner, task_id)["has_longlist"] is True
+
+
+def test_an_evidence_search_task_reads_as_before(engine: Engine, tmp_path: Path) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_task(client, owner)
+        first = _walk(
+            engine,
+            task_id,
+            purpose=None,
+            status="succeeded",
+            minutes=0,
+            capability="evidence_search",
+        )
+        second = _walk(
+            engine, task_id, purpose=None, status="paused", minutes=5, capability="evidence_search"
+        )
+        body = _get(client, owner, task_id)
+        assert body["latest_run"]["capability_run_id"] == str(second)
+        assert body["active_run"]["capability_run_id"] == str(second)
+        assert body["has_longlist"] is False
+        assert first != second
+
+
+# --- the admission fences ------------------------------------------------------------
+
+
+def _finished_parent_with_running_child(engine: Engine, task_id: str) -> None:
+    parent = _walk(engine, task_id, purpose="longlist", status="succeeded", minutes=0)
+    _walk(engine, task_id, purpose="targeted", status="running", minutes=1, parent=parent)
+
+
+def test_a_running_child_does_not_fence_post_runs(engine: Engine, tmp_path: Path) -> None:
+    """Past the fence: the refusal is the missing plan, not ``run_active``."""
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        _finished_parent_with_running_child(engine, task_id)
+        response = client.post(f"/api/v1/tasks/{task_id}/runs", headers=owner, json={})
+        assert response.status_code == 400, response.text
+
+        # A parentless running walk still fences.
+        _walk(engine, task_id, purpose="longlist", status="running", minutes=9)
+        response = client.post(f"/api/v1/tasks/{task_id}/runs", headers=owner, json={})
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["code"] == "run_active"
+
+
+def test_a_running_child_does_not_fence_a_task_agent_turn(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        _finished_parent_with_running_child(engine, task_id)
+        response = client.post(
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
+            headers=owner,
+            json={
+                "message": "Young people are not getting into work.",
+                "client_turn_id": str(uuid.uuid4()),
+            },
+        )
+        assert response.status_code == 200, response.text
+
+
+def test_a_running_child_does_not_fence_confirm_baseline(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
+        artefact_id = uuid.uuid4()
+        with engine.begin() as conn:
+            conn.execute(
+                artefact.insert().values(
+                    artefact_id=artefact_id,
+                    task_id=uuid.UUID(task_id),
+                    capability_run_id=None,
+                    title="Baseline",
+                    created_at=_T0,
+                )
+            )
+            plan_version = conn.execute(
+                select(task_plan.c.version)
+                .where(task_plan.c.task_id == uuid.UUID(task_id))
+                .where(task_plan.c.status == "approved")
+            ).scalar_one()
+        _finished_parent_with_running_child(engine, task_id)
+        response = client.post(
+            f"/api/v1/tasks/{task_id}/plan/confirm-baseline",
+            headers=owner,
+            json={"artefact_id": str(artefact_id), "plan_version": plan_version},
+        )
+        assert response.status_code == 200, response.text

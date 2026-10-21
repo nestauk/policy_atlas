@@ -6,11 +6,11 @@ plus provider knobs, the embedding model, the search-queries backend and which
 environment variable holds the route's API key (so one secret can hold both the
 OpenAI key and a Bedrock key, and switching route never edits the secret). One
 environment variable, ``POLICY_ATLAS_MODEL_ROUTE``, picks the route; unset means
-``openai-direct``, which reproduces the pre-045 behaviour exactly. An optional
+``openai-direct``, which reproduces the pre-053 behaviour exactly. An optional
 second file named by ``POLICY_ATLAS_MODEL_ROUTE_FILE`` can replace or add routes
 by name without touching the committed file (for evaluations).
 
-Design: task 045 contract D3 and ADR 0039. Every lookup fails loud: an unknown
+Design: task 053 contract D3 and ADR 0041. Every lookup fails loud: an unknown
 route, step, tier or backend name, or a file of the wrong shape, raises at import
 rather than falling back to anything. One value is taken as written: a step
 exception that is not a tier name is sent to the provider as a model id.
@@ -38,11 +38,10 @@ API_KEY_ENVS = ("OPENAI_API_KEY", "AWS_BEARER_TOKEN_BEDROCK")
 ROUTE_ENV = "POLICY_ATLAS_MODEL_ROUTE"
 OVERLAY_ENV = "POLICY_ATLAS_MODEL_ROUTE_FILE"
 
-#: Per-step model variables retired by task 045. They used to override one
+#: Per-step model variables retired by task 053. They used to override one
 #: step's model each; the route file is now the only mechanism. Setting one is
 #: logged once and ignored, never silently honoured.
 RETIRED_ENV = (
-    "POLICY_ATLAS_PLANNER_MODEL",
     "POLICY_ATLAS_AGENT_MODEL",
     "POLICY_ATLAS_AGENT_TRIAGE_MODEL",
     "POLICY_ATLAS_CHAT_MODEL",
@@ -51,6 +50,11 @@ RETIRED_ENV = (
     "POLICY_ATLAS_MRS_NOTE_MODEL",
     "POLICY_ATLAS_FULL_REPORT_INTRO_MODEL",
     "POLICY_ATLAS_RELEVANCE_MODEL",
+    # Options scoping (tasks 044 to 046), retired when that branch merged into 053.
+    "POLICY_ATLAS_TASK_AGENT_MODEL",
+    "POLICY_ATLAS_TASK_AGENT_SCOPING_MODEL",
+    "POLICY_ATLAS_LONGLIST_JUDGMENT_MODEL",
+    "POLICY_ATLAS_LONGLIST_ASSIGNMENT_MODEL",
 )
 
 

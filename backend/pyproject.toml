@@ -58,7 +58,7 @@ dependencies = [
     # 2026-08-05, task 028 PR #41 audit gate)
     "cryptography>=50,<51",
     "pandas>=3.0.5",
-    # Task 045 (approved dependency gate, contract § Constraints): the Bedrock
+    # Task 053 (approved dependency gate, contract § Constraints): the Bedrock
     # client for Cohere embeddings and the Claude search-generation backend.
     # Moved here from the `ops` group so the runtime image carries it; the
     # `<2` ceiling is the same rule as openai/langfuse above. Its type stubs
@@ -120,9 +120,9 @@ dev = [
 # calls AdminCreateUser against the real identity provider) must not cross a major
 # on a lock regen — the same rule applied to openai/langfuse above.
 ops = [
-    # boto3 itself moved to the main dependencies in task 045 (Bedrock); the
+    # boto3 itself moved to the main dependencies in task 053 (Bedrock); the
     # stubs stay here because they are type-check only. `bedrock-runtime` added
-    # for the Cohere and Claude backends (task 045, approved dependency gate).
+    # for the Cohere and Claude backends (task 053, approved dependency gate).
     "boto3-stubs[cognito-idp,bedrock-runtime]>=1.43,<2",
 ]
 

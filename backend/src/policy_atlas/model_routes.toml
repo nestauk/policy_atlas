@@ -17,7 +17,7 @@
 # at a second file with its own [routes.*] tables; they replace or add routes
 # by name. [steps] always comes from this file.
 #
-# Design: docs/tasks/045-bedrock-local-route/contract.md (D3) and ADR 0039.
+# Design: docs/tasks/053-bedrock-local-route/contract.md (D3) and ADR 0041.
 
 [steps]
 # Cheap, high-volume steps. "mini" is the older cheap model; "fast" is the
@@ -40,13 +40,20 @@ grounding_judge = "mini"
 mrs_note = "mini"
 full_report_intro = "mini"
 agent_triage = "mini"
+# Options scoping (tasks 044 to 046): the small calls run on "fast".
+extract_interventions = "fast"
+longlist_assignment = "fast"
 # Writing and conversation.
 synthesis = "standard"
 case_studies = "standard"
 chat = "standard"
 # Planning and the agent's routing decisions.
-planner = "frontier"
+task_agent = "frontier"
 agent = "frontier"
+# Options scoping judgment calls run on their own tier, "judgment" (owner,
+# 2026-10-14: Sol, the step up from Luna, apart from the shared tiers).
+task_agent_scoping = "judgment"
+longlist_judgment = "judgment"
 
 # ---------------------------------------------------------------------------
 [routes.openai-direct]
@@ -57,6 +64,7 @@ api_key_env = "OPENAI_API_KEY"                  # which variable holds this rout
 [routes.openai-direct.text]
 mini = "gpt-5.4-mini"
 fast = "gpt-5.6-luna"
+judgment = "gpt-5.6-sol"
 standard = "gpt-5.6-terra"
 frontier = "gpt-5.5"
 
@@ -84,6 +92,7 @@ api_key_env = "AWS_BEARER_TOKEN_BEDROCK"       # the Bedrock key; boto3 reads th
 [routes.bedrock-local.text]
 mini = "global.openai.gpt-5.6-luna"
 fast = "global.openai.gpt-5.6-luna"
+judgment = "global.openai.gpt-5.6-sol"
 standard = "global.openai.gpt-5.6-terra"
 frontier = "global.openai.gpt-5.6-terra"   # owner's choice (O1); Sol is the step-up
 
@@ -109,6 +118,7 @@ api_key_env = "AWS_BEARER_TOKEN_BEDROCK"
 [routes.bedrock-local-claude.text]
 mini = "global.openai.gpt-5.6-luna"
 fast = "global.openai.gpt-5.6-luna"
+judgment = "global.openai.gpt-5.6-sol"
 standard = "global.openai.gpt-5.6-terra"
 frontier = "global.openai.gpt-5.6-terra"
 

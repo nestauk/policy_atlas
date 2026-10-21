@@ -10,7 +10,7 @@ const TASK_ID = "11111111-1111-1111-1111-111111111111";
 vi.mock("../api/queries", () => ({
   useTask: vi.fn(),
   useDecisions: vi.fn(),
-  usePlanningTurns: vi.fn(),
+  useTaskAgentTurns: vi.fn(),
 }));
 
 function renderHistory() {
@@ -24,9 +24,9 @@ function renderHistory() {
 }
 
 describe("HistoryView — readable with the Task, not scoped to the caller (task 033 phase 10b, rubric 39)", () => {
-  it("renders decisions and planning turns for a caller who does not own the Task", () => {
+  it("renders decisions and task_agent turns for a caller who does not own the Task", () => {
     // The contract struck rev 2.0's "scopes to the caller": any caller who
-    // can read the task sees its decisions and planning turns, not just
+    // can read the task sees its decisions and task_agent turns, not just
     // its owner. This is a verification test, not a behaviour change — no
     // frontend-side owner gate exists here to remove.
     vi.mocked(queries.useTask).mockReturnValue(
@@ -52,9 +52,9 @@ describe("HistoryView — readable with the Task, not scoped to the caller (task
         isError: false,
       } as unknown as ReturnType<typeof queries.useDecisions>,
     );
-    vi.mocked(queries.usePlanningTurns).mockReturnValue(
+    vi.mocked(queries.useTaskAgentTurns).mockReturnValue(
       { data: { data: [] }, isPending: false, isError: false } as unknown as ReturnType<
-        typeof queries.usePlanningTurns
+        typeof queries.useTaskAgentTurns
       >,
     );
 

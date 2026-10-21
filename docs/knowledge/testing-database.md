@@ -3,7 +3,7 @@ type: Testing convention
 title: Tests run against a dedicated test database, each test in a rolled-back transaction
 description: Tests use a separate policy_atlas_test database on the same local container; the conn fixture also rolls back each test. conftest refuses to run against the dev DB.
 tags: [testing, database, pitfall]
-timestamp: 2026-09-08
+timestamp: 2026-09-17
 ---
 
 # Rule
@@ -56,6 +56,17 @@ checkout may be active: run the gate against a private DB via the environment ov
 `TEST_DATABASE_URL=postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_<slice>_test make verify`
 — `reset-test-db` creates any `*_test` name it's given (and refuses names that don't end in
 `_test`).
+
+**A killed concurrent run can leave an `idle in transaction` backend holding locks (044 phase
+5.2).** The next suite on the shared test DB then hangs on that lock — for hours, with no error
+(5.2 lost 2 h 16 min). Check `pg_stat_activity` for `idle in transaction` backends on the test
+database and terminate them before blaming the code.
+
+**A downgrade refusal turns migration round-trips red behind an unrelated test (044).** The 044
+slice revision's downgrade refuses while any `task` or `capability_run` row carries
+`options_scoping`; a test that commits a scoping task and leaves it makes every later migration
+round-trip in the session fail. Shared-Postgres suites clean up the scoping fixtures in the test
+that made them (`tests/api/test_task_links.py` has the autouse pattern).
 
 # Citations
 

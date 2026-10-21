@@ -26,6 +26,6 @@ The generated client is schema-first: `gen/types.ts` and the committed
   `useTasks`, `useTask`, `useCheckIns`, plus the read-model hooks
   named in task 025 §6 (`useFunnel`, `useLandscape`, `useEvidence`,
   `useFindings`, `useDecisions`, `useArtefact`) and the task-027 durable
-  transcript/run reads (`usePlanningTurns`, `useRuns`). `groups`/`coverage`
+  transcript/run reads (`useTaskAgentTurns`, `useRuns`). `groups`/`coverage`
   are in the generated contract too but aren't named in the task brief's
   hook list — add a hook for either once a view needs it.

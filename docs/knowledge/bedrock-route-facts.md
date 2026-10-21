@@ -42,9 +42,9 @@ timestamp: 2026-10-14
 
 # Citations
 
-- [045 contract § Facts we rely on](../tasks/045-bedrock-local-route/contract.md) (model
+- [053 contract § Facts we rely on](../tasks/053-bedrock-local-route/contract.md) (model
   cards and probes, 2026-09-24/25)
-- [045 verification § Live checks and § Review findings](../tasks/045-bedrock-local-route/verification.md)
+- [053 verification § Live checks and § Review findings](../tasks/053-bedrock-local-route/verification.md)
   (live checks 1 to 3 and the Terra knob probe, 2026-10-14)
 - `backend/src/policy_atlas/model_routes.toml`; `core/embeddings.py`
   `CohereEmbeddingBackend`; `evidence_search/sourcing/search_generation.py`

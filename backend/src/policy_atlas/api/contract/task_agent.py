@@ -1,0 +1,737 @@
+"""TaskAgent-turn and plan-draft contract.
+
+`PlanDraft` mirrors the runtime `TaskPlan`
+(`policy_atlas.runtime.task_plan`) field-by-field, but this package
+never imports that module — the contract is standalone. The enum
+vocabularies below (`BackendScope`, `SearchEffort`, `AnalysisDepth`,
+`SteeringMode`, `GroupingFacet`, `ExtractProfile`,
+`DiscretionaryComponent`) are copies of the runtime's string values, pinned
+here independently; a guard test should keep the two from drifting.
+
+Every field on `PlanDraft` except `steps`/`ready` may be `None`/absent while
+the Task Agent conversation is still converging (spec § Task Agent turns) — never
+trust an optional field as "finalised".
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from .chat import AnswerPayloadOut
+from .tasks import LatestRun
+
+#: Search backend scope. Mirrors `task_plan.BackendScope`.
+TASK_AGENT_MESSAGE_MAX = 10_000
+
+BackendScope = Literal["academic_only", "grey_lit_only", "both"]
+
+#: Acquisition effort rung. Mirrors `task_plan.SearchEffort`.
+SearchEffort = Literal["rapid", "standard", "deep"]
+
+#: Analysis component/budget rung. Mirrors `task_plan.AnalysisDepth`.
+AnalysisDepth = Literal["landscape", "standard", "deep"]
+
+#: Finding profile short name. Mirrors `task_plan.ExtractProfile`.
+ExtractProfile = Literal["iof", "icf"]
+
+#: Discretionary chain component. Mirrors `task_plan.DiscretionaryComponent`.
+DiscretionaryComponent = Literal[
+    "characterise",
+    "screen_full",
+    "select",
+    "extract",
+    "group",
+]
+
+#: Grouping facet. Mirrors `task_plan.GroupingFacet`.
+GroupingFacet = Literal[
+    "intervention",
+    "outcome",
+    "unit",
+    "barrier_theme",
+    "enabler_theme",
+    "mechanism_theme",
+]
+
+#: Steering mode. Mirrors `task_plan.SteeringMode`.
+SteeringMode = Literal["frequent", "moderate", "minimal", "unattended"]
+
+# Mirrors ``sse.StageKey`` without importing it: the SSE module itself carries
+# ``PlanDraft`` frames, so a direct import would make the standalone contract
+# package circular.
+PlanStageKey = Literal[
+    "acquire",
+    "screen",
+    "classify",
+    "appraise",
+    "characterise",
+    "select",
+    "extract",
+    "group",
+    "synthesise",
+    "inherit",
+    "suggest",
+    "option_searches",
+    "extract_interventions",
+    "longlist",
+    "option_profile",
+    "constrain",
+    "theme",
+]
+
+#: Country-group membership provenance. Mirrors
+#: `task_plan.CountryGroupAuthorship`.
+CountryGroupAuthorship = Literal["pinned-table", "planner-proposed", "user-amended"]
+
+#: What one Task Agent turn is. A `reply` plans; an `answer` answers from the
+#: paused walk's evidence (or, once a longlist exists, the longlist's and its
+#: option searches'); a `decision` records the option a gate turn chose; an
+#: `action` records a longlist verb the user confirmed (task 045). Absent on
+#: turns stored before task 044, which are all replies.
+TaskAgentTurnKind = Literal["reply", "answer", "decision", "action"]
+
+#: The longlist verbs a confirmed turn applies (task 045, D13).
+LonglistVerb = Literal["add", "exclude", "include_again"]
+
+
+class CountryGroupDraft(BaseModel):
+    """Draft mirror of the runtime `CountryGroup`.
+
+    Args:
+        label: Pinned Tier-1 label, or a user/task_agent label for an explicit
+            Tier-2 country list. `None` while undecided.
+        countries: Explicit ISO-3166 alpha-2 country list for Tier-2 groups.
+        authorship: Provenance of the group membership, when settled.
+    """
+
+    label: str | None = None
+    countries: list[str] | None = None
+    authorship: CountryGroupAuthorship | None = None
+
+
+class ScopeConstraintsDraft(BaseModel):
+    """Draft mirror of the runtime `ScopeConstraints`.
+
+    Args:
+        published_after: Optional lower publication-date bound (`YYYY-MM-DD`).
+        published_before: Optional upper publication-date bound (`YYYY-MM-DD`).
+        publisher_country: Optional Overton publisher-country filter.
+        author_affiliation_countries: Optional OpenAlex author-affiliation
+            country filter (2-letter alpha codes).
+        country_group: Optional named group applied to both search backends.
+        publisher_source: Optional Overton source-collection filter; the only
+            supported value is `apo` (Australian Policy Online).
+    """
+
+    published_after: str | None = None
+    published_before: str | None = None
+    publisher_country: str | None = None
+    publisher_source: Literal["apo"] | None = None
+    author_affiliation_countries: list[str] | None = None
+    country_group: CountryGroupDraft | None = None
+
+
+class PlanStep(BaseModel):
+    """One user-visible step in the composed chain, for progress display.
+
+    Args:
+        label: Short user-visible step label (presentation; may change).
+        blurb: Longer user-visible step description (presentation; may
+            change).
+        stage: Composed-chain stage name the step corresponds to.
+    """
+
+    label: str
+    blurb: str
+    stage: PlanStageKey
+
+
+class PlanDraft(BaseModel):
+    """Draft or approved task plan, as surfaced to the client.
+
+    Mirrors the runtime `TaskPlan` field-by-field. Every field
+    except `steps`/`ready` may be `None`/absent while drafting.
+
+    Args:
+        title: Short user-visible title for the run.
+        question: Refined evidence question.
+        scoping_notes: User-expressed scoping notes.
+        screening_criteria: Visible inclusion/exclusion criteria for screening.
+        backend_scope: Search backend scope.
+        scope_constraints: Optional recency and publisher-geography constraints.
+        search_effort: Acquisition effort rung.
+        analysis_depth: Analysis component and budget rung.
+        components: Discretionary plan components only.
+        component_rationale: Visible intent-fit rationale keyed by
+            discretionary component.
+        grouping_facets: Optional grouping facets, valid only when `group`
+            runs.
+        extract_profiles: Optional finding profile short names, valid only
+            when `extract` runs.
+        steering_mode: Steering mode for the run.
+        assumptions: Visible assumptions and open guesses.
+        expected_artefact_shape: Deterministic forecast derived from components.
+        time_band: Deterministic wall-clock band derived from the two axes.
+        section_budget: Optional future synthesis cap for ordinary sections.
+        steps: The composed chain, presentation-labelled, in execution order.
+        ready: Whether the draft has validated fail-closed into an
+            executable plan.
+    """
+
+    title: str | None = None
+    question: str | None = None
+    scoping_notes: list[str] | None = None
+    screening_criteria: list[str] | None = None
+    backend_scope: BackendScope | None = None
+    scope_constraints: ScopeConstraintsDraft | None = None
+    search_effort: SearchEffort | None = None
+    analysis_depth: AnalysisDepth | None = None
+    components: list[DiscretionaryComponent] | None = None
+    component_rationale: dict[str, str] | None = None
+    grouping_facets: list[GroupingFacet] | None = None
+    extract_profiles: list[ExtractProfile] | None = None
+    steering_mode: SteeringMode | None = None
+    assumptions: list[str] | None = None
+    expected_artefact_shape: str | None = None
+    time_band: str | None = None
+    section_budget: int | None = Field(default=None, ge=2, le=8)
+    steps: list[PlanStep] = Field(default_factory=list)
+    ready: bool = False
+
+
+# --- Options scoping (task 044) --------------------------------------------
+#
+# The second plan shape. It mirrors the runtime `ScopingPlan` field-by-field
+# the way `PlanDraft` mirrors `TaskPlan`, and — like it — this package imports
+# no runtime module: the vocabularies below are independent copies pinned by a
+# guard test.
+
+#: Where a scoping plan field came from. Mirrors `scoping_plan.Origin`.
+Origin = Literal["from_your_question", "assumed", "your_call"]
+
+#: What a constraint is about. Mirrors `scoping_plan.ConstraintKind`. A
+#: `boundary` is what the screen calls a requirement.
+ConstraintKind = Literal["boundary", "consideration", "preference", "evidence_restriction"]
+
+#: The line a consideration speaks of. Mirrors `scoping_plan.ConsiderationAspect`.
+ConsiderationAspect = Literal[
+    "cost",
+    "time_to_set_up",
+    "time_to_effect",
+    "workforce",
+    "who_decides",
+    "dependencies",
+    "coordination",
+    "delivery_complexity",
+    "transferability",
+]
+
+#: When a constraint bites. Mirrors `scoping_plan.CheckedAt`.
+CheckedAt = Literal["longlist", "assessment", "retrieval"]
+
+#: Scoping depth. Mirrors `scoping_plan.ScopingPlan.depth`.
+ScopingDepth = Literal["rapid", "standard"]
+
+#: One entry's kind in Your context. Mirrors `scoping_plan.YourContextEntry`.
+YourContextType = Literal["present_fact", "commitment"]
+
+#: A code-minted default constraint's marker. Mirrors `scoping_plan.DefaultPreference`.
+DefaultPreference = Literal["transferability"]
+
+
+class TaggedOut(BaseModel):
+    """One scoping plan field with the origin tag the user sees.
+
+    Args:
+        text: The field's content, in plain words.
+        origin: Where it came from.
+    """
+
+    text: str
+    origin: Origin
+
+
+class ScopingConstraintOut(BaseModel):
+    """One typed constraint or preference on a scoping plan.
+
+    Args:
+        text: The user's ask.
+        kind: What the constraint is about.
+        origin: Where it came from.
+        checked_at: When it bites; fixed by `kind`.
+        aspect: The line a consideration speaks of; required on a
+            consideration, `null` on every other kind.
+        hard: True on a consideration that states a limit; false on every
+            other kind.
+        country_group: Source-origin restriction, when there is one.
+        published_after: ISO date floor, when there is one.
+        published_before: ISO date ceiling, when there is one.
+        languages: Language names. Stored and shown as not yet applied at
+            retrieval — the search grammar has no language filter.
+        setting: True on a boundary naming the delivery setting the
+            options must be delivered through; the longlist search carries it.
+        default: `transferability` on the default transferability preference
+            every scoping plan carries (checked at assessment, assumed, follows
+            Where until edited); `null` on a constraint the user asked for.
+            Omitting the default from a patch removes it.
+    """
+
+    text: str
+    kind: ConstraintKind
+    origin: Origin
+    checked_at: CheckedAt
+    aspect: ConsiderationAspect | None = None
+    hard: bool = False
+    country_group: CountryGroupDraft | None = None
+    published_after: str | None = None
+    published_before: str | None = None
+    languages: list[str] | None = None
+    setting: bool = False
+    default: DefaultPreference | None = None
+
+
+class YourContextOut(BaseModel):
+    """One entry of the user's own context, verbatim.
+
+    Args:
+        text: The user's words, exactly as written.
+        type: Something true now, or something they plan or promise.
+        turn_index: The Task Agent turn the entry came from.
+        test_as_condition: Whether they asked for it to be tested.
+    """
+
+    text: str
+    type: YourContextType
+    turn_index: int
+    test_as_condition: bool = False
+
+
+class OptionDesignOut(BaseModel):
+    """A specified design Policy Atlas proposed back from an option's words.
+
+    Args:
+        name: A short option name.
+        description: One sentence: what is done, by whom, for whom.
+        design_features: The features that define the option.
+        outcomes_served: Which of the plan's outcomes the option is for.
+        assumed: The features Policy Atlas supplied rather than the user
+            stated; shown as assumed.
+        version: The design's version.
+    """
+
+    name: str
+    description: str
+    design_features: list[str]
+    outcomes_served: list[str] = Field(default_factory=list)
+    assumed: list[str] = Field(default_factory=list)
+    version: int = 1
+
+
+class YourOptionOut(BaseModel):
+    """One option the user already has in mind.
+
+    Args:
+        text: The user's words, verbatim.
+        design: The proposed design; `null` until proposed.
+        turn_index: The Task Agent turn it came from; `null` on a draft not
+            yet approved.
+    """
+
+    text: str
+    design: OptionDesignOut | None = None
+    turn_index: int | None = None
+
+
+class YourOptionIn(BaseModel):
+    """One option in a scoping plan edit: the user's words only.
+
+    Args:
+        text: The user's words, verbatim. Unchanged words keep their design;
+            new or changed words get a design proposed back.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=TASK_AGENT_MESSAGE_MAX)
+
+
+class ScopingSteerPointDefaultOut(BaseModel):
+    """One standing instruction on a scoping plan.
+
+    Args:
+        steer_point: The check-in point the rule covers.
+        action: `proceed_flag` — the only value; unattended records the gate and continues.
+    """
+
+    steer_point: str
+    action: Literal["proceed_flag"]
+
+
+class BaselineConfirmedOut(BaseModel):
+    """The record that a plan version was confirmed against a baseline.
+
+    Args:
+        artefact_id: The baseline artefact the user read.
+        plan_version: The plan version they confirmed.
+    """
+
+    artefact_id: uuid.UUID
+    plan_version: int
+
+
+class ScopingPlanDraft(BaseModel):
+    """Draft or approved options-scoping plan, as surfaced to the client.
+
+    Mirrors the runtime `ScopingPlan` field-by-field. Every field except
+    `steps`/`ready` may be `None`/absent while drafting.
+
+    Args:
+        title: Short user-visible name for the task.
+        question: The user's ask.
+        intended_change: What we are trying to change.
+        target_unit: Who or what should change.
+        where: The jurisdiction the policy would apply to.
+        outcomes: The outcomes evidence is read against.
+        depth: The scoping depth the user chose.
+        constraints: Typed constraints and preferences, including the default
+            transferability preference (marked by `default`).
+        your_context: The user's own situation, verbatim.
+        your_options: Options the user already has in mind, each with its
+            proposed design.
+        entry_branch: `explore` is the only branch in this release.
+        linked_task_ids: The tasks this plan starts from.
+        steering_mode: Check-in cadence for the run.
+        steer_point_defaults: Standing instructions.
+        assumptions: Every guess the plan is making.
+        steps: The three display steps, in order.
+        time_band: The coarse compute band for the baseline.
+        baseline_confirmed: The confirm-baseline record, once written.
+        ready: Whether the draft has validated into an executable plan.
+    """
+
+    title: str | None = None
+    question: str | None = None
+    intended_change: TaggedOut | None = None
+    target_unit: TaggedOut | None = None
+    where: TaggedOut | None = None
+    outcomes: list[TaggedOut] | None = None
+    depth: ScopingDepth | None = None
+    constraints: list[ScopingConstraintOut] | None = None
+    your_context: list[YourContextOut] | None = None
+    your_options: list[YourOptionOut] | None = None
+    entry_branch: Literal["explore"] | None = None
+    linked_task_ids: list[uuid.UUID] | None = None
+    steering_mode: SteeringMode | None = None
+    steer_point_defaults: list[ScopingSteerPointDefaultOut] | None = None
+    assumptions: list[str] | None = None
+    steps: list[PlanStep] = Field(default_factory=list)
+    time_band: str | None = None
+    baseline_confirmed: BaselineConfirmedOut | None = None
+    ready: bool = False
+
+
+class ScopingPlanPatch(BaseModel):
+    """Typed replace-field edits for a scoping plan.
+
+    Omitted fields stay as they are; a supplied field replaces its counterpart
+    outright. The merged result must still be a valid executable scoping plan.
+
+    Args:
+        intended_change: Replacement intended change.
+        target_unit: Replacement target unit.
+        where: Replacement jurisdiction.
+        outcomes: Replacement outcome list.
+        depth: Replacement depth.
+        constraints: Replacement constraint list. Omitting the default
+            transferability preference removes it for good.
+        your_context: Replacement Your context list.
+        your_options: Replacement options list, by the user's words.
+        steering_mode: Replacement check-in cadence.
+        steer_point_defaults: Replacement standing instructions.
+        assumptions: Replacement assumptions.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    intended_change: TaggedOut | None = None
+    target_unit: TaggedOut | None = None
+    where: TaggedOut | None = None
+    outcomes: list[TaggedOut] | None = None
+    depth: ScopingDepth | None = None
+    constraints: list[ScopingConstraintOut] | None = None
+    your_context: list[YourContextOut] | None = None
+    your_options: list[YourOptionIn] | None = None
+    steering_mode: SteeringMode | None = None
+    steer_point_defaults: list[ScopingSteerPointDefaultOut] | None = None
+    assumptions: list[str] | None = None
+
+
+class ConfirmBaselineIn(BaseModel):
+    """Inbound body for `POST /api/v1/tasks/{id}/plan/confirm-baseline`.
+
+    Args:
+        artefact_id: The baseline artefact the user read.
+        plan_version: The plan version they are confirming.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    artefact_id: uuid.UUID
+    plan_version: int = Field(ge=1)
+
+
+class TaskAgentTurnCreate(BaseModel):
+    """Inbound body for `POST /api/v1/tasks/{id}/task-agent-turns`.
+
+    Args:
+        message: The user's chat message for this task_agent turn.
+        client_turn_id: Caller-minted UUID making double-submit idempotent —
+            resubmitting the same `client_turn_id` returns the same turn
+            rather than re-running the task_agent.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Turns are durable and every prior message re-enters each task_agent call
+    # (rehydration), so an unbounded message inflates storage AND every future
+    # turn's prompt forever (security review, 2026-07-29).
+    message: str = Field(min_length=1, max_length=TASK_AGENT_MESSAGE_MAX)
+    client_turn_id: uuid.UUID
+
+
+class PartOptionOut(BaseModel):
+    """One selectable option on a sequential task_agent part.
+
+    Args:
+        id: Stable option identifier within the part.
+        label: Short user-visible option label.
+        sub: Optional outcome and time-band sub-label.
+        primary: Whether this is the single recommended option.
+        reason: Optional explanation for the recommendation.
+    """
+
+    id: str
+    label: str
+    sub: str | None = None
+    primary: bool
+    reason: str | None = None
+
+
+class PartChipOut(BaseModel):
+    """One typed, editable chip attached to a task_agent part.
+
+    Args:
+        label: Short user-visible chip label.
+        kind: Editor type for the chip value.
+        value: Machine-readable value consumed by that editor.
+    """
+
+    label: str
+    kind: Literal["text", "date_range", "country_list"]
+    value: str
+
+
+class PartProposalOut(BaseModel):
+    """One structured proposal in the sequential task_agent conversation.
+
+    Args:
+        id: The proposed task_agent part.
+        step_label: User-visible position and context for the proposal.
+        title: Plain-language proposal heading.
+        body: Optional supporting explanation.
+        chips: Optional typed scope chips.
+        options: The available response options.
+    """
+
+    id: str
+    step_label: str
+    title: str
+    body: str | None = None
+    chips: list[PartChipOut] | None = None
+    options: list[PartOptionOut]
+
+
+class TurnDecisionOut(BaseModel):
+    """The recorded decision a gate turn resolved a paused walk with.
+
+    Args:
+        option_id: The check-in option the user chose.
+        label: That option's user-visible label, as offered.
+        check_in_id: The check-in the decision answered.
+        capability_run_id: The walk the check-in belongs to.
+        plan_version: The plan version the decision was taken against.
+        opened_run: The longlist walk "Confirm plan and build longlist" opened,
+            when this decision opened one. Absent on every other decision.
+    """
+
+    option_id: str
+    label: str
+    check_in_id: uuid.UUID
+    capability_run_id: uuid.UUID
+    plan_version: int
+    opened_run: LatestRun | None = None
+
+
+class TurnActionOut(BaseModel):
+    """The longlist verb a Task Agent turn applied, once the user confirmed it.
+
+    Args:
+        verb: ``add``, ``exclude`` or ``include_again``.
+        option_id: The option the verb applied to (the new option, for ``add``).
+        label: That option's name.
+        capability_run_id: The option search ``add`` opened (a walk with no
+            parent), so the thread can follow it. Absent for the other verbs.
+    """
+
+    verb: LonglistVerb
+    option_id: uuid.UUID
+    label: str
+    capability_run_id: uuid.UUID | None = None
+
+
+class TaskAgentTurnOut(BaseModel):
+    """Response body for one task_agent turn.
+
+    A turn is one of four things, named by ``kind``: a planning ``reply``, a
+    grounded ``answer`` from the paused walk's evidence (or the longlist's), a
+    recorded ``decision`` at a gate, or an applied longlist ``action`` (task
+    045). They are additive optional fields rather than a discriminated union,
+    so every existing reader keeps working and a turn stored before task 044
+    stays valid with ``kind`` absent.
+
+    Args:
+        reply: The task_agent's conversational reply for this turn.
+        plan: The full current draft plan.
+        suggestions: The task_agent's suggested answers to its clarifying
+            question, rendered as tappable quick replies. Empty when none.
+        part: Structured sequential-task_agent proposal, when this turn carries one.
+        conversation_id: Task Agent conversation that produced this turn.
+        capability: The owning task's capability, when known. Absent on turns
+            stored before task 044.
+        scoping_plan: The full current scoping draft, on an options-scoping
+            turn. `plan` is null for those turns, and this is null for
+            Evidence search turns.
+        kind: What this turn is. Absent on turns stored before task 044,
+            which are all replies.
+        answer: The cited answer, on an `answer` turn.
+        decision: The recorded gate decision, on a `decision` turn.
+        action: The applied longlist verb, on an `action` turn.
+    """
+
+    reply: str
+    plan: PlanDraft | None = None
+    suggestions: list[str] = Field(default_factory=list)
+    part: PartProposalOut | None = None
+    conversation_id: uuid.UUID | None = None
+    capability: str | None = None
+    scoping_plan: ScopingPlanDraft | None = None
+    kind: TaskAgentTurnKind | None = None
+    answer: AnswerPayloadOut | None = None
+    decision: TurnDecisionOut | None = None
+    action: TurnActionOut | None = None
+
+
+class TaskAgentTranscriptTurnOut(BaseModel):
+    """One durable task_agent-transcript turn shown in chronological order.
+
+    Args:
+        turn_index: Monotonic per-task conversation coordinate.
+        conversation_id: Owning task_agent conversation, absent only on legacy rows.
+        client_turn_id: The caller's idempotency key for this turn — returned
+            so a reloaded client can retry its own incomplete latest turn.
+        user_message: Submitted user message.
+        reply: Task Agent reply, absent until a pending turn completes.
+        suggestions: Task Agent quick-reply suggestions, if the turn completed.
+        part: Structured sequential-task_agent proposal, absent for legacy turns.
+        capability: The owning task's capability, absent on legacy turns.
+        status: Durable execution state for this turn.
+        created_at: Receipt timestamp, retained as display metadata.
+        completed_at: Terminal timestamp, absent while still pending.
+        kind: What this turn is. Absent on turns stored before task 044,
+            which are all replies.
+        answer: The cited answer, on an `answer` turn.
+        decision: The recorded gate decision, on a `decision` turn.
+        action: The applied longlist verb, on an `action` turn.
+    """
+
+    turn_index: int
+    conversation_id: uuid.UUID | None = None
+    client_turn_id: uuid.UUID
+    user_message: str
+    reply: str | None
+    suggestions: list[str] = Field(default_factory=list)
+    part: PartProposalOut | None = None
+    capability: str | None = None
+    status: Literal["pending", "completed", "failed"]
+    created_at: datetime
+    completed_at: datetime | None
+    kind: TaskAgentTurnKind | None = None
+    answer: AnswerPayloadOut | None = None
+    decision: TurnDecisionOut | None = None
+    action: TurnActionOut | None = None
+
+
+class PlanOut(BaseModel):
+    """Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.
+
+    Args:
+        plan: The current Evidence search plan, or null on a scoping task.
+        scoping: The current options-scoping plan, or null on an Evidence
+            search task.
+        capability: Which of the two the task is, so a reader never has to
+            infer it from which field is null.
+        version: Plan row version.
+        status: Plan status (e.g. `draft`, `approved`).
+        opened_run: The longlist walk `POST .../plan/confirm-baseline` opened,
+            on that route's response. Absent on every other plan read.
+    """
+
+    plan: PlanDraft | None = None
+    scoping: ScopingPlanDraft | None = None
+    capability: str = "evidence_search"
+    version: int
+    status: str
+    opened_run: LatestRun | None = None
+
+
+class PlanPatchIn(BaseModel):
+    """Inbound body for `PATCH /api/v1/tasks/{id}/plan`.
+
+    Omitted fields stay as they are. An empty string on a date or geography
+    field clears that constraint. The merged result must still be a valid
+    executable plan.
+
+    Args:
+        question: Replacement evidence question.
+        backend_scope: Search backend scope.
+        search_effort: Acquisition effort rung.
+        analysis_depth: Analysis component and budget rung.
+        steering_mode: Check-in cadence for the run.
+        screening_criteria: Replacement inclusion/exclusion criteria.
+        published_after: Lower publication-date bound (`YYYY-MM-DD`), or
+            empty to clear.
+        published_before: Upper publication-date bound (`YYYY-MM-DD`), or
+            empty to clear.
+        geography: Country, ISO code, or pinned group label, or empty to
+            clear geography filters.
+        scoping: Options-scoping edits. Mutually exclusive with every field
+            above: an Evidence search field on a scoping task, or `scoping` on
+            an Evidence search task, is a 422.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    question: str | None = Field(default=None, min_length=1)
+    backend_scope: BackendScope | None = None
+    search_effort: SearchEffort | None = None
+    analysis_depth: AnalysisDepth | None = None
+    steering_mode: SteeringMode | None = None
+    screening_criteria: list[str] | None = None
+    published_after: str | None = None
+    published_before: str | None = None
+    geography: str | None = None
+    scoping: ScopingPlanPatch | None = None

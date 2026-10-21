@@ -36,14 +36,14 @@ interface RailState {
 }
 
 /**
- * Session-local state for the collapsible/resizable planning rail
+ * Session-local state for the collapsible/resizable task_agent rail
  * (027 strand 3; PR #35's IDE-style rail, single-thread). Collapse is a real
  * button — keyboard-operable by construction (finding 19) — and resize is a
  * `role="separator"` handle that works by pointer drag or arrow keys, clamped
  * to sane bounds. No persistence: a fresh session gets the default split.
  *
  * Until the user resizes, the width stays on the caller's animated
- * percentage default (55/45 planning, 50/50 once a run exists — 028 strand 4
+ * percentage default (55/45 task_agent, 50/50 once a run exists — 028 strand 4
  * revises the RETRO §2.3 split); the first resize pins it
  * to pixels for the rest of the session.
  */
@@ -85,16 +85,16 @@ export function useRail(defaultWidth: string): RailState {
   return {
     collapsed,
     width: collapsed ? RAIL_COLLAPSED : px !== null ? `${px}px` : defaultWidth,
-    regionId: "planning-rail",
+    regionId: "task_agent-rail",
     toggleProps: {
       "aria-expanded": !collapsed,
-      "aria-controls": "planning-rail",
+      "aria-controls": "task_agent-rail",
       onClick: () => setCollapsed((value) => !value),
     },
     separatorProps: {
       role: "separator",
       "aria-orientation": "vertical",
-      "aria-label": "Resize the planning rail",
+      "aria-label": "Resize the Task Agent rail",
       "aria-valuemin": RAIL_MIN,
       "aria-valuemax": RAIL_MAX,
       "aria-valuenow": px ?? undefined,
@@ -129,7 +129,7 @@ export function RailToggle({
     >
       <span aria-hidden="true">{collapsed ? "»" : "«"}</span>
       <span className="sr-only">
-        {collapsed ? "Expand the planning rail" : "Collapse the planning rail"}
+        {collapsed ? "Expand the Task Agent rail" : "Collapse the Task Agent rail"}
       </span>
     </button>
   );

@@ -9,7 +9,7 @@ timestamp: 2026-07-10
 # Rule
 
 Two prompt disciplines for any structured-output surface whose schema is
-validated fail-closed (`planner_prompt.py`, task 017 live check):
+validated fail-closed (`task_agent_prompt.py`, task 017 live check):
 
 1. **Pin the exact key vocabulary.** Where a dict field has meaningful keys
    (`component_rationale`), name the allowed keys in the prompt and forbid

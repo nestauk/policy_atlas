@@ -9,6 +9,8 @@ guards used after a ``parse`` or ``create`` call.
 
 from __future__ import annotations
 
+import uuid
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,7 +18,13 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from policy_atlas.core.model_routes import live_api_key, route
-from policy_atlas.core.usage import UsageResult, log_usage, token_usage_from_provider
+from policy_atlas.core.usage import (
+    UsageResult,
+    log_usage,
+    token_usage_from_provider,
+    usage_details,
+    usage_metadata,
+)
 
 
 @dataclass
@@ -146,6 +154,89 @@ def parse_structured[T: BaseModel](
     log_usage(usage_event, response.usage)
     parsed: T = require_parsed(response, label=label)
     return parsed, token_usage_from_provider(response.usage)
+
+
+def traced_parse[T: BaseModel](
+    client: Any,
+    langfuse_client: Any,
+    *,
+    messages: list[Any],
+    response_format: type[T],
+    model: str,
+    max_output_tokens: int,
+    usage_event: str,
+    label: str,
+    name: str,
+    prompt_version: str,
+    session_id: uuid.UUID | None = None,
+    metadata: Mapping[str, Any] | None = None,
+    clean: Callable[[T], T] | None = None,
+) -> UsageResult[T]:
+    """Run :func:`parse_structured` under one Langfuse generation.
+
+    The span records the messages, the parsed output, the model, the prompt
+    version, any extra metadata and the token usage (``usage_details``, so
+    Langfuse can price the call).
+
+    Args:
+        client: The OpenAI client.
+        langfuse_client: Langfuse client, or ``None`` for no tracing.
+        messages: Chat messages for the call.
+        response_format: The pydantic wire type to parse into.
+        model: Model id.
+        max_output_tokens: Completion token cap.
+        usage_event: structlog event name for usage logging.
+        label: Call label used in guard error messages.
+        name: Static Langfuse observation name.
+        prompt_version: Recorded in the span metadata.
+        session_id: Optional Langfuse session id.
+        metadata: Extra span metadata, after the prompt version.
+        clean: Optional step applied to the parsed output before it is
+            traced and returned (for example a NUL scrub).
+
+    Returns:
+        The parsed (and cleaned) output plus token usage.
+
+    Raises:
+        RuntimeError: If the response has no choices or was not parsed.
+    """
+    # Local import: tracing imports this module (through core.embeddings).
+    from policy_atlas.core import tracing
+
+    def _call() -> UsageResult[T]:
+        parsed, usage = parse_structured(
+            client,
+            messages=messages,
+            response_format=response_format,
+            usage_event=usage_event,
+            label=label,
+            model=model,
+            max_completion_tokens=max_output_tokens,
+        )
+        return (clean(parsed) if clean is not None else parsed), usage
+
+    def _update(span: Any, result: UsageResult[T]) -> None:
+        parsed, usage = result
+        span.update(
+            usage_details=usage_details(usage),
+            input={"messages": messages},
+            output=parsed.model_dump(),
+            model=model,
+            metadata={
+                "prompt_version": prompt_version,
+                **(metadata or {}),
+                **usage_metadata(usage),
+            },
+        )
+
+    return tracing.traced_call(
+        langfuse_client,
+        name=name,
+        as_type="generation",
+        call=_call,
+        session_id=session_id,
+        update=_update,
+    )
 
 
 def require_single_tool_call(response: Any, *, label: str) -> Any:

@@ -202,7 +202,7 @@ def make_conversation(
     Args:
         conn: Open database connection.
         task_id: The task the conversation belongs to.
-        kind: `chat` or `planning`.
+        kind: `chat` or `task_agent`.
         created_by: The authoring subject, or `None` for a legacy row.
         status: `active`, `closed` or `archived`.
         title: The conversation's title.
@@ -309,6 +309,7 @@ def make_task(
     status: str = "active",
     project_id: uuid.UUID | None = None,
     name: str = "Task",
+    capability: str = "evidence_search",
 ) -> uuid.UUID:
     """Insert one task row (and its project membership) and return its id."""
     task_id = uuid.uuid4()
@@ -325,6 +326,7 @@ def make_task(
             owner_user_id=owner_user_id,
             org_id=org_id,
             visibility=visibility,
+            capability=capability,
         )
     )
     if project_id is not None:

@@ -441,7 +441,7 @@ def test_claude_reformulate_and_suggest_delegate_to_inner_backend(
     ("backend_name", "expected"),
     [("claude", "claude"), ("openai", "openai")],
 )
-def test_live_planner_selects_search_generation_backend_from_route(
+def test_live_task_agent_selects_search_generation_backend_from_route(
     monkeypatch: pytest.MonkeyPatch, backend_name: str, expected: str
 ) -> None:
     class _LiveFetcher:
@@ -464,7 +464,7 @@ def test_live_planner_selects_search_generation_backend_from_route(
     monkeypatch.setattr(agent, "live_embedding_backend", _factory)
     monkeypatch.setattr(agent, "LiveDocumentFetcher", _LiveFetcher)
     monkeypatch.setattr(search_live, "live_search_backends", lambda: [])
-    monkeypatch.setattr(agent, "OpenAIPlannerBackend", _factory)
+    monkeypatch.setattr(agent, "OpenAITaskAgentBackend", _factory)
     monkeypatch.setattr(
         search_generation,
         "ClaudeSearchGenerationBackend",
@@ -487,9 +487,12 @@ def test_live_planner_selects_search_generation_backend_from_route(
         "OpenAIGroupClusteringBackendFactory",
         "OpenAISynthesisBackend",
         "OpenAIGroundingJudgeBackend",
+        "OpenAIInterventionsBackend",
+        "OpenAIAgentBackend",
+        "OpenAILonglistBackend",
     ):
         monkeypatch.setattr(agent, name, _factory)
 
-    _planner, backends = agent.live_planner_and_backends(None)
+    _task_agent, backends = agent.live_task_agent_and_backends(None)
 
     assert cast("_SelectedBackend", backends.search_generation).name == expected

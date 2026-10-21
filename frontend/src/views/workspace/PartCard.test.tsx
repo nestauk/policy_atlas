@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   PartCard,
-  type PlanningTurn,
+  type TaskAgentTurn,
   chipDisplayLabel,
   chipEditMessage,
   confirmMessage,
@@ -15,8 +15,8 @@ import {
 function turn(
   index: number,
   message: string,
-  part: PlanningTurn["part"] = null,
-): PlanningTurn {
+  part: TaskAgentTurn["part"] = null,
+): TaskAgentTurn {
   return {
     turn_index: index,
     client_turn_id: `00000000-0000-0000-0000-00000000000${index}`,
@@ -30,7 +30,7 @@ function turn(
   };
 }
 
-function proposal(id: string, overrides: Partial<NonNullable<PlanningTurn["part"]>> = {}) {
+function proposal(id: string, overrides: Partial<NonNullable<TaskAgentTurn["part"]>> = {}) {
   return {
     id,
     step_label: `Plan · ${id}`,
@@ -115,6 +115,31 @@ describe("PartCard", () => {
     expect(onSend).toHaveBeenCalledWith("Looks right\n\n[confirm part=scope option=confirm]");
     await user.click(screen.getByRole("button", { name: /Change it/ }));
     expect(onPrefill).toHaveBeenCalledWith("Change it: ");
+  });
+
+  it("renders every option as secondary when none is primary (task 044: scoping depth has no default, ruling 25)", () => {
+    const part = proposal("depth", {
+      options: [
+        { id: "rapid", label: "Rapid scoping", sub: null, primary: false, reason: null },
+        { id: "standard", label: "Standard scoping", sub: null, primary: false, reason: null },
+      ],
+    });
+    render(
+      <PartCard
+        part={part}
+        state={{ live: true, confirmedOptionId: null }}
+        disabled={false}
+        onSend={vi.fn()}
+        onPrefill={vi.fn()}
+      />,
+    );
+    const rapid = screen.getByRole("button", { name: "Rapid scoping" });
+    const standard = screen.getByRole("button", { name: "Standard scoping" });
+    expect(rapid.dataset.partOption).toBe("secondary");
+    expect(standard.dataset.partOption).toBe("secondary");
+    // Neither option carries the primary button's solid-blue treatment.
+    expect(rapid.className).not.toContain("bg-blue");
+    expect(standard.className).not.toContain("bg-blue");
   });
 
   it("options carrying a sub line (presets) send directly even when secondary", async () => {

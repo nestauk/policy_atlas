@@ -11,7 +11,7 @@ import functools
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, Protocol, TypedDict
+from typing import Any, Literal, Protocol, TypedDict
 
 import structlog
 from langgraph.graph import END, StateGraph
@@ -22,7 +22,7 @@ from policy_atlas.core import events
 from policy_atlas.core.embeddings import EmbeddingBackend, StubEmbeddingBackend
 from policy_atlas.core.inference import InferenceProvider
 from policy_atlas.core.liveness import task_liveness
-from policy_atlas.core.schema import evidence_scope, runs
+from policy_atlas.core.schema import evidence_scope, runs, task_plan
 from policy_atlas.evidence_search.assess.appraise import AppraiseContext, appraise_sources
 from policy_atlas.evidence_search.assess.classification_backend import (
     ClassificationBackend,
@@ -53,13 +53,19 @@ from policy_atlas.evidence_search.extract.extract import (
 )
 from policy_atlas.evidence_search.extract.extraction_backend import (
     ExtractionBackend,
+    InterventionsBackend,
     StubExtractionBackend,
     StubICFExtractionBackend,
+    StubInterventionsBackend,
 )
 from policy_atlas.evidence_search.extract.finding_vetter import (
     FindingVetterBackend,
     ICFFindingVetterBackend,
 )
+from policy_atlas.evidence_search.extract.interventions_records import (
+    PROFILE_ID as INTERVENTIONS_PROFILE_ID,
+)
+from policy_atlas.evidence_search.extract.interventions_records import TaggingContext
 from policy_atlas.evidence_search.extract.relevance_annotator import (
     RelevanceAnnotatorBackend,
 )
@@ -97,8 +103,23 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
     SynthesiseFailure,
     synthesise_scope,
 )
+from policy_atlas.options_scoping.constrain.constrain import constrain_scope
+from policy_atlas.options_scoping.context import ScopeContext
+from policy_atlas.options_scoping.longlist.longlist import longlist_scope
+from policy_atlas.options_scoping.longlist.longlist_backend import (
+    LonglistBackend,
+    StubLonglistBackend,
+)
+from policy_atlas.options_scoping.longlist_intent import plan_tagging_context
+from policy_atlas.options_scoping.option_profile.option_profile import option_profile_scope
+from policy_atlas.options_scoping.suggest.suggest import SuggestBackend, suggest_options
+from policy_atlas.options_scoping.theme.theme import theme_scope
+from policy_atlas.runtime.agent_backend import StubAgentBackend
+from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
+from policy_atlas.runtime.inherit import inherit_documents
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Config
+from policy_atlas.runtime.scoping_plan import ScopingPlan
 
 log = structlog.get_logger()
 
@@ -123,10 +144,13 @@ class HarnessState(TypedDict):
     finding_vetter_backend: FindingVetterBackend | None
     icf_extraction_backend: Any
     icf_finding_vetter_backend: ICFFindingVetterBackend | None
+    interventions_backend: InterventionsBackend
     relevance_annotator_backend: RelevanceAnnotatorBackend | None
     group_clustering_backend: GroupClusteringBackendFactory
     synthesis_backend: SynthesisBackend
     grounding_judge_backend: GroundingJudgeBackend
+    suggest_backend: SuggestBackend
+    longlist_backend: LonglistBackend
     summary: dict[str, Any] | None
     progress_emitter: ProgressEmitter | None
     error: str | None
@@ -300,6 +324,144 @@ def _run_extract(state: HarnessState) -> HarnessState:
         relevance_annotator_backend=state["relevance_annotator_backend"],
     )
     return _run_scope_component(state, context_cls, sources_fn)
+
+
+def _scope_tagging_context(
+    conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID
+) -> TaggingContext | None:
+    """The tagging context of the scope's plan (task 046, S4), or ``None``.
+
+    Reads the plan version the intent record names (``evidence_scope.plan_id``)
+    on the component's own connection and builds the context with the place
+    strip applied (:func:`plan_tagging_context`). A scope with no plan gives
+    ``None``, which leaves the profile exactly as it was before 046.
+
+    Args:
+        conn: The component's connection.
+        task_id: Owning task.
+        scope_id: The walk's intent record.
+
+    Returns:
+        The tagging context, or ``None`` when the scope names no plan.
+
+    Raises:
+        ValueError: If the scope names a plan version that does not exist or
+            is not a scoping plan.
+        pydantic.ValidationError: If the stored plan payload is invalid.
+    """
+    plan_id = conn.execute(
+        select(evidence_scope.c.plan_id).where(
+            evidence_scope.c.evidence_scope_id == scope_id,
+            evidence_scope.c.task_id == task_id,
+        )
+    ).scalar_one_or_none()
+    if plan_id is None:
+        return None
+    payload = conn.execute(
+        select(task_plan.c.payload).where(
+            task_plan.c.plan_id == plan_id, task_plan.c.task_id == task_id
+        )
+    ).scalar_one_or_none()
+    if payload is None:
+        raise ValueError(f"extract_interventions: plan {plan_id} of the scope not found")
+    plan = validate_plan(OPTIONS_SCOPING, payload)
+    if not isinstance(plan, ScopingPlan):  # pragma: no cover - the registry's model
+        raise ValueError("extract_interventions: the scope's plan is not a scoping plan")
+    return plan_tagging_context(plan)
+
+
+def _extract_interventions_scope(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: ExtractContext,
+    extraction_backend: ExtractionBackend,
+    interventions_backend: InterventionsBackend,
+) -> dict[str, Any]:
+    """Run the intervention profile with the scope plan's tagging context.
+
+    Args:
+        conn: Open database connection.
+        task_id: Owning task id.
+        run_id: Run writing the extraction result.
+        context: The selection-free extract context.
+        extraction_backend: IOF extraction backend (unused by this profile;
+            ``extract_scope`` requires one).
+        interventions_backend: The intervention profile backend.
+
+    Returns:
+        The extraction component summary.
+    """
+    return extract_scope(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=context,
+        extraction_backend=extraction_backend,
+        interventions_backend=interventions_backend,
+        profiles=(INTERVENTIONS_PROFILE_ID,),
+        interventions_context=_scope_tagging_context(
+            conn, task_id=task_id, scope_id=context.scope_id
+        ),
+    )
+
+
+def _run_extract_interventions(state: HarnessState) -> HarnessState:
+    """The intervention profile node (task 045, ADR 0039 decision 6).
+
+    The selection-free path: ``extract_scope`` over every screened-in document
+    of the scope, with the intervention profile named through the
+    ``profiles`` kwarg — never the scope's extraction directive, whose
+    IOF-mandatory rule stands (plan P9). No select run is referenced. The
+    scope plan's tagging context rides along (task 046, S4).
+    """
+    context_cls = functools.partial(ExtractContext, selection_run_id=None)
+    sources_fn = functools.partial(
+        _extract_interventions_scope,
+        extraction_backend=state["extraction_backend"],
+        interventions_backend=state["interventions_backend"],
+    )
+    return _run_scope_component(state, context_cls, sources_fn)
+
+
+def _inherit_sources(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: ScopeContext,
+) -> dict[str, Any]:
+    del context  # inherit reads the task's links, not the scope
+    return inherit_documents(conn, task_id=task_id, run_id=run_id).as_summary()
+
+
+#: The options-scoping nodes: the step and the state key of its backend.
+#: ``inherit`` (task 045, S6) completes even when a link cannot be read, its
+#: ``degrades_walk`` flag making a degraded walk; ``option_profile`` is a
+#: spine step (a failure fails the walk); ``theme`` is not (a failure
+#: degrades the walk). ``constrain``, ``option_profile`` and ``theme`` ride
+#: the longlist backend.
+_BackendKey = Literal["suggest_backend", "longlist_backend"]
+_SCOPING_STEPS: dict[str, tuple[Callable[..., dict[str, Any]], _BackendKey | None]] = {
+    "inherit": (_inherit_sources, None),
+    "suggest": (suggest_options, "suggest_backend"),
+    "longlist": (longlist_scope, "longlist_backend"),
+    "option_profile": (option_profile_scope, "longlist_backend"),
+    "constrain": (constrain_scope, "longlist_backend"),
+    "theme": (theme_scope, "longlist_backend"),
+}
+
+
+def _scoping_node(name: str) -> Any:
+    def run(state: HarnessState) -> HarnessState:
+        step, backend_key = _SCOPING_STEPS[name]  # read at run time, so a test can swap a step
+        sources_fn = (
+            step if backend_key is None else functools.partial(step, backend=state[backend_key])
+        )
+        return _run_scope_component(state, ScopeContext, sources_fn)
+
+    return run
 
 
 def _run_group(state: HarnessState) -> HarnessState:
@@ -509,6 +671,9 @@ def build_graph() -> Any:
     g.add_node("characterise", _run_characterise)
     g.add_node("select", _run_select)
     g.add_node("extract", _run_extract)
+    g.add_node("extract_interventions", _run_extract_interventions)
+    for name in _SCOPING_STEPS:
+        g.add_node(name, _scoping_node(name))
     g.add_node("group", _run_group)
     g.add_node("synthesise", _run_synthesise)
     g.add_node("finish", _finish)
@@ -526,6 +691,13 @@ def build_graph() -> Any:
             "characterise": "characterise",
             "select": "select",
             "extract": "extract",
+            "extract_interventions": "extract_interventions",
+            "inherit": "inherit",
+            "suggest": "suggest",
+            "longlist": "longlist",
+            "option_profile": "option_profile",
+            "constrain": "constrain",
+            "theme": "theme",
             "group": "group",
             "synthesise": "synthesise",
         },
@@ -538,6 +710,13 @@ def build_graph() -> Any:
     g.add_edge("characterise", "finish")
     g.add_edge("select", "finish")
     g.add_edge("extract", "finish")
+    g.add_edge("extract_interventions", "finish")
+    g.add_edge("inherit", "finish")
+    g.add_edge("suggest", "finish")
+    g.add_edge("longlist", "finish")
+    g.add_edge("option_profile", "finish")
+    g.add_edge("constrain", "finish")
+    g.add_edge("theme", "finish")
     g.add_edge("group", "finish")
     g.add_edge("synthesise", "finish")
     g.add_edge("finish", END)
@@ -609,10 +788,13 @@ def run_harness(
     finding_vetter_backend: FindingVetterBackend | None = None,
     icf_extraction_backend: Any | None = None,
     icf_finding_vetter_backend: ICFFindingVetterBackend | None = None,
+    interventions_backend: InterventionsBackend | None = None,
     relevance_annotator_backend: RelevanceAnnotatorBackend | None = None,
     group_clustering_backend: GroupClusteringBackendFactory | None = None,
     synthesis_backend: SynthesisBackend | None = None,
     grounding_judge_backend: GroundingJudgeBackend | None = None,
+    suggest_backend: SuggestBackend | None = None,
+    longlist_backend: LonglistBackend | None = None,
     progress_emitter: ProgressEmitter | None = None,
 ) -> dict[str, Any]:
     """Run the compiled harness graph for one run, persisting its output.
@@ -663,6 +845,9 @@ def run_harness(
             defaults to ``StubICFExtractionBackend()`` — no default egress.
         icf_finding_vetter_backend: Post-extract ICF finding vetter. ``None``
             means judging is off for ICF.
+        interventions_backend: Intervention profile backend for the
+            extract_interventions component (task 045); defaults to
+            ``StubInterventionsBackend()`` — no default egress.
         relevance_annotator_backend: B2′ relevance annotator for the extract
             component (024). Like the finding vetter it stays ``None`` by
             default with NO stub substitution — ``None`` (or absent
@@ -675,6 +860,11 @@ def run_harness(
             defaults to ``StubSynthesisBackend()`` — no default egress.
         grounding_judge_backend: Grounding judge backend for the synthesise component;
             defaults to ``StubGroundingJudgeBackend()`` — no default egress.
+        suggest_backend: Judgment-model seam for the suggest component (task
+            045); defaults to ``StubAgentBackend()`` — no default egress.
+        longlist_backend: Model seam for the longlist, option_profile,
+            constrain and theme components (task 045; task 046, S20);
+            defaults to ``StubLonglistBackend()`` — no default egress.
 
     Returns:
         Harness outcome with ``summary`` populated only after successful
@@ -748,6 +938,11 @@ def run_harness(
             else StubICFExtractionBackend()
         ),
         "icf_finding_vetter_backend": icf_finding_vetter_backend,
+        "interventions_backend": (
+            interventions_backend
+            if interventions_backend is not None
+            else StubInterventionsBackend()
+        ),
         # No stub substitution (the finding-vetter pattern): None means the
         # annotator pass is OFF, so extract_scope's own None default is reachable.
         "relevance_annotator_backend": relevance_annotator_backend,
@@ -763,6 +958,12 @@ def run_harness(
             grounding_judge_backend
             if grounding_judge_backend is not None
             else StubGroundingJudgeBackend()
+        ),
+        "suggest_backend": (
+            suggest_backend if suggest_backend is not None else StubAgentBackend()
+        ),
+        "longlist_backend": (
+            longlist_backend if longlist_backend is not None else StubLonglistBackend()
         ),
         "summary": None,
         "progress_emitter": progress_emitter,

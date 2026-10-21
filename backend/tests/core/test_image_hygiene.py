@@ -4,7 +4,7 @@ Task 033 put `boto3` and its type stubs in a **non-default** dependency group
 (`pyproject.toml` `[dependency-groups] ops`) that the Dockerfile installs without,
 and this file pinned that the API process never imports them.
 
-Task 045 (approved dependency gate) moved `boto3` itself into the main dependencies:
+Task 053 (approved dependency gate) moved `boto3` itself into the main dependencies:
 the Cohere embedding backend and the Claude search-generation backend under `core/`
 and `evidence_search/` call Amazon Bedrock through it, so the deployed image now
 ships the SDK. What the image still does not ship is the **type stubs**
@@ -28,7 +28,7 @@ import policy_atlas
 import policy_atlas.ops
 
 #: Distributions the request path must not reach at runtime, by top-level module
-#: name: the boto3 type stubs, which stay in the `ops` group (task 045).
+#: name: the boto3 type stubs, which stay in the `ops` group (task 053).
 _FORBIDDEN = ("mypy_boto3_cognito_idp", "mypy_boto3_bedrock_runtime")
 
 

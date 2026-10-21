@@ -43,7 +43,7 @@ from policy_atlas.evidence_search.extract.relevance_prompt import (
     RELEVANCE_MAX_OUTPUT_TOKENS as RELEVANCE_ANNOTATOR_MAX_OUTPUT_TOKENS,
 )
 
-# Model from the route file (task 045); see core/model_routes.py.
+# Model from the route file (task 053); see core/model_routes.py.
 RELEVANCE_ANNOTATOR_MODEL = route().model_for("relevance")
 # Effort per the vetter precedent (xhigh exhausts completion caps on 5.4-mini
 # judgment calls); the marking task is lighter than vetting, but the ceiling is

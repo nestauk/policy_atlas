@@ -13,7 +13,8 @@ from __future__ import annotations
 from typing import Any
 
 from policy_atlas.api.contract import StageKey
-from policy_atlas.runtime.task_plan import registry_component_for
+from policy_atlas.runtime.steering import BASELINE_CONFIRM
+from policy_atlas.runtime.task_plan import canonical_steer_point, registry_component_for
 
 STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
     "acquire": ("Searching sources", "Queries out to academic and policy databases."),
@@ -25,6 +26,26 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
     "extract": ("Extracting findings", "Each claim is pulled out with its exact quote."),
     "group": ("Grouping findings", "Findings that answer the same question, together."),
     "synthesise": ("Writing the report", "Cited, checked, ready to challenge."),
+    "inherit": ("Reading the linked search", "Its documents and report join this task."),
+    "suggest": ("Suggesting options", "From the plan, the baseline and any linked report."),
+    "option_searches": (
+        "Searching for each option",
+        "One search per suggestion and per option of yours.",
+    ),
+    "extract_interventions": (
+        "Reading the abstracts",
+        "Which interventions each one covers, and how.",
+    ),
+    "longlist": ("Clustering into options", "Records grouped into options."),
+    "option_profile": (
+        "Writing what each option would take",
+        "What each option would take, and what kind of action it is.",
+    ),
+    "constrain": (
+        "Applying your constraints",
+        "Every option checked against the plan's requirements.",
+    ),
+    "theme": ("Grouping into themes", "Included options grouped into themes."),
 }
 
 STAGE_BY_REGISTRY: dict[str, StageKey] = {
@@ -38,11 +59,23 @@ STAGE_BY_REGISTRY: dict[str, StageKey] = {
     "extract": "extract",
     "group": "group",
     "synthesise": "synthesise",
+    "inherit": "inherit",
+    "suggest": "suggest",
+    "option_searches": "option_searches",
+    "extract_interventions": "extract_interventions",
+    "longlist": "longlist",
+    "option_profile": "option_profile",
+    "constrain": "constrain",
+    "theme": "theme",
 }
 
 
 def stage_for_payload(payload: dict[str, Any]) -> StageKey | None:
     """Map a composed or registry component name onto a public stage key."""
+    # The baseline gate's card is about the baseline, so its stage word is
+    # stated here rather than inherited from the component name (task 044, P11).
+    if canonical_steer_point(payload.get("steer_point")) == BASELINE_CONFIRM:
+        return "synthesise"
     component = payload.get("component")
     if not isinstance(component, str):
         return None

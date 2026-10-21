@@ -18,6 +18,7 @@ from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run
 from policy_atlas.evidence_search.corpus.characterise import CharacteriseFailure
 from policy_atlas.runtime import harness, steering_events
+from policy_atlas.runtime.capability_registry import expect_task_plan
 from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision, build
 from policy_atlas.runtime.runner import NullIO, WalkParked, run_plan
 from policy_atlas.runtime.steering import (
@@ -901,7 +902,10 @@ def test_adjust_answer_parity_reads_the_amended_plan(engine: Engine) -> None:
             resume_from=amended,
             resume_decision=ResumeDecision(response="adjust"),
         )
-        assert amended.plan.screening_criteria == delta["screen_abstract"]["screening"]["criteria"]
+        assert (
+            expect_task_plan(amended.plan).screening_criteria
+            == delta["screen_abstract"]["screening"]["criteria"]
+        )
         assert resumed.status == unbroken.status == "succeeded"
     finally:
         _cleanup(engine, parked_task_id)

@@ -42,7 +42,7 @@ timestamp: 2026-09-25
 - **Codex cannot start `uv` either** (its cache sits outside the sandbox), so a
   Codex brief that needs any Python test run says "tests run lead-side"; and **Codex
   runs `ruff format` over the whole tree unless told the exact files** (051: one round
-  reformatted about 170 unrelated files, reverted by path; 045 Phase B: four files
+  reformatted about 170 unrelated files, reverted by path; 053 Phase B: four files
   reformatted again because the brief allowed `ruff format src tests`). Name the files
   in the brief, allow only `ruff format --check` and `ruff check --fix`, and say "no
   formatter" for a read-only pass. The lint gate here is `ruff check`, so existing files
@@ -56,6 +56,11 @@ timestamp: 2026-09-25
   cleanly in 028 — but a mid-flight `pnpm typecheck` sees the union and
   cross-fires (one agent's regenerated types transiently broke the
   other's check). Gate on typecheck only after both land.
+- **A worker that starts its gate in the background can stop before it reports.** The brief
+  says "wait for the gate; the final message is the report" (046 base build).
+- **Check delegated output for invented attributions.** A worker wrote a code comment
+  attributing a rule to the owner with a date; no such statement existed. Grep delegated
+  diffs for "owner", "ruled", "decided" before gating (046 base build).
 
 # Why
 

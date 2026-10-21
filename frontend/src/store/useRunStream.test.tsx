@@ -72,7 +72,7 @@ describe("RunStreamProvider / useRunStream", () => {
 
     act(() => {
       sseState.onFrame?.({
-        type: "stage.completed",
+        type: "stage.completed", capability_run_id: null,
         stage: "screen",
         label: "Screening",
         summary: { included: 10 },
@@ -81,7 +81,7 @@ describe("RunStreamProvider / useRunStream", () => {
         sequence: 1,
       });
       sseState.onFrame?.({
-        type: "stage.completed",
+        type: "stage.completed", capability_run_id: null,
         stage: "classify",
         label: "Classifying",
         summary: {},
@@ -103,6 +103,48 @@ describe("RunStreamProvider / useRunStream", () => {
       vi.advanceTimersByTime(RUN_STREAM_INVALIDATE_DEBOUNCE_MS);
     });
     expect(invalidateQueries).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the longlist and option cards alone when only a child walk's frames landed", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateQueries = vi.spyOn(client, "invalidateQueries").mockResolvedValue(undefined);
+    renderHook(() => useRunStream(TASK_ID), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>
+          <RunStreamProvider taskId={TASK_ID}>{children}</RunStreamProvider>
+        </QueryClientProvider>
+      ),
+    });
+    const status = (id: string, value: "running" | "succeeded", sequence: number): SseFrame => ({
+      type: "run.status",
+      capability_run_id: id,
+      status: value,
+      occurred_at: "2026-07-21T10:00:00Z",
+      sequence,
+    });
+    const predicate = () => {
+      const call = invalidateQueries.mock.calls.at(-1)?.[0] as unknown as { predicate: (query: { queryKey: unknown[] }) => boolean };
+      return (key: unknown[]) => call.predicate({ queryKey: key });
+    };
+
+    act(() => sseState.onFrame?.(status("walk", "running", 1)));
+    await act(async () => {
+      vi.advanceTimersByTime(RUN_STREAM_INVALIDATE_DEBOUNCE_MS);
+    });
+    expect(predicate()(["tasks", TASK_ID, "longlist"])).toBe(true);
+
+    act(() => {
+      sseState.onFrame?.(status("child", "running", 2));
+      sseState.onFrame?.(status("child", "succeeded", 3));
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(RUN_STREAM_INVALIDATE_DEBOUNCE_MS);
+    });
+    expect(invalidateQueries).toHaveBeenCalledTimes(2);
+    expect(predicate()(["tasks", TASK_ID, "longlist"])).toBe(false);
+    expect(predicate()(["tasks", TASK_ID, "options", "o1"])).toBe(false);
+    expect(predicate()(["tasks", TASK_ID])).toBe(true);
   });
 
   it("throws when used outside the provider", () => {

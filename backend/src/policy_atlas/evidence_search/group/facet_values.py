@@ -17,7 +17,7 @@ DEFAULT_FACETS = (DEFAULT_FACET,)
 FACET_COUNTERPART: dict[str, str] = {
     "intervention": "outcome",
     "outcome": "intervention",
-    "population": "intervention",
+    "unit": "intervention",
 }
 VALUE_FACETS = frozenset(FACET_COUNTERPART)
 CLAIM_THEME_FACETS = frozenset(

@@ -115,15 +115,44 @@ tool-governance level instead (see [security/egress — not yet drafted]; arch �
   grounding and audit. **A source whose full text can't be fetched (paywall, dead link) is
   snapshotted on the text in hand** (abstract + metadata), **not dropped** — each snapshot carries
   a **`text_basis`** (`full_text` | `abstract_only`) so grounding and coverage know what a finding
-  rests on. Identity rests on **content hash (at ingest) + the §9 search-governance
+  rests on. *(Known defect, issue #74, 2026-09-09: a publisher's "JavaScript is disabled" stub page
+  passes the ingest's 200-character thin-text floor and is labelled `full_text`; the spec's rule —
+  bot blocks are `blocked_by_host`, never full text — stands, the code does not honour it for this
+  page. Fix in the Evidence search before options scoping's task 1 relies on the label.)* Identity rests on **content hash (at ingest) + the §9 search-governance
   event + source locator**. A corrected re-upload is a **new snapshot**, optionally carrying a
   human-asserted `supersedes(source_snapshot_id)` edge (a link only — no diffing, no
-  monitoring).
+  monitoring). *(Known issue, owner ruling on decision-sheet row A8, 2026-09-09: one document
+  fetched from two backends or in two versions is two snapshots and today counts twice in
+  coverage; a corpus-level **document identity** — dedup at acquire or ingest, and whether it
+  should precede the chunk index for retrieval diversity — is **deferred to a standalone Evidence
+  search slice after the options-scoping build**, DOI-only as its first rule; recorded in
+  `docs/deferred.md`. Until then, options scoping's task 2 counts documents **by DOI where one
+  exists** at the point of counting — denominators, membership, cap places — with no schema or
+  ingestion change.)*
 - **Acquired snapshots are a shared, content-addressed, cross-task substrate** (key =
   content hash × parse-profile × segmentation-policy × embedding-model version); derived
   substrate computed **once per unique key**; reference-counted GC; reference edges
   task-private (no cross-task enumeration). **Uploaded snapshots stay per-task, never
   shared.** Sharpens a cross-tenant boundary flag → carry to security/egress (arch §11). ⚠️
+- **Inherited documents (owner ruling on decision-sheet row A7, 2026-09-09; closes the 🟡 in OS
+  components § 0).** An inherited document is an acquired one; `origin` is untouched and no
+  inheritance column is added. A document row created by an `inherit` run is inherited; its
+  source task is whichever linked task holds the same snapshot, resolved through `task_link`, so a
+  document inherited from several linked tasks needs no special case. "Inherited versus added" on
+  Sources is a query over the creating run. Classification and appraisal for inherited documents
+  are **read from the linked task's pinned run**; classifier and rubric versions travel with the
+  rows as they already do and are not surfaced to the user. A re-run in the receiving task is a
+  plan setting or a user action, after which the receiving task's own rows take over for those
+  documents. Re-screening against the receiving plan is mandatory (OS ruling 22).
+  *([task 045 contract](../tasks/045-scoping-longlist/contract.md), finding A3 and D23.)* The inherit step writes one `task_source_snapshot` row per
+  linked document, pointing at the same content-addressed snapshot, **origin unchanged** (owner:
+  "origin stays the original source; inherited = created by the inherit step"). Classification and
+  appraisal are **read across through one resolver** — per document, the evidence type and quality
+  tier with their provenance (this task's own scope, or a linked task's pinned run through
+  `task_link` and the shared snapshot id) and an explicit *absent*; a tier under a different rubric
+  version is re-appraised rather than mixed. Owner: "I think it would make sense to have documents
+  be able to be read across tasks rather than just copying them over … laying the groundwork for [a
+  meta-analysis capability]". No general cross-task reading layer is built.
 - **Origin drives classification richness & default priority, not appraisal** — an uploaded
   SR is appraised the same as an acquired one; priority is handled by **scoping** (soft prior),
   not a hidden re-weight. Uploaded docs get an **inferred `function`** (never user-entered;
@@ -150,6 +179,15 @@ existing records and creates per-source tasks only for what's missing. Reuse hap
 fingerprint)`. Capabilities consume via pinned **evidence dataset snapshots** (point-in-time).
 **Model/prompt upgrades set future defaults; they never invalidate existing findings or
 historical state.**
+
+*(Owner ruling on OS decision-sheet row A4, 2026-09-09.)* A linked task's findings are readable
+across the Link like any other record (§ Links between tasks); no change to the extraction memo is
+needed to read them. Reusing them is piecemeal: a finding only ever stands in for the fields it
+actually holds, for the same document snapshot and a compatible design, keeping its original claim
+and provenance; the rest is extracted or marked missing, and values are never mixed across
+different comparators or time periods. Which fields options scoping's light profile can take from
+an existing finding is decided with that profile (task 3). Letting extract skip snapshots another
+task already extracted is a separate Evidence search change, not needed by options scoping.
 
 - **Where a finding is multidimensional, preserve it as one coherent typed record with its
   dimensions intact and queryable** — never flattened to disconnected fields or prose.
@@ -235,7 +273,11 @@ historical state.**
   source names it (the CFIR inner-setting rule, carried near-verbatim in both prompts: the
   setting where recipients *experience* the intervention, never the institution that created
   or mandated it — a parliament passing a school nutrition policy means "school") — is **new
-  to the stored vocabulary on BOTH schemas**: a nullable finding-grain column on ICF from
+  to the stored vocabulary on BOTH schemas** *(owner ruling 2026-09-09, parity with the
+  options-scoping plan's setting constraint: `setting` is where the **target unit** experiences the
+  intervention — the delivery point or channel — generalised from the CFIR "recipients" wording as
+  target unit was from population; the source-named field is unchanged, and the extraction prompts
+  adopt the wording when task 3 next revises them)*: a nullable finding-grain column on ICF from
   day one, and a nullable top-level column added to IOF by the same flow-back (the `iof_v3`
   rider — see Edit 1 above). Cross-schema linkage between IOF and ICF stays
   **reference-mediated via `group`** (no explicit link objects) — the shared vocabulary
@@ -248,6 +290,15 @@ historical state.**
   the six shared reference columns, reference-columns-only); its first reader is group's
   value-facet loader. Kind-scoped payloads (ICF `claim`/`context_type`) stay direct table
   reads — a kind-scoped facet gets a kind-scoped read, honestly.
+- **Third record kind: `intervention_profile_record`** (options scoping, [task 045 contract](../tasks/045-scoping-longlist/contract.md), D3 —
+  owner naming 2026-09-22, replacing "intervention mention" and "abstract profile"). One row per
+  intervention a screened-in document's abstract covers, with its **role** (evaluated · described ·
+  recommended · comparator · mentioned), its stated design features, whether it is a bundle and of
+  what, a quote anchor and the shared reference columns; per document, whether it covers no
+  intervention. On the findings pattern beside the two finding tables, but **not a finding of
+  effect** and not a subset of either: it lacks the effect (IOF) and the typed claim (ICF). Its own
+  fingerprint domain, memoised through `source_extraction_record` per task; the union view gains a
+  third branch for it.
 - **ICF is its own fingerprint domain** (own extraction profile/call `eb_icf_base_v1`, own
   `SCHEMA_VERSION` `icf_v2` since task 022's `context_label` rider, hanging off
   `source_extraction_record` via the same composite FK
@@ -265,7 +316,7 @@ historical state.**
   `not_selected` (doc-level — screened-in but not chosen) · `not_extracted` (field-level) ·
   `unclear` · `extraction_failed`. A source that **reports** a null is a **finding**; a source
   that **doesn't mention** an outcome is **coverage**. (Consumed by the gap-provenance rule in
-  [provenance-grounding.md](provenance-grounding.md) and the EB
+  [provenance-grounding.md](provenance-grounding.md) and the ES
   [provenance.md](../capabilities/evidence-search/provenance.md).)
 - **Hybrid-queryable dimensions**: ⏸ **deferred behind the dimension-promotion gate for ALL
   dimensions, `intervention`/`outcome` included** (owner adjudication at the task-022
@@ -285,7 +336,7 @@ land. arch §3.5–§3.6.)*
 
 ### The option entity (declared 2026-09-07 for options scoping; OS ruling 44)
 
-EB clusters are persisted per run (`characterisation_result` holds each run's themes and
+ES clusters are persisted per run (`characterisation_result` holds each run's themes and
 memberships as JSON; `source_tag` rows carry the theme label per document) but are deliberately
 **never promoted to canonical, queryable state**: there is no theme table, memberships belong to the
 run that computed them, and a re-run replaces rather than matches them, so a cluster has no identity
@@ -296,11 +347,44 @@ shortlist choice, a variant's link to its parent or a child task's dependency ac
 - typed relations **variant of** / **part of** between option ids;
 - **state records** against the id: included · excluded (with the constraint) · on the shortlist
   (proposed by Policy Atlas / added by you) · assessed (scoping pass / full run);
-- **membership records** against the id and a design version: the intervention mentions and the
+- **membership records** against the id and a design version: the intervention profile records and the
   findings that belong to it (also the validated set behind its pattern claims);
-- a link to the child Evidence search task a full run mints.
+- a link to the child Evidence search task a full run mints (one row of `task_link`, below).
 Matching a regenerated option to an existing id after a plan change (deltas, not restarts) is
 **open** — OS open question 7 — and is a labelled judgement or a user confirmation, never silent.
+
+*([task 045 contract](../tasks/045-scoping-longlist/contract.md).)* Built as the tables `option`, `option_membership` (each row carrying its
+assignment reason and the `design_feature_not_stated` flag, D11) and `option_relation`, with the
+run-keyed `longlist_result` (themes, per-option coverage, constraint judgements, guesses and the
+counted buckets — the characterise pattern). Option-level judgements are keyed `(option_id,
+design_version)`, so a changed design cannot inherit them (D10). `task_link` gains the nullable
+`option_id`. An option search is a **child walk**: `capability_run.parent_capability_run_id` names
+the longlist walk that asked for it (finding A1); a walk the Task Agent starts to add an option has
+no parent.
+
+### Links between tasks (declared 2026-09-09; owner ruling on decision-sheet row A6)
+
+"Link" and "Context" in [vocabulary.md](../vocabulary.md) had no record. **`task_link`** — source
+task (the one read from) · target task (the one that inherits) · optional option id · pinned source
+run ids · created by · created at — is the input the shared `inherit` component reads in both
+directions, and the row the option entity's child-task link is. What a link is *for* follows from
+the linked tasks' capabilities and whether an option is named (search → scoping is the scoping
+direction; scoping → search with an option is a full-run child; without one, a search started from
+a scoping task); there is **no purpose column** until two links between the same kinds of task mean
+different things. Links are **many-to-many**: a task may read from several linked tasks and be read
+by several. Where several tasks feed one, the plan takes the **user's own ask** and the linked
+tasks' questions are offered to the Task Agent conversation as context; the pool is the union; each
+suggestion carries the task it came from *(owner amendment 2026-09-09)*. Two tasks may be linked
+only while they **share a project**, so they share visibility and organisation; a link that stops
+satisfying this is flagged, not broken.
+`inherit` **reads across a link; it does not copy**: snapshots, chunks, embeddings and findings are
+read by snapshot id; classification and appraisal rows are read from the pinned source run and
+shown as inherited; the receiving task writes only its own document rows and its own screening
+(OS ruling 22). A task with inbound links is archived, never hard-deleted. A link changes no one's
+access. *(Owner, 2026-09-09: kept generic — a task-to-task record — as the foundation later
+capabilities such as meta-analysis will build on; the option id is optional so the full run's
+child link can name its option.)* `task_link` is unique per task pair — noted for options scoping's task 5,
+the full run (task 045, finding A21).
 
 - **Three grains:** **block** = capture grain (own version chain; summary co-versions);
   **artefact** = snapshot grain (lock-on-advance freezes a named immutable binding of block

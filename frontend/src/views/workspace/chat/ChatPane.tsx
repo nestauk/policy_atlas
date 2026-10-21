@@ -18,7 +18,7 @@ import { usePinToBottom } from "./usePinToBottom";
  *
  * Args:
  *   props: Conversation identity, optional starter section titles, the
- *     hand-off to the planning thread, `wide` for the Agent tab's reading
+ *     hand-off to the task_agent thread, `wide` for the Agent tab's reading
  *     column, and `onAtBottomChange`, reporting the reader's deliberate
  *     scroll past the transcript's end so the tab can reveal the footer.
  *
@@ -29,14 +29,14 @@ export function ChatPane({
   taskId,
   conversationId,
   sectionTitles = [],
-  onOpenPlanning,
+  onOpenTaskAgent,
   wide = false,
   onAtBottomChange,
 }: {
   taskId: string;
   conversationId: string;
   sectionTitles?: string[];
-  onOpenPlanning: () => void;
+  onOpenTaskAgent: () => void;
   wide?: boolean;
   onAtBottomChange?: (atBottom: boolean) => void;
 }) {
@@ -121,7 +121,7 @@ export function ChatPane({
               onAsk={send}
             />
           ) : (
-            <ChatMessages taskId={taskId} rows={chat.rows} onOpenPlanning={onOpenPlanning} onRetry={retry} />
+            <ChatMessages taskId={taskId} rows={chat.rows} onOpenTaskAgent={onOpenTaskAgent} onRetry={retry} />
           )}
         </div>
       </div>

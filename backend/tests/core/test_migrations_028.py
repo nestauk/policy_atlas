@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.url import make_url
 
-from policy_atlas.core.schema import artefact, block, planning_transcript, source_tag
+from policy_atlas.core.schema import artefact, block, source_tag, task_agent_transcript
 from tests.conftest import _alembic_cfg
 from tests.core.legacy_catalog import (
     legacy_table,
@@ -106,8 +106,9 @@ def test_028_migration_roundtrip_preserves_legacy_rows(
                 column["name"] for column in inspector.get_columns("artefact")
             }
             assert "theme_id" in {column["name"] for column in inspector.get_columns("source_tag")}
+            # 044 renamed the table; at head it is `task_agent_transcript`.
             assert "part" in {
-                column["name"] for column in inspector.get_columns("planning_transcript")
+                column["name"] for column in inspector.get_columns("task_agent_transcript")
             }
             assert conn.execute(
                 select(block.c.summary, block.c.summary_status).where(block.c.block_id == block_id)
@@ -125,8 +126,8 @@ def test_028_migration_roundtrip_preserves_legacy_rows(
             )
             assert (
                 conn.execute(
-                    select(planning_transcript.c.part).where(
-                        planning_transcript.c.id == transcript_id
+                    select(task_agent_transcript.c.part).where(
+                        task_agent_transcript.c.id == transcript_id
                     )
                 ).scalar_one()
                 is None

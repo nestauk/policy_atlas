@@ -31,9 +31,21 @@ HASH_LIST_PATH = Path(__file__).resolve().parent / "prompt_hashes.json"
 PROMPT_ROOT = Path(__file__).resolve().parent.parent / "backend" / "src" / "policy_atlas"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+#: Files that carry model-facing prompt text without "prompt" in the name (repo-relative).
+EXTRA_FILES: tuple[str, ...] = (
+    # The intervention record's Field descriptions are the model's schema (task 046, amendment 3).
+    "backend/src/policy_atlas/evidence_search/extract/interventions_records.py",
+    # The finding records' Field descriptions and their shared texts (R75), and the
+    # grounding judge's field list (R73).
+    "backend/src/policy_atlas/evidence_search/extract/iof_records.py",
+    "backend/src/policy_atlas/evidence_search/extract/icf_records.py",
+    "backend/src/policy_atlas/evidence_search/extract/finding_references.py",
+    "backend/src/policy_atlas/evidence_search/synthesis/grounding_judge.py",
+)
+
 
 def prompt_files() -> list[Path]:
-    """Every prompt-bearing file under backend/src/policy_atlas.
+    """Every prompt-bearing file under backend/src/policy_atlas, plus EXTRA_FILES.
 
     That is every Python module whose name contains "prompt", plus every
     ``.txt`` file: prompt wordings kept out of Python (for example the
@@ -42,7 +54,8 @@ def prompt_files() -> list[Path]:
     """
     modules = (path for path in PROMPT_ROOT.rglob("*.py") if "prompt" in path.name.lower())
     texts = PROMPT_ROOT.rglob("*.txt")
-    return sorted([*modules, *texts])
+    extras = (REPO_ROOT / extra for extra in EXTRA_FILES)
+    return sorted({*modules, *texts, *extras})
 
 
 def rel(path: Path) -> str:

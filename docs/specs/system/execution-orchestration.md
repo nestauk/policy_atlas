@@ -25,7 +25,7 @@ timestamp: 2026-07-05
 - **Every capability sub-agent composes its own artefact at its run terminus** (task 013
   flow-back): composition is capability expertise, so the Agent *shapes* the artefact at
   plan time (sections, facets, depth — compiled parameters) and owns **no runtime content
-  machinery**. EB's instance is its `synthesise` terminal component.
+  machinery**. ES's instance is its `synthesise` terminal component.
 - **Plan-time authority, not runtime.** Flexibility lives at plan time (cheap, human-gated,
   logged); execution follows the agreed plan. The capability agent's only runtime discretion is
   the bounded **escape hatches** (e.g. evidence thin → extra search, provided it flags/logs).
@@ -52,7 +52,7 @@ components**, where **each component is realised by the mechanism its nature dem
 
 **Rigidity is a per-capability parameter** (how much skeleton + the deterministic-vs-agentic
 mix). Extremes are degenerate cases of one construct (pure agent-loop = scrutinise/red-team;
-fixed linear pipeline = v2). EB sits toward structured. Substrate: a **fixed LangGraph harness
+fixed linear pipeline = v2). ES sits toward structured. Substrate: a **fixed LangGraph harness
 interpreting the plan-as-data**, not a graph rebuilt per run.
 
 ## The vocabulary — tool / component / capability
@@ -193,7 +193,7 @@ ask* / *flag & continue* / *silently log & continue*, by **kind of decision × m
   escalations but never remove one.
 - **The Agent watch — the decider layer** *(024; discharges this spec's former
   "⏸ no first-principles runtime classifier" deferral — see below)*: one Agent
-  agent, three moments (the planning conversation · the free-text steering **router** at
+  agent, three moments (the Task Agent conversation · the free-text steering **router** at
   pauses · the boundary **watch**), one prompt family, one shared session. The watch
   observes component boundaries under **structurally gated invocation**: clean boundaries
   are resolved deterministically (a no-LLM `agent_judgement_routed` `clean_boundary`
@@ -213,7 +213,7 @@ ask* / *flag & continue* / *silently log & continue*, by **kind of decision × m
 - **Unattended — discretion is the mode** *(024 revision of the 017 proceed-and-flag
   mechanism)*: choosing Unattended **is** the delegation. Standing instructions are
   pre-declared per steer point as visible plan content (authored in the planning
-  conversation: the planner walks the steer points proposing plain-language defaults —
+  conversation: the Task Agent walks the steer points proposing plain-language defaults —
   accepted, edited, or skipped), and a **pinned rule always overrides the watch**; a
   declared hard stop is always honoured — discretion can never override a declared stop.
   A decision no pinned rule covers is taken by the watch under the disciplines above and

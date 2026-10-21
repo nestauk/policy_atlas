@@ -10,7 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { connectEventStream } from "../api/sse";
 import { useAuth } from "../auth";
 import { createInitialRunStreamState } from "./types";
-import { reduceRunStreamFrame } from "./reducer";
+import { isOtherRunsStage, reduceRunStreamFrame } from "./reducer";
 import type { RunStreamState } from "./types";
 
 /**
@@ -115,15 +115,27 @@ function useRunStreamConnection(taskId: string, connect: boolean): RunStreamStat
     // state (a stale-connection race at the task-switch boundary).
     let closed = false;
     let invalidateTimer: ReturnType<typeof setTimeout> | null = null;
+    // This connection's frames folded on their own, so a frame can be told
+    // apart as a child walk's (a longlist's option search) as it lands.
+    let folded = createInitialRunStreamState();
+    // True while every frame in the pending window came from a child walk:
+    // those leave the longlist and the option cards alone.
+    let childOnly = true;
 
     const flushInvalidate = () => {
       invalidateTimer = null;
+      const keepLonglist = childOnly;
+      childOnly = true;
       void queryClient.invalidateQueries({
-        predicate: (query) => query.queryKey[0] === "tasks" && query.queryKey[1] === taskId,
+        predicate: ({ queryKey }) =>
+          queryKey[0] === "tasks" &&
+          queryKey[1] === taskId &&
+          !(keepLonglist && (queryKey[2] === "longlist" || queryKey[2] === "options")),
       });
     };
 
-    const scheduleInvalidate = () => {
+    const scheduleInvalidate = (fromChild: boolean) => {
+      if (!fromChild) childOnly = false;
       if (invalidateTimer !== null) clearTimeout(invalidateTimer);
       invalidateTimer = setTimeout(flushInvalidate, RUN_STREAM_INVALIDATE_DEBOUNCE_MS);
     };
@@ -146,9 +158,10 @@ function useRunStreamConnection(taskId: string, connect: boolean): RunStreamStat
       },
       onFrame: (frame) => {
         if (closed) return;
+        folded = reduceRunStreamFrame(folded, frame);
         setState((previous) => reduceRunStreamFrame(previous, frame));
         if (frame.type === "stage.completed" || frame.type === "run.status") {
-          scheduleInvalidate();
+          scheduleInvalidate(isOtherRunsStage(folded, frame.capability_run_id));
         }
       },
     });

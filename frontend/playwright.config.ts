@@ -34,7 +34,7 @@ export default defineConfig({
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
-    env: { VITE_MOCK: "1" },
+    env: { VITE_MOCK: "1", VITE_OPTIONS_SCOPING: "1" },
   },
   projects: [
     {

@@ -233,8 +233,11 @@ session. Once gate B passes, GitHub Actions owns steady-state `deploy-update` ru
      --overwrite
    ```
 
-   Supply one to five canonical **IPv4** CIDRs, separated by commas with no
-   spaces. IPv6 entries are rejected: the shared ALB is IPv4-only (IPv4 security
+   Supply one to eight canonical **IPv4** CIDRs, separated by commas with no
+   spaces. An ALB rule holds at most five condition values and the hostname
+   takes one, so the deploy splits the list into one listener rule per four
+   CIDRs (priorities 20 and 21). Changing the number of CIDRs takes effect on
+   the next deploy, like any other allowlist edit. IPv6 entries are rejected: the shared ALB is IPv4-only (IPv4 security
    group ingress, an `A` alias record, default address type), so an IPv6 entry
    could never match a client and an IPv6-only list would lock everyone out
    with a silent 404. Universal `/0` ranges are rejected because they do not
@@ -300,14 +303,17 @@ synth-time context query and must not run before the VPC exists.
      (Self-signup is disabled — operator-created users only, for the migration
      window.)
 
-     Day-to-day, use the operator CLI instead of the raw call — it creates the
-     account **and enrols it**, which the raw call does not (task 033). The
-     make wrappers own the setup (session check, pool id from SSM, DB
-     credentials, the § 6 tunnel opened or reused):
+     Day-to-day, use the operator CLI instead of the raw call. With `ORG` it
+     creates the account and enrols it (task 033). Without `ORG` it creates the
+     account and an identity row in no organisation, including the address, so
+     the person can be found later. A later `user enrol` places them. The make
+     wrappers own the setup (session
+     check, pool id from SSM, DB credentials, the § 6 tunnel opened or reused):
 
      ```bash
      export PA_OPS_ACCOUNT_STAGING=<account id>   # operator-asserted, never derived
      make user-create ENV=staging EMAIL=<user-email> NAME="<name>" ORG="<organisation>"
+     make user-create ENV=staging EMAIL=<user-email> NAME="<name>"   # no organisation
      ```
 
      The direct form remains equivalent (the wrappers only forward to it):
@@ -317,7 +323,7 @@ synth-time context query and must not run before the VPC exists.
        --name /policy_atlas_v3/auth/user_pool_id --query Parameter.Value --output text)
      # DATABASE_URL points at the § 6 tunnel
      uv run python -m policy_atlas.ops --env staging user create \
-       --email <user-email> --display-name "<name>" --org "<organisation>"
+       --email <user-email> --display-name "<name>" [--org "<organisation>"]
      ```
 
      The CLI verifies that the AWS account and user pool it resolved match the
@@ -529,13 +535,19 @@ omitted from the deployed task.
 | `POLICY_ATLAS_FIXTURE_CORPUS` | omitted (development/test fixture override) | `evidence_search/sourcing/ingest_full_text.py` |
 | `POLICY_ATLAS_AGENT_MODEL` | omitted (development tuning; application default) | `runtime/agent_backend.py` |
 | `POLICY_ATLAS_AGENT_TRIAGE_MODEL` | omitted (development tuning; application default) | `runtime/agent_backend.py` |
-| `POLICY_ATLAS_PLANNER_MODEL` | omitted (development tuning; application default) | `runtime/planner.py` |
+| `POLICY_ATLAS_TASK_AGENT_MODEL` | omitted (development tuning; application default) | `runtime/task_agent.py` |
 | `POLICY_ATLAS_RELEVANCE_MODEL` | omitted (development tuning; application default) | `evidence_search/extract/relevance_annotator.py` |
 | `POLICY_ATLAS_SEARCH_CACHE_TTL_S` | omitted (development tuning; application default) | `evidence_search/sourcing/search_live.py` |
 | `POLICY_ATLAS_SYNTHESIS_MODEL` | omitted (development tuning; application default `gpt-5.6-terra`) | `evidence_search/synthesis/synthesis_backend.py` |
 | `RUN_EXECUTOR_MAX` | config value: `backend.run_executor_max` | `api/settings.py` |
 | `SSE_HEARTBEAT_SECONDS` | omitted (application default: 15) | `api/settings.py` |
 | `SSE_POLL_INTERVAL_SECONDS` | omitted (application default: 0.4) | `api/settings.py` |
+
+**Renamed in task 044:** `POLICY_ATLAS_PLANNER_MODEL` became
+`POLICY_ATLAS_TASK_AGENT_MODEL`. No fallback read of the old name was added, and
+the application default is unchanged, so a deployment that still sets only the
+old name behaves exactly as before — the variable is simply ignored and the
+built-in default applies.
 
 **Capacity values** (sized together for a 10-concurrent-run ceiling):
 `RUN_EXECUTOR_MAX=10`, `DB_POOL_SIZE=15`, `DB_MAX_OVERFLOW=10`, task 2 vCPU /
@@ -567,7 +579,7 @@ choose a different remote target.
 **The ops CLI (task 033) runs over this same tunnel** — the operator's
 laptop, `uv run python -m policy_atlas.ops --env staging|prod ...` with
 `DATABASE_URL` pointing at `localhost:15432`, or the equivalent make
-wrappers (`make user-create ENV=... EMAIL=... NAME=... ORG=...` — see the
+wrappers (`make user-create ENV=... EMAIL=... NAME=... [ORG=...]` — see the
 Makefile's ops block; `scripts/ops_run.sh` performs this section's setup
 and tunnel automatically, reusing an already-open one), under the operator's own IAM
 (Cognito `cognito-idp:ListUsers` + `cognito-idp:AdminCreateUser` +

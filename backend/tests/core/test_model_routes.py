@@ -1,6 +1,6 @@
-"""Tests for the committed model route file and its loader (task 045, contract D3).
+"""Tests for the committed model route file and its loader (task 053, contract D3).
 
-The default route must reproduce every pre-045 literal exactly; everything else
+The default route must reproduce every pre-053 literal exactly; everything else
 is the fail-loud rule, the overlay, and the retired-variable warning.
 """
 
@@ -16,9 +16,9 @@ import pytest
 from policy_atlas.core import model_routes
 from policy_atlas.core.model_routes import ROUTE_FILE, Route, load_route
 
-# What the code said before task 045, step by step. The default route must
+# What the code said before task 053, step by step. The default route must
 # give exactly these, so a laptop with nothing set behaves as before.
-PRE_045_MODELS = {
+PRE_053_MODELS = {
     "screen": "gpt-5.6-luna",
     "search_queries": "gpt-5.6-luna",
     "search_reformulate": "gpt-5.6-luna",
@@ -40,8 +40,13 @@ PRE_045_MODELS = {
     "synthesis": "gpt-5.6-terra",
     "case_studies": "gpt-5.6-terra",
     "chat": "gpt-5.6-terra",
-    "planner": "gpt-5.5",
+    "task_agent": "gpt-5.5",
     "agent": "gpt-5.5",
+    # Options scoping (tasks 044 to 046), as merged into 053.
+    "task_agent_scoping": "gpt-5.6-sol",
+    "longlist_judgment": "gpt-5.6-sol",
+    "longlist_assignment": "gpt-5.6-luna",
+    "extract_interventions": "gpt-5.6-luna",
 }
 
 
@@ -54,10 +59,10 @@ def test_route_file_ships_inside_the_package() -> None:
     assert "src/policy_atlas" in str(ROUTE_FILE)
 
 
-def test_default_route_reproduces_every_pre_045_model() -> None:
+def test_default_route_reproduces_every_pre_053_model() -> None:
     route = _default()
-    assert set(route.steps) == set(PRE_045_MODELS)
-    for step, model in PRE_045_MODELS.items():
+    assert set(route.steps) == set(PRE_053_MODELS)
+    for step, model in PRE_053_MODELS.items():
         assert route.model_for(step) == model, step
     assert route.openai_base_url == "https://api.openai.com/v1"
     assert route.api_key_env == "OPENAI_API_KEY"
@@ -76,7 +81,9 @@ def test_bedrock_local_names_bedrock_models_and_cohere() -> None:
     assert route.model_for("classify") == "global.openai.gpt-5.6-luna"
     assert route.model_for("screen") == "global.openai.gpt-5.6-luna"
     assert route.model_for("synthesis") == "global.openai.gpt-5.6-terra"
-    assert route.model_for("planner") == "global.openai.gpt-5.6-terra"
+    assert route.model_for("task_agent") == "global.openai.gpt-5.6-terra"
+    assert route.model_for("task_agent_scoping") == "global.openai.gpt-5.6-sol"
+    assert route.model_for("longlist_assignment") == "global.openai.gpt-5.6-luna"
     assert route.embeddings.backend == "cohere"
     assert route.embeddings.model == "eu.cohere.embed-v4:0"
     assert route.embeddings.profile == "cohere_embed_v4_1536_v1"
@@ -89,7 +96,7 @@ def test_bedrock_local_claude_switches_only_query_generation() -> None:
     claude = load_route(ROUTE_FILE, "bedrock-local-claude", {})
     assert claude.search_queries.backend == "claude"
     assert claude.search_queries.model == "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
-    for step in PRE_045_MODELS:
+    for step in PRE_053_MODELS:
         assert claude.model_for(step) == plain.model_for(step), step
     assert claude.embeddings == plain.embeddings
 
@@ -289,12 +296,13 @@ def test_bedrock_route_reads_its_own_key_variable(monkeypatch: pytest.MonkeyPatc
     assert model_routes.live_api_key() == "bedrock-key"
 
 
-def test_every_module_constant_equals_its_pre_045_literal() -> None:
-    """Rubric item 10: the 25 constants the sweep rewired, each under the default route."""
+def test_every_module_constant_equals_its_pre_053_literal() -> None:
+    """Rubric item 10: the 29 constants the sweep rewired, each under the default route."""
     from policy_atlas.core import embeddings
     from policy_atlas.evidence_search.assess import classify_prompt, screen_prompt
     from policy_atlas.evidence_search.corpus import ranking, theme_grouping
     from policy_atlas.evidence_search.extract import (
+        extract_interventions_prompt,
         finding_vetter,
         icf_prompt,
         iof_prompt,
@@ -303,9 +311,11 @@ def test_every_module_constant_equals_its_pre_045_literal() -> None:
     from policy_atlas.evidence_search.group import group_clustering
     from policy_atlas.evidence_search.sourcing import search_prompts
     from policy_atlas.evidence_search.synthesis import grounding_judge, synthesis_backend
-    from policy_atlas.runtime import agent_backend, chat_prompt, planner
+    from policy_atlas.options_scoping.longlist import longlist_backend
+    from policy_atlas.runtime import agent_backend, chat_prompt, task_agent, task_agent_scoping
 
     mini, luna, terra, big = "gpt-5.4-mini", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.5"
+    sol = "gpt-5.6-sol"
     expected = {
         (classify_prompt, "CLASSIFY_MODEL"): mini,
         (screen_prompt, "SCREEN_MODEL"): luna,
@@ -329,11 +339,15 @@ def test_every_module_constant_equals_its_pre_045_literal() -> None:
         (agent_backend, "AGENT_MODEL"): big,
         (agent_backend, "AGENT_TRIAGE_MODEL"): mini,
         (chat_prompt, "CHAT_MODEL"): terra,
-        (planner, "PLANNER_MODEL"): big,
+        (task_agent, "TASK_AGENT_MODEL"): big,
+        (task_agent_scoping, "TASK_AGENT_SCOPING_MODEL"): sol,
+        (longlist_backend, "LONGLIST_JUDGMENT_MODEL"): sol,
+        (longlist_backend, "LONGLIST_ASSIGNMENT_MODEL"): luna,
+        (extract_interventions_prompt, "INTERVENTIONS_MODEL"): luna,
         (embeddings, "EMBEDDING_MODEL"): "text-embedding-3-small",
         (embeddings, "EMBEDDING_PROFILE"): "openai_text_embedding_3_small_v1",
     }
-    assert len(expected) == 25
+    assert len(expected) == 29
     for (module, constant), value in expected.items():
         assert getattr(module, constant) == value, f"{module.__name__}.{constant}"
 

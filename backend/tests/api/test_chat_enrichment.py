@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
-from policy_atlas.api import chat_enrichment, chat_turns
+from policy_atlas.api import answer_core, chat_enrichment, chat_turns
 from policy_atlas.api.chat_enrichment import enrich_chat_turn
 from policy_atlas.core.schema import chat_turn, source_snapshot, task_source_snapshot
 from policy_atlas.core.schema import chunk as chunk_table
@@ -495,7 +495,7 @@ def test_replay_preserves_an_enriched_payload(
         _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         snapshot_id, chunk_id = _seed_chunk(engine, task_id)
         monkeypatch.setattr(
-            chat_turns,
+            answer_core,
             "build_section_tools",
             lambda **_: {
                 "search_chunks": lambda _arguments: {

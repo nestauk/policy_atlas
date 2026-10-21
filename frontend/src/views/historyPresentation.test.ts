@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { mergeHistory } from "./historyPresentation";
 
 describe("mergeHistory", () => {
-  it("merges planning turns and decisions into one list ordered by time, question and plan first", () => {
+  it("merges task_agent turns and decisions into one list ordered by time, question and plan first", () => {
     const turns = [
       { turn_index: 0, created_at: "2026-07-28T09:00:00Z", user_message: "What is the policy landscape?", status: "completed" as const },
       { turn_index: 1, created_at: "2026-07-28T09:05:00Z", user_message: "Focus on the UK only.", status: "completed" as const },
@@ -39,7 +39,7 @@ describe("mergeHistory", () => {
     ]);
   });
 
-  it("gives turn_index 0 the Question category and later turns Planning", () => {
+  it('gives turn_index 0 the Question category and later turns "Planning"', () => {
     const turns = [
       { turn_index: 0, created_at: "2026-07-28T09:00:00Z", user_message: "Start", status: "completed" as const },
       { turn_index: 1, created_at: "2026-07-28T09:05:00Z", user_message: "Refine", status: "completed" as const },
@@ -80,7 +80,7 @@ describe("mergeHistory", () => {
       { turn_index: 1, created_at: "2026-07-28T09:05:00Z", user_message: "Refine", status: "completed" as const },
     ];
     const result = mergeHistory([], turns);
-    expect(result[0].details).toEqual([{ label: "The planner replied", value: "Here is the plan." }]);
+    expect(result[0].details).toEqual([{ label: "The Task Agent replied", value: "Here is the plan." }]);
     expect(result[1].details).toBeUndefined();
   });
 
@@ -101,5 +101,23 @@ describe("mergeHistory", () => {
   it("returns an empty array for empty inputs", () => {
     expect(mergeHistory([], [])).toEqual([]);
     expect(mergeHistory(undefined, undefined)).toEqual([]);
+  });
+
+  it("files the user's longlist changes under Longlist, with the server's sentence (task 045)", () => {
+    const rows = mergeHistory(
+      ["option.added", "option.excluded", "option.included"].map((kind, index) => ({
+        sequence: index + 1,
+        occurred_at: `2026-09-22T10:0${index}:00Z`,
+        kind,
+        summary: `You changed option ${index + 1}.`,
+      })),
+      [],
+    );
+    expect(rows.map((row) => row.category)).toEqual(["Longlist", "Longlist", "Longlist"]);
+    expect(rows.map((row) => row.sentence)).toEqual([
+      "You changed option 1.",
+      "You changed option 2.",
+      "You changed option 3.",
+    ]);
   });
 });

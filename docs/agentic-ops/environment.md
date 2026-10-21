@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–040; 040 is frontend-only and changes no env; 051 changes no env and no schema (the single-pass search; model ids were code constants until 045); 045 adds one optional selector, `POLICY_ATLAS_MODEL_ROUTE` (unset = OpenAI direct, as before), and each route names its key variable (`OPENAI_API_KEY` for OpenAI direct, `AWS_BEARER_TOKEN_BEDROCK` for the Bedrock routes), no schema change, see `backend/.env.example`; 039 adds the APO test-mod (`publisher_source`,
+stands (tasks 001–040 on `dev`; 044 on `feat/options-scoping` adds two reversible migrations (`a7d3f1c8e2b5` Task Agent rename, `b5e1d7a4c026` options-scoping records) 045 a third (`c7e2a9f4b1d8` the longlist records) and 046 three more (`d8f3b6a2c4e1` profile tags, `e9a4c1f7b3d2` the option profile column, `f1b6d3a8c2e5` the `population` → `unit` rename with a reversible data migration of the grouping facet key — the first of this branch that rewrites production rows; ADR 0040 § Rollback) — run `alembic upgrade head` against the dev DB after pulling that branch; the backend must run as one worker process (the start and add reservations are per process, ADR 0041 decision 13); note that since 053 every `POLICY_ATLAS_*_MODEL` variable (including `POLICY_ATLAS_PLANNER_MODEL` and `POLICY_ATLAS_TASK_AGENT_MODEL`) is ignored with one warning, models come from `backend/src/policy_atlas/model_routes.toml`; and note the slice downgrade refuses while any `options_scoping` task or walk exists (`scripts/ops_remove_scoping_tasks.py --task-id <id> --apply` is the remedy — it deletes each named task whole, ADR 0037 § Rollback, ADR 0041 § Rollback); 040 is frontend-only and changes no env; 051 changes no env and no schema (the single-pass search; model ids were code constants until 053); 053 adds one optional selector, `POLICY_ATLAS_MODEL_ROUTE` (unset = OpenAI direct, as before), and each route names its key variable (`OPENAI_API_KEY` for OpenAI direct, `AWS_BEARER_TOKEN_BEDROCK` for the Bedrock routes), no schema change, see `backend/.env.example`; 039 adds the APO test-mod (`publisher_source`,
 Overton `source=apo`) plus planning/artefact bug fixes — no migration; when
 another checkout of this repo may be running tests, isolate the gate with a
 per-checkout `TEST_DATABASE_URL` `*_test` override; 038 renames the catalog (`project`→`task`,
@@ -20,7 +20,7 @@ against the dev DB after pulling it; the ops CLI (`python -m policy_atlas.ops`)
 is tunnel-only and needs no local setup, but `make dev-seed` puts the tenancy
 UI on screen locally — it enrols dev-user/dev-colleague/dev-admin into
 "Dev Org" on the dev DB via the real enrol logic with a faked Cognito; 029 adds the chat surface: no new env vars required locally
-(the chat model is read from the committed route file since task 045); a live chat turn needs the
+(the chat model is read from the committed route file since task 053); a live chat turn needs the
 funded OpenAI key `make dev` already loads; 025 hoists the Python project to `backend/` and adds the `frontend/`
 web app; 026 adds `infra/` (CDK, own venv from `infra/requirements*.txt`; `make -C infra test`
 joined `make verify` — no AWS/Docker needed) plus `make fe-api-smoke` (real-HTTP Playwright
@@ -211,3 +211,15 @@ the Makefile; if they ever diverge, that's a bug in the workflow, not a fact to 
   else touching the shared Postgres) cleared 12 as test-DB pollution (the stranded-rows/parallel-lane
   landmine, AGENTS.md § Landmines). A red baseline read without isolation misattributes pre-existing
   pollution to the slice.
+- **A dev token lives 4 hours** (046 builds) — `make dev` mints one; a browser or API check on a
+  resumed session mints a fresh one first (`python -m policy_atlas.api.dev_issuer mint --dir
+  .dev-issuer --sub dev-user --client-id policy-atlas-dev --ttl 14400` from `backend/`).
+- **A lone 5-second vitest timeout under load is load, not the tree** (046 amendment 4) — two
+  unrelated timeouts on a machine running a replay chain and two test suites; a quiet rerun passed.
+- **A page with an open event stream never reaches Playwright's `networkidle`** (046 builds) — wait
+  for `domcontentloaded` and a fixed time.
+- **A new run-stage key changes the OpenAPI document** (046 amendment 2) — `drift-check` is red
+  until `make openapi-sync`; the stage enum is part of the contract.
+- **The gate's backend step reads the whole suite serially in ~15 minutes** (3,600 tests); a
+  session restart kills a background `make verify` without a record — rerun only the step it was
+  in if the log shows the earlier steps green.

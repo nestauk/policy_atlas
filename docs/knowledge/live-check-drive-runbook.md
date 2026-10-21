@@ -21,17 +21,17 @@ timestamp: 2026-10-14
   re-imports the launching file; an unguarded driver re-runs itself inside the worker
   (a second task appears in the log, and the first run fails with "start a new
   process before the current process has finished its bootstrapping phase"). Task 014
-  met this first; 045's live check 3 lost its one budgeted run to it because the lesson
+  met this first; 053's live check 3 lost its one budgeted run to it because the lesson
   lived only in a verification note. The guarded re-run completed in 548 s.
 - **The dev database is NOT migrated by `make test`** (that owns the test DB).
   A schema slice must run `alembic upgrade head` against dev before any live
   check — 027's drive tripped on this.
 - **Playwright specs in this repo are ESM** — `__dirname` needs the
   `fileURLToPath(import.meta.url)` shim.
-- **An unattended plan is not one turn**: the planner walks one standing
+- **An unattended plan is not one turn**: the Task Agent walks one standing
   instruction per steer point before honestly marking ready (~6 approvals in
   027 part B) — scripted drives need a generous turn budget.
-- **The planner pins structured extraction to deep analysis depth** — a
+- **The Task Agent pins structured extraction to deep analysis depth** — a
   standard-depth run has no extract stage and therefore no findings rows; live
   checks that need findings must ask for deep depth.
 - **Playwright strict mode collides with brand copy** (028): `getByText("ready")`
@@ -39,6 +39,9 @@ timestamp: 2026-10-14
   from the first draft of an acceptance spec.
 - **The mock e2e suite and a live Playwright leg cannot share one laptop** —
   the load makes mock `page.goto` time out; serialise them (028 G.2).
+- **The chat's dev token must be minted for the subject that owns the task**
+  (045): `make dev` signs in as `dev-user`; a token minted for any other `sub`
+  gets 403 on every write route of a `dev-user` task.
 - **live-028's restart helper only kills what it spawned** (028 review C2):
   the leg-B FIRST restart targets the `make dev`-started API and requires
   `LIVE_ALLOW_API_TAKEOVER=1`; it verifies every port-8000 listener is a

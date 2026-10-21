@@ -40,7 +40,9 @@ export interface ResolvedDecision {
 /** The current plan row, as surfaced by `plan.updated`. */
 interface PlanState {
   version: number;
-  plan: PlanDraft;
+  /** Null for an Options scoping task: its plan travels on `scoping` and the
+   *  plan document reads it from the plan query, not the stream (task 044). */
+  plan: PlanDraft | null;
 }
 
 /** Project lifecycle fields as surfaced by `task.updated` audit events.
@@ -88,6 +90,9 @@ export interface RunStreamState {
   appliedTypesAtLastSequence: string[];
   run: RunRef | null;
   runs: Record<string, RunStatus>;
+  /** Runs first seen while another walk was running or paused — child walks
+   *  (task 045 option searches). None of them ever becomes `run`. */
+  childRunIds: string[];
   stages: StageEntry[];
   pendingCheckIn: CheckInOut | null;
   decisions: ResolvedDecision[];
@@ -109,6 +114,7 @@ export function createInitialRunStreamState(): RunStreamState {
     appliedTypesAtLastSequence: [],
     run: null,
     runs: {},
+    childRunIds: [],
     stages: [],
     pendingCheckIn: null,
     decisions: [],

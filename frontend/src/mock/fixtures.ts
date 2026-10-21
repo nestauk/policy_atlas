@@ -5,7 +5,7 @@ export const MOCK_TASK_ID = "0d91c2e7-9b9b-4f4d-bd20-1f6819fb3425";
 export const MOCK_RUN_ID = "7b40cc12-c3a7-4457-92fc-23d15a26d433";
 export const MOCK_CHECK_IN_ID = "4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef634";
 export const MOCK_PLAN_ID = "80000000-0000-4000-8000-000000000001";
-export const MOCK_PLANNING_CONVERSATION_ID = "50000000-0000-4000-8000-000000000001";
+export const MOCK_TASK_AGENT_CONVERSATION_ID = "50000000-0000-4000-8000-000000000001";
 export const MOCK_PROJECT_ID = "60000000-0000-4000-8000-000000000001";
 const MOCK_ORGANISATION_ID = "90000000-0000-4000-8000-000000000001";
 
@@ -37,6 +37,13 @@ export const mockTask: components["schemas"]["TaskOut"] = {
   // Assigned to `mockProject` below so `GET /tasks?project_id=` has a
   // real member to return (task 033 phase 10a; membership is a list, ADR 0032).
   project_ids: [MOCK_PROJECT_ID],
+  // Task 044: the kind of work. The mock's task is an Evidence search; a
+  // scoping task is created through the mock's `POST /tasks`.
+  capability: "evidence_search",
+  links: [],
+  // Task 045: what exists and what is active. No walk, no longlist yet.
+  active_run: null,
+  has_longlist: false,
 };
 
 /** Task 033 phase 10a: the one project the mock serves. `task_count`
@@ -208,7 +215,7 @@ export const mockFindings: components["schemas"]["FindingOut"][] = [
     causality_by_design: "plausibly_causal",
     effect_basis: "observed",
     study_geography: "United Kingdom",
-    population: "Primary-school children, ages 5-11",
+    unit: "Primary-school children, ages 5-11",
     setting: "State primary schools",
     study_design: "Cohort study",
     is_primary: true,
@@ -232,7 +239,7 @@ export const mockFindings: components["schemas"]["FindingOut"][] = [
     level: "provider",
     claim_level: "study",
     claim_basis: "studied",
-    population: "Primary-school families",
+    unit: "Primary-school families",
     setting: "Urban local authority",
     study_geography: "London, United Kingdom",
     study_design: "Mixed methods",
@@ -337,6 +344,134 @@ export const mockArtefactSectionProse: Record<number, string> = {
   1: "Pair school food action with safer active-travel routes and practical family support, while monitoring local reach.",
 };
 
+/**
+ * The options-scoping baseline (task 044, deliverable 9) the mock serves as
+ * the scoping task's Result: the seven written sections in their fixed order,
+ * one proposed section inserted after "What is contested", and the
+ * code-rendered Sources section last. No key findings, no conclusions, no
+ * case studies — a baseline mints none of them.
+ *
+ * `role` is `"standard"` throughout because that is what the read model
+ * returns: the Sources block is written with role `"sources"` and coerced
+ * (`api/readmodels/repository.py`). The section ORDER is what puts Sources
+ * last, not its role.
+ */
+export const mockBaselineArtefact: components["schemas"]["ArtefactOut"] = {
+  artefact_id: "00000000-0000-4000-8000-00000000b001",
+  title: "Do nothing: current policy and trajectory",
+  question:
+    "How can we reduce the number of young people not in education, employment or training?",
+  template: "baseline",
+  depth_label: "scoping pass",
+  coverage_snapshot: {
+    source_count: 18,
+    included: 18,
+    screened_out: 24,
+    study_types: { "policy report": 11, analysis: 5, evaluation: 2 },
+    year_range: [2020, 2026],
+  },
+  sections: [
+    {
+      title: "What is in place",
+      nav_label: "In place",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000001",
+        prose: "The borough runs a youth employment hub, a supported-internship offer through the further education college, and the national Youth Offer through Jobcentre Plus. Careers advice reaches school leavers through the schools themselves; there is no single referral route for young people who have already left.",
+        claims: [],
+      }],
+    },
+    {
+      title: "Trend if nothing changes",
+      nav_label: "Trend",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000002",
+        prose: "The NEET and not-known rate for 16-17 year-olds has moved little across the last four years, sitting a little above the London average. No source in the set projects the rate forward beyond the current academic year.",
+        claims: [],
+      }],
+    },
+    {
+      title: "Who is affected",
+      nav_label: "Who",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000003",
+        prose: "Young people with a recorded special educational need, those known to children's social care, and those who left school without a level 2 qualification are over-represented. The plan names 16-24 year-olds; the published figures measure 16-17 year-olds, so the older half of the group is not described by this data.",
+        claims: [],
+      }],
+    },
+    {
+      title: "What is already changing",
+      nav_label: "Changing",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000004",
+        prose: "A devolved adult-skills settlement takes effect from the next financial year, and the college's supported-internship places are due to expand. One employer-partnership programme closes at the end of the current cohort.",
+        claims: [],
+      }],
+    },
+    {
+      title: "What is contested",
+      nav_label: "Contested",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000005",
+        prose: "Sources disagree about whether the binding constraint is the supply of entry-level jobs or the transition support around them. They also disagree about the not-known cohort: one reading treats it as measurement error, another as unrecorded disengagement.",
+        claims: [],
+      }],
+    },
+    {
+      title: "How the transition is tracked",
+      nav_label: "Tracking",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000006",
+        prose: "Destination data is collected at two points in the year and reconciled against school records. Two sources describe the reconciliation as incomplete for young people who move borough.",
+        claims: [],
+      }],
+    },
+    {
+      title: "Cost of inaction",
+      nav_label: "Cost of inaction",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000007",
+        prose: "One national estimate puts the lifetime public-finance cost of a sustained NEET spell in the tens of thousands of pounds per person, at 2021 prices. No source in this set costs the status quo for this borough.",
+        claims: [{
+          claim_id: "41000000-0000-4000-8000-000000000001",
+          claim_type: "gap",
+          text: "No source in this set costs the status quo for this borough.",
+          span: [138, 195],
+          citations: [],
+          gap: { grade: "corpus_absence", caveat: null },
+        }],
+      }],
+    },
+    {
+      title: "Key assumption",
+      nav_label: "Key assumption",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000008",
+        prose: "The assumption most worth checking is that the current offer does not reach the young people driving the trend, rather than reaching them and failing. This rests on the absence of a referral route for those who have already left, and on the incomplete destination reconciliation reported above.",
+        claims: [],
+      }],
+    },
+    {
+      title: "Sources",
+      nav_label: "Sources",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000009",
+        prose: "18 sources from Overton and OpenAlex, searched for the situation and trend this plan describes, limited to the United Kingdom and other high-income countries.\nLive official statistics and departmental pages were not searched; figures come from the documents above, as at their publication dates.\nSource mix: 13 grey literature (policy reports, official and organisational publications) and 5 academic articles. The profile leans on grey sources.\nA language restriction is recorded in the plan and not yet applied at retrieval.",
+        claims: [],
+      }],
+    },
+  ],
+  references: [],
+};
+
 export const mockCoverage: components["schemas"]["CoverageOut"] = {
   sentence: "Coverage is adequate for school-food and family-support approaches (46 screened-in sources, 2019-2024), while local active-travel evaluation evidence remains thin.",
   base: { screened_in: 46, years: [2019, 2024] },
@@ -370,7 +505,7 @@ export const mockCoverage: components["schemas"]["CoverageOut"] = {
 //
 // The chat citation carries a durable chunk id (not the artefact citation
 // table's id) — a distinct fixture id in the same 8-4-4-4-12 style, one
-// prefix on from the planning-turn ids above.
+// prefix on from the task_agent-turn ids above.
 export const MOCK_CHAT_CITATION_CHUNK_ID = "70000000-0000-4000-8000-000000000001";
 export const MOCK_CHAT_CLAIM_ID = "70000000-0000-4000-8000-000000000002";
 
@@ -403,8 +538,8 @@ export const MOCK_CHAT_PROGRESS_LABEL = "Searching the evidence…";
 
 /**
  * A ready plan draft (contract 027 F.2 fixture item 1b): the mock task
- * represents a resumed session — the planning conversation already
- * happened, and its transcript persisted (`seedPlanningTurns`), so the
+ * represents a resumed session — the task_agent conversation already
+ * happened, and its transcript persisted (`seedTaskAgentTurns`), so the
  * plan pane renders ready immediately. Demonstrates `time_band`,
  * `scope_constraints.country_group` and labelled `steps`.
  */
@@ -444,23 +579,167 @@ export const mockPlanReady: components["schemas"]["PlanDraft"] = {
   ready: true,
 };
 
-const MOCK_PLANNING_TURN_IDS = {
+export const MOCK_LINK_ID = "70000000-0000-4000-8000-000000000001";
+export const MOCK_LINK_SOURCE_RUN_ID = "70000000-0000-4000-8000-000000000002";
+
+/**
+ * A ready options-scoping plan (task 044, contract deliverable 5), one link
+ * and one of each constraint kind so every plan-document section has
+ * something to render. Mirrors `mockPlanReady`'s role for the ES fixture:
+ * the mock's task_agent turn transcript is scripted as already having
+ * reached this shape, so mock mode and the e2e journey can show the
+ * finished plan document without scripting every intermediate turn.
+ */
+export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
+  title: "Cutting NEET numbers in Tower Hamlets",
+  question: "How can we reduce the number of young people not in education, employment or training?",
+  intended_change: {
+    text: "Fewer 16-24 year-olds are NEET six months after leaving school.",
+    origin: "from_your_question",
+  },
+  target_unit: { text: "16-24 year-olds at risk of becoming NEET", origin: "assumed" },
+  where: { text: "United Kingdom", origin: "assumed" },
+  outcomes: [
+    { text: "NEET rate at 6 months", origin: "from_your_question" },
+    { text: "Sustained employment or training at 12 months", origin: "assumed" },
+  ],
+  depth: "standard",
+  constraints: [
+    {
+      text: "Only include options a local authority can fund directly",
+      kind: "boundary",
+      origin: "your_call",
+      checked_at: "longlist",
+      country_group: null,
+      published_after: null,
+      published_before: null,
+      languages: null,
+      setting: false,
+      default: null,
+      aspect: null,
+      hard: false,
+    },
+    {
+      text: "Prefer options with a lower cost per participant",
+      kind: "consideration",
+      origin: "your_call",
+      checked_at: "assessment",
+      country_group: null,
+      published_after: null,
+      published_before: null,
+      languages: null,
+      setting: false,
+      default: null,
+      aspect: "cost",
+      hard: false,
+    },
+    {
+      text: "Evidence from the UK and other high-income countries only",
+      kind: "evidence_restriction",
+      origin: "assumed",
+      checked_at: "retrieval",
+      country_group: { label: "United Kingdom", countries: ["GB"], authorship: "planner-proposed" },
+      published_after: null,
+      published_before: null,
+      languages: ["English"],
+      setting: false,
+      default: null,
+      aspect: null,
+      hard: false,
+    },
+    {
+      text: "Transferable to United Kingdom",
+      kind: "preference",
+      origin: "assumed",
+      checked_at: "assessment",
+      country_group: null,
+      published_after: null,
+      published_before: null,
+      languages: null,
+      setting: false,
+      default: "transferability",
+      aspect: null,
+      hard: false,
+    },
+  ],
+  your_options: [
+    {
+      text: "A youth guarantee, like the one Finland runs",
+      design: {
+        name: "Youth guarantee",
+        description: "Every young person out of work for four months is offered a job, training or education.",
+        design_features: [
+          "an offer within four months of leaving work or education",
+          "a job, apprenticeship, training or education place",
+          "delivered through Jobcentre Plus",
+        ],
+        outcomes_served: ["NEET rate at 6 months"],
+        assumed: ["delivered through Jobcentre Plus"],
+        version: 1,
+      },
+      turn_index: 2,
+    },
+  ],
+  your_context: [
+    {
+      text: "We already run a careers-advice service in every secondary school.",
+      type: "present_fact",
+      turn_index: 1,
+      test_as_condition: false,
+    },
+    {
+      text: "We plan to expand apprenticeship places next year.",
+      type: "commitment",
+      turn_index: 2,
+      test_as_condition: true,
+    },
+  ],
+  entry_branch: "explore",
+  linked_task_ids: [],
+  steering_mode: "moderate",
+  steer_point_defaults: [],
+  assumptions: ["The United Kingdom is the right jurisdiction unless you say otherwise."],
+  steps: [
+    {
+      stage: "synthesise",
+      label: "Baseline",
+      blurb:
+        "What is in place, the trend, who is affected and what is contested, from Overton and OpenAlex. The run pauses for you to question it and confirm the plan.",
+    },
+    {
+      stage: "acquire",
+      label: "Longlist",
+      blurb:
+        "Suggest options, search widely, read every abstract for the interventions it covers, cluster them into options, apply your constraints.",
+    },
+    {
+      stage: "select",
+      label: "Shortlist and assessment",
+      blurb: "Review the proposed reading set. Assessment runs only when you say so. Not in this release.",
+    },
+  ],
+  time_band: "10-15 minutes",
+  baseline_confirmed: null,
+  ready: true,
+};
+
+const MOCK_TASK_AGENT_TURN_IDS = {
   first: "60000000-0000-4000-8000-000000000001",
   second: "60000000-0000-4000-8000-000000000002",
   failed: "60000000-0000-4000-8000-000000000003",
 } as const;
 
 /**
- * The durable planning transcript (contract 027 F.2 fixture item 1a): two
+ * The durable task_agent transcript (contract 027 F.2 fixture item 1a): two
  * completed turns that formed the ready plan above, plus one FAILED row —
  * the honest incomplete-turn render — deliberately the latest turn so it
  * carries a Retry control. Returns a fresh array each call so
  * `resetMockScenario` can restore pristine seed state.
  */
-export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTurnOut"][] {
+export function seedTaskAgentTurns(): components["schemas"]["TaskAgentTranscriptTurnOut"][] {
   return [
     {
-      client_turn_id: MOCK_PLANNING_TURN_IDS.first,
+      client_turn_id: MOCK_TASK_AGENT_TURN_IDS.first,
       turn_index: 1,
       user_message: "Which local policy approaches reduce childhood obesity for primary-school children?",
       reply: "Here's how I've read your question.",
@@ -481,7 +760,7 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
       completed_at: "2026-07-18T09:02:04Z",
     },
     {
-      client_turn_id: MOCK_PLANNING_TURN_IDS.second,
+      client_turn_id: MOCK_TASK_AGENT_TURN_IDS.second,
       turn_index: 2,
       user_message: "That's my question\n\n[confirm part=question option=confirm]",
       reply: "What counts as in-scope? Edit any chip directly. I'll search from 2016 onward. UK as the primary setting is judged from each document.",
@@ -505,7 +784,7 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
       completed_at: "2026-07-18T09:03:16Z",
     },
     {
-      client_turn_id: MOCK_PLANNING_TURN_IDS.failed,
+      client_turn_id: MOCK_TASK_AGENT_TURN_IDS.failed,
       turn_index: 3,
       user_message: "Also fold in whether family-support programmes should be a separate lever.",
       reply: null,
@@ -516,4 +795,681 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
       completed_at: "2026-07-21T08:58:03Z",
     },
   ];
+}
+
+// --- The options-scoping baseline gate (task 044, Phase 5.5) -------------
+
+export const MOCK_BASELINE_CHECK_IN_ID = "4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef635";
+
+const MOCK_SCOPING_TURN_IDS = {
+  plan: "60000000-0000-4000-8000-000000000011",
+  answer: "60000000-0000-4000-8000-000000000012",
+  decision: "60000000-0000-4000-8000-000000000013",
+} as const;
+
+/** The gate's key assumption, quoted by the card and by the seeded answer. */
+const MOCK_KEY_ASSUMPTION =
+  "Careers advice reaches the young people already in school, not the ones who have already dropped out.";
+
+/**
+ * The baseline gate's check-in (`baseline_confirm`) — the one steer point on
+ * the scoping lattice. Its bundle carries what the card shows: the baseline's
+ * key assumption and the four plan settings the walk ran from.
+ */
+export const mockBaselineGateCheckIn: components["schemas"]["CheckInOut"] = {
+  check_in_id: MOCK_BASELINE_CHECK_IN_ID,
+  kind: "baseline_confirm",
+  boundary: "after_component",
+  component: "synthesise",
+  stage: "synthesise",
+  render: [
+    "Confirm the plan against the baseline",
+    `Key assumption: ${MOCK_KEY_ASSUMPTION}`,
+    "Settings",
+    "Target unit: 16-24 year-olds at risk of becoming NEET",
+    "Where: United Kingdom",
+    "Outcomes: NEET rate at 6 months; Sustained employment or training at 12 months",
+    "Depth: standard",
+  ].join("\n"),
+  options: [
+    {
+      id: "confirm_plan",
+      label: "Confirm plan and build longlist",
+      description: "Accept the plan as it stands and go on to the longlist.",
+      requires_user_input: false,
+      suggested: false,
+      why: null,
+      endorsement: null,
+    },
+    {
+      id: "change_plan",
+      label: "Change the plan",
+      description: "Stop here and edit the plan; the baseline you have read is kept.",
+      requires_user_input: false,
+      suggested: false,
+      why: null,
+      endorsement: null,
+    },
+  ],
+  triggers: [],
+  bundle: {
+    key_assumption: MOCK_KEY_ASSUMPTION,
+    settings: {
+      target_unit: "16-24 year-olds at risk of becoming NEET",
+      where: "United Kingdom",
+      outcomes: ["NEET rate at 6 months", "Sustained employment or training at 12 months"],
+      depth: "standard",
+    },
+  },
+  segment_reentry_allowed: false,
+  rerun_component: "synthesise",
+  status: "pending",
+  created_at: "2026-07-21T09:44:00Z",
+  sequence: 44,
+};
+
+/** A grounded answer to a question asked at the gate: one claim, one
+ *  citation, rendered by the chat's own citation renderer. */
+export function mockScopingAnswerTurn(
+  clientTurnId: string,
+  message: string,
+  turnIndex: number,
+  createdAt: string,
+): components["schemas"]["TaskAgentTranscriptTurnOut"] {
+  const answer =
+    "The baseline holds one study of school-based careers advice; it does not cover young people who have already left education [1].";
+  return {
+    client_turn_id: clientTurnId,
+    turn_index: turnIndex,
+    user_message: message,
+    reply: answer,
+    suggestions: [],
+    part: null,
+    capability: "options_scoping",
+    kind: "answer",
+    answer: {
+      citations: [
+        {
+          n: 1,
+          id: MOCK_CHAT_CITATION_CHUNK_ID,
+          chunk_id: MOCK_CHAT_CITATION_CHUNK_ID,
+          source_id: mockEvidence[0].source_id,
+          source_title: mockEvidence[0].title,
+          quote: MOCK_CHAT_CITATION_QUOTE,
+        },
+      ],
+      claims: [
+        {
+          claim_id: MOCK_CHAT_CLAIM_ID,
+          text: "The baseline holds one study of school-based careers advice",
+          span: [0, 57],
+          citation_ns: [1],
+        },
+      ],
+      enrichment: null,
+      handoff: null,
+      warning_not_evidence_checked: false,
+      stopped_before_evidence_check: false,
+    },
+    status: "completed",
+    created_at: createdAt,
+    completed_at: createdAt,
+  };
+}
+
+/** The decision turn the gate's card decision leaves in the thread. */
+export function mockScopingDecisionTurn(
+  optionId: string,
+  label: string,
+  turnIndex: number,
+  createdAt: string,
+): components["schemas"]["TaskAgentTranscriptTurnOut"] {
+  return {
+    client_turn_id: MOCK_SCOPING_TURN_IDS.decision,
+    turn_index: turnIndex,
+    user_message: label,
+    reply: null,
+    suggestions: [],
+    part: null,
+    capability: "options_scoping",
+    kind: "decision",
+    decision: {
+      option_id: optionId,
+      label,
+      check_in_id: MOCK_BASELINE_CHECK_IN_ID,
+      capability_run_id: MOCK_RUN_ID,
+      plan_version: 1,
+    },
+    status: "completed",
+    created_at: createdAt,
+    completed_at: createdAt,
+  };
+}
+
+// task 045 (6.2) -----------------------------------------------------------
+// The longlist's three surfaces (list view, reduced grid, option card): a
+// longlist walk on `mockScopingPlanReady`'s NEET/Tower Hamlets plan, two
+// themes and four options exercising every state the views must render —
+// one clustered and excluded (breaks the funding requirement, and part of
+// the package below), one suggested with no in-scope evidence, one added by
+// the user with zero documents (its own option search found nothing yet),
+// and one package bundling the excluded option.
+
+type OptionOutFixture = components["schemas"]["OptionOut"];
+type OptionSummaryOutFixture = components["schemas"]["OptionSummaryOut"];
+
+export const MOCK_LONGLIST_RUN_ID = "a0000000-0000-4000-8000-000000000001";
+export const MOCK_LONGLIST_WALK_ID = "a0000000-0000-4000-8000-000000000002";
+export const MOCK_LONGLIST_THEME_ID_CONDITIONALITY = "a0000000-0000-4000-8000-000000000020";
+export const MOCK_LONGLIST_THEME_ID_UNIVERSAL_OFFER = "a0000000-0000-4000-8000-000000000021";
+export const MOCK_OPTION_ID_EXCLUDED = "a0000000-0000-4000-8000-000000000010";
+export const MOCK_OPTION_ID_NO_IN_SCOPE = "a0000000-0000-4000-8000-000000000011";
+export const MOCK_OPTION_ID_ADDED_BY_YOU = "a0000000-0000-4000-8000-000000000012";
+export const MOCK_OPTION_ID_PACKAGE = "a0000000-0000-4000-8000-000000000013";
+
+const MOCK_LONGLIST_RESTRICTION_TEXT = "Evidence from the UK and other high-income countries only";
+const MOCK_LONGLIST_FUNDING_CONSTRAINT = "Only include options a local authority can fund directly";
+const MOCK_LONGLIST_COST_PREFERENCE = "Prefer options with a lower cost per participant";
+
+type ProfileFixture = NonNullable<OptionOutFixture["profile"]>;
+
+/** One eight-line profile for a longlist fixture: a sentence per line and a
+ *  mark where the option stands out (`who_decides` and `dependencies` never
+ *  carry one). */
+function mockProfile(
+  marks: Partial<Record<"cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "coordination" | "delivery_complexity", "less" | "more">>,
+  settings: string[],
+): ProfileFixture {
+  const line = (key: ProfileFixture["lines"][number]["key"], sentence: string) => ({
+    key,
+    sentence,
+    mark: key === "who_decides" || key === "dependencies" ? null : (marks[key] ?? null),
+  });
+  return {
+    lines: [
+      line("cost", "Costs are mostly staff time; no capital spend is reported."),
+      line("time_to_set_up", "Local teams could start within a year using existing contracts."),
+      line("time_to_effect", "Effects on the NEET rate show after about two years."),
+      line("workforce", "Needs trained advisers in every area, drawn from current staff."),
+      line("who_decides", "The local authority decides, with the Department for Work and Pensions consulted."),
+      line("dependencies", "Depends on shared data between schools and Jobcentre Plus."),
+      line("coordination", "Schools, Jobcentres and councils must agree who refers whom."),
+      line("delivery_complexity", "One referral route; few moving parts once the data is shared."),
+    ],
+    settings,
+  };
+}
+
+/** One full `OptionOut` (the card) per longlist option, keyed by id — the
+ *  single source both `GET /options/{id}` and the two GETs' summaries
+ *  project from, and the exclude/include/add handlers mutate in place. */
+export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
+  [MOCK_OPTION_ID_EXCLUDED]: {
+    option_id: MOCK_OPTION_ID_EXCLUDED,
+    name: "National sanctions regime",
+    description: "A statutory duty on the local authority to withdraw benefits from NEET young people who refuse an offer.",
+    design: {
+      name: "National sanctions regime",
+      description: "A statutory duty on the local authority to withdraw benefits from NEET young people who refuse an offer.",
+      design_features: [
+        "a duty to withdraw benefits on refusal of an offer",
+        "administered by the local authority",
+        "applies after one missed offer",
+      ],
+      outcomes_served: ["NEET rate at 6 months"],
+      assumed: [],
+      version: 1,
+    },
+    design_features: ["a duty to withdraw benefits on refusal of an offer", "administered by the local authority", "applies after one missed offer"],
+    outcomes_served: ["NEET rate at 6 months"],
+    origin: "clustered",
+    state: "excluded",
+    exclusion: {
+      by: "constrain",
+      constraint: MOCK_LONGLIST_FUNDING_CONSTRAINT,
+      reason: "A local authority cannot withdraw a national benefit directly.",
+    },
+    no_in_scope_evidence: false,
+    primary_lever_type: "enforce existing powers",
+    lever_none_fits_reason: null,
+    lever_reason: "The council withholds a benefit payment when a young person refuses an offer.",
+    secondary_lever_types: ["regulate"],
+    ambition: "more",
+    ambition_reason: "Changes who is entitled to a national benefit, not just how it is delivered.",
+    profile: mockProfile({ cost: "less", time_to_effect: "more", coordination: "more" }, ["Jobcentre", "Secondary school"]),
+    authority: {
+      label: "needs_action_by",
+      body: "the Department for Work and Pensions",
+      reason: "The benefit is set nationally, so a council cannot change it alone.",
+    },
+    taxonomy_version: "lever-types-v1",
+    document_count: 6,
+    evaluated_count: 3,
+    relations: [{ kind: "part_of", other_option_id: MOCK_OPTION_ID_PACKAGE, other_name: "Universal youth offer bundle" }],
+    search_pending: false,
+    run_id: MOCK_LONGLIST_RUN_ID,
+    capability_run_id: MOCK_LONGLIST_WALK_ID,
+    plan_version: 1,
+    evaluated_countries: [{ country: "United Kingdom", documents: 2 }],
+    outcomes_evaluated: 1,
+    outcomes_total: 2,
+    place_sentences: [
+      { place: "United Kingdom", sentence: "One moderate local evaluation of the Benefit sanctions pilot in England measured the NEET rate at 6 months in 18-24 year-olds.", generated: true, where: true },
+      { place: "No single place", sentence: "1 strong systematic review with 18-24 year-olds, measuring NEET rate at 6 months.", generated: false, where: false },
+    ],
+    evidence: {
+      outcome_counts: {
+        evaluating_documents: 3,
+        by_outcome: [{ outcome: "NEET rate at 6 months", documents: 3, evaluated: 3 }],
+      },
+    },
+    judgements: [
+      { constraint_id: "relevant", constraint_text: "Relevant to the stated outcomes", verdict: "passes", reason: "Targets the NEET rate directly." },
+      { constraint_id: "distinct", constraint_text: "Distinct from the other options", verdict: "passes", reason: "No other option on the list withdraws benefits." },
+      { constraint_id: "in_scope", constraint_text: "Within scope", verdict: "passes", reason: "Its evidence is drawn from the plan's country group." },
+      { constraint_id: "req-1", constraint_text: MOCK_LONGLIST_FUNDING_CONSTRAINT, verdict: "breaks", reason: "A local authority cannot withdraw a national benefit directly." },
+    ],
+    guesses: [
+      { constraint_id: "pref-1", constraint_text: MOCK_LONGLIST_COST_PREFERENCE, guess: "likely a low cost per participant", leaning: "likely_meets" },
+    ],
+    in_scope: null,
+    documents: [
+      { task_source_snapshot_id: "mock-doc-a1", title: "Conditionality and NEET outcomes: a local authority review", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", place: "United Kingdom", programme_name: "Benefit sanctions pilot", tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: "England", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-a2", title: "Benefit sanctions for young jobseekers: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Strong", place: "multiple countries", programme_name: null, tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: null, records_count: 2 },
+      { task_source_snapshot_id: null, title: "National activation policy briefing", role: "mentioned", evidence_type: "Policy analysis", tier: null, place: "United Kingdom", programme_name: null, tried_on_kind: null, measured: null, place_detail: null, records_count: 0 },
+    ],
+  },
+  [MOCK_OPTION_ID_NO_IN_SCOPE]: {
+    option_id: MOCK_OPTION_ID_NO_IN_SCOPE,
+    name: "School-based mentoring",
+    description: "Trained mentors work one-to-one with pupils identified as at risk of becoming NEET.",
+    design: {
+      name: "School-based mentoring",
+      description: "Trained mentors work one-to-one with pupils identified as at risk of becoming NEET.",
+      design_features: ["one-to-one mentoring", "delivered in the school", "targeted at pupils flagged as at risk"],
+      outcomes_served: ["NEET rate at 6 months"],
+      assumed: [],
+      version: 1,
+    },
+    design_features: ["one-to-one mentoring", "delivered in the school", "targeted at pupils flagged as at risk"],
+    outcomes_served: ["NEET rate at 6 months"],
+    origin: "suggested",
+    state: "included",
+    exclusion: null,
+    no_in_scope_evidence: true,
+    primary_lever_type: "provide a service",
+    lever_none_fits_reason: null,
+    secondary_lever_types: [],
+    ambition: null,
+    ambition_reason: "Adds support alongside the existing offer rather than changing who runs it.",
+    profile: mockProfile({ workforce: "more", time_to_set_up: "less" }, ["Secondary school"]),
+    authority: {
+      label: "within_your_power",
+      body: null,
+      reason: "A council can commission mentors through its existing school contracts.",
+    },
+    taxonomy_version: "lever-types-v1",
+    document_count: 4,
+    evaluated_count: 2,
+    evaluated_countries: [
+      { country: "Australia", documents: 1 },
+      { country: "Canada", documents: 1 },
+    ],
+    place_sentences: [
+      { place: "Australia", sentence: "1 limited local evaluation with secondary school pupils in Victoria, measuring school engagement.", generated: false, where: false },
+      { place: "Canada", sentence: "One moderate local evaluation in Ontario measured the NEET rate at 6 months in pupils at risk of becoming NEET.", generated: true, where: false },
+    ],
+    outcomes_evaluated: 1,
+    outcomes_total: 2,
+    relations: [],
+    search_pending: false,
+    run_id: MOCK_LONGLIST_RUN_ID,
+    capability_run_id: MOCK_LONGLIST_WALK_ID,
+    plan_version: 1,
+    evidence: {
+    },
+    judgements: [
+      { constraint_id: "relevant", constraint_text: "Relevant to the stated outcomes", verdict: "passes", reason: "Targets pupils at risk of the NEET outcome." },
+      { constraint_id: "distinct", constraint_text: "Distinct from the other options", verdict: "passes", reason: "No other option delivers one-to-one mentoring." },
+      { constraint_id: "in_scope", constraint_text: "Within scope", verdict: "cannot_check", reason: "None of its documents pass the plan's evidence restriction." },
+      { constraint_id: "req-1", constraint_text: MOCK_LONGLIST_FUNDING_CONSTRAINT, verdict: "passes", reason: "Delivered through the school's existing budget." },
+    ],
+    guesses: [
+      { constraint_id: "pref-1", constraint_text: MOCK_LONGLIST_COST_PREFERENCE, guess: "likely a low cost per participant", leaning: "likely_meets" },
+    ],
+    in_scope: { restriction: MOCK_LONGLIST_RESTRICTION_TEXT, in_scope_documents: 0, documents: 4 },
+    documents: [
+      { task_source_snapshot_id: "mock-doc-b1", title: "Peer mentoring for at-risk pupils in Ontario schools", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", place: "Canada", programme_name: null, tried_on_kind: "pupils at risk of becoming NEET", measured: "NEET rate at 6 months", place_detail: "Ontario", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-b2", title: "School mentoring and NEET risk: an Australian cohort study", role: "evaluated", evidence_type: "Local evaluation", tier: "Limited", place: "Australia", programme_name: null, tried_on_kind: "secondary school pupils", measured: "school engagement", place_detail: "Victoria", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-b3", title: "Mentoring programmes for disengaged youth: a scoping review", role: "described", evidence_type: "Policy analysis", tier: null, place: "other", programme_name: null, tried_on_kind: "young people", measured: null, place_detail: "English-speaking countries", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-b4", title: "Youth mentoring outcomes: unclear geography", role: "recommended", evidence_type: "Local evaluation", tier: "Moderate", place: "not stated", programme_name: null, tried_on_kind: "young people", measured: null, place_detail: null, records_count: 1 },
+    ],
+  },
+  [MOCK_OPTION_ID_ADDED_BY_YOU]: {
+    option_id: MOCK_OPTION_ID_ADDED_BY_YOU,
+    name: "Youth guarantee",
+    description: "Every young person out of work for four months is offered a job, training or education.",
+    design: {
+      name: "Youth guarantee",
+      description: "Every young person out of work for four months is offered a job, training or education.",
+      design_features: [
+        "an offer within four months of leaving work or education",
+        "a job, apprenticeship, training or education place",
+        "delivered through Jobcentre Plus",
+      ],
+      outcomes_served: ["NEET rate at 6 months"],
+      assumed: ["delivered through Jobcentre Plus"],
+      version: 1,
+    },
+    design_features: [
+      "an offer within four months of leaving work or education",
+      "a job, apprenticeship, training or education place",
+      "delivered through Jobcentre Plus",
+    ],
+    outcomes_served: ["NEET rate at 6 months"],
+    origin: "added_by_you",
+    state: "included",
+    exclusion: null,
+    no_in_scope_evidence: false,
+    primary_lever_type: null,
+    lever_none_fits_reason: "The design bundles an offer, an obligation and a delivery channel — no single instrument fits yet.",
+    secondary_lever_types: [],
+    ambition: null,
+    ambition_reason: null,
+    profile: null,
+    authority: null,
+    taxonomy_version: "lever-types-v1",
+    document_count: 0,
+    evaluated_count: 0,
+    evaluated_countries: [],
+    outcomes_evaluated: 0,
+    outcomes_total: 2,
+    relations: [],
+    search_pending: false,
+    run_id: MOCK_LONGLIST_RUN_ID,
+    capability_run_id: MOCK_LONGLIST_WALK_ID,
+    plan_version: 1,
+    evidence: {
+    },
+    judgements: [],
+    guesses: [],
+    in_scope: null,
+    documents: [],
+  },
+  [MOCK_OPTION_ID_PACKAGE]: {
+    option_id: MOCK_OPTION_ID_PACKAGE,
+    name: "Universal youth offer bundle",
+    description: "A single application bringing together careers advice, apprenticeships and training places under one offer.",
+    design: {
+      name: "Universal youth offer bundle",
+      description: "A single application bringing together careers advice, apprenticeships and training places under one offer.",
+      design_features: ["one application", "careers advice, apprenticeships and training places", "delivered through Jobcentre Plus"],
+      outcomes_served: ["NEET rate at 6 months", "Sustained employment or training at 12 months"],
+      assumed: [],
+      version: 1,
+    },
+    design_features: ["one application", "careers advice, apprenticeships and training places", "delivered through Jobcentre Plus"],
+    outcomes_served: ["NEET rate at 6 months", "Sustained employment or training at 12 months"],
+    origin: "suggested",
+    state: "included",
+    exclusion: null,
+    no_in_scope_evidence: false,
+    primary_lever_type: "regulate",
+    lever_none_fits_reason: null,
+    secondary_lever_types: ["provide a service"],
+    ambition: "less",
+    ambition_reason: "Reorganises the existing offer into one application rather than adding anything new.",
+    profile: mockProfile({ cost: "less", delivery_complexity: "more", time_to_set_up: "less" }, ["Jobcentre", "Community centre"]),
+    authority: { label: "unclear", body: null, reason: "The sources do not say who could merge the application routes." },
+    taxonomy_version: "lever-types-v1",
+    document_count: 9,
+    evaluated_count: 5,
+    evaluated_countries: [{ country: "United Kingdom", documents: 3 }],
+    place_sentences: [
+      { place: "United Kingdom", sentence: "One very strong systematic review of the Youth Guarantee in England measured the NEET rate at 6 months in 18-24 year-olds.", generated: true, where: true },
+      { place: "No single place", sentence: "One strong local evaluation measured sustained employment or training at 12 months in 16-24 year-olds.", generated: true, where: false },
+    ],
+    outcomes_evaluated: 2,
+    outcomes_total: 2,
+    relations: [{ kind: "has_part", other_option_id: MOCK_OPTION_ID_EXCLUDED, other_name: "National sanctions regime" }],
+    search_pending: false,
+    run_id: MOCK_LONGLIST_RUN_ID,
+    capability_run_id: MOCK_LONGLIST_WALK_ID,
+    plan_version: 1,
+    evidence: {
+    },
+    judgements: [
+      { constraint_id: "relevant", constraint_text: "Relevant to the stated outcomes", verdict: "passes", reason: "Serves both stated outcomes." },
+      { constraint_id: "distinct", constraint_text: "Distinct from the other options", verdict: "passes", reason: "The only option combining the existing offer into one application." },
+      { constraint_id: "in_scope", constraint_text: "Within scope", verdict: "passes", reason: "Its evidence is drawn from the plan's country group." },
+      { constraint_id: "req-1", constraint_text: MOCK_LONGLIST_FUNDING_CONSTRAINT, verdict: "passes", reason: "Delivered through the local authority's existing Jobcentre Plus partnership." },
+    ],
+    guesses: [
+      { constraint_id: "pref-1", constraint_text: MOCK_LONGLIST_COST_PREFERENCE, guess: "cannot say on cost from the design alone", leaning: "cannot_say" },
+    ],
+    in_scope: null,
+    documents: [
+      { task_source_snapshot_id: "mock-doc-d1", title: "Single-application youth guarantees: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Very strong", place: "United Kingdom", programme_name: "Youth Guarantee", tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: "England", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-d2", title: "Combining careers advice and apprenticeships: a local evaluation", role: "evaluated", evidence_type: "Local evaluation", tier: "Strong", place: "multiple countries", programme_name: null, tried_on_kind: "16-24 year-olds", measured: "Sustained employment or training at 12 months", place_detail: null, records_count: 2 },
+      { task_source_snapshot_id: "mock-doc-d3", title: "One-stop youth offers outside the UK: a policy analysis", role: "described", evidence_type: "Policy analysis", tier: "Moderate", place: "Germany", programme_name: "Jugendberufsagentur", tried_on_kind: "young people", measured: "apprenticeship starts", place_detail: "Hamburg", records_count: 1 },
+    ],
+  },
+};
+
+/** Project one option card down to the list/grid's summary shape (the same
+ *  fields `GET /longlist` returns for each option). */
+function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixture {
+  return {
+    option_id: option.option_id,
+    name: option.name,
+    description: option.description,
+    outcomes_served: option.outcomes_served,
+    origin: option.origin,
+    state: option.state,
+    exclusion: option.exclusion,
+    no_in_scope_evidence: option.no_in_scope_evidence,
+    primary_lever_type: option.primary_lever_type,
+    lever_none_fits_reason: option.lever_none_fits_reason,
+    lever_reason: option.lever_reason,
+    secondary_lever_types: option.secondary_lever_types,
+    ambition: option.ambition,
+    ambition_reason: option.ambition_reason,
+    profile: option.profile,
+    authority: option.authority,
+    taxonomy_version: option.taxonomy_version,
+    document_count: option.document_count,
+    evaluated_count: option.evaluated_count,
+    relations: option.relations,
+    search_pending: option.search_pending,
+    evaluated_countries: option.evaluated_countries,
+    outcomes_evaluated: option.outcomes_evaluated,
+    outcomes_total: option.outcomes_total,
+  };
+}
+
+/** Option ids added by hand or by chat verb since the walk built the four
+ *  fixture options above (`POST /options`, `mockFetch`) — always unthemed,
+ *  like a real rebuild's new entrants. */
+export const mockLonglistExtraOptionIds: string[] = [];
+
+/** Build one `OptionOut` for `POST /options` (the button's and the chat
+ *  verb's shared path, D13): minted *added by you*, zero documents, not yet
+ *  typed — an option search would fill it in, which the mock does not run. */
+export function buildMockAddedOption(text: string): OptionOutFixture {
+  const name = text.trim().length > 0 ? text.trim() : "New option";
+  return {
+    option_id: crypto.randomUUID(),
+    name,
+    description: name,
+    design: {
+      name,
+      description: name,
+      design_features: [name],
+      outcomes_served: [],
+      assumed: [],
+      version: 1,
+    },
+    design_features: [name],
+    outcomes_served: [],
+    origin: "added_by_you",
+    state: "included",
+    exclusion: null,
+    no_in_scope_evidence: false,
+    primary_lever_type: null,
+    lever_none_fits_reason: "Not yet typed — its option search hasn't returned.",
+    secondary_lever_types: [],
+    ambition: null,
+    ambition_reason: null,
+    profile: null,
+    authority: null,
+    taxonomy_version: "lever-types-v1",
+    document_count: 0,
+    evaluated_count: 0,
+    evaluated_countries: [],
+    outcomes_evaluated: 0,
+    outcomes_total: 2,
+    relations: [],
+    search_pending: false,
+    run_id: MOCK_LONGLIST_RUN_ID,
+    capability_run_id: MOCK_LONGLIST_WALK_ID,
+    plan_version: 1,
+    evidence: {
+    },
+    judgements: [],
+    guesses: [],
+    in_scope: null,
+    documents: [],
+  };
+}
+
+/** `GET /tasks/{id}/longlist` — two themes, four options, in themed-first
+ *  order (the package's theme before "No theme"'s single added-by-you
+ *  option), built from `mockLonglistOptionCards` so the summary and the
+ *  card never drift apart. Any option added since (`mockLonglistExtraOptionIds`)
+ *  appends unthemed, like a real rebuild's new entrants. */
+export function mockLonglist(): components["schemas"]["LonglistOut"] {
+  const options = [
+    MOCK_OPTION_ID_EXCLUDED,
+    MOCK_OPTION_ID_NO_IN_SCOPE,
+    MOCK_OPTION_ID_PACKAGE,
+    MOCK_OPTION_ID_ADDED_BY_YOU,
+    ...mockLonglistExtraOptionIds,
+  ].map((optionId) => toLonglistOptionSummary(mockLonglistOptionCards[optionId]));
+  return {
+    run_id: MOCK_LONGLIST_RUN_ID,
+    capability_run_id: MOCK_LONGLIST_WALK_ID,
+    plan_version: 1,
+    counts: {
+      options: options.length,
+      themes: 2,
+      included: options.filter((option) => option.state === "included").length,
+      excluded: options.filter((option) => option.state === "excluded").length,
+      no_in_scope: options.filter((option) => option.no_in_scope_evidence).length,
+      none_fits: options.filter((option) => option.primary_lever_type == null).length,
+    },
+    themes: [
+      {
+        theme_id: MOCK_LONGLIST_THEME_ID_CONDITIONALITY,
+        name: "Conditionality and support",
+        description: "Options that attach an obligation or targeted help to the existing offer.",
+        option_ids: [MOCK_OPTION_ID_EXCLUDED, MOCK_OPTION_ID_NO_IN_SCOPE],
+      },
+      {
+        theme_id: MOCK_LONGLIST_THEME_ID_UNIVERSAL_OFFER,
+        name: "A universal offer",
+        description: "A single, non-conditional offer replacing today's patchwork.",
+        option_ids: [MOCK_OPTION_ID_PACKAGE],
+      },
+    ],
+    unthemed_option_ids: [MOCK_OPTION_ID_ADDED_BY_YOU, ...mockLonglistExtraOptionIds],
+    options,
+    lever_types: [
+      "regulate",
+      "subsidise",
+      "tax or charge",
+      "inform",
+      "provide a service",
+      "enforce existing powers",
+      "devolve",
+      "change who runs the system",
+      "invest in infrastructure",
+      "convene",
+    ],
+    // Mirrors backend lever_types.py (LEVER_TYPES, AMBITION_DEFINITIONS);
+    // update alongside it.
+    lever_type_definitions: [
+      { key: "regulate", definition: "set or change rules, standards, bans, licensing or planning requirements" },
+      { key: "provide a service", definition: "deliver or fund a service or programme directly to people" },
+    ],
+    // Every taxonomy version (task 046): mirrors backend lever_types.py's
+    // LEVER_TYPES (v2, current) and LEVER_TYPES_V1 — update alongside it.
+    lever_type_definitions_by_version: {
+      lever_types_v2: [
+        { key: "regulate", definition: "set or change rules, standards, bans, licensing or planning requirements" },
+        {
+          key: "subsidise",
+          definition:
+            "pay for, grant-fund, discount or otherwise lower the price of something for people, or fund a provider to deliver it",
+        },
+        { key: "tax or charge", definition: "raise the price of something through a tax, levy, fee or charge" },
+        { key: "inform", definition: "give information, advice, campaigns, labelling or guidance to change behaviour" },
+        {
+          key: "provide a service",
+          definition:
+            "deliver a service or programme to people directly, by the state's own bodies and staff (a public service, a facility, a scheme run by a public body)",
+        },
+        { key: "enforce existing powers", definition: "apply, inspect or enforce rules and duties that already exist" },
+        {
+          key: "devolve",
+          definition: "move a decision, budget or power to a lower tier of government or a local body",
+        },
+        {
+          key: "change who runs the system",
+          definition: "reorganise institutions, commissioning, ownership or accountability for a service",
+        },
+        {
+          key: "build or change infrastructure",
+          definition: "create or alter physical environments, routes, facilities or estates",
+        },
+        {
+          key: "procure or commission",
+          definition:
+            "buy a service or goods from a provider, or use public purchasing or commissioning rules to change what is bought or from whom",
+        },
+      ],
+      lever_types_v1: [
+        { key: "regulate", definition: "set or change rules, standards, bans, licensing or planning requirements" },
+        {
+          key: "subsidise",
+          definition:
+            "pay for, grant-fund, discount or otherwise lower the price of something for people or providers",
+        },
+        { key: "tax or charge", definition: "raise the price of something through a tax, levy, fee or charge" },
+        { key: "inform", definition: "give information, advice, campaigns, labelling or guidance to change behaviour" },
+        {
+          key: "provide a service",
+          definition: "deliver or fund a service or programme directly to people (a scheme, a programme, a facility)",
+        },
+        { key: "enforce existing powers", definition: "apply, inspect or enforce rules and duties that already exist" },
+        {
+          key: "devolve",
+          definition: "move a decision, budget or power to a lower tier of government or a local body",
+        },
+        {
+          key: "change who runs the system",
+          definition: "reorganise institutions, commissioning, ownership or accountability for a service",
+        },
+        {
+          key: "build or change infrastructure",
+          definition: "create or alter physical environments, routes, facilities or estates",
+        },
+        {
+          key: "procure or commission",
+          definition: "use public purchasing or commissioning rules to change what is bought or from whom",
+        },
+      ],
+    },
+    taxonomy_version: "lever-types-v1",
+    depth_label: "scoping pass",
+  };
 }
