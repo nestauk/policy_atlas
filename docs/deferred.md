@@ -832,23 +832,34 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   Claude backend (tool-use JSON, fresh prompt per prompting rule 12). The standing
   constraint from 018 stays: nothing new couples to a provider-specific API surface.
   What remains deferred, and to which slice:
-  - **Staging and production (deploy slice):** task-role permissions per model, the
-    container minting its own short-term key, `POLICY_ATLAS_MODEL_ROUTE` per
-    environment from `pa_config.json`, Marketplace model access per account, the
-    organisation's region policy allowing `aws:RequestedRegion = unspecified` for
-    Bedrock's global profiles, quota checks, removal of `OPENAI_API_KEY` from the app
-    secret, Langfuse pricing for the Bedrock model ids, the Anthropic use-case form if
-    any Claude path needs it. Whether to re-embed older projects under the Cohere
-    profile or simply not offer chat retrieval on them is a cost decision for that slice
-    (owner, 2026-09-25); the old vectors stay in the database under their old profile.
-    Two notes from the 045 review (2026-10-14): `infra/DEPLOYMENT.md` § tuning knobs still
-    lists the retired `POLICY_ATLAS_*_MODEL` variables and must be rewritten when that
-    slice touches `infra/`; and the `boto3` region for Cohere and Claude comes from
-    `AWS_REGION` alone (default `eu-west-2`, contract D5) while the OpenAI address is
-    written in the route, so a shell with `AWS_REGION` set for other AWS work sends the
-    EU profiles to the wrong region. Reading the region from the route file beside
-    `openai_base_url` is the one-line fix; it waits for the deploy slice, which sets the
-    container's region anyway.
+  - **Staging and production (deploy slice):** the owner's plan changed on 2026-10-21:
+    the container does **not** mint its own key from the task role. Both keys live in
+    the app secret for good (`OPENAI_API_KEY` for OpenAI, a new `AWS_BEARER_TOKEN_BEDROCK`
+    field holding a long-term Bedrock API key owned by an IAM user with Bedrock invoke
+    permissions, with an owner and a rotation date), and `POLICY_ATLAS_MODEL_ROUTE` is a
+    plain environment variable set per environment from `infra/pa_config.json`. Switching
+    route is a config commit and a deploy; rotating a key is a secret edit and a forced
+    new deployment (ECS reads secrets only at task start; the route file is read once at
+    import). **Prerequisite code change:** each route must name the variable that holds
+    its key (`OPENAI_API_KEY` on `openai-direct`, `AWS_BEARER_TOKEN_BEDROCK` on the
+    Bedrock routes) in `model_routes.toml`, read by the loader, `resolve_openai_client`
+    and the three live-mode checks; today a Bedrock route reads `OPENAI_API_KEY`, so with
+    both keys present it would send the OpenAI key to Bedrock. Still on the list:
+    Marketplace model access per account, the organisation's region policy allowing
+    `aws:RequestedRegion = unspecified` for Bedrock's global profiles, quota checks,
+    Langfuse pricing for the Bedrock model ids, the Anthropic use-case form if any
+    Claude path needs it, and AWS's note that long-term keys are meant for exploration,
+    to be recorded in that slice's ADR. Whether to re-embed older projects under the
+    Cohere profile or simply not offer chat retrieval on them is a cost decision for
+    that slice (owner, 2026-09-25); the old vectors stay in the database under their
+    old profile. Two notes from the 045 review (2026-10-14): `infra/DEPLOYMENT.md`
+    § tuning knobs still lists the retired `POLICY_ATLAS_*_MODEL` variables and must be
+    rewritten when that slice touches `infra/`; and the `boto3` region for Cohere and
+    Claude comes from `AWS_REGION` alone (default `eu-west-2`, contract D5) while the
+    OpenAI address is written in the route, so a shell with `AWS_REGION` set for other
+    AWS work sends the EU profiles to the wrong region. Reading the region from the
+    route file beside `openai_base_url` is the one-line fix; it waits for the deploy
+    slice, which sets the container's region anyway.
   - **Model quality (evaluation slice):** Luna in place of gpt-5.4-mini, Terra in place
     of gpt-5.5, the Claude tier for query generation, and Cohere vectors for grouping
     and retrieval are all unmeasured. Compare by writing an overlay route file per
