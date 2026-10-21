@@ -840,11 +840,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
     plain environment variable set per environment from `infra/pa_config.json`. Switching
     route is a config commit and a deploy; rotating a key is a secret edit and a forced
     new deployment (ECS reads secrets only at task start; the route file is read once at
-    import). **Prerequisite code change:** each route must name the variable that holds
-    its key (`OPENAI_API_KEY` on `openai-direct`, `AWS_BEARER_TOKEN_BEDROCK` on the
-    Bedrock routes) in `model_routes.toml`, read by the loader, `resolve_openai_client`
-    and the three live-mode checks; today a Bedrock route reads `OPENAI_API_KEY`, so with
-    both keys present it would send the OpenAI key to Bedrock. Still on the list:
+    import). The prerequisite landed in 045 on 2026-10-21: each route names the variable
+    that holds its key (`api_key_env`), so both keys coexist in one secret. Still on
+    the list:
     Marketplace model access per account, the organisation's region policy allowing
     `aws:RequestedRegion = unspecified` for Bedrock's global profiles, quota checks,
     Langfuse pricing for the Bedrock model ids, the Anthropic use-case form if any

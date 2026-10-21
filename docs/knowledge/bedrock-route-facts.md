@@ -1,7 +1,7 @@
 ---
 type: Integration quirk
 title: Bedrock from London — which models answer, through which API, with which key variable
-description: From eu-west-2 the GPT-5.6 family (Terra, Luna, Sol) answers through Bedrock's OpenAI-compatible endpoint under global.* profiles only (gpt-5.4-mini is absent, gpt-5.5 is US-only); Claude and Cohere answer through eu.* profiles via boto3 Converse / InvokeModel; one short-term Bedrock key goes in OPENAI_API_KEY and AWS_BEARER_TOKEN_BEDROCK, and a missing second variable surfaces as an AccessDeniedException naming the IAM user; Terra refuses function tools without reasoning_effort "none" but parses structured output without it.
+description: From eu-west-2 the GPT-5.6 family (Terra, Luna, Sol) answers through Bedrock's OpenAI-compatible endpoint under global.* profiles only (gpt-5.4-mini is absent, gpt-5.5 is US-only); Claude and Cohere answer through eu.* profiles via boto3 Converse / InvokeModel; each route names its key variable (Bedrock routes read AWS_BEARER_TOKEN_BEDROCK for both clients), and a missing Bedrock variable surfaces as an AccessDeniedException naming the IAM user; Terra refuses function tools without reasoning_effort "none" but parses structured output without it.
 tags: [bedrock, openai, claude, cohere, boto3, credentials, live-probe]
 timestamp: 2026-10-14
 ---
@@ -15,11 +15,14 @@ timestamp: 2026-10-14
   Claude (`eu.anthropic.*`) does not accept the OpenAI-compatible format: use `boto3`
   Converse. Cohere Embed v4 (`eu.cohere.embed-v4:0`) is InvokeModel, 96 texts per call,
   1536 numbers by default, and distinguishes `search_document` from `search_query`.
-- **One key, two variables.** A short-term Bedrock API key (12 hours) is read by the
-  OpenAI client from `OPENAI_API_KEY` and by `boto3` from `AWS_BEARER_TOKEN_BEDROCK`.
-  If the second is unset, `boto3` falls back to the machine's ordinary AWS credentials
-  and Bedrock answers `AccessDeniedException` **naming the IAM user and the profile**.
-  That reads like a permission gap; check both variables before treating it as one.
+- **Each route names its key variable.** On a Bedrock route both the OpenAI client and
+  `boto3` read `AWS_BEARER_TOKEN_BEDROCK` (`api_key_env` in the route file); the
+  OpenAI key in `OPENAI_API_KEY` is left alone, so both may be set at once. If the
+  Bedrock variable is unset, `boto3` falls back to the machine's ordinary AWS
+  credentials and Bedrock answers `AccessDeniedException` **naming the IAM user and
+  the profile**. That reads like a permission gap; check the variable before treating
+  it as one. A 401 from `api.openai.com` quoting a `bedrock-…` key means the route
+  selector is unset, not a bad key.
 - **Terra's knob is about function tools, not structured output.** On Bedrock as on
   OpenAI direct, `chat.completions.create(tools=...)` on Terra returns 400 unless
   `reasoning_effort="none"`; `chat.completions.parse(response_format=...)` works

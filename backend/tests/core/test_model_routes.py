@@ -60,6 +60,7 @@ def test_default_route_reproduces_every_pre_045_model() -> None:
     for step, model in PRE_045_MODELS.items():
         assert route.model_for(step) == model, step
     assert route.openai_base_url == "https://api.openai.com/v1"
+    assert route.api_key_env == "OPENAI_API_KEY"
     assert route.embeddings.backend == "openai"
     assert route.embeddings.model == "text-embedding-3-small"
     assert route.embeddings.profile == "openai_text_embedding_3_small_v1"
@@ -71,6 +72,7 @@ def test_default_route_reproduces_every_pre_045_model() -> None:
 def test_bedrock_local_names_bedrock_models_and_cohere() -> None:
     route = load_route(ROUTE_FILE, "bedrock-local", {})
     assert route.openai_base_url.startswith("https://bedrock-runtime.eu-west-2.")
+    assert route.api_key_env == "AWS_BEARER_TOKEN_BEDROCK"
     assert route.model_for("classify") == "global.openai.gpt-5.6-luna"
     assert route.model_for("screen") == "global.openai.gpt-5.6-luna"
     assert route.model_for("synthesis") == "global.openai.gpt-5.6-terra"
@@ -105,6 +107,7 @@ synthesis = "standard"
 
 [routes.r]
 openai_base_url = "https://example.test/v1"
+api_key_env = "OPENAI_API_KEY"
 [routes.r.text]
 mini = "m-mini"
 standard = "m-std"
@@ -181,7 +184,8 @@ def test_overlay_replaces_and_adds_routes_but_not_steps(tmp_path: Path) -> None:
     replaced = _write(
         tmp_path,
         "replace.toml",
-        '[routes.r]\nopenai_base_url = "https://other.test/v1"\n[routes.r.text]\n'
+        '[routes.r]\nopenai_base_url = "https://other.test/v1"\napi_key_env = "OPENAI_API_KEY"\n'
+        '[routes.r.text]\n'
         'mini = "m-mini-x"\nstandard = "m-std"\n[routes.r.embeddings]\nbackend = "openai"\n'
         'model = "e"\nprofile = "p"\n[routes.r.search_queries]\nbackend = "openai"\n',
     )
@@ -233,6 +237,10 @@ def test_retired_variables_change_nothing_and_are_named(tmp_path: Path) -> None:
             "'text' must be a table, not str",
         ),
         (MINIMAL + '[routes.r.steps]\nscreen = "mini"\n[[routes.r.steps]]\n', "not valid TOML"),
+        (
+            MINIMAL.replace('api_key_env = "OPENAI_API_KEY"', 'api_key_env = "OPENAI_KEY"'),
+            "'api_key_env' is 'OPENAI_KEY', not one of",
+        ),
     ],
 )
 def test_unknown_backend_names_and_wrong_shapes_fail_loud(
@@ -262,6 +270,23 @@ def test_stray_openai_base_url_does_not_move_the_client(monkeypatch: pytest.Monk
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     client = resolve_openai_client(None, backend_name="test", timeout=1.0, max_retries=0)
     assert str(client.base_url).rstrip("/") == "https://api.openai.com/v1"
+
+
+def test_bedrock_route_reads_its_own_key_variable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Both keys may be set at once; a Bedrock route reads the Bedrock one, never the OpenAI one."""
+    from policy_atlas.core import model_routes, openai_client
+
+    bedrock = load_route(ROUTE_FILE, "bedrock-local", {})
+    monkeypatch.setattr(model_routes, "route", lambda: bedrock)
+    monkeypatch.setattr(openai_client, "route", lambda: bedrock)
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    with pytest.raises(RuntimeError, match="requires AWS_BEARER_TOKEN_BEDROCK"):
+        openai_client.resolve_openai_client(None, backend_name="t", timeout=1.0, max_retries=0)
+    assert model_routes.live_api_key() is None
+    monkeypatch.setenv("AWS_BEARER_TOKEN_BEDROCK", "bedrock-key")
+    client = openai_client.resolve_openai_client(None, backend_name="t", timeout=1.0, max_retries=0)
+    assert client.api_key == "bedrock-key"
+    assert model_routes.live_api_key() == "bedrock-key"
 
 
 def test_every_module_constant_equals_its_pre_045_literal() -> None:

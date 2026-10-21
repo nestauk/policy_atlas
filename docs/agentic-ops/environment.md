@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–040; 040 is frontend-only and changes no env; 051 changes no env and no schema (the single-pass search; model ids were code constants until 045); 045 adds one optional selector, `POLICY_ATLAS_MODEL_ROUTE` (unset = OpenAI direct, as before), and for a Bedrock route the same short-term key in `OPENAI_API_KEY` and `AWS_BEARER_TOKEN_BEDROCK`, no schema change, see `backend/.env.example`; 039 adds the APO test-mod (`publisher_source`,
+stands (tasks 001–040; 040 is frontend-only and changes no env; 051 changes no env and no schema (the single-pass search; model ids were code constants until 045); 045 adds one optional selector, `POLICY_ATLAS_MODEL_ROUTE` (unset = OpenAI direct, as before), and each route names its key variable (`OPENAI_API_KEY` for OpenAI direct, `AWS_BEARER_TOKEN_BEDROCK` for the Bedrock routes), no schema change, see `backend/.env.example`; 039 adds the APO test-mod (`publisher_source`,
 Overton `source=apo`) plus planning/artefact bug fixes — no migration; when
 another checkout of this repo may be running tests, isolate the gate with a
 per-checkout `TEST_DATABASE_URL` `*_test` override; 038 renames the catalog (`project`→`task`,

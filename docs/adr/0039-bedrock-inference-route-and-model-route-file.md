@@ -95,8 +95,11 @@ environment files.
 
 - One dependency change: `boto3` moves from the operator-only group to the main
   dependency list, with Bedrock type stubs. `openai` stays.
-- Local development needs a Bedrock short-term key in two variables, one for each
-  client library. Keys expire within 12 hours.
+- Each route names the environment variable that holds its key (`api_key_env`, added
+  2026-10-21): `OPENAI_API_KEY` on `openai-direct`, `AWS_BEARER_TOKEN_BEDROCK` on the
+  Bedrock routes, where `boto3` reads the same variable. Both keys may be set at once,
+  so a route switch never edits a key. Locally a short-term Bedrock key expires within
+  12 hours.
 - Staging and production need task-role permissions per model, Marketplace terms
   accepted per account, an organisation-level allowance for the `unspecified` region
   value that global profiles evaluate against, quota checks, and a cost-based decision on

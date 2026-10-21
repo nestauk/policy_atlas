@@ -311,7 +311,7 @@ class OpenAIGroupClusteringBackendFactory:
     """Live OpenAI implementation of the group clustering factory seam.
 
     Args:
-        api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is
+        api_key: Optional OpenAI API key. If omitted, the route's key variable is
             read from the environment.
         langfuse_client: Optional Langfuse client. When omitted, tracing is a
             no-op and no Langfuse object is created.

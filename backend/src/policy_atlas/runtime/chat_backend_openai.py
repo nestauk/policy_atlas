@@ -44,7 +44,7 @@ class OpenAIChatBackend(ChatBackend):
         """Create the live adapter using the repository's standard client seam.
 
         Args:
-            api_key: Optional key; absent uses ``OPENAI_API_KEY``.
+            api_key: Optional key; absent uses the route's key variable.
         """
         self._client = resolve_openai_client(
             api_key, backend_name="OpenAIChatBackend", timeout=120.0, max_retries=2

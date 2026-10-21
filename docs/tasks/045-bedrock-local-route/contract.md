@@ -45,6 +45,10 @@ set on the new models and re-tuning prompts) come later and are out of scope her
 > (5) the `reasoning_effort` knob is keyed by model id, not by the `standard` tier as the
 > D3 example shows, because the code compared the model id before and a step exception
 > can name a model directly.
+> A sixth, after review (2026-10-21): (6) the owner replaced the deploy slice's task-role key
+> minting with long-term keys in the app secret, so each route now names the variable
+> that holds its key (`api_key_env`); D2's "one key in two variables" no longer applies,
+> a Bedrock route reads `AWS_BEARER_TOKEN_BEDROCK` for both clients.
 
 ## Why this is safe to do now
 

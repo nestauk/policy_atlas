@@ -165,7 +165,7 @@ class OpenAIEmbeddingBackend:
     """Live OpenAI embedding backend.
 
     Args:
-        api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is read
+        api_key: Optional OpenAI API key. If omitted, the route's key variable is read
             from the environment.
 
     Raises:

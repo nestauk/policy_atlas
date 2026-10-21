@@ -44,6 +44,8 @@ contract's own vocabulary and is recorded in the contract's build-time note:
 | `make verify` + `make audit` (gate 3, step-6 exit) | pass | backend 2654 passed in 6:13; mypy 313; prompt-guard 17; frontend 617; no known vulnerabilities |
 | `make verify` (step 7 entry, fresh review conversation, before any fix) | pass | backend 2654 passed in 6:05; mypy 313; ruff clean; frontend 617; infra 86; okf 153 concepts; prompt-guard green |
 | `make verify` + `make audit` (step 7 exit, after the review fixes) | see § Review findings § Gate after fixes | |
+| `uv run --env-file .env python probe_key_env.py` (2026-10-21, post-review addition) | pass | `POLICY_ATLAS_MODEL_ROUTE=bedrock-local` with `OPENAI_API_KEY` set to a dummy value: route names `AWS_BEARER_TOKEN_BEDROCK`, the client carries that key, Luna on Bedrock replied `ok` |
+| `make verify` (2026-10-21, post-review addition) | interrupted at 64% by the owner for the dev merge; route tests 27 passed, ruff + mypy clean on touched files; the full gate re-runs after the merge | `make okf-validate`: 156 concepts, 0 violations |
 
 ### Phase B (Cohere embeddings), diff summary
 
@@ -483,6 +485,36 @@ Name         Skip Reason
 ------------ -------------------------------
 policy-atlas distribution marked as editable
 ```
+
+## Post-review addition (2026-10-21): each route names its key variable
+
+**Why.** The owner replaced the deploy slice's plan (task-role key minting) with
+long-term keys held in the app secret, both keys at once, and the route chosen by
+`POLICY_ATLAS_MODEL_ROUTE` from `infra/pa_config.json`. Under the reviewed build a
+Bedrock route read `OPENAI_API_KEY`, so with both keys present it would have sent the
+OpenAI key to Bedrock, and switching route meant editing the secret.
+
+**What changed.** One new field per route, `api_key_env`, validated against
+`API_KEY_ENVS = ("OPENAI_API_KEY", "AWS_BEARER_TOKEN_BEDROCK")`. A new helper
+`live_api_key()` in `core/model_routes.py` reads the named variable. The three readers
+now go through it: `resolve_openai_client` (error message names the route's variable),
+`api/deps._live` (both the `live` fail-loud and the `auto` switch) and the agent
+command-line switch in `runtime/agent.py`. Fifteen backend docstrings that said
+"`OPENAI_API_KEY` is read" now say "the route's key variable is read". `boto3` is
+untouched: it always read `AWS_BEARER_TOKEN_BEDROCK`. `.env.example`, ADR 0039,
+`docs/knowledge/bedrock-route-facts.md`, `environment.md` and `deferred.md` updated;
+contract build-time note (6).
+
+**Tests.** Both committed routes assert their variable; a misspelt `api_key_env` joins
+the fail-loud parametrised case; `test_bedrock_route_reads_its_own_key_variable` sets
+only `OPENAI_API_KEY` under `bedrock-local` and expects the client to refuse naming
+`AWS_BEARER_TOKEN_BEDROCK`, then sets it and expects the client to carry it.
+
+**Local effect.** A developer on a Bedrock route now needs the Bedrock key in
+`AWS_BEARER_TOKEN_BEDROCK` only. If it is left only in `OPENAI_API_KEY`, `auto` mode
+runs stubs, the same silent behaviour as any missing key before this slice.
+
+**Gate and live probe.** See § Commands run (rows dated 2026-10-21).
 
 ## Rubric status
 

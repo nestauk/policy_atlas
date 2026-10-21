@@ -1819,7 +1819,7 @@ class OpenAISynthesisBackend:
     """Live OpenAI implementation of the section proposal and section loop seams.
 
     Args:
-        api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is read
+        api_key: Optional OpenAI API key. If omitted, the route's key variable is read
             from the environment.
         langfuse_client: Optional Langfuse client. When omitted, tracing is a
             no-op and no Langfuse object is created.

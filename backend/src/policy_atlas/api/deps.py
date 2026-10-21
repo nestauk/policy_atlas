@@ -19,6 +19,7 @@ from policy_atlas.core.embeddings import (
     StubEmbeddingBackend,
     live_embedding_backend,
 )
+from policy_atlas.core.model_routes import live_api_key, route
 from policy_atlas.evidence_search.synthesis.grounding_judge import (
     GroundingJudgeBackend,
     OpenAIGroundingJudgeBackend,
@@ -57,12 +58,12 @@ def _live() -> bool:
     if mode == "stub":
         return False
     if mode == "live":
-        if not os.environ.get("OPENAI_API_KEY"):
+        if not live_api_key():
             raise RuntimeError(
-                "PA_BACKEND_MODE=live requires OPENAI_API_KEY to be configured"
+                f"PA_BACKEND_MODE=live requires {route().api_key_env} to be configured"
             )
         return True
-    return bool(os.environ.get("OPENAI_API_KEY"))
+    return bool(live_api_key())
 
 
 def warn_on_partial_live_keys() -> None:
@@ -140,7 +141,7 @@ def get_planner_backend() -> PlannerBackend:
     """Build the planner backend, key-driven exactly like `agent`.
 
     Returns:
-        The live OpenAI planner (Langfuse-traced) when `OPENAI_API_KEY` is
+        The live OpenAI planner (Langfuse-traced) when the route's key is
         configured, else the deterministic stub. Tests override this
         dependency with a scripted backend before creating a client.
     """
@@ -155,7 +156,7 @@ def get_runner_backends() -> RunnerBackends:
 
     Returns:
         The full live backend set (search transports, OpenAI components,
-        document fetcher, tracing) when `OPENAI_API_KEY` is configured, else
+        document fetcher, tracing) when the route's key is configured, else
         the egress-free harness defaults. Tests override this seam with
         deterministic component doubles.
     """
@@ -171,7 +172,7 @@ def get_agent_backend() -> AgentBackend:
     Returns:
         The live OpenAI agent (the 024 router/watch — free-text
         compilation must go through the real router in live deployments) when
-        `OPENAI_API_KEY` is configured, else the deterministic stub.
+        the route's key is configured, else the deterministic stub.
     """
     if _live():
         return OpenAIAgentBackend(langfuse_client=tracing.get_langfuse())

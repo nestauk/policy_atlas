@@ -2,7 +2,9 @@
 
 The file is ``model_routes.toml`` at the package root. It names every step once
 with a default tier, and for each named *route* says which model each tier is,
-plus provider knobs, the embedding model and the search-queries backend. One
+plus provider knobs, the embedding model, the search-queries backend and which
+environment variable holds the route's API key (so one secret can hold both the
+OpenAI key and a Bedrock key, and switching route never edits the secret). One
 environment variable, ``POLICY_ATLAS_MODEL_ROUTE``, picks the route; unset means
 ``openai-direct``, which reproduces the pre-045 behaviour exactly. An optional
 second file named by ``POLICY_ATLAS_MODEL_ROUTE_FILE`` can replace or add routes
@@ -32,6 +34,7 @@ ROUTE_FILE = Path(__file__).resolve().parent.parent / "model_routes.toml"
 DEFAULT_ROUTE = "openai-direct"
 EMBEDDING_BACKENDS = ("openai", "cohere")
 SEARCH_QUERIES_BACKENDS = ("openai", "claude")
+API_KEY_ENVS = ("OPENAI_API_KEY", "AWS_BEARER_TOKEN_BEDROCK")
 ROUTE_ENV = "POLICY_ATLAS_MODEL_ROUTE"
 OVERLAY_ENV = "POLICY_ATLAS_MODEL_ROUTE_FILE"
 
@@ -75,6 +78,9 @@ class Route:
     Args:
         name: The route name, as selected.
         openai_base_url: Where the OpenAI client sends requests.
+        api_key_env: The environment variable that holds this route's API key.
+            The OpenAI client and the live-mode switch read it; ``boto3`` always
+            reads ``AWS_BEARER_TOKEN_BEDROCK`` on its own.
         tiers: Tier name to model id.
         steps: Step name to default tier (from the committed ``[steps]`` table).
         step_exceptions: Step name to a tier name or a model id, for this route.
@@ -85,6 +91,7 @@ class Route:
 
     name: str
     openai_base_url: str
+    api_key_env: str
     tiers: Mapping[str, str]
     steps: Mapping[str, str]
     step_exceptions: Mapping[str, str]
@@ -219,6 +226,7 @@ def load_route(
     return Route(
         name=name,
         openai_base_url=_require(table, "openai_base_url", where),
+        api_key_env=_choice(table, "api_key_env", where, API_KEY_ENVS),
         tiers=tiers,
         steps=steps,
         step_exceptions=exceptions,
@@ -245,3 +253,12 @@ def route() -> Route:
         os.environ,
         overlay_path=Path(overlay) if overlay else None,
     )
+
+
+def live_api_key() -> str | None:
+    """The API key for the selected route, or ``None`` when it is not set.
+
+    Reads the variable the route names (``api_key_env``), so a Bedrock route
+    never picks up the OpenAI key by accident and the two can coexist.
+    """
+    return os.environ.get(route().api_key_env)
