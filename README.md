@@ -26,7 +26,8 @@ backend/src/policy_atlas/
     group/                   multi-facet grouping over extracted findings
     synthesis/               artefact composition, section generation loop, grounding judge
   core/                      schema, db, events, logging, tracing, usage, model-client
-                             plumbing, embeddings
+                             plumbing, embeddings, model routes
+  model_routes.toml          which AI model each step uses, per route (see below)
 backend/alembic/             database migrations
 backend/tests/               mirrors the src tree; conftest runs migrations once per session;
                              backend/tests/data/ holds all fixtures (full-text corpus +
@@ -83,9 +84,25 @@ curl http://localhost:8000/healthz   # => {"status": "ok"}
 ```
 
 The API composes **stub** planner/search backends by default and goes live
-when the selected model route's key variable is set (`OPENAI_API_KEY` on the
-default route, `AWS_BEARER_TOKEN_BEDROCK` on a Bedrock route); `PA_BACKEND_MODE=live|stub|auto` makes the
-posture explicit (see `backend/.env.example`).
+when the selected model route's key is set (`OPENAI_API_KEY` on the default
+route, `AWS_BEARER_TOKEN_BEDROCK` on a Bedrock route); `PA_BACKEND_MODE=live|stub|auto`
+makes the posture explicit (see `backend/.env.example`).
+
+**Choosing AI models.** Every model name lives in one committed file,
+`backend/src/policy_atlas/model_routes.toml`. One setting picks a route from it:
+
+| `POLICY_ATLAS_MODEL_ROUTE` | where AI calls go | key it reads |
+|---|---|---|
+| unset (`openai-direct`) | OpenAI, as before | `OPENAI_API_KEY` |
+| `bedrock-local` | Amazon Bedrock in London: GPT-5.6 models, Cohere embeddings | `AWS_BEARER_TOKEN_BEDROCK` |
+| `bedrock-local-claude` | as `bedrock-local`, with Claude writing the search queries | `AWS_BEARER_TOKEN_BEDROCK` |
+
+To change a model, edit the route file and open a pull request. To try a model
+without a pull request, put your own route in a separate file and name it with
+`POLICY_ATLAS_MODEL_ROUTE_FILE`. The old per-step `POLICY_ATLAS_*_MODEL`
+settings are ignored. Diagrams and details:
+[`docs/tasks/053-bedrock-local-route/model-routing.html`](docs/tasks/053-bedrock-local-route/model-routing.html)
+(open it in a browser).
 
 **4. Frontend dev server** (from `frontend/`; installs once with `pnpm install`):
 
