@@ -98,7 +98,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
     <div class="tile"><div class="num accent">1</div><div class="lab">setting to switch route; no code change</div></div>
   </div>
   <p class="toc">
-    <a href="#why">Why</a><a href="#map">1: Steps, tiers and models</a><a href="#path">2: Where a request goes</a><a href="#keys">3: Which key is used</a><a href="#vectors">4: Embeddings</a><a href="#howto">How to</a><a href="#proof">Tested</a><a href="#later">Not in this change</a>
+    <a href="#why">Why</a><a href="#map">1: Steps, tiers and models</a><a href="#path">2: Where a request goes</a><a href="#keys">3: Which key is used</a><a href="#vectors">4: Embeddings</a><a href="#howto">How to</a><a href="#proof">Tested</a><a href="#later">Switching staging and production</a>
   </p>
 </header>
 
@@ -224,7 +224,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
       </g>
     </svg>
     <div class="legend"><span style="--dot: var(--c-openai)">OpenAI, called directly</span><span style="--dot: var(--c-bedrock)">the same model family, through Amazon Bedrock</span><span style="--dot: var(--c-claude)">Claude, through Amazon Bedrock</span></div>
-    <figcaption><b>The default route reproduces today's models exactly.</b> On Bedrock, two models the app uses today are not available from London, so the Bedrock route uses the nearest model from the same family in their place. Whether the stand-ins are as good is not measured yet; that is the evaluation work listed at the end.</figcaption>
+    <figcaption><b>The default route reproduces today's models exactly.</b> On Bedrock, two models the app uses today are not available from London, so the Bedrock route uses the nearest model from the same family in their place. Luna has already been evaluated; Terra in place of gpt-5.5 has run live but has not been evaluated on its own.</figcaption>
   </figure>
 </section>
 
@@ -393,7 +393,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
         <line x1="710" y1="190" x2="634" y2="191" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#a4)" style="stroke: var(--c-plain)"/>
       </g>
     </svg>
-    <figcaption><b>Switching route never mixes the two kinds of numbers.</b> A project embedded under one route has no search-ready passages under the other until it is ingested again. Whether to re-embed existing deployed projects, or simply not offer chat search on them, is a cost decision for the deployment work.</figcaption>
+    <figcaption><b>Switching route never mixes the two kinds of numbers.</b> A project embedded under one route has no search-ready passages under the other until it is ingested again. Existing deployed projects need ingesting again before their chat search works on Bedrock.</figcaption>
   </figure>
 </section>
 
@@ -433,12 +433,16 @@ POLICY_ATLAS_MODEL_ROUTE=my-test</code></pre>The extra file can add or replace r
 </section>
 
 <section class="wrap" id="later">
-  <h2>Not in this change</h2>
-  <div class="two">
-    <div><b class="h">Deployment</b>Staging and production still call OpenAI. A later change adds the Bedrock key to the app secret, sets the route per environment from config, and settles AWS access, quotas and the region policy for the global profile.</div>
-    <div><b class="h">Quality</b>Luna in place of gpt-5.4-mini, Terra in place of gpt-5.5, Claude for query writing and Cohere embeddings are not yet measured against the evaluation sets. The overlay file is how those comparisons will run.</div>
-  </div>
-  <p>Design record: <a href="../../adr/0041-bedrock-inference-route-and-model-route-file.md">ADR 0041</a>. Scope and evidence: <a href="contract.md">contract</a>, <a href="verification.md">verification</a>. Remaining work: <a href="../../deferred.md">deferred log</a>, § Bedrock routes.</p>
+  <h2>Switching staging and production</h2>
+  <p>Merging this change does not move anything. Staging and production set no route, so they keep calling OpenAI exactly as today. Switching an environment to Bedrock takes three steps:</p>
+  <ol class="steps">
+    <li><b>Add the key to the app secret.</b> Put a long-term Bedrock API key in <code>policy_atlas_v3/app</code> as a new field, <code>AWS_BEARER_TOKEN_BEDROCK</code>.</li>
+    <li><b>Pass it to the app, and choose the route.</b> The deployment code hands the container only the secret fields it names one by one, so it needs two new lines: one for the new key, and one setting <code>POLICY_ATLAS_MODEL_ROUTE=bedrock-local</code>. Putting the route in <code>infra/pa_config.json</code> lets staging and production differ.</li>
+    <li><b>Deploy.</b> The app reads the key and the route when it starts.</li>
+  </ol>
+  <div class="note"><b>One side effect.</b> Projects that already exist were embedded with OpenAI. On Bedrock their chat search finds nothing until they are ingested again (Diagram 4). New projects are not affected.</div>
+  <p><b>Models.</b> Luna has already been evaluated. Claude is not used: the <code>bedrock-local-claude</code> route is there for testing it later. Terra in place of gpt-5.5 (the Task Agent and the agent's routing) and the Cohere embeddings have run live but have not been evaluated on their own.</p>
+  <p>Design record: <a href="../../adr/0041-bedrock-inference-route-and-model-route-file.md">ADR 0041</a>. Scope and evidence: <a href="contract.md">contract</a>, <a href="verification.md">verification</a>.</p>
 </section>
 </main>
 
