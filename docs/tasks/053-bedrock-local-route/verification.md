@@ -689,6 +689,80 @@ file or in the named test; "open" means it waits on the live checks.
     four files in Phase B and the lead had to restore and re-apply. Briefs should allow
     `ruff format --check` and `ruff check --fix`, never a bare `ruff format` on the tree.
 
+## Review handoff, delta (2026-10-21, for a fresh step-7 pass)
+
+The stack of 2026-10-14 reviewed the slice up to `84ecc720`. Four commits followed, all
+written by the lead in the conversation that also drove the live checks, so that
+conversation may not adjudicate them (`task-cycle-review`: fresh conversation). This is
+the handoff for a **delta** pass; nothing before `84ecc720` needs re-reading unless a
+delta finding points there.
+
+- **Commits:** `f73d8686` (deferred-log plan change, docs only), `8a772ffb` (each route
+  names its key variable), `9feb8090` (merge of `origin/dev` at `eedf9ef9`, the task
+  renumber 045→053 / ADR 0039→0041, options scoping under the route file, the four
+  merge-loss fixes, the certifi bump), `cb597bd6` (live check 4 record, docs only).
+- **Diff to read:** our lines on top of dev, scoped to the files the delta touched:
+
+  ```
+  git diff origin/dev...HEAD -- backend/src/policy_atlas/model_routes.toml \
+    backend/src/policy_atlas/core/model_routes.py backend/src/policy_atlas/core/openai_client.py \
+    backend/src/policy_atlas/api/deps.py backend/src/policy_atlas/runtime/agent.py \
+    backend/src/policy_atlas/runtime/agent_backend.py backend/src/policy_atlas/runtime/task_agent.py \
+    backend/src/policy_atlas/runtime/task_agent_scoping.py \
+    backend/src/policy_atlas/options_scoping/longlist/longlist_backend.py \
+    backend/src/policy_atlas/evidence_search/extract/extract_interventions_prompt.py \
+    backend/tests/core/test_model_routes.py backend/tests/evidence_search/sourcing/test_search_generation.py \
+    backend/.env.example backend/uv.lock scripts/prompt_hashes.json
+  ```
+
+  Records: `docs/adr/0041-*`, `docs/deferred.md` § Bedrock routes, `docs/knowledge/`
+  (`merge-take-theirs-drops-unconflicted-hunks`, the two updated records, `index.md`,
+  `log.md`), `docs/agentic-ops/{environment,readiness}.md`, this file's § Post-review
+  addition and § Post-merge integration, contract notes (6) to (8). Exclude
+  `docs/tasks/04[4-6]-*` and everything dev brought (`git diff 84ecc720...origin/dev`).
+- **Provenance:** every delta line is lead-written (Claude); no Codex surface. So the
+  Codex adversarial lane anchors the delta and `/code-review medium` is the Claude half.
+- **Entry gate:** `make verify` + `make audit` green at `9feb8090` (backend 3638, mypy
+  420, infra 93, frontend 882); `cb597bd6` changed this file only.
+- **Decisions the stack must confirm or contest** (each made unilaterally by the lead):
+  1. `api_key_env` is validated as one of two names (`API_KEY_ENVS`); `live_api_key()`
+     feeds `resolve_openai_client`, `api/deps._live` and the agent CLI switch; `boto3`
+     still reads its variable on its own. A developer who leaves the Bedrock key only in
+     `OPENAI_API_KEY` now gets stubs under `auto` mode, silently, like any missing key.
+  2. `POLICY_ATLAS_PLANNER_MODEL` was removed from `RETIRED_ENV` because dev's rename
+     sweep (`test_rename_044_sweep.py`) forbids the string in `backend/src`; a stale
+     setting of that name is therefore no longer warned about (`.env.example` still lists
+     it for readers).
+  3. The fifth tier is named `judgment` (Sol); no reasoning-effort knob for Sol; probe
+     only (plain + structured parse), no function-tool call on Sol has been made.
+  4. `extract_interventions` and `longlist_assignment` sit on `fast` (Luna), matching
+     dev's literals; `task_agent` keeps `frontier`.
+  5. Merge resolution: `git checkout --theirs` on four Python files, then re-application
+     of the 045 hunks from `git diff $(git merge-base 84ecc720 origin/dev) 84ecc720`.
+     Check that list against HEAD for any hunk still missing; the gate found three.
+  6. The renumber sweep touched only lines this branch added (`git diff -U0 origin/dev`
+     hunks); dev's own "045 a third" citation in `environment.md` was restored by hand.
+     Confirm no other dev citation of 045/0039 was rewritten.
+  7. `certifi` 2026.6.17 → 2026.10.19 by `uv lock --upgrade-package certifi` (inherited
+     advisory, one package).
+  8. Live check 4's driver lessons are recorded as driver errors, not product defects:
+     a walk's first `paused` is a steering check-in, and the confirm decision opens the
+     longlist walk itself (`confirm-baseline` afterwards → 409). Contest if either reads
+     as a product or documentation defect.
+  9. The readiness line now states PR #69 merged 2026-10-15 and this slice landing
+     2026-10-21; adjust the date if the merge slips.
+- **Knowledge candidates (delta):** the merge lesson is authored
+  ([merge-take-theirs-drops-unconflicted-hunks](../../knowledge/merge-take-theirs-drops-unconflicted-hunks.md));
+  still open: (a) the two scoping-driver lessons above, a candidate fold into
+  [live-check-drive-runbook](../../knowledge/live-check-drive-runbook.md); (b) "a
+  renumber sweep after a numbering clash must touch only the branch's own added lines",
+  a candidate fold into the two-step-rename concept.
+- **Known unverified after the delta:** `bedrock-local-claude` has not been run live
+  since the merge (its loader path is covered by the subprocess test only); chat
+  retrieval through the web API on Cohere vectors still only in tests; Sol under
+  function tools untested; the options-scoping run's quality against the 046 measures
+  is unmeasured (evaluation slice).
+
 ## Knowledge records (step 8)
 
 Authored from the build's candidates and the stack's findings, each adjudicated:
