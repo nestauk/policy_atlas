@@ -3,17 +3,19 @@ type: Convention
 title: Model names live in model_routes.toml; module constants read the cached route at import
 description: Every model id is resolved once per process from the committed route file (route() is functools.cache, selected by POLICY_ATLAS_MODEL_ROUTE) into module-level constants, so a test of a non-default route must run in a subprocess, not a reload; the mechanical pin against regressions is the 29-constant equality test plus a grep narrowed to assignment lines (comments may name models); the loader rejects unknown routes, steps, tiers, backend names and wrong-shaped sections at import, but a step-exception value that is not a tier name is sent verbatim as a model id (deliberate, ADR 0041 decision 2: a typo in a tier name there fails at the first call, not at import).
 tags: [model-routes, configuration, import-time, testing, bedrock]
-timestamp: 2026-10-21
+timestamp: 2026-10-22
 ---
 
 # Rules
 
 - **One file, one selector.** `backend/src/policy_atlas/model_routes.toml` names every
-  text-model call site once (`[steps]`, 27 steps, five tiers) and, per route, the model
+  text-model call site once (`[steps]`, 27 steps, three tiers: `fast`, `standard`, `frontier`) and, per route, the model
   for each tier, the `reasoning_effort` knob keyed by model id, the embedding section
   and the search-queries backend. `POLICY_ATLAS_MODEL_ROUTE` picks the route; unset is
-  `openai-direct`, byte-identical to the pre-053 requests except the embedding batch
-  size (128 to 96, contract D4). An uncommitted overlay named by
+  `openai-direct`. Until 2026-10-22 that route was byte-identical to the pre-053
+  requests except the embedding batch size (128 to 96, contract D4); it now carries the
+  owner's three-tier choice (Luna, Terra, Sol), and the tests pin the file's own values
+  rather than old literals. An uncommitted overlay named by
   `POLICY_ATLAS_MODEL_ROUTE_FILE` replaces or adds whole routes for experiments and
   may not carry `[steps]`. The `POLICY_ATLAS_*_MODEL` variables are retired (twelve after the
   options-scoping merge): ignored, named in one start-up warning. The one exception is
@@ -46,7 +48,7 @@ timestamp: 2026-10-21
 
 Task 053 replaced 25 literals in 15 modules and nine environment overrides with one
 (29 literals in 19 modules and twelve overrides once the options-scoping merge of
-2026-10-21 was folded in; Sol joined as the `judgment` tier)
+2026-10-21 was folded in; Sol joined as the top tier, `frontier` since 2026-10-22)
 reviewed file so that a Bedrock route could name models that exist there and an
 evaluation could try any model by adding a route. The review stack found two silent
 fallbacks the first cut left (an unknown `search_queries.backend` built the OpenAI

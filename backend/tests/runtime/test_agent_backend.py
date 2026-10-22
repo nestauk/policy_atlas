@@ -20,6 +20,7 @@ from sqlalchemy.engine import Engine
 from structlog.testing import capture_logs
 
 from policy_atlas.core import events
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.schema import selection_result, task_plan
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime import steering_events
@@ -99,9 +100,10 @@ def test_classify_boundary_truth_table() -> None:
 
 
 def test_model_routing_by_moment() -> None:
-    """route/decide are judgment-class; triage is mini-class (a distinct default)."""
+    """route/decide are standard-tier; triage is the fast tier (a distinct default)."""
     assert AGENT_TRIAGE_MODEL != AGENT_MODEL
-    assert "mini" in AGENT_TRIAGE_MODEL
+    assert route().model_for("agent_triage") == AGENT_TRIAGE_MODEL
+    assert route().model_for("agent") == AGENT_MODEL
 
 
 def test_parse_needs_failclosed() -> None:

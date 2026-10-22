@@ -889,9 +889,10 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
     AWS work sends the EU profiles to the wrong region. Reading the region from the
     route file beside `openai_base_url` is the one-line fix; it waits for the deploy
     slice, which sets the container's region anyway.
-  - **Model quality (evaluation slice):** Luna in place of gpt-5.4-mini, Terra in place
-    of gpt-5.5, the Claude tier for query generation, and Cohere vectors for grouping
-    and retrieval are all unmeasured. Compare by writing an overlay route file per
+  - **Model quality (evaluation slice):** since 2026-10-22 every route runs Luna, Terra
+    and Sol (contract note 10). Luna was evaluated in task 051; Terra in place of gpt-5.5
+    for the two agents, Cohere vectors for grouping and retrieval, and the inactive
+    Claude route for query generation are unmeasured. Compare by writing an overlay route file per
     experiment (`POLICY_ATLAS_MODEL_ROUTE_FILE`); the committed file changes only when a
     choice is made. Whether reformulation and suggestion also move to Claude.
   - **Retired variables:** the twelve `POLICY_ATLAS_*_MODEL` overrides are ignored with a

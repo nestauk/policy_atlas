@@ -6,6 +6,9 @@ does not restate them.
 
 > **Build-time note (2026-10-21).** After the dev merge the counts in items 10 and 23
 > are 29 constants and 27 steps (contract note 8); the items are read with those numbers.
+> From 2026-10-22 (contract note 10) item 9 reads "unset means the committed
+> `openai-direct` route", whose models are the owner's three-tier choice, not the
+> pre-053 literals; the tests pin the route file's values instead.
 
 ## Standard items
 

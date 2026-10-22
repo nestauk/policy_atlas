@@ -1,6 +1,9 @@
 # Knowledge update log
 
-## 2026-10-22 (task 053, CI fix)
+## 2026-10-22 (task 053, CI fix and tier change)
+* **Update**: [model-route-constants-read-at-import](model-route-constants-read-at-import.md)
+  — three tiers on every route from 2026-10-22; the default route carries the owner's
+  choice, not the pre-053 literals, and the tests pin the file's own values.
 * **Update**: [tests-are-zero-egress-scrub-keys](tests-are-zero-egress-scrub-keys.md) —
   `boto3` resolves credentials at client construction and probes the EC2 metadata
   address when none are configured; conftest sets `AWS_EC2_METADATA_DISABLED` so a

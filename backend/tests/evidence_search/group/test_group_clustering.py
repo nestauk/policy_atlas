@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import json
 
+from policy_atlas.core.model_routes import route
 from policy_atlas.evidence_search.clustering_engine import ClusterLabel, ClusterUnit
 from policy_atlas.evidence_search.group.group import GROUP_PROMPT_VERSION, GROUP_RESIDUAL_LABEL
 from policy_atlas.evidence_search.group.group_clustering import (
@@ -47,7 +48,7 @@ def _claim_unit(unit_id: str = "c1") -> ClusterUnit:
 def test_version_constants() -> None:
     assert GROUP_CLUSTERING_PROMPT_VERSION == "group_cluster_v1"
     assert GROUP_PROMPT_VERSION == GROUP_CLUSTERING_PROMPT_VERSION
-    assert GROUP_CLUSTERING_MODEL == "gpt-5.4-mini"
+    assert route().model_for("group_clustering") == GROUP_CLUSTERING_MODEL
 
 
 def test_records_json_gates_context_and_drops_redundant_text() -> None:

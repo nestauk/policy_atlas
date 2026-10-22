@@ -693,7 +693,7 @@ file or in the named test; "open" means it waits on the live checks.
 | 6 | Verification evidence recorded | this file |
 | 7 | Known gaps and deferred seams in `docs/deferred.md` | holds; the "Bedrock routes" entry is superseded, gaps listed |
 | 8 | Tier 3 review stack ran | holds: contract verifier, `/code-review medium`, `/security-review`, Codex adversarial, lead trace lane; 14 findings settled above; human deep review at the PR |
-| 9 | Unset means unchanged | holds for every model id, the profile and the client address (`test_default_route_reproduces_every_pre_053_model`, `test_every_module_constant_equals_its_pre_053_literal`, `test_stray_openai_base_url_does_not_move_the_client`); one approved request-shape change on the default route: OpenAI embedding batches are 96 texts, not 128 (contract D4, finding 6) |
+| 9 | Unset means unchanged (read per contract note 10 from 2026-10-22: unset means the committed `openai-direct` route) | held for every model id until 2026-10-22, then the owner changed the default route's models on purpose (§ Owner's tier change); still holds for the profile and the client address (`test_default_route_reproduces_every_pre_053_model`, `test_every_module_constant_equals_its_pre_053_literal`, `test_stray_openai_base_url_does_not_move_the_client`); one approved request-shape change on the default route: OpenAI embedding batches are 96 texts, not 128 (contract D4, finding 6) |
 | 10 | No literal model name left; loader fails loud; retired variables ignored with a warning | holds: the 29-constant test (25 before the dev merge); `grep -rnE '= "(gpt-\|text-embedding-)' backend/src` matches only the model lines of `model_routes.toml` (six after the merge); `grep -rn 'environ.get("POLICY_ATLAS_[A-Z_]*MODEL' backend/src` empty; loader tests incl. backend names and wrong shapes (findings 1, 2) |
 | 11 | Claude fails loud, no silent fallback | holds: `test_claude_generate_queries_rejects_invalid_responses` |
 | 12 | Only query generation moved | holds: `test_claude_reformulate_and_suggest_delegate_to_inner_backend` |
@@ -905,6 +905,39 @@ locally by hiding the credential files (`AWS_CONFIG_FILE=/dev/null`,
 `AWS_EC2_METADATA_DISABLED=true` beside the key scrub, so the client is built with no
 credentials, which only matters at request time and the suite never sends one. Same
 two tests then pass with and without machine credentials. Full gate: § Commands run.
+
+### Owner's tier change (2026-10-22)
+
+After reading the explainer page the owner cut the tiers from five to three (contract
+note 10): `fast` (Luna) for all twenty cheap steps, `standard` (Terra) for writing, chat
+and both agents, `frontier` (Sol) for the two options-scoping judgment calls. The
+`bedrock-local-claude` route stays in the file, marked not in use.
+
+- `model_routes.toml`: `[steps]` and the three routes' `.text` tables; comments.
+- `test_model_routes.py`: `PRE_053_MODELS` became `DEFAULT_ROUTE_MODELS` (the route
+  file's `openai-direct` values); the 29-constant test pins those; the "no knob" check
+  now reads Sol. 28 passed.
+- Effect on `openai-direct`, which staging and production run: fourteen steps move from
+  gpt-5.4-mini to Luna and both agents from gpt-5.5 to Terra on the next deploy. Luna was
+  evaluated for screening and query writing in task 051; Terra for the agents has run live
+  (live check 3 and the Terra probe, both parse-only calls, no knob needed) but is not
+  evaluated on its own. The Terra `reasoning_effort` knob still covers any tool-bearing
+  call on Terra, keyed by model id.
+- The full gate then failed ten tests that pinned the old literals outside the route
+  tests (the 2026-10-14 verifier's pattern): six asserted `"gpt-5.4-mini"` or `"mini" in`
+  the triage model (`test_classify`, `test_finding_vetter`, `test_characterise_prompt_pins`,
+  `test_icf_prompt`, `test_group_clustering`, `test_agent_backend`) and four were the
+  IOF/ICF extraction fingerprint pins. Rubric item 5 (no weakened tests): the six now
+  assert the route's value for their step, which is what they meant; the fingerprint
+  pins are re-pinned with the proof that re-digesting the components with the old model
+  reproduces the earlier hashes exactly, so the model is the only moved component.
+- **Product consequence of the moved memo key:** the extraction fingerprint includes the
+  model, so stored IOF/ICF extractions made under gpt-5.4-mini are not reused; a project's
+  next run re-extracts under Luna. New projects are unaffected. The same applies to any
+  later model change, by design.
+- Records: contract note 10, rubric build-time note, ADR 0041 amendment, knowledge
+  record, `.env.example`, README, deferred log, eval READMEs, the explainer page and
+  the PR body.
 
 ### Knowledge records, delta (2026-10-21)
 

@@ -1,6 +1,6 @@
 """Tests for the committed model route file and its loader (task 053, contract D3).
 
-The default route must reproduce every pre-053 literal exactly; everything else
+The default route must name the owner's model choice exactly; everything else
 is the fail-loud rule, the overlay, and the retired-variable warning.
 """
 
@@ -16,32 +16,33 @@ import pytest
 from policy_atlas.core import model_routes
 from policy_atlas.core.model_routes import ROUTE_FILE, Route, load_route
 
-# What the code said before task 053, step by step. The default route must
-# give exactly these, so a laptop with nothing set behaves as before.
-PRE_053_MODELS = {
+# The owner's model choice for the default route (2026-10-22: three tiers; the
+# cheap steps on Luna, the writers and agents on Terra, the scoping judgment on
+# Sol). Until then the default route reproduced the pre-053 literals.
+DEFAULT_ROUTE_MODELS = {
     "screen": "gpt-5.6-luna",
     "search_queries": "gpt-5.6-luna",
     "search_reformulate": "gpt-5.6-luna",
     "search_suggest": "gpt-5.6-luna",
-    "classify": "gpt-5.4-mini",
-    "extract": "gpt-5.4-mini",
-    "icf_extract": "gpt-5.4-mini",
-    "finding_vetter": "gpt-5.4-mini",
-    "icf_finding_vetter": "gpt-5.4-mini",
-    "relevance": "gpt-5.4-mini",
-    "rerank": "gpt-5.4-mini",
-    "theme_discovery": "gpt-5.4-mini",
-    "theme_assignment": "gpt-5.4-mini",
-    "group_clustering": "gpt-5.4-mini",
-    "grounding_judge": "gpt-5.4-mini",
-    "mrs_note": "gpt-5.4-mini",
-    "full_report_intro": "gpt-5.4-mini",
-    "agent_triage": "gpt-5.4-mini",
+    "classify": "gpt-5.6-luna",
+    "extract": "gpt-5.6-luna",
+    "icf_extract": "gpt-5.6-luna",
+    "finding_vetter": "gpt-5.6-luna",
+    "icf_finding_vetter": "gpt-5.6-luna",
+    "relevance": "gpt-5.6-luna",
+    "rerank": "gpt-5.6-luna",
+    "theme_discovery": "gpt-5.6-luna",
+    "theme_assignment": "gpt-5.6-luna",
+    "group_clustering": "gpt-5.6-luna",
+    "grounding_judge": "gpt-5.6-luna",
+    "mrs_note": "gpt-5.6-luna",
+    "full_report_intro": "gpt-5.6-luna",
+    "agent_triage": "gpt-5.6-luna",
     "synthesis": "gpt-5.6-terra",
     "case_studies": "gpt-5.6-terra",
     "chat": "gpt-5.6-terra",
-    "task_agent": "gpt-5.5",
-    "agent": "gpt-5.5",
+    "task_agent": "gpt-5.6-terra",
+    "agent": "gpt-5.6-terra",
     # Options scoping (tasks 044 to 046), as merged into 053.
     "task_agent_scoping": "gpt-5.6-sol",
     "longlist_judgment": "gpt-5.6-sol",
@@ -59,10 +60,10 @@ def test_route_file_ships_inside_the_package() -> None:
     assert "src/policy_atlas" in str(ROUTE_FILE)
 
 
-def test_default_route_reproduces_every_pre_053_model() -> None:
+def test_default_route_names_the_owners_model_choice() -> None:
     route = _default()
-    assert set(route.steps) == set(PRE_053_MODELS)
-    for step, model in PRE_053_MODELS.items():
+    assert set(route.steps) == set(DEFAULT_ROUTE_MODELS)
+    for step, model in DEFAULT_ROUTE_MODELS.items():
         assert route.model_for(step) == model, step
     assert route.openai_base_url == "https://api.openai.com/v1"
     assert route.api_key_env == "OPENAI_API_KEY"
@@ -71,7 +72,7 @@ def test_default_route_reproduces_every_pre_053_model() -> None:
     assert route.embeddings.profile == "openai_text_embedding_3_small_v1"
     assert route.search_queries.backend == "openai"
     assert route.reasoning_effort_for("gpt-5.6-terra") == "none"
-    assert route.reasoning_effort_for("gpt-5.5") is None
+    assert route.reasoning_effort_for("gpt-5.6-sol") is None
 
 
 def test_bedrock_local_names_bedrock_models_and_cohere() -> None:
@@ -84,6 +85,7 @@ def test_bedrock_local_names_bedrock_models_and_cohere() -> None:
     assert route.model_for("task_agent") == "global.openai.gpt-5.6-terra"
     assert route.model_for("task_agent_scoping") == "global.openai.gpt-5.6-sol"
     assert route.model_for("longlist_assignment") == "global.openai.gpt-5.6-luna"
+    assert route.model_for("agent") == "global.openai.gpt-5.6-terra"
     assert route.embeddings.backend == "cohere"
     assert route.embeddings.model == "eu.cohere.embed-v4:0"
     assert route.embeddings.profile == "cohere_embed_v4_1536_v1"
@@ -96,7 +98,7 @@ def test_bedrock_local_claude_switches_only_query_generation() -> None:
     claude = load_route(ROUTE_FILE, "bedrock-local-claude", {})
     assert claude.search_queries.backend == "claude"
     assert claude.search_queries.model == "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
-    for step in PRE_053_MODELS:
+    for step in DEFAULT_ROUTE_MODELS:
         assert claude.model_for(step) == plain.model_for(step), step
     assert claude.embeddings == plain.embeddings
 
@@ -325,7 +327,7 @@ def test_live_mode_switch_reads_the_route_key_variable(monkeypatch: pytest.Monke
     assert deps._live() is True
 
 
-def test_every_module_constant_equals_its_pre_053_literal() -> None:
+def test_every_module_constant_equals_the_default_route() -> None:
     """Rubric item 10: the 29 constants the sweep rewired, each under the default route."""
     from policy_atlas.core import embeddings
     from policy_atlas.evidence_search.assess import classify_prompt, screen_prompt
@@ -343,32 +345,31 @@ def test_every_module_constant_equals_its_pre_053_literal() -> None:
     from policy_atlas.options_scoping.longlist import longlist_backend
     from policy_atlas.runtime import agent_backend, chat_prompt, task_agent, task_agent_scoping
 
-    mini, luna, terra, big = "gpt-5.4-mini", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.5"
-    sol = "gpt-5.6-sol"
+    luna, terra, sol = "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"
     expected = {
-        (classify_prompt, "CLASSIFY_MODEL"): mini,
+        (classify_prompt, "CLASSIFY_MODEL"): luna,
         (screen_prompt, "SCREEN_MODEL"): luna,
-        (ranking, "RERANK_MODEL"): mini,
-        (theme_grouping, "DISCOVERY_MODEL"): mini,
-        (theme_grouping, "ASSIGNMENT_MODEL"): mini,
-        (finding_vetter, "FINDING_VETTER_MODEL"): mini,
-        (finding_vetter, "ICF_FINDING_VETTER_MODEL"): mini,
-        (icf_prompt, "ICF_EXTRACTION_MODEL"): mini,
-        (iof_prompt, "EXTRACTION_MODEL"): mini,
-        (relevance_annotator, "RELEVANCE_ANNOTATOR_MODEL"): mini,
-        (group_clustering, "GROUP_CLUSTERING_MODEL"): mini,
+        (ranking, "RERANK_MODEL"): luna,
+        (theme_grouping, "DISCOVERY_MODEL"): luna,
+        (theme_grouping, "ASSIGNMENT_MODEL"): luna,
+        (finding_vetter, "FINDING_VETTER_MODEL"): luna,
+        (finding_vetter, "ICF_FINDING_VETTER_MODEL"): luna,
+        (icf_prompt, "ICF_EXTRACTION_MODEL"): luna,
+        (iof_prompt, "EXTRACTION_MODEL"): luna,
+        (relevance_annotator, "RELEVANCE_ANNOTATOR_MODEL"): luna,
+        (group_clustering, "GROUP_CLUSTERING_MODEL"): luna,
         (search_prompts, "SEARCH_QUERIES_MODEL"): luna,
         (search_prompts, "SEARCH_REFORMULATE_MODEL"): luna,
         (search_prompts, "SEARCH_SUGGEST_MODEL"): luna,
-        (grounding_judge, "JUDGE_MODEL"): mini,
+        (grounding_judge, "JUDGE_MODEL"): luna,
         (synthesis_backend, "SYNTHESIS_MODEL"): terra,
         (synthesis_backend, "CASE_STUDIES_MODEL"): terra,
-        (synthesis_backend, "MRS_NOTE_MODEL"): mini,
-        (synthesis_backend, "FULL_REPORT_INTRO_MODEL"): mini,
-        (agent_backend, "AGENT_MODEL"): big,
-        (agent_backend, "AGENT_TRIAGE_MODEL"): mini,
+        (synthesis_backend, "MRS_NOTE_MODEL"): luna,
+        (synthesis_backend, "FULL_REPORT_INTRO_MODEL"): luna,
+        (agent_backend, "AGENT_MODEL"): terra,
+        (agent_backend, "AGENT_TRIAGE_MODEL"): luna,
         (chat_prompt, "CHAT_MODEL"): terra,
-        (task_agent, "TASK_AGENT_MODEL"): big,
+        (task_agent, "TASK_AGENT_MODEL"): terra,
         (task_agent_scoping, "TASK_AGENT_SCOPING_MODEL"): sol,
         (longlist_backend, "LONGLIST_JUDGMENT_MODEL"): sol,
         (longlist_backend, "LONGLIST_ASSIGNMENT_MODEL"): luna,

@@ -63,7 +63,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [A limit for a mini model lives in the response schema or in code, never in the prose](mini-model-limits-live-in-the-schema-and-code.md) - `maxItems` held where three rounds of "at most 12" did not; a per-item ceiling is a code check with one retry; a ban on one joiner is answered with another; the memo key is the prompt version (046 loops 20L, 26L, 28).
 * [Every model-bearing surface carries its own literal model id](model-pin-per-surface.md) - the triage default borrowed `SCREEN_MODEL`, so a screening pin would have moved triage; own literals per surface, `test_model_routing_by_moment` is the guard (051).
 
-* [Model names live in model_routes.toml; module constants read the cached route at import](model-route-constants-read-at-import.md) - one committed file plus a selector variable (unset = pre-053 requests); constants resolve once per process, so other-route tests run in a subprocess; the pin is the 29-constant test plus an assignment-line grep; unknown route/step/tier/backend name/wrong shape fail at import, a non-tier step-exception value is sent verbatim (053).
+* [Model names live in model_routes.toml; module constants read the cached route at import](model-route-constants-read-at-import.md) - one committed file plus a selector variable (unset = the committed openai-direct route; pre-053 literals until 2026-10-22); constants resolve once per process, so other-route tests run in a subprocess; the pin is the 29-constant test plus an assignment-line grep; unknown route/step/tier/backend name/wrong shape fail at import, a non-tier step-exception value is sent verbatim (053).
 
 ## Prompting
 

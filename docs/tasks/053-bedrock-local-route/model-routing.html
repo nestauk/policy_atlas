@@ -88,37 +88,28 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 </head>
 <body>
 <header class="masthead wrap">
-  <div class="eyebrow">Policy Atlas · AI models · task 053 · as built, October 2026</div>
+  <div class="eyebrow">Policy Atlas · task 053</div>
   <h1>How the app chooses its AI models</h1>
-  <p class="lede">Every place where the app calls an AI model now asks one committed file which model to use. One setting picks a "route" in that file, and the route decides the model for every step, where the request is sent, and which key it uses. Leave the setting empty and nothing changes: the app calls OpenAI exactly as before. Set it to <code>bedrock-local</code> and every call goes to Amazon Bedrock in London instead.</p>
-  <div class="tiles">
-    <div class="tile"><div class="num">27</div><div class="lab">places in the app that call a text model, each named once</div></div>
-    <div class="tile"><div class="num">5</div><div class="lab">model tiers: fast, mini, judgment, standard, frontier</div></div>
-    <div class="tile"><div class="num">3</div><div class="lab">routes ship: OpenAI direct, Bedrock, Bedrock with Claude</div></div>
-    <div class="tile"><div class="num accent">1</div><div class="lab">setting to switch route; no code change</div></div>
-  </div>
-  <p class="toc">
-    <a href="#why">Why</a><a href="#map">1: Steps, tiers and models</a><a href="#path">2: Where a request goes</a><a href="#keys">3: Which key is used</a><a href="#vectors">4: Embeddings</a><a href="#howto">How to</a><a href="#proof">Tested</a><a href="#later">Switching staging and production</a>
-  </p>
+  <p class="lede">Every place where the app calls an AI model now asks one committed file which model to use. One setting picks a "route" in that file, and the route decides the model for every step, where the request is sent, and which key it uses. Leave the setting empty and the app calls OpenAI directly. Set it to <code>bedrock-local</code> and every call goes to Amazon Bedrock in London instead.</p>
 </header>
 
 <main>
 <section class="wrap" id="why">
   <h2>Why this exists</h2>
   <p>Before this change, model names were written in 29 places in the code, and nine environment variables could override some of them. Nobody could see in one place which model the app was using, and moving to a different provider meant editing code across the whole backend.</p>
-  <p>Nesta wants the app's AI calls to run through <b>Amazon Bedrock</b>, Amazon's hosted service for AI models, so that usage is billed and governed through the organisation's AWS account. Bedrock serves the same GPT-5.6 family the app already uses, plus Claude and Cohere. This change makes that move possible with one setting, and keeps today's behaviour as the default until the deployment work is done.</p>
+  <p>Nesta wants the app's AI calls to run through <b>Amazon Bedrock</b>, Amazon's hosted service for AI models, so that usage is billed and governed through the organisation's AWS account. Bedrock serves the same GPT-5.6 family the app already uses, plus Claude and Cohere. This change makes that move possible with one setting. The default route still calls OpenAI.</p>
   <div class="key"><b>In one sentence:</b> model names now live in <code>backend/src/policy_atlas/model_routes.toml</code>, and <code>POLICY_ATLAS_MODEL_ROUTE</code> picks which set of them the app uses.</div>
 </section>
 
 <section class="wrap" id="map">
   <h2>Diagram 1: steps, tiers and models</h2>
-  <p>The file has three layers. First, it lists every step that calls a text model and gives it a <b>tier</b>: a role such as "cheap and fast" or "strong writer", not a specific model. Second, each <b>route</b> says which model fills each tier. Third, a route may make a single step an exception, though none of the shipped routes does. The code only ever asks "which model for the <code>screen</code> step?", and the route answers.</p>
-  <p>The tier is what makes a route short. Moving all fourteen "mini" steps to a new model is one line in the file, not fourteen code edits.</p>
+  <p>The file has three layers. First, it lists every step that calls a text model and gives it a <b>tier</b>: a role such as "cheap and fast" or "strong writer", not a specific model. Second, each <b>route</b> says which model fills each tier. Third, a route may make a single step an exception, though none of the shipped routes does. A third route, <code>bedrock-local-claude</code>, is kept in the file for testing Claude models later; it is not in use and nothing selects it. The code only ever asks "which model for the <code>screen</code> step?", and the route answers.</p>
+  <p>The tier is what makes a route short. Moving all twenty "fast" steps to a new model is one line in the file, not twenty code edits.</p>
 </section>
 
 <section class="wide">
   <figure>
-    <svg viewBox="0 0 980 650" role="img" aria-label="Five groups of steps, each assigned a tier. Fast, six steps: OpenAI direct uses gpt-5.6-luna, Bedrock uses Luna. Mini, fourteen steps: gpt-5.4-mini directly, Luna on Bedrock as a stand-in. Judgment, two steps: gpt-5.6-sol on both. Standard, three steps: gpt-5.6-terra on both. Frontier, two steps: gpt-5.5 directly, Terra on Bedrock as a stand-in. Embeddings use text-embedding-3-small directly and Cohere Embed v4 in the EU on Bedrock. Search query writing uses OpenAI on both routes, or Claude Haiku 4.5 on the bedrock-local-claude route.">
+    <svg viewBox="0 0 980 470" role="img" aria-label="Three groups of steps, each assigned a tier, and the same three models on both routes. Fast, twenty steps: gpt-5.6-luna directly, Luna on Bedrock. Standard, five steps: gpt-5.6-terra directly, Terra on Bedrock. Frontier, two steps: gpt-5.6-sol directly, Sol on Bedrock. Embeddings use text-embedding-3-small directly and Cohere Embed v4 in the EU on Bedrock.">
       <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
       <g font-family="inherit" font-size="13">
         <text x="20" y="32" font-weight="700" font-size="12" letter-spacing=".06em" style="fill: var(--grey)">STEPS IN THE APP</text>
@@ -129,113 +120,75 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
         <text x="850" y="32" text-anchor="middle" font-weight="600">bedrock-local</text>
 
         <!-- fast -->
-        <rect x="20" y="60" width="310" height="66" rx="6" style="fill: var(--ground); stroke: var(--c-plain)"/>
-        <text x="32" y="82" font-weight="600">6 steps</text>
-        <text x="32" y="100" font-size="11">screening, three search-query steps,</text>
-        <text x="32" y="115" font-size="11">intervention extraction, longlist assignment</text>
-        <line x1="330" y1="93" x2="358" y2="93" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
-        <rect x="362" y="78" width="96" height="30" rx="15" stroke="currentColor" stroke-width="1.5" style="fill: var(--paper)"/>
-        <text x="410" y="98" text-anchor="middle" font-weight="700">fast</text>
-        <line x1="458" y1="93" x2="498" y2="93" stroke-dasharray="3 3" style="stroke: var(--c-plain)"/>
-        <rect x="500" y="72" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-openai); stroke: var(--c-openai)"/>
-        <text x="610" y="98" text-anchor="middle">gpt-5.6-luna</text>
-        <rect x="740" y="72" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-bedrock); stroke: var(--c-bedrock)"/>
-        <text x="850" y="98" text-anchor="middle">Luna</text>
-
-        <!-- mini -->
-        <rect x="20" y="140" width="310" height="84" rx="6" style="fill: var(--ground); stroke: var(--c-plain)"/>
-        <text x="32" y="162" font-weight="600">14 steps</text>
-        <text x="32" y="180" font-size="11">classify, two extractors, two finding checks,</text>
-        <text x="32" y="195" font-size="11">relevance, re-rank, two theme steps, grouping,</text>
-        <text x="32" y="210" font-size="11">grounding judge, two report notes, agent triage</text>
-        <line x1="330" y1="182" x2="358" y2="182" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
-        <rect x="362" y="167" width="96" height="30" rx="15" stroke="currentColor" stroke-width="1.5" style="fill: var(--paper)"/>
-        <text x="410" y="187" text-anchor="middle" font-weight="700">mini</text>
-        <line x1="458" y1="182" x2="498" y2="182" stroke-dasharray="3 3" style="stroke: var(--c-plain)"/>
-        <rect x="500" y="161" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-openai); stroke: var(--c-openai)"/>
-        <text x="610" y="187" text-anchor="middle">gpt-5.4-mini</text>
-        <rect x="740" y="155" width="220" height="54" rx="6" fill-opacity=".08" style="fill: var(--c-bedrock); stroke: var(--c-bedrock)"/>
-        <text x="850" y="178" text-anchor="middle">Luna</text>
-        <text x="850" y="197" text-anchor="middle" font-size="11" style="fill: var(--grey)">stand-in: gpt-5.4-mini is not on Bedrock</text>
-
-        <!-- judgment -->
-        <rect x="20" y="238" width="310" height="66" rx="6" style="fill: var(--ground); stroke: var(--c-plain)"/>
-        <text x="32" y="260" font-weight="600">2 steps</text>
-        <text x="32" y="278" font-size="11">options-scoping Task Agent,</text>
-        <text x="32" y="293" font-size="11">longlist judgment calls</text>
-        <line x1="330" y1="271" x2="358" y2="271" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
-        <rect x="362" y="256" width="96" height="30" rx="15" stroke="currentColor" stroke-width="1.5" style="fill: var(--paper)"/>
-        <text x="410" y="276" text-anchor="middle" font-weight="700">judgment</text>
-        <line x1="458" y1="271" x2="498" y2="271" stroke-dasharray="3 3" style="stroke: var(--c-plain)"/>
-        <rect x="500" y="250" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-openai); stroke: var(--c-openai)"/>
-        <text x="610" y="276" text-anchor="middle">gpt-5.6-sol</text>
-        <rect x="740" y="250" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-bedrock); stroke: var(--c-bedrock)"/>
-        <text x="850" y="276" text-anchor="middle">Sol</text>
+        <rect x="20" y="60" width="310" height="100" rx="6" style="fill: var(--ground); stroke: var(--c-plain)"/>
+        <text x="32" y="82" font-weight="600">20 steps · cheap and high-volume</text>
+        <text x="32" y="100" font-size="11">screening, classification, the search-query steps,</text>
+        <text x="32" y="115" font-size="11">extraction and finding checks, relevance, re-ranking,</text>
+        <text x="32" y="130" font-size="11">theme steps, grouping, grounding judge, report notes,</text>
+        <text x="32" y="145" font-size="11">agent triage, intervention extraction, longlist assignment</text>
+        <line x1="330" y1="110" x2="358" y2="110" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+        <rect x="362" y="95" width="96" height="30" rx="15" stroke="currentColor" stroke-width="1.5" style="fill: var(--paper)"/>
+        <text x="410" y="115" text-anchor="middle" font-weight="700">fast</text>
+        <line x1="458" y1="110" x2="498" y2="110" stroke-dasharray="3 3" style="stroke: var(--c-plain)"/>
+        <rect x="500" y="89" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-openai); stroke: var(--c-openai)"/>
+        <text x="610" y="115" text-anchor="middle">gpt-5.6-luna</text>
+        <rect x="740" y="89" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-bedrock); stroke: var(--c-bedrock)"/>
+        <text x="850" y="115" text-anchor="middle">Luna</text>
 
         <!-- standard -->
-        <rect x="20" y="318" width="310" height="66" rx="6" style="fill: var(--ground); stroke: var(--c-plain)"/>
-        <text x="32" y="340" font-weight="600">3 steps</text>
-        <text x="32" y="358" font-size="11">writing the synthesis, case studies,</text>
-        <text x="32" y="373" font-size="11">the chat</text>
-        <line x1="330" y1="351" x2="358" y2="351" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
-        <rect x="362" y="336" width="96" height="30" rx="15" stroke="currentColor" stroke-width="1.5" style="fill: var(--paper)"/>
-        <text x="410" y="356" text-anchor="middle" font-weight="700">standard</text>
-        <line x1="458" y1="351" x2="498" y2="351" stroke-dasharray="3 3" style="stroke: var(--c-plain)"/>
-        <rect x="500" y="330" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-openai); stroke: var(--c-openai)"/>
-        <text x="610" y="356" text-anchor="middle">gpt-5.6-terra</text>
-        <rect x="740" y="330" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-bedrock); stroke: var(--c-bedrock)"/>
-        <text x="850" y="356" text-anchor="middle">Terra</text>
+        <rect x="20" y="180" width="310" height="84" rx="6" style="fill: var(--ground); stroke: var(--c-plain)"/>
+        <text x="32" y="202" font-weight="600">5 steps · writing, conversation, planning</text>
+        <text x="32" y="220" font-size="11">writing the synthesis, case studies, the chat,</text>
+        <text x="32" y="235" font-size="11">the evidence-search Task Agent,</text>
+        <text x="32" y="250" font-size="11">the agent's routing decisions</text>
+        <line x1="330" y1="222" x2="358" y2="222" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+        <rect x="362" y="207" width="96" height="30" rx="15" stroke="currentColor" stroke-width="1.5" style="fill: var(--paper)"/>
+        <text x="410" y="227" text-anchor="middle" font-weight="700">standard</text>
+        <line x1="458" y1="222" x2="498" y2="222" stroke-dasharray="3 3" style="stroke: var(--c-plain)"/>
+        <rect x="500" y="201" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-openai); stroke: var(--c-openai)"/>
+        <text x="610" y="227" text-anchor="middle">gpt-5.6-terra</text>
+        <rect x="740" y="201" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-bedrock); stroke: var(--c-bedrock)"/>
+        <text x="850" y="227" text-anchor="middle">Terra</text>
 
         <!-- frontier -->
-        <rect x="20" y="398" width="310" height="66" rx="6" style="fill: var(--ground); stroke: var(--c-plain)"/>
-        <text x="32" y="420" font-weight="600">2 steps</text>
-        <text x="32" y="438" font-size="11">evidence-search Task Agent,</text>
-        <text x="32" y="453" font-size="11">the agent's routing decisions</text>
-        <line x1="330" y1="431" x2="358" y2="431" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
-        <rect x="362" y="416" width="96" height="30" rx="15" stroke="currentColor" stroke-width="1.5" style="fill: var(--paper)"/>
-        <text x="410" y="436" text-anchor="middle" font-weight="700">frontier</text>
-        <line x1="458" y1="431" x2="498" y2="431" stroke-dasharray="3 3" style="stroke: var(--c-plain)"/>
-        <rect x="500" y="410" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-openai); stroke: var(--c-openai)"/>
-        <text x="610" y="436" text-anchor="middle">gpt-5.5</text>
-        <rect x="740" y="404" width="220" height="54" rx="6" fill-opacity=".08" style="fill: var(--c-bedrock); stroke: var(--c-bedrock)"/>
-        <text x="850" y="427" text-anchor="middle">Terra</text>
-        <text x="850" y="446" text-anchor="middle" font-size="11" style="fill: var(--grey)">stand-in: gpt-5.5 is US-only on Bedrock</text>
+        <rect x="20" y="284" width="310" height="66" rx="6" style="fill: var(--ground); stroke: var(--c-plain)"/>
+        <text x="32" y="306" font-weight="600">2 steps · the hardest judgment calls</text>
+        <text x="32" y="324" font-size="11">the options-scoping Task Agent,</text>
+        <text x="32" y="339" font-size="11">the longlist judgment calls</text>
+        <line x1="330" y1="317" x2="358" y2="317" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+        <rect x="362" y="302" width="96" height="30" rx="15" stroke="currentColor" stroke-width="1.5" style="fill: var(--paper)"/>
+        <text x="410" y="322" text-anchor="middle" font-weight="700">frontier</text>
+        <line x1="458" y1="317" x2="498" y2="317" stroke-dasharray="3 3" style="stroke: var(--c-plain)"/>
+        <rect x="500" y="296" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-openai); stroke: var(--c-openai)"/>
+        <text x="610" y="322" text-anchor="middle">gpt-5.6-sol</text>
+        <rect x="740" y="296" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-bedrock); stroke: var(--c-bedrock)"/>
+        <text x="850" y="322" text-anchor="middle">Sol</text>
 
-        <line x1="20" y1="486" x2="960" y2="486" stroke-width="2" style="stroke: var(--line)"/>
-        <text x="20" y="508" font-weight="700" font-size="12" letter-spacing=".06em" style="fill: var(--grey)">ALSO SET BY THE ROUTE</text>
+        <line x1="20" y1="372" x2="960" y2="372" stroke-width="2" style="stroke: var(--line)"/>
+        <text x="20" y="394" font-weight="700" font-size="12" letter-spacing=".06em" style="fill: var(--grey)">ALSO SET BY THE ROUTE</text>
 
-        <rect x="20" y="522" width="438" height="48" rx="6" style="fill: var(--ground); stroke: var(--c-plain)"/>
-        <text x="32" y="542" font-weight="600">Embeddings</text>
-        <text x="32" y="560" font-size="11">turn text into numbers for full-text search and the chat</text>
-        <rect x="500" y="525" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-openai); stroke: var(--c-openai)"/>
-        <text x="610" y="551" text-anchor="middle">text-embedding-3-small</text>
-        <rect x="740" y="525" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-bedrock); stroke: var(--c-bedrock)"/>
-        <text x="850" y="551" text-anchor="middle">Cohere Embed v4 (EU)</text>
-
-        <rect x="20" y="584" width="438" height="56" rx="6" style="fill: var(--ground); stroke: var(--c-plain)"/>
-        <text x="32" y="604" font-weight="600">Who writes the search queries</text>
-        <text x="32" y="622" font-size="11">the third route, bedrock-local-claude, is bedrock-local with</text>
-        <text x="32" y="636" font-size="11">only this one step moved to Claude</text>
-        <rect x="500" y="591" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-openai); stroke: var(--c-openai)"/>
-        <text x="610" y="617" text-anchor="middle">OpenAI (the fast tier)</text>
-        <rect x="740" y="585" width="220" height="54" rx="6" fill-opacity=".10" style="fill: var(--c-claude); stroke: var(--c-claude)"/>
-        <text x="850" y="607" text-anchor="middle">Claude Haiku 4.5 (EU)</text>
-        <text x="850" y="625" text-anchor="middle" font-size="11" style="fill: var(--grey)">on bedrock-local-claude</text>
+        <rect x="20" y="408" width="438" height="48" rx="6" style="fill: var(--ground); stroke: var(--c-plain)"/>
+        <text x="32" y="428" font-weight="600">Embeddings</text>
+        <text x="32" y="446" font-size="11">turn text into numbers for full-text search and the chat</text>
+        <rect x="500" y="411" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-openai); stroke: var(--c-openai)"/>
+        <text x="610" y="437" text-anchor="middle">text-embedding-3-small</text>
+        <rect x="740" y="411" width="220" height="42" rx="6" fill-opacity=".08" style="fill: var(--c-bedrock); stroke: var(--c-bedrock)"/>
+        <text x="850" y="437" text-anchor="middle">Cohere Embed v4 (EU)</text>
       </g>
     </svg>
-    <div class="legend"><span style="--dot: var(--c-openai)">OpenAI, called directly</span><span style="--dot: var(--c-bedrock)">the same model family, through Amazon Bedrock</span><span style="--dot: var(--c-claude)">Claude, through Amazon Bedrock</span></div>
-    <figcaption><b>The default route reproduces today's models exactly.</b> On Bedrock, two models the app uses today are not available from London, so the Bedrock route uses the nearest model from the same family in their place. Luna has already been evaluated; Terra in place of gpt-5.5 has run live but has not been evaluated on its own.</figcaption>
+    <div class="legend"><span style="--dot: var(--c-openai)">OpenAI, called directly</span><span style="--dot: var(--c-bedrock)">the same models, through Amazon Bedrock</span></div>
+    <figcaption><b>Three tiers, the same three models on both routes.</b> Luna (evaluated for screening and query writing in task 051) takes every cheap step, Terra the writing, the chat and both agents, and Sol the options-scoping judgment calls. Until 22 October 2026 the default route kept the older gpt-5.4-mini for the cheap steps and gpt-5.5 for the agents; neither model is used anywhere now.</figcaption>
   </figure>
 </section>
 
 <section class="wrap" id="path">
   <h2>Diagram 2: where a request goes</h2>
-  <p>When the app starts, it reads the route once and keeps it. Three kinds of call then follow the route. Text models (all 27 steps) use the OpenAI client library the app already had; Bedrock offers an address that accepts the same request format, so only the address and the key change. Embeddings and Claude need Amazon's own client library, <code>boto3</code>, because Bedrock serves them in its own request format.</p>
+  <p>When the app starts, it reads the route once and keeps it. Three kinds of call then follow the route. Text models (all 27 steps) use the OpenAI client library the app already had; Bedrock offers an address that accepts the same request format, so only the address and the key change. Cohere embeddings need Amazon's own client library, <code>boto3</code>, because Bedrock serves them in its own request format. So does Claude, on the inactive test route.</p>
 </section>
 
 <section class="wide">
   <figure>
-    <svg viewBox="0 0 980 420" role="img" aria-label="The setting POLICY_ATLAS_MODEL_ROUTE selects a route from the committed route file, optionally overlaid by an uncommitted file for experiments. The route is read once at start-up. Text models go through the OpenAI client either to api.openai.com or to Bedrock's London address under a global profile. Embeddings go either to OpenAI or to Cohere Embed v4 on Bedrock under an EU profile. On the Claude route, search query writing goes to Claude Haiku on Bedrock under an EU profile.">
+    <svg viewBox="0 0 980 420" role="img" aria-label="The setting POLICY_ATLAS_MODEL_ROUTE selects a route from the committed route file, optionally overlaid by an uncommitted file for experiments. The route is read once at start-up. Text models go through the OpenAI client either to api.openai.com or to Bedrock's London address under a global profile. Embeddings go either to OpenAI or to Cohere Embed v4 on Bedrock under an EU profile. On the inactive Claude test route, search query writing goes to Claude Haiku on Bedrock under an EU profile.">
       <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
       <g font-family="inherit" font-size="13">
         <rect x="20" y="20" width="250" height="84" rx="6" stroke="currentColor" style="fill: var(--ground)"/>
@@ -268,9 +221,9 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
         <text x="490" y="210" text-anchor="middle" font-size="11">OpenAI client, or boto3 for Cohere</text>
         <text x="490" y="225" text-anchor="middle" font-size="11">(Amazon's own request format)</text>
         <rect x="660" y="164" width="300" height="70" rx="6" style="fill: var(--ground); stroke: var(--c-plain)"/>
-        <text x="810" y="190" text-anchor="middle" font-weight="600">Search queries on Claude</text>
-        <text x="810" y="210" text-anchor="middle" font-size="11">only on bedrock-local-claude; boto3,</text>
-        <text x="810" y="225" text-anchor="middle" font-size="11">Claude returns structured answers via a tool</text>
+        <text x="810" y="190" text-anchor="middle" font-weight="600">Search queries on Claude · not in use</text>
+        <text x="810" y="210" text-anchor="middle" font-size="11">only on the bedrock-local-claude test route;</text>
+        <text x="810" y="225" text-anchor="middle" font-size="11">boto3, structured answers via a tool</text>
 
         <line x1="95" y1="234" x2="95" y2="268" stroke-width="1.5" marker-end="url(#a2)" style="stroke: var(--c-openai)"/>
         <line x1="245" y1="234" x2="245" y2="268" stroke-width="1.5" marker-end="url(#a2)" style="stroke: var(--c-bedrock)"/>
@@ -300,14 +253,14 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
         <rect x="660" y="272" width="300" height="100" rx="6" fill-opacity=".10" style="fill: var(--c-claude); stroke: var(--c-claude)"/>
         <text x="810" y="296" text-anchor="middle" font-weight="600" font-size="12">Bedrock, London</text>
         <text x="810" y="315" text-anchor="middle" font-size="11">Claude Haiku 4.5, EU profile: stays in the EU</text>
-        <text x="810" y="334" text-anchor="middle" font-size="11" style="fill: var(--grey)">Sonnet 5 or Opus 5 is a one-line change</text>
-        <text x="810" y="349" text-anchor="middle" font-size="11" style="fill: var(--grey)">in the route file</text>
+        <text x="810" y="334" text-anchor="middle" font-size="11" style="fill: var(--grey)">kept for testing Claude later; no environment</text>
+        <text x="810" y="349" text-anchor="middle" font-size="11" style="fill: var(--grey)">selects this route today</text>
 
         <text x="20" y="404" font-size="11" style="fill: var(--grey)">A failed or malformed Claude answer stops the step with an error; it never falls back to OpenAI without saying so.</text>
       </g>
     </svg>
-    <div class="legend"><span style="--dot: var(--c-openai)">openai-direct</span><span style="--dot: var(--c-bedrock)">bedrock-local</span><span style="--dot: var(--c-claude)">bedrock-local-claude</span></div>
-    <figcaption><b>Where the data is processed.</b> From London, Bedrock only offers the GPT-5.6 models under a "global" profile, so those requests may be processed in any AWS region. Cohere and Claude have EU-only profiles and use them. The OpenAI-direct route is unchanged.</figcaption>
+    <div class="legend"><span style="--dot: var(--c-openai)">openai-direct</span><span style="--dot: var(--c-bedrock)">bedrock-local</span><span style="--dot: var(--c-claude)">bedrock-local-claude (not in use)</span></div>
+    <figcaption><b>Where the data is processed.</b> From London, Bedrock only offers the GPT-5.6 models under a "global" profile, so those requests may be processed in any AWS region. Cohere and Claude have EU-only profiles and use them. The Claude route is kept only for testing.</figcaption>
   </figure>
 </section>
 
@@ -403,9 +356,9 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
     <div><b class="h">Use Bedrock locally</b>Create a Bedrock API key in the AWS console (Bedrock, then API keys; a short-term key lasts up to 12 hours). In <code>backend/.env</code> set:
 <pre><code>POLICY_ATLAS_MODEL_ROUTE=bedrock-local
 AWS_BEARER_TOKEN_BEDROCK=&lt;your key&gt;</code></pre>Restart the backend. Remove the route line to go back to OpenAI.</div>
-    <div><b class="h">Try a model without a pull request</b>Write a small file with your own <code>[routes.my-test]</code> table (copy one from the route file), then:
-<pre><code>POLICY_ATLAS_MODEL_ROUTE_FILE=my-routes.toml
-POLICY_ATLAS_MODEL_ROUTE=my-test</code></pre>The extra file can add or replace routes. It cannot change the list of steps.</div>
+    <div><b class="h">Try a model without a pull request</b>Write a small file with your own <code>[routes.my-test]</code> table (copy one from the route file). Then, in <code>backend/.env</code> like any other setting, point at it by its full path and select it:
+<pre><code>POLICY_ATLAS_MODEL_ROUTE_FILE=/Users/you/my-routes.toml
+POLICY_ATLAS_MODEL_ROUTE=my-test</code></pre>The extra file can add or replace routes. It cannot change the list of steps. Local experiments only; nothing deployed sets it.</div>
   </div>
   <div class="two">
     <div><b class="h">Change a model for good</b>Edit the model line in <code>model_routes.toml</code> and open a pull request. The change is one line, visible in review, and every step on that tier follows it.</div>
@@ -418,14 +371,14 @@ POLICY_ATLAS_MODEL_ROUTE=my-test</code></pre>The extra file can add or replace r
 <section class="wrap" id="proof">
   <h2>How it was tested</h2>
   <ul>
-    <li><b>Nothing changes by default.</b> A test checks that all 29 model settings in the code equal the values they had before this change when no route is chosen.</li>
+    <li><b>The default route is pinned.</b> A test checks that all 29 model settings in the code equal the route file's <code>openai-direct</code> values when no route is chosen, so a model change is always a visible edit to that file.</li>
     <li><b>Offline test suite.</b> Over 3,600 backend tests run with network access blocked; the test setup clears the route and key settings so a developer's <code>.env</code> cannot switch a test to a live provider.</li>
     <li><b>Live runs on Bedrock</b> (October 2026), recorded in this task's <code>verification.md</code>:</li>
   </ul>
   <div class="scroll"><table>
     <thead><tr><th>check</th><th>what ran</th><th>result</th></tr></thead>
     <tbody>
-      <tr><td>Query writing</td><td>Luna on Bedrock, and Claude Haiku 4.5, Sonnet 5 and Opus 5 through the real code</td><td>all four returned valid queries</td></tr>
+      <tr><td>Query writing</td><td>Luna on Bedrock, and Claude Haiku 4.5, Sonnet 5 and Opus 5 through the real code (Claude is not in use; this showed it can be)</td><td>all four returned valid queries</td></tr>
       <tr><td>Evidence search</td><td>a quick evidence-search run on <code>bedrock-local</code>: search, screening, classification, appraisal, full-text ingest with Cohere, synthesis</td><td>succeeded in 9 min; 206 Cohere embeddings beside the untouched OpenAI ones</td></tr>
       <tr><td>Options scoping</td><td>"interventions to reduce obesity", end to end on <code>bedrock-local</code></td><td>20 options in 6 themes in about 20 min of run time; about 790 model calls, all on Bedrock; 0 errors</td></tr>
     </tbody>
@@ -434,18 +387,18 @@ POLICY_ATLAS_MODEL_ROUTE=my-test</code></pre>The extra file can add or replace r
 
 <section class="wrap" id="later">
   <h2>Switching staging and production</h2>
-  <p>Merging this change does not move anything. Each environment's route is set in <code>infra/pa_config.json</code>, and both say <code>openai-direct</code>, so staging and production keep calling OpenAI exactly as today. Switching an environment to Bedrock takes three steps:</p>
+  <p>Merging this change does not move anything to Bedrock. Each environment's route is set in <code>infra/pa_config.json</code>, and both say <code>openai-direct</code>, so staging and production keep calling OpenAI. What does change on the next deploy is which OpenAI models they use: the three-tier choice in Diagram 1, so fourteen cheap steps move from gpt-5.4-mini to Luna and both agents from gpt-5.5 to Terra. Switching an environment to Bedrock takes three steps:</p>
   <ol class="steps">
     <li><b>Add the key to the app secret.</b> Put a long-term Bedrock API key in <code>policy_atlas_v3/app</code> as a new field, <code>AWS_BEARER_TOKEN_BEDROCK</code>. Do this first: once the route is a Bedrock one, the app asks for this field when it starts, and it cannot start without it.</li>
     <li><b>Change one word in the config.</b> Set that environment's <code>model_route</code> in <code>infra/pa_config.json</code> to <code>bedrock-local</code>, and merge.</li>
     <li><b>Deploy.</b> The app reads the key and the route when it starts. To go back, set the route to <code>openai-direct</code> and deploy again.</li>
   </ol>
   <div class="note"><b>One side effect.</b> Projects that already exist were embedded with OpenAI. On Bedrock their chat search finds nothing until they are ingested again (Diagram 4). New projects are not affected.</div>
-  <p><b>Models.</b> Luna has already been evaluated. Claude is not used: the <code>bedrock-local-claude</code> route is there for testing it later. Terra in place of gpt-5.5 (the Task Agent and the agent's routing) and the Cohere embeddings have run live but have not been evaluated on their own.</p>
+  <p><b>Models.</b> Luna was evaluated in task 051. Claude is not used; the <code>bedrock-local-claude</code> route stays in the file for testing it later. Terra for the two agents (moved from gpt-5.5 on 22 October 2026) and the Cohere embeddings have run live but have not been evaluated on their own.</p>
   <p>Design record: <a href="../../adr/0041-bedrock-inference-route-and-model-route-file.md">ADR 0041</a>. Scope and evidence: <a href="contract.md">contract</a>, <a href="verification.md">verification</a>.</p>
 </section>
 </main>
 
-<footer class="wrap">Policy Atlas · task 053 · model routing explainer · written 2026-10-21 from the code on branch <code>aws-bedrock-integration</code>.</footer>
+<footer class="wrap">Policy Atlas · task 053 · model routing explainer · written 2026-10-21, updated 2026-10-22, from the code on branch <code>aws-bedrock-integration</code>.</footer>
 </body>
 </html>

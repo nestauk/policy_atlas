@@ -65,6 +65,14 @@ set on the new models and re-tuning prompts) come later and are out of scope her
 > `infra/DEPLOYMENT.md` describes the switch. This is a production-config change the
 > owner approved in writing in the review conversation. Rubric item 18 is replaced
 > accordingly.
+> Owner decision 2026-10-22: (10) three tiers instead of five. `mini` folds into `fast`
+> (Luna, evaluated in task 051), the two `frontier` steps (both agents) move to
+> `standard` (Terra), and `judgment` is renamed `frontier` (Sol). This applies to
+> `openai-direct` too, so the default route no longer reproduces the pre-053 literals:
+> gpt-5.4-mini and gpt-5.5 are no longer used anywhere. Rubric item 9 is read as "unset
+> means the committed `openai-direct` route" from that date; the pre-053 reproduction
+> held, and was shown by the tests, until then. The `bedrock-local-claude` route stays
+> in the file marked not in use, kept for testing Claude models later.
 
 ## Why this is safe to do now
 

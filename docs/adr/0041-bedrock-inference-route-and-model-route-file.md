@@ -1,7 +1,7 @@
 # ADR 0041 — Inference moves to Amazon Bedrock; models are named in a committed route file
 
 - **Status:** Accepted — 2026-09-25 (Karlis Kanders, owner, task 053 plan gate).
-- **Date:** 2026-09-25
+- **Date:** 2026-09-25; amended 2026-10-22 (three tiers, see below)
 - **Task:** [053-bedrock-local-route](../tasks/053-bedrock-local-route/contract.md)
 - **Builds on:** [ADR 0005](0005-first-product-egress-embedding-grouping-seams.md) (first
   live provider calls, egress posture, tracing) ·
@@ -92,9 +92,23 @@ environment files.
    and `grounding_judge.py` were pinned by dev and lose their constant the same way).
 
 7. **Quality is not claimed by this move.** Luna stands in for gpt-5.4-mini, Terra for
-   gpt-5.5, and Claude Haiku is the first Claude tier, all unmeasured. The evaluation set
+   gpt-5.5, and Claude Haiku is the first Claude tier, all unmeasured at the time of
+   writing (Luna was then evaluated for screening and query writing in task 051). The evaluation set
    on branch `34-evaluate-against-ground-truth` is the regression net that licenses each
    choice. Comparing models means adding a route, not editing code.
+
+## Amendment, 2026-10-22: three tiers on every route
+
+The owner cut the text tiers to three and applied them to `openai-direct` as well:
+`fast` (Luna) for all twenty cheap steps, `standard` (Terra) for writing, chat and both
+agents, `frontier` (Sol) for the two options-scoping judgment calls. So the default
+route no longer reproduces the pre-053 literals: gpt-5.4-mini and gpt-5.5 are not used
+on any route, and the next deploy of staging and production moves fourteen steps to
+Luna and both agents to Terra. Luna was evaluated in task 051; Terra for the agents has
+run live but is not evaluated on its own. The `bedrock-local-claude` route stays in the
+file marked not in use, for testing Claude models later; decision 4's one-line swap
+still holds for it. Decision 2's "reproduces the pre-053 behaviour exactly" held until
+this date and was shown by the tests; the tests now pin the route file's own values.
 
 ## Consequences
 

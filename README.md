@@ -93,13 +93,12 @@ makes the posture explicit (see `backend/.env.example`).
 
 | `POLICY_ATLAS_MODEL_ROUTE` | where AI calls go | key it reads |
 |---|---|---|
-| unset (`openai-direct`) | OpenAI, as before | `OPENAI_API_KEY` |
+| unset (`openai-direct`) | OpenAI directly: Luna, Terra, Sol | `OPENAI_API_KEY` |
 | `bedrock-local` | Amazon Bedrock in London: GPT-5.6 models, Cohere embeddings | `AWS_BEARER_TOKEN_BEDROCK` |
-| `bedrock-local-claude` | as `bedrock-local`, with Claude writing the search queries | `AWS_BEARER_TOKEN_BEDROCK` |
+| `bedrock-local-claude` | not in use; kept for testing Claude models later | `AWS_BEARER_TOKEN_BEDROCK` |
 
 To change a model, edit the route file and open a pull request. To try a model
-without a pull request, put your own route in a separate file and name it with
-`POLICY_ATLAS_MODEL_ROUTE_FILE`. The old per-step `POLICY_ATLAS_*_MODEL`
+without a pull request, put your own route in a separate file and name it using an env variable `POLICY_ATLAS_MODEL_ROUTE_FILE`. The old per-step `POLICY_ATLAS_*_MODEL`
 settings are ignored. Diagrams and details:
 [`docs/tasks/053-bedrock-local-route/model-routing.html`](docs/tasks/053-bedrock-local-route/model-routing.html)
 (open it in a browser).

@@ -76,7 +76,7 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger()
 
-#: The scoping Task Agent's model — its own tier ("judgment"), apart from the
+#: The scoping Task Agent's model — the strongest tier ("frontier"), apart from the
 #: Evidence search Task Agent's. Model from the route file (task 053).
 TASK_AGENT_SCOPING_MODEL = route().model_for("task_agent_scoping")
 
