@@ -1,5 +1,12 @@
 # Knowledge update log
 
+## 2026-10-22 (task 053, CI fix)
+* **Update**: [tests-are-zero-egress-scrub-keys](tests-are-zero-egress-scrub-keys.md) —
+  `boto3` resolves credentials at client construction and probes the EC2 metadata
+  address when none are configured; conftest sets `AWS_EC2_METADATA_DISABLED` so a
+  test that builds a Bedrock client passes on a credential-less CI runner as it does
+  on a keyed laptop.
+
 ## 2026-10-21 (task 053, delta review)
 * **Update**: [live-check-drive-runbook](live-check-drive-runbook.md) — an
   options-scoping walk's first pause is a steering check-in, the confirm decision opens

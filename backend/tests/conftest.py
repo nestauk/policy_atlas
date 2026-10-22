@@ -38,6 +38,14 @@ for _egress_key in (
 ):
     os.environ.pop(_egress_key, None)
 
+# boto3 resolves credentials when a client is built. With none configured (CI), the
+# chain ends by asking the EC2 instance-metadata address, which socket-deny turns
+# into an HTTPClientError at construction (task 053 CI failure). A developer's
+# machine has ~/.aws credentials, so the probe never ran locally. Disable it: the
+# Cohere and Claude clients are then built with no credentials, which only matters
+# at request time, and the suite never sends one.
+os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
+
 # Fixture corpus moved out of the package (contract decision 12, task 016) — point
 # FixtureFetcher's default resolution at the repo test-data home for the suite.
 os.environ.setdefault("POLICY_ATLAS_FIXTURE_CORPUS", str(Path(__file__).parent / "data"))

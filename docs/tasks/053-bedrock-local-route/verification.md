@@ -890,6 +890,22 @@ The owner asked for the deployment wiring in this PR rather than a separate slic
 To switch staging: add the field to the secret, set staging's route to `bedrock-local`,
 merge, deploy. `make -C infra test`: 95 passed.
 
+### CI failure after the push (2026-10-22)
+
+GitHub's `verify` failed two tests that pass on every developer machine:
+`test_live_embedding_backend_selects_route` and
+`test_chat_embedding_backend_selects_cohere_in_live_mode`, both with
+`botocore.exceptions.HTTPClientError` from a blocked socket to `169.254.169.254`.
+Cause: both build a real `CohereEmbeddingBackend()`, whose `boto3.client(...)` resolves
+credentials at construction; the CI runner has none, so the chain probes the EC2
+instance-metadata address and socket-deny raises inside `botocore`. A developer's
+`~/.aws` credentials answer first locally, so the probe never ran here. Reproduced
+locally by hiding the credential files (`AWS_CONFIG_FILE=/dev/null`,
+`AWS_SHARED_CREDENTIALS_FILE=/dev/null`): 2 failed. Fix: `tests/conftest.py` sets
+`AWS_EC2_METADATA_DISABLED=true` beside the key scrub, so the client is built with no
+credentials, which only matters at request time and the suite never sends one. Same
+two tests then pass with and without machine credentials. Full gate: § Commands run.
+
 ### Knowledge records, delta (2026-10-21)
 
 | Candidate | Decision |
