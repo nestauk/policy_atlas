@@ -92,3 +92,7 @@ scripts/feasibility_checks/
 docs/tasks/*/research/
 docs/tasks/*/spec-changes-proposed.md
 docs/tasks/*/intent.md
+scripts/evals/post_screening_and_synthesis/inputs/briefings/
+scripts/evals/post_screening_and_synthesis/datasets/
+scripts/evals/post_screening_and_synthesis/results/*
+!scripts/evals/post_screening_and_synthesis/results/history.md
