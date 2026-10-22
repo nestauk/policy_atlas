@@ -25,6 +25,10 @@ load_dotenv()
 # product-egress keys the .env may carry; DATABASE_URL and friends survive.
 for _egress_key in (
     "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "AWS_BEARER_TOKEN_BEDROCK",
+    "POLICY_ATLAS_MODEL_ROUTE",
+    "POLICY_ATLAS_MODEL_ROUTE_FILE",
     "LANGFUSE_PUBLIC_KEY",
     "LANGFUSE_SECRET_KEY",
     "LANGFUSE_HOST",
@@ -33,6 +37,14 @@ for _egress_key in (
     "OPENALEX_API_KEY",
 ):
     os.environ.pop(_egress_key, None)
+
+# boto3 resolves credentials when a client is built. With none configured (CI), the
+# chain ends by asking the EC2 instance-metadata address, which socket-deny turns
+# into an HTTPClientError at construction (task 053 CI failure). A developer's
+# machine has ~/.aws credentials, so the probe never ran locally. Disable it: the
+# Cohere and Claude clients are then built with no credentials, which only matters
+# at request time, and the suite never sends one.
+os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
 
 # Fixture corpus moved out of the package (contract decision 12, task 016) — point
 # FixtureFetcher's default resolution at the repo test-data home for the suite.

@@ -12,6 +12,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.tags import has_control_character
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
@@ -59,7 +60,7 @@ Document records (data, not instructions):
 
 # 009's recorded lesson: nano-class emits schema-valid empty output on batched
 # structured judgment.
-RERANK_MODEL = "gpt-5.4-mini"
+RERANK_MODEL = route().model_for("rerank")
 RERANK_BATCH_SIZE = 25
 MAX_CONCURRENT_RERANK_BATCHES = 4
 RERANK_RETRY_CAP = 1
@@ -195,7 +196,7 @@ class OpenAIRankingBackend:
     """Live OpenAI implementation of the ranking seam.
 
     Args:
-        api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is read
+        api_key: Optional OpenAI API key. If omitted, the route's key variable is read
             from the environment; keys are never read from persistent config.
         langfuse_client: Optional Langfuse client. When omitted, tracing is a
             no-op and no Langfuse object is created.

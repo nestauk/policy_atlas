@@ -64,7 +64,7 @@ class OpenAIClassificationBackend:
     """Live OpenAI implementation of the classification seam.
 
     Args:
-        api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is read
+        api_key: Optional OpenAI API key. If omitted, the route's key variable is read
             from the environment; keys are never read from persistent config.
         langfuse_client: Optional Langfuse client. When omitted, tracing is a
             no-op and no Langfuse object is created.

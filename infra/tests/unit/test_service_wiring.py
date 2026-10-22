@@ -1,7 +1,11 @@
 """Assertions for the Policy Atlas API and migration task wiring."""
 import json
+import tomllib
+from pathlib import Path
 
-from tests.unit.test_synth import TEMPLATES, _resources
+from tests.unit.test_synth import BEDROCK_APP_TEMPLATE, TEMPLATES, _resources
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 API_ENVIRONMENT_NAMES = {
@@ -16,6 +20,7 @@ API_ENVIRONMENT_NAMES = {
     "LOG_LEVEL",
     "LOG_FORMAT",
     "LANGFUSE_TRACING_ENVIRONMENT",
+    "POLICY_ATLAS_MODEL_ROUTE",
 }
 APP_SECRET_NAMES = {
     "OPENAI_API_KEY",
@@ -28,11 +33,11 @@ APP_SECRET_NAMES = {
 }
 
 
-def _task_definition(family: str) -> dict:
+def _task_definition(family: str, template: dict | None = None) -> dict:
     """Return the synthesized ECS task definition having ``family``."""
     return next(
         resource["Properties"]
-        for _, resource in _resources(TEMPLATES["app"], "AWS::ECS::TaskDefinition")
+        for _, resource in _resources(template or TEMPLATES["app"], "AWS::ECS::TaskDefinition")
         if resource["Properties"]["Family"] == family
     )
 
@@ -63,6 +68,7 @@ def test_api_container_has_the_complete_deployed_plain_environment_map():
     assert environment["LOG_LEVEL"] == "INFO"
     assert environment["LOG_FORMAT"] == "json"
     assert environment["LANGFUSE_TRACING_ENVIRONMENT"] == "staging"
+    assert environment["POLICY_ATLAS_MODEL_ROUTE"] == "openai-direct"
 
 
 def test_api_container_references_database_and_app_secrets_without_values():
@@ -82,6 +88,29 @@ def test_api_container_references_database_and_app_secrets_without_values():
     for reference in secrets.values():
         rendered = json.dumps(reference)
         assert "secretsmanager" in rendered or "Fn::" in rendered or "Ref" in rendered
+
+
+def test_bedrock_route_adds_only_the_bedrock_key_from_the_app_secret():
+    """Task 053: a Bedrock route passes AWS_BEARER_TOKEN_BEDROCK; OpenAI direct does not."""
+    container = _container(_task_definition("policy-atlas-v3-api", BEDROCK_APP_TEMPLATE))
+    environment = {item["Name"]: item["Value"] for item in container["Environment"]}
+    assert environment["POLICY_ATLAS_MODEL_ROUTE"] == "bedrock-local"
+    secrets = _secret_map(container)
+    assert set(secrets) == {"DATABASE_URL", *APP_SECRET_NAMES, "AWS_BEARER_TOKEN_BEDROCK"}
+    reference = json.dumps(secrets["AWS_BEARER_TOKEN_BEDROCK"])
+    assert "AWS_BEARER_TOKEN_BEDROCK" in reference
+    assert "policy_atlas_v3/app" in reference
+
+
+def test_every_configured_model_route_exists_in_the_backend_route_file():
+    """A typo in pa_config.json fails here, not as a backend crash after deploy."""
+    routes = tomllib.loads(
+        (REPO_ROOT / "backend/src/policy_atlas/model_routes.toml").read_text()
+    )["routes"]
+    config = json.loads((REPO_ROOT / "infra/pa_config.json").read_text())
+    for env_name, env_config in config.items():
+        route = env_config["policy_atlas_config"]["backend"]["model_route"]
+        assert route in routes, f"{env_name}: unknown model route {route!r}"
 
 
 def test_migration_task_is_one_shot_and_has_only_the_database_secret():

@@ -760,7 +760,6 @@ def test_openai_junk_judge_backend_passes_model_and_reasoning_effort() -> None:
     assert result.verdicts[0].verdict == "sound"
     assert usage is None
     [kwargs] = fake_client.chat.completions.calls
-    assert kwargs["model"] == "gpt-5.4-mini"
     assert kwargs["model"] == FINDING_VETTER_MODEL
     assert kwargs["reasoning_effort"] == "high"
     assert kwargs["reasoning_effort"] == FINDING_VETTER_REASONING_EFFORT

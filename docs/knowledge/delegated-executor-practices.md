@@ -42,8 +42,12 @@ timestamp: 2026-09-25
 - **Codex cannot start `uv` either** (its cache sits outside the sandbox), so a
   Codex brief that needs any Python test run says "tests run lead-side"; and **Codex
   runs `ruff format` over the whole tree unless told the exact files** (051: one round
-  reformatted about 170 unrelated files, reverted by path). Name the files in the brief
-  and say "no formatter" for a read-only pass.
+  reformatted about 170 unrelated files, reverted by path; 053 Phase B: four files
+  reformatted again because the brief allowed `ruff format src tests`). Name the files
+  in the brief, allow only `ruff format --check` and `ruff check --fix`, and say "no
+  formatter" for a read-only pass. The lint gate here is `ruff check`, so existing files
+  are not formatter-clean and any bare `ruff format` on them is churn the lead must
+  revert by hand before the diff is reviewable.
 - **Fixture doubles return the same objects on every call** (`functools.cache`), so
   any bookkeeping by `id(record)` must copy what a backend returns (051 Phase 3a).
 - **Two families editing one working tree concurrently** is safe when the

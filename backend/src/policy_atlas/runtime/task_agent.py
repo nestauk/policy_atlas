@@ -12,7 +12,6 @@ completes before acquire begins — this seam is never invoked mid-run
 
 from __future__ import annotations
 
-import os
 import uuid
 from typing import Any, Protocol, cast
 
@@ -21,6 +20,7 @@ from langfuse import Langfuse
 
 from policy_atlas.api.contract import PlanDraft, PlanStep
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import resolve_openai_client, traced_parse
 from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.evidence_search.extract.extract import _scrub_nul
@@ -43,9 +43,8 @@ from policy_atlas.runtime.task_plan import TaskPlan, registry_component_for, tim
 
 log = structlog.get_logger()
 
-# Judgment-class model; env-overridable so ops can pin a different model
-# without a code change (the `SYNTHESIS_MODEL` pattern).
-TASK_AGENT_MODEL = os.environ.get("POLICY_ATLAS_TASK_AGENT_MODEL", "gpt-5.5")
+# Model from the route file (task 053); see core/model_routes.py.
+TASK_AGENT_MODEL = route().model_for("task_agent")
 
 # The Task Agent turn as emitted by any backend; the wire model IS the turn
 # shape, code-side and model-side — no separate dataclass to keep in sync.
@@ -188,7 +187,7 @@ class OpenAITaskAgentBackend:
     """Live OpenAI implementation of the Task Agent seam, for any capability.
 
     Args:
-        api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is read
+        api_key: Optional OpenAI API key. If omitted, the route's key variable is read
             from the environment; keys are never read from persistent config.
         langfuse_client: Optional Langfuse client. When omitted, tracing is a
             no-op and no Langfuse object is created.

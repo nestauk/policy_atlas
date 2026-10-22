@@ -9,7 +9,6 @@ guards used after a ``parse`` or ``create`` call.
 
 from __future__ import annotations
 
-import os
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -18,6 +17,7 @@ from typing import Any
 from openai import OpenAI
 from pydantic import BaseModel
 
+from policy_atlas.core.model_routes import live_api_key, route
 from policy_atlas.core.usage import (
     UsageResult,
     log_usage,
@@ -56,9 +56,13 @@ def resolve_openai_client(
     """Resolve the OpenAI API key and construct a client, failing loudly.
 
     Shared by both live backends so key-resolution policy lives in one place.
+    The base address always comes from the selected route, so ``OPENAI_BASE_URL``
+    in the environment is never consulted.
 
     Args:
-        api_key: Explicit key, or ``None`` to read ``OPENAI_API_KEY``.
+        api_key: Explicit key, or ``None`` to read the variable the route names
+            (``OPENAI_API_KEY`` on ``openai-direct``, ``AWS_BEARER_TOKEN_BEDROCK``
+            on the Bedrock routes).
         backend_name: Backend class name for the error message.
         timeout: Per-request timeout in seconds.
         max_retries: SDK-level retry cap for transient failures.
@@ -66,10 +70,15 @@ def resolve_openai_client(
     Raises:
         RuntimeError: If no API key is provided or configured.
     """
-    resolved_key = api_key or os.environ.get("OPENAI_API_KEY")
+    resolved_key = api_key or live_api_key()
     if not resolved_key:
-        raise RuntimeError(f"{backend_name} requires OPENAI_API_KEY or an explicit api_key.")
-    return OpenAI(api_key=resolved_key, timeout=timeout, max_retries=max_retries)
+        raise RuntimeError(f"{backend_name} requires {route().api_key_env} or an explicit api_key.")
+    return OpenAI(
+        api_key=resolved_key,
+        base_url=route().openai_base_url,
+        timeout=timeout,
+        max_retries=max_retries,
+    )
 
 
 def openai_kwargs(model: str, *, reasoning_effort: str | None = None) -> dict[str, Any]:

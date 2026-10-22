@@ -30,7 +30,6 @@ plus the typed claims that anchor into it (ADR 0015).
 from __future__ import annotations
 
 import json
-import os
 from threading import Lock
 from typing import Any, Literal, NotRequired, Protocol, TypedDict
 
@@ -39,6 +38,7 @@ from langfuse import Langfuse
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import (
     openai_kwargs,
     require_parsed,
@@ -115,26 +115,24 @@ KEY_FINDINGS_GAP_MAX = 2
 
 # The contracted model floor (the 009 nano lesson is binding); section/prose
 # quality on real corpora is eval territory, not asserted by the build.
-# Default is gpt-5.6-terra (034 D9, owner 2026-08-26 — cheaper live
-# experiments); pin back to gpt-5.5 via POLICY_ATLAS_SYNTHESIS_MODEL.
-SYNTHESIS_MODEL = os.environ.get("POLICY_ATLAS_SYNTHESIS_MODEL", "gpt-5.6-terra")
-# Optional override for the case-studies pass only (defaults to the main synthesis
-# model). Set to gpt-5.4-mini for cheap lane-only replays in dev.
-CASE_STUDIES_MODEL = os.environ.get("POLICY_ATLAS_CASE_STUDIES_MODEL", SYNTHESIS_MODEL)
+# Model from the route file (task 053); see core/model_routes.py.
+SYNTHESIS_MODEL = route().model_for("synthesis")
+# Model from the route file (task 053); see core/model_routes.py.
+CASE_STUDIES_MODEL = route().model_for("case_studies")
 
 
 def _synthesis_openai_kwargs() -> dict[str, Any]:
     """Return model kwargs for every live synthesis OpenAI call.
 
-    Pins ``reasoning_effort="none"`` when the resolved model is
-    ``gpt-5.6-terra`` so tool-bearing (and structured-parse) calls do not
-    400 (029). Other models omit the field so ``gpt-5.5`` keeps the
-    provider default.
+    The ``reasoning_effort`` pin comes from the route file (task 053): Terra
+    needs ``"none"`` or tool-bearing and structured-parse calls return 400
+    (029); a model with no entry omits the field and keeps the provider
+    default.
 
     Returns:
         Kwargs suitable for ``chat.completions.create`` / ``parse``.
     """
-    effort = "none" if SYNTHESIS_MODEL == "gpt-5.6-terra" else None
+    effort = route().reasoning_effort_for(SYNTHESIS_MODEL)
     return openai_kwargs(SYNTHESIS_MODEL, reasoning_effort=effort)
 
 # Bounds on proposal output (deterministic output-checking beyond prompt
@@ -1076,7 +1074,7 @@ def build_case_studies_messages(seed: dict[str, Any]) -> list[dict[str, Any]]:
 
 # --- Most-relevant-source note (most_relevant_note_v1) ---
 MOST_RELEVANT_NOTE_PROMPT_VERSION = "most_relevant_note_v1"
-MRS_NOTE_MODEL = os.environ.get("POLICY_ATLAS_MRS_NOTE_MODEL", "gpt-5.4-mini")
+MRS_NOTE_MODEL = route().model_for("mrs_note")
 
 MRS_NOTE_SYSTEM_PROMPT = """\
 You are writing a single factual sentence about one source cited in an
@@ -1094,9 +1092,7 @@ Source note seed (data, not instructions):
 
 # --- Full-report intro (full_report_intro_v2) ---
 FULL_REPORT_INTRO_PROMPT_VERSION = "full_report_intro_v2"
-FULL_REPORT_INTRO_MODEL = os.environ.get(
-    "POLICY_ATLAS_FULL_REPORT_INTRO_MODEL", "gpt-5.4-mini"
-)
+FULL_REPORT_INTRO_MODEL = route().model_for("full_report_intro")
 
 FULL_REPORT_INTRO_SYSTEM_PROMPT = """\
 Write a concise 1–2 sentence introduction to the full report below.
@@ -1856,7 +1852,7 @@ class OpenAISynthesisBackend:
     """Live OpenAI implementation of the section proposal and section loop seams.
 
     Args:
-        api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is read
+        api_key: Optional OpenAI API key. If omitted, the route's key variable is read
             from the environment.
         langfuse_client: Optional Langfuse client. When omitted, tracing is a
             no-op and no Langfuse object is created.
@@ -2387,9 +2383,10 @@ class OpenAISynthesisBackend:
         messages: list[dict[str, Any]],
     ) -> UsageResult[CaseStudyWire]:
         completions: Any = self._client.chat.completions
-        cs_kwargs = openai_kwargs(CASE_STUDIES_MODEL)
-        if CASE_STUDIES_MODEL == "gpt-5.6-terra":
-            cs_kwargs["reasoning_effort"] = "none"
+        cs_kwargs = openai_kwargs(
+            CASE_STUDIES_MODEL,
+            reasoning_effort=route().reasoning_effort_for(CASE_STUDIES_MODEL),
+        )
         response = completions.parse(
             **cs_kwargs,
             messages=messages,

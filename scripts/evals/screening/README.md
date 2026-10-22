@@ -19,7 +19,7 @@ One item is one published review, or one evidence gap map (a map of which interv
 
 The screen under test is the app's stage-1 screen (`screen_v2` in the product code). Stage 1 reads the title and abstract only. These datasets have no full text, so stage 2 is not run. The eval calls the app's own stage-1 code (the production screening backend and call loop), so the prompt, the order of calls, the number of calls in parallel and the retries are the app's. The model, the number of replies and the reasoning effort can be changed for one run; the app's settings are not edited. The model, the prompt, and the keep rule are the ones the app uses:
 
-- The default model is `gpt-5.4-mini`.
+- The default model is the app's `screen` step model from `backend/src/policy_atlas/model_routes.toml` (`gpt-5.6-luna` on the default route since task 053; it was `gpt-5.4-mini` when the runs recorded under `results/` were made).
 - The default asks for three independent replies per document.
 - `unsure` counts as a vote to keep the document. A tie keeps it. A document with no abstract is kept if any reply said `relevant`, even when the other replies said `not_relevant`.
 - With three replies, at least two must parse. Fewer than that and the document counts as not kept.
@@ -139,7 +139,9 @@ The bucket is the same one the earlier prototype used. The results prefix is new
 
 All commands run from the repository root.
 
-The language-model key is `OPENAI_API_KEY` in `backend/.env`. The AWS command-line tool uses your default profile. Log in the way you usually do first. This should print your account, not an error:
+**Models and routes (task 053).** The scripts run with `--env-file backend/.env`, so they use the same model route as the app: `POLICY_ATLAS_MODEL_ROUTE` unset means OpenAI directly, `bedrock-local` means Amazon Bedrock, and `POLICY_ATLAS_MODEL_ROUTE_FILE` can add an experimental route (see `backend/.env.example`). The key is the one the route names: `OPENAI_API_KEY` on the default route, `AWS_BEARER_TOKEN_BEDROCK` on Bedrock. A `--model` flag overrides the route's choice for that run only; on a Bedrock route it must be a Bedrock model id (for example `global.openai.gpt-5.6-luna`), because the route also sets the address the request goes to.
+
+The language-model key goes in `backend/.env`: `OPENAI_API_KEY` on the default route, `AWS_BEARER_TOKEN_BEDROCK` on a Bedrock route (see the note below). The AWS command-line tool uses your default profile. Log in the way you usually do first. This should print your account, not an error:
 
 ```
 aws sts get-caller-identity

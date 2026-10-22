@@ -665,7 +665,6 @@ def test_classify_backend_passes_model_and_reasoning_effort() -> None:
     assert result.primary_evidence_type == "RCTs and Quasi-Experimental Studies"
     assert usage is None
     [kwargs] = fake_client.chat.completions.calls
-    assert kwargs["model"] == "gpt-5.4-mini"
     assert kwargs["model"] == CLASSIFY_MODEL
     assert kwargs["reasoning_effort"] == "high"
     assert kwargs["reasoning_effort"] == CLASSIFY_REASONING_EFFORT

@@ -38,6 +38,7 @@ import json
 
 from openai.types.chat import ChatCompletionMessageParam
 
+from policy_atlas.core.model_routes import route
 from policy_atlas.evidence_search.extract.interventions_records import (
     InterventionsRecordWire,
     InterventionsResponse,
@@ -48,9 +49,10 @@ from policy_atlas.evidence_search.extract.iof_prompt import UNCLASSIFIED_EVIDENC
 
 PROMPT_VERSION = "extract_interventions_v4"
 
-# The mini model, as the contract's model route states: about 3,000 prompt
-# tokens per document, one call per screened-in document.
-INTERVENTIONS_MODEL = "gpt-5.6-luna"  # owner, 2026-10-14: the scoping tiers
+# The small model, as the contract's model route states: about 3,000 prompt
+# tokens per document, one call per screened-in document. From the route file
+# (task 053); see core/model_routes.py.
+INTERVENTIONS_MODEL = route().model_for("extract_interventions")
 # A reasoning model: the cap covers reasoning and output. An abstract yields a
 # handful of records; 8K leaves room for a review naming a dozen.
 INTERVENTIONS_MAX_OUTPUT_TOKENS = 8_192

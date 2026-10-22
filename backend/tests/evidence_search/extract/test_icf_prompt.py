@@ -16,6 +16,7 @@ from typing import Any, cast
 import pytest
 from openai.types.chat import ChatCompletionMessageParam
 
+from policy_atlas.core.model_routes import route
 from policy_atlas.evidence_search.extract.extract import _icf_judge_payload_entry
 from policy_atlas.evidence_search.extract.finding_vetter import (
     ICF_FINDING_VETTER_MODEL,
@@ -57,7 +58,7 @@ def test_version_constants() -> None:
     assert ICF_PROMPT_VERSION == "extract_icf_v2"
     assert ICF_FINDING_VETTER_PROMPT_VERSION == "extract_icf_vetter_v2"
     # Gate decision 1: vetter knobs mirror the IOF vetter.
-    assert ICF_FINDING_VETTER_MODEL == "gpt-5.4-mini"
+    assert route().model_for("icf_finding_vetter") == ICF_FINDING_VETTER_MODEL
 
 
 def test_user_template_has_no_inline_envelope_interpolation() -> None:

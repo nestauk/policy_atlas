@@ -1,0 +1,135 @@
+# Which AI model each part of the app uses.
+#
+# This file is the only place model names live. The code asks for a model by
+# step name (for example "screen" or "synthesis"); this file says which model
+# that step gets on the selected route. Pick a route with the environment
+# variable POLICY_ATLAS_MODEL_ROUTE. When it is unset, "openai-direct" is used:
+# OpenAI called directly, with the owner's model choice of 2026-10-22.
+#
+# Three layers:
+#   [steps]            every step, once, with its default tier
+#   [routes.<name>]    the model for each tier, provider knobs, embeddings,
+#                      and the search-queries backend
+#   [routes.<name>.steps]  optional: a step that should not follow its default
+#                      tier on this route (a tier name, or a specific model id)
+#
+# To try models without editing this file, point an env variable
+# POLICY_ATLAS_MODEL_ROUTE_FILE at a second file with its own [routes.*] tables;
+# they replace or add routes by name. [steps] always comes from this file.
+#
+# Design: docs/tasks/053-bedrock-local-route/contract.md (D3) and ADR 0041.
+
+[steps]
+# Cheap, high-volume steps: one small model for all of them
+screen = "fast"
+search_queries = "fast"
+search_reformulate = "fast"
+search_suggest = "fast"
+classify = "fast"
+extract = "fast"
+icf_extract = "fast"
+finding_vetter = "fast"
+icf_finding_vetter = "fast"
+relevance = "fast"
+rerank = "fast"
+theme_discovery = "fast"
+theme_assignment = "fast"
+group_clustering = "fast"
+grounding_judge = "fast"
+mrs_note = "fast"
+full_report_intro = "fast"
+agent_triage = "fast"
+# Options scoping (tasks 044 to 046): the small calls.
+extract_interventions = "fast"
+longlist_assignment = "fast"
+# Writing, conversation, planning and the agent's routing decisions (owner,
+# 2026-10-22: the Task Agent and the agent moved from gpt-5.5 to Terra).
+synthesis = "standard"
+case_studies = "standard"
+chat = "standard"
+task_agent = "standard"
+agent = "standard"
+# The options-scoping judgment calls run on the strongest tier (Sol).
+task_agent_scoping = "frontier"
+longlist_judgment = "frontier"
+
+# ---------------------------------------------------------------------------
+[routes.openai-direct]
+# OpenAI called directly. The default when nothing is set. Until 2026-10-22 this
+# route reproduced the pre-053 models exactly (gpt-5.4-mini for the cheap steps,
+# gpt-5.5 for the agents); it now carries the owner's three-tier choice.
+openai_base_url = "https://api.openai.com/v1"   # stated so no stray env var can move it
+api_key_env = "OPENAI_API_KEY"                  # which variable holds this route's key
+
+[routes.openai-direct.text]
+fast = "gpt-5.6-luna"
+standard = "gpt-5.6-terra"
+frontier = "gpt-5.6-sol"
+
+[routes.openai-direct.knobs.reasoning_effort]
+# Terra refuses function tools unless reasoning effort is "none" (task 029).
+"gpt-5.6-terra" = "none"
+
+[routes.openai-direct.embeddings]
+backend = "openai"
+model = "text-embedding-3-small"
+profile = "openai_text_embedding_3_small_v1"
+
+[routes.openai-direct.search_queries]
+# Which code path writes the search queries (the one step with two
+# implementations). "openai": the OpenAI client, on the search_queries step's
+# tier like every other step. "claude": Claude through boto3 (Claude does not
+# accept the OpenAI request format), which needs a model line beside it.
+backend = "openai"
+
+# ---------------------------------------------------------------------------
+[routes.bedrock-local]
+# Every call goes to Amazon Bedrock's London endpoint. OpenAI models are reached
+# through Bedrock's global routing (the only way from London); embeddings use
+# Cohere through EU-only routing. The same three models as openai-direct, under
+# Bedrock's global profile names.
+openai_base_url = "https://bedrock-runtime.eu-west-2.amazonaws.com/openai/v1"
+api_key_env = "AWS_BEARER_TOKEN_BEDROCK"       # the Bedrock key; boto3 reads the same variable
+
+[routes.bedrock-local.text]
+fast = "global.openai.gpt-5.6-luna"
+standard = "global.openai.gpt-5.6-terra"
+frontier = "global.openai.gpt-5.6-sol"
+
+[routes.bedrock-local.knobs.reasoning_effort]
+"global.openai.gpt-5.6-terra" = "none"
+
+[routes.bedrock-local.embeddings]
+backend = "cohere"
+model = "eu.cohere.embed-v4:0"
+profile = "cohere_embed_v4_1536_v1"
+
+[routes.bedrock-local.search_queries]
+backend = "openai"   # Luna through Bedrock's OpenAI-format address, like every other step
+
+# ---------------------------------------------------------------------------
+[routes.bedrock-local-claude]
+# NOT IN USE. Kept for testing Claude models later (owner, 2026-10-22): as
+# bedrock-local, but search query generation runs on Claude via Bedrock. No
+# environment selects it and nothing is planned to. Swap the Claude tier by
+# changing the model below:
+#   eu.anthropic.claude-sonnet-5  /  eu.anthropic.claude-opus-5
+openai_base_url = "https://bedrock-runtime.eu-west-2.amazonaws.com/openai/v1"
+api_key_env = "AWS_BEARER_TOKEN_BEDROCK"
+
+[routes.bedrock-local-claude.text]
+fast = "global.openai.gpt-5.6-luna"
+standard = "global.openai.gpt-5.6-terra"
+frontier = "global.openai.gpt-5.6-sol"
+
+[routes.bedrock-local-claude.knobs.reasoning_effort]
+"global.openai.gpt-5.6-terra" = "none"
+
+[routes.bedrock-local-claude.embeddings]
+backend = "cohere"
+model = "eu.cohere.embed-v4:0"
+profile = "cohere_embed_v4_1536_v1"
+
+[routes.bedrock-local-claude.search_queries]
+backend = "claude"
+model = "eu.anthropic.claude-haiku-4-5-20251001-v1:0"

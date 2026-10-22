@@ -1,5 +1,65 @@
 # Knowledge update log
 
+## 2026-10-22 (task 053, CI fix and tier change)
+* **Update**: [model-route-constants-read-at-import](model-route-constants-read-at-import.md)
+  — three tiers on every route from 2026-10-22; the default route carries the owner's
+  choice, not the pre-053 literals, and the tests pin the file's own values.
+* **Update**: [tests-are-zero-egress-scrub-keys](tests-are-zero-egress-scrub-keys.md) —
+  `boto3` resolves credentials at client construction and probes the EC2 metadata
+  address when none are configured; conftest sets `AWS_EC2_METADATA_DISABLED` so a
+  test that builds a Bedrock client passes on a credential-less CI runner as it does
+  on a keyed laptop.
+
+## 2026-10-21 (task 053, delta review)
+* **Update**: [live-check-drive-runbook](live-check-drive-runbook.md) — an
+  options-scoping walk's first pause is a steering check-in, the confirm decision opens
+  the longlist walk (053 live check 4); reading traces on a Langfuse v3 host goes through
+  the REST API, filtered by session.
+* **Update**: [two-step-rename-needs-ledger-and-anchored-exemptions](two-step-rename-needs-ledger-and-anchored-exemptions.md)
+  — a renumber after a numbering clash sweeps only the branch's own lines and re-reads
+  hand-merged lines (053 sent two dev citations to the wrong ADR).
+* **Update**: [model-route-constants-read-at-import](model-route-constants-read-at-import.md)
+  — 27 steps, five tiers, twelve retired variables (one silent); the step-exception
+  model-id pass-through named as deliberate.
+* **Update**: [bedrock-route-facts](bedrock-route-facts.md) — planner → task_agent after
+  the merge; index description now states the per-route key variable.
+* **Update**: [tests-are-zero-egress-scrub-keys](tests-are-zero-egress-scrub-keys.md),
+  [orchestrate-stub-smoke](orchestrate-stub-smoke.md) — "live iff `OPENAI_API_KEY`" is now
+  "the route's key variable".
+
+## 2026-10-21 (task 053, dev merge)
+* **Creation**: Added
+  [merge-take-theirs-drops-unconflicted-hunks](merge-take-theirs-drops-unconflicted-hunks.md)
+  — accepting dev's file wholesale lost three non-conflicting 053 hunks; found by the
+  full gate, re-applied from a diff against the pre-merge tip.
+* **Update**: [model-route-constants-read-at-import](model-route-constants-read-at-import.md)
+  — the pin is 29 constants in 19 modules after options scoping (Sol as the `judgment`
+  tier) joined the route file.
+* **Update**: [bedrock-route-facts](bedrock-route-facts.md) — each route names its key
+  variable; a 401 from api.openai.com quoting a `bedrock-…` key means the selector is unset.
+
+## 2026-10-14 (task 053 step 8)
+* **Creation**: Added [bedrock-route-facts](bedrock-route-facts.md) — which models answer
+  from London through which API, the two key variables and the AccessDenied look-alike,
+  Terra's knob being about function tools only (053 probes and live checks; review-stack
+  probe closed the planner-on-Terra question).
+* **Creation**: Added
+  [model-route-constants-read-at-import](model-route-constants-read-at-import.md) — the
+  committed route file, import-time constants and the subprocess rule for other-route
+  tests, the 25-constant pin, what the loader can and cannot check (053 build; the
+  backend-name and overlay-shape fallbacks were convergent Codex and Claude findings).
+* **Creation**: Added
+  [interface-change-sweeps-fakes-and-premise-pins](interface-change-sweeps-fakes-and-premise-pins.md)
+  — sweep every fake of a changed Protocol method before a targeted run; repoint, never
+  delete, a structural pin an approved gate invalidates (053 Phase B gate failure and
+  the image-hygiene repoint, widened at review).
+* **Update**: [live-check-drive-runbook](live-check-drive-runbook.md) gains the
+  `if __name__ == "__main__"` rule for drivers that call `run_plan` (014's lesson,
+  re-learned by 053's live check 3).
+* **Update**: [delegated-executor-practices](delegated-executor-practices.md) — briefs
+  allow `ruff format --check` and `ruff check --fix` only; a bare `ruff format` on
+  existing files is churn (053 Phase B).
+
 ## 2026-10-12 (task 046 step 8, all four amendments)
 * **Creation**: Added [mini-model-limits-live-in-the-schema-and-code](mini-model-limits-live-in-the-schema-and-code.md)
   (build candidates a3 "a ceiling in words does not bind", a4 "will not count characters",
