@@ -6,10 +6,10 @@ new task kind whose Result is a Magenta Book canvas: a drafted causal chain, eve
 assumption and result box graded against evidence in the background, pathways consolidated,
 and a stress-test chat, with import, export and one entry point from Options scoping.
 
-> **Status:** drafted 2026-10-23 · awaiting owner approval. The contract-stage adversarial
+> **Status:** **approved 2026-10-23 · owner** ("approve, let's go"). The contract-stage adversarial
 > review ran before approval, at the lead's choice, so the owner approves a reviewed contract:
 > ten findings, all adopted (§ Adversarial findings). Contract approved (before planning):
-> _pending_ · Plan approved (before implementation): _pending_ · ADR: **0042** (to be written
+> 2026-10-23 · owner · Plan approved (before implementation): _pending_ · ADR: **0042** (to be written
 > at step 4 of the design phase; § ADR scope).
 >
 > **Design source.** The capability spec
