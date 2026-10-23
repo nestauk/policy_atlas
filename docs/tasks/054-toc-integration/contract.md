@@ -515,7 +515,7 @@ web egress and the link rule · `/simplify` · human deep review).
 **Rollback.** Turn the server setting off (no new ToC tasks). The revision's downgrade refuses
 while any `task` or `capability_run` row carries `theory_of_change`; the remedy is an operator
 script that hard-deletes those tasks, their walks and their bucket objects, after which the
-downgrade drops the seven tables and `task_link.source_option_id` and narrows the four
+downgrade drops the eight tables and `task_link.source_option_id` and narrows the four
 constraints. The bucket is retained by policy and emptied by the same script; deleting it is a
 separate infrastructure change. Deploy the previous image.
 
