@@ -6,7 +6,9 @@ new task kind whose Result is a Magenta Book canvas: a drafted causal chain, eve
 assumption and result box graded against evidence in the background, pathways consolidated,
 and a stress-test chat, with import, export and one entry point from Options scoping.
 
-> **Status:** drafted 2026-10-23 · awaiting owner approval. Contract approved (before planning):
+> **Status:** drafted 2026-10-23 · awaiting owner approval. The contract-stage adversarial
+> review ran before approval, at the lead's choice, so the owner approves a reviewed contract:
+> ten findings, all adopted (§ Adversarial findings). Contract approved (before planning):
 > _pending_ · Plan approved (before implementation): _pending_ · ADR: **0042** (to be written
 > at step 4 of the design phase; § ADR scope).
 >
@@ -38,12 +40,14 @@ Nine numbered deliverables, one per build step. The rubric, the plan and the ADR
 numbers. Each step is usable on its own (owner, R13: "sequence and compartmentalise").
 
 1. **Shell and draft.** The task kind, its plan, its Task Agent, the draft, a read-only
-   canvas with its bands, assumption cards and key, the list view, the build flag.
+   canvas with its bands, assumption cards and key, the list view, the build flag. E1 and the
+   E6 harness are built here and run once on the draft (spec build order).
 2. **Evidence check.** One search per item over OpenAlex and Overton, the reused Evidence
    search spine, the per-document judge, grades and flags, case studies and indicators, the
    detail panel, the Sources tab, the summary with evaluation questions.
 3. **Discover and consolidate.** Pathways found in the evidence; merging, setting aside and
-   choosing; flagged changes to user work; Restore, Keep mine and Undo.
+   choosing; flagged changes to user work; Restore, Keep mine and Undo. E6 runs again on the
+   consolidated theory.
 4. **Editing during the check.** Canvas editing, the edit queue and follow-up check,
    *out of date*, Check again, History events, change requests through the Task Agent, the
    plan-change choice (C11).
@@ -121,13 +125,18 @@ open to the owner at the contract 🛑.
 - **C1. One theory per task; edits in place.** The graph tables are keyed by `task_id`. There
   are no graph versions: every change writes an event to `event_log` (History). Undo of a
   consolidate step replays the before-state carried in that step's event (C9).
-- **C2. Item searches reuse the option-search child walk.** The child-walk machinery in
-  `runtime/option_search.py` (intent record with `purpose='targeted'`, `acquire_only`,
-  `walk_pool.option_search_pool()`, join, abandon) is today typed to `OptionDesign` and
-  `ScopingPlan`. The plan decides between generalising it to take an intent text and a context
-  reference, or a thin ToC sibling over the same pool and join; either way no second pool, join
-  or abandon path is written. The intent record's `context` names the item (`toc_item_kind`,
-  `toc_item_id`, `item_hash`).
+- **C2. Item searches use one capability-neutral child search** (A6). The child-walk machinery
+  in `runtime/option_search.py` moves into a new `runtime/child_search.py`:
+  `ChildSearchRequest(intent: str, context: dict, plan_id, purpose="targeted")` and
+  `run_child_search(engine, *, task_id, request, parent_capability_run_id, backends, user_id)
+  -> uuid`, plus the existing join, interrupt and abandon functions over the same
+  `walk_pool.option_search_pool()`. The child resolves its plan through the capability registry
+  by the task's capability (today it validates `ScopingPlan` directly, `option_search.py:211`).
+  `run_option_search` becomes a thin caller that passes `design.as_intent()` and the option
+  context, so its signature and behaviour stay as they are; the existing OS option-search tests
+  are the compatibility check and must pass unchanged. The ToC item search passes the item text
+  and `context = {toc_item_kind, toc_item_id, item_hash, acquire_only: true}`. Abandon
+  semantics are unchanged: a parent that ends abandons its children.
 - **C3. Two walks.** A **draft walk** (draft or import) and a **check walk** (item searches →
   join → screen → classify → appraise → judge → discover → consolidate → summarise →
   follow-up check). The check walk starts automatically when the draft walk succeeds (R5). A
@@ -149,46 +158,92 @@ open to the owner at the contract 🛑.
   and relevant, then choose by promising and evidence (owner, S5), within 6 success and 3
   failure pathways. It may merge, reword or set aside user-made or user-edited elements, and
   then sets the changed-by-Policy-Atlas flag with the reason and the user's prior version (T1).
-- **C7. Web search.** A Responses API call with the hosted `web_search` tool, beside the
-  existing `chat.completions.parse` wrapper in `core/openai_client.py`, with the same tracing,
-  usage records and call budget. A new `[routes.<name>.web_search]` table in
-  `model_routes.toml` holds the address and model: OpenAI on `openai-direct`;
-  `https://bedrock-mantle.us-east-1.api.aws/openai/v1` with `openai.gpt-5.6-terra` on
-  `bedrock-local` (owner, 2026-10-23: "Send only the web search calls to Bedrock's US
-  endpoint"). Each cited URL is fetched once with the existing full-text fetcher
-  (`ingest_full_text.py`), and stored as a `source_snapshot` whose metadata names the backend
-  `web`, the URL and the retrieval time. Page text enters prompts only through the existing
-  untrusted-text rule (`sanitize_prompt_field` in `core/prompt_fields.py`) and inside a fenced
-  data block, as the scoping prompts' `_fence_safe` does. Every web call emits the existing `search.executed` governance event.
-- **C8. Uploads.** The file travels as base64 in a JSON body (no `python-multipart`), PNG, JPG
-  or PDF, at most 10 MB, checked by content type and magic bytes. The backend writes it to a
-  new private, encrypted S3 bucket (`RemovalPolicy.RETAIN`, block all public access, TLS only)
-  under `tasks/<task_id>/<upload_id>`; reads go through a task-scoped route with the task's
-  ordinary read check. PDF pages are rasterised with `pymupdf` (already a dependency), at most
-  10 pages. Each upload writes an audit event and a trace span (closes the
-  `docs/deferred.md` "Upload audit-event seam" for this surface). Deleting a task deletes its
-  objects. Local development uses a directory in place of the bucket, behind one small storage
+- **C7. Web search** (A3, A7). A Responses API call with the hosted `web_search` tool, beside
+  the existing `chat.completions.parse` wrapper in `core/openai_client.py`, with the same
+  tracing, usage records and call budget.
+  - **Route config.** A typed `WebSearchRoute(enabled: bool, base_url: str | None, model: str |
+    None, api_key_env: str | None)` parsed from `[routes.<name>.web_search]` in
+    `model_routes.toml` by `core/model_routes.py`. Every route must declare the table; a
+    missing table fails loud at start-up. `base_url` must be one of two allowed addresses,
+    `https://api.openai.com/v1` or `https://bedrock-mantle.us-east-1.api.aws/openai/v1`;
+    anything else fails loud. `openai-direct`: enabled, OpenAI's address, the standard model.
+    `bedrock-local`: enabled, the Mantle address, `openai.gpt-5.6-terra` (Mantle takes in-region
+    names, not `global.` ones), key `AWS_BEARER_TOKEN_BEDROCK` (owner, 2026-10-23: "Send only
+    the web search calls to Bedrock's US endpoint"). `bedrock-local-claude`: disabled. No
+    fallback: if the web call fails, the leg records the failure and "web not searched"; it
+    never retries on another address. Non-web calls keep the route's own `openai_base_url`,
+    which a test asserts.
+  - **Pages.** Each cited URL is fetched with the existing hardened `LiveDocumentFetcher`
+    (`evidence_search/sourcing/fetch_live.py`: private-address blocking, 5 redirect hops, 25 MB
+    and 30 s caps), through its `DocumentFetcher` protocol, **not** through the full-text ingest
+    pipeline, whose eligibility rules only take stored search results. A new writer
+    `evidence_search/sourcing/web_pages.py` turns HTML into text with `trafilatura` (already a
+    dependency), caps the text at 200,000 characters, and writes one `source_snapshot`
+    (`text_basis = 'full_text'`, metadata `backend = 'web'`, the URL, the retrieval time) plus a
+    `task_source_snapshot` with `origin = 'acquired'`. Duplicates are checked by URL inside the
+    task. Only http and https URLs are fetched.
+  - **Untrusted text.** Page text enters prompts only through `sanitize_prompt_field`
+    (`core/prompt_fields.py`) and inside a fenced data block, as the scoping prompts'
+    `_fence_safe` does. Quotes are checked against the stored page text. Every web call emits
+    the existing `search.executed` governance event.
+- **C8. Uploads** (A4, A8). The file travels as base64 in a JSON body (no
+  `python-multipart`): PNG, JPG or PDF, at most 10 MB, checked by declared type **and** magic
+  bytes. The backend writes it to a new private, encrypted S3 bucket (`RemovalPolicy.RETAIN`,
+  block all public access, TLS only) under `tasks/<task_id>/<upload_id>`. PDF pages are
+  rasterised with `pymupdf` (already a dependency), at most 10 pages. Each upload writes an
+  audit event and a trace span (closes the `docs/deferred.md` "Upload audit-event seam" for this
+  surface). Local development uses a directory in place of the bucket, behind one small storage
   protocol.
+  - **Lifecycle.** Tasks are archived, never deleted, by the product (`api/lifecycle.py`
+    `archive_task`), so uploads stay while their task row exists, archived or not. Objects are
+    removed only by the operator script that hard-deletes tasks (§ Risk tier), which deletes
+    the object first, records an event, and is safe to run twice. A retention rule for uploads
+    is a deferred seam in `docs/deferred.md`.
+  - **Access.** Upload bytes and the "Your original" view are **never** on the public read leg:
+    authenticated full access only, same rules as editing the task. Served by the backend
+    (no presigned URLs) with `Content-Disposition: inline`, `X-Content-Type-Options: nosniff` and
+    the stored content type.
 - **C9. Undo, Restore, Keep mine.** Consolidate writes one event whose payload carries the
-  before-state of every row it changed. **Undo** applies it back and writes its own event; it
-  is offered until the next edit to an affected row. **Restore** moves one set-aside pathway to
+  before-state of every row it changed. **Undo** applies it back row by row with the revision check
+  of C10, skips rows the user changed since, says which, and writes its own event. **Restore** moves one set-aside pathway to
   kept (above the limits is allowed when the user does it). **Keep mine** puts the user's prior
   version back on one flagged element and clears the flag.
-- **C10. Editing during the check.** As the spec § Editing during the check states. An edit
-  during a running check queues the item; the check walk's last step runs one follow-up pass
-  over queued items. Edits never block on the walk: the edit route takes a row lock, not a walk
-  lock.
+- **C10. Editing during the check** (A5). Every graph row carries an integer `revision`,
+  raised by one on every write.
+  - **Edits.** Each edit request carries the revision the client saw; the route locks the row
+    (`SELECT … FOR UPDATE`), refuses with 409 `toc_stale_revision` on a mismatch, writes, raises
+    the revision and records one event, in one transaction. Edits never wait on a walk.
+  - **Judge.** Judgements are insert-only and keyed by item hash, so they never overwrite. A
+    judgement for an old hash is kept and reads *out of date*. A judgement for a deleted item is
+    removed with it by the foreign key's cascade.
+  - **Discover.** Insert-only. A proposal that refers to a box deleted meanwhile fails its
+    foreign key and is dropped and counted.
+  - **Consolidate.** Reads the graph with every row's revision, then applies each change in one
+    transaction with `WHERE revision = <observed>`. A row the user changed meanwhile is skipped,
+    and the summary line says how many changes were skipped and why. User edits always win.
+  - **Undo** uses the same compare-and-apply against the revisions consolidate wrote.
+  - **Summary.** Stamped with the time it read the graph; the panel says "the theory changed
+    since this summary" when any row is newer.
+  - **Follow-up pass.** Derived, not queued: after the main pass, the check walk checks every
+    item whose current item hash has no judgements from this walk. Items cannot be queued twice.
+    After the walk ends, the same rule drives "Check again".
 - **C11. A plan change after the draft** offers two choices in the Task Agent thread, as task
   044 did for the baseline: **Redraft** (a new draft walk replaces the graph; the old graph is
   recorded in the History event; user elements are carried over as flagged items where they
   still fit) or **Keep the graph** (the plan changes; the graph does not).
 - **C12. Steering.** The ToC lattice is empty: no pause points, and the Task Agent does not ask
   for a steering mode. The check walk reports progress through the existing run events only.
-- **C13. Links.** `task_link` gains `source_option_id UUID NULL` with a composite foreign key to
-  `option(option_id, task_id)` on `(source_option_id, source_task_id)` (owner: "yes fine"). The
-  task-create link rules widen in one place (`api/routers/tasks.py` `_write_task_links`): a ToC
-  target accepts exactly one Options scoping source, which must name `source_option_id` of an
-  option that is not merged. Every other existing rule stands. No link after creation.
+- **C13. Links** (A2). `task_link` gains `source_option_id UUID NULL` with a composite foreign
+  key `fk_task_link_source_option` on `(source_option_id, source_task_id)` to
+  `option(option_id, task_id)`, MATCH SIMPLE (owner: "yes fine"). The create request keeps
+  `from_task_ids` as it is for ES and OS, and gains one optional field,
+  `from_option: {source_task_id: UUID, source_option_id: UUID} | null`. Rules: `from_option`
+  is accepted only with `capability = 'theory_of_change'` (else 422 `from_option_capability`);
+  a ToC create takes `from_option` or nothing, never `from_task_ids` (422
+  `toc_links_option_only`); the source must be an OS task that passes the existing four checks
+  in `_write_task_links` (readable, same project, finished walk); the option must belong to it
+  and not be merged (409 `link_option_invalid`). `TaskLinkOut` gains `source_option_id`. No
+  link after creation.
 - **C14. Shared documents.** The ToC `inherit` direction gives the ToC task one
   `task_source_snapshot` row per option document, pointing at the same `source_snapshot`
   (shared, not copied; owner, 2026-10-23), runs before the item searches so `acquire`'s
@@ -203,14 +258,48 @@ open to the owner at the contract 🛑.
   `POLICY_ATLAS_THEORY_OF_CHANGE=1` is on, so a merge to `dev` exposes nothing by API alone.
 - **C16. New dependencies** (owner, R12): `@xyflow/react` (canvas, MIT), `html-to-image`
   pinned to `1.11.11` (PNG and SVG export), `python-pptx` (PowerPoint). Nothing else.
+- **C17. Public read** (A8). The graph, grades, evidence, pathways and summary follow the
+  existing public read leg exactly as the Result and Sources tabs do. Uploads and the original
+  view are authenticated only (C8). Tests cover anonymous, same-organisation, owner and
+  cross-organisation access for each new route.
 
 ## ADR scope
 
-ADR 0042, "A third task kind: theory of change", records C1–C16 that are consequential: the
+ADR 0042, "A third task kind: theory of change", records the consequential decisions among C1–C17: the
 task kind and its walks (C3), the grade rule as a deliberate difference from Options scoping's
 no-banding rule (C4), web search opening the open-web seam, with the Mantle US endpoint for
 the Bedrock route (C7), the uploads bucket (C8), flagged changes to user work (T1, C6), the
 `source_option_id` link (C13), the server-side capability setting (C15), and the rollback.
+
+## Schema
+
+One Alembic revision (A1). Every new table follows the repo's cross-task guard: a
+`UNIQUE (<id>, task_id)` and composite foreign keys that include `task_id`, so no row can point
+into another task. Every graph table has `created_at`, `updated_at` and `revision INTEGER NOT
+NULL DEFAULT 1` (C10). "Flag columns" means `pa_changed BOOLEAN NOT NULL DEFAULT false`,
+`pa_change_reason TEXT NULL`, `prior_version JSONB NULL` (T1) and `user_edited BOOLEAN NOT NULL
+DEFAULT false`. `origin` is checked against `drafted · found_in_evidence · imported · user ·
+options_scoping`.
+
+| Table | Columns (besides the common ones) | Keys and checks |
+|---|---|---|
+| `toc_box` | `box_id`, `task_id`, `layer`, `text`, `dosage NULL`, `result_criteria JSONB`, `indicator NULL`, `origin`, flag columns, `position JSONB NULL` | PK `box_id`; `uq_toc_box_id_task`; `ck_toc_box_layer` (`input · output · outcome · impact · failure_outcome`); FK `task_id` → `task` |
+| `toc_link` | `link_id`, `task_id`, `source_box_id`, `target_box_id`, `if_text`, `for_text`, `then_text`, `because_text`, `unless_text`, `origin`, flag columns | PK; `uq_toc_link_id_task`; `fk_toc_link_source` and `fk_toc_link_target` on `(box_id, task_id)` ON DELETE CASCADE; `ck_toc_link_distinct`; unique `(task_id, source_box_id, target_box_id)` |
+| `toc_assumption` | `assumption_id`, `task_id`, `link_id`, `text`, `load_bearing`, `origin`, flag columns | PK; `uq_toc_assumption_id_task`; `fk_toc_assumption_link` on `(link_id, task_id)` ON DELETE CASCADE; partial unique index: at most one `load_bearing` per task |
+| `toc_band_item` | `item_id`, `task_id`, `band`, `text`, `sort_order`, `origin` | PK; `ck_toc_band` (`context · supporting`) |
+| `toc_pathway` | `pathway_id`, `task_id`, `kind`, `status`, `reason`, `label`, `origin`, flag columns | PK; `uq_toc_pathway_id_task`; `ck_toc_pathway_kind` (`success · failure`); `ck_toc_pathway_status` (`kept · set_aside`) |
+| `toc_pathway_link` | `pathway_id`, `task_id`, `position`, `link_id` | PK `(pathway_id, position)`; FKs on `(pathway_id, task_id)` and `(link_id, task_id)` ON DELETE CASCADE. A join table, not JSONB, so a deleted link cannot leave a dangling member. A pathway with a gap after a deletion reads *broken*; the canvas shows it and the graph validator reports it. |
+| `toc_item_evidence` | `evidence_id`, `task_id`, `item_kind`, `box_id NULL`, `link_id NULL`, `assumption_id NULL`, `task_source_snapshot_id`, `capability_run_id`, `stance`, `quote`, `condition NULL`, `case_study JSONB NULL`, `indicator NULL`, `item_hash` | PK; `ck_toc_evidence_one_item` (exactly one item column set, matching `item_kind`); composite FKs to each item ON DELETE CASCADE; FK `(task_source_snapshot_id, task_id)` → `uq_tss_id_task`; FK `(capability_run_id, task_id)` → `uq_capr_id_task`; `ck_toc_evidence_stance` (`supports · conditional · challenges · not_about`); unique `(item, task_source_snapshot_id, item_hash)` |
+| `toc_upload` | `upload_id`, `task_id`, `object_key`, `file_name`, `content_type`, `size_bytes`, `sha256`, `uploaded_by`, `uploaded_at` | PK; `ck_toc_upload_type` (`image/png · image/jpeg · application/pdf`); `ck_toc_upload_size` (at most 10 MB) |
+
+Changes to existing tables: `ck_task_capability` and `ck_capr_capability` gain
+`theory_of_change`; `ck_scope_purpose` gains `toc`; `ck_conversation_kind` gains `stress_test`;
+`task_link.source_option_id` with `fk_task_link_source_option` (C13).
+
+**Downgrade order:** refuse while any `task` or `capability_run` row carries
+`theory_of_change`; then drop `toc_item_evidence`, `toc_pathway_link`, `toc_pathway`,
+`toc_assumption`, `toc_link`, `toc_box`, `toc_band_item`, `toc_upload`; drop
+`fk_task_link_source_option` and its column; narrow the four constraints.
 
 ## Surface map
 
@@ -245,6 +334,24 @@ Applied with this contract, after approval, logged in `docs/specs/log.md`:
    for the ToC check walk; the seam stays deferred for every other capability.
 5. `docs/specs/product.md` in/out table: Theory of change moves from out of scope to in scope.
 
+## Adversarial findings (contract stage, 2026-10-23)
+
+Reviewer: Codex (`codex-rescue`, read-only brief), one pass over the contract and rubric against
+the spec and the code, before the owner's approval. Ten findings; all adopted.
+
+| # | Severity | Finding | Adopted remedy |
+|---|---|---|---|
+| A1 | Blocker | The schema named tables but no keys, cross-task guards, cascades or downgrade order. | § Schema. |
+| A2 | Blocker | The create request has only `from_task_ids`; there was no shape for naming an option. | C13: a separate `from_option` field, its rules and error codes. |
+| A3 | Blocker | The full-text ingest pipeline only takes stored search results, so it cannot fetch cited web pages. | C7: reuse the hardened `LiveDocumentFetcher` through its protocol, plus a new page writer. |
+| A4 | Blocker | Tasks are archived, never deleted, so "delete uploads with the task" had no trigger. | C8: uploads live as long as the task row; only the operator script removes them; retention deferred. |
+| A5 | Blocker | Nothing stopped a background step from overwriting a newer user edit. | C10: row revisions, compare-and-apply for every writer, a derived follow-up pass, race tests. |
+| A6 | Blocker | Whether to generalise option search or write a sibling was left to the plan. | C2: one capability-neutral child search; the OS tests as the compatibility check. |
+| A7 | Should fix | The web search route table had no typed shape, address allow-list or failure rule. | C7: `WebSearchRoute`, two allowed addresses, no fallback. |
+| A8 | Should fix | Public access to new routes, especially uploads, was unstated. | C17 and C8 § Access. |
+| A9 | Should fix | Google Slides was both a requirement and a possible non-claim. | Live check (8) and rubric 8 made conditional. |
+| A10 | Should fix | The spec runs E6 at step 1; the contract ran it at step 3. | E6 built and run at deliverable 1, and again at 3. |
+
 ## Scope / Out of scope
 
 - **In:** deliverables 1–9; ADR 0042; the spec changes; E1, E2 (with E2b on a fixed, cached
@@ -263,9 +370,10 @@ Every one of these is an approval gate, and this contract asks for all of them a
 - **Schema.** One Alembic revision: widen `ck_task_capability`, `ck_capr_capability`,
   `ck_scope_purpose` (`toc`), `ck_conversation_kind` (`stress_test`); add
   `task_link.source_option_id` and its foreign key; add `toc_box`, `toc_link`,
-  `toc_assumption`, `toc_band_item`, `toc_pathway`, `toc_item_evidence`, `toc_upload`, with the
+  `toc_assumption`, `toc_band_item`, `toc_pathway`, `toc_pathway_link`, `toc_item_evidence`,
+  `toc_upload`, with the
   changed-by-Policy-Atlas columns (flag, reason, prior version as JSONB) on boxes, links,
-  assumptions and pathways. Reversible (§ Risk tier).
+  assumptions and pathways, and `toc_pathway_link`. Exactly § Schema. Reversible (§ Risk tier).
 - **Runtime egress.** New: web search (OpenAI, or Mantle in us-east-1 on the Bedrock route);
   page fetches of cited URLs; vision calls carrying user-uploaded files. Existing: OpenAlex,
   Overton, model calls.
@@ -308,7 +416,7 @@ loop.
 - **Honest absence.** *No evidence found* says what was searched. "Web not searched" appears
   whenever the web leg did not run.
 - **Leave seams as seams** in `docs/deferred.md`: full-text depth, ES links, the cross-task
-  duplicate gap, Miro API, the later evals.
+  duplicate gap, Miro API, the later evals, an upload retention rule.
 
 ## Stop conditions
 
@@ -334,7 +442,7 @@ calls challenge evidence "supports" more than one time in five (the owner decide
      pathway a connected route; assumption type computed from layers. Frontend (vitest): the
      canvas renders boxes, links, markers, bands and key from a fixture; the list view; the
      build flag hides the entry.
-  2. Item text built deterministically from fixtures; item hash stable. The grade function's
+  2. OS option-search tests pass unchanged on the moved child-search code (C2). Item text built deterministically from fixtures; item hash stable. The grade function's
      table test covers every row of the rule, the web cap and both flags. Item searches open
      child walks with the right intent record and join; an unverified quote drops the
      judgement and counts it; *K* and the 80-item cap hold. Detail panel renders the three
@@ -342,22 +450,29 @@ calls challenge evidence "supports" more than one time in five (the owner decide
   3. Consolidate keeps at most 6 success and 3 failure; a change to a user element sets the flag
      with reason and prior version; Undo restores the before-state exactly; Restore and Keep
      mine behave; discover's links are judged without a new search.
-  4. An edit during a check queues the item and the follow-up pass checks it; a changed item
+  4. Race tests: an edit racing the judge, discover, consolidate and Undo each leaves the
+     user's edit in place and the skipped change reported; a stale edit gets 409
+     `toc_stale_revision`; an edit during a check is picked up by the derived follow-up pass; a changed item
      reads *out of date* and its old judgements stop counting; a deleted item's pending results
      are dropped; every edit writes one event; the plan-change choice (C11) for both branches.
-  5. The route table parses on all routes; the Bedrock route sends web calls to the Mantle
+  5. `WebSearchRoute` parsing: a missing table, an address outside the two allowed, and a
+     disabled route each behave as C7 states; non-web calls keep the route's own address; the
+     route table parses on all routes; the Bedrock route sends web calls to the Mantle
      address and nothing else there; pages are stored once with backend `web`; page text reaches every prompt that reads it only through `sanitize_prompt_field` and a
      fence; web judgements never raise a grade
      above *weak*; "web not searched" appears when the leg is off.
   6. `stress_test` conversations: four questions, each tied to an element; the chat route
      refuses edits to the graph from either chat.
   7. Upload: type and size checks (including a renamed non-image), the 10-page PDF cap, the
-     storage protocol on a local directory, the task-scoped read check, deletion with the task,
-     the audit event. Import of a text fixture keeps the user's words and labels additions.
+     storage protocol on a local directory, the audit event; access for anonymous, same-
+     organisation, owner and cross-organisation callers on every new route (C17), with the
+     upload routes refusing the public leg; the response headers of C8. Import of a text fixture keeps the user's words and labels additions.
   8. Exports: CSV columns, JSON round-trip through the graph models, draw.io XML that parses
      and has one vertex per box and one edge per link, a `.pptx` that python-pptx re-opens with
      one connector per link attached to its two boxes.
-  9. Create with an OS source requires `source_option_id` of a non-merged option in that task;
+  9. `from_option` on a non-ToC create is 422; a ToC create with `from_task_ids` is 422; an
+     option from another task or a merged option is 409; ES and OS create requests behave as
+     before;
      the foreign key holds; the slots are seeded and labelled; option documents get membership
      rows pointing at the same snapshots, before any item search; the per-task duplicate check
      stops a re-store; the newer-run flag appears when the source has a later finished walk; the
@@ -377,7 +492,9 @@ calls challenge evidence "supports" more than one time in five (the owner decide
   the check, then its follow-up result; (5) web leg on `openai-direct`, and one web call on
   `bedrock-local` against Mantle; (6) one stress-test round; (7) one image import of a
   published GOV.UK theory figure; (8) every export opened in its target tool (PowerPoint,
-  Google Slides, diagrams.net, Miro import); (9) "Design a theory of change" from an existing
+  diagrams.net, Miro import), and the PowerPoint file opened in Google Slides: if the arrows stay
+  attached, Slides is a supported claim; if not, the owner rules and Slides is listed as a
+  non-claim in `docs/deferred.md`; (9) "Design a theory of change" from an existing
   OS task's option page. No full live e2e of ES or OS.
 
 ## Verification evidence expected
