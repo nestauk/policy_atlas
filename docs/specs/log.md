@@ -1,5 +1,20 @@
 # Spec update log
 
+## 2026-10-23
+* **Creation**: [Theory of change capability](capabilities/theory-of-change/capability.md) and
+  [components](capabilities/theory-of-change/components.md), a draft for owner review (task 054).
+  Sources: the task 054 approach note and the `stakeholder_atlas` ToC prototype. Every decision is
+  🟡 or ❓ until the owner rules on the open questions.
+* **Update**: owner rulings R1–R16 of the same day applied (Magenta Book layout, four layers,
+  pathways drafted then checked then consolidated, background check while editing, web search,
+  image import, exports, evals). Research behind them:
+  `docs/tasks/054-toc-integration/research-notes.md`. Open: Q4, Q8, Q14, Q17–Q20.
+* **Update**: second round of owner rulings S1–S11 (Magenta Book layers Inputs, Outputs,
+  Outcomes, Impact; strong/medium/weak grades with flags; box searches with case studies; OpenAI web
+  search; uploads kept in S3; one "Design a theory of change" button on the option page).
+* **Update**: third round: `source_option_id` column; option documents shared, not duplicated;
+  on the Bedrock route, web search calls go to Bedrock's US endpoint. No owner questions remain open.
+
 ## 2026-10-12
 Task 046 (the longlist refinement), contract § Spec changes, applied at the step-7 review on the
 owner's word ("Make the spec changes"; items 1–17 of `spec-changes-proposed.md` and the amendment 3

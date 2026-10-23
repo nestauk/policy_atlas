@@ -55,6 +55,7 @@ implementation lands — see the flow-back in [README](README).
 - Capability specs (instances of the framework):
   - [capabilities/evidence-search/](capabilities/evidence-search/) — the first v3.0 capability.
   - [capabilities/options-scoping/](capabilities/options-scoping/) — the second: options scoping, reusing Evidence search machinery in its own pipeline ([capability](capabilities/options-scoping/capability.md) · [components](capabilities/options-scoping/components.md) · [trust rules](capabilities/options-scoping/trust.md)).
+  - [capabilities/theory-of-change/](capabilities/theory-of-change/) — the third, **draft for owner review** (task 054): a causal chain on a canvas, each link checked against evidence with the Evidence search spine, plus a stress test ([capability](capabilities/theory-of-change/capability.md) · [components](capabilities/theory-of-change/components.md)).
 
 ## What to read for a task
 
@@ -68,6 +69,7 @@ implementation lands — see the flow-back in [README](README).
 | The plan object, plan→config compile, two-level/progressive planning, source/evidence policy, depth/thoroughness | [system/plan-as-object.md](system/plan-as-object.md) → arch §5 |
 | Anything in the Evidence search run (acquire → … → synthesise) | [capabilities/evidence-search/](capabilities/evidence-search/) → build spec |
 | Anything in an Options Scoping run (plan → baseline → longlist → shortlist → assess → export; the full evidence search as a child Evidence search task) | [capabilities/options-scoping/](capabilities/options-scoping/) → concept (source #10) |
+| Anything in a Theory of change task (plan → draft → evidence check per link → summarise; stress test; canvas) | [capabilities/theory-of-change/](capabilities/theory-of-change/) → [task 054 approach note](../tasks/054-toc-integration/theory_of_change_approach.md) |
 | Writing or changing ANY LLM prompt/envelope surface; the refine-replay loop; model swaps | [system/prompting.md](system/prompting.md) — no frozen-source arch section (018 origin) |
 | Export/share, version-pinned deep-links, the superseded-version banner | **No contract drafted yet** — read arch §10 directly (a down-weighted v3.0 seam). |
 | Collaboration/comments/event log, persistence substrate, observability/eval, security/egress | **No contract drafted yet** — read arch §7, §9, §8, §11 directly; draft the contract when the first task lands. |
