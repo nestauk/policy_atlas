@@ -366,9 +366,14 @@ export interface paths {
          *     the thing it was created for. So any refusal below rolls the task row back
          *     with it.
          *
+         *     A theory of change is refused unless the server setting is on (task 054,
+         *     C15), before anything is written.
+         *
          *     Raises:
          *         HTTPException: 404 when a named source task is not readable by the
          *             caller.
+         *         ApiUnprocessable: 422 ``capability_not_enabled`` for a theory of
+         *             change while ``POLICY_ATLAS_THEORY_OF_CHANGE`` is off.
          *         ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,
          *             ``link_project_mismatch`` or ``link_source_unfinished``.
          */
@@ -4934,7 +4939,7 @@ export interface components {
              * @default evidence_search
              * @enum {string}
              */
-            capability: "evidence_search" | "options_scoping";
+            capability: "evidence_search" | "options_scoping" | "theory_of_change";
             /** From Task Ids */
             from_task_ids?: string[];
             /** Name */
@@ -5053,7 +5058,7 @@ export interface components {
              * @default evidence_search
              * @enum {string}
              */
-            capability: "evidence_search" | "options_scoping";
+            capability: "evidence_search" | "options_scoping" | "theory_of_change";
             /**
              * Created At
              * Format: date-time

@@ -255,12 +255,16 @@ def _list_only(conn: Connection, task_ids: list[uuid.UUID]) -> None:
         )
 
 
-def _apply(conn: Connection, task_ids: list[uuid.UUID]) -> None:
+def _apply(
+    conn: Connection, task_ids: list[uuid.UUID], *, kind: str = "options_scoping"
+) -> None:
     """Hard-delete the given scoping tasks and their rows, in FK order.
 
     Args:
         conn: Open database connection, inside the caller's transaction.
         task_ids: The options-scoping task ids to remove.
+        kind: The task kind named in the closing line (task 054's
+            ``ops_remove_toc_tasks.py`` reuses this order).
     """
     # Break the two nullable cycle pointers between plan and evidence_scope first.
     conn.execute(
@@ -343,7 +347,7 @@ def _apply(conn: Connection, task_ids: list[uuid.UUID]) -> None:
     )
     log.info("ops_remove_scoping_tasks.deleted", table="task", count=task_result.rowcount)
     joined = ", ".join(str(tid) for tid in task_ids)
-    print(f"deleted {task_result.rowcount} options_scoping task(s): {joined}")
+    print(f"deleted {task_result.rowcount} {kind} task(s): {joined}")
 
 
 def _print_refusal(refusals: list[tuple[uuid.UUID, uuid.UUID]]) -> None:

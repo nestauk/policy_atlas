@@ -136,7 +136,8 @@ def test_the_schema_module_carries_only_the_new_names() -> None:
         "ck_tat_suggestions_array",
         "ck_conversation_task_agent_never_archived",
         "uq_conversation_one_active_task_agent",
-        "kind IN ('task_agent', 'chat')",
+        # Task 054 widened the check with 'stress_test'.
+        "kind IN ('task_agent', 'chat', 'stress_test')",
     ):
         assert expected in text, f"`core/schema.py` is missing {expected!r}"
 

@@ -48,6 +48,14 @@ DEFAULT_ROUTE_MODELS = {
     "longlist_judgment": "gpt-5.6-sol",
     "longlist_assignment": "gpt-5.6-luna",
     "extract_interventions": "gpt-5.6-luna",
+    # Theory of change (task 054).
+    "task_agent_toc": "gpt-5.6-sol",
+    "toc_draft": "gpt-5.6-sol",
+    "toc_merge": "gpt-5.6-sol",
+    "toc_choose": "gpt-5.6-sol",
+    "toc_discover": "gpt-5.6-terra",
+    "toc_judge": "gpt-5.6-terra",
+    "toc_summarise": "gpt-5.6-terra",
 }
 
 

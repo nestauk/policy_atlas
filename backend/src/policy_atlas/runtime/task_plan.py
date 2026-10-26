@@ -126,6 +126,16 @@ OPTIONS_SCOPING_STEPS: tuple[str, ...] = (
     "constrain",
     "theme",
 )
+#: The steps only a theory-of-change chain composes (task 054, S3).
+# Not yet in _validate_registry: their harness nodes land in steps 1.3 and 1.4.
+TOC_STEPS: tuple[str, ...] = (
+    "toc_draft",
+    "toc_discover",
+    "toc_merge",
+    "toc_judge",
+    "toc_choose",
+    "toc_summarise",
+)
 DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(("select", "extract", "group"))
 DEEP_GROUPING_FACETS: tuple[GroupingFacet, ...] = (
     "intervention",

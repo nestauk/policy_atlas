@@ -34,5 +34,13 @@
   "backend/src/policy_atlas/runtime/longlist_verbs_prompt.py": "df6bbff96ecf87b185da7f1e782fbe1881f22c253850ff8eda84da4e1236391c",
   "backend/src/policy_atlas/runtime/option_design_prompt.py": "5e2a957edc580f84670574ddeccd9bbd0528bb26f6ea6607f0249cbece34973c",
   "backend/src/policy_atlas/runtime/task_agent_prompt.py": "4071ece4c1ac472efa32d0a12bda99af6ce397fb4fc68b22b7d8c91f9a3accc3",
-  "backend/src/policy_atlas/runtime/task_agent_scoping_prompt.py": "c08fdab08bfb7d566c773715bb7aab5722abdff4f4ccd5678d61e6dc77809dc8"
+  "backend/src/policy_atlas/runtime/task_agent_scoping_prompt.py": "c08fdab08bfb7d566c773715bb7aab5722abdff4f4ccd5678d61e6dc77809dc8",
+  "backend/src/policy_atlas/runtime/task_agent_toc_prompt.py": "75a16faba47f89752bde5316c3ecd31e2850f896abb56d756d43a7a0513f9680",
+  "backend/src/policy_atlas/theory_of_change/choose_prompt.py": "538cc0bf16dea4d3a0bb4fb0d3d142e81a9539e252c44a7b1cc5d7410bee8281",
+  "backend/src/policy_atlas/theory_of_change/discover_prompt.py": "0a85786911b082f8f60a7937d1311aefbcdb8f4a68ff7fc0f559deef660839c0",
+  "backend/src/policy_atlas/theory_of_change/draft_prompt.py": "32d69fc72bb16c73aa6bf72745151d3e42583bdc90fbcbf5e9cda22cf3904a72",
+  "backend/src/policy_atlas/theory_of_change/evidence/item_search_prompt.py": "be64b53f66cce0f73bf3eec695828767b37995cc5983003a69c682552155c738",
+  "backend/src/policy_atlas/theory_of_change/evidence/judge_prompt.py": "62ced29ba472c5d801d84a4c43ed1017c7a26e8c9e5328a254e799b26740872a",
+  "backend/src/policy_atlas/theory_of_change/merge_prompt.py": "f2d096af6c11a11431bd9269cdd45c196167fe0a9c11fb88d41f100d44ef343f",
+  "backend/src/policy_atlas/theory_of_change/summary_prompt.py": "41b7ac3669b20df53ae228c5d9c239eeb9a1715d0c34f7ab03461156c1f1ef39"
 }

@@ -26,10 +26,11 @@ A test (``tests/runtime/test_capability_registry.py``) asserts by AST scan that
 
 from __future__ import annotations
 
+import importlib
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -43,6 +44,7 @@ from policy_atlas.runtime.scoping_plan import (
 )
 from policy_atlas.runtime.steering import LATTICE_POINTS, PausePoint
 from policy_atlas.runtime.task_plan import ComposedChain, TaskPlan, compose
+from policy_atlas.runtime.toc_plan import TocPlan, compose_toc
 
 #: The Evidence search capability key. Named rather than spelled out at each
 #: call site so the constant-capability readers (the ones whose *input type* is
@@ -52,13 +54,16 @@ EVIDENCE_SEARCH = "evidence_search"
 #: The options-scoping capability key.
 OPTIONS_SCOPING = "options_scoping"
 
-#: Either capability's plan model. The runner and the continuation reducer are
+#: The theory-of-change capability key (task 054).
+THEORY_OF_CHANGE = "theory_of_change"
+
+#: Any capability's plan model. The runner and the continuation reducer are
 #: capability-agnostic *chassis* — they carry a plan without knowing which kind
 #: it is — while almost everything they hand it to is Evidence search code
 #: typed on ``TaskPlan``. Those hand-offs go through :func:`expect_task_plan`,
 #: so a scoping plan reaching an Evidence search path is a loud ``TypeError``
 #: and not a silent wrong answer.
-AnyPlan = TaskPlan | ScopingPlan
+AnyPlan = TaskPlan | ScopingPlan | TocPlan
 
 
 class UnknownCapability(LookupError):
@@ -175,7 +180,14 @@ def _options_scoping_task_agent() -> TaskAgentProfile:
     return OPTIONS_SCOPING_TASK_AGENT
 
 
-#: The registry. Both capabilities as of phase 3.2 (X3).
+def _toc_task_agent() -> TaskAgentProfile:
+    # By name: the profile module lands in task 054 step 1.3, and nothing may
+    # import it before a turn asks for it.
+    module = importlib.import_module("policy_atlas.runtime.task_agent_toc")
+    return cast(TaskAgentProfile, module.TOC_TASK_AGENT)
+
+
+#: The registry: Evidence search, options scoping (task 044), theory of change (task 054).
 CAPABILITIES: dict[str, CapabilitySpec] = {
     EVIDENCE_SEARCH: CapabilitySpec(
         plan_model=TaskPlan,
@@ -192,6 +204,13 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         # end-walk disposition are phase 5.2.
         lattice={BASELINE_CONFIRM: PausePoint("after_component", "synthesise")},
         load_task_agent=_options_scoping_task_agent,
+    ),
+    THEORY_OF_CHANGE: CapabilitySpec(
+        plan_model=TocPlan,
+        compose=compose_toc,
+        # Empty: a theory-of-change walk never pauses (C12).
+        lattice={},
+        load_task_agent=_toc_task_agent,
     ),
 }
 
@@ -435,4 +454,25 @@ def expect_scoping_plan(plan: BaseModel) -> ScopingPlan:
     """
     if not isinstance(plan, ScopingPlan):
         raise TypeError(f"this path handles scoping plans only, got {type(plan).__name__}")
+    return plan
+
+
+def expect_toc_plan(plan: BaseModel) -> TocPlan:
+    """Narrow a registry-validated plan to the theory-of-change model.
+
+    The mirror of :func:`expect_task_plan` for the theory-of-change paths.
+
+    Args:
+        plan: A plan returned by :func:`validate_plan`.
+
+    Returns:
+        The same object, typed.
+
+    Raises:
+        TypeError: If the plan is not a theory-of-change plan.
+    """
+    if not isinstance(plan, TocPlan):
+        raise TypeError(
+            f"this path handles theory-of-change plans only, got {type(plan).__name__}"
+        )
     return plan

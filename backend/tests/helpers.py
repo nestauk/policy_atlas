@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.usage import UsageResult
@@ -327,6 +327,16 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         annotation.c.block_id.in_(block_ids_subq)
     )
 
+    # Task 054 theory-of-change rows first: judgements name documents and walks.
+    for toc_table in (
+        "toc_item_evidence",
+        "toc_pathway_link",
+        "toc_pathway",
+        "toc_link",
+        "toc_box",
+        "toc_band_item",
+    ):
+        conn.execute(text(f"DELETE FROM {toc_table} WHERE task_id = :tid"), {"tid": task_id})
     # Task 045 option records first: membership and relation FK onto option;
     # option FKs onto runs and is named by task_link.option_id (cleared here,
     # the link rows themselves go below); longlist_result FKs onto scope/runs;
@@ -1028,3 +1038,117 @@ class ScriptedGenerationBackend:
             raise AssertionError("suggest was not expected to be called")
         self.suggest_payloads.append(payload)
         return self._pop_wire(self._suggestions, SearchSuggestWire(papers=[])), None
+
+
+def seed_toc_task(conn: Connection) -> dict[str, uuid.UUID]:
+    """Insert a theory-of-change task with a small graph, a walk and one judgement.
+
+    Two boxes joined by one link, a third box named as a case study, one kept
+    pathway over the link, one band item, and one judgement of the link
+    against one document by a ``toc`` check walk (task 054).
+
+    Returns:
+        The ids: ``task_id``, ``source``, ``target``, ``case_box``, ``link``,
+        ``pathway``, ``walk``, ``tss``, ``evidence``.
+    """
+    from policy_atlas.core.schema import (
+        task,
+        toc_band_item,
+        toc_box,
+        toc_item_evidence,
+        toc_link,
+        toc_pathway,
+        toc_pathway_link,
+    )
+
+    stamp = {"created_at": now(), "updated_at": now()}
+    ids = {name: uuid.uuid4() for name in ("task_id", "source", "target", "case_box", "link")}
+    ids["pathway"], ids["evidence"] = uuid.uuid4(), uuid.uuid4()
+    task_id = ids["task_id"]
+    conn.execute(
+        task.insert().values(
+            task_id=task_id,
+            name="Test theory",
+            status="active",
+            capability="theory_of_change",
+            **stamp,
+        )
+    )
+    for key, layer in (("source", "input"), ("target", "output"), ("case_box", "outcome")):
+        conn.execute(
+            toc_box.insert().values(
+                box_id=ids[key],
+                task_id=task_id,
+                layer=layer,
+                text=f"{layer} box",
+                result_criteria=[],
+                origin="drafted",
+                **stamp,
+            )
+        )
+    conn.execute(
+        toc_link.insert().values(
+            link_id=ids["link"],
+            task_id=task_id,
+            source_box_id=ids["source"],
+            target_box_id=ids["target"],
+            if_text="if",
+            for_text="for",
+            then_text="then",
+            because_text="because",
+            origin="drafted",
+            **stamp,
+        )
+    )
+    conn.execute(
+        toc_pathway.insert().values(
+            pathway_id=ids["pathway"],
+            task_id=task_id,
+            kind="success",
+            status="kept",
+            label="Main route",
+            origin="drafted",
+            **stamp,
+        )
+    )
+    conn.execute(
+        toc_pathway_link.insert().values(
+            pathway_id=ids["pathway"], task_id=task_id, position=0, link_id=ids["link"], **stamp
+        )
+    )
+    conn.execute(
+        toc_band_item.insert().values(
+            item_id=uuid.uuid4(),
+            task_id=task_id,
+            band="context",
+            text="Context line",
+            sort_order=0,
+            origin="drafted",
+            **stamp,
+        )
+    )
+    ids["walk"] = seed_walk(
+        conn,
+        task_id,
+        capability="theory_of_change",
+        purpose="toc",
+        context={"toc_walk": "check"},
+        plan_payload={},
+    ).walk_id
+    _snap, ids["tss"] = seed_source(conn, task_id)
+    conn.execute(
+        toc_item_evidence.insert().values(
+            evidence_id=ids["evidence"],
+            task_id=task_id,
+            link_id=ids["link"],
+            case_box_id=ids["case_box"],
+            task_source_snapshot_id=ids["tss"],
+            capability_run_id=ids["walk"],
+            stance_elsewhere="supports",
+            quote_elsewhere="It worked.",
+            stance_here="not_about",
+            item_hash="h1",
+            **stamp,
+        )
+    )
+    return ids

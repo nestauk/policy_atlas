@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import ast
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
@@ -23,10 +24,12 @@ from policy_atlas.core.schema import task
 from policy_atlas.runtime import capability_registry as registry
 from policy_atlas.runtime.steering import LATTICE_POINTS
 from policy_atlas.runtime.task_plan import TaskPlan, compose
+from policy_atlas.runtime.toc_plan import TocPlan, compose_toc
 from tests.helpers import now
 
 #: The only files allowed to name ``TaskPlan.model_validate``,
-#: ``ScopingPlan.model_validate`` or bare ``compose(``. Relative to
+#: ``ScopingPlan.model_validate``, ``TocPlan.model_validate`` or bare
+#: ``compose(``. Relative to
 #: ``backend/src/policy_atlas``.
 _ALLOWED_DIRECT_CALLERS = frozenset(
     {
@@ -97,12 +100,16 @@ def test_each_capability_resolves_its_own_task_agent_profile() -> None:
     assert es.after_approve is None and scoping.after_approve is not None
 
 
-def test_the_registry_holds_the_two_capabilities_this_build_knows() -> None:
+def test_the_registry_holds_the_three_capabilities_this_build_knows() -> None:
     # Phase 2 built the chassis with Evidence search alone; phase 3.2 added
-    # ``options_scoping`` with ``ScopingPlan``. A third capability is a third
-    # entry, and until it exists a task carrying its key must fail closed
-    # rather than quietly composing an Evidence search chain.
-    assert set(registry.CAPABILITIES) == {"evidence_search", "options_scoping"}
+    # ``options_scoping`` with ``ScopingPlan``; task 054 adds
+    # ``theory_of_change`` with ``TocPlan``. Any other key fails closed rather
+    # than quietly composing an Evidence search chain.
+    assert set(registry.CAPABILITIES) == {
+        "evidence_search",
+        "options_scoping",
+        "theory_of_change",
+    }
 
 
 def test_validate_plan_returns_the_capability_s_model() -> None:
@@ -123,7 +130,7 @@ def test_compose_plan_matches_the_direct_composer() -> None:
     [
         lambda: registry.spec_for("options_appraisal"),
         lambda: registry.validate_plan("options_appraisal", _plan_payload()),
-        lambda: registry.lattice_for("theory_of_change"),
+        lambda: registry.lattice_for("options_appraisal"),
     ],
 )
 def test_an_unknown_capability_fails_closed(call) -> None:  # type: ignore[no-untyped-def]
@@ -179,9 +186,10 @@ def test_capability_of_task_raises_for_a_task_that_does_not_exist(conn: Connecti
 def _direct_calls(tree: ast.AST) -> set[str]:
     """Return the banned call spellings found in one module's AST.
 
-    ``TaskPlan.model_validate(...)``, ``ScopingPlan.model_validate(...)`` and a
-    bare ``compose(...)`` all mean "this reader decided the capability itself".
-    The seam guards **both** plan models, not only the Evidence search one (F8):
+    ``TaskPlan.model_validate(...)``, ``ScopingPlan.model_validate(...)``,
+    ``TocPlan.model_validate(...)`` and a bare ``compose(...)`` all mean "this
+    reader decided the capability itself". The seam guards **every** plan
+    model, not only the Evidence search one (F8):
     a scoping payload validated directly is the same mistake in the other
     direction.
     """
@@ -194,7 +202,7 @@ def _direct_calls(tree: ast.AST) -> set[str]:
             isinstance(func, ast.Attribute)
             and func.attr == "model_validate"
             and isinstance(func.value, ast.Name)
-            and func.value.id in ("TaskPlan", "ScopingPlan")
+            and func.value.id in ("TaskPlan", "ScopingPlan", "TocPlan")
         ):
             found.add(f"{func.value.id}.model_validate")
         if isinstance(func, ast.Name) and func.id == "compose":
@@ -227,5 +235,81 @@ def test_the_seam_test_would_notice_a_direct_call() -> None:
     assert _direct_calls(ast.parse("ScopingPlan.model_validate(payload)")) == {
         "ScopingPlan.model_validate"
     }
+    assert _direct_calls(ast.parse("TocPlan.model_validate(payload)")) == {
+        "TocPlan.model_validate"
+    }
     assert _direct_calls(ast.parse("chain = compose(plan)")) == {"compose"}
     assert _direct_calls(ast.parse("chain = compose_plan(capability, plan)")) == set()
+
+
+# --- Theory of change (task 054, S1) ----------------------------------------
+
+
+def _toc_payload() -> dict[str, object]:
+    """A minimal valid theory-of-change plan payload."""
+    return {
+        "title": "Healthy weight",
+        "question": "How would a junk-food advertising ban reduce childhood obesity?",
+        "entry_point": "intervention_first",
+        "intended_change": "Fewer children living with obesity",
+        "target_population": "Children aged 4 to 11",
+        "intervention": "A ban on junk-food advertising on public transport",
+    }
+
+
+def _scoping_payload() -> dict[str, object]:
+    """A minimal valid options-scoping plan payload."""
+    from policy_atlas.runtime.scoping_plan import build_scoping_plan
+    from policy_atlas.runtime.task_agent_scoping_prompt import ScopingPlanDraftWire
+
+    return build_scoping_plan(
+        ScopingPlanDraftWire.model_validate(
+            {
+                "title": "Youth employment options",
+                "question": "What could reduce the number of young people not in work?",
+                "intended_change": {
+                    "text": "Reduce the number of young people not in work",
+                    "origin": "from_your_question",
+                },
+                "target_unit": {"text": "16 to 24 year olds", "origin": "your_call"},
+                "outcomes": [{"text": "the NEET rate", "origin": "assumed"}],
+                "depth": "standard",
+            }
+        )
+    ).model_dump(mode="json")
+
+
+def test_the_theory_of_change_entry_resolves_its_model_composer_and_empty_lattice() -> None:
+    spec = registry.spec_for(registry.THEORY_OF_CHANGE)
+    assert spec.plan_model is TocPlan
+    assert spec.compose is compose_toc
+    assert registry.lattice_for(registry.THEORY_OF_CHANGE) == {}
+    plan = registry.expect_toc_plan(
+        registry.validate_plan(registry.THEORY_OF_CHANGE, _toc_payload())
+    )
+    assert (plan.steering_mode, plan.steer_point_defaults, plan.ready) == ("unattended", [], True)
+    chain = registry.compose_plan(
+        registry.THEORY_OF_CHANGE, plan, purpose="toc", context={"toc_walk": "draft"}
+    )
+    assert chain.components == ["toc_draft"]
+
+
+@pytest.mark.parametrize(
+    ("capability", "payload"),
+    [
+        ("theory_of_change", _plan_payload),
+        ("theory_of_change", _scoping_payload),
+        ("evidence_search", _toc_payload),
+        ("options_scoping", _toc_payload),
+    ],
+)
+def test_a_plan_of_one_kind_is_rejected_by_another_kind_s_model(
+    capability: str, payload: Callable[[], dict[str, object]]
+) -> None:
+    with pytest.raises(ValidationError):
+        registry.validate_plan(capability, payload())
+
+
+def test_expect_toc_plan_refuses_a_plan_that_is_not_a_theory_of_change() -> None:
+    with pytest.raises(TypeError):
+        registry.expect_toc_plan(_NotATaskPlan())

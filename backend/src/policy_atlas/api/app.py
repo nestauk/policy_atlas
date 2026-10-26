@@ -58,6 +58,9 @@ _CONFLICT_CODES = {
 
 _CAPACITY_CODES = {"chat_capacity"}
 
+#: Task 054 (C15): a capability this deployment has switched off.
+_UNPROCESSABLE_CODES = {"capability_not_enabled"}
+
 
 class ApiConflict(Exception):
     """A contract-defined conflict response raised by API service adapters.
@@ -79,6 +82,22 @@ class ApiConflict(Exception):
         """
         if code not in _CONFLICT_CODES:
             raise ValueError(f"unsupported API conflict code: {code}")
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+class ApiUnprocessable(Exception):
+    """A contract-defined 422 with its own error code, raised by API service adapters.
+
+    Args:
+        code: One of the contract-defined 422 codes.
+        message: Human-readable explanation for the caller.
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        if code not in _UNPROCESSABLE_CODES:
+            raise ValueError(f"unsupported API unprocessable code: {code}")
         super().__init__(message)
         self.code = code
         self.message = message
@@ -390,6 +409,10 @@ def _install_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiConflict)
     async def api_conflict_handler(_: Request, exc: ApiConflict) -> JSONResponse:
         return _error_response(409, exc.code, exc.message)
+
+    @app.exception_handler(ApiUnprocessable)
+    async def api_unprocessable_handler(_: Request, exc: ApiUnprocessable) -> JSONResponse:
+        return _error_response(422, exc.code, exc.message)
 
     @app.exception_handler(ApiCapacity)
     async def api_capacity_handler(_: Request, exc: ApiCapacity) -> JSONResponse:

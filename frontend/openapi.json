@@ -7713,7 +7713,8 @@
             "default": "evidence_search",
             "enum": [
               "evidence_search",
-              "options_scoping"
+              "options_scoping",
+              "theory_of_change"
             ],
             "title": "Capability",
             "type": "string"
@@ -7840,7 +7841,8 @@
             "default": "evidence_search",
             "enum": [
               "evidence_search",
-              "options_scoping"
+              "options_scoping",
+              "theory_of_change"
             ],
             "title": "Capability",
             "type": "string"
@@ -9422,7 +9424,7 @@
         ]
       },
       "post": {
-        "description": "Create one active task owned by the authenticated subject.\n\nStamps the creator's organisation onto the row (contract \u00a7 7) \u2014 NULL when\nthe creator is unenrolled, which leaves the row reachable by its owner\nalone. `visibility` takes the column default `private` (owner amendment\n2026-08-26 \u2014 new work is unshared until its owner deliberately shares it).\n\nTask 044 (C10): projects and Links arrive in the **same** request and are\nwritten in the **same** transaction. The old create-then-patch flow could\nleave a real, unassigned task behind, and \"Starts from\" cannot be built on\na flow with that failure mode \u2014 a scoping task linked to nothing has lost\nthe thing it was created for. So any refusal below rolls the task row back\nwith it.\n\nRaises:\n    HTTPException: 404 when a named source task is not readable by the\n        caller.\n    ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,\n        ``link_project_mismatch`` or ``link_source_unfinished``.",
+        "description": "Create one active task owned by the authenticated subject.\n\nStamps the creator's organisation onto the row (contract \u00a7 7) \u2014 NULL when\nthe creator is unenrolled, which leaves the row reachable by its owner\nalone. `visibility` takes the column default `private` (owner amendment\n2026-08-26 \u2014 new work is unshared until its owner deliberately shares it).\n\nTask 044 (C10): projects and Links arrive in the **same** request and are\nwritten in the **same** transaction. The old create-then-patch flow could\nleave a real, unassigned task behind, and \"Starts from\" cannot be built on\na flow with that failure mode \u2014 a scoping task linked to nothing has lost\nthe thing it was created for. So any refusal below rolls the task row back\nwith it.\n\nA theory of change is refused unless the server setting is on (task 054,\nC15), before anything is written.\n\nRaises:\n    HTTPException: 404 when a named source task is not readable by the\n        caller.\n    ApiUnprocessable: 422 ``capability_not_enabled`` for a theory of\n        change while ``POLICY_ATLAS_THEORY_OF_CHANGE`` is off.\n    ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,\n        ``link_project_mismatch`` or ``link_source_unfinished``.",
         "operationId": "create_task_api_v1_tasks_post",
         "requestBody": {
           "content": {

@@ -28,7 +28,7 @@ from policy_atlas.core.schema import (
     task_link,
 )
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
-from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING
+from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, THEORY_OF_CHANGE
 
 #: Sentinel for "resolve the owner's display name yourself". Distinct from
 #: ``None``, which is a legitimate resolved value (an ownerless row).
@@ -105,10 +105,11 @@ def _latest_run_row(conn: Connection, row: RowMapping | dict[str, Any]) -> RowMa
     options-scoping task, the most recent walk that is neither a child walk
     nor an option search (a ``targeted`` intent record) — ADR 0039 decision
     5 — so an option search never becomes "the task's run" to a reader that
-    has not yet moved to ``active_run`` and the existence flags.
+    has not yet moved to ``active_run`` and the existence flags. A theory of
+    change filters the same way: its item searches are child walks (task 054).
     """
     query = select(capability_run).where(capability_run.c.task_id == row["task_id"])
-    if row["capability"] == OPTIONS_SCOPING:
+    if row["capability"] in (OPTIONS_SCOPING, THEORY_OF_CHANGE):
         query = (
             query.select_from(
                 capability_run.join(

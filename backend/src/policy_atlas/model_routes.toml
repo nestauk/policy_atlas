@@ -52,6 +52,16 @@ agent = "standard"
 # The options-scoping judgment calls run on the strongest tier (Sol).
 task_agent_scoping = "frontier"
 longlist_judgment = "frontier"
+# Theory of change (task 054, contract § Prompts and model routes): the plan,
+# the draft and the two consolidation calls on the strongest tier; the many
+# judge calls, discovery and the summary on the middle tier.
+task_agent_toc = "frontier"
+toc_draft = "frontier"
+toc_merge = "frontier"
+toc_choose = "frontier"
+toc_discover = "standard"
+toc_judge = "standard"
+toc_summarise = "standard"
 
 # ---------------------------------------------------------------------------
 [routes.openai-direct]

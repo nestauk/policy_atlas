@@ -26,8 +26,9 @@ TASK_NAME_MAX = 200
 
 #: The kinds of work a task can do (task 044, ADR 0037 decision 1). Written at
 #: creation and never changed — turning one task into another is what a Link
-#: is for (D2).
-Capability = Literal["evidence_search", "options_scoping"]
+#: is for (D2). ``theory_of_change`` (task 054) is refused on create unless the
+#: server setting is on (C15).
+Capability = Literal["evidence_search", "options_scoping", "theory_of_change"]
 
 
 class TaskCreate(BaseModel):

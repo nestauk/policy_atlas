@@ -157,6 +157,7 @@ from policy_atlas.runtime.task_plan import (
     TaskPlan,
     registry_component_for,
 )
+from policy_atlas.runtime.toc_plan import TOC_PURPOSE
 
 log = structlog.get_logger()
 
@@ -5533,10 +5534,11 @@ def _finish_run(
             .where(capability_run.c.capability_run_id == capability_run_id)
             .where(capability_run.c.task_id == task_id)
         ).scalar_one_or_none()
-    if purpose == LONGLIST_PURPOSE:
+    if purpose in (LONGLIST_PURPOSE, TOC_PURPOSE):
         # Every end of a longlist walk — the spine failed, an abort, or the
         # walk's own finish — ends the option searches the join never waited
         # for, before the walk itself (task 045, S2). After a join, a no-op.
+        # A theory-of-change check walk's item searches end the same way (054).
         option_search.abandon_children(engine, task_id=task_id, parent_id=capability_run_id)
     with engine.begin() as conn:
         ended_at = datetime.now(UTC)
