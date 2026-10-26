@@ -46,6 +46,8 @@ const useConversationsState = vi.hoisted(() => ({ mock: vi.fn(() => ({ data: { d
 const sseState = vi.hoisted(() => ({ connect: vi.fn(() => ({ close: vi.fn() })) }));
 
 vi.mock("../api/queries", () => ({
+  // Task 054: the result gate also reads the theory-of-change graph (none here).
+  useToc: () => ({ data: undefined }),
   useMe: () => ({ data: meState.data }),
   useTask: (taskId: string) => ({
     data: taskId && !taskState.pending

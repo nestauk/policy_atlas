@@ -34,3 +34,23 @@ describe("VITE_OPTIONS_SCOPING", () => {
     expect(off.capabilityLabel("options_scoping")).toBe("Options scoping");
   });
 });
+
+describe("VITE_THEORY_OF_CHANGE", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("offers Theory of change only when the flag is 1", async () => {
+    vi.stubEnv("VITE_THEORY_OF_CHANGE", "1");
+    vi.resetModules();
+    const on = await import("./capabilities");
+    expect(on.isSelectableCapability("theory_of_change")).toBe(true);
+
+    vi.stubEnv("VITE_THEORY_OF_CHANGE", "");
+    vi.resetModules();
+    const off = await import("./capabilities");
+    expect(off.isSelectableCapability("theory_of_change")).toBe(false);
+    expect(off.capabilityLabel("theory_of_change")).toBe("Theory of change");
+  });
+});

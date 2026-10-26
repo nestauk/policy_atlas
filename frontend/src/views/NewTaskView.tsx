@@ -230,6 +230,15 @@ const FORM_COPY: Record<
     placeholder: "e.g. How can we reduce the number of young people not in education, employment or training?",
     submitLabel: "Prepare plan",
   },
+  theory_of_change: {
+    eyebrow: "Theory of change",
+    heading: "What change do you want to explain?",
+    blurb:
+      "Describe the change you want, or the intervention you have in mind. Policy Atlas will draft a theory of change for your review, then check each step against the evidence.",
+    placeholder:
+      "Describe the change you want, the intervention you have in mind, or paste a theory of change you already have.",
+    submitLabel: "Prepare plan",
+  },
 };
 
 /** Step two: the question, and as little else as possible beside it. */

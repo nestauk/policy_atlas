@@ -27,4 +27,6 @@ interface ImportMetaEnv {
    * capability is complete.
    */
   readonly VITE_OPTIONS_SCOPING?: string;
+  /** `"1"` shows the Theory of change capability (New task picker). Same rule as above. */
+  readonly VITE_THEORY_OF_CHANGE?: string;
 }

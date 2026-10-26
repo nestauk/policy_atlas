@@ -28,9 +28,10 @@ import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { COPY } from "../lib/vocabulary";
 import { RESULT_VIEWS, resultView } from "./lifecycle";
-import { hasLonglist, isBaselineArtefact, statusRun } from "./scopingActivity";
+import { hasLonglist, isBaselineArtefact, isToc, statusRun } from "./scopingActivity";
 import { useChatsEnabled } from "./taskResult";
 import { LonglistView } from "./longlist/LonglistView";
+import { TocResult } from "./toc/TocResult";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
@@ -1329,6 +1330,7 @@ export function ArtefactView() {
   const { taskId = "" } = useParams();
   const isPublicView = usePublicView();
   const task = useTask(taskId);
+  if (!isPublicView && isToc(task.data)) return <TocResult taskId={taskId} />;
   if (isPublicView || !hasLonglist(task.data)) return <ArtefactReport />;
   return <ScopingResult taskId={taskId} />;
 }

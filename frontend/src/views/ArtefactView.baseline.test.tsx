@@ -24,6 +24,7 @@ vi.mock("../api/queries", async (importOriginal) => {
   const actual = await importOriginal<typeof queries>();
   return {
     ...actual,
+    useToc: () => ({ data: undefined }),
     useTask: vi.fn(),
     useArtefact: vi.fn(),
     useConversations: vi.fn(),

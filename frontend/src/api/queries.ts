@@ -1,10 +1,11 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "../auth";
 import { createAuthedApiClient } from "./client";
 import type { components } from "./gen/types";
 import { isRunActive } from "../views/scopingActivity";
+import type { TocEvidence, TocGraph } from "../views/toc/types";
 
 /**
  * Query-key roots, shared with `src/store/useRunStream.tsx` so SSE-driven
@@ -55,6 +56,8 @@ export const queryKeys = {
   // key without a separate positional argument.
   projects: (query?: ProjectsQuery) => ["projects", "list", query] as const,
   project: (projectId: string) => ["projects", projectId, "detail"] as const,
+  toc: (taskId: string) => ["tasks", taskId, "toc"] as const,
+  tocEvidence: (taskId: string) => ["tasks", taskId, "toc", "evidence"] as const,
 };
 
 /** `GET /api/v1/tasks` filters (task 033 phase 10a adds `scope` and
@@ -652,5 +655,65 @@ export function useLonglist(taskId: string) {
       return data ?? null;
     },
     enabled: Boolean(taskId),
+  });
+}
+
+/**
+ * Theory of change reads (task 054, increment 1). The two routes are not in
+ * the generated client yet, so the client is narrowed by hand; drop the cast
+ * after `make openapi-sync`.
+ */
+type TocGet = <T>(
+  path: string,
+  init: { params: { path: { task_id: string } } },
+) => Promise<{ data?: T; error?: unknown; response: Response }>;
+
+function useTocGet() {
+  const client = useApiClient();
+  return (client as unknown as { GET: TocGet }).GET;
+}
+
+/** `GET /api/v1/tasks/{task_id}/toc` — the graph, polled every 5 s while the
+ *  draft or the evidence check is still running. */
+export function useToc(taskId: string) {
+  const get = useTocGet();
+  return useQuery({
+    queryKey: queryKeys.toc(taskId),
+    queryFn: async () => {
+      const { data, error, response } = await get<TocGraph>("/api/v1/tasks/{task_id}/toc", {
+        params: { path: { task_id: taskId } },
+      });
+      if (response.status === 404) return null;
+      if (error) throw error;
+      return data ?? null;
+    },
+    enabled: Boolean(taskId),
+    refetchInterval: (activeQuery) => {
+      const status = activeQuery.state.data?.check_status;
+      return status === "drafting" || status === "checking" ? 5_000 : false;
+    },
+  });
+}
+
+/** `GET /api/v1/tasks/{task_id}/toc/evidence` — every judged document and
+ *  case study; polled on the same rule as the graph. */
+export function useTocEvidence(taskId: string) {
+  const get = useTocGet();
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: queryKeys.tocEvidence(taskId),
+    queryFn: async () => {
+      const { data, error, response } = await get<TocEvidence>("/api/v1/tasks/{task_id}/toc/evidence", {
+        params: { path: { task_id: taskId } },
+      });
+      if (response.status === 404) return null;
+      if (error) throw error;
+      return data ?? null;
+    },
+    enabled: Boolean(taskId),
+    refetchInterval: () => {
+      const status = queryClient.getQueryData<TocGraph | null>(queryKeys.toc(taskId))?.check_status;
+      return status === "drafting" || status === "checking" ? 5_000 : false;
+    },
   });
 }

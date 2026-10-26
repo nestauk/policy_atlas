@@ -1,7 +1,7 @@
-import { useArtefact, useTask } from "../api/queries";
+import { useArtefact, useTask, useToc } from "../api/queries";
 import { useRunStream } from "../store";
 import { hasResult, type TabOptions } from "./lifecycle";
-import { hasLonglist, hasTaskResult, isBaselineArtefact, isScoping } from "./scopingActivity";
+import { hasLonglist, hasTaskResult, isBaselineArtefact, isScoping, isToc } from "./scopingActivity";
 
 /**
  * The results a task's lifecycle tabs open on (task 044, A17; task 045):
@@ -16,8 +16,13 @@ export function useTabOptions(taskId: string): { options: TabOptions; baselineLo
   const task = useTask(taskId);
   const scoping = isScoping(task.data);
   const artefact = useArtefact(scoping ? taskId : "");
+  const toc = useToc(isToc(task.data) ? taskId : "");
   return {
-    options: { hasBaseline: isBaselineArtefact(artefact.data), hasLonglist: hasLonglist(task.data) },
+    options: {
+      hasBaseline: isBaselineArtefact(artefact.data),
+      hasLonglist: hasLonglist(task.data),
+      hasToc: (toc.data?.boxes.length ?? 0) > 0,
+    },
     baselineLoading: scoping && artefact.isLoading,
   };
 }
@@ -31,6 +36,10 @@ export function useTabOptions(taskId: string): { options: TabOptions; baselineLo
 export function useChatsEnabled(taskId: string): boolean {
   const task = useTask(taskId);
   const artefact = useArtefact(taskId);
+  const toc = useToc(isToc(task.data) ? taskId : "");
   const stream = useRunStream(taskId);
-  return hasTaskResult(task.data, { hasBaseline: isBaselineArtefact(artefact.data) }) || hasResult(stream.run?.status);
+  return (
+    hasTaskResult(task.data, { hasBaseline: isBaselineArtefact(artefact.data), hasToc: (toc.data?.boxes.length ?? 0) > 0 }) ||
+    hasResult(stream.run?.status)
+  );
 }

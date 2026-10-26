@@ -24,6 +24,7 @@
     "@radix-ui/react-toast": "^1.2.20",
     "@radix-ui/react-tooltip": "^1.2.13",
     "@tanstack/react-query": "^5.101.2",
+    "@xyflow/react": "^12.12.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "oidc-client-ts": "^3.5.0",

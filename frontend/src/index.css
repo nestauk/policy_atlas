@@ -113,6 +113,17 @@
   --color-violet-tint: #efedfc; /* the higher level word on a profile line (046) */
   --color-aqua-tint: #e6f5f7; /* the lower level word on a profile line (046) */
 
+  /* Evidence grades (task 054 theory of change): colour means the grade and
+     nothing else. The line/dot colour, and a darker twin for grade words. */
+  --color-grade-strong: #18a48c;
+  --color-grade-medium: #f0a823;
+  --color-grade-weak: #ff6e47;
+  --color-grade-none: #b4b4bb;
+  --color-grade-strong-text: #0d7a67;
+  --color-grade-medium-text: #8f6100;
+  --color-grade-weak-text: #c23f1b;
+  --color-grade-none-text: #646363;
+
   /* Nesta = 0 radius, everywhere */
   /* Motion curves (design-engineering pass, 2026-09-05): the built-in CSS
      easings are too weak for UI. Strong ease-out for anything entering or
@@ -315,4 +326,38 @@
       scroll-behavior: auto !important;
     }
   }
+}
+
+/* Theory of change canvas (task 054): edges take the lower grade's colour;
+   weak and none are dashed; an unchecked or checking edge is grey and pulses. */
+.toc-edge {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.toc-edge--strong { stroke: var(--color-grade-strong); }
+.toc-edge--medium { stroke: var(--color-grade-medium); }
+.toc-edge--weak { stroke: var(--color-grade-weak); stroke-dasharray: 7 5; }
+.toc-edge--none { stroke: var(--color-grade-none); stroke-dasharray: 2 5; }
+.toc-edge--pending { stroke: var(--color-line-2); animation: toc-pulse 1.6s ease-in-out infinite; }
+.toc-edge--selected { stroke-width: 3; }
+.toc-critical-dot { fill: var(--color-navy); }
+@keyframes toc-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toc-edge--pending { animation: none; }
+}
+.toc-grade-strong { color: var(--color-grade-strong-text); }
+.toc-grade-medium { color: var(--color-grade-medium-text); }
+.toc-grade-weak { color: var(--color-grade-weak-text); }
+.toc-grade-none { color: var(--color-grade-none-text); }
+.toc-dot-strong { background: var(--color-grade-strong); }
+.toc-dot-medium { background: var(--color-grade-medium); }
+.toc-dot-weak { background: var(--color-grade-weak); }
+.toc-dot-none { background: transparent; border: 1.5px dashed var(--color-grade-none); }
+/* PDF: the panel is hidden (aside), the canvas and toolbar stay. */
+@media print {
+  .toc-canvas { height: 520px !important; break-inside: avoid; }
 }
