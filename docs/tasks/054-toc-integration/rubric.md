@@ -44,8 +44,8 @@ cross-cutting boxes that apply to it.
 8.  [ ] The gates of C18 held: full `make verify` at build open, at each migration and at each
         increment's end; the contract's deterministic tests present and green; each try-it session
         recorded with notes and screenshots.
-9.  [ ] Exactly the schema in contract § Schema, in three reversible revisions whose downgrades
-        refuse while ToC rows exist; each round-trip test passes.
+9.  [ ] Exactly the schema in contract § Schema, in three reversible revisions, each downgrade
+        refusing only while its own data exists; each round-trip test passes.
 10. [ ] OpenAPI diff additive only; generated files changed only by `make openapi-sync`; no
         secrets edited.
 11. [ ] Prompt hashes: only the entries in contract § Prompts and model routes; every existing
@@ -64,6 +64,6 @@ cross-cutting boxes that apply to it.
 18. [ ] The contract's five spec changes applied with rulings quoted and logged in
         `docs/specs/log.md`; frozen sources untouched.
 19. [ ] ADR 0042 Accepted with sign-off date, rollback included.
-20. [ ] The C18 review stack ran: `/code-review` on each increment's PR; the security lane on
-        increments 3, 5 and 7; the contract verifier, a Codex adversarial pass on the code and
+20. [ ] The C18 review stack ran: `/code-review` and the security lane on each increment's PR,
+        focused as C18 states; the contract verifier, a Codex adversarial pass on the code and
         `/simplify` once before the merge to `dev`; findings in [verification.md](verification.md).

@@ -187,6 +187,9 @@ decisions below. The decisions fix what the spec leaves to the build.
     (`text_basis = 'full_text'`, metadata `backend = 'web'`, URL, retrieval time) and a
     `task_source_snapshot` with `origin = 'acquired'`. Duplicates checked by URL inside the task;
     http and https only.
+  - **Fetch limits.** At most 🟡 5 cited URLs fetched per web call and 🟡 100 per check walk, in
+    citation order. URLs over a limit are not fetched; their count and addresses are recorded in
+    the walk's event and shown as "N cited pages not fetched" in the Sources tab.
   - **Untrusted text.** Page text enters prompts only through `sanitize_prompt_field` and a fenced
     data block (`_fence_safe`). Quotes are checked against the stored page text. Every web call
     emits `search.executed`.
@@ -257,8 +260,11 @@ decisions below. The decisions fix what the spec leaves to the build.
     increment before its PR.
   - **Try it in the app.** Every increment ends with the owner using it on a real topic; during
     the iteration phase, at least one live topic per working session.
-  - **Reviews.** Each increment's PR gets `/code-review`, and the security lane where it touches
-    egress, uploads or the link rule (increments 3, 5, 7). The contract verifier, a Codex
+  - **Reviews.** Each increment's PR gets `/code-review` and the security lane (AGENTS.md: one
+    security lane, always at Tier 3 and above), focused on what the increment exposes: the public
+    read API and the server setting (1); writes, Undo and the 409 path (2); web egress and page
+    text (3); the chat context fence (4); uploads (5); authenticated exports (6); the link rule
+    (7). The contract verifier, a Codex
     adversarial pass on the code and `/simplify` run **once**, before the branch merges to `dev`,
     not per increment.
   - **Schema.** Increment 1 adds one revision with the core tables; increments 5 and 7 add their
@@ -340,7 +346,7 @@ options_scoping`.
 | Table | Columns (besides the common ones) | Keys and checks |
 |---|---|---|
 | `toc_box` | `box_id`, `task_id`, `layer`, `text`, `dosage NULL`, `result_criteria JSONB`, `indicator NULL`, `description NULL`, `origin`, flag columns, `position JSONB NULL` | PK; `uq_toc_box_id_task`; `ck_toc_box_layer` (`input · output · outcome · impact · failure_outcome`); FK `task_id` → `task` |
-| `toc_link` | `link_id`, `task_id`, `source_box_id`, `target_box_id`, `if_text`, `for_text`, `then_text`, `because_text`, `conditions JSONB NOT NULL DEFAULT '[]'`, `sentence NULL`, `elsewhere_sentence NULL`, `here_sentence NULL`, `critical BOOLEAN NOT NULL DEFAULT false`, `counted_hash NULL`, `kept_hash NULL`, `kept_by NULL`, `origin`, flag columns | PK; `uq_toc_link_id_task`; partial unique index on `task_id` where `critical`; `fk_toc_link_source` and `fk_toc_link_target` on `(box_id, task_id)` ON DELETE CASCADE; `ck_toc_link_distinct`; `ck_toc_link_kept_by` (`user · check`); unique `(task_id, source_box_id, target_box_id)` |
+| `toc_link` | `link_id`, `task_id`, `source_box_id`, `target_box_id`, `if_text`, `for_text`, `then_text`, `because_text`, `conditions JSONB NOT NULL DEFAULT '[]'`, `sentence NULL`, `elsewhere_sentence NULL`, `here_sentence NULL`, `critical BOOLEAN NOT NULL DEFAULT false`, `counted_hash NULL`, `kept_hash NULL`, `kept_by NULL`, `origin`, flag columns | PK; `uq_toc_link_id_task`; partial unique index on `task_id` where `critical`; `fk_toc_link_source` and `fk_toc_link_target` on `(box_id, task_id)` ON DELETE CASCADE; `ck_toc_link_distinct`; `ck_toc_link_kept_by` (`user · check · choose`); unique `(task_id, source_box_id, target_box_id)` |
 | `toc_band_item` | `item_id`, `task_id`, `band`, `text`, `sort_order`, `origin` | PK; `ck_toc_band` (`context · supporting`) |
 | `toc_pathway` | `pathway_id`, `task_id`, `kind`, `status`, `reason`, `label`, `origin`, flag columns | PK; `uq_toc_pathway_id_task`; `ck_toc_pathway_kind` (`success · failure`); `ck_toc_pathway_status` (`kept · set_aside`) |
 | `toc_pathway_link` | `pathway_id`, `task_id`, `position`, `link_id` | PK `(pathway_id, position)`; FKs on `(pathway_id, task_id)` and `(link_id, task_id)` ON DELETE CASCADE. A pathway with a gap after a deletion reads *broken*. |
@@ -357,9 +363,11 @@ increment 4: one widening is cheaper than a fourth revision).
 
 **Revision 3 (increment 7):** `task_link.source_option_id` with `fk_task_link_source_option` (C13).
 
-**Downgrade order:** each revision refuses while any `task` or `capability_run` row carries
-`theory_of_change`. Revision 3 drops the foreign key and column; revision 2 drops `toc_upload`;
-revision 1 drops `toc_item_evidence`, `toc_pathway_link`, `toc_pathway`, `toc_link`, `toc_box`,
+**Downgrade order:** each revision refuses only while its own data exists, so a later increment
+can be rolled back without deleting every theory. Revision 3 refuses while any
+`task_link.source_option_id` is set, then drops the foreign key and column. Revision 2 refuses
+while any `toc_upload` row exists, then drops the table. Revision 1 refuses while any `task` or
+`capability_run` row carries `theory_of_change`, then drops `toc_item_evidence`, `toc_pathway_link`, `toc_pathway`, `toc_link`, `toc_box`,
 `toc_band_item` and narrows the four constraints.
 
 ## Surface map
@@ -405,8 +413,8 @@ Every step reads its model from `model_routes.toml` (ADR 0041). Web search uses 
 
 ## Spec changes
 
-Applied at the close of the design phase, with the ADR, and logged in `docs/specs/log.md` (the
-W1–W18 spec edits are already applied and logged, 2026-10-26):
+Applied at the close of the design phase by plan step **D1**, with the ADR, and logged in
+`docs/specs/log.md` (the W1–W18 spec edits are already applied and logged, 2026-10-26):
 
 1. ToC components throughout (skeleton, items, components table, data, migrations, runtime and
    code, build order) to match this contract. **Applied 2026-10-26** with the review fixes.
@@ -559,7 +567,8 @@ beyond the surface map.
      behave as C7 states; non-web calls keep the route's address; the Bedrock route sends only web
      calls to Mantle; pages stored once with backend `web`; page text reaches prompts only through
      `sanitize_prompt_field` and a fence; web judgements never raise a grade above *weak*; "web
-     not searched" appears when the leg is off.
+     not searched" appears when the leg is off; the per-call and per-walk fetch limits hold and the
+     skipped URLs are recorded.
   4. `stress_test` conversations: four questions, each tied to a box or link; neither chat writes
      the graph; a fence test on a web-page quote.
   5. Upload: type and size checks including a renamed non-image; the 10-page cap; the storage

@@ -20,7 +20,7 @@ the next starts.
 - **Full `make verify`** at build open (P0), when a migration lands (1.2, 5.2, 7.1), and at the
   end of each increment before its PR. The two checkouts share the test database and Playwright
   port 5199: run full gates serially.
-- **Reviews.** `/code-review` on each increment's PR; the security lane on increments 3, 5 and 7.
+- **Reviews.** `/code-review` and the security lane on each increment's PR, focused as C18 lists.
   The contract verifier, a Codex adversarial pass on the code and `/simplify` run once, at P8,
   before the merge to `dev`.
 - **Executors.** Judgment-bearing work goes to `deep-reasoner` (owner ruling 2026-09-04);
@@ -132,7 +132,7 @@ merged paragraph.
 S12. **Web call** (increment 3; C7). `resolve_web_search_client()`, `traced_web_search(…) ->
 WebSearchResult(text, citations, usage, tool_calls)` in `core/openai_client.py`;
 `token_usage_from_responses` in `core/usage.py`; `evidence_search/sourcing/web_pages.py`
-`freeze_pages(…)`. A short-term Bedrock key works in one region only, so a developer on
+`freeze_pages(…)` with the C7 fetch limits (🟡 5 per call, 🟡 100 per walk) and the skipped URLs recorded. A short-term Bedrock key works in one region only, so a developer on
 `bedrock-local` with a London key gets "web not searched", not a crash. README and `.env.example`
 gain the `web_search` table for overlay route files.
 
@@ -171,6 +171,14 @@ router-level auth so reads can use the public leg.
 - **Access matrix:** one parametrised test, started in increment 1 and extended by each increment,
   runs the four caller kinds against every ToC route.
 
+## D1 — Design close — `lead`
+
+After the owner approves the contract and this plan: write ADR 0042 (Accepted, with sign-off
+date; contract § ADR scope); apply contract spec changes 2–5 (the ToC product surface, the OS
+artefact and scope, the execution spec's open-web seam, the product in/out table), each quoting
+its ruling, and log them; record the approval in both documents' status lines. Commit by explicit
+path. Then stop: the build runs in a fresh session with `task-cycle-build`.
+
 ## P0 — Build open — `lead` (inline)
 
 PR #84 merged to `dev` (stop condition otherwise). Create `feat/theory-of-change` from `dev`; bring
@@ -205,8 +213,9 @@ on the S5 change before the rest builds on it.
 
 1.5 **Read API and Result page — `fast-worker`, then lead polish** (taste-bearing). S14 public
 reads; router registration and route-table test; the access matrix; `@xyflow/react` through the
-dependency gate; S13 read-only (`TocResult`, `TocCanvas`, `ReadingGuide`, `DetailPanel`,
-`DetailedInformation`) and the plan panel's ToC sections; `capabilities.ts` flag; `NewTaskView`
+dependency gate; **only** the five read-only core components of S13 (`TocResult`, `TocCanvas`,
+`ReadingGuide`, `DetailPanel`, `DetailedInformation`) and the plan panel's ToC sections; the
+editing, original, stress-test and export parts of S13 belong to increments 2, 5, 4 and 6; `capabilities.ts` flag; `NewTaskView`
 copy; vitest from fixtures. The lead's polish matches the wireframes. Commit.
 
 1.6 **First try — `lead`** (evidence the owner reads). Full `make verify`. One live topic end to
@@ -227,7 +236,8 @@ subset; the ablation arm), `e6_rebuild.py` (20 published theories, 2025–26 fir
 iteration; numbers recorded. E2b only after the owner approves its cost. Check the E2 stop
 condition before increment 2.
 
-Exit: the owner's word; full `make verify`; PR into `feat/theory-of-change`; `/code-review`.
+Exit: the owner's word; full `make verify`; PR into `feat/theory-of-change`; `/code-review` and the
+security lane on the public read API and the server setting.
 
 ## Increment 2 — Editing and changes
 
@@ -247,7 +257,8 @@ buttons in Detailed information; the changed-by-Policy-Atlas block with Keep min
 Agent's change list with Undo, and Check all and Keep all; Restore in *Considered and set aside*;
 the 409 reload. Commit.
 
-Exit: try it (2) — `lead`, then the owner; full `make verify`; PR; `/code-review`.
+Exit: try it (2) — `lead`, then the owner; full `make verify`; PR; `/code-review` and the security
+lane on writes, Undo and the 409 path.
 
 ## Increment 3 — Web search
 
@@ -257,9 +268,10 @@ Record it. Stop condition if refused.
 
 3.2 **Route config, call, pages — `deep-reasoner`.** `WebSearchRoute` and its parser; the three
 route tables; fixture TOMLs; the non-web address test; S12; the `toc_web` child step; "web not
-searched"; the web cap end to end; one smoke call per route. Commit per piece.
+searched"; the fetch limits with a test; the web cap end to end; one smoke call per route. Commit per piece.
 
-Exit: try it (3); full `make verify`; PR; `/code-review` and the security lane on egress.
+Exit: try it (3); full `make verify`; PR; `/code-review` and the security lane on egress and page
+text.
 **Merge point (C15):** the lead asks the owner whether the branch merges to `dev` now (server
 setting off) or later.
 
@@ -274,7 +286,8 @@ polish.** `stress_test` kind; four questions tied to a box or link, starting wit
 connection; discuss through `answer_core`; neither chat writes the graph; the fence test; the Task
 Agent's "Start the stress test" button; `StressTestPane` with canvas focus. Commit.
 
-Exit: try it (4); full `make verify`; PR; `/code-review`.
+Exit: try it (4); full `make verify`; PR; `/code-review` and the security lane on the chat context
+fence.
 
 ## Increment 5 — Bring your own theory
 
@@ -305,7 +318,7 @@ report as the print of the Result page with Detailed information expanded. Commi
 6.2 **Manual checks — `lead`** (evidence the owner reads). PowerPoint, diagrams.net, Miro import,
 Google Slides, the PDF. Recorded with screenshots.
 
-Exit: full `make verify`; PR; `/code-review`.
+Exit: full `make verify`; PR; `/code-review` and the security lane on the authenticated exports.
 
 ## Increment 7 — Design from an option
 
