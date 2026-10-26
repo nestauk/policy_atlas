@@ -1,7 +1,7 @@
 # Rubric: 054-toc-integration
 
 The task is **done only if every box holds**. Otherwise it is in progress, not done.
-Increments 1–7, decisions C1–C21, rulings T1 and W1–W17, the terms and the acceptance checks are
+Increments 1–7, decisions C1–C21, rulings T1 and W1–W18, the terms and the acceptance checks are
 defined in [contract.md](contract.md); this rubric points at them and restates nothing. Each
 increment's PR into `feat/theory-of-change` (C15) is reviewed against its own box plus the
 cross-cutting boxes that apply to it.

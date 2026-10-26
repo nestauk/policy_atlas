@@ -89,6 +89,7 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
 | **Box** | One element in a layer. |
 | **Link** | A causal step from one box to the next. It carries the **mechanism**: why the step happens. |
 | **Conditions** | What must hold for a link to work in the user's setting: the link's *unless* text, one or more short statements. This is where the Magenta Book's assumptions live (Mayne 2015: "only when we add the assumptions to the causal links … do we get a theory of change"). There is no separate assumption object (owner, 2026-10-26). |
+| **Assumption type** | Set by code from the layers a link joins, using the Magenta Book's types: *delivery* (inputs to outputs), *take-up* (outputs to outcomes), *behaviour change* (outcomes to outcomes), *benefits and side effects* (outcomes to impact). Conditions on failure pathways are grouped as *if it goes wrong*. Not stored. |
 | **Worked elsewhere · Holds here** | The two evidence questions on every link: did it work where it was tried, and will it work here (Cartwright and Hardie 2012, *Evidence-Based Policy*). The second is about transferability: whether the link's conditions hold for this population, in this place, now. |
 | **Critical connection** | The link whose failure here would break the most of the theory. Shown as "Critical connection · test this first". |
 | **Context** | External factors and other policies (Magenta Book band "Contextual factors and external influencers"). |
@@ -230,7 +231,7 @@ plan ══approve══▶ draft or import ─▶ search and screen (background
 ## Output structure
 
 ✅ The canvas is the default view of the Result tab (approach § 7). ✅ The layout follows the owner's
-wireframe review of 2026-10-26 (`docs/tasks/054-toc-integration/wireframes.html`, version 20).
+wireframe review of 2026-10-26 (`docs/tasks/054-toc-integration/wireframes.html`, version 21).
 Visual rules: one font, the app's own, in the app's sizes; colour means evidence grade and nothing
 else; blue means actions and things to review; no counts, badges or captions on the canvas; detail
 appears on hover, on click, and in Detailed information.
@@ -272,8 +273,12 @@ appears on hover, on click, and in Detailed information.
     change*.
   - Folded away: how the grade was given, and where the item came from.
 - **Detailed information**, under the canvas, in the report's expand and collapse sections, with
-  *Download as PDF* on the right. One section per pathway (pathway 1 open), then *Considered and set
-  aside* (each with its reason and **Restore**, R1) and *Questions for an evaluation*. In a pathway:
+  *Download as PDF* on the right. One section per pathway (pathway 1 open), then **Assumptions**
+  (owner, 2026-10-26: "let's add that assumptions list"): every condition the theory relies on, as
+  a plain statement, grouped by assumption type, each with its *holds here* grade, the connection
+  it belongs to, and the critical-connection label where it applies. It keeps the purpose of the
+  Magenta Book's assumptions band, so the PDF report shows all assumptions in one place. Then
+  *Considered and set aside* (each with its reason and **Restore**, R1) and *Questions for an evaluation*. In a pathway:
   each box (layer label, title, a two-sentence description citing its case studies), then each
   connection in **three paragraphs**: its sentence naming both boxes and the mechanism; *worked
   elsewhere*, with its grade and evidence sentence; *holds here*, with its grade and evidence
@@ -518,7 +523,7 @@ Consensus and System · S10 light connections: one "Design a theory of change" b
 page · S11 a newer source run is flagged; several theories per option allowed.
 
 **Wireframe and journey review (2026-10-26):** the visual and evidence rulings are in § Output
-structure and § Trust rules, and in the task 054 contract as W1–W17. Journey: J1 starting from an
+structure and § Trust rules, and in the task 054 contract as W1–W18. Journey: J1 starting from an
 option reuses everything the option answers; only the intended change is confirmed. Connecting to
 Options scoping is preferred, but the capability may ship standalone first if the link would
 disturb Options scoping · J2 the Task Agent asks at most two questions before drafting (the

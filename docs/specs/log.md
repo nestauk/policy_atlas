@@ -58,6 +58,11 @@
   documents already found, then optionally Search for more); no automatic follow-up pass. Status
   table updated (owner: "Policy Atlas should simply flag that there has been a user edit").
   Task 054 contract W17.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): Detailed
+  information gains an **Assumptions** section listing every condition, grouped by the Magenta
+  Book's types (computed from layers), with its *holds here* grade, so the PDF report keeps the
+  purpose of the assumptions band (owner: "let's add that assumptions list"). Vocabulary gains
+  *Assumption type*. Task 054 contract W18 (2026-10-26).
 
 ## 2026-10-23
 * **Creation**: [Theory of change capability](capabilities/theory-of-change/capability.md) and

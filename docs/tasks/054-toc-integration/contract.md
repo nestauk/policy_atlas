@@ -10,7 +10,7 @@ and *holds here*, with pathways found in the evidence, a stress-test chat, impor
 entry point from Options scoping.
 
 > **Status:** approved 2026-10-23 · owner ("approve, let's go"). **Amended 2026-10-26** after the
-> owner's wireframe and journey review (§ Rulings from the wireframe review, W1–W17) and the
+> owner's wireframe and journey review (§ Rulings from the wireframe review, W1–W18) and the
 > owner's ruling on an iterative build (C18). The amendments change the schema, the deliverables
 > and the review stack, so the contract is **re-approved with the plan**: _pending_. ADR **0042**
 > is written after that approval (§ ADR scope).
@@ -18,7 +18,7 @@ entry point from Options scoping.
 > **Design sources.** Product intent and every owner ruling: the capability spec
 > [`docs/specs/capabilities/theory-of-change/`](../../specs/capabilities/theory-of-change/capability.md)
 > ([components](../../specs/capabilities/theory-of-change/components.md)). Screens:
-> [wireframes.html](wireframes.html) (version 20), which § Output structure of the spec describes
+> [wireframes.html](wireframes.html) (version 21), which § Output structure of the spec describes
 > in words. Owner-facing explainer: [theory-of-change.html](theory-of-change.html). This contract
 > fixes the build: schema, interfaces, tests, sequence. Where it and the spec differ, the
 > contract's § Decisions is the newer word and the spec is updated with it.
@@ -73,7 +73,8 @@ this contract.
 | **Layer** | One of the four Magenta Book columns: Inputs · Outputs · Outcomes · Impact (owner, S1). |
 | **Box** | One element in a layer (`toc_box`). A failure outcome is a box with layer `failure_outcome`. Boxes are **described, not graded** (W4): each has a two-sentence description, result criteria, case studies and indicators. |
 | **Link** | A causal step between two boxes (`toc_link`), also called a **connection** in the product. It has if / for / then / because text, its **conditions**, a one-sentence reading (W8), and two grades. |
-| **Conditions** | What must hold for a link to work in the user's setting, stored on the link (`toc_link.conditions`). They hold the Magenta Book's assumptions; there is no assumption table (W14). |
+| **Conditions** | What must hold for a link to work in the user's setting, stored on the link (`toc_link.conditions`, a list of plain statements). They hold the Magenta Book's assumptions; there is no assumption table (W14). Detailed information lists them all in an **Assumptions** section, grouped by assumption type (W18). |
+| **Assumption type** | *delivery* · *take-up* · *behaviour change* · *benefits and side effects*, computed from the layers a link joins (spec § Vocabulary); *if it goes wrong* for failure pathways. Not stored. |
 | **Worked elsewhere · Holds here** | The two evidence questions on every link: did it work where it was tried, and will it work for this population, in this place, now (transferability; Cartwright and Hardie 2012). Each has its own grade. |
 | **Critical connection** | The link whose failure here would break the most of the theory, marked with one navy dot and "Critical connection · test this first" (W10, W14). At most one per task. |
 | **Band item** | A context or supporting-activities line (`toc_band_item`). Shown in the header paragraph and the reading guide, not on the canvas (W1). |
@@ -116,7 +117,7 @@ this contract.
 
 Owner rulings are quoted in the spec § Rulings. **T1** (2026-10-23): "we should still allow
 Policy Atlas to consolidate or edit the ToCs that users touched, just it should be flagged."
-**W1–W17** (2026-10-26) are listed in § Rulings from the wireframe review and folded into the
+**W1–W18** (2026-10-26) are listed in § Rulings from the wireframe review and folded into the
 decisions below. The decisions fix what the spec leaves to the build.
 
 - **C1. One theory per task; edits in place.** The graph tables are keyed by `task_id`. No graph
@@ -310,7 +311,9 @@ decisions below. The decisions fix what the spec leaves to the build.
   theory* and *What the evidence says*; the detail panel shows a link's reading, how it works and
   what it needs, then *worked elsewhere* and *holds here*, each with its sentence and documents
   (a document shared by both listed once); Detailed information in the report's expand and
-  collapse sections, with *Download as PDF* on the right. The plan uses the navy plan panel of
+  collapse sections, with *Download as PDF* on the right, including the **Assumptions** section:
+  every condition grouped by assumption type, with its *holds here* grade, its connection and the
+  critical label (W18). The plan uses the navy plan panel of
   the other task types. The Task Agent posts a message when the draft appears, lists each change
   after the check, and always suggests a stress test (J3, J5, J7).
 
@@ -403,7 +406,7 @@ Every step reads its model from `model_routes.toml` (ADR 0041). Web search uses 
 ## Spec changes
 
 Applied at the close of the design phase, with the ADR, and logged in `docs/specs/log.md` (the
-W1–W17 spec edits are already applied and logged, 2026-10-26):
+W1–W18 spec edits are already applied and logged, 2026-10-26):
 
 1. ToC components throughout (skeleton, items, components table, data, migrations, runtime and
    code, build order) to match this contract. **Applied 2026-10-26** with the review fixes.
@@ -417,7 +420,7 @@ W1–W17 spec edits are already applied and logged, 2026-10-26):
 
 ## Rulings from the wireframe review (2026-10-26)
 
-The owner reviewed `wireframes.html` (versions 1–19) and the user journey. Each ruling is applied
+The owner reviewed `wireframes.html` (versions 1–21) and the user journey. Each ruling is applied
 in the spec and logged in `docs/specs/log.md`, and folded into § Decisions above.
 
 | # | Ruling | Folded into |
@@ -439,6 +442,7 @@ in the spec and logged in `docs/specs/log.md`, and folded into § Decisions abov
 | W15 | A robust modelling study can support *medium* | C4, C5 |
 | W16 | Check order: discover, merge, judge, choose | C3, C6 |
 | W17 | Edits flag; the user decides; minimal Check again | C19 |
+| W18 | An Assumptions section in Detailed information lists every condition, grouped by the Magenta Book's types, so the PDF shows all assumptions in one place | Terms, C21 |
 
 Journey rulings J1–J9 are in the spec § Rulings. J9 (how an older theory signals it may be out of
 date) is postponed.
@@ -538,8 +542,8 @@ beyond the surface map.
      did not judge is replaced (C20). Frontend (vitest): the canvas renders neutral boxes,
      connections in the lower grade and the critical dot from a fixture; the reading guide opens
      and closes; the panel shows both questions with a shared document listed once; Detailed
-     information expands, merges the two paragraphs when the documents agree, and opens a
-     document list from "+"; the build flag hides the entry. The access matrix for every read
+     information expands, merges the two paragraphs when the documents agree, opens a document list
+     from "+", and lists every condition under Assumptions in its computed type; the build flag hides the entry. The access matrix for every read
      route (C17).
   2. Race tests with explicit barriers: an edit racing judge, discover, merge, choose and Undo
      leaves the user's edit in place and reports the skipped change; a stale edit gets 409

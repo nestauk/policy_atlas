@@ -1,6 +1,6 @@
 # Plan: 054-toc-integration
 
-Increments 1–7, decisions C1–C21, rulings T1 and W1–W17, the schema and every term are defined in
+Increments 1–7, decisions C1–C21, rulings T1 and W1–W18, the schema and every term are defined in
 [contract.md](contract.md). This plan fixes the seams the contract leaves to the build (S1–S14),
 routes each step to an executor and sets the gates. It adds nothing to scope.
 
@@ -103,7 +103,7 @@ Undo), the pending count, and the stress-test suggestion (increment 4 adds the b
 
 S8. **Graph module** (`theory_of_change/graph.py`). Pydantic read and write models for the graph
 tables; the validator (E1 checks, the *broken* pathway rule); `item_text(link) -> str` (sentence, if, for, then, because, both box texts, conditions, and the
-place and population for the search) and `item_hash(link)` over the link fields, both box texts and
+place and population for the search) and `assumption_type(link)` from the two layers (spec § Vocabulary); `item_hash(link)` over the link fields, both box texts and
 the conditions, **not** the plan-scope fields (C19); `link_state(link, active_walk) -> checking ·
 checked · pending · kept · no_change` by the C19 transition table; `edit_row(conn, …, expected_revision)`
 raising `StaleRevision` → 409 `toc_stale_revision`; `apply_changes(conn, task_id, changes,
@@ -144,7 +144,7 @@ critical dot; blue dots for edited, pending and changed items; hover summaries),
 works and what it needs, then both questions with their documents, a shared document once; the
 pending block; changed-by-Policy-Atlas block), `DetailedInformation.tsx` (expand and collapse
 sections; boxes as label, title, description; links as three paragraphs or one merged; the "+"
-document lists; pending label and buttons; print styles for the PDF), `OriginalView.tsx`,
+document lists; the Assumptions section grouped by `assumption_type(link)` from S8 (W18); pending label and buttons; print styles for the PDF), `OriginalView.tsx`,
 `StressTestPane.tsx`, `exports.ts`. The ToC sections of the navy plan panel in
 `PlanDocument.tsx`. Hooks in `api/queries.ts` (`useToc`, `useTocEvidence`) and `api/mutations.ts`
 (`useTocEdit`, `useTocKeep`, `useTocRecheck`, `useTocUndo`, `useTocRestore`, `useTocKeepMine`,
