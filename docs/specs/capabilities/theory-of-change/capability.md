@@ -47,7 +47,7 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   worked elsewhere and that it will hold here, and the evidence for and against it. The canvas is a first version to work from
   (approach § 1, § 7).
 - 🟡 **The theory is the reasoning and the evidence; the canvas shows it.** The stored object is
-  the graph with its links, their conditions and evidence. The canvas, the list view and every export are
+  the graph with its links, their conditions and evidence. The canvas, Detailed information and every export are
   views of it (Magenta Book p.46).
 - 🟡 **Users and jobs** (approach § 2): design and stress-test an intervention; communicate how it
   creates impact; plan an evaluation (weak links become evaluation questions); align a team.
@@ -66,7 +66,7 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   loops, mediators, system maps and realist context–mechanism–outcome statements.
 - ✅ **No real-time co-editing** (approach § 7). Export comes before collaboration.
 - ✅ **No overall score for the theory** (owner, S2: "not sure if it makes sense … at the moment").
-  The header shows counts by grade instead.
+  The header shows two short paragraphs instead (owner, 2026-10-26).
 - 🟡 **Cross-capability triage stays out**: the user chooses "Theory of change" on the new-task page.
 - ✅ **Out of this task:** full-text reading of evidence (R6); stress-test answers written back to
   the graph (R11); a Miro API integration (R13; the draw.io file covers Miro, research § 3);
@@ -119,7 +119,7 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
 ```
 plan ══approve══▶ draft or import ─▶ search and screen (background) ─▶ discover ─▶ merge ─▶ judge ─▶ choose ─▶ summarise
                          │                  ▲                                          │
-                         └─ user edits on the canvas at any time ──────────────────────┘─▶ re-check changed items
+                         └─ user edits at any time: links flagged *check pending*; the user keeps the evidence or checks again
                                               stress test · discuss: chats, any time after the draft
 ```
 
@@ -143,7 +143,8 @@ plan ══approve══▶ draft or import ─▶ search and screen (background
    failure modes the draft does not have. Each becomes a candidate pathway, labelled *found in the
    evidence*, with the documents and quotes that suggested it. Its new links get no search of their
    own; they are judged with the rest against the documents already found.
-5. 🟡 **Consolidate** (R1 step 3; owner, S5), in two steps around the judge:
+5. 🟡 **Consolidate** (R1 step 3; owner, S5) is two steps, merge and choose, with the judge between
+   them:
    - **Merge, by *distinct* and *relevant*,** before judging. Pathways that share a mechanism,
      drafted or discovered, merge into one. Pathways that do not reach the intended change for the
      plan's population and place are set aside. This needs no evidence, so nothing is judged twice.
@@ -185,7 +186,7 @@ plan ══approve══▶ draft or import ─▶ search and screen (background
     then right outcome would be no change"):
     1. One small call compares the old and new wording (claim, population, conditions). If the
        claim is the same, nothing is judged again; the link reads *Checked: no change*.
-    2. If the claim changed, only the documents already found are judged again, reranked
+    2. If the claim changed, only the documents already judged for that link are judged again, reranked
        against the new wording, with no new search. The Task Agent says what changed: documents
        that no longer apply and stances that flipped. Grades are recomputed.
     3. If fewer than two documents still speak to the link, the user is offered **Search for
@@ -198,10 +199,12 @@ plan ══approve══▶ draft or import ─▶ search and screen (background
   reword or set aside items the user made or edited, but every such change is **flagged** (owner,
   2026-10-23: "still allow Policy Atlas to consolidate or edit the ToCs that users touched, just
   it should be flagged"). 🟡 A flagged item shows a *changed by Policy Atlas* mark with the reason;
-  its panel shows the user's version beside the new one, with **Keep mine**. A set-aside pathway
+  its panel shows the user's version beside the new one, with **Accept** (the change stands and
+  the mark clears) and **Keep mine** (the user's version returns, the mark clears, and the link
+  is marked *check pending*). Undo in the Task Agent thread also clears it. A set-aside pathway
   that held user work is marked *includes your edits* in "Considered and set aside".
 - When the check finishes, the user gets the existing run notification. The Task Agent thread
-  then lists **each change** consolidate made (pathways added from the evidence, merged, set aside,
+  then lists **each change** discover, merge and choose made (pathways added from the evidence, merged, set aside,
   and every change to the user's work), each with its own **Undo**, plus **Undo all** (owner,
   2026-10-26). The blue dots on the canvas mark the same changes. Every change is an event in
   History. The Task Agent then **always suggests a stress test** (owner, 2026-10-26).
@@ -227,7 +230,7 @@ plan ══approve══▶ draft or import ─▶ search and screen (background
 ## Output structure
 
 ✅ The canvas is the default view of the Result tab (approach § 7). ✅ The layout follows the owner's
-wireframe review of 2026-10-26 (`docs/tasks/054-toc-integration/wireframes.html`, version 9).
+wireframe review of 2026-10-26 (`docs/tasks/054-toc-integration/wireframes.html`, version 20).
 Visual rules: one font, the app's own, in the app's sizes; colour means evidence grade and nothing
 else; blue means actions and things to review; no counts, badges or captions on the canvas; detail
 appears on hover, on click, and in Detailed information.
@@ -276,12 +279,12 @@ appears on hover, on click, and in Detailed information.
   elsewhere*, with its grade and evidence sentence; *holds here*, with its grade and evidence
   sentence, naming the conditions. The critical one is labelled *Critical connection · test this
   first*. When the same documents answer both questions, the evidence is not repeated
-  (§ Trust rules). A pending link shows *Edited · check pending* above its paragraphs, with
+  (§ Trust rules). A small **+** after a sentence opens its documents. This section is the PDF
+  report. A pending link shows *Edited · check pending* above its paragraphs, with
   **Check again** and **Keep the evidence**, and its grades read *for the previous wording*.
 - **Task Agent thread.** When a check ends with links pending, and whenever the user returns to a
   task with pending links, the thread says how many, with **Check all** and **Keep all**. After a
-  Check again it reports what changed, or "no change". A small **+** after a sentence opens its documents. This section is the PDF
-  report.
+  Check again it reports what changed, or "no change".
 - **Your original.** For an imported theory, the uploaded image or PDF, inside the plan under
   *Starting point*, and from the toolbar.
 - **Sources tab.** The existing tab: every document read, what it was used for, by source type and
@@ -323,7 +326,7 @@ assessment is grounded** ([../options-scoping/trust.md](../options-scoping/trust
   ✅ There is no *supports under conditions* stance and no *holds under conditions* flag (owner,
   2026-10-26: "under conditions is implied, and should be covered by Assumptions"). A supporting
   document that holds only for some groups, places or settings records that condition, which shows
-  in its evidence line. 🟡 A condition the link does not yet name goes to consolidate, which adds it
+  in its evidence line. 🟡 A condition the link does not yet name goes to choose, which adds it
   to the link's conditions, labelled *found in the evidence*.
 
   ✅ **Robust modelling can reach medium** (owner, 2026-10-26). The shared appraisal scores every
@@ -388,7 +391,11 @@ assessment is grounded** ([../options-scoping/trust.md](../options-scoping/trust
     quote. Each grade counts only its own stances.
   - The canvas colours a link by the lower of the two grades; the panel and Detailed information
     show both. A link that worked elsewhere but has weak *holds here* evidence is the *critical
-    connection · test this first* case; code picks the one that sits on the most kept pathways.
+    connection · test this first* case. The draft proposes it; after choose, code re-picks it:
+    among links on kept success pathways whose *worked elsewhere* grade is medium or strong and
+    whose *holds here* grade is weak or none, the one on the most kept pathways (ties: the earlier
+    one in pathway 1). If none qualifies, the link with the lowest *holds here* grade on the most
+    kept pathways. A critical connection the user marked is kept.
   - ✅ **Evidence is not repeated** (owner, 2026-10-26). A document appears once in a link's list,
     tagged *elsewhere*, *here* or both. The *holds here* sentence never restates a finding the
     *worked elsewhere* sentence already gave; it names that study and says why it also counts
@@ -435,7 +442,8 @@ Design a theory of change".
 - ✅ **Several theories from one option** are allowed (owner, S11), for example one per population.
   The option page lists them all.
 - ✅ **When the scoping task runs again**, the ToC keeps reading the pinned run and shows "a newer
-  run is available", with a button that re-links and re-checks (owner, S11).
+  run is available" (owner, S11). To use the newer run, the user starts a new theory from the
+  option page; a task never re-links after creation (task 054 contract C13).
 - 🟡 Any option that is not merged can start a ToC. An excluded option passes its exclusion reason
   to the Task Agent as context.
 - ⏸ **Later:** links to Evidence search tasks (their documents and extracted findings), linking
@@ -448,12 +456,13 @@ Design a theory of change".
 - 🟡 **Agent tab.** The Task Agent leads the plan conversation. It takes the pasted text or the
   uploaded file there. After the draft, the same thread takes change requests and shows progress.
 - ✅ **Uploaded files are kept** (owner, S8: "keep them on S3? why not?"). 🟡 They go to a private,
-  encrypted S3 bucket, are readable only through the task's own access rules, and are deleted with
-  the task. History records the name, size and a hash. A new bucket is an infrastructure change,
+  encrypted S3 bucket and are readable only through the task's own access rules. Tasks are archived,
+  never deleted, so a file stays while its task row exists; only the operator script that
+  hard-deletes tasks removes it (task 054 contract C8). History records the name, size and a hash. A new bucket is an infrastructure change,
   recorded in the ADR.
 - ✅ **Stress test: conversation only** (R11). A button opens a new chat of kind `stress_test`. Four
   short questions, one at a time, each tied to one box or link that the canvas
-  highlights: mechanism, the critical connection failing here, scope and population, failure. Replies are
+  highlights: the critical connection failing here, mechanism, scope and population, failure. Replies are
   two to four sentences and use only the theory and its evidence.
 - 🟡 **Discuss.** The existing chat, with the graph and its evidence as context, through the
   existing grounded-answer path. It does not edit the graph.
@@ -473,7 +482,7 @@ ladder:
 
 | # | Eval | Measures | Data | Metric |
 |---|---|---|---|---|
-| E1 | Structure checks | Every draft is well-formed: layers in order, no orphan boxes, every link with at least one condition, at least one failure pathway, every evidence item on a real document | The tool's own drafts on about 30 descriptions | Pass rate per check; runs in CI |
+| E1 | Structure checks | Every draft is well-formed: layers in order, no orphan boxes, every link with at least one condition, at least one failure pathway, every pathway a connected route, every evidence item on a stored document | The tool's own drafts on about 30 descriptions | Pass rate per check; runs in CI |
 | E2 | Judge on public data | Stance accuracy given an abstract | SciFact, Check-COVID, PubMedQA, Evidence Inference, mapped to our stances; plus an ablation arm (abstract removed, expect "not about this item") | Macro-F1; how often a challenge is called support |
 | E2b | Grades against outside references | Whether our grade and flags agree with other evidence tools on the same claims | **Consensus** (its Consensus Meter: support, mixed, contradict) and **System** (a graph of statistical relationships from published studies, mostly health; public graph in closed beta until autumn 2026) | Agreement by claim; cases where we say *strong* and they say *contradict* |
 | E3 | Image import on rendered diagrams | Reading a diagram with known answers | Our own graphs rendered in several layouts; FlowVQA as an outside check | Box F1 with fuzzy text match; link F1; direction; layer accuracy; condition recall |
@@ -509,7 +518,7 @@ Consensus and System · S10 light connections: one "Design a theory of change" b
 page · S11 a newer source run is flagged; several theories per option allowed.
 
 **Wireframe and journey review (2026-10-26):** the visual and evidence rulings are in § Output
-structure and § Trust rules, and in the task 054 contract as W1–W11. Journey: J1 starting from an
+structure and § Trust rules, and in the task 054 contract as W1–W17. Journey: J1 starting from an
 option reuses everything the option answers; only the intended change is confirmed. Connecting to
 Options scoping is preferred, but the capability may ship standalone first if the link would
 disturb Options scoping · J2 the Task Agent asks at most two questions before drafting (the

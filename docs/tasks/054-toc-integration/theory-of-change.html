@@ -100,7 +100,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
     <div class="tile"><div class="num">4</div><div class="lab">Magenta Book layers: inputs, outputs, outcomes, impact</div></div>
     <div class="tile"><div class="num">2</div><div class="lab">evidence questions on every connection: did it work elsewhere, will it work here</div></div>
     <div class="tile"><div class="num">6 + 3</div><div class="lab">success and failure pathways kept at most</div></div>
-    <div class="tile"><div class="num accent">9</div><div class="lab">build steps, each gated by its own evals</div></div>
+    <div class="tile"><div class="num accent">1 + 6</div><div class="lab">a simple core, tried and tuned, then six increments</div></div>
   </div>
   <nav class="toc" aria-label="Contents">
     <a href="#journey">A session</a><a href="#canvas">The canvas</a><a href="#grades">Two questions</a><a href="#pipeline">How it is built</a><a href="#check">The check, step by step</a><a href="#editing">Editing, step by step</a><a href="#connections">Options scoping</a><a href="#data">What is stored</a><a href="#evals">Evals</a><a href="#order">Build order</a>
@@ -293,7 +293,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
         <text x="760" y="338" font-size="12"><tspan font-weight="600">Discuss</tspan> · the existing chat</text>
         <text x="760" y="362" font-size="12"><tspan font-weight="600">Export</tspan> · new, small</text>
 
-        <text x="20" y="372" font-size="11" style="fill: var(--grey)">Edits on the canvas can happen at every stage. Edited items are checked again when the run ends.</text>
+        <text x="20" y="372" font-size="11" style="fill: var(--grey)">Edits can happen at every stage. Edited steps are flagged; you keep the evidence or check again.</text>
       </g>
     </svg>
     </div>
@@ -353,7 +353,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
     <li><b>An edit flags the step; nothing reruns on its own.</b>
       <span class="sub">The connection keeps its evidence and grades, labelled "for the previous wording", and gets a blue dot and "Edited · check pending". The user decides: <b>Keep the evidence</b>, which is recorded as their choice, or <b>Check again</b>.</span></li>
     <li><b>Check again changes as little as possible.</b>
-      <span class="sub">First, one small call asks whether the new wording changes the claim. If it is only a rewording, nothing is judged again and the step reads "Checked: no change". If the claim changed, only the documents already found are judged again, reranked for the new wording, with no new search; the Task Agent says which documents no longer apply and which answers flipped. If fewer than two documents still apply, it offers <b>Search for more</b>.</span></li>
+      <span class="sub">First, one small call asks whether the new wording changes the claim. If it is only a rewording, nothing is judged again and the step reads "Checked: no change". If the claim changed, only the documents already judged for that step are judged again, reranked for the new wording, with no new search; the Task Agent says which documents no longer apply and which answers flipped. If fewer than two documents still apply, it offers <b>Search for more</b>.</span></li>
     <li><b>Edits during the check need nothing special.</b>
       <span class="sub">A connection edited before the check reaches it is simply judged on its new wording. One edited after it was judged is marked pending like any other. When the check ends, the Task Agent says how many steps are pending, with "Check all" and "Keep all".</span></li>
     <li><b>Changing a box changes its connections.</b>
@@ -363,7 +363,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
     <li><b>A plan change after the draft offers a choice.</b>
       <span class="sub">Redraft the theory (the old one stays in History), or keep the canvas and mark the steps the change affects as "check pending".</span></li>
     <li><b>Policy Atlas's own changes are flagged, and each can be undone.</b>
-      <span class="sub">Discover, merge and choose run on the theory as it is when each starts. They may merge, reword or set aside things the user made, but each change stores the reason and the user's version. The merge and choose events store the before-state of every row it changed, so the Task Agent can offer an Undo per change and Undo all. Undo skips any row the user has changed since, and says which. On a changed item, "Keep mine" puts the user's version back and checks it again; "Restore" brings back a set-aside pathway.</span></li>
+      <span class="sub">Discover, merge and choose run on the theory as it is when each starts. They may merge, reword or set aside things the user made, but each change stores the reason and the user's version. The merge and choose events store the before-state of every row it changed, so the Task Agent can offer an Undo per change and Undo all. Undo skips any row the user has changed since, and says which. On a changed item, "Accept" keeps the change and "Keep mine" puts the user's version back and marks it "check pending"; "Restore" brings back a set-aside pathway.</span></li>
     <li><b>Chats never edit the theory.</b>
       <span class="sub">The stress test and the discuss chat read the theory and its evidence. To change anything, the user edits the canvas or asks the Task Agent.</span></li>
   </ol>
@@ -412,7 +412,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
     <thead><tr><th>eval</th><th>question it answers</th><th>data</th></tr></thead>
     <tbody>
       <tr><td><b>Structure checks</b></td><td>Is every draft well formed: layers in order, no loose boxes, every connection with at least one condition, at least one failure pathway?</td><td>Our own drafts on about 30 descriptions. Runs automatically.</td></tr>
-      <tr><td><b>Judge on public data</b></td><td>Given an abstract, does the judge say supports, challenges or not about this correctly? How often is a challenge mistaken for support?</td><td>SciFact, Check-COVID, PubMedQA, Evidence Inference. Also compared with Consensus and System on the same claims.</td></tr>
+      <tr><td><b>Judge on public data</b></td><td>Given an abstract, does the judge say supports, challenges or not about this correctly? How often is a challenge mistaken for support?</td><td>SciFact, Check-COVID, PubMedQA, Evidence Inference. Optionally compared with Consensus and System on the same claims, if the cost is approved.</td></tr>
       <tr><td><b>Rebuild a published theory</b></td><td>From the written description of an intervention, how close is the draft to the theory its authors published?</td><td>20 to 40 reports from the Youth Endowment Fund, GOV.UK and Campbell reviews.</td></tr>
     </tbody>
   </table></div>
@@ -421,19 +421,17 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 
 <section class="wrap" id="order">
   <h2>Build order</h2>
-  <p>One programme of work in nine steps. Each step is usable on its own. The work changes the database, adds a public interface and new infrastructure, so it runs at the highest review tier, with a plan the owner approves before any code is written.</p>
+  <p>A simple core first, tried on real topics and tuned, then six increments, each used in the app before the next starts. Fast checks run on every change; the full test suite runs at the start, when the database changes, and at the end of each increment.</p>
   <ol class="steps">
-    <li><b>Shell and draft.</b> The new task kind, the Task Agent, the draft, the canvas, the reading guide and Detailed information.</li>
-    <li><b>Evidence check.</b> Per-item searches on OpenAlex and Overton, the judge, the grades, the cited sentences, the detail panel.</li>
-    <li><b>Discover and consolidate.</b> Pathways from the evidence, set-aside pathways, the change list with Undo.</li>
-    <li><b>Editing during the check.</b> Canvas editing, "check pending" marks, Keep the evidence, Check again and Search for more.</li>
-    <li><b>Web search.</b> The third source and its design decision record.</li>
-    <li><b>Stress test and discuss.</b> The two chats, and the Task Agent's suggestion.</li>
+    <li><b>Core.</b> The new task kind, the Task Agent, the draft, the evidence check on OpenAlex and Overton, the two grades and the cited sentences, the canvas, the panel and Detailed information. Then <b>iteration</b>: real topics, tuning, and the first evals, until the core is good enough to build on.</li>
+    <li><b>Editing and changes.</b> Canvas editing, "check pending" with Keep the evidence and Check again, edits through the Task Agent, the change list with Undo.</li>
+    <li><b>Web search.</b> The third source.</li>
+    <li><b>Stress test and discuss.</b></li>
     <li><b>Bring your own theory.</b> Pasted text, pictures and PDFs, and the uploads bucket.</li>
     <li><b>Export.</b> The PDF report, pictures, CSV, JSON, draw.io and PowerPoint.</li>
     <li><b>Design from an option.</b> The button, the back-list and the shared documents, if they do not disturb Options scoping.</li>
   </ol>
-  <p>The full design is in the capability spec under <code>docs/specs/capabilities/theory-of-change/</code>; the screens are in <code>wireframes.html</code>, and the decisions from the wireframe review are W1 to W14 in the task contract.</p>
+  <p>The full design is in the capability spec under <code>docs/specs/capabilities/theory-of-change/</code>; the screens are in <code>wireframes.html</code>; the build is fixed in the task contract, with the review rulings W1 to W17.</p>
 </section>
 </main>
 

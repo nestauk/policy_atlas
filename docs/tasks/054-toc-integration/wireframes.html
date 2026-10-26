@@ -233,7 +233,7 @@ footer.doc-foot { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var
 </style>
 <div class="doc">
 <header class="masthead">
-  <div class="eyebrow">Task 054 · Theory of change · Wireframes, version 3</div>
+  <div class="eyebrow">Task 054 · Theory of change · Wireframes, version 20</div>
   <h1>Theory of change wireframes</h1>
   <p class="lede">One user, from an option to a checked and exported theory of change, in the existing Policy Atlas app. Version 3 is quieter still: one font, three sizes, and plain paragraphs in place of labels and counts.</p>
   <div class="mast-grid">
@@ -303,7 +303,7 @@ footer.doc-foot { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var
     <div><div class="fnum">Frame 4 · core</div><h2>The detail panel</h2>
       <p>A click opens the item's panel. For a connection: what happens, how the step works and what it needs, then <i>Worked elsewhere</i> and <i>Holds here</i>, each with its grade, a cited sentence and its documents. A document that serves both is listed in full once. Here it is the critical connection: it worked where it was tried (medium), but it needs brands not to move their spend, and the evidence that this holds in England is weak.</p></div>
     <dl class="fnotes">
-      <div><dt>From the prototype</dt><dd>If, for, then, because, unless on each arrow.</dd></div>
+      <div><dt>From the prototype</dt><dd>If, for, then and because on each connection.</dd></div>
       <div class="decide"><dt>Decide</dt><dd>Group evidence by supports and challenges (shown), or list it by strength with the stance in each line?</dd></div>
     </dl>
   </div>
@@ -329,11 +329,11 @@ footer.doc-foot { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var
       <p>When the check ends, you get the usual run notification. Policy Atlas has added pathways found in the evidence and consolidated. It may change your work, and says so: blue dots mark each change on the canvas, and the Task Agent lists every change with its own Undo, plus Undo all. A changed item also shows your version beside the new one. The Task Agent then suggests a stress test.</p></div>
     <dl class="fnotes">
       <div><dt>Rule</dt><dd>T1: Policy Atlas may merge, reword or set aside your items, and flags each change.</dd></div>
-      <div class="decide"><dt>Decide</dt><dd>Does a blue dot clear when you open the item, or only when you accept or keep yours?</dd></div>
+      <div class="decide"><dt>Decide</dt><dd>A blue dot clears when you accept the change, keep yours, or undo it.</dd></div>
     </dl>
   </div>
   <div class="device" id="m6"></div>
-  <div class="inset"><div class="device" id="m6b"></div><p><b>A plan change after the draft.</b> If you change the plan, here the population, the Task Agent asks whether to redraft or keep the canvas and check the affected items again.</p></div>
+  <div class="inset"><div class="device" id="m6b"></div><p><b>A plan change after the draft.</b> If you change the plan, here the population, the Task Agent asks whether to redraft or keep the canvas and its evidence as they are, with an optional "Check all again".</p></div>
 </section>
 
 <section class="frame" id="f7">
@@ -359,14 +359,14 @@ footer.doc-foot { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var
     <div><div class="fnum">Frame 9</div><h2>Export</h2>
       <p>The Download menu, grouped by what people do next. The new PDF report is the result page on paper: the canvas, then the detailed information.</p></div>
     <dl class="fnotes">
-      <div><dt>New</dt><dd>The PDF report is not in the spec yet. It comes almost free from the profiles.</dd></div>
+      <div><dt>New</dt><dd>The PDF report is the print of the Result page with Detailed information expanded.</dd></div>
       <div><dt>Open</dt><dd>Google Slides only if its import keeps the arrows attached (contract A9).</dd></div>
     </dl>
   </div>
   <div class="device-row" style="align-items:flex-start"><div class="device" id="m9" style="flex:0 1 auto"></div><div class="device" id="m9b" style="flex:0 1 auto"></div></div>
 </section>
 
-<footer class="doc-foot">Task 054 · <code>docs/tasks/054-toc-integration/wireframes.html</code> · Spec: <code>docs/specs/capabilities/theory-of-change/</code> · Version 2 · 26 Oct 2026</footer>
+<footer class="doc-foot">Task 054 · <code>docs/tasks/054-toc-integration/wireframes.html</code> · Spec: <code>docs/specs/capabilities/theory-of-change/</code> · Version 20 · 26 Oct 2026</footer>
 </div>
 <script>
 /* ===================== Example theory (illustrative) ===================== */
@@ -582,7 +582,7 @@ const PANEL_CHANGED = `<div class="caps" style="color:var(--blue)">Changed by Po
   <p style="margin:0;color:var(--navy)">Merged with a drafted box that described the same step. The documents talk about children's requests and their choices, so one box now covers both.</p>
   <div class="vs"><div><span class="caps">Your version</span>Children pester parents less for these foods</div><div class="theirs"><span class="caps" style="color:var(--blue)">New version</span>Children ask for and pick healthier food</div></div>
   <div style="display:flex;gap:8px;margin-top:12px;align-items:center"><span class="btn sm">Accept</span><span class="btn2 sm">Keep mine</span></div>
-  <div class="sub" style="margin-top:6px">Keep mine restores your text and checks it again.</div>
+  <div class="sub" style="margin-top:6px">Keep mine restores your text and marks the step "check pending".</div>
   <div class="h">How it is measured</div><p style="margin:0">${BOXES.C2.measure}</p>
   <details><summary>History</summary><div class="sub">26 Oct 14:02 · you edited the text<br>26 Oct 14:19 · Policy Atlas merged it with "Children choose fewer less healthy snacks"</div></details>`;
 
@@ -633,11 +633,6 @@ const railMin = () => `<div class="rail min"><span class="dot" style="background
 const rail = (head, inner, composer = "Ask the Task Agent, or ask for a change") => `<div class="rail"><div class="rhead">${head}</div><div class="thread">${inner}</div><div class="composer"><span>${composer}</span><span class="send">↑</span></div></div>`;
 const app = (o, inner) => `<div class="app${o.narrow ? " narrow" : ""}">${nav(o.nav)}${o.tbar || ""}${inner}</div>`;
 const resultTbar = (tab = "Result") => tbar(TOC, "Theory of change", tab);
-function counts() {
-  const items = Object.values(LINKS);
-  const c = { strong: 0, medium: 0, weak: 0, none: 0 }; items.forEach(i => c[i.grade]++);
-  return { c, n: items.length };
-}
 function header(state = "checked") {
   const title = `<div class="ptitle">Restrict less healthy food ads <span class="arrow">→</span> fewer children living with obesity</div>`;
   if (state === "running") return `${title}<div class="intro" style="grid-template-columns:minmax(0,1fr)"><p>Policy Atlas is checking each step against the evidence. Steps take their colour as they are checked. You can keep editing: edited steps keep their evidence and are marked, and you decide whether to check them again.</p></div>`;
@@ -722,7 +717,7 @@ $("m1b").innerHTML = app({ narrow: true, tbar: tbar("Interventions to reduce obe
     <div class="run"><div style="display:flex;justify-content:space-between"><b>Checking the evidence</b><span>12 of 22</span></div><div class="bar"><i style="width:55%"></i></div><div style="color:var(--grey);font-size:var(--fs-ui)">Judging each step · about 4 minutes left</div>
       <details style="margin-top:6px"><summary style="cursor:pointer;font-size:var(--fs-ui);font-weight:700">Details</summary><div style="font-size:var(--fs-ui);color:var(--grey);margin-top:4px">Reused 61 documents from the option · 22 searches in OpenAlex, Overton and the web · 214 abstracts screened, 58 kept · next: find new pathways, then consolidate</div></details></div>
     <div class="msg user">Can you add a failure pathway about price promotions?</div>
-    <div class="msg"><div class="who">Task Agent</div><p>I'll add it when the check finishes, so the results stay consistent. Or add it yourself now with "Add box".</p></div>`)}
+    <div class="msg"><div class="who">Task Agent</div><p>Done: I added a failure pathway "Price promotions replace ad budgets". It will be checked with the rest.</p></div>`)}
     <div class="amain">${header("running")}${toolbar(cb.uid, { edit: true })}${cb.html}</div></div>`);
 }
 $("m5b").innerHTML = `<div class="app narrow" style="width:640px;padding:18px 22px"><div class="caps">In Detailed information</div><div class="dbody" style="font-size:var(--fs-body)">${detailRows("P1", { L4: "pending" }, ["L4"]).replace("Children ask for and pick healthier food", "Children pester parents less for these foods")}</div></div>`;
@@ -742,16 +737,16 @@ $("m5b").innerHTML = `<div class="app narrow" style="width:640px;padding:18px 22
   $("m6b").innerHTML = `<div class="app narrow" style="width:400px"><div class="rail" style="width:100%;border:0"><div class="rhead"><b>Task Agent</b></div><div class="thread">
     <div class="msg user">Change the population to children aged 11 to 15.</div>
     <div class="msg"><div class="who">Task Agent</div><p>Done. Your canvas was drafted for ages 4 to 15. What should I do?</p>
-      <div style="display:grid;gap:8px;margin-top:8px"><span class="btn" style="justify-content:center">Redraft the theory</span><span class="btn2" style="justify-content:center">Keep it and check again</span></div>
+      <div style="display:grid;gap:8px;margin-top:8px"><span class="btn" style="justify-content:center">Redraft the theory</span><span class="btn2" style="justify-content:center">Keep the canvas</span></div>
       <p style="font-size:var(--fs-ui);color:var(--grey);margin-top:8px">The old canvas stays in History.</p></div></div></div></div>`;
 }
 // 7 stress test
 {
   const cb = canvasBlock({ focus: ["O1", "C1", "L3"], selected: "L3", aria: "Canvas with the first outcome arrow highlighted for the stress test" });
   const q = (t, s) => `<span style="flex:1;height:3px;background:${s === "done" ? "var(--navy)" : s === "now" ? "var(--blue)" : "var(--line)"}" title="${t}"></span>`;
-  $("m7").innerHTML = app({ tbar: resultTbar() }, `<div class="abody">${rail(`<b>Stress test</b><span class="caps" style="margin-left:auto">2 of 4</span>`, `
-    <div style="display:flex;gap:4px">${q("Mechanism", "done")}${q("If the critical connection fails here", "now")}${q("Scope", "todo")}${q("Failure", "todo")}</div>
-    <div class="msg"><p><b>Question 2. If the critical connection fails here</b></p><p>Suppose brands move their budgets to brand-only ads, sponsorship and influencers. What in your theory still works, and what would you watch first?</p></div>
+  $("m7").innerHTML = app({ tbar: resultTbar() }, `<div class="abody">${rail(`<b>Stress test</b><span class="caps" style="margin-left:auto">1 of 4</span>`, `
+    <div style="display:flex;gap:4px">${q("If the critical connection fails here", "now")}${q("Mechanism", "todo")}${q("Scope", "todo")}${q("Failure", "todo")}</div>
+    <div class="msg"><p><b>Question 1. If the critical connection fails here</b></p><p>Suppose brands move their budgets to brand-only ads, sponsorship and influencers. What in your theory still works, and what would you watch first?</p></div>
     <div class="msg user">Pathway 2 still works: reformulation doesn't depend on exposure. I'd watch influencer content first.</div>
     <div class="msg"><div class="who">Stress test</div><p>That fits the evidence: pathway 2 does not pass through this arrow. But its first step is weak, so it cannot carry the theory alone. In Chile the shift came within a year, so monitoring should start before the rules do.</p></div>`, "Answer in your own words")}
     <div class="amain">${header()}${toolbar(cb.uid)}${cb.html}</div></div>`);
