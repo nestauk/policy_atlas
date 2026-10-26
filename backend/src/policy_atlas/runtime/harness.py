@@ -120,6 +120,9 @@ from policy_atlas.runtime.inherit import inherit_documents
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Config
 from policy_atlas.runtime.scoping_plan import ScopingPlan
+from policy_atlas.theory_of_change import check as toc_check
+from policy_atlas.theory_of_change.backend import StubTocBackend, TocBackend
+from policy_atlas.theory_of_change.draft import toc_draft_scope
 
 log = structlog.get_logger()
 
@@ -151,6 +154,7 @@ class HarnessState(TypedDict):
     grounding_judge_backend: GroundingJudgeBackend
     suggest_backend: SuggestBackend
     longlist_backend: LonglistBackend
+    toc_backend: TocBackend
     summary: dict[str, Any] | None
     progress_emitter: ProgressEmitter | None
     error: str | None
@@ -464,6 +468,30 @@ def _scoping_node(name: str) -> Any:
     return run
 
 
+#: The theory-of-change steps (task 054), each ``(conn, *, task_id, run_id,
+#: context, backend)`` on the ToC backend, like the scoping steps.
+_TOC_STEPS: dict[str, Callable[..., dict[str, Any]]] = {
+    "toc_draft": toc_draft_scope,
+    "toc_discover": toc_check.toc_discover_scope,
+    "toc_merge": toc_check.toc_merge_scope,
+    "toc_judge": toc_check.toc_judge_scope,
+    "toc_choose": toc_check.toc_choose_scope,
+    "toc_summarise": toc_check.toc_summarise_scope,
+}
+
+
+def _toc_node(name: str) -> Any:
+    def run(state: HarnessState) -> HarnessState:
+        step = _TOC_STEPS[name]  # read at run time, so a test can swap a step
+        kwargs: dict[str, Any] = {"backend": state["toc_backend"]}
+        if name == "toc_judge":
+            # Judge reranks each link's candidates with select's rerank backend (C5).
+            kwargs["ranker"] = state["ranking_backend"]
+        return _run_scope_component(state, ScopeContext, functools.partial(step, **kwargs))
+
+    return run
+
+
 def _run_group(state: HarnessState) -> HarnessState:
     config = state["config"]
     assert config.extraction_run_id is not None  # registry-enforced at compile
@@ -674,6 +702,8 @@ def build_graph() -> Any:
     g.add_node("extract_interventions", _run_extract_interventions)
     for name in _SCOPING_STEPS:
         g.add_node(name, _scoping_node(name))
+    for name in _TOC_STEPS:
+        g.add_node(name, _toc_node(name))
     g.add_node("group", _run_group)
     g.add_node("synthesise", _run_synthesise)
     g.add_node("finish", _finish)
@@ -700,6 +730,7 @@ def build_graph() -> Any:
             "theme": "theme",
             "group": "group",
             "synthesise": "synthesise",
+            **{name: name for name in _TOC_STEPS},
         },
     )
     g.add_edge("acquire", "finish")
@@ -719,6 +750,8 @@ def build_graph() -> Any:
     g.add_edge("theme", "finish")
     g.add_edge("group", "finish")
     g.add_edge("synthesise", "finish")
+    for name in _TOC_STEPS:
+        g.add_edge(name, "finish")
     g.add_edge("finish", END)
     return g.compile()
 
@@ -795,6 +828,7 @@ def run_harness(
     grounding_judge_backend: GroundingJudgeBackend | None = None,
     suggest_backend: SuggestBackend | None = None,
     longlist_backend: LonglistBackend | None = None,
+    toc_backend: TocBackend | None = None,
     progress_emitter: ProgressEmitter | None = None,
 ) -> dict[str, Any]:
     """Run the compiled harness graph for one run, persisting its output.
@@ -865,6 +899,8 @@ def run_harness(
         longlist_backend: Model seam for the longlist, option_profile,
             constrain and theme components (task 045; task 046, S20);
             defaults to ``StubLonglistBackend()`` — no default egress.
+        toc_backend: Model seam for every theory-of-change step (task 054);
+            defaults to ``StubTocBackend()`` — no default egress.
 
     Returns:
         Harness outcome with ``summary`` populated only after successful
@@ -965,6 +1001,7 @@ def run_harness(
         "longlist_backend": (
             longlist_backend if longlist_backend is not None else StubLonglistBackend()
         ),
+        "toc_backend": toc_backend if toc_backend is not None else StubTocBackend(),
         "summary": None,
         "progress_emitter": progress_emitter,
         "error": None,

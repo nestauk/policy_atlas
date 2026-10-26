@@ -92,6 +92,7 @@ from policy_atlas.runtime.task_agent import (
 from policy_atlas.runtime.task_agent_prompt import PLANNER_HISTORY_TURNS_MAX, PlanDraftWire
 from policy_atlas.runtime.task_plan import CountryGroupAuthorship, TaskPlan
 from policy_atlas.runtime.toc_plan import TOC_PURPOSE, TOC_WALK_DRAFT, TOC_WALK_KEY, TocPlan
+from policy_atlas.theory_of_change.backend import OpenAITocBackend
 
 log = structlog.get_logger()
 
@@ -845,6 +846,8 @@ def live_task_agent_and_backends(
         suggest=OpenAIAgentBackend(langfuse_client=langfuse_client),
         # The options-scoping longlist step's calls (task 045, S8).
         longlist=OpenAILonglistBackend(langfuse_client=langfuse_client),
+        # Every theory-of-change step's calls (task 054).
+        toc=OpenAITocBackend(langfuse_client=langfuse_client),
     )
     task_agent = OpenAITaskAgentBackend(langfuse_client=langfuse_client)
     return task_agent, backends

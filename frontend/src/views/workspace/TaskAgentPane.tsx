@@ -301,6 +301,8 @@ export function Composer({
 }
 
 function UserBubble({ text }: { text: string }) {
+  // A code-authored Task Agent line (task 054, J3) has no user message.
+  if (text === "") return null;
   return (
     <div className="anim-rise ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5">
       <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>

@@ -513,6 +513,7 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
         assert plan_after_newer_turn.json() == {
             "plan": first.json()["plan"],
             "scoping": None,
+            "toc": None,
             "capability": "evidence_search",
             "version": 0,
             "status": "draft",
@@ -651,6 +652,7 @@ def test_task_agent_rehydrates_after_restart_and_get_plan_reads_stored_draft(
         assert draft_after_restart.json() == {
             "plan": first.json()["plan"],
             "scoping": None,
+            "toc": None,
             "capability": "evidence_search",
             "version": 0,
             "status": "draft",

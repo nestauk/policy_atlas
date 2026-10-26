@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from .check_ins import CheckInOut
 from .runs import RunStatus
-from .task_agent import PlanDraft, ScopingPlanDraft
+from .task_agent import PlanDraft, ScopingPlanDraft, TocPlanDraft
 from .tasks import TaskStatus
 
 #: The pinned stable component-vocabulary stage keys (spec § SSE).
@@ -181,6 +181,7 @@ class PlanUpdatedFrame(_PersistedFrameBase):
     type: Literal["plan.updated"]
     plan: PlanDraft | None = None
     scoping: ScopingPlanDraft | None = None
+    toc: TocPlanDraft | None = None
     version: int
 
 

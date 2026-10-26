@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import type { components } from "../../api/gen/types";
-import { usePatchPlan } from "../../api/mutations";
+import { usePatchPlan, useStartRun } from "../../api/mutations";
 import { usePlan, useTask } from "../../api/queries";
 import { seedComposer } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
@@ -64,6 +64,7 @@ type ScopingConstraintOut = components["schemas"]["ScopingConstraintOut"];
 type YourContextOut = components["schemas"]["YourContextOut"];
 type YourOptionOut = components["schemas"]["YourOptionOut"];
 type TaskLinkOut = components["schemas"]["TaskLinkOut"];
+type TocPlanDraft = components["schemas"]["TocPlanDraft"];
 
 const panelLabelClass = "text-lead font-bold text-white";
 const panelEditButtonClass =
@@ -824,6 +825,118 @@ function ScopingPlanSections({
   );
 }
 
+// --- Theory-of-change plan sections (task 054, step 1.3) ------------------
+
+const TOC_ENTRY_POINT_LABEL: Record<NonNullable<TocPlanDraft["entry_point"]>, string> = {
+  outcome_first: "From the change you want",
+  intervention_first: "From an intervention",
+  existing_theory: "From your own theory of change",
+};
+
+/** One plain field: its value, or the grey "Not decided yet". */
+function PlainField({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <dt className={panelHintClass}>{label}</dt>
+      <dd className={cn(panelValueClass, "whitespace-pre-line")}>
+        {value != null && value !== "" ? scrub(value) : <NotDecided />}
+      </dd>
+    </div>
+  );
+}
+
+/** The theory-of-change plan's sections. Set through the Task Agent (no
+ *  inline editor): Edit seeds the composer, as the scoping plan does. Start
+ *  drafts the theory; the evidence check follows by itself. */
+function TocPlanSections({
+  taskId,
+  toc,
+  readOnly,
+  onStarted,
+}: {
+  taskId: string;
+  toc: TocPlanDraft;
+  readOnly: boolean;
+  onStarted?: () => void;
+}) {
+  const startRun = useStartRun(taskId);
+  const [notice, setNotice] = useState<string | null>(null);
+  return (
+    <>
+      <div className="space-y-6">
+        <ScopingSection
+          label="Starting point"
+          onEdit={() => seedComposer("Change the starting point: ")}
+          readOnly={readOnly}
+        >
+          <dl className="space-y-3">
+            <PlainField
+              label="Entry point"
+              value={toc.entry_point != null ? TOC_ENTRY_POINT_LABEL[toc.entry_point] : null}
+            />
+            {toc.existing_theory_text != null && (
+              <PlainField label="Your theory of change" value={toc.existing_theory_text} />
+            )}
+          </dl>
+        </ScopingSection>
+        <ScopingSection
+          label="The change"
+          onEdit={() => seedComposer("Change the intended change: ")}
+          readOnly={readOnly}
+        >
+          <dl className="space-y-3">
+            <PlainField label="Intended change" value={toc.intended_change} />
+            <PlainField label="Who it is for" value={toc.target_population} />
+            <PlainField label="Where" value={toc.where} />
+            <PlainField label="Time horizon" value={toc.time_horizon} />
+          </dl>
+        </ScopingSection>
+        <ScopingSection
+          label="Intervention"
+          onEdit={() => seedComposer("Change the intervention: ")}
+          readOnly={readOnly}
+        >
+          <dl className="space-y-3">
+            <PlainField label="Intervention" value={toc.intervention} />
+            <PlainField label="Dosage" value={toc.dosage} />
+          </dl>
+        </ScopingSection>
+        <ScopingSection
+          label="Context"
+          onEdit={() => seedComposer("Add to the context: ")}
+          readOnly={readOnly}
+        >
+          <dl>
+            <PlainField label="What you told us about the setting" value={toc.context} />
+          </dl>
+        </ScopingSection>
+      </div>
+      {!readOnly && (
+        <div className="pt-8">
+          <Button
+            className={cn(START_SEARCH_CLASS)}
+            disabled={!toc.ready || startRun.isPending}
+            onClick={() => {
+              setNotice(null);
+              startRun.mutate(undefined, {
+                onSuccess: () => onStarted?.(),
+                onError: () => setNotice("The draft couldn't start. Try again."),
+              });
+            }}
+          >
+            Draft the theory
+          </Button>
+          {notice != null && (
+            <p role="alert" className="mt-2 text-body text-red-tint">
+              {notice}
+            </p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 /**
  * The search plan, edited in place. Saves stay local until Start search —
  * a task_agent round-trip on every field would rewrite the whole plan.
@@ -1019,6 +1132,15 @@ export function PlanDocument({
               readOnly={readOnly}
               runActive={runActive}
               approved={planQuery.data.status === "approved"}
+              onStarted={onStarted}
+            />
+          )}
+
+          {planQuery.data?.toc != null && (
+            <TocPlanSections
+              taskId={taskId}
+              toc={planQuery.data.toc}
+              readOnly={readOnly}
               onStarted={onStarted}
             />
           )}
@@ -1323,7 +1445,7 @@ export function PlanDocument({
           </div>
           )}
 
-          {!scopingPlan && !readOnly && (
+          {!scopingPlan && planQuery.data?.toc == null && !readOnly && (
           <div className="pt-8">
             <Button className={cn(START_SEARCH_CLASS)} disabled={startDisabled} onClick={start}>
               {startLabel}

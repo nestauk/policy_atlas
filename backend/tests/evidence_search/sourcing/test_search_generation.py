@@ -490,6 +490,7 @@ def test_live_task_agent_selects_search_generation_backend_from_route(
         "OpenAIInterventionsBackend",
         "OpenAIAgentBackend",
         "OpenAILonglistBackend",
+        "OpenAITocBackend",
     ):
         monkeypatch.setattr(agent, name, _factory)
 

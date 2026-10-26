@@ -37,10 +37,15 @@ from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
 from policy_atlas.core import tracing
 from policy_atlas.core.schema import capability_run, task_agent_transcript
-from policy_atlas.runtime.capability_registry import latest_approved_plan_row, validate_plan
+from policy_atlas.runtime.capability_registry import (
+    THEORY_OF_CHANGE,
+    latest_approved_plan_row,
+    validate_plan,
+)
 from policy_atlas.runtime.option_search import unattended_plan
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
 from policy_atlas.runtime.scoping_plan import LONGLIST_PURPOSE
+from policy_atlas.theory_of_change.store import has_graph
 
 log = structlog.get_logger()
 
@@ -122,6 +127,13 @@ def _dispatch_run(
         # Opened inside the executor worker: contextvars do not cross a plain
         # executor.submit. run_plan opens its own session scope per component.
         with tracing.trace_scope(user_id=user_id):
+            if capability == THEORY_OF_CHANGE and evidence_scope_id is None:
+                # Imported here: the opener imports this module.
+                from policy_atlas.api.toc_start import start_scope
+
+                # Start drafts, or (a graph already on the canvas) checks it
+                # again in full: the S4 restart rule.
+                evidence_scope_id = start_scope(engine, task_id=task_id, plan_row=plan_row)
             outcome = run_plan(
                 engine,
                 task_id=task_id,
@@ -137,9 +149,10 @@ def _dispatch_run(
                 # impossible to start (task 044). A longlist walk (its own
                 # intent record passed in) runs unattended: it does not pause
                 # (task 045, D1).
+                # A theory-of-change plan is unattended by its model (C12).
                 plan=(
                     unattended_plan(plan_row["payload"])  # type: ignore[arg-type]
-                    if evidence_scope_id is not None
+                    if evidence_scope_id is not None and capability != THEORY_OF_CHANGE
                     else validate_plan(capability, plan_row["payload"])
                 ),
                 plan_id=plan_row["plan_id"],  # type: ignore[arg-type]
@@ -159,6 +172,13 @@ def _dispatch_run(
                     task_id=task_id,
                     capability=capability,
                     backends=backends,
+                )
+            if capability == THEORY_OF_CHANGE:
+                from policy_atlas.api.toc_start import run_toc_sequence
+
+                # Draft → check, inline on this worker (S4).
+                run_toc_sequence(
+                    engine, task_id=task_id, first_outcome=outcome, backends=backends
                 )
     except Exception:
         log.exception("api.run_dispatch_failed", task_id=str(task_id))
@@ -315,10 +335,15 @@ def create_run(
                 .where(task_agent_transcript.c.task_id == task_id)
                 .where(task_agent_transcript.c.status == "completed")
             ).scalar_one()
+            # Once a theory of change has a graph, no turn changes its plan
+            # (task 054, S7), so a later turn does not make it stale.
             if (
                 approved_plan.source_turn_index is not None
                 and latest_completed_turn is not None
                 and approved_plan.source_turn_index < latest_completed_turn
+                and not (
+                    access.row["capability"] == THEORY_OF_CHANGE and has_graph(conn, task_id)
+                )
             ):
                 raise ApiConflict(
                     "plan_stale",

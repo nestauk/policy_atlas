@@ -7,6 +7,7 @@ import { AuthContext } from "../auth/AuthContext";
 import type { AuthApi } from "../auth/types";
 import { ArtefactView } from "./ArtefactView";
 import { PublicViewProvider } from "./publicView";
+import { tocEvidenceFixture, tocGraphFixture } from "./toc/fixture";
 
 // The public view (task 037) must never open the run stream (the events
 // route is not on the public surface) — stub the SSE-backed store to its
@@ -57,7 +58,7 @@ const FUNNEL = { found: 0, relevant: 0, cited: 0 };
 /** Render the real `ArtefactView` under `PublicViewProvider value={true}`
  *  with every actual request logged — the pin is on the requests made, not
  *  on a mocked query layer that could quietly diverge from the real hooks. */
-function renderPublicArtefact() {
+function renderPublicArtefact(project: Record<string, unknown> = PROJECT) {
   const requestedPaths: string[] = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(
@@ -65,7 +66,9 @@ function renderPublicArtefact() {
       "http://localhost:3000",
     );
     requestedPaths.push(url.pathname);
-    if (url.pathname === `/api/v1/tasks/${TASK_ID}`) return jsonResponse(PROJECT);
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}`) return jsonResponse(project);
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}/toc`) return jsonResponse({ ...tocGraphFixture(), task_id: TASK_ID });
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}/toc/evidence`) return jsonResponse(tocEvidenceFixture());
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/artefact`) return jsonResponse(ARTEFACT);
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/landscape`) return jsonResponse(LANDSCAPE);
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/funnel`) return jsonResponse(FUNNEL);
@@ -114,5 +117,15 @@ describe("ArtefactView — public view issues only public-surface requests (task
 
     expect(requestedPaths.some((path) => path.includes("conversations"))).toBe(false);
     expect(screen.queryByText("Ask about this analysis")).not.toBeInTheDocument();
+  });
+});
+
+describe("ArtefactView — a public theory of change (task 054, C17)", () => {
+  it("renders the theory from the public reads only", async () => {
+    const { requestedPaths } = renderPublicArtefact({ ...PROJECT, capability: "theory_of_change" });
+
+    await waitFor(() => expect(requestedPaths).toContain(`/api/v1/tasks/${TASK_ID}/toc`));
+    expect(requestedPaths.some((path) => path.includes("conversations"))).toBe(false);
+    expect(requestedPaths).toContain(`/api/v1/tasks/${TASK_ID}/toc/evidence`);
   });
 });

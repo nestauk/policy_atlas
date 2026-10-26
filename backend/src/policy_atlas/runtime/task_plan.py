@@ -127,7 +127,6 @@ OPTIONS_SCOPING_STEPS: tuple[str, ...] = (
     "theme",
 )
 #: The steps only a theory-of-change chain composes (task 054, S3).
-# Not yet in _validate_registry: their harness nodes land in steps 1.3 and 1.4.
 TOC_STEPS: tuple[str, ...] = (
     "toc_draft",
     "toc_discover",
@@ -346,7 +345,10 @@ def _enabled_components(depth: AnalysisDepth) -> set[DiscretionaryComponent]:
 
 def _validate_registry() -> None:
     missing = sorted(
-        {registry_component_for(step) for step in (*ALL_STEPS, *OPTIONS_SCOPING_STEPS)}
+        {
+            registry_component_for(step)
+            for step in (*ALL_STEPS, *OPTIONS_SCOPING_STEPS, *TOC_STEPS)
+        }
         - set(COMPONENT_REGISTRY)
     )
     if missing:

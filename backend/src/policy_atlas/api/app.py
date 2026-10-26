@@ -58,6 +58,9 @@ _CONFLICT_CODES = {
 
 _CAPACITY_CODES = {"chat_capacity"}
 
+#: Task 054 (S14): a readable task that is not a theory of change.
+_NOT_FOUND_CODES = {"toc_not_found"}
+
 #: Task 054 (C15): a capability this deployment has switched off.
 _UNPROCESSABLE_CODES = {"capability_not_enabled"}
 
@@ -98,6 +101,25 @@ class ApiUnprocessable(Exception):
     def __init__(self, code: str, message: str) -> None:
         if code not in _UNPROCESSABLE_CODES:
             raise ValueError(f"unsupported API unprocessable code: {code}")
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+class ApiNotFound(Exception):
+    """A contract-defined 404 with its own code, for a resource of the wrong kind.
+
+    Raised only after the caller has passed the read check, so it never tells
+    an outsider anything (an unreadable task keeps the generic ``not_found``).
+
+    Args:
+        code: One of the contract-defined 404 codes.
+        message: Human-readable explanation for the caller.
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        if code not in _NOT_FOUND_CODES:
+            raise ValueError(f"unsupported API not-found code: {code}")
         super().__init__(message)
         self.code = code
         self.message = message
@@ -244,6 +266,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         public_read_router as tasks_public_read_router,
     )
     from policy_atlas.api.routers.tasks import router as tasks_router
+    from policy_atlas.api.routers.toc import router as toc_router
     from policy_atlas.api.routers.waitlist import router as waitlist_router
 
     for router in (
@@ -259,6 +282,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         sse_router,
         read_models_router,
         longlist_router,
+        toc_router,
         waitlist_router,
         *routers,
     ):
@@ -413,6 +437,10 @@ def _install_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiUnprocessable)
     async def api_unprocessable_handler(_: Request, exc: ApiUnprocessable) -> JSONResponse:
         return _error_response(422, exc.code, exc.message)
+
+    @app.exception_handler(ApiNotFound)
+    async def api_not_found_handler(_: Request, exc: ApiNotFound) -> JSONResponse:
+        return _error_response(404, exc.code, exc.message)
 
     @app.exception_handler(ApiCapacity)
     async def api_capacity_handler(_: Request, exc: ApiCapacity) -> JSONResponse:

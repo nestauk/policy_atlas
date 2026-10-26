@@ -36,6 +36,7 @@ from policy_atlas.api.contract import (
     TaskAgentTranscriptTurnOut,
     TaskAgentTurnCreate,
     TaskAgentTurnOut,
+    TocPlanDraft,
     TurnDecisionOut,
 )
 from policy_atlas.api.contract.tasks import LatestRun
@@ -69,6 +70,7 @@ from policy_atlas.api.routers._common import (
     active_parentless_walk,
 )
 from policy_atlas.api.routers.check_ins import execute_claimed
+from policy_atlas.api.toc_start import walk_kind as toc_walk_kind
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import (
@@ -92,6 +94,7 @@ from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.capability_registry import (
     EVIDENCE_SEARCH,
     OPTIONS_SCOPING,
+    THEORY_OF_CHANGE,
     AnyPlan,
     TaskAgentProfile,
     capability_of_task,
@@ -123,6 +126,7 @@ from policy_atlas.runtime.task_agent_scoping import (
     latest_approved_scoping_plan,
 )
 from policy_atlas.runtime.task_plan import TaskPlan, _enabled_components
+from policy_atlas.runtime.toc_plan import TOC_WALK_CHECK
 
 log = structlog.get_logger()
 
@@ -174,22 +178,28 @@ def _expire_stale_pending_turns(conn: Connection, task_id: uuid.UUID) -> None:
     )
 
 
-def plan_slot(draft: BaseModel, *, scoping_slot: str = "scoping") -> dict[str, Any]:
+def plan_slot(
+    draft: BaseModel, *, scoping_slot: str = "scoping", toc_slot: str = "toc"
+) -> dict[str, Any]:
     """Put a projected draft in its capability's slot.
 
     The contracts keep one slot per capability (``plan`` for Evidence search,
-    ``scoping`` — ``scoping_plan`` on a turn — for options scoping), so this is
-    the one place the draft's type picks the field.
+    ``scoping`` — ``scoping_plan`` on a turn — for options scoping, ``toc`` —
+    ``toc_plan`` on a turn — for a theory of change), so this is the one
+    place the draft's type picks the field.
 
     Args:
-        draft: A ``PlanDraft`` or ``ScopingPlanDraft``.
+        draft: A ``PlanDraft``, ``ScopingPlanDraft`` or ``TocPlanDraft``.
         scoping_slot: The field a scoping draft goes in.
+        toc_slot: The field a theory-of-change draft goes in.
 
     Returns:
         The keyword arguments that place the draft.
     """
     if isinstance(draft, ScopingPlanDraft):
         return {scoping_slot: draft}
+    if isinstance(draft, TocPlanDraft):
+        return {toc_slot: draft}
     return {"plan": draft}
 
 
@@ -244,6 +254,30 @@ def _scoping_plan_out(conn: Connection, task_id: uuid.UUID) -> PlanOut:
         version=0,
         status="draft",
     )
+
+
+def _toc_plan_out(conn: Connection, task_id: uuid.UUID) -> PlanOut:
+    """Return a theory-of-change task's plan as ``GET /plan`` shows it (task 054).
+
+    The approved plan wins; before one exists, the latest completed turn that
+    carried a draft stands in.
+    """
+    row = latest_approved_plan_row(conn, task_id)
+    if row is not None:
+        return _plan_out(THEORY_OF_CHANGE, validate_plan(THEORY_OF_CHANGE, row["payload"]), row)
+    responses = conn.execute(
+        select(task_agent_transcript.c.response)
+        .where(task_agent_transcript.c.task_id == task_id)
+        .where(task_agent_transcript.c.status == "completed")
+        .where(task_agent_transcript.c.response.is_not(None))
+        .order_by(task_agent_transcript.c.turn_index.desc())
+        .limit(1)
+    ).scalars()
+    response = next(iter(responses), None)
+    draft = TaskAgentTurnOut.model_validate(response).toc_plan if response else None
+    if draft is None:
+        raise HTTPException(status_code=404, detail="resource not found")
+    return PlanOut(toc=draft, capability=THEORY_OF_CHANGE, version=0, status="draft")
 
 
 def _apply_scoping_patch(
@@ -397,10 +431,10 @@ def _task_agent_inputs(
         task_agent_state = row["task_agent_state"]
         if reply is None:
             raise RuntimeError("completed task_agent transcript row is incomplete")
-        turns.extend((
-            {"role": "user", "text": row["user_message"]},
-            {"role": "planner", "text": reply},
-        ))
+        # A code-authored line (task 054, J3) has no user message.
+        if row["user_message"]:
+            turns.append({"role": "user", "text": row["user_message"]})
+        turns.append({"role": "planner", "text": reply})
         # A gate turn — an answer, an ask-back, a recorded decision — is part
         # of the conversation but carries no plan draft (task 044), so it adds
         # its exchange and leaves the draft where the last planning turn left
@@ -549,7 +583,15 @@ def _phase_one_turn(
         if active is not None
         else None
     )
-    if active is not None and gate is None:
+    # A theory-of-change check walk keeps the thread open (task 054, S7): the
+    # turn is admitted and answers questions; the plan stays as approved.
+    toc_checking = (
+        active is not None
+        and capability == THEORY_OF_CHANGE
+        and toc_walk_kind(conn, task_id=task_id, capability_run_id=active["capability_run_id"])
+        == TOC_WALK_CHECK
+    )
+    if active is not None and gate is None and not toc_checking:
         raise ApiConflict(
             "run_active",
             "finish or stop the current run before replanning; "
@@ -1095,7 +1137,7 @@ def create_task_agent_turn(
                 approved, note = profile.after_approve(engine, task_id, approved, agent)
             if note is not None:
                 reply_text = f"{turn.reply.rstrip()}\n\n{note}"
-        part = _validated_part(turn.part, profile)
+        part = _validated_part(getattr(turn, "part", None), profile)
         draft = (
             profile.draft_from_plan(approved)
             if approved is not None
@@ -1103,7 +1145,7 @@ def create_task_agent_turn(
         )
         result = TaskAgentTurnOut(
             reply=reply_text,
-            **plan_slot(draft, scoping_slot="scoping_plan"),
+            **plan_slot(draft, scoping_slot="scoping_plan", toc_slot="toc_plan"),
             capability=capability,
             suggestions=turn.suggested_answers or [],
             part=part,
@@ -1235,6 +1277,8 @@ def get_plan(
         capability = access.row["capability"]
         if capability == OPTIONS_SCOPING:
             return _scoping_plan_out(conn, task_id)
+        if capability == THEORY_OF_CHANGE:
+            return _toc_plan_out(conn, task_id)
         row, plan, latest = _current_es_plan(conn, task_id, capability)
     if row is not None and plan is not None:
         return _plan_out(EVIDENCE_SEARCH, plan, row)
@@ -1531,6 +1575,12 @@ def patch_plan(
             )
         capability = access.row["capability"]
         es_fields = payload.model_fields_set - {"scoping"}
+        if capability == THEORY_OF_CHANGE:
+            # Increment 1: the plan is set through the Task Agent only.
+            raise HTTPException(
+                status_code=422,
+                detail="a theory-of-change plan is changed through the Task Agent",
+            )
         if capability == OPTIONS_SCOPING:
             if es_fields:
                 raise HTTPException(

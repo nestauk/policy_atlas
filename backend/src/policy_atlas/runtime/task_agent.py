@@ -175,11 +175,12 @@ def _scrub_turn[W: (PlannerTurnWire, ScopingTurnWire)](turn: W) -> W:
     updates["plan_draft"] = type(turn.plan_draft).model_validate(
         _scrub_nul(turn.plan_draft.model_dump())
     )
-    if turn.part is not None:
+    part = getattr(turn, "part", None)  # a theory-of-change turn has no part (task 054)
+    if part is not None:
         # Postgres JSONB rejects \u0000; an unscrubbed part would wedge the
         # phase-two transcript write instead of degrading (review 028, security
         # lane).
-        updates["part"] = type(turn.part).model_validate(_scrub_nul(turn.part.model_dump()))
+        updates["part"] = type(part).model_validate(_scrub_nul(part.model_dump()))
     return turn.model_copy(update=updates)
 
 

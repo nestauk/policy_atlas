@@ -383,6 +383,43 @@ class BaselineConfirmedOut(BaseModel):
     plan_version: int
 
 
+class TocPlanDraft(BaseModel):
+    """Draft or approved theory-of-change plan, as surfaced to the client (task 054).
+
+    Mirrors the runtime `TocPlan`. Every field except `ready` may be absent
+    while drafting.
+
+    Args:
+        title: Short user-visible name for the task.
+        question: The user's ask.
+        entry_point: `outcome_first`, `intervention_first` or `existing_theory`.
+        intended_change: The impact, in measurable words.
+        target_population: Who the change is for.
+        intervention: What would be done.
+        dosage: How much of the intervention each beneficiary gets.
+        existing_theory_text: The user's own theory, verbatim.
+        where: The place the theory is for.
+        time_horizon: When the impact is expected.
+        context: What the user said about the setting.
+        assumptions: Every guess the plan is making.
+        ready: Whether the draft has validated into an executable plan.
+    """
+
+    title: str | None = None
+    question: str | None = None
+    entry_point: Literal["outcome_first", "intervention_first", "existing_theory"] | None = None
+    intended_change: str | None = None
+    target_population: str | None = None
+    intervention: str | None = None
+    dosage: str | None = None
+    existing_theory_text: str | None = None
+    where: str | None = None
+    time_horizon: str | None = None
+    context: str | None = None
+    assumptions: list[str] = Field(default_factory=list)
+    ready: bool = False
+
+
 class ScopingPlanDraft(BaseModel):
     """Draft or approved options-scoping plan, as surfaced to the client.
 
@@ -615,6 +652,8 @@ class TaskAgentTurnOut(BaseModel):
         scoping_plan: The full current scoping draft, on an options-scoping
             turn. `plan` is null for those turns, and this is null for
             Evidence search turns.
+        toc_plan: The full current theory-of-change draft, on a theory-of-change
+            turn (task 054).
         kind: What this turn is. Absent on turns stored before task 044,
             which are all replies.
         answer: The cited answer, on an `answer` turn.
@@ -629,6 +668,7 @@ class TaskAgentTurnOut(BaseModel):
     conversation_id: uuid.UUID | None = None
     capability: str | None = None
     scoping_plan: ScopingPlanDraft | None = None
+    toc_plan: TocPlanDraft | None = None
     kind: TaskAgentTurnKind | None = None
     answer: AnswerPayloadOut | None = None
     decision: TurnDecisionOut | None = None
@@ -682,6 +722,7 @@ class PlanOut(BaseModel):
         plan: The current Evidence search plan, or null on a scoping task.
         scoping: The current options-scoping plan, or null on an Evidence
             search task.
+        toc: The current theory-of-change plan (task 054), or null.
         capability: Which of the two the task is, so a reader never has to
             infer it from which field is null.
         version: Plan row version.
@@ -692,6 +733,7 @@ class PlanOut(BaseModel):
 
     plan: PlanDraft | None = None
     scoping: ScopingPlanDraft | None = None
+    toc: TocPlanDraft | None = None
     capability: str = "evidence_search"
     version: int
     status: str

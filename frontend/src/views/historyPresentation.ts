@@ -93,9 +93,11 @@ export function mergeHistory(
       category: turn.turn_index === 0 ? "Question" : "Planning",
       tone: turn.status === "failed" ? "red" : "blue",
       sentence:
-        turn.status === "failed"
-          ? `You asked: "${turn.user_message}" — this turn didn't complete.`
-          : `You asked: "${turn.user_message}"`,
+        turn.user_message === ""
+          ? "The Task Agent posted an update." // a code-authored line (task 054, J3)
+          : turn.status === "failed"
+            ? `You asked: "${turn.user_message}" — this turn didn't complete.`
+            : `You asked: "${turn.user_message}"`,
       details:
         turn.reply != null && turn.reply !== ""
           ? [{ label: "The Task Agent replied", value: turn.reply }]

@@ -984,3 +984,58 @@ describe("PlanDocument — options scoping, task 045 slots", () => {
     expect(rows[at + 1]).toContain("Kept for the assessment. It excludes nothing.");
   });
 });
+
+describe("PlanDocument — theory of change (task 054)", () => {
+  type TocPlanDraft = components["schemas"]["TocPlanDraft"];
+
+  function tocPlanOut(overrides: Partial<TocPlanDraft> = {}): PlanOut {
+    return {
+      capability: "theory_of_change",
+      plan: null,
+      scoping: null,
+      toc: {
+        title: "Healthy weight",
+        question: "How would an advertising ban reduce childhood obesity?",
+        entry_point: "intervention_first",
+        intended_change: "Fewer children living with obesity",
+        target_population: "children aged 4 to 11",
+        intervention: "a junk-food advertising ban",
+        dosage: null,
+        existing_theory_text: null,
+        where: "London",
+        time_horizon: "within 5 years",
+        context: null,
+        assumptions: [],
+        ready: true,
+        ...overrides,
+      },
+      status: "approved",
+      version: 1,
+    };
+  }
+
+  it("renders the starting point, the change, the intervention and the context", () => {
+    mockUsePlan({ data: tocPlanOut() });
+    renderPlan();
+    for (const label of ["Starting point", "The change", "Intervention", "Context"]) {
+      expect(screen.getByText(label, { selector: "h3, h2, span, p, div" })).toBeInTheDocument();
+    }
+    expect(screen.getByText("From an intervention")).toBeInTheDocument();
+    expect(screen.getByText("Fewer children living with obesity")).toBeInTheDocument();
+    expect(screen.getByText("children aged 4 to 11")).toBeInTheDocument();
+    expect(screen.getByText("a junk-food advertising ban")).toBeInTheDocument();
+    expect(screen.getAllByText(COPY.notDecided).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Draft the theory" })).toBeEnabled();
+    // No Evidence search sections or start button.
+    expect(screen.queryByText("Research question")).not.toBeInTheDocument();
+  });
+
+  it("shows a pasted theory under the starting point", () => {
+    mockUsePlan({
+      data: tocPlanOut({ entry_point: "existing_theory", existing_theory_text: "Inputs lead to outputs." }),
+    });
+    renderPlan();
+    expect(screen.getByText("From your own theory of change")).toBeInTheDocument();
+    expect(screen.getByText("Inputs lead to outputs.")).toBeInTheDocument();
+  });
+});

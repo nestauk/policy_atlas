@@ -53,6 +53,9 @@ _CONDITIONALLY_PUBLIC_GETS = frozenset(
         "/api/v1/tasks/{task_id}/options/{option_id}",
         # Task 046, amendment 3 (R67): the dossier's records, public like the dossier.
         "/api/v1/tasks/{task_id}/sources/{source_id}/records",
+        # Task 054 (S14, C17): the theory of change, public like the Result tab.
+        "/api/v1/tasks/{task_id}/toc",
+        "/api/v1/tasks/{task_id}/toc/evidence",
     }
 )
 
@@ -68,6 +71,9 @@ _PUBLIC_STRUCTURAL_GETS = _CONDITIONALLY_PUBLIC_GETS - frozenset(
         "/api/v1/tasks/{task_id}/chunks/{chunk_id}/context",
         "/api/v1/tasks/{task_id}/longlist",
         "/api/v1/tasks/{task_id}/options/{option_id}",
+        # 404 ``toc_not_found`` on a task that is not a theory of change.
+        "/api/v1/tasks/{task_id}/toc",
+        "/api/v1/tasks/{task_id}/toc/evidence",
     }
 )
 

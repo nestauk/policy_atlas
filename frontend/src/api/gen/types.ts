@@ -1108,6 +1108,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/toc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc
+         * @description Return the theory: boxes, links with both grades and states, pathways, summary.
+         */
+        get: operations["get_toc_api_v1_tasks__task_id__toc_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc Evidence
+         * @description Return every judged document per link and every case study per box.
+         */
+        get: operations["get_toc_evidence_api_v1_tasks__task_id__toc_evidence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/waitlist": {
         parameters: {
             query?: never;
@@ -3805,6 +3845,7 @@ export interface components {
          *         plan: The current Evidence search plan, or null on a scoping task.
          *         scoping: The current options-scoping plan, or null on an Evidence
          *             search task.
+         *         toc: The current theory-of-change plan (task 054), or null.
          *         capability: Which of the two the task is, so a reader never has to
          *             infer it from which field is null.
          *         version: Plan row version.
@@ -3823,6 +3864,7 @@ export interface components {
             scoping?: components["schemas"]["ScopingPlanDraft"] | null;
             /** Status */
             status: string;
+            toc?: components["schemas"]["TocPlanDraft"] | null;
             /** Version */
             version: number;
         };
@@ -3909,6 +3951,8 @@ export interface components {
             scoping: components["schemas"]["ScopingPlanDraft"] | null;
             /** Sequence */
             sequence: number;
+            /** @default null */
+            toc: components["schemas"]["TocPlanDraft"] | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4879,6 +4923,8 @@ export interface components {
          *         scoping_plan: The full current scoping draft, on an options-scoping
          *             turn. `plan` is null for those turns, and this is null for
          *             Evidence search turns.
+         *         toc_plan: The full current theory-of-change draft, on a theory-of-change
+         *             turn (task 054).
          *         kind: What this turn is. Absent on turns stored before task 044,
          *             which are all replies.
          *         answer: The cited answer, on an `answer` turn.
@@ -4902,6 +4948,7 @@ export interface components {
             scoping_plan?: components["schemas"]["ScopingPlanDraft"] | null;
             /** Suggestions */
             suggestions?: string[];
+            toc_plan?: components["schemas"]["TocPlanDraft"] | null;
         };
         /**
          * TaskCreate
@@ -5289,6 +5336,411 @@ export interface components {
              * @enum {string}
              */
             type: "tick";
+        };
+        /**
+         * TocBoxEvidenceOut
+         * @description A box's case studies and the indicators its documents used.
+         */
+        TocBoxEvidenceOut: {
+            /**
+             * Box Id
+             * Format: uuid
+             */
+            box_id: string;
+            /** Case Studies */
+            case_studies: components["schemas"]["TocCaseStudyOut"][];
+            /** Indicators */
+            indicators: string[];
+        };
+        /**
+         * TocBoxOut
+         * @description One element in a layer. Boxes are described, not graded (W4).
+         */
+        TocBoxOut: {
+            /**
+             * Box Id
+             * Format: uuid
+             */
+            box_id: string;
+            /** Description */
+            description: string | null;
+            /** Dosage */
+            dosage: string | null;
+            /**
+             * Layer
+             * @enum {string}
+             */
+            layer: "input" | "output" | "outcome" | "impact" | "failure_outcome";
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "drafted" | "found_in_evidence" | "imported" | "user" | "options_scoping";
+            result_criteria: components["schemas"]["TocResultCriteriaOut"];
+            /** Revision */
+            revision: number;
+            /** Text */
+            text: string;
+        };
+        /**
+         * TocCaseStudyOut
+         * @description Where one box was seen (or, for an input, put in place).
+         */
+        TocCaseStudyOut: {
+            /** Note */
+            note: string;
+            /** Place */
+            place: string | null;
+            /** Programme */
+            programme: string;
+            /** Quote */
+            quote: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "academic" | "policy" | "web";
+            /**
+             * Task Source Snapshot Id
+             * Format: uuid
+             */
+            task_source_snapshot_id: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string | null;
+            /** Year */
+            year: number | null;
+        };
+        /**
+         * TocDocumentOut
+         * @description One judged document of one link, listed once even when it answers both.
+         */
+        TocDocumentOut: {
+            /** Appraisal Score */
+            appraisal_score: number | null;
+            /** Condition */
+            condition: string | null;
+            elsewhere: components["schemas"]["TocStanceOut"];
+            /** Evidence Type */
+            evidence_type: string | null;
+            here: components["schemas"]["TocStanceOut"];
+            /** Previous Wording */
+            previous_wording: boolean;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "academic" | "policy" | "web";
+            /**
+             * Task Source Snapshot Id
+             * Format: uuid
+             */
+            task_source_snapshot_id: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string | null;
+            /** Year */
+            year: number | null;
+        };
+        /**
+         * TocEvidenceOut
+         * @description Every judged document and case study of the theory.
+         */
+        TocEvidenceOut: {
+            /** Boxes */
+            boxes: components["schemas"]["TocBoxEvidenceOut"][];
+            /** Links */
+            links: components["schemas"]["TocLinkEvidenceOut"][];
+        };
+        /**
+         * TocGradeOut
+         * @description One question's grade (C4).
+         */
+        TocGradeOut: {
+            /** Against */
+            against: number;
+            /**
+             * Grade
+             * @enum {string}
+             */
+            grade: "strong" | "medium" | "weak" | "none";
+            /** Supports */
+            supports: number;
+        };
+        /**
+         * TocGradeRuleOut
+         * @description One row of the grade rule, generated from the grade constants (C4).
+         */
+        TocGradeRuleOut: {
+            /** Label */
+            label: string;
+            /** Rule */
+            rule: string;
+        };
+        /**
+         * TocGraphOut
+         * @description The whole theory as the Result page reads it.
+         */
+        TocGraphOut: {
+            /** Boxes */
+            boxes: components["schemas"]["TocBoxOut"][];
+            /**
+             * Check Status
+             * @enum {string}
+             */
+            check_status: "none" | "drafting" | "checking" | "checked" | "failed";
+            /** Context */
+            context: string[];
+            /** Grade Rules */
+            grade_rules: components["schemas"]["TocGradeRuleOut"][];
+            /** Links */
+            links: components["schemas"]["TocLinkOut"][];
+            /** Links Left Out */
+            links_left_out: number;
+            /** Pathways */
+            pathways: components["schemas"]["TocPathwayOut"][];
+            summary: components["schemas"]["TocSummaryOut"] | null;
+            /** Supporting Activities */
+            supporting_activities: string[];
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+        };
+        /**
+         * TocLinkEvidenceOut
+         * @description Every document judged for one link.
+         */
+        TocLinkEvidenceOut: {
+            /** Documents */
+            documents: components["schemas"]["TocDocumentOut"][];
+            /**
+             * Link Id
+             * Format: uuid
+             */
+            link_id: string;
+        };
+        /**
+         * TocLinkOut
+         * @description One causal step, with both grades and its state.
+         */
+        TocLinkOut: {
+            /** Assumption Type */
+            assumption_type: string;
+            /** Because Text */
+            because_text: string;
+            /** Conditions */
+            conditions: string[];
+            /** Critical */
+            critical: boolean;
+            elsewhere: components["schemas"]["TocGradeOut"];
+            /** Elsewhere Sentence */
+            elsewhere_sentence: string | null;
+            /** For Text */
+            for_text: string;
+            here: components["schemas"]["TocGradeOut"];
+            /** Here Sentence */
+            here_sentence: string | null;
+            /** If Text */
+            if_text: string;
+            /**
+             * Link Id
+             * Format: uuid
+             */
+            link_id: string;
+            /**
+             * Lower Grade
+             * @enum {string}
+             */
+            lower_grade: "strong" | "medium" | "weak" | "none";
+            /** Merged */
+            merged: boolean;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "drafted" | "found_in_evidence" | "imported" | "user" | "options_scoping";
+            /** Revision */
+            revision: number;
+            /** Sentence */
+            sentence: string;
+            /**
+             * Source Box Id
+             * Format: uuid
+             */
+            source_box_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "unchecked" | "checking" | "checked" | "pending" | "kept" | "no_change";
+            /**
+             * Target Box Id
+             * Format: uuid
+             */
+            target_box_id: string;
+            /** Then Text */
+            then_text: string;
+        };
+        /**
+         * TocPathwayOut
+         * @description One ordered route of links.
+         */
+        TocPathwayOut: {
+            /** Broken */
+            broken: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "success" | "failure";
+            /** Label */
+            label: string;
+            /** Link Ids */
+            link_ids: string[];
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "drafted" | "found_in_evidence" | "imported" | "user" | "options_scoping";
+            /**
+             * Pathway Id
+             * Format: uuid
+             */
+            pathway_id: string;
+            /** Reason */
+            reason: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "kept" | "set_aside";
+        };
+        /**
+         * TocPlanDraft
+         * @description Draft or approved theory-of-change plan, as surfaced to the client (task 054).
+         *
+         *     Mirrors the runtime `TocPlan`. Every field except `ready` may be absent
+         *     while drafting.
+         *
+         *     Args:
+         *         title: Short user-visible name for the task.
+         *         question: The user's ask.
+         *         entry_point: `outcome_first`, `intervention_first` or `existing_theory`.
+         *         intended_change: The impact, in measurable words.
+         *         target_population: Who the change is for.
+         *         intervention: What would be done.
+         *         dosage: How much of the intervention each beneficiary gets.
+         *         existing_theory_text: The user's own theory, verbatim.
+         *         where: The place the theory is for.
+         *         time_horizon: When the impact is expected.
+         *         context: What the user said about the setting.
+         *         assumptions: Every guess the plan is making.
+         *         ready: Whether the draft has validated into an executable plan.
+         */
+        TocPlanDraft: {
+            /** Assumptions */
+            assumptions?: string[];
+            /**
+             * Context
+             * @default null
+             */
+            context: string | null;
+            /**
+             * Dosage
+             * @default null
+             */
+            dosage: string | null;
+            /**
+             * Entry Point
+             * @default null
+             */
+            entry_point: ("outcome_first" | "intervention_first" | "existing_theory") | null;
+            /**
+             * Existing Theory Text
+             * @default null
+             */
+            existing_theory_text: string | null;
+            /**
+             * Intended Change
+             * @default null
+             */
+            intended_change: string | null;
+            /**
+             * Intervention
+             * @default null
+             */
+            intervention: string | null;
+            /**
+             * Question
+             * @default null
+             */
+            question: string | null;
+            /**
+             * Ready
+             * @default false
+             */
+            ready: boolean;
+            /**
+             * Target Population
+             * @default null
+             */
+            target_population: string | null;
+            /**
+             * Time Horizon
+             * @default null
+             */
+            time_horizon: string | null;
+            /**
+             * Title
+             * @default null
+             */
+            title: string | null;
+            /**
+             * Where
+             * @default null
+             */
+            where: string | null;
+        };
+        /**
+         * TocResultCriteriaOut
+         * @description Mayne's checks on one box.
+         */
+        TocResultCriteriaOut: {
+            /** Definition */
+            definition?: string | null;
+            /** Indicator */
+            indicator?: string | null;
+            /** Timing */
+            timing?: string | null;
+        };
+        /**
+         * TocStanceOut
+         * @description One question's stance on one document.
+         */
+        TocStanceOut: {
+            /** Quote */
+            quote: string | null;
+            /**
+             * Stance
+             * @enum {string}
+             */
+            stance: "supports" | "challenges" | "not_about";
+        };
+        /**
+         * TocSummaryOut
+         * @description The header paragraphs and the questions for an evaluation (C20).
+         */
+        TocSummaryOut: {
+            /** About */
+            about: string;
+            /** Evaluation Questions */
+            evaluation_questions: string[];
+            /** Evidence Says */
+            evidence_says: string;
         };
         /**
          * TurnActionOut
@@ -7039,6 +7491,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskAgentTurnOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_api_v1_tasks__task_id__toc_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocGraphOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_evidence_api_v1_tasks__task_id__toc_evidence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocEvidenceOut"];
                 };
             };
             /** @description Validation Error */

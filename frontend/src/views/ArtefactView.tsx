@@ -1330,7 +1330,9 @@ export function ArtefactView() {
   const { taskId = "" } = useParams();
   const isPublicView = usePublicView();
   const task = useTask(taskId);
-  if (!isPublicView && isToc(task.data)) return <TocResult taskId={taskId} />;
+  // A theory of change is public like the Result tab (C17): the graph and its
+  // evidence are on the public read leg.
+  if (isToc(task.data)) return <TocResult taskId={taskId} />;
   if (isPublicView || !hasLonglist(task.data)) return <ArtefactReport />;
   return <ScopingResult taskId={taskId} />;
 }

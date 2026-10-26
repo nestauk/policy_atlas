@@ -157,7 +157,13 @@ from policy_atlas.runtime.task_plan import (
     TaskPlan,
     registry_component_for,
 )
-from policy_atlas.runtime.toc_plan import TOC_PURPOSE
+from policy_atlas.runtime.toc_plan import (
+    TOC_LINKS_KEY,
+    TOC_PURPOSE,
+    TOC_WALK_CHECK,
+    TOC_WALK_KEY,
+)
+from policy_atlas.theory_of_change.backend import TocBackend
 
 log = structlog.get_logger()
 
@@ -182,6 +188,13 @@ LLM_BEARING_COMPONENTS = frozenset(
         "theme",
         # Task 046 (R37): option_profile makes the lever-typing calls.
         "option_profile",
+        # Task 054: every theory-of-change step makes model calls.
+        "toc_draft",
+        "toc_discover",
+        "toc_merge",
+        "toc_judge",
+        "toc_choose",
+        "toc_summarise",
     }
 )
 SPINE_COMPONENTS = frozenset(SPINE)
@@ -300,6 +313,8 @@ class RunnerBackends:
         longlist: Optional model seam for the options-scoping ``longlist``
             step (task 045); ``None`` lets the harness resolve the
             deterministic ``StubLonglistBackend``.
+        toc: Optional model seam for every theory-of-change step (task
+            054); ``None`` lets the harness resolve ``StubTocBackend``.
     """
 
     embedding: EmbeddingBackend | None = None
@@ -321,6 +336,7 @@ class RunnerBackends:
     langfuse_client: Langfuse | None = None
     suggest: SuggestBackend | None = None
     longlist: LonglistBackend | None = None
+    toc: TocBackend | None = None
 
 
 class CheckInIO(Protocol):
@@ -952,6 +968,16 @@ def _run_plan_impl(
     # run, on a resumed walk).
     option_search_children: list[uuid.UUID] | None = None
     option_searches_joined = False
+    # A theory-of-change check walk's item searches (task 054, S3): the same
+    # two barriers, dispatched before the first step and joined before
+    # ``screen_abstract``. A ToC walk never pauses, so never resumes.
+    toc_check = (
+        resume_from is None
+        and purpose == TOC_PURPOSE
+        and scope_context.get(TOC_WALK_KEY) == TOC_WALK_CHECK
+    )
+    toc_children: list[uuid.UUID] | None = None
+    toc_joined = False
     # The most-recent ATTEMPTED run id per registry component, INCLUDING failed
     # attempts (FIX 1): un-blinds class 9 (downstream_capability_reduced), which
     # scans the walk's attempted run ids for component.failed/skipped events — a
@@ -1076,6 +1102,51 @@ def _run_plan_impl(
 
     while remaining_steps:
         step = remaining_steps.pop(0)
+        if toc_check:
+            if toc_children is None:
+                toc_children = option_search.dispatch_toc_item_searches(
+                    engine,
+                    task_id=task_id,
+                    parent_id=capability_run_id,
+                    plan_row={
+                        "plan_id": steering_state.plan_id,
+                        "version": steering_state.plan_version,
+                        "payload": steering_state.plan.model_dump(mode="json"),
+                    },
+                    backends=backend_bundle,
+                    session_id=session_id,
+                    links=scope_context.get(TOC_LINKS_KEY),
+                )
+            if step.component == "screen_abstract" and not toc_joined:
+                toc_joined = True
+                joined = option_search.join_children(
+                    engine,
+                    task_id=task_id,
+                    parent_id=capability_run_id,
+                    child_ids=toc_children,
+                    stage=option_search.TOC_ITEM_SEARCHES_STAGE,
+                    timeout=option_search.toc_join_timeout(len(toc_children)),
+                )
+                # A failed item search degrades the walk, never fails it.
+                if joined.failed:
+                    reason = f"{joined.failed} of {joined.total} item searches did not finish"
+                    step_outcomes.append(
+                        RunStepOutcome(
+                            component=option_search.TOC_ITEM_SEARCHES_STAGE,
+                            run_id=None,
+                            status="skipped",
+                            wall_clock_s=None,
+                            skipped=True,
+                            reason=reason,
+                        )
+                    )
+                    flagged_events.append(
+                        {
+                            "component": option_search.TOC_ITEM_SEARCHES_STAGE,
+                            "status": "skipped",
+                            "reason": reason,
+                        }
+                    )
         if purpose == LONGLIST_PURPOSE:
             # The fan-out: the first step after ``suggest`` (whether it
             # succeeded or not — the user's own options are entrants either
@@ -5598,7 +5669,14 @@ def _finish_run(
         # never leave a succeeded run with an active task_agent conversation.
         # A child walk never does (task 045, P3): the thread the user is
         # watching belongs to its parent. Nor does any option search.
-        if status in ("succeeded", "degraded") and not is_child and not is_option_search:
+        # Nor does a theory-of-change walk (054, S7): the thread stays open
+        # through the check and after it.
+        if (
+            status in ("succeeded", "degraded")
+            and not is_child
+            and not is_option_search
+            and purpose != TOC_PURPOSE
+        ):
             close_task_agent_conversation(conn, task_id=task_id, closed_at=ended_at)
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)
@@ -5840,6 +5918,7 @@ def _run_step_attempt(
                     grounding_judge_backend=backends.grounding_judge,
                     suggest_backend=backends.suggest,
                     longlist_backend=backends.longlist,
+                    toc_backend=backends.toc,
                     search_backends=backends.search_backends,
                     search_generation_backend=backends.search_generation,
                     document_fetcher=backends.document_fetcher,

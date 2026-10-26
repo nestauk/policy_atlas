@@ -33,19 +33,21 @@ SITES: dict[tuple[str, str], tuple[int, str]] = {
     ("runtime/agent.py", "persist_approved_plan"): (
         1, "done 1.2: a TocPlan writes purpose='toc', context.toc_walk='draft'"
     ),
-    # Left for later steps.
+    # Done in 054 steps 1.3 and 1.4.
     ("runtime/runner.py", "_run_plan_impl"): (
-        1, "1.4: the toc item-search dispatch and join beside LONGLIST_PURPOSE"
+        1, "done 1.4: toc item searches dispatch and join in their own branch beside it"
     ),
     ("api/routers/runs.py", "_dispatch_run"): (
-        1, "1.3: the draft → check follow-on (S4); longlist follow-on stays OS-only"
+        1, "done 1.3: the draft → check follow-on (S4); longlist follow-on stays OS-only"
     ),
-    ("api/routers/task_agent.py", "get_plan"): (
-        1, "1.3: a ToC branch (today a ToC task falls to the Evidence search read)"
-    ),
+    ("api/routers/task_agent.py", "get_plan"): (1, "done 1.3: a ToC branch before it"),
     ("api/routers/task_agent.py", "patch_plan"): (
-        1, "1.3: a ToC branch (today a ToC task falls to the Evidence search patch)"
+        1, "done 1.3: ToC refused 422 before it (the plan is set through the Task Agent)"
     ),
+    ("runtime/option_search.py", "child_plan"): (
+        1, "done 1.4: an OS child runs unattended_plan; every other via the registry"
+    ),
+    # Left for later steps.
     ("api/routers/task_agent.py", "_paused_gate"): (
         1, "OS-only: a toc walk never pauses; turns during a check are S7 (1.3, 2.2)"
     ),
