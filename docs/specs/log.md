@@ -1,5 +1,15 @@
 # Spec update log
 
+## 2026-10-26 (design close, task 054)
+* **Update**: task 054 contract spec changes 2–5 applied at the plan gate (owner: "Approve!"),
+  with [ADR 0042](../adr/0042-theory-of-change-task-kind.md):
+  [ToC capability](capabilities/theory-of-change/capability.md) § Product surface gains the
+  server setting, the empty lattice and the plan-change choice;
+  [OS capability](capabilities/options-scoping/capability.md) "start a theory of change" moves
+  from ⏸ to ✅; [execution-orchestration](system/execution-orchestration.md) opens the open-web
+  backend for the ToC check walk only; [product.md](product.md) puts Theory of change in scope
+  behind a build flag. Spec change 1 (components) was applied earlier the same day.
+
 ## 2026-10-26
 * **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Trust rules: a
   link and its assumptions answer different questions, get their own judge question and grade, and

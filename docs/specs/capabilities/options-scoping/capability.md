@@ -487,7 +487,8 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   unit by its nature, otherwise it is context and the factor stays Unknown, ruling 34) ·
   Assumptions (load-bearing, strength, the key one) · What it would take (implementation
   requirements, reported costs, time to impact, distributional notes — provenance-carrying, no
-  analysis). Next steps: run a full evidence search · start a theory of change (⏸ consumer) ·
+  analysis). Next steps: run a full evidence search · ✅ start a theory of change ("How would this option work?",
+  with the theories already made from it; task 054, ADR 0042, owner 2026-10-23) ·
   remove from shortlist. No export from the profile.
 - ✅ **Case studies** come from three tiers typed by provenance: the academic corpus (especially
   observational and quasi-experimental implementation accounts), **Overton grey literature (the

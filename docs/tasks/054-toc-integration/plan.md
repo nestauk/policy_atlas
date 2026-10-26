@@ -7,8 +7,11 @@ routes each step to an executor and sets the gates. It adds nothing to scope.
 > **Status:** first drafted 2026-10-23 and reviewed in two read-only lanes (26 findings, folded;
 > § Plan-review folds). **Re-planned 2026-10-26** after the owner's wireframe and journey review
 > and the ruling on an iterative build (contract C18): a simple core first, an iteration phase,
-> then six increments. Plan and contract approved (before implementation): _pending_. ADR 0042 is
-> written after approval and before the build opens.
+> then six increments. A read-only Codex review of the revised
+> contract and plan followed (five fixes folded; the core's size kept as is on the owner's word).
+> **Plan and contract approved (before implementation): 2026-10-26 · owner** ("Approve!"). D1 done:
+> ADR [0042](../../adr/0042-theory-of-change-task-kind.md) Accepted; contract spec changes 2–5
+> applied and logged. Next: P0, in a fresh session, once PR #84 has merged.
 
 **How this build runs (C18).** Build the narrowest core that runs end to end, try it on real
 topics, tune it, then add one increment at a time. The owner uses each increment in the app before

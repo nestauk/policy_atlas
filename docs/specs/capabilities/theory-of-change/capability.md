@@ -457,7 +457,14 @@ Design a theory of change".
 ## Product surface
 
 - 🟡 **New task page.** "Theory of change" becomes available behind a build flag
-  (`VITE_THEORY_OF_CHANGE`).
+  (`VITE_THEORY_OF_CHANGE`). ✅ The backend also refuses to create the task kind unless the server
+  setting `POLICY_ATLAS_THEORY_OF_CHANGE=1` is on, so a merge exposes nothing by API alone (task 054
+  contract C15; ADR 0042).
+- ✅ **No steering pauses.** The theory-of-change lattice is empty: no pause points and no
+  steering-mode question; the check reports progress through the run events (contract C12).
+- ✅ **A plan change after the draft** offers **Redraft** (a new draft replaces the canvas; the old
+  one stays in History) or **Keep the canvas** (graph and evidence stay; the Task Agent offers
+  "Check all again" as an optional next step) (contract C11).
 - 🟡 **Agent tab.** The Task Agent leads the plan conversation. It takes the pasted text or the
   uploaded file there. After the draft, the same thread takes change requests and shows progress.
 - ✅ **Uploaded files are kept** (owner, S8: "keep them on S3? why not?"). 🟡 They go to a private,

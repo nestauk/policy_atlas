@@ -12,8 +12,10 @@ entry point from Options scoping.
 > **Status:** approved 2026-10-23 · owner ("approve, let's go"). **Amended 2026-10-26** after the
 > owner's wireframe and journey review (§ Rulings from the wireframe review, W1–W18) and the
 > owner's ruling on an iterative build (C18). The amendments change the schema, the deliverables
-> and the review stack, so the contract is **re-approved with the plan**: _pending_. ADR **0042**
-> is written after that approval (§ ADR scope).
+> and the review stack, so the contract is **re-approved with the plan**: **approved 2026-10-26 ·
+> owner** ("Approve!"), after a read-only Codex review of the revised contract and plan (five
+> fixes folded, one finding kept on the owner's word). ADR
+> [0042](../../adr/0042-theory-of-change-task-kind.md): Accepted 2026-10-26.
 >
 > **Design sources.** Product intent and every owner ruling: the capability spec
 > [`docs/specs/capabilities/theory-of-change/`](../../specs/capabilities/theory-of-change/capability.md)
