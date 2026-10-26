@@ -1,3 +1,4 @@
+import { tocEvidenceFixture, tocGraphFixture } from "../views/toc/fixture";
 import type { SseFrame } from "../api/sseFrame";
 import type { AuthApi } from "../auth/types";
 import type { components } from "../api/gen/types";
@@ -310,6 +311,15 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json({ accepted: true });
   }
 
+  // Task 054: a theory-of-change task reads the Result page's fixture, so the
+  // canvas, panel and Detailed information can be looked at without a backend.
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/toc`)) {
+    return json({ ...tocGraphFixture(), task_id: MOCK_TASK_ID });
+  }
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/toc/evidence`)) {
+    return json(tocEvidenceFixture());
+  }
+
   // Task 044 (C10): create is ONE request carrying the kind of work, the
   // projects and the tasks it starts from. The mock stores the capability so
   // the New task screen's two paths are exercisable without a backend; it
@@ -318,8 +328,8 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   if (method === "POST" && path.endsWith("/api/v1/tasks")) {
     const body = await requestBody(request, init);
     const capability =
-      isRecord(body) && body.capability === "options_scoping"
-        ? "options_scoping"
+      isRecord(body) && (body.capability === "options_scoping" || body.capability === "theory_of_change")
+        ? body.capability
         : "evidence_search";
     const fromTaskIds =
       isRecord(body) && Array.isArray(body.from_task_ids)

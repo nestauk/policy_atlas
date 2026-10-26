@@ -329,18 +329,20 @@
 }
 
 /* Theory of change canvas (task 054): edges take the lower grade's colour;
-   weak and none are dashed; an unchecked or checking edge is grey and pulses. */
-.toc-edge {
+   weak and none are dashed; an unchecked or checking edge is grey and pulses.
+   Scoped under .react-flow so the library's own edge styles, loaded later,
+   do not win. */
+.react-flow .toc-edge {
   fill: none;
   stroke-width: 2;
   stroke-linecap: round;
 }
-.toc-edge--strong { stroke: var(--color-grade-strong); }
-.toc-edge--medium { stroke: var(--color-grade-medium); }
-.toc-edge--weak { stroke: var(--color-grade-weak); stroke-dasharray: 7 5; }
-.toc-edge--none { stroke: var(--color-grade-none); stroke-dasharray: 2 5; }
-.toc-edge--pending { stroke: var(--color-line-2); animation: toc-pulse 1.6s ease-in-out infinite; }
-.toc-edge--selected { stroke-width: 3; }
+.react-flow .toc-edge--strong { stroke: var(--color-grade-strong); }
+.react-flow .toc-edge--medium { stroke: var(--color-grade-medium); }
+.react-flow .toc-edge--weak { stroke: var(--color-grade-weak); stroke-dasharray: 7 5; }
+.react-flow .toc-edge--none { stroke: var(--color-grade-none); stroke-dasharray: 2 5; }
+.react-flow .toc-edge--pending { stroke: var(--color-line-2); animation: toc-pulse 1.6s ease-in-out infinite; }
+.react-flow .toc-edge--selected { stroke-width: 3; }
 .toc-critical-dot { fill: var(--color-navy); }
 @keyframes toc-pulse {
   0%, 100% { opacity: 1; }
