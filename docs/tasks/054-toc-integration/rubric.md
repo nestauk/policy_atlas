@@ -9,8 +9,8 @@ boxes.
 ## Deliverables (one box each)
 
 1. [ ] **1 Shell and draft**: the task kind through the registry; `TocPlan` and the Task Agent;
-       the draft walk (C3); the graph validator; the read-only canvas in the Magenta Book layout
-       with bands, assumption cards, markers and key; the list view; the build flag and the
+       the draft walk (C3); the graph validator; the read-only canvas in the reviewed layout
+       (W1–W3) with the reading guide and Detailed information; the build flag and the
        server setting (C15); E1 and the E6 harness built and run once (A10).
 2. [ ] **2 Evidence check**: item searches on the capability-neutral child search, with the OS
        option-search tests passing unchanged (C2); the reused spine unchanged; the judge with
@@ -21,7 +21,8 @@ boxes.
        within the limits (C6); changes to user work flagged with reason and prior version (T1);
        Undo, Restore and Keep mine (C9); E6 run again and recorded.
 4. [ ] **4 Editing during the check**: row revisions and compare-and-apply for every writer,
-       with the race tests green (C10); the derived follow-up pass; *out of date*; Check again;
+       with the race tests green (C10); *Edited · check pending*, Keep the evidence, the minimal
+       Check again and Search for more (W17);
        one event per edit; change requests through the Task Agent; the plan-change choice (C11).
 5. [ ] **5 Web search**: the Responses call and the typed route table with its address
        allow-list and no fallback (C7); Mantle in us-east-1 on the Bedrock route and nothing

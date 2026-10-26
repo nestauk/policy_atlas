@@ -1,5 +1,64 @@
 # Spec update log
 
+## 2026-10-26
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Trust rules: a
+  link and its assumptions answer different questions, get their own judge question and grade, and
+  never share judgements (owner: "add these changes you've listed"). Components § item_evidence
+  and eval E5 updated to match. Found while reviewing the task 054 wireframes.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): the *supports under
+  conditions* stance and the *holds under conditions* flag are removed; a support may record a
+  condition, and conditions no assumption covers go to consolidate as candidate assumptions
+  (owner: "under conditions is implied, and should be covered by Assumptions"). The link panel
+  lists its assumptions after its evidence. Task 054 contract § Terms amended to match; schema
+  unchanged.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): summarise writes one
+  evidence sentence per box, link and assumption, citing only that item's judged documents, checked
+  by code (owner: "yes, add them to spec"). Components § summarise updated to match.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): inputs boxes are
+  searched and graded too, with delivery case studies (owner: "Inputs also can get evidence/case
+  study notes"). Components § Items gives the input item text. Task 054 contract § Terms amended.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): only links and
+  assumptions are searched and graded; boxes are neutral and show result criteria, case studies
+  and indicators drawn from their links' documents (owner: "Let's go with neutral boxes. Rest of
+  the suggestions sound good"; White 2009, Mayne 2015 and 2017, Funnell and Rogers 2011). This
+  replaces S3's box searches and the same day's input searches. § Output structure rewritten to
+  the reviewed wireframes. Components § Items, § item_evidence, § summarise and § Data updated.
+  Task 054 contract § Wireframe review amendments W1–W10.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Trust rules: a
+  link's evidence answers "did it work elsewhere", an assumption's "will this condition hold here";
+  an assumption never restates its link's mechanism; no shared quotes; E1 restatement check;
+  components § Items assumption text names population and place (owner: "Yes let's apply it").
+  Task 054 contract W11.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): each box gets a
+  two-sentence description citing its case studies; link sentences read as one paragraph (owner:
+  "more into a narrative - still short"). Task 054 contract W7 extended.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Rulings: journey
+  rulings J1–J9 (option entry reuses the option; at most two questions; draft message; run
+  notification; per-change Undo; canvas and Detailed information equal; stress test always
+  suggested; PDF and PowerPoint both matter; staleness postponed). § Editing during the check
+  updated for per-change Undo. Task 054 contract W12–W13.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): no separate
+  assumptions. Every link answers *worked elsewhere* and *holds here* (Cartwright and Hardie 2012),
+  and its conditions hold the Magenta Book's assumptions; the canvas colours a link by the lower
+  grade and marks one critical connection; Detailed information shows a link as three paragraphs
+  without repeating evidence (owner: "the evidence for each connection is in fact the
+  Assumption"). Vocabulary, Pipeline, Output structure, Trust rules, Product surface, Evaluation
+  and components § Items, item_evidence, summarise and Data updated. Task 054 contract W14.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Trust rules: a
+  modelling study the judge marks robust counts as score 3 in the ToC grade rule, so it can
+  support *medium*, never *strong*; the shared appraisal is unchanged (owner: "if modelling is
+  robust, then it could be upgraded to Medium evidence"). Task 054 contract W15.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Pipeline: the
+  check order is discover → merge → judge → choose; consolidate splits around the judge (owner:
+  "first elucidate missing pathways, consolidate them and then judge them all together").
+  Components skeleton and task 054 contract C6, W16 and plan chain updated.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Editing during
+  the check: an edit flags the link *Edited · check pending* and keeps its evidence; the user
+  chooses Keep the evidence or a minimal Check again (same-meaning call first, then re-judge only
+  documents already found, then optionally Search for more); no automatic follow-up pass. Status
+  table updated (owner: "Policy Atlas should simply flag that there has been a user edit").
+  Task 054 contract W17.
+
 ## 2026-10-23
 * **Creation**: [Theory of change capability](capabilities/theory-of-change/capability.md) and
   [components](capabilities/theory-of-change/components.md), a draft for owner review (task 054).

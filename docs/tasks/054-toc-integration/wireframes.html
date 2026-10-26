@@ -1,0 +1,836 @@
+<title>Theory of change wireframes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: a design-review document. Each frame is a mock of the Policy Atlas app.
+   v3 type rule: one font (the app's sans), three sizes inside the app (24 title, 16 reading, 14 controls),
+   navy text, grey only for secondary lines, blue for actions, grade colours for evidence.
+   Single light theme on purpose: the app itself is light only. */
+:root {
+  color-scheme: light;
+  --blue: #0000ff; --navy: #0f294a; --grey: #646363; --ink: #1c1c1e;
+  --line: #e4e4e7; --line-2: #d3d3d8; --box: #b7bcc6; --ground: #f4f4f5; --paper: #ffffff; --paper-2: #fafafa;
+  --blue-tint: #ececff; --blue-tint-2: #f5f5ff;
+  --g-strong: #18a48c; --t-strong: #0d7a67;
+  --g-medium: #f0a823; --t-medium: #8f6100;
+  --g-weak: #ff6e47;   --t-weak: #c23f1b;
+  --g-none: #b4b4bb;   --t-none: #646363;
+  --font: "Averta", "Manrope", system-ui, sans-serif;
+  --fs-title: 24px; --fs-lead: 19px; --fs-body: 16px; --fs-ui: 14px;
+}
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--navy); font-family: var(--font); font-size: var(--fs-body); line-height: 1.55; margin: 0; padding-block: 0 5rem; padding-inline: 16px; -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { font-family: var(--font); color: var(--navy); text-wrap: balance; margin: 0; }
+a { color: var(--blue); }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
+.doc { max-width: 1280px; margin: 0 auto; }
+
+/* ---------- document chrome ---------- */
+.masthead { padding-block: 2.5rem 1.5rem; border-bottom: 3px solid var(--navy); }
+.eyebrow { font-size: var(--fs-ui); font-weight: 700; color: var(--blue); }
+.masthead h1 { font-size: 36px; font-weight: 800; letter-spacing: -.5px; line-height: 1.15; margin-top: .3rem; }
+.lede { max-width: 44em; margin: .8rem 0 0; }
+.mast-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem 2.5rem; margin-top: 1.5rem; }
+@media (max-width: 860px) { .mast-grid { grid-template-columns: minmax(0, 1fr); } }
+.mast-grid h3 { font-size: var(--fs-body); font-weight: 700; }
+.mast-grid ul, .mast-grid ol { margin: .4rem 0 0; padding-left: 1.2rem; display: grid; gap: .3rem; }
+.note { margin-top: 1.25rem; max-width: 44em; }
+.index { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30; background: var(--ground); border-bottom: 1px solid var(--line-2); padding-block: .6rem; display: flex; gap: .35rem; overflow-x: auto; scrollbar-width: thin; }
+.index a { flex: none; text-decoration: none; font-size: var(--fs-ui); font-weight: 600; color: var(--navy); padding: .3rem .6rem; border: 1px solid var(--line-2); background: var(--paper); white-space: nowrap; }
+.index a:hover { color: var(--blue); border-color: var(--blue); }
+.index a .n { color: var(--blue); font-weight: 800; margin-right: .3rem; }
+.frame { padding-block: 3rem 0; scroll-margin-top: 3.5rem; }
+.fhead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 22rem); gap: 1rem 2.5rem; align-items: start; margin-bottom: 1.25rem; }
+.fnum { font-size: var(--fs-ui); font-weight: 700; color: var(--blue); }
+.fhead h2 { font-size: var(--fs-title); font-weight: 800; line-height: 1.25; margin-top: .2rem; }
+.fhead p { margin: .5rem 0 0; max-width: 44em; }
+.fnotes { display: grid; gap: .55rem; font-size: var(--fs-ui); line-height: 1.45; background: var(--paper); border: 1px solid var(--line); padding: .85rem 1rem; margin: 0; }
+.fnotes dt { font-weight: 700; }
+.fnotes dd { margin: .1rem 0 0; }
+.fnotes .decide dt { color: var(--blue); }
+@media (max-width: 860px) { .fhead { grid-template-columns: minmax(0, 1fr); } }
+.device { overflow-x: auto; padding-bottom: .5rem; }
+.device-row { display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: flex-start; }
+.device-row > .device { flex: 1 1 560px; min-width: 0; }
+
+/* ---------- the app mock ---------- */
+.app { width: 1280px; background: var(--paper); border: 1px solid var(--line-2); box-shadow: 0 18px 40px -26px rgb(15 41 74 / .35); font-size: var(--fs-ui); line-height: 1.5; color: var(--navy); position: relative; }
+.app.narrow { width: 620px; }
+.anav { height: 54px; display: flex; align-items: center; gap: 20px; padding: 0 20px; border-bottom: 1px solid var(--line); }
+.logo { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: var(--fs-body); }
+.logo i { width: 14px; height: 14px; background: var(--blue); clip-path: polygon(0 0, 70% 0, 100% 30%, 100% 100%, 0 100%); }
+.anav .links { margin-left: auto; display: flex; gap: 20px; font-weight: 600; }
+.anav .links span.on { border-bottom: 3px solid var(--blue); padding-bottom: 2px; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-tint); font-weight: 700; font-size: 12px; display: grid; place-items: center; }
+.tbar { height: 50px; display: flex; align-items: center; gap: 10px; padding: 0 20px; background: var(--ground); border-bottom: 1px solid var(--line); }
+.tname { font-size: var(--fs-body); font-weight: 600; white-space: nowrap; }
+.caps { font-size: var(--fs-ui); color: var(--grey); }
+.tabs { margin-left: auto; display: flex; gap: 22px; font-weight: 600; }
+.tabs span { padding-bottom: 3px; border-bottom: 3px solid transparent; }
+.tabs span.on { border-bottom-color: var(--blue); }
+.tabs span.off { color: var(--line-2); }
+.abody { display: flex; min-height: 600px; }
+.rail { width: 360px; flex: none; border-right: 1px solid var(--line); background: var(--paper-2); display: flex; flex-direction: column; }
+.rail.min { width: 48px; align-items: center; padding-top: 14px; gap: 10px; }
+.rail.min .vlab { writing-mode: vertical-rl; transform: rotate(180deg); font-weight: 700; }
+.rhead { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.thread { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.cn .btn, .cn .btn2 { font-size: var(--fs-ui); }
+.pend { border: 1px solid var(--blue); background: var(--blue-tint-2); padding: 10px 12px; margin: 4px 0 10px; }
+.chg { display: flex; gap: 10px; justify-content: space-between; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--line); }
+.msg p { margin: 0 0 .5rem; }
+.msg.user { align-self: flex-end; background: var(--blue-tint); padding: 8px 12px; max-width: 86%; }
+.who { display: none; }
+.composer { margin: 12px 16px 16px; border: 1px solid var(--line-2); background: var(--paper); display: flex; align-items: flex-end; gap: 8px; padding: 10px 10px 10px 12px; }
+.composer span:first-child { flex: 1; color: var(--grey); }
+.send { width: 34px; height: 34px; background: var(--blue); color: #fff; display: grid; place-items: center; font-weight: 800; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); }
+.amain { flex: 1; min-width: 0; padding: 24px 32px; position: relative; }
+.btn { display: inline-flex; align-items: center; gap: 6px; background: var(--blue); color: #fff; font-weight: 700; padding: 9px 16px; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%); white-space: nowrap; }
+.btn.sm { padding: 6px 12px; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%); }
+.btn2 { display: inline-flex; align-items: center; gap: 6px; background: var(--paper); color: var(--navy); border: 1px solid var(--navy); font-weight: 700; padding: 8px 14px; white-space: nowrap; }
+.btn2.sm { padding: 5px 10px; }
+.quiet { background: none; border: 0; color: var(--navy); font-weight: 700; font-size: var(--fs-ui); padding: 5px 8px; font-family: inherit; }
+.link { color: var(--blue); font-weight: 700; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+.dot.ring { background: transparent !important; border: 1.5px dashed var(--g-none); }
+.gw { font-weight: 700; }
+.gw.strong { color: var(--t-strong); } .gw.medium { color: var(--t-medium); } .gw.weak { color: var(--t-weak); } .gw.none { color: var(--t-none); }
+
+/* result page */
+.ptitle { font-size: var(--fs-title); font-weight: 800; line-height: 1.25; letter-spacing: -.2px; }
+.ptitle .arrow { color: var(--blue); }
+.intro { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; margin-top: 14px; font-size: var(--fs-body); }
+.intro p { margin: 0; max-width: 40em; }
+.intro h3, .section h3 { font-size: var(--fs-body); font-weight: 700; margin-bottom: 4px; }
+.toolbar { display: flex; align-items: center; gap: 6px; margin: 24px 0 12px; }
+.select { display: inline-flex; align-items: center; border: 1px solid var(--line-2); padding: 5px 10px; font-weight: 600; background: var(--paper); }
+.select select { border: 0; font: inherit; color: inherit; background: transparent; padding: 0; cursor: pointer; }
+.toolbar .sp { flex: 1; }
+.section { margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--line); max-width: 760px; font-size: var(--fs-body); }
+.section p { margin: 0 0 .6rem; }
+.section .dot { margin: 0 3px 0 1px; }
+
+/* canvas */
+.cwrap { display: flex; border: 1px solid var(--line); background: var(--paper); }
+.cscroll { flex: 1; min-width: 0; overflow-x: auto; position: relative; background: var(--paper-2); }
+.cscroll svg { display: block; width: 100%; min-width: 960px; max-width: 1200px; height: auto; }
+.cv text { font-family: var(--font); }
+.cv .bt { font-size: 13.5px; font-weight: 600; fill: var(--navy); }
+.cv .hdr { font-size: 13.5px; font-weight: 600; fill: var(--grey); }
+.cv .item { cursor: pointer; }
+.cv .item .bx { filter: drop-shadow(0 1px 1.5px rgb(15 41 74 / .08)); }
+.cv .item:hover .bx { filter: drop-shadow(0 4px 10px rgb(15 41 74 / .14)); }
+.cv .dim { opacity: .16; }
+.cv .checking .bx { animation: breathe 1.6s ease-in-out infinite; }
+@keyframes breathe { 0%,100% { opacity: 1 } 50% { opacity: .45 } }
+@media (prefers-reduced-motion: reduce) { .cv .checking .bx { animation: none; } }
+.tip { position: absolute; z-index: 5; pointer-events: none; background: var(--navy); color: #fff; font-size: var(--fs-ui); line-height: 1.4; padding: 7px 10px; max-width: 260px; border-radius: 6px; box-shadow: 0 8px 20px -8px rgb(15 41 74 / .5); }
+.tip .s { display: block; margin-top: 2px; }
+
+/* detail panel */
+.panel { width: 380px; flex: none; border-left: 1px solid var(--line); background: var(--paper); padding: 18px 20px; max-height: 680px; overflow-y: auto; }
+.panel .x { float: right; color: var(--grey); font-size: 20px; line-height: 1; cursor: pointer; }
+.panel h3 { font-size: var(--fs-body); font-weight: 700; line-height: 1.4; margin: 2px 0 8px; }
+.gline { display: flex; gap: 8px; align-items: baseline; }
+.gline .dot { flex: none; }
+.sub { color: var(--grey); margin-top: 4px; }
+.panel details, .prof details { margin-top: 10px; }
+.panel summary, .prof summary { cursor: pointer; font-weight: 700; }
+.panel .h, .prof .h { font-weight: 700; margin: 16px 0 4px; }
+.ev { padding: 9px 0; border-top: 1px solid var(--line); }
+.ev .t { font-weight: 600; line-height: 1.4; }
+.ev .m { color: var(--grey); margin-top: 2px; }
+.ev q { display: block; margin-top: 4px; quotes: "\201C" "\201D"; }
+.ifthen { display: grid; grid-template-columns: 64px 1fr; gap: 3px 10px; margin: 0; }
+.ifthen dt { color: var(--grey); }
+.ifthen dd { margin: 0; }
+.vs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.vs > div { border: 1px solid var(--line-2); padding: 8px 10px; }
+.vs .theirs { border-color: var(--blue); }
+.vs .caps { display: block; margin-bottom: 2px; }
+
+/* step-by-step profiles */
+.spine { margin-top: 12px; }
+.prof { border: 1px solid var(--line-2); border-radius: 10px; background: var(--paper); padding: 12px 16px; font-size: var(--fs-ui); }
+.prof .ttl { font-weight: 700; font-size: var(--fs-body); }
+.prof p { margin: 4px 0 0; }
+.joint { position: relative; margin-left: 28px; padding: 10px 0 10px 28px; font-size: var(--fs-ui); }
+.joint p { margin: 0; }
+.joint p + p { margin-top: 4px; }
+.joint::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--c, var(--line-2)); }
+.joint.dash::before { background: repeating-linear-gradient(to bottom, var(--c) 0 6px, transparent 6px 11px); }
+.num { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1.25px solid var(--line-2); font-size: 10px; font-weight: 800; color: var(--grey); background: var(--paper); vertical-align: 1px; }
+.num.lb { background: var(--navy); border-color: var(--navy); color: #fff; }
+details.more { margin-top: 10px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--paper); padding: 10px 16px; font-size: var(--fs-ui); }
+details.more summary { cursor: pointer; font-weight: 700; font-size: var(--fs-body); }
+
+/* detailed information: the report's expand and collapse sections */
+.dhead { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 40px; padding-bottom: 8px; }
+.dhead h2 { font-size: var(--fs-title); font-weight: 800; }
+.ds { border-top: 1px solid var(--line); padding: 16px 0; }
+.dsb { display: flex; width: 100%; align-items: baseline; gap: 12px; background: none; border: 0; padding: 0; font: inherit; color: var(--navy); text-align: left; cursor: pointer; }
+.dsb h3 { flex: 1; font-size: var(--fs-lead); font-weight: 700; }
+.exp { font-size: var(--fs-ui); font-weight: 700; color: var(--blue); white-space: nowrap; }
+.dsum { margin: 4px 0 0; color: var(--grey); }
+.dsum:empty, .ds.open .dsum { display: none; }
+.ds:not(.open) .dbody { display: none; }
+.dbody { margin-top: 8px; max-width: 820px; }
+.ds, .dbody { font-size: var(--fs-body); }
+.lay { font-size: var(--fs-ui); color: var(--grey); margin-bottom: 1px; }
+.st { padding: 12px 0; }
+.st + .st { border-top: 1px solid var(--line); }
+.st .ttl { font-size: var(--fs-body); font-weight: 700; }
+.st p, .cn p, .as p { margin: 4px 0 0; font-size: var(--fs-body); max-width: 44em; }
+.cn { position: relative; margin-left: 12px; padding: 10px 0 22px 24px; }
+.cn::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--c); }
+.cn::after { content: ""; position: absolute; left: -5px; bottom: 2px; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 9px solid var(--c); }
+.cn.dash::before { background: repeating-linear-gradient(to bottom, var(--c) 0 6px, transparent 6px 11px); }
+.as { margin-top: 10px; padding: 10px 14px; background: var(--paper-2); border: 1px solid var(--line); }
+.as.lb { border-color: var(--navy); }
+.as.lb .lay { font-weight: 700; }
+.as .ttl { font-weight: 700; }
+.more { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-left: 4px; padding: 0; border-radius: 50%; border: 1px solid var(--line-2); background: var(--paper); color: var(--grey); font: 700 13px/1 var(--font); vertical-align: 1px; cursor: pointer; }
+.nw { white-space: nowrap; }
+.more:hover, .more[aria-expanded="true"] { border-color: var(--navy); color: var(--navy); }
+.evb { margin: 4px 0 4px 16px; font-size: var(--fs-body); max-width: 44em; }
+.evb .ev .m { font-size: var(--fs-ui); }
+.evb .h { font-weight: 700; margin: 10px 0 2px; }
+.reading { border: 1px solid var(--line); background: var(--paper-2); padding: 14px 18px; margin-bottom: 12px; font-size: var(--fs-ui); }
+.reading h3 { font-size: var(--fs-body); font-weight: 700; }
+.reading p { margin: 6px 0 0; max-width: 64em; }
+.reading .dot { margin-left: 2px; }
+
+/* the plan panel, as in the other task types (PlanDocument) */
+.planp { flex: 1; min-width: 0; background: var(--navy); color: #fff; }
+.planp .col { max-width: 720px; margin: 0 auto; padding: 32px 20px 40px; }
+.planp h2 { color: #fff; font-size: var(--fs-title); font-weight: 800; padding-bottom: 20px; border-bottom: 1px solid rgb(255 255 255 / .15); display: flex; justify-content: space-between; }
+.planp h2 span { font-size: 20px; font-weight: 400; color: #97a8bc; }
+.psec { padding: 18px 0; border-bottom: 1px solid rgb(255 255 255 / .15); }
+.psec .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.psec .lab { font-size: var(--fs-body); font-weight: 700; }
+.pedit { border: 1px solid rgb(255 255 255 / .25); padding: 4px 12px; font-weight: 600; font-size: var(--fs-ui); }
+.psec .val { font-size: var(--fs-body); margin-top: 4px; }
+.psec .hint { color: #c5d0dc; margin-top: 4px; font-size: var(--fs-ui); }
+.orig { margin-top: 12px; background: #fff; padding: 10px; max-width: 360px; }
+
+/* misc */
+.card { border: 1px solid var(--line); background: var(--paper); padding: 14px 16px; }
+.run { border: 1px solid var(--line-2); background: var(--paper); padding: 12px; }
+.bar { height: 4px; background: var(--line); margin: 8px 0 6px; }
+.bar i { display: block; height: 100%; background: var(--blue); }
+table.t { border-collapse: collapse; width: 100%; }
+table.t th { text-align: left; font-weight: 700; border-bottom: 1px solid var(--line-2); padding: 6px 8px; }
+table.t td { border-bottom: 1px solid var(--line); padding: 9px 8px; vertical-align: top; }
+table.t td.num-c { font-variant-numeric: tabular-nums; text-align: right; }
+table.t td.g { color: var(--grey); }
+.inset { margin-top: 1.25rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: flex-start; }
+.inset > .device { flex: 0 1 auto; }
+.inset > p { flex: 1 1 18rem; margin: 0; max-width: 34em; }
+.paper { width: 760px; zoom: .72; background: #fff; border: 1px solid var(--line-2); box-shadow: 0 18px 40px -26px rgb(15 41 74 / .35); padding: 40px 48px; }
+footer.doc-foot { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--line-2); font-size: var(--fs-ui); color: var(--grey); }
+</style>
+<div class="doc">
+<header class="masthead">
+  <div class="eyebrow">Task 054 · Theory of change · Wireframes, version 3</div>
+  <h1>Theory of change wireframes</h1>
+  <p class="lede">One user, from an option to a checked and exported theory of change, in the existing Policy Atlas app. Version 3 is quieter still: one font, three sizes, and plain paragraphs in place of labels and counts.</p>
+  <div class="mast-grid">
+    <div><h3>What changed</h3><ul>
+      <li>Rounded boxes and smooth curved arrows, as in the prototype.</li>
+      <li>Colour shows evidence strength and nothing else. Only connections are graded, each on two questions: did it work elsewhere, and will it hold here. Boxes are neutral and show how they are measured and where they have been seen. Blue is for actions and for things you need to review.</li>
+      <li>No separate assumptions. Each connection names the conditions it needs, and its "holds here" evidence speaks to them. The navy dot marks the critical connection.</li>
+      <li>One font, the app's own, in three sizes: 24 for the page title, 16 for reading, 14 for controls and lists.</li>
+      <li>No small captions, counts or metadata lines. Context, the evidence summary and how to read the canvas are proper paragraphs.</li>
+      <li>"Detailed information" under the canvas uses the report's expand and collapse sections. It labels each step as input, output, outcome or impact, and shows each connection as three short paragraphs: what happens, whether it worked elsewhere, and whether it will hold here.</li>
+      <li>The plan uses the navy plan panel of the other task types, with your original file in its flow.</ul></div>
+    <div><h3>Four levels of detail</h3><ol>
+      <li><b>Look:</b> boxes, arrows and their colours. Enough to see where the theory is weak.</li>
+      <li><b>Hover:</b> both grades for a connection, or how a box is measured.</li>
+      <li><b>Click:</b> the panel on the right, with the evidence.</li>
+      <li><b>Read:</b> scroll below the canvas for every profile in order, ready to print.</li>
+    </ol></div>
+  </div>
+  <p class="note"><b>Example content.</b> The option is real: "Restrictions on unhealthy food advertising to children", from the obesity Options scoping task. The theory, sources and quotes are illustrative and have not been checked. "Less healthy food" means food high in fat, salt or sugar.</p>
+</header>
+
+<nav class="index" aria-label="Frames">
+  <a href="#f1"><span class="n">1</span>Two ways in</a>
+  <a href="#f2"><span class="n">2</span>Plan conversation</a>
+  <a href="#f3"><span class="n">3</span>Result page</a>
+  <a href="#f4"><span class="n">4</span>Detail panel</a>
+  <a href="#f5"><span class="n">5</span>Editing during the check</a>
+  <a href="#f6"><span class="n">6</span>Changes to review</a>
+  <a href="#f7"><span class="n">7</span>Stress test</a>
+  <a href="#f8"><span class="n">8</span>Sources</a>
+  <a href="#f9"><span class="n">9</span>Export</a>
+</nav>
+
+<section class="frame" id="f1">
+  <div class="fhead">
+    <div><div class="fnum">Frame 1</div><h2>Two ways in</h2>
+      <p>The "Theory of change" row on the New task page becomes active. On an option in Options scoping, a short block at the end offers "Design a theory of change" and lists the theories already made from it.</p></div>
+    <dl class="fnotes"><div><dt>Reuses</dt><dd><code>NewTaskView</code> and the expanded <code>OptionCard</code>.</dd></div></dl>
+  </div>
+  <div class="device-row"><div class="device" id="m1a"></div><div class="device" id="m1b"></div></div>
+</section>
+
+<section class="frame" id="f2">
+  <div class="fhead">
+    <div><div class="fnum">Frame 2</div><h2>The plan conversation</h2>
+      <p>The Task Agent fills the plan from the option, suggests a measurable change, and takes the team's own logic model as a PDF. The plan is the same navy panel as in the other task types. Your original sits inside it, under "Starting point".</p></div>
+    <dl class="fnotes"><div><dt>Reuses</dt><dd><code>TaskAgentPane</code>, the plan document and <code>PlanCard</code>.</dd></div></dl>
+  </div>
+  <div class="device" id="m2"></div>
+</section>
+
+<section class="frame" id="f3">
+  <div class="fhead">
+    <div><div class="fnum">Frame 3 · core</div><h2>The result page</h2>
+      <p>Two short paragraphs say what the theory is and what the evidence says. Then come the canvas and the detailed information. "How to read this" in the toolbar opens a short guide. <b>Try it:</b> hover anything on the canvas, change the pathway, click a box, and open a step's evidence below.</p></div>
+    <dl class="fnotes">
+      <div><dt>From the prototype</dt><dd>Rounded boxes, curved arrows, the pathway view, click for evidence.</dd></div>
+      <div><dt>From the Magenta Book</dt><dd>The four layers, context, supporting activities, failure pathways.</dd></div>
+      <div class="decide"><dt>Decide</dt><dd>Should "Detailed information" open the first pathway (shown), or fold them all?</dd></div>
+    </dl>
+  </div>
+  <div class="device" id="m3"></div>
+</section>
+
+<section class="frame" id="f4">
+  <div class="fhead">
+    <div><div class="fnum">Frame 4 · core</div><h2>The detail panel</h2>
+      <p>A click opens the item's panel. For a connection: what happens, how the step works and what it needs, then <i>Worked elsewhere</i> and <i>Holds here</i>, each with its grade, a cited sentence and its documents. A document that serves both is listed in full once. Here it is the critical connection: it worked where it was tried (medium), but it needs brands not to move their spend, and the evidence that this holds in England is weak.</p></div>
+    <dl class="fnotes">
+      <div><dt>From the prototype</dt><dd>If, for, then, because, unless on each arrow.</dd></div>
+      <div class="decide"><dt>Decide</dt><dd>Group evidence by supports and challenges (shown), or list it by strength with the stance in each line?</dd></div>
+    </dl>
+  </div>
+  <div class="device" id="m4"></div>
+</section>
+
+<section class="frame" id="f5">
+  <div class="fhead">
+    <div><div class="fnum">Frame 5 · core</div><h2>Editing while the check runs</h2>
+      <p>The draft appears at once. Connections are grey until checked, and take their colour as each check finishes. The user reworded an outcome that was already checked. Nothing reruns: the box and the connection into it get a blue dot, and the connection keeps its evidence, marked <i>Edited · check pending</i>. Clicking the connection opens its panel with the pending block on top (shown open here). Detailed information shows the same step with the same buttons (below), and after the check the Task Agent lists pending steps with Check all and Keep all (frame 6).</p></div>
+    <dl class="fnotes">
+      <div><dt>Reuses</dt><dd><code>RunningCard</code> and run events in the rail.</dd></div>
+      <div class="decide"><dt>Decide</dt><dd>Is the blue dot enough for "edited, not yet checked", or should the box also stay grey?</dd></div>
+    </dl>
+  </div>
+  <div class="device" id="m5"></div>
+  <div class="inset"><div class="device" id="m5b"></div><p><b>The same step in Detailed information</b> carries the label and both buttons, so readers who skip the canvas see it too. In the panel above, the block sits on top. <b>Check again changes as little as possible.</b> It first asks whether the new wording changes the claim. A rewording, like this one, keeps the evidence and reads "Checked: no change". If the claim changed, only the documents already found are judged again, with no new search, and the Task Agent says what changed. If fewer than two documents still apply, it offers <b>Search for more</b>.</p></div>
+</section>
+
+<section class="frame" id="f6">
+  <div class="fhead">
+    <div><div class="fnum">Frame 6 · core</div><h2>Changes to review</h2>
+      <p>When the check ends, you get the usual run notification. Policy Atlas has added pathways found in the evidence and consolidated. It may change your work, and says so: blue dots mark each change on the canvas, and the Task Agent lists every change with its own Undo, plus Undo all. A changed item also shows your version beside the new one. The Task Agent then suggests a stress test.</p></div>
+    <dl class="fnotes">
+      <div><dt>Rule</dt><dd>T1: Policy Atlas may merge, reword or set aside your items, and flags each change.</dd></div>
+      <div class="decide"><dt>Decide</dt><dd>Does a blue dot clear when you open the item, or only when you accept or keep yours?</dd></div>
+    </dl>
+  </div>
+  <div class="device" id="m6"></div>
+  <div class="inset"><div class="device" id="m6b"></div><p><b>A plan change after the draft.</b> If you change the plan, here the population, the Task Agent asks whether to redraft or keep the canvas and check the affected items again.</p></div>
+</section>
+
+<section class="frame" id="f7">
+  <div class="fhead">
+    <div><div class="fnum">Frame 7</div><h2>Stress test</h2>
+      <p>A separate chat asks four questions, one at a time. The canvas fades everything except the item each question is about. The chat does not change the canvas.</p></div>
+    <dl class="fnotes"><div><dt>Reuses</dt><dd><code>ChatSidePanel</code>, with a new chat kind.</dd></div></dl>
+  </div>
+  <div class="device" id="m7"></div>
+</section>
+
+<section class="frame" id="f8">
+  <div class="fhead">
+    <div><div class="fnum">Frame 8</div><h2>Sources</h2>
+      <p>The existing Sources tab: every document read, what it was used for, and the split by source type and country, so any skew is visible.</p></div>
+    <dl class="fnotes"><div><dt>Reuses</dt><dd><code>SourcesView</code>.</dd></div></dl>
+  </div>
+  <div class="device" id="m8"></div>
+</section>
+
+<section class="frame" id="f9">
+  <div class="fhead">
+    <div><div class="fnum">Frame 9</div><h2>Export</h2>
+      <p>The Download menu, grouped by what people do next. The new PDF report is the result page on paper: the canvas, then the detailed information.</p></div>
+    <dl class="fnotes">
+      <div><dt>New</dt><dd>The PDF report is not in the spec yet. It comes almost free from the profiles.</dd></div>
+      <div><dt>Open</dt><dd>Google Slides only if its import keeps the arrows attached (contract A9).</dd></div>
+    </dl>
+  </div>
+  <div class="device-row" style="align-items:flex-start"><div class="device" id="m9" style="flex:0 1 auto"></div><div class="device" id="m9b" style="flex:0 1 auto"></div></div>
+</section>
+
+<footer class="doc-foot">Task 054 · <code>docs/tasks/054-toc-integration/wireframes.html</code> · Spec: <code>docs/specs/capabilities/theory-of-change/</code> · Version 2 · 26 Oct 2026</footer>
+</div>
+<script>
+/* ===================== Example theory (illustrative) ===================== */
+const COLS = { in: { x: 20, w: 180, label: "Inputs" }, out: { x: 255, w: 190, label: "Outputs" }, oc: { x: 495, w: 210, label: "Outcomes" }, imp: { x: 765, w: 215, label: "Impact" } };
+const BOXES = {
+  I1: { layer: "in", y: 50, text: "Ban on less healthy food ads: TV before 9pm, all paid online", measure: "In force on TV and online, and checked by Ofcom.", seen: "Similar bans run in Chile (2016), Quebec (1980) and on London transport (2019); Chile's took three years to reach online ads (2021).", story: "This is the policy itself: from January 2026, ads for less healthy food cannot run on TV before 9pm or as paid ads online, and Ofcom checks that the rules are followed. Similar bans already run in Chile (2016), Quebec (1980) and on London transport (2019), though Chile's took three years to reach online ads (2021).", cases: 3, origin: "From your logic model" },
+  I2: { layer: "in", y: 166, text: "Nutrient profiling rules, enforced by Ofcom", measure: "Each product scored by the nutrient profiling model.", seen: "The same model has decided which foods UK ad rules cover since 2007 (Department of Health, 2018).", story: "The rules rely on the nutrient profiling model to decide which products count as less healthy, and Ofcom enforces them. The same model has set the scope of UK ad rules since 2007 and was last reviewed in 2018 (Department of Health, 2018).", cases: 2, origin: "Drafted by Policy Atlas" },
+  O1: { layer: "out", y: 50, text: "Fewer less healthy food ads shown on TV and online", measure: "Number of these ads shown before 9pm and online, from Ofcom monitoring.", seen: "Ofcom tracked this after the 2007 TV rules (Ofcom, 2010).", story: "The first thing the rules should deliver is fewer of these ads on screen, which Ofcom can count from its monitoring of TV and online ads. It counted them after the 2007 TV rules and found broadcasters largely complied (Ofcom, 2010).", cases: 1, origin: "From your logic model" },
+  O2: { layer: "out", y: 172, text: "Some products reformulated to pass the rules", measure: "Share of advertised products changed to pass the rules.", seen: "No case study found yet.", story: "Some firms may change their recipes so their products pass the rules and can still be advertised. That would show as a rising share of reformulated products, but no case study has tracked it yet.", cases: 0, origin: "Drafted by Policy Atlas" },
+  C1: { layer: "oc", y: 44, text: "Children see fewer ads for less healthy food", measure: "Ads for less healthy food a child sees in a week.", seen: "Measured in Chile (2020) and on London transport (2022).", story: "If fewer ads are shown, children should see fewer of them, counted as the ads for less healthy food a child sees in a week. Researchers counted exactly this in Chile (2020) and on London transport (2022).", cases: 2, origin: "From your logic model" },
+  C2: { layer: "oc", y: 136, text: "Children ask for and pick healthier food", measure: "Children's requests and choices in shopping studies.", seen: "Measured in trials and shopping studies (systematic review, 2022).", story: "Seeing fewer ads should change what children ask for and choose, which studies measure through children's requests and choices when shopping. Trials and shopping studies have tracked this for years (systematic review, 2022).", cases: 2, origin: "From your logic model" },
+  C3: { layer: "oc", y: 228, text: "Households buy fewer calories from less healthy food", measure: "Calories bought from less healthy food per household per week, 6 to 12 months after the rules start.", seen: "Measured after the London transport restriction (2022) and the Quebec ban (2011).", story: "Healthier choices should show in what families buy: fewer calories from less healthy food per household per week, six to twelve months after the rules start. This was measured after the London transport restriction (2022) and the Quebec ban (2011).", cases: 2, origin: "Drafted by Policy Atlas" },
+  M1: { layer: "imp", y: 136, text: "Fewer children living with obesity at age 10 to 11", measure: "Share of children aged 10 to 11 living with obesity, from the National Child Measurement Programme, from 2030.", seen: "Modelled for the UK (impact assessment, 2021).", story: "The long-term aim is fewer children living with obesity by age 10 to 11, as the National Child Measurement Programme records each year. The change will take years to show, and so far it has only been modelled for the UK (impact assessment, 2021).", cases: 1, origin: "From your logic model" },
+  F1a: { layer: "oc", row: 1, text: "Brands shift spend to brand ads and influencers", measure: "Spend on brand ads, sponsorship and influencers.", seen: "Seen in Chile within a year of its rules (2021).", story: "Instead of cutting their spend, brands may move it to brand ads, sponsorship and influencers, which the rules do not cover. This happened in Chile within a year of its rules (2021).", cases: 1, fail: true, origin: "Found in the evidence" },
+  F1b: { layer: "imp", row: 1, text: "Children's exposure barely falls", measure: "Children's exposure across all channels.", seen: "Not measured anywhere yet.", story: "If they do, children's exposure across all channels would barely fall. No study has measured total exposure like this yet.", cases: 0, fail: true, origin: "Found in the evidence" },
+  F2a: { layer: "oc", row: 2, text: "Reformulated snacks sold as healthier, and eaten more", measure: "Amounts eaten of reformulated snacks.", seen: "Not measured anywhere yet.", story: "Snacks changed to pass the rules may be sold as healthier, and children may eat more of them. No study has measured this for these rules yet.", cases: 0, fail: true, origin: "Drafted by Policy Atlas" },
+  F2b: { layer: "imp", row: 2, text: "No fall in calories eaten", measure: "Calories eaten per child per day.", seen: "Not measured anywhere yet.", story: "Then the calories children eat each day would not fall. Nothing has measured this yet.", cases: 0, fail: true, origin: "Drafted by Policy Atlas" },
+};
+const LINKS = {
+  L1: { from: "I1", to: "O1", grade: "strong", docs: 3, here: "medium", hdocs: 2, cond: "platforms that can spot and block paid online ads", ev: "Broadcasters blocked most covered ads under earlier TV rules, in the UK and in Chile (Ofcom, 2010; 2020).", hev: "The Ofcom review was of UK TV, so it counts here too. Online is less certain: an Advertising Standards Authority audit found most paid ads blocked, but some brand accounts slipped through (2023).", says: "The ban means fewer less healthy food ads are shown, because broadcasters and platforms must block them.", because: "broadcasters and platforms must block these ads" },
+  L2: { from: "I2", to: "O2", grade: "weak", docs: 1, here: "none", hdocs: 0, cond: "firms that value advertising enough to change their recipes", ev: "One trade report links ad rules to reformulation; no study tests it (2024).", says: "Nutrient profiling rules lead some firms to reformulate products, so they can keep advertising them.", because: "firms reformulate so they can keep advertising" },
+  L3: { from: "O1", to: "C1", grade: "medium", docs: 3, here: "weak", hdocs: 4, critical: true, cond: "brands not moving their spend to brand-only ads, sponsorship and influencers", ev: "Exposure fell by about half under Chile's rules (2020) and almost to none on London transport (2022), though less for teenagers (2019).", hev: "The London study was in England, so it counts here too. But brands moved their spend to brand-only ads in Chile within a year (2021) and to influencers on children's social media (2023), and UK brands have announced sponsorship plans (2025).", says: "Fewer ads shown means children see fewer ads, because most of their exposure comes from TV and paid online ads.", because: "most of children's exposure comes from TV and paid online ads" },
+  L4: { from: "C1", to: "C2", grade: "strong", docs: 6, here: "weak", hdocs: 1, v: true, cond: "an effect from short trials that lasts in everyday life", ev: "Trials show children eat more after seeing food ads (systematic review, 2022).", hev: "Most of those trials last under an hour; one UK study of daily viewing found a smaller effect (2019).", says: "Seeing fewer ads leads children to ask for and pick healthier food, because ads raise their liking for, and intake of, advertised foods.", because: "ads raise children's liking for, and intake of, advertised foods" },
+  L5: { from: "C2", to: "C3", grade: "medium", docs: 3, here: "weak", hdocs: 1, v: true, cond: "parents giving in to fewer requests when children ask less", ev: "Surveys find children's requests shape part of family shopping (2018; 2020).", hev: "Only one small UK survey of parents speaks to this (2019).", says: "Children asking for healthier food leads households to buy fewer calories from less healthy food, because children's requests drive part of family shopping.", because: "children's requests drive part of family food shopping" },
+  L6: { from: "O2", to: "C3", grade: "medium", docs: 2, here: "medium", hdocs: 2, same: true, cond: "reformulated products not being eaten in larger amounts", ev: "Reformulated drinks carried fewer calories after the UK soft drinks levy (2020; 2023).", says: "Reformulated products mean households buy fewer calories from less healthy food, because the new recipes carry fewer calories.", because: "reformulated products carry fewer calories" },
+  L7: { from: "C3", to: "M1", grade: "medium", docs: 1, here: "weak", hdocs: 1, cond: "children not making up the cut calories with other food", ev: "A validated model of energy balance, built on feeding trials, links small, lasting calorie cuts to slower weight gain in children (2018). No study has yet observed this after ad rules.", hev: "The UK government's impact assessment models it for England (2021), but nobody has measured whether children make up the calories elsewhere.", says: "Buying fewer of these calories leads to fewer children living with obesity, because small, lasting cuts in calories slow weight gain over years.", because: "small, lasting cuts in calories slow weight gain over years" },
+  LF1: { from: "O1", to: "F1a", grade: "medium", docs: 2, here: "weak", hdocs: 1, fail: true, off: 14, cond: "channels outside the rules staying open", ev: "Brands moved spend to brand ads and influencers after Chile's rules (2021; 2023).", hev: "UK brands have announced sponsorship plans (2025), but that is a web page, so it cannot count above weak.", says: "Instead of cutting their spend, brands move it to brand ads and influencers, which the rules do not cover.", because: "brand ads and influencer posts fall outside the rules" },
+  LF2: { from: "F1a", to: "F1b", grade: "none", docs: 0, here: "none", hdocs: 0, fail: true, says: "With spend moved elsewhere, children's exposure to these brands barely falls.", because: "spend moves rather than stops" },
+  LF3: { from: "O2", to: "F2a", grade: "none", docs: 0, here: "none", hdocs: 0, fail: true, off: 12, says: "Reformulated snacks are sold as healthier and eaten in larger amounts, because health claims can raise how much people eat.", because: "health claims can raise how much people eat" },
+  LF4: { from: "F2a", to: "F2b", grade: "none", docs: 0, here: "none", hdocs: 0, fail: true, says: "Larger portions mean no fall in calories eaten, because they cancel out the smaller calories per portion.", because: "extra portions cancel the smaller calories" },
+};
+const RANK = { strong: 3, medium: 2, weak: 1, none: 0 };
+const low = (l) => RANK[l.here] < RANK[l.grade] ? l.here : l.grade;
+const PATHWAYS = {
+  all: { label: "All pathways" },
+  P1: { label: "Pathway 1 · Fewer ads, healthier choices", ids: "I1 O1 C1 C2 C3 M1 L1 L3 L4 L5 L7", spine: ["I1", "L1", "O1", "L3", "C1", "L4", "C2", "L5", "C3", "L7", "M1"] },
+  P2: { label: "Pathway 2 · Reformulation", ids: "I2 O2 C3 M1 L2 L6 L7", spine: ["I2", "L2", "O2", "L6", "C3", "L7", "M1"] },
+  F1: { label: "If it goes wrong · Spend moves elsewhere", ids: "I1 O1 F1a F1b L1 LF1 LF2", spine: ["I1", "L1", "O1", "LF1", "F1a", "LF2", "F1b"] },
+  F2: { label: "If it goes wrong · Health halo", ids: "I2 O2 F2a F2b L2 LF3 LF4", spine: ["I2", "L2", "O2", "LF3", "F2a", "LF4", "F2b"] },
+};
+const CONTEXT = "Rules in force since January 2026. Rules on where shops place these foods already apply. Children's viewing is moving to YouTube and TikTok.";
+const SUPPORT = "Ofcom and Advertising Standards Authority monitoring · industry guidance on nutrient profiling · a national evaluation";
+const GW = { strong: "Strong", medium: "Medium", weak: "Weak", none: "No evidence found" };
+const GC = { strong: "var(--g-strong)", medium: "var(--g-medium)", weak: "var(--g-weak)", none: "var(--g-none)", grey: "var(--line-2)" };
+const DASH = { strong: "", medium: "", weak: "7 5", none: "2 5", grey: "" };
+const RULES = [
+  ["strong", "Strong", "two or more good studies (review, trial or quasi-experiment) support it, and none of that quality challenges it."],
+  ["medium", "Medium", "at least one fair study supports it, and no challenge is better than the best support."],
+  ["weak", "Weak", "only poor support, or the challenges outweigh the support."],
+  ["none", "No evidence found", "the search ran and found nothing on it."],
+];
+
+/* ===================== helpers ===================== */
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const $ = (id) => document.getElementById(id);
+function wrap(text, max) {
+  const out = []; let line = "";
+  for (const w of text.split(" ")) {
+    if ((line + " " + w).trim().length > max && line) { out.push(line); line = w; } else line = (line + " " + w).trim();
+  }
+  if (line) out.push(line);
+  return out;
+}
+const dot = (g) => g === "none" ? `<span class="dot ring"></span>` : `<span class="dot" style="background:${GC[g]}"></span>`;
+const docsLine = (it) => it.docs === 0 ? "the search found nothing" : `${it.docs} document${it.docs > 1 ? "s" : ""}${it.against ? `; ${it.against} challenge${it.against > 1 ? "" : "s"} it` : ""}`;
+const nameOf = (id) => BOXES[id] ? BOXES[id].text : `${short(LINKS[id].from)} → ${short(LINKS[id].to)}`;
+const SHORT = { I1: "the ad ban", I2: "nutrient rules", O1: "fewer ads shown", O2: "reformulation", C1: "children see fewer ads", C2: "healthier choices", C3: "fewer calories bought", M1: "less obesity", F1a: "spend moves", F1b: "exposure barely falls", F2a: "eaten more", F2b: "no fall in calories" };
+const short = (id) => SHORT[id] || id;
+
+/* ===================== canvas ===================== */
+const CV = {};
+let UID = 0;
+function canvas(opts) {
+  const uid = "c" + (++UID);
+  CV[uid] = Object.assign({ states: {}, text: {}, hide: [], focus: null, pathway: "all", selected: null }, opts);
+  return { uid, html: `<div class="cv-host" id="${uid}">${svg(uid)}</div>` };
+}
+function rerender(uid) { const el = $(uid); if (el) el.innerHTML = svg(uid); }
+function svg(uid) {
+  const o = CV[uid], hide = new Set(o.hide);
+  let members = null;
+  if (o.focus) members = new Set(o.focus);
+  else if (PATHWAYS[o.pathway].ids) members = new Set(PATHWAYS[o.pathway].ids.split(" "));
+  const dim = (id) => members && !members.has(id) ? " dim" : "";
+  // geometry: success boxes first, then the failure lane below them
+  const G = {};
+  const place = (id, b, y) => {
+    const c = COLS[b.layer], lines = wrap(o.text[id] || b.text, Math.floor((c.w - 30) / 7));
+    const h = Math.max(52, 24 + 16 * lines.length);
+    G[id] = { ...b, id, x: c.x, w: c.w, y, h, lines, cy: y + h / 2, st: o.states[id] };
+  };
+  for (const [id, b] of Object.entries(BOXES)) if (!b.fail && !hide.has(id)) place(id, b, b.y);
+  const lane = Math.max(...Object.values(G).map(b => b.y + b.h)) + 30;
+  let rowY = lane + 30;
+  for (const row of [1, 2]) {
+    let maxH = 0;
+    for (const [id, b] of Object.entries(BOXES)) if (b.fail && b.row === row && !hide.has(id)) { place(id, b, rowY); maxH = Math.max(maxH, G[id].h); }
+    if (maxH) rowY += maxH + 20;
+  }
+  const H = rowY + 8;
+  const p = [`<svg class="cv" viewBox="0 0 1000 ${H}" role="img" aria-label="${esc(o.aria || "Theory of change canvas for restricting less healthy food advertising to children")}">`];
+  p.push(`<defs>${Object.keys(GC).map(g => `<marker id="${uid}-${g}" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1.5 L9 5 L1 8.5 z" style="fill:${GC[g]}"/></marker>`).join("")}</defs>`);
+  for (const c of Object.values(COLS)) p.push(`<text class="hdr" x="${c.x + c.w / 2}" y="28" text-anchor="middle">${c.label}</text>`);
+  if (Object.values(G).some(b => b.fail)) {
+    p.push(`<line x1="20" x2="980" y1="${lane}" y2="${lane}" stroke-width="1" style="stroke:var(--line-2)"/><text class="hdr" x="20" y="${lane + 20}">If it goes wrong</text>`);
+  }
+  // links
+  const mid = {};
+  for (const [id, l] of Object.entries(LINKS)) {
+    const a = G[l.from], b = G[l.to];
+    if (!a || !b || hide.has(id)) continue;
+    const st = o.states[id];
+    const g = st === "checking" ? "grey" : low(l);
+    let d, m;
+    if (l.v) {
+      const x = a.x + a.w / 2, y1 = a.y + a.h, y2 = b.y - 1;
+      d = `M${x} ${y1} C${x} ${y1 + 14} ${x} ${y2 - 14} ${x} ${y2}`; m = { x, y: (y1 + y2) / 2 };
+    } else {
+      const x1 = a.x + a.w, y1 = a.cy + (l.off || 0), x2 = b.x - 1, y2 = b.cy;
+      const pull = Math.max(30, (x2 - x1) * 0.5);
+      d = `M${x1} ${y1} C${x1 + pull} ${y1} ${x2 - pull} ${y2} ${x2} ${y2}`;
+      m = { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
+    }
+    mid[id] = m;
+    const sel = o.selected === id;
+    p.push(`<g class="item${dim(id)}" data-id="${id}" data-uid="${uid}"><path d="${d}" fill="none" stroke="transparent" stroke-width="16"/>`);
+    if (sel) p.push(`<path d="${d}" fill="none" stroke-width="9" stroke-linecap="round" style="stroke:var(--blue-tint)"/>`);
+    p.push(`<path d="${d}" fill="none" stroke-width="${sel ? 2.6 : 2}" stroke-dasharray="${DASH[g]}" stroke-linecap="round" marker-end="url(#${uid}-${g})" style="stroke:${sel ? "var(--blue)" : GC[g]}"/></g>`);
+  }
+  // an edited connection gets a blue dot; the critical connection one navy dot
+  for (const [id, l] of Object.entries(LINKS)) {
+    const m = mid[id];
+    if (m && o.states[id] === "pending") p.push(`<g class="item" data-id="${id}" data-uid="${uid}"><circle cx="${m.x}" cy="${m.y}" r="10" fill="transparent"/><circle cx="${m.x}" cy="${m.y}" r="5" style="fill:var(--blue)"/></g>`);
+    if (!m || !l.critical) continue;
+    p.push(`<g class="item${dim(id)}" data-id="${id}" data-uid="${uid}"><circle cx="${m.x}" cy="${m.y}" r="10" fill="transparent"/><circle cx="${m.x}" cy="${m.y}" r="6.5" style="fill:var(--navy)"/></g>`);
+  }
+  // boxes
+  for (const b of Object.values(G)) {
+    const st = b.st, sel = o.selected === b.id;
+    const stroke = sel ? "var(--blue)" : "var(--box)";
+    p.push(`<g class="item${st === "checking" ? " checking" : ""}${dim(b.id)}" data-id="${b.id}" data-uid="${uid}">`);
+    if (sel) p.push(`<rect x="${b.x - 4}" y="${b.y - 4}" width="${b.w + 8}" height="${b.h + 8}" rx="13" style="fill:var(--blue-tint)"/>`);
+    p.push(`<rect class="bx" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="10" stroke-width="${sel ? 2.4 : 1.5}" style="fill:var(--paper);stroke:${stroke}"/>`);
+    b.lines.forEach((ln, i) => p.push(`<text class="bt" x="${b.x + 15}" y="${b.y + 22 + i * 16 + (b.h - 24 - 16 * b.lines.length) / 2}">${esc(ln)}</text>`));
+    if (st === "edited" || st === "changed" || st === "new") p.push(`<circle cx="${b.x + b.w - 11}" cy="${b.y + 11}" r="4.5" style="fill:var(--blue)"/>`);
+    p.push(`</g>`);
+  }
+  p.push(`</svg>`);
+  return p.join("");
+}
+function tipText(uid, id) {
+  const st = CV[uid].states[id];
+  if (st === "checking") return `<b>Checking…</b><span class="s">The grade appears when the check finishes.</span>`;
+  if (st === "edited") return `<b>Edited by you</b><span class="s">Connections to this box keep their evidence until you check them again.</span>`;
+  if (st === "pending") return `<b>Edited · check pending</b><span class="s">The evidence shown is for the previous wording. Click to check again or keep it.</span>`;
+  if (st === "changed") return `<b>Changed by Policy Atlas</b><span class="s">Click to compare with your version.</span>`;
+  if (st === "new") return `<b>Found in the evidence</b><span class="s">Added after the check. Click to review.</span>`;
+  if (BOXES[id]) return `<b>${LAYER1[BOXES[id].layer]}</b><span class="s">${esc(BOXES[id].measure)}</span><span class="s">Click for case studies.</span>`;
+  const l = LINKS[id];
+  return `<b>${l.critical ? "Critical connection · test this first" : "Connection"}</b><span class="s">Worked elsewhere: ${GW[l.grade].toLowerCase()}</span><span class="s">Holds here: ${GW[l.here].toLowerCase()}</span><span class="s">Click for the evidence.</span>`;
+}
+function canvasBlock(opts, panelHtml) {
+  const c = canvas(opts);
+  return { uid: c.uid, html: `<div class="cwrap"><div class="cscroll">${c.html}<div class="tip" hidden></div></div><aside class="panel" id="pn-${c.uid}" ${panelHtml ? "" : "hidden"}>${panelHtml ? closeX(c.uid) + panelHtml : ""}</aside></div>` };
+}
+const closeX = (uid) => `<span class="x" data-close="${uid}" role="button" tabindex="0" aria-label="Close">×</span>`;
+</script>
+<script>
+/* ===================== evidence, panel and profiles ===================== */
+const ev = (t, m, q) => `<div class="ev"><div class="t">${t}</div><div class="m">${m}</div><q>${q}</q></div>`;
+const EV_SUP_L3 = [
+  ev("Children's exposure to food marketing after Chile's Law 20.606", "Academic · 2020 · before and after · fair", "Children's exposure to ads for regulated foods on TV fell by about half."),
+  ev("Household purchases after the Transport for London advertising restriction", "Academic · 2022 · quasi-experiment · good", "Ads for less healthy food fell to almost none across the network after the restriction."),
+];
+EV_SUP_L3.push(ev("Exposure to food ads among teenagers after TV restrictions", "Academic · 2019 · time series · fair · holds for children under 12", "Exposure fell for younger children, but much less for teenagers."));
+const EV_CHA = [
+  ev("Food brand advertising after Chile's marketing restrictions", "Academic · 2021 · before and after · fair", "Companies moved to brand-only advertising that did not show the regulated products."),
+  ev("Less healthy food brands on children's social media feeds", "Academic · 2023 · cross-sectional · fair", "Most brand content children saw came from influencers, not paid ads."),
+  ev("Brands turn to sponsorship as UK ad rules near", "Web page · 2025 · not appraised", "Several large brands said they would move budgets into sponsorship and brand campaigns."),
+];
+const EV = {
+  L3: { e: `<div class="h">Supports (3)</div>${EV_SUP_L3.join("")}<div class="h">Challenges (0)</div><div class="sub">None found.</div>`,
+        h: `<div class="h">Supports (1)</div><div class="ev"><div class="t">Household purchases after the Transport for London advertising restriction</div><div class="m">Listed above · in England</div></div><div class="h">Challenges (3)</div>${EV_CHA.join("")}` },
+  C3: `<div class="h">Case studies (2)</div>${ev("Transport for London advertising restriction, 2019", "London · academic · quasi-experiment · good", "Weekly household energy bought from less healthy products fell by about 7% against a comparison area.")}${ev("Quebec ban on advertising to children, 1980", "Quebec, Canada · academic · natural experiment · fair", "Fast-food spending fell in French-speaking households, who saw the restricted channels.")}<div class="h">Indicators used</div><div>Calories bought per household per week · share of spending on less healthy food</div>`,
+};
+const lc = (t) => t.charAt(0).toLowerCase() + t.slice(1);
+const LAYER1 = { in: "Input", out: "Output", oc: "Outcome", imp: "Impact" };
+const kindOf = (id) => BOXES[id] ? (BOXES[id].fail ? `${LAYER1[BOXES[id].layer]} if it goes wrong` : LAYER1[BOXES[id].layer]) : (LINKS[id].critical ? "Critical connection · test this first" : "Connection");
+function gradeLine(it, here) {
+  const g = here ? it.here : it.grade, n = here ? it.hdocs : it.docs;
+  const w = g === "none" ? (here ? "No evidence found on whether it holds here" : "No evidence found that it worked elsewhere") : `${GW[g]} evidence ${here ? "it holds here" : "it worked elsewhere"}`;
+  return `<div class="gline">${dot(g)}<span><b>${w}.</b></span></div>`;
+}
+const PENDING = { L4: { before: "Children ask for and pick healthier food", now: "Children pester parents less for these foods" } };
+const pendingBlock = (id) => { const x = PENDING[id]; return `<div class="pend"><div class="caps" style="color:var(--blue)">Edited · check pending</div><p style="margin:4px 0 0">You changed a box on this step after its evidence was checked. The grades below are for the previous wording.</p><div class="vs"><div><span class="caps">Before</span>${x.before}</div><div class="theirs"><span class="caps" style="color:var(--blue)">Now</span>${x.now}</div></div><div style="display:flex;gap:8px;margin-top:10px"><span class="btn sm">Check again</span><span class="btn2 sm">Keep the evidence</span></div></div>`; };
+function panel(id, st) {
+  const b = BOXES[id], l = LINKS[id];
+  const parts = [`<div class="caps">${kindOf(id)}</div><h3>${esc(l ? `${short(l.from)[0].toUpperCase() + short(l.from).slice(1)} → ${short(l.to)}` : b.text)}</h3>`];
+  if (st === "pending" && PENDING[id]) parts.push(pendingBlock(id));
+  if (b) { parts.push(`<div class="h">How it is measured</div><p style="margin:0">${b.measure}</p><div class="h">Where it has been seen</div><p style="margin:0">${b.seen}</p>`); if (EV[id]) parts.push(EV[id]); else if (b.cases) parts.push(`<div class="sub">The ${b.cases} case studies, with place, source and quote, appear here.</div>`); }
+  if (l) {
+    const E = EV[id] || {};
+    parts.push(`<p style="margin:0">${l.says}</p><div class="h">How this step works</div><dl class="ifthen"><dt>If</dt><dd>${esc(lc(BOXES[l.from].text))}</dd><dt>For</dt><dd>children aged 4 to 15 in England</dd><dt>Then</dt><dd>${esc(lc(BOXES[l.to].text))}</dd><dt>Because</dt><dd>${l.because}</dd>${l.cond ? `<dt>Needs</dt><dd>${l.cond}</dd>` : ""}</dl>`);
+    parts.push(`<div style="margin-top:18px;padding-top:12px;border-top:1px solid var(--line)">${gradeLine(l, false)}</div>${l.ev ? `<p style="margin:6px 0 0">${l.ev}</p>` : ""}${E.e || (l.docs ? `<div class="sub">The ${l.docs} documents, with quotes, appear here.</div>` : "")}`);
+    parts.push(`<div style="margin-top:18px;padding-top:12px;border-top:1px solid var(--line)">${l.same ? `<div class="gline">${dot(l.here)}<span><b>${GW[l.here]} evidence it holds here.</b></span></div><p style="margin:6px 0 0">The same documents answer this: they are from England.</p>` : `${gradeLine(l, true)}${l.cond ? `<p style="margin:6px 0 0">It needs ${l.cond}.${l.hev ? " " + l.hev : ""}</p>` : ""}${E.h || (l.hdocs ? `<div class="sub">The ${l.hdocs} documents, with quotes, appear here.</div>` : "")}`}`);
+    parts.push(`<details><summary>How these grades were given</summary><div class="sub">${RULES.map(r => `${r[1]}: ${r[2]}`).join(" ")} Web pages never raise a grade above weak.</div></details>`);
+  }
+  parts.push(`<details><summary>Where this came from</summary><div class="sub">${b ? b.origin : "Drafted by Policy Atlas"}. Checked 26 Oct 2026, 14:19.</div></details>`);
+  parts.push(`<div style="display:flex;gap:4px;margin-top:14px;border-top:1px solid var(--line);padding-top:10px"><button class="quiet">Discuss</button><button class="quiet">Edit</button><button class="quiet">Check again</button></div>`);
+  return parts.join("");
+}
+const PANEL_CHANGED = `<div class="caps" style="color:var(--blue)">Changed by Policy Atlas</div><h3>Children ask for and pick healthier food</h3>
+  <p style="margin:0;color:var(--navy)">Merged with a drafted box that described the same step. The documents talk about children's requests and their choices, so one box now covers both.</p>
+  <div class="vs"><div><span class="caps">Your version</span>Children pester parents less for these foods</div><div class="theirs"><span class="caps" style="color:var(--blue)">New version</span>Children ask for and pick healthier food</div></div>
+  <div style="display:flex;gap:8px;margin-top:12px;align-items:center"><span class="btn sm">Accept</span><span class="btn2 sm">Keep mine</span></div>
+  <div class="sub" style="margin-top:6px">Keep mine restores your text and checks it again.</div>
+  <div class="h">How it is measured</div><p style="margin:0">${BOXES.C2.measure}</p>
+  <details><summary>History</summary><div class="sub">26 Oct 14:02 · you edited the text<br>26 Oct 14:19 · Policy Atlas merged it with "Children choose fewer less healthy snacks"</div></details>`;
+
+const gsent = (g, here) => g === "none" ? `<span class="gw none">${here ? "No evidence found on whether it holds here." : "No evidence found that it worked elsewhere."}</span>` : `<span class="gw ${g}">${GW[g]} evidence ${here ? "it holds here" : "it worked elsewhere"}.</span>`;
+const more = (id, docs) => docs ? ` <button class="more" data-ev aria-expanded="false" aria-label="Show the ${docs} documents">+</button>` : "";
+const tail = (text, id, docs) => { if (!docs) return text; const k = text.lastIndexOf(" "); return `${text.slice(0, k + 1)}<span class="nw">${text.slice(k + 1)}${more(id, docs)}</span>`; };
+const evList = (id, docs, which) => docs ? `<div class="evb" hidden>${(which ? EV[id] && EV[id][which] : EV[id]) || `<p class="sub">The ${docs} sources and their quotes, as in the panel.</p>`}</div>` : "";
+function detailRows(key, states = {}, ids) {
+  return (ids || PATHWAYS[key].spine).map(id => {
+    if (BOXES[id]) {
+      const b = BOXES[id];
+      return `<div class="st"><div class="lay">${LAYER1[b.layer]}</div><div class="ttl">${esc(b.text)}</div><p>${tail(b.story, id, b.cases)}</p>${evList(id, b.cases)}</div>`;
+    }
+    const l = LINKS[id], g = low(l);
+    const hereP = l.same
+      ? ""
+      : `<p>${gsent(l.here, true)} ${l.cond ? `It needs ${l.cond}.` : ""} ${tail(l.hev || (l.here === "none" ? "No document speaks to this here." : ""), id + "h", l.hdocs)}</p>${evList(id, l.hdocs, "h")}`;
+    const elseP = l.same
+      ? `<p><span class="gw ${l.grade}">${GW[l.grade]} evidence, including in England.</span> ${tail(l.ev, id, l.docs)}</p>${evList(id, l.docs, "e")}`
+      : `<p>${gsent(l.grade)} ${tail(l.ev || "No document speaks to this step.", id, l.docs)}</p>${evList(id, l.docs, "e")}`;
+    const pend = states[id] === "pending" ? `<div class="lay" style="color:var(--blue)">Edited · check pending · the grades below are for the previous wording</div><div style="display:flex;gap:8px;margin:6px 0 4px"><span class="btn sm">Check again</span><span class="btn2 sm">Keep the evidence</span></div>` : "";
+    return `<div class="cn${g === "weak" || g === "none" ? " dash" : ""}" style="--c:${GC[g]}">${pend}${l.critical ? `<div class="lay" style="font-weight:700">Critical connection · test this first</div>` : ""}<p>${l.says}</p>${elseP}${hereP}</div>`;
+  }).join("");
+}
+const dsec = (title, summary, body, open = false) => `<section class="ds${open ? " open" : ""}"><button class="dsb" aria-expanded="${open}"><h3>${title}</h3><span class="exp">${open ? "Collapse −" : "Expand +"}</span></button><p class="dsum">${summary}</p><div class="dbody">${body}</div></section>`;
+function readingSection(uid) {
+  return `<div class="reading" id="rd-${uid}" hidden><h3>How to read the canvas</h3>
+    <p>Read from left to right: what the programme puts in, what it delivers, the changes for children and families, and the long-term impact. Pathways that could go wrong sit below the line.</p>
+    <p>Boxes are the steps. The connections between them carry the evidence. Their colour shows how strong it is: <span class="dot" style="background:var(--g-strong)"></span> strong, <span class="dot" style="background:var(--g-medium)"></span> medium, <span class="dot" style="background:var(--g-weak)"></span> weak, or <span class="dot ring"></span> none found yet. A dashed line means weak or none. Strong means at least two good studies agree and none of that quality disagrees. Web pages alone never make a step stronger than weak.</p>
+    <p>Every connection answers two questions: did it work where it was tried, and will it work here, in England, now? The second depends on the conditions the step needs. A connection takes the colour of the weaker answer; hover to see both. The navy dot marks the critical connection: test it first. Hover over anything for a summary, and click it for the evidence.</p>
+    <p>Around the programme, Ofcom and the Advertising Standards Authority monitor the rules, industry gets guidance on nutrient profiling, and a national evaluation is planned.</p></div>`;
+}
+function detailSection() {
+  return `<div class="dhead"><h2>Detailed information</h2><span class="btn2 sm">Download as PDF</span></div>
+  ${dsec(PATHWAYS.P1.label, "", detailRows("P1"), true)}
+  ${dsec(PATHWAYS.P2.label, "Reformulation lowers the calories in products families already buy.", detailRows("P2"))}
+  ${dsec(PATHWAYS.F1.label, "Brands keep marketing through channels the rules do not cover.", detailRows("F1"))}
+  ${dsec(PATHWAYS.F2.label, "Products sold as healthier are eaten in larger amounts.", detailRows("F2"))}
+  ${dsec("Considered and set aside", "Three pathways that Policy Atlas did not keep, with the reason for each.", `<div class="st"><div class="ttl">Children ask parents less</div><p>Merged into pathway 1, because it is the same step as healthier choices. <span class="link">Restore</span></p></div><div class="st"><div class="ttl">Price promotions replace ad budgets</div><p>Not relevant: the documents tie promotions to other rules. <span class="link">Restore</span></p></div><div class="st"><div class="ttl">Fewer ads change adult diets too</div><p>Outside the plan's population. <span class="link">Restore</span></p></div>`)}
+  ${dsec("Questions for an evaluation", "What an evaluation should test, from the steps least shown to hold here.", `<ol style="display:grid;gap:4px;margin:4px 0 0;padding-left:20px"><li>Did children's exposure fall across all channels, including brand ads and influencers?</li><li>Did household purchases fall, and for which households?</li><li>Are the calories cut made up from other food?</li><li>Do reformulated products change how much children eat?</li></ol>`)}`;
+}
+
+/* ===================== app chrome ===================== */
+const nav = (on = "Tasks") => `<div class="anav"><div class="logo"><i></i>Policy Atlas</div><div class="links">${["New task", "Tasks", "Projects"].map(x => `<span class="${x === on ? "on" : ""}">${x}</span>`).join("")}</div><div class="avatar">KK</div></div>`;
+const tbar = (name, kind, tab, locked = []) => `<div class="tbar"><span class="tname">${name}</span><span class="caps">${kind}</span><div class="tabs">${["Agent", "Result", "Sources", "Share", "History"].map(t => `<span class="${t === tab ? "on" : ""}${locked.includes(t) ? " off" : ""}">${t}</span>`).join("")}</div></div>`;
+const TOC = "Ad restrictions: theory of change";
+const railMin = () => `<div class="rail min"><span class="dot" style="background:var(--blue);width:8px;height:8px"></span><span class="vlab">Task Agent</span></div>`;
+const rail = (head, inner, composer = "Ask the Task Agent, or ask for a change") => `<div class="rail"><div class="rhead">${head}</div><div class="thread">${inner}</div><div class="composer"><span>${composer}</span><span class="send">↑</span></div></div>`;
+const app = (o, inner) => `<div class="app${o.narrow ? " narrow" : ""}">${nav(o.nav)}${o.tbar || ""}${inner}</div>`;
+const resultTbar = (tab = "Result") => tbar(TOC, "Theory of change", tab);
+function counts() {
+  const items = Object.values(LINKS);
+  const c = { strong: 0, medium: 0, weak: 0, none: 0 }; items.forEach(i => c[i.grade]++);
+  return { c, n: items.length };
+}
+function header(state = "checked") {
+  const title = `<div class="ptitle">Restrict less healthy food ads <span class="arrow">→</span> fewer children living with obesity</div>`;
+  if (state === "running") return `${title}<div class="intro" style="grid-template-columns:minmax(0,1fr)"><p>Policy Atlas is checking each step against the evidence. Steps take their colour as they are checked. You can keep editing: edited steps keep their evidence and are marked, and you decide whether to check them again.</p></div>`;
+  const about = `<div><h3>About this theory</h3><p>How restricting ads for less healthy food could mean fewer children aged 4 to 15 in England living with obesity by 2035. It builds on the option of the same name and your team's logic model. The rules have applied since January 2026, while children's viewing moves to YouTube and TikTok.</p></div>`;
+  const right = `<div><h3>What the evidence says</h3><p>The best-supported step is that ads shape what children choose to eat. Most steps worked where they were tried, but few have been shown to hold in England. The critical one is the first: it worked elsewhere, but here it needs brands not to move their spend to brand ads and influencers, and the evidence on that is weak. <span class="link">Test it first</span></p></div>`;
+  return `${title}<div class="intro">${about}${right}</div>`;
+}
+function toolbar(uid, o = {}) {
+  const sel = `<label class="select"><select data-uid="${uid}" aria-label="Pathway">${Object.entries(PATHWAYS).map(([k, p]) => `<option value="${k}" ${k === (o.pathway || "all") ? "selected" : ""}>${p.label}</option>`).join("")}</select></label>`;
+  const right = o.edit
+    ? `<button class="quiet">Add box</button><button class="quiet">Connect</button><span class="btn sm">Done editing</span>`
+    : `${o.read ? `<button class="quiet" data-read="rd-${uid}">How to read this</button>` : ""}<button class="quiet">Edit</button><button class="quiet">Your original</button><button class="quiet">Stress test</button><span class="btn2 sm">Download ▾</span>`;
+  return `<div class="toolbar">${sel}<span class="sp"></span>${right}</div>`;
+}
+
+/* ===================== frames ===================== */
+// 1a New task
+$("m1a").innerHTML = app({ narrow: true, nav: "New task" }, `<div style="padding:28px 32px 32px">
+  <div class="caps" style="font-size:var(--fs-ui)">New task</div>
+  <div style="font-size:var(--fs-title);font-weight:800;color:var(--navy);margin-top:4px">What would you like to do?</div>
+  <ul style="list-style:none;margin:18px 0 0;padding:0;font-size:var(--fs-body)">
+    ${[["Evidence search"], ["Options scoping"], ["Theory of change", "on"], ["Mapping stakeholders", "off"]].map(([t, s]) => `<li style="display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:12px 2px;color:${s === "on" ? "var(--blue)" : s === "off" ? "var(--grey)" : "var(--navy)"}">${t}${s === "off" ? `<span class="caps">Coming soon</span>` : `<span style="color:var(--blue)">→</span>`}</li>`).join("")}
+  </ul>
+  <div style="border-top:1px dashed var(--line-2);margin-top:28px;padding-top:20px">
+    <div class="caps" style="font-size:var(--fs-ui)">Theory of change</div>
+    <div style="font-size:var(--fs-title);font-weight:800;color:var(--navy);margin-top:4px;line-height:1.2">What change do you want to explain?</div>
+    <p style="font-size:var(--fs-body);color:var(--grey);margin:8px 0 0">Describe the change, the programme, or both. Policy Atlas will draft a theory of change, then check each step against the evidence.</p>
+    <div style="margin-top:16px;border:1px solid var(--line-2);padding:12px 14px;display:flex;gap:10px;align-items:flex-end"><span style="flex:1;color:var(--grey);font-size:var(--fs-body);min-height:66px">e.g. How would a sugar levy on milkshakes reduce child obesity?</span><span class="btn">Start</span></div>
+    <p style="font-size:var(--fs-ui);color:var(--grey);margin:8px 0 0">Already have one? Paste it, or <span class="link" style="font-size:var(--fs-ui)">upload an image or PDF</span>.</p>
+  </div></div>`);
+// 1b option page
+$("m1b").innerHTML = app({ narrow: true, tbar: tbar("Interventions to reduce obesity", "Options scoping", "Result") }, `<div style="padding:18px 24px 26px">
+  <div style="display:flex;gap:18px;font-weight:600;color:var(--navy);font-size:var(--fs-ui);border-bottom:1px solid var(--line);padding-bottom:8px"><span>Baseline</span><span style="border-bottom:3px solid var(--blue);padding-bottom:6px;margin-bottom:-9px">Longlist</span><span style="color:var(--grey)">Report</span></div>
+  <div class="card" style="margin-top:14px;padding:18px 20px">
+    <div class="caps">Regulate · included</div>
+    <div style="font-size:var(--fs-body);font-weight:700;color:var(--navy);margin-top:4px;line-height:1.3">Restrictions on unhealthy food advertising to children</div>
+    <p style="margin:6px 0 0;font-size:var(--fs-ui)">Restrict advertising and sponsorship of foods high in fat, salt or sugar where it reaches or appeals to children.</p>
+    <div style="margin-top:12px;font-size:var(--fs-ui);color:var(--grey)">⋯ design features, evidence and assessment, as today ⋯</div>
+    <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:16px">
+      <div style="font-size:var(--fs-body);font-weight:700;color:var(--navy)">How would this option work?</div>
+      <p style="margin:4px 0 12px;font-size:var(--fs-ui);color:var(--grey)">Map the steps from this option to the change, and check each one against the evidence. This option's documents come with it.</p>
+      <span class="btn">Design a theory of change</span>
+      <div style="margin-top:14px;font-size:var(--fs-ui);color:var(--grey)">Already made from this option: <span class="link" style="font-size:var(--fs-ui)">${TOC}</span></div>
+    </div></div></div>`);
+// 2 plan
+{
+  const sec = (lab, val, extra = "") => `<div class="psec"><div class="top"><span class="lab">${lab}</span><span class="pedit">Edit</span></div><div class="val">${val}</div>${extra}</div>`;
+  const thumb = `<div class="orig"><svg viewBox="0 0 220 120" style="width:100%;display:block" role="img" aria-label="The uploaded logic model, page 1">
+        ${[[12, 12], [12, 74], [82, 43], [152, 12], [152, 74]].map(([x, y]) => `<rect x="${x}" y="${y}" width="56" height="34" rx="4" style="fill:var(--ground);stroke:var(--grey)"/>`).join("")}
+        <path d="M68 29 C76 29 74 60 82 60 M68 91 C76 91 74 60 82 60 M138 60 C146 60 144 29 152 29 M138 60 C146 60 144 91 152 91" fill="none" style="stroke:var(--grey)"/></svg></div>`;
+  $("m2").innerHTML = app({ tbar: tbar(TOC, "Theory of change", "Agent", ["Result"]) }, `<div class="abody">${rail(`Task Agent`, `
+  <div class="msg user">Design a theory of change for "Restrictions on unhealthy food advertising to children".</div>
+  <div class="msg"><p>I've filled the plan from the option. Two questions.</p><p><b>1.</b> What change do you want, in words you could measure? I suggest <i>fewer children living with obesity at age 10 to 11</i>, as the National Child Measurement Programme records it.</p><p><b>2.</b> Do you already have a theory? Paste it, or upload an image or PDF.</p></div>
+  <div class="msg user">Yes, use that. Here's our draft logic model.<p style="margin:6px 0 0">📄 logic-model-v2.pdf</p></div>
+  <div class="msg"><p>I read 5 boxes and 4 connections from it. I'll start from your model and add what is missing. The plan is ready.</p><div style="display:flex;gap:8px;margin-top:8px"><span class="btn">Draft the theory</span></div></div>`, "Reply, or attach a file")}
+  <div class="planp"><div class="col"><h2>Theory of change plan <span>×</span></h2>
+    ${sec("Intended change", "Fewer children living with obesity at age 10 to 11, as the National Child Measurement Programme records it.")}
+    ${sec("Who it is for", "Children aged 4 to 15 in England, and their households.")}
+    ${sec("Intervention", "A ban on ads for less healthy food on TV before 9pm and on all paid online ads, with limits on sponsorship.")}
+    ${sec("By when", "2035")}
+    ${sec("Starting point", "Your team's logic model, plus the option it came from.", `${thumb}<div class="hint">logic-model-v2.pdf · 5 boxes and 4 connections read</div>`)}
+    ${sec("Evidence", "All countries, from 2000. The 61 documents found for the option are reused before new searches.")}
+  </div></div></div>`);
+}
+// 3 result page
+{
+  const cb = canvasBlock({});
+  $("m3").innerHTML = app({ tbar: resultTbar() }, `<div class="abody">${railMin()}<div class="amain">${header()}${toolbar(cb.uid, { read: true })}${readingSection(cb.uid)}${cb.html}${detailSection()}</div></div>`);
+}
+// 4 detail panel
+{
+  const cb = canvasBlock({ selected: "L3" }, panel("L3"));
+  $("m4").innerHTML = app({ tbar: resultTbar() }, `<div class="abody">${railMin()}<div class="amain">${header()}${toolbar(cb.uid)}${cb.html}</div></div>`);
+}
+// 5 check running
+{
+  const st = Object.fromEntries(["L5", "L6", "L7", "LF3", "LF4", "L2"].map(k => [k, "checking"]));
+  st.C2 = "edited"; st.L4 = "pending";
+  const cb = canvasBlock({ states: st, hide: ["F1a", "F1b", "LF1", "LF2"], selected: "L4", text: { C2: "Children pester parents less for these foods" }, aria: "Draft theory while the evidence check runs" }, panel("L4", "pending"));
+  $("m5").innerHTML = app({ tbar: resultTbar() }, `<div class="abody">${rail(`<b>Task Agent</b>`, `
+    <div class="msg"><div class="who">Task Agent</div><p>Your draft is on the canvas. I'm checking each step against the evidence now. You can edit while I work. A step you edit keeps its evidence and is marked "check pending"; you decide whether to check it again.</p></div>
+    <div class="run"><div style="display:flex;justify-content:space-between"><b>Checking the evidence</b><span>12 of 22</span></div><div class="bar"><i style="width:55%"></i></div><div style="color:var(--grey);font-size:var(--fs-ui)">Judging each step · about 4 minutes left</div>
+      <details style="margin-top:6px"><summary style="cursor:pointer;font-size:var(--fs-ui);font-weight:700">Details</summary><div style="font-size:var(--fs-ui);color:var(--grey);margin-top:4px">Reused 61 documents from the option · 22 searches in OpenAlex, Overton and the web · 214 abstracts screened, 58 kept · next: find new pathways, then consolidate</div></details></div>
+    <div class="msg user">Can you add a failure pathway about price promotions?</div>
+    <div class="msg"><div class="who">Task Agent</div><p>I'll add it when the check finishes, so the results stay consistent. Or add it yourself now with "Add box".</p></div>`)}
+    <div class="amain">${header("running")}${toolbar(cb.uid, { edit: true })}${cb.html}</div></div>`);
+}
+$("m5b").innerHTML = `<div class="app narrow" style="width:640px;padding:18px 22px"><div class="caps">In Detailed information</div><div class="dbody" style="font-size:var(--fs-body)">${detailRows("P1", { L4: "pending" }, ["L4"]).replace("Children ask for and pick healthier food", "Children pester parents less for these foods")}</div></div>`;
+// 6 changes to review
+{
+  const cb = canvasBlock({ states: { C2: "changed", F1a: "new", F1b: "new" }, selected: "C2" }, PANEL_CHANGED);
+  $("m6").innerHTML = app({ tbar: resultTbar() }, `<div class="abody">${rail(`<b>Task Agent</b>`, `
+    <div class="msg"><div class="who">Task Agent</div><p><b>The check is done.</b> I checked 11 connections against 74 documents and changed these:</p>
+      <div class="chg"><span>Added a failure pathway found in the evidence: brands move their spend elsewhere.</span><span class="link">Undo</span></div>
+      <div class="chg"><span>Merged your box "Children pester parents less" with a drafted one that says the same.</span><span class="link">Undo</span></div>
+      <div class="chg"><span>Set aside 3 pathways, each with a reason.</span><span class="link">Undo</span></div>
+      <div style="margin-top:8px"><span class="btn2 sm">Undo all</span></div></div>
+    <div class="msg"><p>Next, I suggest a stress test: four short questions that probe the weakest points, starting with the critical connection.</p><div style="display:flex;gap:8px"><span class="btn sm">Start the stress test</span><span class="btn2 sm">Later</span></div></div>
+    <div class="msg"><p>1 step you edited has a check pending: children see fewer ads → healthier choices.</p><div style="display:flex;gap:8px"><span class="btn2 sm">Check all</span><span class="btn2 sm">Keep all</span></div></div>
+    <div class="msg"><p>You asked for a price-promotions pathway. The evidence did not support it on its own, so it is set aside. Restore it anyway?</p><div style="display:flex;gap:8px"><span class="btn2 sm">Restore</span><span class="btn2 sm">Leave it</span></div></div>`)}
+    <div class="amain">${header()}${toolbar(cb.uid)}${cb.html}</div></div>`);
+  $("m6b").innerHTML = `<div class="app narrow" style="width:400px"><div class="rail" style="width:100%;border:0"><div class="rhead"><b>Task Agent</b></div><div class="thread">
+    <div class="msg user">Change the population to children aged 11 to 15.</div>
+    <div class="msg"><div class="who">Task Agent</div><p>Done. Your canvas was drafted for ages 4 to 15. What should I do?</p>
+      <div style="display:grid;gap:8px;margin-top:8px"><span class="btn" style="justify-content:center">Redraft the theory</span><span class="btn2" style="justify-content:center">Keep it and check again</span></div>
+      <p style="font-size:var(--fs-ui);color:var(--grey);margin-top:8px">The old canvas stays in History.</p></div></div></div></div>`;
+}
+// 7 stress test
+{
+  const cb = canvasBlock({ focus: ["O1", "C1", "L3"], selected: "L3", aria: "Canvas with the first outcome arrow highlighted for the stress test" });
+  const q = (t, s) => `<span style="flex:1;height:3px;background:${s === "done" ? "var(--navy)" : s === "now" ? "var(--blue)" : "var(--line)"}" title="${t}"></span>`;
+  $("m7").innerHTML = app({ tbar: resultTbar() }, `<div class="abody">${rail(`<b>Stress test</b><span class="caps" style="margin-left:auto">2 of 4</span>`, `
+    <div style="display:flex;gap:4px">${q("Mechanism", "done")}${q("If the critical connection fails here", "now")}${q("Scope", "todo")}${q("Failure", "todo")}</div>
+    <div class="msg"><p><b>Question 2. If the critical connection fails here</b></p><p>Suppose brands move their budgets to brand-only ads, sponsorship and influencers. What in your theory still works, and what would you watch first?</p></div>
+    <div class="msg user">Pathway 2 still works: reformulation doesn't depend on exposure. I'd watch influencer content first.</div>
+    <div class="msg"><div class="who">Stress test</div><p>That fits the evidence: pathway 2 does not pass through this arrow. But its first step is weak, so it cannot carry the theory alone. In Chile the shift came within a year, so monitoring should start before the rules do.</p></div>`, "Answer in your own words")}
+    <div class="amain">${header()}${toolbar(cb.uid)}${cb.html}</div></div>`);
+}
+// 8 sources
+{
+  const rows = [
+    ["Food marketing and children's food intake: a systematic review and meta-analysis", "Academic", "Review · good", 2022, "Healthier choices (worked elsewhere)", "supports"],
+    ["Household purchases after the Transport for London advertising restriction", "Academic", "Quasi-experiment · good", 2022, "Fewer calories bought", "supports"],
+    ["Food brand advertising after Chile's marketing restrictions", "Academic", "Before and after · fair", 2021, "Children see fewer ads (holds here); spend moves", "challenges"],
+    ["Impact assessment: restricting advertising of less healthy food", "Policy document", "Modelling · fair", 2021, "Less obesity", "supports"],
+    ["Brands turn to sponsorship as UK ad rules near", "Web page", "Not appraised", 2025, "Children see fewer ads (holds here)", "challenges"],
+  ];
+  const bar = (parts) => `<div style="display:flex;height:6px;width:260px;margin-top:6px;gap:2px">${parts.map(([w, c]) => `<i style="width:${w}%;background:${c}"></i>`).join("")}</div>`;
+  $("m8").innerHTML = app({ tbar: resultTbar("Sources") }, `<div class="abody">${railMin()}<div class="amain">
+    <div style="font-size:var(--fs-title);font-weight:800;color:var(--navy)">74 documents read</div>
+    <div class="sub">OpenAlex, Overton and the web, plus 61 documents from the option. Abstracts only.</div>
+    <div style="display:flex;gap:36px;flex-wrap:wrap;margin-top:16px;font-size:var(--fs-ui);color:var(--grey)">
+      <div><div class="caps">Source type</div>${bar([[62, "var(--navy)"], [24, "#5b6f8c"], [14, "var(--line-2)"]])}<div style="margin-top:4px">Academic 46 · policy 18 · web 10</div></div>
+      <div><div class="caps">Country</div>${bar([[41, "var(--navy)"], [19, "#5b6f8c"], [27, "#9aa8bb"], [13, "var(--line-2)"]])}<div style="margin-top:4px">UK 30 · Europe 14 · Americas 20 · other 10</div></div>
+      <label class="select" style="margin-left:auto;align-self:flex-end"><span class="caps" style="font-size:var(--fs-ui)">Used for</span><select aria-label="Filter by item"><option>Every step</option><option>Children see fewer ads</option></select></label></div>
+    <table class="t" style="margin-top:16px"><thead><tr><th>Document</th><th>Type</th><th>Quality</th><th style="text-align:right">Year</th><th>Used for</th><th>Stance</th></tr></thead><tbody>
+      ${rows.map(r => `<tr><td style="max-width:360px;font-weight:600">${r[0]}</td><td class="g">${r[1]}</td><td class="g">${r[2]}</td><td class="num-c g">${r[3]}</td><td class="g">${r[4]}</td><td style="color:${r[5] === "supports" ? "var(--t-strong)" : "var(--t-weak)"};font-weight:600">${r[5] === "supports" ? "Supports" : "Challenges"}</td></tr>`).join("")}
+    </tbody></table><div class="sub" style="margin-top:8px">Showing 5 of 74. Not searched: full texts and non-English sources.</div></div></div>`);
+}
+// 9 export
+{
+  $("m9").innerHTML = `<div class="app narrow" style="width:380px;padding:14px 16px 16px">
+    <div style="display:flex;justify-content:flex-end"><span class="btn2 sm">Download ▴</span></div>
+    <div style="border:1px solid var(--line-2);margin-top:6px;box-shadow:0 12px 24px -16px rgb(15 41 74 / .4)">
+      ${[["Read and share", [["Report (PDF)", "The canvas and every step, as on the result page"], ["Image (PNG or SVG)", "The canvas only"]]], ["Keep working", [["Diagram file (draw.io)", "Opens in Miro, Lucidchart and diagrams.net"], ["PowerPoint", "Real boxes and connected arrows"]]], ["Data", [["References (CSV)", "Every document and what it supports"], ["Theory (JSON)", "For other tools"]]]].map(([h, items]) => `<div style="padding:8px 14px;border-bottom:1px solid var(--line)"><div class="caps" style="font-size:var(--fs-ui)">${h}</div>${items.map(([t, s]) => `<div style="padding:5px 0"><div style="font-weight:700;color:var(--navy)">${t}</div><div style="font-size:var(--fs-ui);color:var(--grey)">${s}</div></div>`).join("")}</div>`).join("")}
+    </div></div>`;
+  const mini = canvas({ aria: "Canvas as printed in the PDF report" });
+  $("m9b").innerHTML = `<div class="paper"><div style="font-size:var(--fs-ui);color:var(--grey);font-weight:700">Policy Atlas · theory of change · 26 Oct 2026</div>
+    <div style="font-size:var(--fs-title);font-weight:800;color:var(--navy);margin-top:6px;line-height:1.2">Restrict less healthy food ads → fewer children living with obesity</div>
+    <div style="margin-top:12px;border:1px solid var(--line)">${mini.html}</div>
+    <div style="font-weight:700;color:var(--navy);margin-top:14px;font-size:var(--fs-ui)">Detailed information · pathway 1</div>
+    <div style="margin-top:6px;display:grid;gap:5px">${["I1", "L1", "O1", "L3", "C1"].map(id => BOXES[id] ? `<div style="border:1px solid var(--line-2);border-radius:6px;padding:5px 8px"><b style="color:var(--navy)">${BOXES[id].text}</b><div style="color:var(--grey)">${BOXES[id].story}</div></div>` : `<div style="border-left:2px ${LINKS[id].grade === "weak" ? "dashed" : "solid"} ${GC[LINKS[id].grade]};margin-left:14px;padding:2px 0 2px 12px"><span class="gw ${LINKS[id].grade}">${GW[LINKS[id].grade]}</span> <span style="color:var(--grey)">${LINKS[id].says}</span></div>`).join("")}</div>
+    <div style="color:var(--grey);margin-top:8px">… continues with every step, then the evidence list and the references.</div></div>`;
+}
+
+/* ===================== interaction ===================== */
+document.addEventListener("change", (e) => {
+  const s = e.target.closest("select[data-uid]");
+  if (s) { CV[s.dataset.uid].pathway = s.value; CV[s.dataset.uid].focus = null; rerender(s.dataset.uid); }
+});
+document.addEventListener("click", (e) => {
+  const rd = e.target.closest("[data-read]");
+  if (rd) { const el = $(rd.dataset.read); el.hidden = !el.hidden; rd.textContent = el.hidden ? "How to read this" : "Hide how to read this"; return; }
+  const dsb = e.target.closest(".dsb");
+  if (dsb) { const sec = dsb.parentElement, open = sec.classList.toggle("open"); dsb.setAttribute("aria-expanded", open); dsb.querySelector(".exp").textContent = open ? "Collapse −" : "Expand +"; return; }
+  const evt = e.target.closest("[data-ev]");
+  if (evt) { const b = evt.closest("p").nextElementSibling; b.hidden = !b.hidden; evt.setAttribute("aria-expanded", !b.hidden); evt.textContent = b.hidden ? "+" : "−"; return; }
+  const op = e.target.closest("[data-open]");
+  if (op) { const pn = op.closest(".panel"), uid = pn.id.slice(3); CV[uid].selected = op.dataset.open; rerender(uid); pn.innerHTML = closeX(uid) + panel(op.dataset.open); return; }
+  const close = e.target.closest("[data-close]");
+  if (close) { const uid = close.dataset.close; $("pn-" + uid).hidden = true; CV[uid].selected = null; rerender(uid); return; }
+  const item = e.target.closest(".item[data-uid]");
+  if (item) {
+    const uid = item.dataset.uid, id = item.dataset.id, pn = $("pn-" + uid);
+    if (!pn) return;
+    CV[uid].selected = id; rerender(uid);
+    pn.innerHTML = closeX(uid) + (CV[uid].states[id] === "changed" ? PANEL_CHANGED : panel(id, CV[uid].states[id]));
+    pn.hidden = false;
+  }
+});
+document.addEventListener("mouseover", (e) => {
+  const item = e.target.closest(".item[data-uid]");
+  document.querySelectorAll(".tip").forEach(t => { if (!item || !t.parentElement.contains(item)) t.hidden = true; });
+  if (!item) return;
+  const box = item.closest(".cscroll"), tip = box && box.querySelector(".tip");
+  if (!tip) return;
+  tip.innerHTML = tipText(item.dataset.uid, item.dataset.id);
+  tip.hidden = false;
+  const r = item.getBoundingClientRect(), br = box.getBoundingClientRect();
+  let left = r.left - br.left + box.scrollLeft + r.width / 2 - tip.offsetWidth / 2;
+  left = Math.max(8, Math.min(left, box.scrollWidth - tip.offsetWidth - 8));
+  let top = r.top - br.top - tip.offsetHeight - 8;
+  if (top < 4) top = r.bottom - br.top + 8;
+  tip.style.left = left + "px"; tip.style.top = top + "px";
+});
+</script>

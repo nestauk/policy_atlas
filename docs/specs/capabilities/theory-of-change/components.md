@@ -21,9 +21,9 @@ existing engine with new input or output) or **new**. Each "new" has a reason.
 
 ```
 [0 inherit, from an option] ─▶ 1 plan ══approve══▶ 2 draft (or 2b import) ─▶
-   item searches (child walks, acquire only; one per link, assumption and output/outcome/impact box;
+   item searches (child walks, acquire only; one per link;
                   OpenAlex · Overton · web) ─▶ join
-   ─▶ 3 screen ─▶ 4 classify ─▶ 5 appraise ─▶ 6 item_evidence ─▶ 7 discover ─▶ 8 consolidate ─▶ 9 summarise
+   ─▶ 3 screen ─▶ 4 classify ─▶ 5 appraise ─▶ 7 discover ─▶ 8a merge ─▶ 6 item_evidence ─▶ 8b choose ─▶ 9 summarise
    ─▶ follow-up check on items queued by edits during the run
 
 re-check   = item searches for the chosen items ─▶ 3 ─▶ 4 ─▶ 5 ─▶ 6 (those items only)
@@ -37,19 +37,19 @@ export     = read endpoints and frontend rendering; no walk
 |---|---|---|---|---|
 | 0 | inherit | **modified**: shared by ES and OS; gains one direction, from an OS option | Seeds the plan slots from the option and the scoping plan; gives the ToC task a membership row for each of the option's documents (the document itself is shared, not copied), flagged *inherited* and re-screened, with classification and appraisal read from the scoping run. Runs **before** the item searches, so `acquire` does not store those documents again (capability.md § Connections to other tasks). | procedure |
 | 1 | plan | **modified**: the Task Agent profile pattern with ToC slots | The plan conversation and `TocPlan` (capability.md § Plan slots). | agent, lead-authored prompt |
-| 2 | draft | **new**: nothing in the repo writes a causal graph | Candidate success and failure pathways through Inputs, Outputs, Outcomes and Impact; links with mechanisms; assumptions; context; supporting activities; result criteria and indicators; load-bearing assumption. Code then checks the graph (the E1 checks) and sets each assumption's type from its link's layers. | one call (judgment model) + code checks |
+| 2 | draft | **new**: nothing in the repo writes a causal graph | Candidate success and failure pathways through Inputs, Outputs, Outcomes and Impact; links with mechanisms and conditions; context; supporting activities; result criteria and indicators; the critical connection. Code then checks the graph (the E1 checks). | one call (judgment model) + code checks |
 | 2b | import | **new**: no vision call exists | Reads pasted text, an image or a PDF of an existing theory into the same graph shape, keeping the user's words and labelling what it adds. The file is stored in S3 (§ Uploads). PDF pages become images with `pymupdf` (already a dependency) and go through the existing `chat.completions.parse` path as image parts. | one vision call + the same code checks |
 | — | item search | **reused**: the option-search child walk (`runtime/option_search.py`) | One acquire-only walk per item (§ Items). Intent = the item text. The search guidance asks for queries that would find support **and** challenge; for a box, also case studies and measures. 🟡 At most 80 items per check. | procedure |
 | — | web leg | **new backend** behind the existing `search` verb | OpenAI's web search tool (§ Web search). | procedure |
 | 3 | screen | **reused**, unchanged | Title-and-abstract screen once over the joined pool; intent = the theory. Web pages are screened on their title and opening text. | per-doc fan-out |
 | 4 | classify | **reused** | Evidence type per document. Non-evidence never counts toward a grade. | per-doc fan-out |
 | 5 | appraise | **reused** | Appraisal score per document under the existing rubric (1 to 5). Feeds the grade. | code |
-| 6 | item_evidence | **new**: nothing judges a document against one causal claim or one result | Per item: the screened-in documents its own search found plus inherited ones, reranked against the item with the existing rerank backend, top *K* kept (🟡 *K* = 8). One call per item and document: *supports* · *supports under conditions* · *challenges* · *not about this item*, with a quote and, for conditions, the condition. For a box, the same call also returns any **case study** (programme, place) and any **indicator** the document uses. The existing quote verifier checks each quote; unverified items are dropped. | per-pair fan-out + quote check |
+| 6 | item_evidence | **new**: nothing judges a document against one causal claim or one result | Per item: the screened-in documents its own search found plus inherited ones, reranked against the item with the existing rerank backend, top *K* kept (🟡 *K* = 8). One call per link and document returns two stances, each *supports* · *challenges* · *not about this*, with its own quote: one for *worked elsewhere* (did the change follow where it was tried) and one for *holds here* (does it work, or do its conditions hold, for the plan's population and place); a support may record a condition; for a modelling study, the call also says whether it is robust (capability § Trust rules). For a link, the same call also returns any **case study** (programme, place) and any **indicator** the document gives for the link's source or target box; for an input source box, the case study records where it was put in place and what it took. The existing quote verifier checks each quote; unverified items are dropped. | per-pair fan-out + quote check |
 | — | grade | **new**, code only | Grade, flags and status per item, computed on read from its evidence rows (capability.md § Trust rules). Not stored, so it cannot drift. One function, so the rule can be tuned from the evals. | code |
 | 7 | discover | **new**: the OS intervention profile finds interventions, not mechanisms or failure modes | Batched calls over the screened-in abstracts and pages: mechanisms, outcomes and failure modes the graph does not have, each with its document and quote. They become candidate pathways labelled *found in the evidence*; their new links are judged by `item_evidence` against the existing pool, with no new search. | batched calls + item_evidence |
 | 8 | consolidate | **new**: nothing in the repo selects among causal routes | Stage 1 merges by *distinct* (shared mechanism) and sets aside by *relevant* (does not reach the intended change for the plan's population and place). Stage 2, only above the limits (6 success, 3 failure), keeps by *promising* and *evidence* (grade counts per pathway, given as input). A one-line reason per pathway. Code enforces the limits, records a flag and the user's prior version for every change to a user-made or user-edited item, and writes one undo record. | one call (judgment model) + code checks |
-| 9 | summarise | **modified**: a small template call, not the full ES synthesise | The summary and the evaluation questions, from the graph and the grades. Sentences about evidence cite evidence items; the rest is labelled reasoning. 🟡 ES `synthesise` grounded blocks or one call with citation checks: a contract decision. | one call + citation check |
-| — | stress test | **new**: a chat kind with its own prompt | Four questions, one at a time, each tied to a box, link or assumption. Conversation only. | chat turns |
+| 9 | summarise | **modified**: a small template call, not the full ES synthesise | The summary, the evaluation questions, and two evidence sentences per link (worked elsewhere, holds here, without repeating a finding), from the graph, the grades and the judged documents; each sentence cites only its own item's documents (capability § Trust rules). Sentences about evidence cite evidence items; the rest is labelled reasoning. 🟡 ES `synthesise` grounded blocks or one call with citation checks: a contract decision. | one call + citation check |
+| — | stress test | **new**: a chat kind with its own prompt | Four questions, one at a time, each tied to a box or link. Conversation only. | chat turns |
 | — | discuss | **reused**: the existing chat and grounded-answer path | The graph and its evidence enter the chat context. | chat turns |
 | — | export | **new**, small | PNG and SVG from the canvas in the browser (`html-to-image`). CSV references, JSON graph, draw.io XML (standard library) and PowerPoint (`python-pptx`) from backend read endpoints. | code |
 
@@ -65,9 +65,9 @@ always gives the same text:
 
 - **Link:** "If <if>, for <for>, then <then>, because <because>." With empty fields: "<source
   box> leads to <target box>."
-- **Assumption:** its text, plus the text of its link for context.
-- **Output, outcome or impact box:** "<box text>, for <population>, from interventions such as
-  <intervention>." Inputs boxes are not searched.
+- The link item also carries its conditions and the question "does it work, and do these
+  conditions hold, for <population> in <where> now?" (owner, 2026-10-26).
+- Boxes are not items (owner, 2026-10-26): they are not searched or graded.
 - Every item carries the theory scope: intervention, intended change, population, where.
 
 A hash of the item text is stored with each evidence row. A changed text no longer matches, and
@@ -117,10 +117,9 @@ task.
 |---|---|
 | `toc_box` | task, layer (input · output · outcome · impact · failure_outcome), text, dosage, result criteria, indicator, origin, user-edited flag, position override. |
 | `toc_link` | task, source box, target box, if / for / then / because / unless, origin, user-edited flag. |
-| `toc_assumption` | task, link, text, load-bearing flag, origin, user-edited flag. The type is computed from the link. |
 | `toc_band_item` | task, band (context · supporting activities), text, origin. |
-| `toc_pathway` | task, kind (success · failure), status (kept · set aside), reason, label, origin, ordered links. Boxes, links, assumptions and pathways also carry a *changed by Policy Atlas* flag, its reason and the user's prior version. |
-| `toc_item_evidence` | item (box, link or assumption), source snapshot, stance, quote, condition, case study, indicator, item hash, capability run. |
+| `toc_pathway` | task, kind (success · failure), status (kept · set aside), reason, label, origin, ordered links. Boxes, links and pathways also carry a *changed by Policy Atlas* flag, its reason and the user's prior version. |
+| `toc_item_evidence` | link, source snapshot, stance and quote for *worked elsewhere*, stance and quote for *holds here*, condition, case study and indicator (each tagged with the box it describes), item hash, capability run. |
 | `toc_upload` | task, S3 key, file name, size, hash, uploaded by, uploaded at. |
 
 Shared tables, reused: `task`, `plan`, `task_agent_transcript`, `task_link`, `evidence_scope`,
@@ -160,7 +159,7 @@ the seven tables.
 | `api/routers/tasks.py` | The two link-rule changes. |
 | `tests/runtime/test_capability_registry.py` | The "unknown capability" assertion for `theory_of_change` is reversed. |
 | Infrastructure | The uploads bucket and the backend's access to it. |
-| Frontend | `lib/capabilities.ts` flag; `views/toc/` (canvas, bands, assumption cards, key, detail panel, pathways list, original-file view, stress-test pane); a ToC branch in `views/taskResult.ts`; "Design a theory of change" at the end of the option page. |
+| Frontend | `lib/capabilities.ts` flag; `views/toc/` (canvas, reading guide, detail panel, Detailed information, original-file view, stress-test pane); a ToC branch in `views/taskResult.ts`; "Design a theory of change" at the end of the option page. |
 | New dependencies (R12) | `@xyflow/react` (canvas; MIT licence), `html-to-image` pinned to 1.11.11 (PNG and SVG), `python-pptx` (PowerPoint). Each goes through the dependency gate. |
 
 ## Build order
@@ -174,7 +173,7 @@ uploads bucket and the grade rule.
 
 | Step | Delivers | Evals that gate it |
 |---|---|---|
-| 1. Shell and draft | Registry entry, migration, `TocPlan`, Task Agent, `draft`, graph read API, read-only canvas with bands, assumption cards, key, pathways list, build flag | E1; E6 harness built and run once |
+| 1. Shell and draft | Registry entry, migration, `TocPlan`, Task Agent, `draft`, graph read API, read-only canvas, reading guide, Detailed information, build flag | E1; E6 harness built and run once |
 | 2. Evidence check | Item searches on OpenAlex and Overton, the reused spine, `item_evidence`, grades, case studies and indicators, detail panel, Sources tab, `summarise` | E2, E2b, then E5 |
 | 3. Discover and consolidate | `discover`, `consolidate`, set-aside pathways with Restore, the undo record | E6 |
 | 4. Editing during the check | Canvas editing, the edit queue, follow-up check, *out of date*, "Check again", History events, change requests through the Task Agent | E1 on edited graphs |

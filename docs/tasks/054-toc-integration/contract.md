@@ -2,8 +2,9 @@
 
 One programme contract for the third capability, **Theory of change**, in nine numbered build
 steps (owner memory: one contract per programme, numbered steps, no gate per step). It lands a
-new task kind whose Result is a Magenta Book canvas: a drafted causal chain, every link,
-assumption and result box graded against evidence in the background, pathways consolidated,
+new task kind whose Result is a Magenta Book canvas: a drafted causal chain, every link graded
+against evidence in the background, both where it was tried and here (boxes described, not
+graded; § Wireframe review amendments), pathways consolidated,
 and a stress-test chat, with import, export and one entry point from Options scoping.
 
 > **Status:** **approved 2026-10-23 · owner** ("approve, let's go"). The contract-stage adversarial
@@ -40,7 +41,8 @@ Nine numbered deliverables, one per build step. The rubric, the plan and the ADR
 numbers. Each step is usable on its own (owner, R13: "sequence and compartmentalise").
 
 1. **Shell and draft.** The task kind, its plan, its Task Agent, the draft, a read-only
-   canvas with its bands, assumption cards and key, the list view, the build flag. E1 and the
+   canvas in the reviewed layout (W1–W3), the reading guide, Detailed information without
+   evidence, the build flag. E1 and the
    E6 harness are built here and run once on the draft (spec build order).
 2. **Evidence check.** One search per item over OpenAlex and Overton, the reused Evidence
    search spine, the per-document judge, grades and flags, case studies and indicators, the
@@ -48,8 +50,8 @@ numbers. Each step is usable on its own (owner, R13: "sequence and compartmental
 3. **Discover and consolidate.** Pathways found in the evidence; merging, setting aside and
    choosing; flagged changes to user work; Restore, Keep mine and Undo. E6 runs again on the
    consolidated theory.
-4. **Editing during the check.** Canvas editing, the edit queue and follow-up check,
-   *out of date*, Check again, History events, change requests through the Task Agent, the
+4. **Editing during the check.** Canvas editing, *Edited · check pending*, Keep the evidence,
+   the minimal Check again and Search for more (W17), History events, change requests through the Task Agent, the
    plan-change choice (C11).
 5. **Web search.** OpenAI's web search tool as a third source on both routes, pages frozen as
    untrusted text.
@@ -76,14 +78,14 @@ recorded; `verification.md`. Removing the build flag is **not** in this contract
 | **Layer** | One of the four Magenta Book columns: Inputs · Outputs · Outcomes · Impact (owner, S1). Spec § Vocabulary. |
 | **Box** | One element in a layer (`toc_box`). A failure outcome is a box with layer `failure_outcome`. |
 | **Link** | A causal step between two boxes (`toc_link`), with if / for / then / because / unless text. |
-| **Assumption** | A condition on one link (`toc_assumption`). Its **type** (delivery · take-up · behaviour change · benefits and unintended effects) is computed from the link's two layers, never stored. |
+| **Conditions** | What must hold for a link to work in the user's setting, stored on the link (`toc_link.conditions`). They hold the Magenta Book's assumptions; there is no assumption table (W14). |
 | **Band item** | A line in the context band or the supporting-activities band (`toc_band_item`). |
 | **Pathway** | An ordered route of links from an input to an impact or a failure outcome (`toc_pathway`), kind success or failure, status kept or set aside, with a one-line reason. |
-| **Item** | Anything the evidence check tests: a link, an assumption, or an output, outcome or impact box. Inputs boxes are not items (owner, S3). |
+| **Item** | Anything the evidence check tests: a link. Boxes are not items (W4); assumptions are a link's conditions (W14). Each link has two grades, *worked elsewhere* and *holds here*. |
 | **Item text** | The fixed sentence code builds for an item (spec components § Items). Its hash is the **item hash**. |
 | **Item search** | One acquire-only child walk for one item, built on the Options scoping option-search machinery (`runtime/option_search.py`). C2. |
-| **Judgement** | One row of `toc_item_evidence`: one item, one document, a stance (supports · supports under conditions · challenges · not about this item), a verified quote, and for boxes any case study and indicator. |
-| **Grade** | strong · medium · weak · no evidence found, computed on read from an item's judgements by one function (C4). **Flags:** *evidence against (N)*, *holds under conditions*. **Status:** *checking*, *out of date*. |
+| **Judgement** | One row of `toc_item_evidence`: one item, one document, a stance (supports · challenges · not about this item), a verified quote, an optional condition on a support, and any case study and indicator the document gives, each tagged with the box it describes (W4). |
+| **Grade** | strong · medium · weak · no evidence found, computed on read from an item's judgements by one function (C4). **Flags:** *evidence against (N)*. (Amended 2026-10-26 by the owner during the wireframe review: no *supports under conditions* stance and no *holds under conditions* flag; conditions are covered by assumptions. Schema unchanged: `condition NULL` stays.) **Status:** *checking*, *Edited · check pending*, *evidence kept by you*, *checked: no change* (W17). |
 | **Origin** | Who made a graph element: `drafted` · `found_in_evidence` · `imported` · `user` · `options_scoping`. |
 | **Changed-by-Policy-Atlas flag** | Set when discover or consolidate changes or sets aside something the user made or edited (T1). Stored with the reason and the user's prior version. |
 | **Draft walk** | The walk that drafts or imports the graph. **Check walk** | the walk that searches, judges, discovers, consolidates and summarises. C3. |
@@ -138,8 +140,8 @@ open to the owner at the contract 🛑.
   and `context = {toc_item_kind, toc_item_id, item_hash, acquire_only: true}`. Abandon
   semantics are unchanged: a parent that ends abandons its children.
 - **C3. Two walks.** A **draft walk** (draft or import) and a **check walk** (item searches →
-  join → screen → classify → appraise → judge → discover → consolidate → summarise →
-  follow-up check). The check walk starts automatically when the draft walk succeeds (R5). A
+  join → screen → classify → appraise → discover → merge → judge → choose → summarise; W16,
+  W17). The check walk starts automatically when the draft walk succeeds (R5). A
   re-check is a check walk restricted to named items, without discover and consolidate. The
   main ToC intent record uses a new `purpose` value, `toc`.
 - **C4. The grade is one pure function, computed on read.** `grade(judgements, appraisals) ->
@@ -153,10 +155,10 @@ open to the owner at the contract 🛑.
   dropped and counted. At most 80 items per check walk; above that, the check covers the items
   on kept pathways first and says how many were left out.
 - **C6. Discover and consolidate.** Discover reads the screened-in documents in batches and
-  proposes pathways labelled `found_in_evidence`; their new links are judged against the
-  existing pool only. Consolidate runs in two stages (spec § Pipeline 5): aggregate by distinct
-  and relevant, then choose by promising and evidence (owner, S5), within 6 success and 3
-  failure pathways. It may merge, reword or set aside user-made or user-edited elements, and
+  proposes pathways labelled `found_in_evidence`; their new links get no search and are judged
+  with the rest against the existing pool. Consolidate is two steps around the judge (W16, spec
+  § Pipeline 5): **merge** by distinct and relevant before judging, then **choose** by promising
+  and evidence after grading (owner, S5), within 6 success and 3 failure pathways. It may merge, reword or set aside user-made or user-edited elements, and
   then sets the changed-by-Policy-Atlas flag with the reason and the user's prior version (T1).
 - **C7. Web search** (A3, A7). A Responses API call with the hosted `web_search` tool, beside
   the existing `chat.completions.parse` wrapper in `core/openai_client.py`, with the same
@@ -214,7 +216,7 @@ open to the owner at the contract 🛑.
     (`SELECT … FOR UPDATE`), refuses with 409 `toc_stale_revision` on a mismatch, writes, raises
     the revision and records one event, in one transaction. Edits never wait on a walk.
   - **Judge.** Judgements are insert-only and keyed by item hash, so they never overwrite. A
-    judgement for an old hash is kept and reads *out of date*. A judgement for a deleted item is
+    judgement for an old hash is kept; it counts while the link is pending or kept (W17). A judgement for a deleted item is
     removed with it by the foreign key's cascade.
   - **Discover.** Insert-only. A proposal that refers to a box deleted meanwhile fails its
     foreign key and is dropped and counted.
@@ -224,9 +226,8 @@ open to the owner at the contract 🛑.
   - **Undo** uses the same compare-and-apply against the revisions consolidate wrote.
   - **Summary.** Stamped with the time it read the graph; the panel says "the theory changed
     since this summary" when any row is newer.
-  - **Follow-up pass.** Derived, not queued: after the main pass, the check walk checks every
-    item whose current item hash has no judgements from this walk. Items cannot be queued twice.
-    After the walk ends, the same rule drives "Check again".
+  - **Follow-up pass.** Removed by W17: an edit flags the link, and the user chooses Check again
+    or Keep the evidence.
 - **C11. A plan change after the draft** offers two choices in the Task Agent thread, as task
   044 did for the baseline: **Redraft** (a new draft walk replaces the graph; the old graph is
   recorded in the History event; user elements are carried over as flagged items where they
@@ -283,13 +284,12 @@ options_scoping`.
 
 | Table | Columns (besides the common ones) | Keys and checks |
 |---|---|---|
-| `toc_box` | `box_id`, `task_id`, `layer`, `text`, `dosage NULL`, `result_criteria JSONB`, `indicator NULL`, `origin`, flag columns, `position JSONB NULL` | PK `box_id`; `uq_toc_box_id_task`; `ck_toc_box_layer` (`input · output · outcome · impact · failure_outcome`); FK `task_id` → `task` |
-| `toc_link` | `link_id`, `task_id`, `source_box_id`, `target_box_id`, `if_text`, `for_text`, `then_text`, `because_text`, `unless_text`, `origin`, flag columns | PK; `uq_toc_link_id_task`; `fk_toc_link_source` and `fk_toc_link_target` on `(box_id, task_id)` ON DELETE CASCADE; `ck_toc_link_distinct`; unique `(task_id, source_box_id, target_box_id)` |
-| `toc_assumption` | `assumption_id`, `task_id`, `link_id`, `text`, `load_bearing`, `origin`, flag columns | PK; `uq_toc_assumption_id_task`; `fk_toc_assumption_link` on `(link_id, task_id)` ON DELETE CASCADE; partial unique index: at most one `load_bearing` per task |
+| `toc_box` | `box_id`, `task_id`, `layer`, `text`, `dosage NULL`, `result_criteria JSONB`, `indicator NULL`, `description NULL` (W7), `origin`, flag columns, `position JSONB NULL` | PK `box_id`; `uq_toc_box_id_task`; `ck_toc_box_layer` (`input · output · outcome · impact · failure_outcome`); FK `task_id` → `task` |
+| `toc_link` | `link_id`, `task_id`, `source_box_id`, `target_box_id`, `if_text`, `for_text`, `then_text`, `because_text`, `conditions JSONB` (W14), `sentence NULL` (W8), `elsewhere_sentence NULL`, `here_sentence NULL` (W7), `critical BOOL DEFAULT false`, `origin`, flag columns | PK; `uq_toc_link_id_task`; partial unique index: at most one `critical` per task; `fk_toc_link_source` and `fk_toc_link_target` on `(box_id, task_id)` ON DELETE CASCADE; `ck_toc_link_distinct`; unique `(task_id, source_box_id, target_box_id)` |
 | `toc_band_item` | `item_id`, `task_id`, `band`, `text`, `sort_order`, `origin` | PK; `ck_toc_band` (`context · supporting`) |
 | `toc_pathway` | `pathway_id`, `task_id`, `kind`, `status`, `reason`, `label`, `origin`, flag columns | PK; `uq_toc_pathway_id_task`; `ck_toc_pathway_kind` (`success · failure`); `ck_toc_pathway_status` (`kept · set_aside`) |
 | `toc_pathway_link` | `pathway_id`, `task_id`, `position`, `link_id` | PK `(pathway_id, position)`; FKs on `(pathway_id, task_id)` and `(link_id, task_id)` ON DELETE CASCADE. A join table, not JSONB, so a deleted link cannot leave a dangling member. A pathway with a gap after a deletion reads *broken*; the canvas shows it and the graph validator reports it. |
-| `toc_item_evidence` | `evidence_id`, `task_id`, `item_kind`, `box_id NULL`, `link_id NULL`, `assumption_id NULL`, `task_source_snapshot_id`, `capability_run_id`, `stance`, `quote`, `condition NULL`, `case_study JSONB NULL`, `indicator NULL`, `item_hash` | PK; `ck_toc_evidence_one_item` (exactly one item column set, matching `item_kind`); composite FKs to each item ON DELETE CASCADE; FK `(task_source_snapshot_id, task_id)` → `uq_tss_id_task`; FK `(capability_run_id, task_id)` → `uq_capr_id_task`; `ck_toc_evidence_stance` (`supports · conditional · challenges · not_about`); unique `(item, task_source_snapshot_id, item_hash)` |
+| `toc_item_evidence` | `evidence_id`, `task_id`, `link_id`, `case_box_id NULL` (the box a case study or indicator describes, W4), `task_source_snapshot_id`, `capability_run_id`, `stance_elsewhere`, `quote_elsewhere NULL`, `stance_here`, `quote_here NULL`, `condition NULL`, `case_study JSONB NULL`, `indicator NULL`, `item_hash` | PK; composite FK `(link_id, task_id)` → `uq_toc_link_id_task` ON DELETE CASCADE; composite FK `(case_box_id, task_id)` → `uq_toc_box_id_task` ON DELETE SET NULL; FK `(task_source_snapshot_id, task_id)` → `uq_tss_id_task`; FK `(capability_run_id, task_id)` → `uq_capr_id_task`; `ck_toc_evidence_stances` (each `supports · challenges · not_about`, W6, W14); a quote is required when its stance is not `not_about`; unique `(link_id, task_source_snapshot_id, item_hash)` |
 | `toc_upload` | `upload_id`, `task_id`, `object_key`, `file_name`, `content_type`, `size_bytes`, `sha256`, `uploaded_by`, `uploaded_at` | PK; `ck_toc_upload_type` (`image/png · image/jpeg · application/pdf`); `ck_toc_upload_size` (at most 10 MB) |
 
 Changes to existing tables: `ck_task_capability` and `ck_capr_capability` gain
@@ -298,7 +298,7 @@ Changes to existing tables: `ck_task_capability` and `ck_capr_capability` gain
 
 **Downgrade order:** refuse while any `task` or `capability_run` row carries
 `theory_of_change`; then drop `toc_item_evidence`, `toc_pathway_link`, `toc_pathway`,
-`toc_assumption`, `toc_link`, `toc_box`, `toc_band_item`, `toc_upload`; drop
+`toc_link`, `toc_box`, `toc_band_item`, `toc_upload`; drop
 `fk_task_link_source_option` and its column; narrow the four constraints.
 
 ## Surface map
@@ -333,6 +333,95 @@ Applied with this contract, after approval, logged in `docs/specs/log.md`:
 4. `docs/specs/system/execution-orchestration.md`: the open-web backend is no longer deferred
    for the ToC check walk; the seam stays deferred for every other capability.
 5. `docs/specs/product.md` in/out table: Theory of change moves from out of scope to in scope.
+
+## Wireframe review amendments (2026-10-26)
+
+The owner reviewed `wireframes.html` (versions 1–9) and ruled as below. Each ruling is applied in
+the spec and logged in `docs/specs/log.md`; this section overrides any older wording in this
+contract and in `plan.md`, which is re-touched before plan approval.
+
+- **W1 Visual rules.** One font, the app's own, in the app's sizes; colour means evidence grade
+  only; blue means actions and review; no counts, badges or captions on the canvas; detail on
+  hover, on click, and in Detailed information. Header: title plus *About this theory* and *What
+  the evidence says*. Context and supporting activities move off the canvas into the header and
+  the reading guide (`toc_band_item` stays; only its display moves).
+- **W2 Canvas.** Rounded neutral boxes; connections as smooth curves coloured by grade, dashed for
+  weak and none; the critical connection marked by one navy dot (W14); failure
+  pathways below *If it goes wrong*; one pathway menu; *How to read this* opens the guide.
+- **W3 Detailed information** replaces the list view and the pathways list: the report's expand
+  and collapse sections, one per pathway, then *Considered and set aside* and *Questions for an
+  evaluation*; *Download as PDF* on the right. This section is the PDF report (a new export
+  beside C16's six).
+- **W4 Boxes are described, not graded.** Only links are searched and graded (W14).
+  Boxes show result criteria, case studies and indicators, pulled from the documents judged for
+  their links (inputs: where put in place and what it took). Schema: `toc_item_evidence` drops
+  `box_id`, adds `case_box_id`; one row per link (W14). Fewer item searches.
+- **W5 (superseded by W14) A link and its assumption answer different questions** (did the change follow where it
+  was tried; does the condition hold), each with its own judge question and grade; they never
+  share judgements; the panel shows the link's evidence first, then its assumption.
+- **W6 No conditions stance or flag.** Stances: supports, challenges, not about. A support may
+  record a condition; uncovered conditions go to consolidate, which adds them to the link's conditions (W14).
+- **W7 Evidence sentences.** Summarise writes two sentences per link (worked elsewhere, holds here; W14), and a
+  two-sentence description per box, each citing only that item's judged documents or case studies;
+  code checks every citation. Storage: a nullable
+  `elsewhere_sentence` and `here_sentence` on `toc_link`, and `description` on `toc_box` (W14) (lead recommendation, for the owner
+  at plan approval).
+- **W8 Connection sentence.** Each link has one sentence naming both boxes and the mechanism,
+  written by the draft with the link's fields; code falls back to "<source> leads to <target>,
+  because <because>". It is redrafted when either box's text changes.
+- **W9 Plan panel.** The navy plan panel of the other task types, with the uploaded original
+  inside it under *Starting point*.
+- **W10 Naming.** "Critical connection · test this first" replaces "load-bearing" in the product (W14).
+- **W11 (superseded by W14) Assumptions are about here.** A link's evidence answers "did it work elsewhere"; an
+  assumption's answers "will this condition hold here" (population, place, now), with the item
+  text and judge question saying so. An assumption never restates its link's mechanism; some links
+  have none. E1 adds a check for restatement (text close to the link's *because*, or the same
+  documents). A document never gives the same quote to a link and its assumption.
+- **W12 Journey (spec § Rulings J1–J9).** The Task Agent asks at most two questions before
+  drafting; the draft posts a sidebar message; the run notification fires when the check ends;
+  the Task Agent then lists each consolidate change with its own **Undo** and **Undo all**
+  (amends C9: the stored before-state is applied per row as well as for the whole step) and always
+  suggests a stress test. Deliverable 9 (design from an option) may ship after a standalone
+  release if it would disturb Options scoping; the owner prefers it in.
+- **W14 No separate assumptions** (owner, later on 2026-10-26: "the evidence for each connection is
+  in fact the Assumption"). Supersedes W2's assumption circles, W5, W10's "critical assumption"
+  and W11. Every link answers two questions, *worked elsewhere* and *holds here* (transferability:
+  do its conditions hold for this population and place, now; Cartwright and Hardie 2012). One
+  judge call per link and document returns a stance and quote for each. The canvas colours a link
+  by the lower grade; the critical connection carries one navy dot. Detailed information shows
+  a link as three paragraphs (sentence, worked elsewhere, holds here) and never repeats a finding:
+  a shared document is listed once, the *holds here* sentence refers back to it, and the two
+  paragraphs merge when every document answers both the same way. Schema: no `toc_assumption`;
+  `toc_link.unless_text` becomes `conditions JSONB`, plus `critical`; `toc_item_evidence` is per
+  link with two stances. Seven tables, not eight.
+- **W15 Robust modelling** (owner, 2026-10-26). For a "Modelling & Simulation" document only, the
+  judge returns `robust_model` (built on or calibrated against outcome data, with sensitivity
+  analysis, or validated). The grade function (C4) treats a robust model as score 3: it can
+  support *medium*, never *strong*. The shared `appraise` rubric is unchanged. Schema:
+  `toc_item_evidence.robust_model BOOL NULL`. The grade table test gains rows for it.
+- **W16 Order of the check** (owner, 2026-10-26: "first elucidate missing pathways, consolidate
+  them and then judge them all together"). The `check` chain is `screen_abstract` → `classify` →
+  `appraise` → `toc_discover` → `toc_merge` → `toc_judge` → `toc_choose` → `toc_summarise`.
+  Consolidate splits into `toc_merge` (needs no evidence) and `toc_choose` (needs grades); each
+  writes its own event with the before-state for Undo (W12). Prompt list: `toc_consolidate_v1`
+  becomes `toc_merge_v1` and `toc_choose_v1`.
+- **W17 Edits flag; the user decides** (owner, 2026-10-26). An edit to a link, or to a box at
+  either end, marks the link *Edited · check pending*; its evidence and grades stay, labelled for
+  the previous wording. The user picks **Keep the evidence** or **Check again**. Check again is
+  minimal: a same-meaning call first (no change → *Checked: no change*); if the claim changed,
+  only the documents already found are re-judged, with no new search; with fewer than two left,
+  **Search for more** is offered. Replaces C10's derived follow-up pass and C3's follow-up step;
+  the plan's `run_toc_sequence` driver loses its automatic re-check hop (draft → check only), and
+  a re-check is a user-started walk. Schema: `toc_link.counted_hash` (the wording whose
+  judgements count) and `kept_hash NULL` with `kept_by` (`user · check`); the state is computed:
+  checked when the text hash equals `counted_hash`, kept when it equals `kept_hash`, else pending.
+  New step `toc_same_meaning` (one standard-tier call, prompt `toc_same_meaning_v1`). Where it
+  shows (spec § Output structure): a blue dot on the link and the edited box; a block at the top
+  of the link's panel with old and new wording, Check again, Keep the evidence, and the grades
+  marked *for the previous wording*; the same label and buttons in Detailed information; a Task
+  Agent message with Check all and Keep all. Frontend tests cover each of the four.
+- **W13 Connection sentence storage.** W8's sentence is a nullable `sentence` column on
+  `toc_link`, beside W7's `evidence_sentence`.
 
 ## Adversarial findings (contract stage, 2026-10-23)
 
@@ -370,10 +459,10 @@ Every one of these is an approval gate, and this contract asks for all of them a
 - **Schema.** One Alembic revision: widen `ck_task_capability`, `ck_capr_capability`,
   `ck_scope_purpose` (`toc`), `ck_conversation_kind` (`stress_test`); add
   `task_link.source_option_id` and its foreign key; add `toc_box`, `toc_link`,
-  `toc_assumption`, `toc_band_item`, `toc_pathway`, `toc_pathway_link`, `toc_item_evidence`,
+  `toc_band_item`, `toc_pathway`, `toc_pathway_link`, `toc_item_evidence`,
   `toc_upload`, with the
-  changed-by-Policy-Atlas columns (flag, reason, prior version as JSONB) on boxes, links,
-  assumptions and pathways, and `toc_pathway_link`. Exactly § Schema. Reversible (§ Risk tier).
+  changed-by-Policy-Atlas columns (flag, reason, prior version as JSONB) on boxes, links
+  and pathways, and `toc_pathway_link`. Exactly § Schema. Reversible (§ Risk tier).
 - **Runtime egress.** New: web search (OpenAI, or Mantle in us-east-1 on the Bedrock route);
   page fetches of cited URLs; vision calls carrying user-uploaded files. Existing: OpenAlex,
   Overton, model calls.
@@ -410,7 +499,7 @@ loop.
 
 - **Don't flatten status.** Spec markers stay as they are until a ruling moves them.
 - **Model only what behaves.** No column, label or flag that changes nothing on screen or in a
-  rule. The assumption type is computed, not stored; the grade is computed, not stored.
+  rule. The two grades are computed, not stored.
 - **Flag, don't drop.** Unverified quotes are dropped from evidence but counted and shown as a
   count; changes to user work are flagged (T1).
 - **Honest absence.** *No evidence found* says what was searched. "Web not searched" appears
@@ -438,22 +527,25 @@ calls challenge evidence "supports" more than one time in five (the owner decide
      `compose_plan` and `lattice_for` accept `theory_of_change`; the AST test still bans bare
      plan validation; an ES or OS plan is rejected on a ToC task and the reverse. Create refuses
      the new kind while the server setting is off. The graph validator (the E1 checks): layers
-     in order, no orphan boxes, every assumption on a link, at least one failure pathway, every
-     pathway a connected route; assumption type computed from layers. Frontend (vitest): the
-     canvas renders boxes, links, markers, bands and key from a fixture; the list view; the
-     build flag hides the entry.
+     in order, no orphan boxes, every link with at least one condition, at least one failure pathway,
+     every pathway a connected route. Frontend (vitest): the
+     canvas renders neutral boxes, connections coloured by the lower of their two grades, and the critical-connection dot, from a fixture; the
+     reading guide opens and closes; Detailed information renders and expands; the build flag
+     hides the entry.
   2. OS option-search tests pass unchanged on the moved child-search code (C2). Item text built deterministically from fixtures; item hash stable. The grade function's
-     table test covers every row of the rule, the web cap and both flags. Item searches open
+     table test covers every row of the rule, the web cap and the evidence-against flag. Item searches open
      child walks with the right intent record and join; an unverified quote drops the
-     judgement and counts it; *K* and the 80-item cap hold. Detail panel renders the three
-     groups (vitest).
+     judgement and counts it; *K* and the 80-item cap hold. Detail panel renders *worked elsewhere* and *holds here*, each with its two
+     groups; a document shared by both is listed once; each evidence sentence cites only its own
+     link's judged documents (W7) (vitest).
   3. Consolidate keeps at most 6 success and 3 failure; a change to a user element sets the flag
      with reason and prior version; Undo restores the before-state exactly; Restore and Keep
      mine behave; discover's links are judged without a new search.
   4. Race tests: an edit racing the judge, discover, consolidate and Undo each leaves the
      user's edit in place and the skipped change reported; a stale edit gets 409
-     `toc_stale_revision`; an edit during a check is picked up by the derived follow-up pass; a changed item
-     reads *out of date* and its old judgements stop counting; a deleted item's pending results
+     `toc_stale_revision`; an edited link reads *Edited · check pending* and keeps its evidence; Keep the evidence and a
+     no-change Check again both leave its judgements counting; a meaning change re-judges only the
+     documents already found (W17); a deleted item's pending results
      are dropped; every edit writes one event; the plan-change choice (C11) for both branches.
   5. `WebSearchRoute` parsing: a missing table, an address outside the two allowed, and a
      disabled route each behave as C7 states; non-web calls keep the route's own address; the
@@ -489,7 +581,7 @@ calls challenge evidence "supports" more than one time in five (the owner decide
   education, employment or training"):
   (1) plan and draft, canvas renders; (2) the check fills grades, one link's panel read against
   its sources; (3) consolidate's summary line and one flagged change, Undo; (4) an edit during
-  the check, then its follow-up result; (5) web leg on `openai-direct`, and one web call on
+  the check, then Keep the evidence on one link and Check again on another; (5) web leg on `openai-direct`, and one web call on
   `bedrock-local` against Mantle; (6) one stress-test round; (7) one image import of a
   published GOV.UK theory figure; (8) every export opened in its target tool (PowerPoint,
   diagrams.net, Miro import), and the PowerPoint file opened in Google Slides: if the arrows stay
@@ -515,7 +607,7 @@ web egress and the link rule · `/simplify` · human deep review).
 **Rollback.** Turn the server setting off (no new ToC tasks). The revision's downgrade refuses
 while any `task` or `capability_run` row carries `theory_of_change`; the remedy is an operator
 script that hard-deletes those tasks, their walks and their bucket objects, after which the
-downgrade drops the eight tables and `task_link.source_option_id` and narrows the four
+downgrade drops the seven tables and `task_link.source_option_id` and narrows the four
 constraints. The bucket is retained by policy and emptied by the same script; deleting it is a
 separate infrastructure change. Deploy the previous image.
 

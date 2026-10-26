@@ -52,11 +52,13 @@ S3. **Walk kinds and chains** (C3; X1, R1, R10). Every ToC intent record carries
 `context.items` (a list of `{kind, id}`). `compose_toc(plan, purpose, context)`:
 - `toc` + `draft`: `inherit` (only when `from_option` is set) → `toc_draft` (or `toc_import` for
   `existing_theory`).
-- `toc` + `check`: `screen_abstract` → `classify` → `appraise` → `toc_discover` → `toc_judge`
-  → `toc_consolidate` → `toc_summarise`. **Discover runs before judge** (R1), so one judge pass
-  covers drafted and discovered items against the same pool, with no new search (C6), and
-  consolidate can choose by evidence.
-- `toc` + `recheck`: `screen_abstract` → `classify` → `appraise` → `toc_judge` (named items).
+- `toc` + `check`: `screen_abstract` → `classify` → `appraise` → `toc_discover` → `toc_merge`
+  → `toc_judge` → `toc_choose` → `toc_summarise` (W16). **Discover and merge run before judge**
+  (R1, W16), so one judge pass covers the merged drafted and discovered links against the same
+  pool, with no new search (C6), and choose can use the grades.
+- `toc` + `recheck` (user-started only, W17): `toc_same_meaning` → `toc_judge` on the documents
+  already judged for the named links, with no search; *Search for more* starts a named-link
+  check walk with item searches.
 - `targeted` + `acquire_only` (the item search child): `acquire` → `toc_web` (`toc_web` only
   when the route's web search is enabled, C7).
 **Item searches are not a chain step** (X1). As for the OS longlist, the runner dispatches the
@@ -78,9 +80,8 @@ a document already screened in the task keeps its result. The deep-reasoner conf
 
 S4. **Follow-on driver and dispatch** (C3, C10; X2, R2, R7). A ToC sequence driver
 `run_toc_sequence(engine, *, task_id, first_outcome)` in `api/toc_start.py` consumes each inline
-walk's returned outcome until `follow_on` is `None`, with the transition map `draft → check`,
-`check → recheck` (only when some current item hash has no judgement from that walk), a hard
-maximum of two hops, and a duplicate guard (`active_parentless_walk` refusal is logged, not
+walk's returned outcome until `follow_on` is `None`, with the transition map `draft → check` only (W17 removed the automatic re-check hop), a hard
+maximum of one hop, and a duplicate guard (`active_parentless_walk` refusal is logged, not
 raised). `_dispatch_run` (`runs.py:125-162`) calls it for ToC outcomes. **Every minted walk
 validates through the registry**: `_dispatch_run` and the follow-on use
 `validate_plan(capability, …)` and force `steering_mode = "unattended"` by capability, replacing
@@ -323,7 +324,8 @@ during a check; S9 applied; the C11 Redraft and Keep choice. Race tests per cont
 (R14). Commit.
 
 4.3 **Canvas editing — `fast-worker`, then lead polish.** Add, edit, delete, connect, move
-assumptions, mark load-bearing; *out of date* and "Check again"; the 409 reload with what
+conditions, mark the critical connection; *Edited · check pending*, Keep the evidence and
+"Check again" (W17); the 409 reload with what
 changed. Gate: `verify-fast` + `frontend-verify` + `pnpm e2e`. Commit.
 
 Exit: **full `make verify`**; live check (4) — `lead`; PR; review stack.

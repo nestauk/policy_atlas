@@ -1,7 +1,7 @@
 ---
 type: Capability spec
 title: Theory of change (ToC)
-description: The declarative theory-of-change spec. The third v3.0 capability; it drafts a Magenta Book causal chain on a canvas, grades the evidence for each box, link and assumption with the Evidence search machinery and the web, consolidates the pathways, and lets the user stress-test the result.
+description: The declarative theory-of-change spec. The third v3.0 capability; it drafts a Magenta Book causal chain on a canvas, grades the evidence for each causal link, both where it was tried and for the user's own setting, with the Evidence search machinery and the web, consolidates the pathways, and lets the user stress-test the result.
 tags: [capability, theory-of-change, compile-target, draft]
 timestamp: 2026-10-23
 ---
@@ -37,15 +37,17 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
 
 - ✅ **The Magenta Book is followed fully** (owner, R1, S1). Its Figure 2.2 (p.46, based on Mayne
   2017) sets the layers, the assumptions under the chain, the context band and the
-  supporting-activities band (research § 1).
+  supporting-activities band (research § 1). ✅ Its assumptions are held as each link's
+  **conditions**, not as separate objects (owner, 2026-10-26: "the evidence for each connection is
+  in fact the Assumption").
 - 🟡 **Outcome.** The user describes a change they want, an intervention, or both, or brings a
   theory of change they already have. They get a **theory-of-change canvas**: success and failure
-  pathways through the four Magenta Book layers, the assumptions on each link, the context, and a
-  reason for each pathway kept or set aside. Each box, link and assumption shows how strong its
-  evidence is, and the evidence for and against it. The canvas is a first version to work from
+  pathways through the four Magenta Book layers, the conditions on each link, the context, and a
+  reason for each pathway kept or set aside. Each link shows how strong its evidence is that it
+  worked elsewhere and that it will hold here, and the evidence for and against it. The canvas is a first version to work from
   (approach § 1, § 7).
 - 🟡 **The theory is the reasoning and the evidence; the canvas shows it.** The stored object is
-  the graph with its assumptions and evidence. The canvas, the list view and every export are
+  the graph with its links, their conditions and evidence. The canvas, the list view and every export are
   views of it (Magenta Book p.46).
 - 🟡 **Users and jobs** (approach § 2): design and stress-test an intervention; communicate how it
   creates impact; plan an evaluation (weak links become evaluation questions); align a team.
@@ -86,17 +88,17 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
 |---|---|
 | **Box** | One element in a layer. |
 | **Link** | A causal step from one box to the next. It carries the **mechanism**: why the step happens. |
-| **Assumption** | A condition that must hold for one specific link to work. It always belongs to a link (Mayne 2015: "only when we add the assumptions to the causal links … do we get a theory of change"). |
-| **Assumption type** | Set by code from the layers the link joins, with the Magenta Book's three types: *take-up* (outputs to outcomes), *behaviour change* (outcomes to outcomes), *benefits and unintended effects* (outcomes to impact). An inputs-to-outputs link has the type *delivery*. |
-| **Load-bearing assumption** | The assumption whose failure would break the most of the theory. Shown as "Test this first". |
+| **Conditions** | What must hold for a link to work in the user's setting: the link's *unless* text, one or more short statements. This is where the Magenta Book's assumptions live (Mayne 2015: "only when we add the assumptions to the causal links … do we get a theory of change"). There is no separate assumption object (owner, 2026-10-26). |
+| **Worked elsewhere · Holds here** | The two evidence questions on every link: did it work where it was tried, and will it work here (Cartwright and Hardie 2012, *Evidence-Based Policy*). The second is about transferability: whether the link's conditions hold for this population, in this place, now. |
+| **Critical connection** | The link whose failure here would break the most of the theory. Shown as "Critical connection · test this first". |
 | **Context** | External factors and other policies (Magenta Book band "Contextual factors and external influencers"). |
 | **Supporting activities** | Work the chain needs but beneficiaries do not receive: training, referrals, marketing, setup (Magenta Book band "Supporting activities…"). |
 | **Pathway** | One route through the layers, from an input to an impact. |
 | **Success pathway** | A route by which the intervention brings the intended change. |
 | **Failure pathway** | A route by which a step fails or the intervention causes harm: the Magenta Book's "negative programme theory" (p.47). Ends in a failure outcome. |
 | **Set-aside pathway** | A pathway considered and not kept, with its reason. The user can restore it. |
-| **Evidence grade** | *Strong*, *medium*, *weak* or *no evidence found*, for a box, a link or an assumption (§ Trust rules). |
-| **Case study** | A named programme or place where a box's result was seen, from a document, with a quote. |
+| **Evidence grade** | *Strong*, *medium*, *weak* or *no evidence found*. Each link has two: *worked elsewhere* and *holds here* (§ Trust rules). Boxes are not graded. |
+| **Case study** | A named programme or place where a box's result was seen, or an input was delivered, from a document, with a quote. |
 | **Result criteria** | Mayne's checks on each box: well-defined, measurable (with a suggested indicator), plausible timing. |
 
 - ✅ "Mechanism" is never a layer label (approach § 3). It is the "because" text on a link.
@@ -115,7 +117,7 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
 ## Pipeline
 
 ```
-plan ══approve══▶ draft or import ─▶ evidence check (background) ─▶ discover ─▶ consolidate ─▶ summarise
+plan ══approve══▶ draft or import ─▶ search and screen (background) ─▶ discover ─▶ merge ─▶ judge ─▶ choose ─▶ summarise
                          │                  ▲                                          │
                          └─ user edits on the canvas at any time ──────────────────────┘─▶ re-check changed items
                                               stress test · discuss: chats, any time after the draft
@@ -123,54 +125,86 @@ plan ══approve══▶ draft or import ─▶ evidence check (background) �
 
 1. 🟡 **Plan.** The Task Agent conversation fills the plan (§ Plan slots); the user approves it.
 2. 🟡 **Draft** (R1 step 1). One model call writes **candidate pathways from reasoning**: up to 6
-   success and 3 failure pathways through the four layers, with links, mechanisms, assumptions,
+   success and 3 failure pathways through the four layers, with links, mechanisms, each link's conditions,
    context, supporting activities, the result criteria for each box (with a suggested indicator
-   for each output, outcome and impact) and the load-bearing assumption. In the existing-theory
+   for each output, outcome and impact) and the critical connection. In the existing-theory
    entry point, an **import** call reads the user's text, image or PDF instead and only adds what
    is missing, labelled. The canvas shows the result at once.
-3. 🟡 **Evidence check, in the background.** One search per **link**, per **assumption** and per
-   **output, outcome and impact box** (owner, S3: "boxes could still have searches"), across
-   OpenAlex, Overton and the web; the Evidence search spine on the pooled documents; then a
-   judgement per item and document ([components.md](components.md)). Progress shows in the Task
+3. 🟡 **Evidence check, in the background.** One search per **link** (owner,
+   2026-10-26: the causal chain is what needs checking; boxes get no search of their own; a link's
+   conditions are part of it), asking both whether it worked where it was tried and whether its
+   conditions hold in the plan's place, across
+   OpenAlex, Overton and the web; then the Evidence search spine on the pooled documents
+   ([components.md](components.md)). Judging waits until discover and merge have run (owner,
+   2026-10-26: "first elucidate missing pathways, consolidate them and then judge them all
+   together"). Progress shows in the Task
    Agent thread through the existing run events.
 4. 🟡 **Discover** (R1 step 2). One pass over the screened documents finds mechanisms, outcomes and
    failure modes the draft does not have. Each becomes a candidate pathway, labelled *found in the
-   evidence*, with the documents and quotes that suggested it. Its new links are judged against the
-   documents already found, with no new search.
-5. 🟡 **Consolidate** (R1 step 3; owner, S5). Two stages:
-   - **Aggregate by *distinct* and *relevant*.** Pathways that share a mechanism merge into one.
-     Pathways that do not reach the intended change for the plan's population and place are set
-     aside.
-   - **Choose by *promising* and *evidence*.** If more than 6 success or 3 failure pathways
-     remain, the ones kept are those most plausible within what the intervention can influence
-     and with the stronger evidence grades on their links, read as counts, never a score.
+   evidence*, with the documents and quotes that suggested it. Its new links get no search of their
+   own; they are judged with the rest against the documents already found.
+5. 🟡 **Consolidate** (R1 step 3; owner, S5), in two steps around the judge:
+   - **Merge, by *distinct* and *relevant*,** before judging. Pathways that share a mechanism,
+     drafted or discovered, merge into one. Pathways that do not reach the intended change for the
+     plan's population and place are set aside. This needs no evidence, so nothing is judged twice.
+   - **Judge** every remaining link in one pass (§ Trust rules), then grade.
+   - **Choose, by *promising* and *evidence*,** after grading. If more than 6 success or 3 failure
+     pathways remain, the ones kept are those most plausible within what the intervention can
+     influence and with the stronger evidence grades on their links, read as counts, never a
+     score. Conditions that supports recorded and a link does not yet name are added to it.
 
    Every kept and set-aside pathway gets a one-line reason naming the criterion. Code checks the
    limits and flags every change to something the user made or edited (§ Editing during the
    check). Mayne's limit applies to
    each pathway view: about 13 boxes before a theory "may be a mess".
 6. 🟡 **Summarise.** A short summary of the theory and its evidence, and **evaluation questions**
-   made from the weak links and the untested assumptions (approach § 4.2 step 6).
+   made from the links whose *holds here* evidence is weak or missing (approach § 4.2 step 6). ✅ It
+   also writes two **evidence sentences** per link, one for *worked elsewhere* and one for *holds
+   here* (owner, 2026-10-26). The sentence follows
+   the grade and names the key sources with their year, for example "Exposure fell by about half
+   under Chile's rules (2020) and almost to none on London transport (2022)". It is shown in the
+   detail panel and in Detailed information, with a control that opens the full document list.
+   ✅ Each **box** gets a short **description**: two sentences of plain prose, the first saying what
+   the step is and how you would know it happened, the second where it has been seen, citing its
+   case studies (owner, 2026-10-26: "more into a narrative - still short"). Each link's sentence
+   and its evidence sentence read as one paragraph.
 
 ### Editing during the check
 
 ✅ The user can edit from the moment the draft appears (R5). 🟡 Rules:
 
-- Each evidence row stores a hash of the text it judged. If the text changed, the row shows as
-  *out of date* and never counts toward the grade.
-- An item the user adds or edits during the check is queued. When the main check ends, one
-  follow-up check runs on every queued item. After that, an edit marks the item *out of date*, and
-  the user presses "Check again" (one item, or all changed items).
-- A deleted box, link or assumption loses its pending results.
-- Discover and consolidate run on the graph as it is when the check ends. ✅ They **may** merge,
+- ✅ **An edit flags; the user decides** (owner, 2026-10-26: "Policy Atlas should simply flag
+  that there has been a user edit and that a check is pending or whether the user has accepted
+  the evidence"). Each evidence row stores a hash of the wording it judged. When the user changes
+  a link's wording, or a box at either end of it, the link keeps its evidence and grades,
+  labelled *for the previous wording*, and is marked *Edited · check pending*. Nothing reruns on
+  its own. The user chooses, per link or for all pending links:
+  - **Keep the evidence**: the evidence counts for the new wording, marked *kept by you after an
+    edit* in the panel and in History.
+  - **Check again**, which changes as little as possible (owner: "if it's just a wording change,
+    then right outcome would be no change"):
+    1. One small call compares the old and new wording (claim, population, conditions). If the
+       claim is the same, nothing is judged again; the link reads *Checked: no change*.
+    2. If the claim changed, only the documents already found are judged again, reranked
+       against the new wording, with no new search. The Task Agent says what changed: documents
+       that no longer apply and stances that flipped. Grades are recomputed.
+    3. If fewer than two documents still speak to the link, the user is offered **Search for
+       more**, a new item search.
+- A link edited before the check reaches it is simply judged on its new wording. There is no
+  automatic follow-up pass. When the check ends with links pending, the Task Agent says how many,
+  with *Check all* and *Keep all*.
+- A deleted box or link loses its evidence.
+- Discover, merge and choose run on the graph as it is when each starts. ✅ They **may** merge,
   reword or set aside items the user made or edited, but every such change is **flagged** (owner,
   2026-10-23: "still allow Policy Atlas to consolidate or edit the ToCs that users touched, just
   it should be flagged"). 🟡 A flagged item shows a *changed by Policy Atlas* mark with the reason;
   its panel shows the user's version beside the new one, with **Keep mine**. A set-aside pathway
   that held user work is marked *includes your edits* in "Considered and set aside".
-- When consolidate finishes, the Task Agent thread says what changed ("2 pathways added from the
-  evidence, 3 set aside, 2 of your edits changed"), with one **Undo** for the whole step. Every
-  change is an event in History.
+- When the check finishes, the user gets the existing run notification. The Task Agent thread
+  then lists **each change** consolidate made (pathways added from the evidence, merged, set aside,
+  and every change to the user's work), each with its own **Undo**, plus **Undo all** (owner,
+  2026-10-26). The blue dots on the canvas mark the same changes. Every change is an event in
+  History. The Task Agent then **always suggests a stress test** (owner, 2026-10-26).
 - A change the user asks for through the Task Agent is an edit like any other.
 
 ## Plan slots
@@ -192,45 +226,66 @@ plan ══approve══▶ draft or import ─▶ evidence check (background) �
 
 ## Output structure
 
-✅ The canvas is the default view of the Result tab (approach § 7).
+✅ The canvas is the default view of the Result tab (approach § 7). ✅ The layout follows the owner's
+wireframe review of 2026-10-26 (`docs/tasks/054-toc-integration/wireframes.html`, version 9).
+Visual rules: one font, the app's own, in the app's sizes; colour means evidence grade and nothing
+else; blue means actions and things to review; no counts, badges or captions on the canvas; detail
+appears on hover, on click, and in Detailed information.
 
-- **Header.** "Intervention → intended change", the population, the check state ("Evidence check
-  running: 12 of 31 items" or "Checked 23 Oct 2026 · 2 items out of date"), and the counts by
-  grade ("31 items: 4 strong, 9 medium, 7 weak, 11 no evidence found; 3 with evidence against").
-- **Test this first.** The load-bearing assumption, why, and its grade.
-- **Canvas** (Magenta Book Figure 2.2 layout):
-  - The **context band** across the top.
-  - Four **layer columns**: Inputs · Outputs · Outcomes · Impact.
-  - The **assumptions band** under the chain (R1: "visualise the assumptions better than in the
-    prototype"). It has one slot per layer change, so each assumption card sits under the link it
-    belongs to. Each link shows a small numbered marker ("A3"), and the card carries the same
-    number. Hover or select either one, and the other lights up with a dotted line between them.
-    Each card shows its type, its grade as a coloured edge and word, its flags, and a star if it is
-    load-bearing. This combines three patterns from the guidance: the Magenta Book band, labelled
-    arrows (Vogel 2012) and typed assumptions (Mayne 2015) (research § 1).
-  - The **supporting-activities band** along the bottom.
-  - **Failure pathways** in their own colour, ending in failure outcomes below the success chain.
-  - A **pathway selector**: the full theory, one pathway at a time, success only, failure only.
-  - Links are coloured and styled by grade, with a small mark for *evidence against*. A box shows
-    its grade as a thin bar along its edge. An item still being checked shows a faint animation.
-  - A **key** that is always visible: the layers and their meanings, the grades and the rule behind
-    each, the flags, the line styles, the assumption markers and types.
-  - Short on-canvas help: "Click a box, an arrow or an assumption for its evidence."
+- **Header.** The title "Intervention → intended change". Then two short paragraphs: *About this
+  theory* (population, place, time horizon, context, where it came from) and *What the evidence
+  says* (the strongest and weakest steps, and a link to the critical connection). While the check
+  runs, one paragraph says it is running and that editing is allowed. After the check, the header
+  keeps both paragraphs; what Policy Atlas changed is listed in the Task Agent thread and marked
+  by blue dots, not in the header (owner, 2026-10-26).
+- **Toolbar.** A pathway menu (all pathways, each pathway on its own); *How to read this*, which
+  opens a short guide above the canvas (layers, grade colours and line styles, the two questions,
+  the critical connection, supporting activities); Edit; Your original; Stress test; Download.
+- **Canvas** (Magenta Book layers):
+  - Four **layer columns**: Inputs · Outputs · Outcomes · Impact. **Failure pathways** sit below a
+    line labelled *If it goes wrong*.
+  - **Boxes are neutral** (owner, 2026-10-26): rounded, with a grey outline. They carry no grade.
+  - **Connections** are smooth curves coloured by the **lower** of their two grades, so the
+    colour answers "how sure can we be this step works here"; weak and *no evidence found* are
+    dashed. Hover shows both grades.
+  - The **critical connection** carries one small navy dot at its middle.
+  - An item still being checked is grey and pulses. An edited box, a link marked *Edited · check
+    pending*, and an item changed by Policy Atlas each carry a blue dot; hover says which.
+  - Context and supporting activities are in the header paragraph and the reading guide, not on
+    the canvas.
 - **Detail panel** (on click):
-  - A **box**: layer, text, origin, result criteria, its grade, the **case studies** found (each
-    with programme, place, source type and quote, typed by source as in Options scoping), the
-    **indicators** the documents used, and its incoming and outgoing links.
-  - A **link**: if / for / then / because / unless, its assumptions, its grade with the rule that
-    gave it, its flags, and the evidence in three groups: *supports* · *supports under conditions*
-    · *challenges*. Each item has its title, year, source type (academic, policy document, web),
-    appraisal tier, a quote, and a link to the source.
-  - An **assumption**: its type, the link it belongs to, its grade, the same evidence groups.
-- **Pathways list.** The kept success and failure pathways as cards, each with its reason. Then
-  **"Considered and set aside"** (R1), each with its reason and a **Restore** button.
-- **Summary and evaluation questions.** Written after the check, from it.
-- **Your original.** For an imported theory, the uploaded image or PDF beside the canvas.
-- **Sources tab.** The existing tab: every document read, by source, with what was searched and
-  what was not.
+  - A **box**: its layer and text, its result criteria (definition, indicator, timing), its
+    **case studies** (programme, place, source type, quote, typed by source as in Options scoping;
+    for an input, delivery notes such as time, cost and enforcement), and the **indicators** the
+    documents used.
+  - A **connection**: its sentence; if / for / then / because; its **conditions**; then *Worked
+    elsewhere* with its grade, sentence and documents in two groups, *supports* and *challenges*;
+    then *Holds here* in the same form. Each document shows title, year, source type, appraisal
+    tier, quote and link.
+  - **A pending link** (W17) opens with a block above everything else: *Edited · check pending*,
+    the old and new wording side by side, **Check again** and **Keep the evidence**, and the two
+    grades marked *for the previous wording*. After Keep, the block becomes one line, *Evidence
+    kept by you after an edit*, with **Check again**. After a no-change check: *Checked: no
+    change*.
+  - Folded away: how the grade was given, and where the item came from.
+- **Detailed information**, under the canvas, in the report's expand and collapse sections, with
+  *Download as PDF* on the right. One section per pathway (pathway 1 open), then *Considered and set
+  aside* (each with its reason and **Restore**, R1) and *Questions for an evaluation*. In a pathway:
+  each box (layer label, title, a two-sentence description citing its case studies), then each
+  connection in **three paragraphs**: its sentence naming both boxes and the mechanism; *worked
+  elsewhere*, with its grade and evidence sentence; *holds here*, with its grade and evidence
+  sentence, naming the conditions. The critical one is labelled *Critical connection · test this
+  first*. When the same documents answer both questions, the evidence is not repeated
+  (§ Trust rules). A pending link shows *Edited · check pending* above its paragraphs, with
+  **Check again** and **Keep the evidence**, and its grades read *for the previous wording*.
+- **Task Agent thread.** When a check ends with links pending, and whenever the user returns to a
+  task with pending links, the thread says how many, with **Check all** and **Keep all**. After a
+  Check again it reports what changed, or "no change". A small **+** after a sentence opens its documents. This section is the PDF
+  report.
+- **Your original.** For an imported theory, the uploaded image or PDF, inside the plan under
+  *Starting point*, and from the toolbar.
+- **Sources tab.** The existing tab: every document read, what it was used for, by source type and
+  country, with what was searched and what was not.
 - **History tab.** The existing event log: plan, draft, imports, every edit, every check.
 
 ## Trust rules
@@ -238,7 +293,7 @@ plan ══approve══▶ draft or import ─▶ evidence check (background) �
 ToC follows the Options scoping principle: **generation is free, interpretation is labelled,
 assessment is grounded** ([../options-scoping/trust.md](../options-scoping/trust.md)).
 
-- 🟡 **Origin label** on every box, link, assumption and pathway: *drafted by Policy Atlas* · *found
+- 🟡 **Origin label** on every box, link and pathway: *drafted by Policy Atlas* · *found
   in the evidence* · *from your theory* · *added by you* · *from your options scoping*. A drafted
   mechanism is a reasoning claim (tier 4, "reasoning, not evidence") until evidence is found.
 - ✅ **Evidence grades: strong, medium, weak** (owner, S4; Mayne 2017: "classified as strong,
@@ -257,25 +312,52 @@ assessment is grounded** ([../options-scoping/trust.md](../options-scoping/trust
   | Flag | When |
   |---|---|
   | Evidence against (N) | Any document challenges the item. "Weak · evidence against" and "No evidence found" never look alike. |
-  | Holds under conditions | Some support is only for some groups, places or conditions. The conditions are listed. |
 
   | Status | When |
   |---|---|
   | Checking | The check is running on this wording. |
-  | Out of date | The text changed after the last check. |
+  | Edited · check pending | The wording changed after its evidence was judged; the evidence shown is for the previous wording. |
+  | Evidence kept by you | The user kept the evidence after an edit, without a new check. |
+  | Checked: no change | Check again found the claim unchanged, so the evidence stands. |
 
-  Supporting documents include those that support under conditions. Web pages show and count toward
+  ✅ There is no *supports under conditions* stance and no *holds under conditions* flag (owner,
+  2026-10-26: "under conditions is implied, and should be covered by Assumptions"). A supporting
+  document that holds only for some groups, places or settings records that condition, which shows
+  in its evidence line. 🟡 A condition the link does not yet name goes to consolidate, which adds it
+  to the link's conditions, labelled *found in the evidence*.
+
+  ✅ **Robust modelling can reach medium** (owner, 2026-10-26). The shared appraisal scores every
+  "Modelling & Simulation" study 2 by type, so a model alone could never pass *weak*. For a
+  modelling study only, the judge also says whether the abstract shows it is **robust**: built on
+  or calibrated against real outcome data (trials, reviews or cohorts), with sensitivity or
+  uncertainty analysis, or validated against observed results. The grade rule then treats a robust
+  model as a score-3 document: it can support *medium*, never *strong*. The shared appraisal is
+  unchanged. Abstracts often omit how a model was built, so most models will stay at 2 until the
+  full-text depth (⏸) exists.
+
+  Web pages show and count toward
   the flags and toward *weak*, but never toward *medium* or *strong* (Options scoping trust rule:
   "a web case study never raises an evidence-strength rating"). The rule is a banding, which
   Options scoping does not allow in v1 without its own eval; ToC adopts it deliberately, records it
   in the task ADR, and tunes it with evals E2, E2b and E7 (owner, S6).
 - 🟡 **Every evidence item carries a quote**, checked by the existing quote verifier against the
   abstract or the frozen web page text. An item without a verified quote is dropped.
-- 🟡 **Boxes get searches as well as result criteria** (owner, S3). Inputs boxes get no search:
-  they describe what the intervention does. For an output, outcome or impact box, the search asks
-  whether comparable interventions achieved that result and how it was measured. Its documents
-  give the box its grade, its **case studies** and its **indicators**. Case studies are typed by
-  source; a web case study never raises the grade.
+- ✅ **An evidence sentence or box description cites only its own item's evidence** (owner,
+  2026-10-26); for a box, its case studies. Every source
+  it cites must be one of that item's judged documents with a verified quote; code checks each
+  citation and drops a sentence that fails. It never states a grade of its own: the grade comes
+  from the grade rule and is shown before the sentence. An item with no evidence gets a fixed
+  sentence, not a generated one.
+- ✅ **Only links are graded; boxes describe** (owner, 2026-10-26, replacing S3's
+  box searches). Theory-based evaluation tests the links of the causal chain and the assumptions
+  under them, which here are each link's conditions (White 2009; Mayne 2015, 2017); a box is a result with *result criteria* (Mayne 2015)
+  or *success criteria and indicators* (Funnell and Rogers 2011), and "did the result happen" is a
+  question for monitoring after delivery. A box search also repeated the evidence of the links
+  into it. So boxes get no search and no grade. Each box shows its result criteria and its **case
+  studies** and **indicators**, which the judge pulls out of the documents it reads for the box's
+  links: for an output, outcome or impact, where that result was seen and how it was measured; for
+  an input (owner, 2026-10-26: "Inputs also can get evidence/case study notes"), where it was put in
+  place and what it took. Case studies are typed by source and cite only verified quotes.
 - ✅ **Web search is in** (R7), as **OpenAI's own web search tool** (owner, S7). 🟡 On the OpenAI
   route it works as is. On the Bedrock route, global routing does **not** make it available
   (checked 2026-10-23 against the AWS model card for GPT-5.6 Sol and OpenAI's Bedrock guide):
@@ -293,6 +375,26 @@ assessment is grounded** ([../options-scoping/trust.md](../options-scoping/trust
 - 🟡 **Skew is shown.** The Sources tab splits documents by source type and by country where known
   (approach § 6).
 - 🟡 **Evidence binds to the wording** of its item (§ Editing during the check).
+- ✅ **Every link answers two questions** (owner, 2026-10-26: "the evidence for each connection is
+  in fact the Assumption … make the distinctions between it worked elsewhere and it worked here").
+  This replaces separate assumption objects.
+  - *Worked elsewhere*: where this step was tried, did the change follow? Evidence about the effect
+    and its mechanism. Shown as "<grade> evidence it worked elsewhere".
+  - *Holds here*: will it work for this population, in this place, now? Evidence from the plan's
+    place, or evidence that the link's conditions hold or fail in comparable settings (Cartwright
+    and Hardie 2012: "it worked there" is not "it will work here"). Shown as "<grade> evidence it
+    holds here". Evidence from the plan's place is preferred, never required.
+  - One judge call per link and document returns a stance for each question, each with its own
+    quote. Each grade counts only its own stances.
+  - The canvas colours a link by the lower of the two grades; the panel and Detailed information
+    show both. A link that worked elsewhere but has weak *holds here* evidence is the *critical
+    connection · test this first* case; code picks the one that sits on the most kept pathways.
+  - ✅ **Evidence is not repeated** (owner, 2026-10-26). A document appears once in a link's list,
+    tagged *elsewhere*, *here* or both. The *holds here* sentence never restates a finding the
+    *worked elsewhere* sentence already gave; it names that study and says why it also counts
+    here (for example, "The London study was in England, so it counts here too"). When every
+    document answers both questions the same way, the two paragraphs merge into one ("Strong
+    evidence, including in England").
 
 ## Connections to other tasks
 
@@ -350,13 +452,13 @@ Design a theory of change".
   the task. History records the name, size and a hash. A new bucket is an infrastructure change,
   recorded in the ADR.
 - ✅ **Stress test: conversation only** (R11). A button opens a new chat of kind `stress_test`. Four
-  short questions, one at a time, each tied to one box, link or assumption that the canvas
-  highlights: mechanism, load-bearing assumption false, scope and population, failure. Replies are
+  short questions, one at a time, each tied to one box or link that the canvas
+  highlights: mechanism, the critical connection failing here, scope and population, failure. Replies are
   two to four sentences and use only the theory and its evidence.
 - 🟡 **Discuss.** The existing chat, with the graph and its evidence as context, through the
   existing grounded-answer path. It does not edit the graph.
-- 🟡 **Canvas editing.** Add, edit, delete and connect boxes; add, edit, delete and move
-  assumptions; mark the load-bearing assumption; restore a set-aside pathway. Each edit writes an
+- 🟡 **Canvas editing.** Add, edit, delete and connect boxes; edit a link's sentence and
+  conditions; mark the critical connection; restore a set-aside pathway. Each edit writes an
   event to History.
 - ✅ **Export** (R13; owner, S9), in this order: the canvas as PNG and SVG; the reference list as
   CSV; the graph as JSON; a **draw.io file**, which Miro, Lucidchart and diagrams.net can import; a
@@ -371,12 +473,12 @@ ladder:
 
 | # | Eval | Measures | Data | Metric |
 |---|---|---|---|---|
-| E1 | Structure checks | Every draft is well-formed: layers in order, no orphan boxes, every assumption on a link, at least one failure pathway, every evidence item on a real document | The tool's own drafts on about 30 descriptions | Pass rate per check; runs in CI |
+| E1 | Structure checks | Every draft is well-formed: layers in order, no orphan boxes, every link with at least one condition, at least one failure pathway, every evidence item on a real document | The tool's own drafts on about 30 descriptions | Pass rate per check; runs in CI |
 | E2 | Judge on public data | Stance accuracy given an abstract | SciFact, Check-COVID, PubMedQA, Evidence Inference, mapped to our stances; plus an ablation arm (abstract removed, expect "not about this item") | Macro-F1; how often a challenge is called support |
 | E2b | Grades against outside references | Whether our grade and flags agree with other evidence tools on the same claims | **Consensus** (its Consensus Meter: support, mixed, contradict) and **System** (a graph of statistical relationships from published studies, mostly health; public graph in closed beta until autumn 2026) | Agreement by claim; cases where we say *strong* and they say *contradict* |
-| E3 | Image import on rendered diagrams | Reading a diagram with known answers | Our own graphs rendered in several layouts; FlowVQA as an outside check | Box F1 with fuzzy text match; link F1; direction; layer accuracy; assumption recall |
+| E3 | Image import on rendered diagrams | Reading a diagram with known answers | Our own graphs rendered in several layouts; FlowVQA as an outside check | Box F1 with fuzzy text match; link F1; direction; layer accuracy; condition recall |
 | E4 | Image import on real figures | The same, on published diagrams | 30–50 figures from GOV.UK plans, Campbell reviews, Youth Endowment Fund reports, labelled by hand | As E3 |
-| E5 | Judge on our own data | Stance accuracy on real item and document pairs, including Overton and web | 150–200 pairs from real runs, two labellers with a written guide for "under conditions" | Agreement between labellers; judge against the agreed label |
+| E5 | Judge on our own data | Stance accuracy on real item and document pairs, including Overton and web | 150–200 pairs from real runs, two labellers with a written guide for recording conditions; includes documents labelled for both questions on one link, with different stances, and supports that record a condition | Agreement between labellers; judge against the agreed label |
 | E6 | Rebuild a published theory | Draft quality against a human theory | 20–40 reports with separate intervention text and theory figure, preferably 2025–26 | Recall of the human impacts and outcomes; soft link F1 and direction; rubric judge on Mayne's criteria; stability over 5 runs |
 | E7 | Back-test against reviews | Whether the check finds challenge evidence where reviews found no effect | EEF Toolkit strands, null EEF trials, Campbell reviews with null or harmful findings, effective ones as controls; the review itself and later papers excluded | Separation between the two groups |
 | E8 | Expert panel | Usefulness against current practice | 5–8 evaluators, about 10 interventions, tool against published theory against a plain chatbot, labels hidden | Win rate; rubric means; "would you use this as a first draft?" |
@@ -399,12 +501,26 @@ export slides, Miro if easy · R15 evals · R16 see R1.
 duplicated · on the Bedrock route, web search calls go to Bedrock's US endpoint.
 
 **Second round (2026-10-23):** S1 follow the Magenta Book fully: Inputs, Outputs, Outcomes, Impact
-· S2 no overall score for now · S3 boxes get searches too, with case studies · S4 strong, medium and
+· S2 no overall score for now · S3 boxes get searches too, with case studies (replaced 2026-10-26: boxes are not searched or graded; case studies come from link evidence) · S4 strong, medium and
 weak for link strength · S5 consolidate by distinct and relevant, choose by promising and evidence
 · S6 strength rule: try it, then test against evals · S7 web search with OpenAI's own tool · S8 keep
 uploads on S3 · S9 canvas library and exports agreed; start with E1, E2 and E6, and look at
 Consensus and System · S10 light connections: one "Design a theory of change" button on the option
 page · S11 a newer source run is flagged; several theories per option allowed.
+
+**Wireframe and journey review (2026-10-26):** the visual and evidence rulings are in § Output
+structure and § Trust rules, and in the task 054 contract as W1–W11. Journey: J1 starting from an
+option reuses everything the option answers; only the intended change is confirmed. Connecting to
+Options scoping is preferred, but the capability may ship standalone first if the link would
+disturb Options scoping · J2 the Task Agent asks at most two questions before drafting (the
+measurable change; whether a theory exists), more only if its latency is low · J3 the draft shows
+on the canvas at once, and the Task Agent posts a message in the sidebar · J4 the existing run
+notification when the check ends · J5 the Task Agent lists each change with its own Undo, beside
+the blue dots · J6 the canvas and Detailed information are equal ways to read; neither is primary ·
+J7 the Task Agent always suggests a stress test after the check · J8 the PDF report and the
+PowerPoint both matter · J9 how an older theory signals it may be out of date is postponed. ·
+Later the same day: assumptions are not separate objects; every link answers *worked elsewhere*
+and *holds here*, and its conditions hold the Magenta Book's assumptions.
 
 ## Open questions
 
