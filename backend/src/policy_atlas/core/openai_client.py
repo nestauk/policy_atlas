@@ -171,6 +171,7 @@ def traced_parse[T: BaseModel](
     session_id: uuid.UUID | None = None,
     metadata: Mapping[str, Any] | None = None,
     clean: Callable[[T], T] | None = None,
+    reasoning_effort: str | None = None,
 ) -> UsageResult[T]:
     """Run :func:`parse_structured` under one Langfuse generation.
 
@@ -193,6 +194,8 @@ def traced_parse[T: BaseModel](
         metadata: Extra span metadata, after the prompt version.
         clean: Optional step applied to the parsed output before it is
             traced and returned (for example a NUL scrub).
+        reasoning_effort: The route's ``reasoning_effort`` for the model, or
+            ``None`` to send none (the request is then unchanged).
 
     Returns:
         The parsed (and cleaned) output plus token usage.
@@ -210,8 +213,8 @@ def traced_parse[T: BaseModel](
             response_format=response_format,
             usage_event=usage_event,
             label=label,
-            model=model,
             max_completion_tokens=max_output_tokens,
+            **openai_kwargs(model, reasoning_effort=reasoning_effort),
         )
         return (clean(parsed) if clean is not None else parsed), usage
 

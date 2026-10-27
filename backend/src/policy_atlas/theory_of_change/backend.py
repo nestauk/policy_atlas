@@ -182,12 +182,16 @@ class OpenAITocBackend:
         max_output_tokens: int,
         prompt_version: str,
     ) -> UsageResult[T]:
+        model = route().model_for(step)
         return traced_parse(
             self._client,
             self._langfuse_client,
             messages=messages,
             response_format=response_format,
-            model=route().model_for(step),
+            model=model,
+            # The route's setting for the model (Terra: "none"); the judge was
+            # measured at it, and without it Terra's default gave unstable stances.
+            reasoning_effort=route().reasoning_effort_for(model),
             max_output_tokens=max_output_tokens,
             usage_event=f"{step}.usage",
             label=step,
