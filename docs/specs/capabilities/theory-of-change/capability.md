@@ -88,7 +88,7 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
 |---|---|
 | **Box** | One element in a layer. |
 | **Link** | A causal step from one box to the next. It carries the **mechanism**: why the step happens. |
-| **Conditions** | What must hold for a link to work in the user's setting: the link's *unless* text, one or more short statements. This is where the Magenta Book's assumptions live (Mayne 2015: "only when we add the assumptions to the causal links … do we get a theory of change"). There is no separate assumption object (owner, 2026-10-26). |
+| **Conditions** | What must hold for a link to work in the user's setting: zero to two short statements per link, only those most likely to fail here, each appearing once in the whole theory (owner, 2026-10-27: "there are way too many assumptions … quite a few duplicates"). This is where the Magenta Book's assumptions live (Mayne 2015: "only when we add the assumptions to the causal links … do we get a theory of change"). There is no separate assumption object (owner, 2026-10-26). |
 | **Assumption type** | Set by code from the layers a link joins, using the Magenta Book's types: *delivery* (inputs to outputs), *take-up* (outputs to outcomes), *behaviour change* (outcomes to outcomes), *benefits and side effects* (outcomes to impact). Conditions on failure pathways are grouped as *if it goes wrong*. Not stored. |
 | **Worked elsewhere · Holds here** | The two evidence questions on every link: did it work where it was tried, and will it work here (Cartwright and Hardie 2012, *Evidence-Based Policy*). The second is about transferability: whether the link's conditions hold for this population, in this place, now. |
 | **Critical connection** | The link whose failure here would break the most of the theory. Shown as "Critical connection · test this first". |
@@ -494,7 +494,7 @@ ladder:
 
 | # | Eval | Measures | Data | Metric |
 |---|---|---|---|---|
-| E1 | Structure checks | Every draft is well-formed: layers in order, no orphan boxes, every link with at least one condition, at least one failure pathway, every pathway a connected route, every evidence item on a stored document | The tool's own drafts on about 30 descriptions | Pass rate per check; runs in CI |
+| E1 | Structure checks | Every draft is well-formed: layers in order, no orphan boxes, at most two conditions per link and none repeated across links, at least one failure pathway, every pathway a connected route, every evidence item on a stored document | The tool's own drafts on about 30 descriptions | Pass rate per check; runs in CI |
 | E2 | Judge on public data | Stance accuracy given an abstract | SciFact, Check-COVID, PubMedQA, Evidence Inference, mapped to our stances; plus an ablation arm (abstract removed, expect "not about this item") | Macro-F1; how often a challenge is called support |
 | E2b | Grades against outside references | Whether our grade and flags agree with other evidence tools on the same claims | **Consensus** (its Consensus Meter: support, mixed, contradict) and **System** (a graph of statistical relationships from published studies, mostly health; public graph in closed beta until autumn 2026) | Agreement by claim; cases where we say *strong* and they say *contradict* |
 | E3 | Image import on rendered diagrams | Reading a diagram with known answers | Our own graphs rendered in several layouts; FlowVQA as an outside check | Box F1 with fuzzy text match; link F1; direction; layer accuracy; condition recall |

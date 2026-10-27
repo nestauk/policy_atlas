@@ -1,5 +1,13 @@
 # Spec update log
 
+## 2026-10-27 (task 054, iteration loop 2)
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): conditions are 0 to 2
+  per link, only those most likely to fail here, each once in the whole theory; E1 checks that
+  rule instead of "at least one condition" (owner: "way too many assumptions … quite a few
+  duplicates"). Task 054 contract C22 records the loop's other rulings (case studies capped at 5,
+  the judge's neighbouring-step and place-independent condition rules, authors, quote in context,
+  page and canvas fixes); plan 2.3 adds moving boxes with Reset layout for increment 2.
+
 ## 2026-10-26 (design close, task 054)
 * **Update**: task 054 contract spec changes 2–5 applied at the plan gate (owner: "Approve!"),
   with [ADR 0042](../adr/0042-theory-of-change-task-kind.md):

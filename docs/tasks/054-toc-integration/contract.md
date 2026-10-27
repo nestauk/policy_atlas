@@ -324,6 +324,16 @@ decisions below. The decisions fix what the spec leaves to the build.
   critical label (W18). The plan uses the navy plan panel of
   the other task types. The Task Agent posts a message when the draft appears, lists each change
   after the check, and always suggests a stress test (J3, J5, J7).
+- **C22. Iteration loop 2** (owner, 2026-10-27). Case studies: at most 5 per box, distinct by
+  programme and place, ranked by appraisal score, then supporting first. Conditions: 0 to 2 per
+  link, only those most likely to fail here, never repeated across links (prompt `toc_draft_v2`,
+  enforced in code when the draft is stored). The judge sees the neighbouring steps and treats a
+  document about a neighbouring step as *not about* this one; a condition that does not depend on
+  place can be shown by good evidence from anywhere (`toc_judge_v3`). Evidence items show authors,
+  and a document title opens the report's citation sidebar with the quote in its passage
+  (`GET /toc/evidence/{evidence_id}/context`). The Result page sits on a white card with the ES
+  report's type styles; the canvas opens at a readable zoom, fits a chosen pathway, and has a
+  working fit-view control and a full-screen view.
 
 ## ADR scope
 
@@ -539,8 +549,8 @@ beyond the surface map.
   1. Migration round-trip; the downgrade refuses while ToC rows exist. Registry: `spec_for`,
      `validate_plan`, `compose_plan`, `lattice_for` accept the kind; the AST guard holds; ES or OS
      plans are rejected on a ToC task and the reverse. Create refuses the kind while the server
-     setting is off. The graph validator (E1 checks): layers in order, no orphan boxes, every link
-     with at least one condition, at least one failure pathway, every pathway connected, every
+     setting is off. The graph validator (E1 checks): layers in order, no orphan boxes, at most two conditions per link and
+     none repeated across links, at least one failure pathway, every pathway connected, every
      evidence item on a stored document. The seven OS option-search test files pass
      unedited; OS and ToC searches join side by side (C2). Item text and hash stable. The grade
      table test covers every rule row, both questions, the web cap, the robust-model row and the

@@ -258,7 +258,9 @@ canvas. Race tests with explicit barriers. Commit per piece.
 conditions, mark critical); the blue dots; the pending block in the panel; the pending label and
 buttons in Detailed information; the changed-by-Policy-Atlas block with Keep mine; the Task
 Agent's change list with Undo, and Check all and Keep all; Restore in *Considered and set aside*;
-the 409 reload. Commit.
+the 409 reload. **Moving boxes** (owner, 2026-10-27): the user can drag boxes; positions save to
+`toc_box.position` (already in revision 1) with the row revision, and **Reset layout** returns every
+box to the computed layout (clears `position`). Commit.
 
 Exit: try it (2) — `lead`, then the owner; full `make verify`; PR; `/code-review` and the security
 lane on writes, Undo and the 409 path.
