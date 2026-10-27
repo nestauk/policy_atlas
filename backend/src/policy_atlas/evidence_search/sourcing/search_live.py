@@ -1087,7 +1087,12 @@ def _validate_overton_next_page_url(next_page_url: str) -> str:
 
 CROSSREF_URL = "https://api.crossref.org/works/{doi}"
 CROSSREF_TIMEOUT_S = 5.0
-CROSSREF_WORKERS = 8
+#: Crossref's polite pool allows about 3 requests at once.
+CROSSREF_WORKERS = 3
+#: The wait before the one retry after a 429 when Crossref sends no Retry-After,
+#: and the longest Retry-After honoured.
+CROSSREF_RETRY_S = 1.0
+CROSSREF_RETRY_MAX_S = 10.0
 
 _TAG = re.compile(r"<[^>]+>")
 
@@ -1111,6 +1116,9 @@ def crossref_abstracts(dois: list[str], *, client: httpx.Client | None = None) -
         dois: DOIs, bare (``10.1/abc``).
         client: Optional HTTP client (tests pass one with a mock transport).
 
+    A 429 (too many requests) is retried once, after its Retry-After or
+    :data:`CROSSREF_RETRY_S`. One summary line is logged per call.
+
     Returns:
         DOI → plain-text abstract, for the DOIs Crossref had one for.
     """
@@ -1118,20 +1126,38 @@ def crossref_abstracts(dois: list[str], *, client: httpx.Client | None = None) -
         return {}
     http = client or httpx.Client(timeout=CROSSREF_TIMEOUT_S, headers={"User-Agent": _user_agent()})
 
-    def one(doi: str) -> tuple[str, str | None]:
+    def one(doi: str) -> tuple[str, str | None, bool]:
+        """``(doi, abstract or None, whether the lookup failed)``."""
+        url = CROSSREF_URL.format(doi=quote(doi, safe="/"))
         try:
-            response = http.get(CROSSREF_URL.format(doi=quote(doi, safe="/")))
+            response = http.get(url)
+            if response.status_code == 429:
+                try:
+                    wait = float(response.headers.get("Retry-After", CROSSREF_RETRY_S))
+                except ValueError:
+                    wait = CROSSREF_RETRY_S
+                time.sleep(min(max(wait, 0.0), CROSSREF_RETRY_MAX_S))
+                response = http.get(url)
             response.raise_for_status()
             jats = response.json().get("message", {}).get("abstract")
         except Exception as exc:  # noqa: BLE001 - a missing abstract is not an error
-            log.info("crossref.abstract_failed", doi=doi, error_type=type(exc).__name__)
-            return doi, None
-        return doi, (_plain(jats) or None) if isinstance(jats, str) else None
+            log.debug("crossref.abstract_failed", doi=doi, error_type=type(exc).__name__)
+            return doi, None, True
+        return doi, (_plain(jats) or None) if isinstance(jats, str) else None, False
 
     try:
         with ThreadPoolExecutor(max_workers=CROSSREF_WORKERS) as executor:
-            found = list(executor.map(one, dois))
+            results = list(executor.map(one, dois))
     finally:
         if client is None:
             http.close()
-    return {doi: text for doi, text in found if text}
+    found = {doi: text for doi, text, _ in results if text}
+    failed = sum(1 for _, _, error in results if error)
+    log.info(
+        "crossref.summary",
+        asked=len(dois),
+        found=len(found),
+        no_abstract=len(dois) - len(found) - failed,
+        failed=failed,
+    )
+    return found

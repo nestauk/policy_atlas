@@ -18,6 +18,7 @@ from datetime import date
 from functools import partial
 from typing import Any, Literal, TypedDict, cast
 
+import structlog
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
@@ -44,6 +45,8 @@ from policy_atlas.evidence_search.sourcing.search_prompts import (
     QueriesPayload,
     validated_queries,
 )
+
+log = structlog.get_logger()
 
 SearchDepth = Literal["rapid", "standard", "deep", "link"]
 SearchDirectiveError = _SearchDirectiveError
@@ -107,13 +110,14 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
         "policy_cap": 200,
         "call_budget": {"openalex": 45, "overton": 30},
     },
-    # The theory-of-change link search (task 054, C27): no generation call,
-    # two OpenAlex semantic calls and one Overton call on the first line of
-    # the intent (the link sentence), every distinct result kept. See ``_link_pools``.
+    # The theory-of-change link search (task 054, C27, C31): two OpenAlex
+    # semantic calls and one Overton call on the first line of the intent (the
+    # link sentence), and one generated keyword query with the review and trial
+    # clauses; every distinct result kept. See ``_link_pools``.
     "link": {
-        "papers_cap": 40,
-        "policy_cap": 40,
-        "call_budget": {"openalex": 2, "overton": 1},
+        "papers_cap": 60,
+        "policy_cap": 60,
+        "call_budget": {"openalex": 4, "overton": 1},
     },
 }
 
@@ -122,6 +126,7 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
 LINK_SEMANTIC_RESULTS = 20
 LINK_PLACE_RESULTS = 10
 LINK_OVERTON_RESULTS = 10
+LINK_KEYWORD_RESULTS = 10
 LINK_PLACE_SUFFIX = " in the United Kingdom"
 
 
@@ -1422,26 +1427,37 @@ def _overton_fetch(
     return fetch_for
 
 
+#: The link depth's keyword calls: the clause added and the origin naming the list.
+_LINK_KEYWORD_CLAUSES: tuple[tuple[str, QueryOrigin], ...] = (
+    (SR_CLAUSE, "variant_sr"),
+    (RCT_CLAUSE, "variant_rct"),
+)
+
+
 def _link_pools(
     passes: dict[str, _Pass],
     backends: list[acquire.SearchBackendBase],
     *,
     text: str,
+    keyword: str | None,
     cap: int,
     variants: dict[str, list[dict[str, Any]]],
     validated: dict[str, dict[str, Any]],
     wires: dict[str, list[dict[str, str]]],
 ) -> tuple[dict[str, list[PoolEntry]], list[str]]:
-    """The link depth's search: three calls on one sentence, ``cap`` records at most (C27).
+    """The link depth's search: five calls for one link, ``cap`` records at most (C27, C31).
 
     OpenAlex semantic search on the sentence (origin ``semantic``) and on the
-    sentence with :data:`LINK_PLACE_SUFFIX` (``semantic_place``), and Overton,
-    itself a search by meaning, on the sentence (``verbatim``). No query
-    generation, keyword calls, citation chasing or landmarks. Duplicates are
-    dropped by the usual paper and policy keys, the copy from the earlier list
-    kept. Each record's origin and pool rank go on its ``source.acquired``
-    event, and each list's own order survives in the pool rank, so the check
-    walk's selection step can rebuild the three ranked lists.
+    sentence with :data:`LINK_PLACE_SUFFIX` (``semantic_place``); the one
+    generated ``keyword`` query on OpenAlex keyword search with the systematic
+    review clause (``variant_sr``) and the trial clause (``variant_rct``), when
+    there is one; and Overton, itself a search by meaning, on the sentence
+    (``verbatim``). No citation chasing or landmarks. Duplicates are
+    dropped by the usual paper and policy keys; the copy that ranks higher in
+    its own list is kept (the earlier list on a tie). Each record's origin and
+    pool rank go on its ``source.acquired`` event, and each list's own order
+    survives in the pool rank, so the check walk's selection step can rebuild
+    the ranked lists.
 
     Returns:
         The pool entries per backend (the kept records first, so acquire's cap
@@ -1460,19 +1476,38 @@ def _link_pools(
                 (text, LINK_SEMANTIC_RESULTS, "semantic"),
                 (text + LINK_PLACE_SUFFIX, LINK_PLACE_RESULTS, "semantic_place"),
             ]
+            keyword_calls: list[tuple[str, QueryOrigin, dict[str, str]]] = [
+                (_compose_variant(keyword, clause), origin, keyword_wire)
+                for clause, origin in _LINK_KEYWORD_CLAUSES
+                for keyword_wire in wires["openalex"]
+                if keyword
+            ]
             calls = search.execute_batch(
                 backend,
                 [
-                    _CallSpec(
-                        verb="search_semantic",
-                        query=query,
-                        origin=origin,
-                        wire_params=wire,
-                        max_records=size,
-                        fetch=_semantic_fetch(extended, query, wire),
-                        keep=keep,
-                    )
-                    for query, size, origin in semantic_calls
+                    *(
+                        _CallSpec(
+                            verb="search_semantic",
+                            query=query,
+                            origin=origin,
+                            wire_params=wire,
+                            max_records=size,
+                            fetch=_semantic_fetch(extended, query, wire),
+                            keep=keep,
+                        )
+                        for query, size, origin in semantic_calls
+                    ),
+                    *(
+                        _CallSpec(
+                            verb="search",
+                            query=query,
+                            origin=origin,
+                            wire_params=keyword_wire,
+                            max_records=LINK_KEYWORD_RESULTS,
+                            fetch=_search_fetch(backend, query, keyword_wire),
+                        )
+                        for query, origin, keyword_wire in keyword_calls
+                    ),
                 ],
             )
         elif backend.name == "overton":
@@ -1639,15 +1674,20 @@ def run_search(
     queries: list[str] = []
     paraphrases: list[str] = []
     queries_dropped = 0
-    generation_calls = 0
-    if depth != "link":
+    generation_calls = 1
+    try:
         wire, usage = generation_backend.generate_queries(
             QueriesPayload(intent=context.intent, guidance=guidance)
         )
+    except Exception:
+        if depth != "link":
+            raise
+        # The link search still runs its searches by meaning (C31).
+        log.warning("search.link_keyword_generation_failed", scope_id=str(context.scope_id))
+    else:
         usage_totals.add(usage)
         queries, paraphrases = validated_queries(wire)
         queries_dropped = len(wire.queries) - len(queries)
-        generation_calls = 1
 
     # The two legs run side by side (plan S13): one pass state per backend, so
     # each has a single writer; the legs never touch the database connection;
@@ -1697,6 +1737,7 @@ def run_search(
             passes,
             backends,
             text=context.intent.strip().splitlines()[0],
+            keyword=queries[0] if queries else None,
             cap=record_cap or constants["papers_cap"],
             variants=variants,
             validated=validated,
