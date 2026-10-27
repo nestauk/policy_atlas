@@ -130,6 +130,30 @@ This is well under the owner's $30 limit for the try. The Consensus API was not 
    - kept pathways show no reason (only set-aside ones carry one).
 8. The Result page asks for `GET /artefact` on a ToC task and gets 404. Harmless, but a wasted request.
 
+## Iteration log
+
+Short loops after the owner's first review (plan § Iteration phase).
+
+**Loop 1 (2026-10-27, commits `944ec427` and the layout commit)**
+
+The owner's review, finding by finding:
+- Finding 1: the Overton key was renewed. A single search returned 200.
+- Finding 2: fix the judge.
+- Finding 3: keep "medium". The owner ruled that a link with 3 supports and 4 challenges stays medium.
+- Finding 4: make the end message less noisy.
+- Most important, in the owner's words: "I can't even see in the canvas where the last outcome ends and connects to". Work on the layout ("multiple Outcome columns are fine") and the connections.
+
+What changed:
+- **Judge (`toc_judge_v2`, re-pinned).** A study done in the stated place now answers "holds here" the same way it answers "worked elsewhere". The UK counts for England, and older or narrower versions of the intervention there count too. The place may come from the title. Not yet measured: the next live run shows the effect.
+- **J5 message.** Pathways found in the evidence are listed once, as one line naming those kept. A found pathway that the same check merged or set aside is left out. There are two new tests.
+- **Canvas layout.**
+  - An outcome now sits one column after the outcome that leads to it, so a chain reads left to right and the impact comes after the last outcome.
+  - Each box takes the average row of the boxes that lead into it, so a chain stays on one row.
+  - Connections are right-angled. Each turns in the gaps between columns and runs along the empty lanes between rows, so no connection crosses a box. A fan-out reads as one trunk with branches.
+  - The critical-connection dot sits on the connection's own last stretch.
+  - No layout library was added.
+  - On the live theory, the outcomes now spread over 4 columns and the impact is visible at the right. See `screenshots/iter1-canvas-layout.png`.
+
 ## Diff summary
 
 **What was built:**

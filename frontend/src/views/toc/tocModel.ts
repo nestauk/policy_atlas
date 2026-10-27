@@ -61,9 +61,6 @@ export const LAYER_LABEL: Record<BoxLayer, string> = {
   failure_outcome: "Outcome if it goes wrong",
 };
 
-export const COLUMN_LABELS = ["Inputs", "Outputs", "Outcomes", "Impact"] as const;
-const LAYER_COLUMN: Record<BoxLayer, number> = { input: 0, output: 1, outcome: 2, impact: 3, failure_outcome: 2 };
-
 /** Kept pathways, success first, then failure (each in the API's order). */
 export function keptPathways(graph: Pick<TocGraph, "pathways">): TocPathway[] {
   const kept = graph.pathways.filter((pathway) => pathway.status === "kept");
@@ -78,9 +75,10 @@ export function visibleLinkIds(graph: Pick<TocGraph, "pathways">, choice: string
 
 export const BOX_W = 200;
 export const BOX_H = 76;
-export const COL_GAP = 90;
+export const COL_GAP = 80;
 export const ROW_GAP = 28;
-const COL_STEP = BOX_W + COL_GAP;
+export const COL_STEP = BOX_W + COL_GAP;
+const ROW_STEP = BOX_H + ROW_GAP;
 /** Space kept for the column headings above the first row. */
 export const HEADER_H = 48;
 
@@ -95,8 +93,15 @@ export interface PlacedBox {
   failure: boolean;
 }
 
+export interface ColumnHeading {
+  label: string;
+  x: number;
+}
+
 export interface TocLayout {
   boxes: PlacedBox[];
+  /** One heading per layer, over its first column. */
+  headings: ColumnHeading[];
   /** The y of the "If it goes wrong" line, or null when nothing sits under it. */
   lineY: number | null;
   width: number;
@@ -105,22 +110,50 @@ export interface TocLayout {
 /**
  * Where every box of a kept pathway goes. Deterministic, no layout library.
  *
- * Four columns by layer. Boxes on a success pathway sit above the line, in
- * rows by order of first appearance along the kept pathways. Boxes found only
- * on failure pathways sit under the line, one band of rows per failure
- * pathway; a `failure_outcome` box goes in the column after its source.
+ * Columns follow the layers, left to right, and outcomes take as many columns
+ * as their longest chain: an outcome sits one column after the outcome that
+ * leads to it, so a chain reads left to right and the impact comes after the
+ * last outcome. Boxes on a success pathway sit above the line; each takes the
+ * average row of the boxes that lead into it (so a chain stays on one row and
+ * fewer connections cross), and boxes in a column never share a row. Boxes
+ * found only on failure pathways sit under the line, one band of rows per
+ * failure pathway; a `failure_outcome` box goes in the column after its source.
  */
 export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">): TocLayout {
   const boxById = new Map<string, TocBox>(graph.boxes.map((box) => [box.box_id, box]));
   const linkById = new Map(graph.links.map((link) => [link.link_id, link]));
+  const pathways = keptPathways(graph);
+  const keptLinks = pathways.flatMap((p) => p.link_ids.map((id) => linkById.get(id))).filter((l): l is TocLink => l !== undefined);
+  const layerOf = (id: string) => boxById.get(id)?.layer;
+
+  // Outcome depth: the longest chain of outcome-to-outcome links leading to it.
+  const outcomeSources = new Map<string, string[]>();
+  for (const link of keptLinks) {
+    if (layerOf(link.source_box_id) === "outcome" && layerOf(link.target_box_id) === "outcome") {
+      outcomeSources.set(link.target_box_id, [...(outcomeSources.get(link.target_box_id) ?? []), link.source_box_id]);
+    }
+  }
+  const depth = new Map<string, number>();
+  const depthOf = (id: string, seen: Set<string>): number => {
+    const known = depth.get(id);
+    if (known !== undefined) return known;
+    if (seen.has(id)) return 0; // a loop: break it here
+    seen.add(id);
+    const d = Math.max(-1, ...(outcomeSources.get(id) ?? []).map((source) => depthOf(source, seen))) + 1;
+    depth.set(id, d);
+    return d;
+  };
+  for (const box of graph.boxes) if (box.layer === "outcome") depthOf(box.box_id, new Set());
+  const outcomeColumns = Math.max(1, ...[...depth.values()].map((d) => d + 1));
+  const impactColumn = 2 + outcomeColumns;
+
   const column = new Map<string, number>();
   const onSuccess = new Set<string>();
   /** First failure pathway (its rank among failure pathways) that holds a box. */
   const failRank = new Map<string, number>();
   const order: string[] = [];
-
   let failIndex = -1;
-  for (const pathway of keptPathways(graph)) {
+  for (const pathway of pathways) {
     if (pathway.kind === "failure") failIndex += 1;
     for (const linkId of pathway.link_ids) {
       const link = linkById.get(linkId);
@@ -131,11 +164,12 @@ export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">)
         if (!column.has(id)) {
           order.push(id);
           const sourceColumn = column.get(link.source_box_id);
+          const byLayer = { input: 0, output: 1, outcome: 2 + (depth.get(id) ?? 0), impact: impactColumn, failure_outcome: 2 }[box.layer];
           column.set(
             id,
             box.layer === "failure_outcome" && id === link.target_box_id && sourceColumn !== undefined
-              ? Math.min(sourceColumn + 1, 3)
-              : LAYER_COLUMN[box.layer],
+              ? Math.min(sourceColumn + 1, impactColumn)
+              : byLayer,
           );
         }
         if (pathway.kind === "success") onSuccess.add(id);
@@ -144,54 +178,122 @@ export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">)
     }
   }
 
-  const placed: PlacedBox[] = [];
+  // Success rows, column by column: the average row of each box's sources.
+  const sourcesOf = new Map<string, string[]>();
+  for (const link of keptLinks) sourcesOf.set(link.target_box_id, [...(sourcesOf.get(link.target_box_id) ?? []), link.source_box_id]);
   const rowOf = new Map<string, number>();
-  const successRows = new Map<number, number>();
-  for (const id of order) {
-    if (!onSuccess.has(id)) continue;
-    const col = column.get(id) ?? 0;
-    const row = successRows.get(col) ?? 0;
-    successRows.set(col, row + 1);
-    rowOf.set(id, row);
-    placed.push({ id, column: col, row, x: col * COL_STEP, y: HEADER_H + row * (BOX_H + ROW_GAP), failure: false });
+  const placed: PlacedBox[] = [];
+  const firstSeen = new Map(order.map((id, index) => [id, index]));
+  let successRowCount = 0;
+  for (let col = 0; col <= impactColumn; col += 1) {
+    const ids = order.filter((id) => onSuccess.has(id) && column.get(id) === col);
+    const wanted = new Map<string, number>();
+    for (const id of ids) {
+      const rows = (sourcesOf.get(id) ?? []).map((source) => rowOf.get(source)).filter((r): r is number => r !== undefined);
+      wanted.set(id, rows.length > 0 ? rows.reduce((a, b) => a + b, 0) / rows.length : Number.POSITIVE_INFINITY);
+    }
+    ids.sort((a, b) => (wanted.get(a) ?? 0) - (wanted.get(b) ?? 0) || (firstSeen.get(a) ?? 0) - (firstSeen.get(b) ?? 0));
+    let next = 0;
+    for (const id of ids) {
+      const target = wanted.get(id) ?? Number.POSITIVE_INFINITY;
+      const row = Number.isFinite(target) ? Math.max(next, Math.round(target)) : next;
+      next = row + 1;
+      rowOf.set(id, row);
+      placed.push({ id, column: col, row, x: col * COL_STEP, y: HEADER_H + row * ROW_STEP, failure: false });
+    }
+    successRowCount = Math.max(successRowCount, next);
   }
-  const successRowCount = Math.max(0, ...successRows.values());
-  const lineY = HEADER_H + successRowCount * (BOX_H + ROW_GAP) + 8;
+  const lineY = HEADER_H + successRowCount * ROW_STEP + 8;
 
   const failureIds = order.filter((id) => !onSuccess.has(id));
   const stack = new Map<string, number>();
   const bandRows = new Map<number, number>();
   for (const id of failureIds) {
     const rank = failRank.get(id) ?? 0;
-    const col = column.get(id) ?? 0;
-    const key = `${rank}:${col}`;
-    const depth = stack.get(key) ?? 0;
-    stack.set(key, depth + 1);
-    bandRows.set(rank, Math.max(bandRows.get(rank) ?? 0, depth + 1));
+    const key = `${rank}:${column.get(id) ?? 0}`;
+    const depthInBand = stack.get(key) ?? 0;
+    stack.set(key, depthInBand + 1);
+    bandRows.set(rank, Math.max(bandRows.get(rank) ?? 0, depthInBand + 1));
   }
   const bandTop = new Map<number, number>();
   let top = lineY + 44;
   for (const rank of [...bandRows.keys()].sort((a, b) => a - b)) {
     bandTop.set(rank, top);
-    top += (bandRows.get(rank) ?? 1) * (BOX_H + ROW_GAP);
+    top += (bandRows.get(rank) ?? 1) * ROW_STEP;
   }
   const used = new Map<string, number>();
   for (const id of failureIds) {
     const rank = failRank.get(id) ?? 0;
     const col = column.get(id) ?? 0;
     const key = `${rank}:${col}`;
-    const depth = used.get(key) ?? 0;
-    used.set(key, depth + 1);
-    placed.push({
-      id,
-      column: col,
-      row: depth,
-      x: col * COL_STEP,
-      y: (bandTop.get(rank) ?? lineY) + depth * (BOX_H + ROW_GAP),
-      failure: true,
-    });
+    const row = used.get(key) ?? 0;
+    used.set(key, row + 1);
+    placed.push({ id, column: col, row, x: col * COL_STEP, y: (bandTop.get(rank) ?? lineY) + row * ROW_STEP, failure: true });
   }
-  return { boxes: placed, lineY: failureIds.length > 0 ? lineY : null, width: 3 * COL_STEP + BOX_W };
+
+  const headings: ColumnHeading[] = [
+    { label: "Inputs", x: 0 },
+    { label: "Outputs", x: COL_STEP },
+    { label: "Outcomes", x: 2 * COL_STEP },
+    { label: "Impact", x: impactColumn * COL_STEP },
+  ];
+  return { boxes: placed, headings, lineY: failureIds.length > 0 ? lineY : null, width: impactColumn * COL_STEP + BOX_W };
+}
+
+export interface EdgeRoute {
+  path: string;
+  labelX: number;
+  labelY: number;
+}
+
+/** An SVG path through the points, with each corner rounded to at most `radius`. */
+function roundedPath(points: [number, number][], radius: number): string {
+  const first = points[0];
+  if (first === undefined) return "";
+  let d = `M ${first[0]},${first[1]}`;
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const [px, py] = points[i - 1] as [number, number];
+    const [cx, cy] = points[i] as [number, number];
+    const [nx, ny] = points[i + 1] as [number, number];
+    const r = Math.min(radius, Math.hypot(cx - px, cy - py) / 2, Math.hypot(nx - cx, ny - cy) / 2);
+    const inX = cx - Math.sign(cx - px) * r;
+    const inY = cy - Math.sign(cy - py) * r;
+    const outX = cx + Math.sign(nx - cx) * r;
+    const outY = cy + Math.sign(ny - cy) * r;
+    d += ` L ${inX},${inY} Q ${cx},${cy} ${outX},${outY}`;
+  }
+  const last = points[points.length - 1] as [number, number];
+  return `${d} L ${last[0]},${last[1]}`;
+}
+
+/**
+ * A right-angled route from a box's right side to a later column's left side
+ * that never crosses a box. To the next column it turns once, in the gap
+ * between the two. Across several columns it turns in the gap after the
+ * source, runs along the empty lane just above the target's row, and turns
+ * down in the gap before the target. Connections leaving one box share their
+ * first stretch, so a fan-out reads as one trunk with branches. The label
+ * point (the critical connection's dot) is on the last stretch, which is the
+ * connection's own.
+ */
+export function routeEdge(sourceX: number, sourceY: number, targetX: number, targetY: number, span: number): EdgeRoute {
+  const radius = 10;
+  const afterSource = sourceX + COL_GAP / 2;
+  if (span <= 1 || Math.abs(targetY - sourceY) < 1) {
+    const points: [number, number][] = [[sourceX, sourceY], [afterSource, sourceY], [afterSource, targetY], [targetX, targetY]];
+    return { path: roundedPath(points, radius), labelX: (afterSource + targetX) / 2, labelY: targetY };
+  }
+  const beforeTarget = targetX - COL_GAP / 2;
+  const lane = targetY - BOX_H / 2 - ROW_GAP / 2;
+  const points: [number, number][] = [
+    [sourceX, sourceY],
+    [afterSource, sourceY],
+    [afterSource, lane],
+    [beforeTarget, lane],
+    [beforeTarget, targetY],
+    [targetX, targetY],
+  ];
+  return { path: roundedPath(points, radius), labelX: (beforeTarget + targetX) / 2, labelY: targetY };
 }
 
 /** Assumption types in the order the Assumptions section lists them. */
@@ -233,7 +335,7 @@ export function tocTitle(graph: Pick<TocGraph, "boxes" | "links" | "pathways">, 
   const layout = layoutToc(graph);
   const textOf = (id: string) => graph.boxes.find((box) => box.box_id === id)?.text;
   const first = layout.boxes.find((box) => !box.failure && box.column === 0);
-  const impacts = layout.boxes.filter((box) => !box.failure && box.column === 3);
+  const impacts = layout.boxes.filter((box) => !box.failure && graph.boxes.find((b) => b.box_id === box.id)?.layer === "impact");
   const input = first === undefined ? undefined : textOf(first.id);
   const impact = impacts.length === 0 ? undefined : textOf(impacts[0]?.id ?? "");
   if (input !== undefined && impact !== undefined) return `${input} → ${impact}`;

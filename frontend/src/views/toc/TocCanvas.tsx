@@ -3,7 +3,7 @@ import "@xyflow/react/dist/style.css";
 import {
   BaseEdge,
   Controls,
-  getBezierPath,
+  getSmoothStepPath,
   Handle,
   MarkerType,
   Position,
@@ -19,12 +19,11 @@ import type { Selection } from "./DetailPanel";
 import {
   BOX_H,
   BOX_W,
-  COLUMN_LABELS,
-  COL_GAP,
   GRADE_VAR,
   HEADER_H,
   layoutToc,
   linkTip,
+  routeEdge,
   visibleLinkIds,
 } from "./tocModel";
 import type { Grade, TocBox, TocGraph, TocLink } from "./types";
@@ -35,6 +34,8 @@ interface BoxData extends Record<string, unknown> {
   selected: boolean;
 }
 interface EdgeData extends Record<string, unknown> {
+  /** Columns from source to target; 0 inside one column. */
+  span: number;
   grade: Grade;
   pending: boolean;
   critical: boolean;
@@ -72,6 +73,8 @@ function BoxView({ data }: NodeProps<BoxNode>) {
       <span className="line-clamp-3">{scrub(box.text)}</span>
       <Handle id="r" type="source" position={Position.Right} className={HANDLE_CLASS} />
       <Handle id="b" type="source" position={Position.Bottom} className={HANDLE_CLASS} />
+      <Handle id="ts" type="source" position={Position.Top} className={HANDLE_CLASS} />
+      <Handle id="bt" type="target" position={Position.Bottom} className={HANDLE_CLASS} />
     </div>
   );
 }
@@ -82,8 +85,11 @@ function LabelView({ data }: NodeProps<LabelNode>) {
 }
 
 function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, markerEnd }: EdgeProps<TocEdge>) {
-  const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
   if (data === undefined) return null;
+  const [path, labelX, labelY] =
+    data.span > 0
+      ? (({ path: p, labelX: x, labelY: y }) => [p, x, y] as const)(routeEdge(sourceX, sourceY, targetX, targetY, data.span))
+      : getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 10 });
   const kind = data.pending ? "pending" : data.grade;
   return (
     <g>
@@ -112,6 +118,8 @@ const HANDLES = [
   { id: "t", type: "target" as const, position: Position.Top, x: BOX_W / 2, y: 0, width: 1, height: 1 },
   { id: "r", type: "source" as const, position: Position.Right, x: BOX_W, y: BOX_H / 2, width: 1, height: 1 },
   { id: "b", type: "source" as const, position: Position.Bottom, x: BOX_W / 2, y: BOX_H, width: 1, height: 1 },
+  { id: "ts", type: "source" as const, position: Position.Top, x: BOX_W / 2, y: 0, width: 1, height: 1 },
+  { id: "bt", type: "target" as const, position: Position.Bottom, x: BOX_W / 2, y: BOX_H, width: 1, height: 1 },
 ];
 
 /**
@@ -136,6 +144,7 @@ export function TocCanvas({
   const keptLinks = visibleLinkIds(graph, "all");
   const boxById = new Map(graph.boxes.map((box) => [box.box_id, box]));
   const columnOf = new Map(layout.boxes.map((placed) => [placed.id, placed.column]));
+  const yOf = new Map(layout.boxes.map((placed) => [placed.id, placed.y]));
   const inView = new Set<string>();
   for (const link of graph.links) {
     if (shown.has(link.link_id)) {
@@ -145,12 +154,12 @@ export function TocCanvas({
   }
 
   const nodes: Array<BoxNode | LabelNode> = [
-    ...COLUMN_LABELS.map(
-      (text, index): LabelNode => ({
+    ...layout.headings.map(
+      (heading, index): LabelNode => ({
         id: `col-${index}`,
         type: "label",
-        position: { x: index * (BOX_W + COL_GAP), y: HEADER_H - 36 },
-        data: { text },
+        position: { x: heading.x, y: HEADER_H - 36 },
+        data: { text: heading.label },
         draggable: false,
         selectable: false,
         focusable: false,
@@ -201,16 +210,19 @@ export function TocCanvas({
     .filter((link) => keptLinks.has(link.link_id) && shown.has(link.link_id) && columnOf.has(link.source_box_id) && columnOf.has(link.target_box_id))
     .map((link) => {
       const sameColumn = columnOf.get(link.source_box_id) === columnOf.get(link.target_box_id);
+      // Inside one column a connection runs bottom to top, or top to bottom when it goes up.
+      const upward = sameColumn && (yOf.get(link.target_box_id) ?? 0) < (yOf.get(link.source_box_id) ?? 0);
       const pending = isPending(link);
       return {
         id: link.link_id,
         type: "toc",
         source: link.source_box_id,
         target: link.target_box_id,
-        sourceHandle: sameColumn ? "b" : "r",
-        targetHandle: sameColumn ? "t" : "l",
+        sourceHandle: sameColumn ? (upward ? "ts" : "b") : "r",
+        targetHandle: sameColumn ? (upward ? "bt" : "t") : "l",
         markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: pending ? "var(--color-line-2)" : GRADE_VAR[link.lower_grade] },
         data: {
+          span: sameColumn ? 0 : (columnOf.get(link.target_box_id) ?? 0) - (columnOf.get(link.source_box_id) ?? 0),
           grade: link.lower_grade,
           pending,
           critical: link.critical,

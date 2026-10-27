@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { boxId, linkId, tocGraphFixture } from "./fixture";
-import { BOX_W, COL_GAP, groupAssumptions, gradeSentence, layoutToc, linkTip, tocTitle } from "./tocModel";
+import { BOX_H, BOX_W, COL_GAP, ROW_GAP, groupAssumptions, gradeSentence, layoutToc, linkTip, routeEdge, tocTitle } from "./tocModel";
 
 const COL_STEP = BOX_W + COL_GAP;
 
@@ -9,16 +9,25 @@ describe("layoutToc", () => {
   const layout = layoutToc(tocGraphFixture());
   const at = (n: number) => layout.boxes.find((b) => b.id === boxId(n));
 
-  it("puts each layer in its own column", () => {
-    expect([1, 2, 3, 4, 5, 8].map((n) => at(n)?.column)).toEqual([0, 0, 1, 1, 2, 3]);
+  it("gives each layer its columns, outcomes one column per step of their chain", () => {
+    // Outcomes C1 → C2 → C3 take columns 2, 3 and 4; the impact comes after them.
+    expect([1, 2, 3, 4, 5, 6, 7, 8].map((n) => at(n)?.column)).toEqual([0, 0, 1, 1, 2, 3, 4, 5]);
     expect(at(5)?.x).toBe(2 * COL_STEP);
+    expect(layout.headings.map((h) => [h.label, h.x])).toEqual([
+      ["Inputs", 0],
+      ["Outputs", COL_STEP],
+      ["Outcomes", 2 * COL_STEP],
+      ["Impact", 5 * COL_STEP],
+    ]);
   });
 
-  it("orders rows by first appearance along the kept pathways", () => {
-    expect(at(1)?.row).toBe(0);
+  it("keeps a chain on one row: each box takes the average row of its sources", () => {
+    for (const n of [1, 3, 5, 6]) expect(at(n)?.row).toBe(0);
     expect(at(2)?.row).toBe(1);
-    expect(at(6)?.row).toBe(1); // second outcome met on pathway 1, after C1
-    expect(at(5)?.row).toBe(0);
+    expect(at(4)?.row).toBe(1);
+    // C3 has sources on rows 0 (C2) and 1 (O2): it rounds to the nearest free row.
+    expect(at(7)?.row).toBe(1);
+    expect(at(8)?.row).toBe(1);
   });
 
   it("places failure-only boxes under the line, a failure outcome after its source", () => {
@@ -36,6 +45,22 @@ describe("layoutToc", () => {
   it("is deterministic and leaves out set-aside pathways", () => {
     expect(layoutToc(tocGraphFixture())).toEqual(layout);
     expect(layout.boxes).toHaveLength(10);
+  });
+});
+
+describe("routeEdge", () => {
+  it("turns once in the gap between neighbouring columns", () => {
+    const route = routeEdge(200, 40, 280, 140, 1);
+    expect(route.path).toMatch(/^M 200,40 L 230,40 Q 240,40 240,50 L 240,130 Q 240,140 250,140 L 280,140$/);
+    expect([route.labelX, route.labelY]).toEqual([260, 140]);
+  });
+
+  it("runs a longer connection along the lane above the target's row, never through a box", () => {
+    const route = routeEdge(200, 40, 3 * COL_STEP, 140, 3);
+    const lane = 140 - BOX_H / 2 - ROW_GAP / 2;
+    expect(route.path).toContain(`${COL_STEP - COL_GAP / 2},${lane}`);
+    expect(route.path).toContain(`${3 * COL_STEP - COL_GAP / 2}`);
+    expect(route.path.endsWith(`L ${3 * COL_STEP},140`)).toBe(true);
   });
 });
 
