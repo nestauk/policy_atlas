@@ -107,3 +107,21 @@ def test_trusted_and_gold() -> None:
         doc,
     )
     assert not h.gold_match({"doi": "10.1/x"}, doc)
+
+
+def test_cache_keeps_every_entry_across_threads(tmp_path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    cache = h.Cache(tmp_path / "c.pkl", budget=100.0)
+    meter = h.Meter()
+
+    def work(t: int) -> None:
+        for i in range(50):
+            cache.call(meter, ("k", t, i), lambda: (i, [h.Cost("x", usd=0.001)]))
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        list(ex.map(work, range(8)))
+    cache.save()
+    assert len([k for k in cache.data if k != "__total_spent__"]) == 400
+    assert meter.calls["x"] == 400 and abs(cache.total - 0.4) < 1e-9
+    assert len(h.Cache(tmp_path / "c.pkl", budget=1.0).data) == 401

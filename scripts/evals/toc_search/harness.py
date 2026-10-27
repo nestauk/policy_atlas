@@ -52,8 +52,9 @@ import time
 import uuid
 from collections import Counter
 from collections.abc import Callable, Iterable
+from functools import partial
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
@@ -93,6 +94,14 @@ from policy_atlas.evidence_search.corpus.ranking import OpenAIRankingBackend
 from policy_atlas.evidence_search.sourcing import acquire
 from policy_atlas.evidence_search.sourcing import search_loop as sl
 from policy_atlas.evidence_search.sourcing.fetch_live import LiveDocumentFetcher
+from policy_atlas.evidence_search.sourcing.search_prompts import (
+    QueriesPayload,
+    validated_queries,
+)
+from policy_atlas.evidence_search.sourcing import search_live
+from policy_atlas.evidence_search.sourcing.search_generation import (
+    OpenAISearchGenerationBackend,
+)
 from policy_atlas.evidence_search.sourcing.search_live import (
     OpenAlexLiveBackend,
     OvertonLiveBackend,
@@ -122,6 +131,9 @@ DEFAULT_TASK = "07e278fe-6c68-42bc-b8dc-d5ee7b4d7b37"
 PRICES: dict[str, tuple[float, float, float]] = {
     "gpt-5.6-luna": (0.20, 0.02, 1.20),
     "gpt-5.6-terra": (2.00, 0.20, 12.00),
+    # developers.openai.com/api/docs/pricing, checked by the owner on 2026-10-27.
+    "gpt-6-luna": (0.10, 0.01, 0.50),
+    "gpt-6.1-terra": (1.00, 0.05, 5.00),
 }
 #: OpenAI's hosted web search tool fee per call (assumed $10 per 1,000 calls).
 WEB_SEARCH_USD_PER_CALL = 0.01
@@ -172,6 +184,31 @@ TRUSTED_WEB_DOMAINS: tuple[str, ...] = (
 DOI_RE = re.compile(r"(10\.\d{4,9}/[^\s?#&]+)", re.I)
 
 
+#: One lock for the cache's dict, its file write, the spend totals and every meter.
+LOCK = threading.Lock()
+
+
+class _RetryCounter:
+    """Stands in for search_live's logger to count rate-limit retries (HTTP 429) per host."""
+
+    def __init__(self, inner: Any) -> None:
+        self.inner = inner
+        self.counts: Counter[str] = Counter()
+
+    def warning(self, event: str, **kw: Any) -> Any:
+        if event == "search.http_retry" and kw.get("status_code") == 429:
+            with LOCK:
+                self.counts[str(kw.get("host"))] += 1
+        return self.inner.warning(event, **kw)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.inner, name)
+
+
+RETRIES = _RetryCounter(search_live.log)
+search_live.log = RETRIES
+
+
 class BudgetExceeded(RuntimeError):
     """The new-call spend reached the cap."""
 
@@ -211,7 +248,7 @@ class Meter:
     """Per-arm totals; thread-safe."""
 
     def __init__(self) -> None:
-        self.lock = threading.Lock()
+        self.lock = LOCK
         self.calls: Counter[str] = Counter()
         self.tokens: dict[str, list[int]] = {}
         self.usd = 0.0
@@ -247,7 +284,7 @@ class Cache:
     def __init__(self, path: Path, budget: float) -> None:
         self.path = path
         self.budget = budget
-        self.lock = threading.Lock()
+        self.lock = LOCK
         self.data: dict[str, Any] = (
             pickle.loads(path.read_bytes()) if path.exists() else {}
         )
@@ -263,13 +300,15 @@ class Cache:
         digest = hashlib.sha256(
             json.dumps(key, sort_keys=True, default=str).encode()
         ).hexdigest()
-        with self.lock:
+        with self.lock:  # the budget check and the spend update share this lock
             hit = self.data.get(digest)
-        if hit is None:
-            if self.total >= self.budget:
+            if hit is None and self.total >= self.budget:
                 raise BudgetExceeded(
                     f"spent ${self.total:.3f} of ${self.budget:.2f} (all runs)"
                 )
+        if hit is None:
+            # ponytail: calls already in flight when the cap is reached still finish
+            # (at most a few cents with --workers 5); reserve spend up front if that matters.
             hit = fn()
             with self.lock:
                 self.data[digest] = hit
@@ -283,7 +322,10 @@ class Cache:
 
     def save(self) -> None:
         with self.lock:
-            self.path.write_bytes(pickle.dumps(self.data))
+            blob = pickle.dumps(self.data)
+            tmp = self.path.with_suffix(".tmp")
+            tmp.write_bytes(blob)
+            tmp.replace(self.path)
 
 
 # --- documents ------------------------------------------------------------------
@@ -672,10 +714,12 @@ class Link:
 class Harness:
     """Shared clients, the cache, and the repo's pipeline steps."""
 
-    def __init__(self, budget: float) -> None:
+    def __init__(
+        self, budget: float, cache_path: Path, reuse_labels: bool = True
+    ) -> None:
         OUT.mkdir(exist_ok=True)
         (OUT / ".gitignore").write_text("*\n")
-        self.cache = Cache(OUT / "cache.pkl", budget)
+        self.cache = Cache(cache_path, budget)
         self.openalex = OpenAlexLiveBackend(
             os.environ["OPENALEX_API_KEY"], email=os.environ.get("OPENALEX_EMAIL")
         )
@@ -691,7 +735,8 @@ class Harness:
         self.fetcher = LiveDocumentFetcher()
         self.r = route()
         self.standard = self.r.tiers["standard"]
-        self.stored = self._stored_labels()
+        # Production's classify labels (5.6 era) are reused only on the 5.6 models.
+        self.stored = self._stored_labels() if reuse_labels else {}
 
     # -- database reads --
 
@@ -799,7 +844,11 @@ class Harness:
                             return None, [Cost("screen")]
                 return None, []
 
-            return self.cache.call(meter, ("screen", i, doc.key, doc.text, intent), run)
+            return self.cache.call(
+                meter,
+                ("screen", self.r.model_for("screen"), i, doc.key, doc.text, intent),
+                run,
+            )
 
         first = rep(0)
         second = (
@@ -831,7 +880,9 @@ class Harness:
                 ]
 
             doc.evidence_type = self.cache.call(
-                meter, ("classify", doc.key, doc.text), run
+                meter,
+                ("classify", self.r.model_for("classify"), doc.key, doc.text),
+                run,
             )
         doc.score = DEFAULT_RUBRIC.get(doc.evidence_type or "")
 
@@ -864,7 +915,9 @@ class Harness:
             return order, [cost]
 
         order = self.cache.call(
-            meter, ("rerank", intent, sorted(d.key for d in docs)), run
+            meter,
+            ("rerank", self.r.model_for("rerank"), intent, sorted(d.key for d in docs)),
+            run,
         )
         return [by_id[uuid.UUID(k)] for k in order]
 
@@ -908,6 +961,7 @@ class Harness:
             meter,
             (
                 "judge",
+                self.r.model_for("toc_judge"),
                 link.item_text,
                 link.neighbours,
                 doc.key,
@@ -1308,8 +1362,14 @@ def metrics(
 # --- arms ---------------------------------------------------------------------------
 
 
-def arm_a(h: Harness, link: Link, gold: dict[str, Any]) -> dict[str, Any]:
-    """As run: the persisted judgements and the link's own 20 records, regraded."""
+def arm_a(
+    h: Harness, link: Link, gold: dict[str, Any], rejudge: bool = False
+) -> dict[str, Any]:
+    """As run: the persisted judgements and the link's own 20 records, regraded.
+
+    With ``rejudge`` (any run not on the 5.6 models), the documents the walk judged are
+    classified and judged again on this run's models, so all arms share one model set.
+    """
     with get_engine().connect() as conn:
         rows = check.counted_judgements(conn, task_id=link.task_id).get(
             link.link_id, []
@@ -1348,6 +1408,7 @@ def arm_a(h: Harness, link: Link, gold: dict[str, Any]) -> dict[str, Any]:
             source=m.get("backend") or "?",
             doi=norm_doi(m.get("doi")),
             openalex_id=short_oa(m.get("backend_record_id")),
+            metadata=m,
         )
     judged: dict[str, tuple[Doc, dict]] = {}
     for r in rows:
@@ -1364,6 +1425,18 @@ def arm_a(h: Harness, link: Link, gold: dict[str, Any]) -> dict[str, Any]:
             },
         )
     ge, gh = check.link_grades(rows, appraisals)
+    meter = None
+    if rejudge:  # same documents, classified and judged again on this run's models
+        meter = Meter()
+        docs_j = [d for d, _ in judged.values()]
+        fresh = [replace(d, evidence_type=None) for d in docs_j]
+        h.parallel(lambda d: h.classify(meter, d), fresh)
+        judged = {
+            d.key: (d, v)
+            for d, v in zip(
+                fresh, h.parallel(lambda d: h.judge(meter, link, d), fresh), strict=True
+            )
+        }
     out = metrics(
         "A",
         link,
@@ -1372,8 +1445,9 @@ def arm_a(h: Harness, link: Link, gold: dict[str, Any]) -> dict[str, Any]:
         pool=[docs[t] for t in own],
         screened=[docs[t] for t in own if t in screened_ids],
         judged=judged,
-        meter=None,
+        meter=meter,
         extra={
+            "rejudged": rejudge,
             "repo_grades": [ge.grade, gh.grade],
             "item_hash_matches": link.hash_matches,
         },
@@ -1381,7 +1455,7 @@ def arm_a(h: Harness, link: Link, gold: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def as_run_queries(link: Link) -> tuple[str, list[str], list[str]]:
+def as_run_queries(link: Link) -> tuple[str, list[str], list[str]] | None:
     """The intent, generated queries and paraphrases the link's item search ran."""
     with get_engine().connect() as conn:
         events = [
@@ -1405,15 +1479,49 @@ def as_run_queries(link: Link) -> tuple[str, list[str], list[str]]:
         for e in events
         if e.get("verb") == "search_semantic" and e.get("backend") == "openalex"
     ]
+    if not semantic:
+        return None
     intent = semantic[0]
     paras = [q for q in semantic[1:] if q not in generated]
     return intent, generated, paras
 
 
+def fresh_queries(
+    h: Harness, meter: Meter, link: Link
+) -> tuple[str, list[str], list[str]]:
+    """For a link the walk gave no item search of its own: the production query writer
+    on the link's text, with the guidance the walk's item searches carried."""
+    with get_engine().connect() as conn:
+        guidance = conn.execute(
+            sql(
+                """select e.context->'search'->'guidance' from capability_run c
+                   join evidence_scope e on e.evidence_scope_id = c.evidence_scope_id
+                   where c.parent_capability_run_id = :w and e.context ? 'link_id' limit 1"""
+            ),
+            {"w": link.walk_id},
+        ).scalar_one_or_none()
+
+    def run() -> tuple[Any, list[Cost]]:
+        wire, usage = OpenAISearchGenerationBackend().generate_queries(
+            QueriesPayload(intent=link.item_text, guidance=guidance)
+        )
+        return validated_queries(wire), [
+            llm_cost("search_queries", h.r.model_for("search_queries"), usage)
+        ]
+
+    queries, paras = h.cache.call(
+        meter,
+        ("search_queries", h.r.model_for("search_queries"), link.item_text, guidance),
+        run,
+    )
+    return link.item_text, queries, paras
+
+
 def arm_b(h: Harness, link: Link, gold: dict[str, Any]) -> dict[str, Any]:
     """Cheap fixes: the as-run OpenAlex search, cap 40, screen against the link."""
     meter = Meter()
-    intent, queries, paras = as_run_queries(link)
+    as_run = as_run_queries(link)
+    intent, queries, paras = as_run or fresh_queries(h, meter, link)
 
     def run() -> tuple[Any, list[Cost]]:
         sl.N_QUERIES = max(sl.N_QUERIES, len(queries))
@@ -1454,7 +1562,7 @@ def arm_b(h: Harness, link: Link, gold: dict[str, Any]) -> dict[str, Any]:
         screened=screened,
         judged=judged,
         meter=meter,
-        extra={"queries": queries},
+        extra={"queries": queries, "queries_as_run": as_run is not None},
     )
 
 
@@ -1585,13 +1693,14 @@ def arm_c(h: Harness, link: Link, gold: dict[str, Any]) -> dict[str, Any]:
 # --- report -------------------------------------------------------------------------
 
 
-def report(rows: list[dict[str, Any]]) -> str:
+def report(rows: list[dict[str, Any]], run: dict[str, Any] | None = None) -> str:
     head = (
         "| link | arm | gold first 20 | gold pool | gold screened | gold judged (top 8) | elsewhere | here | "
         "expected | supports 4-5 (e/h) | stop (e/h) | calls | tokens in/out | est. $ | wall s |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
     )
     out = []
+    rows = sorted(rows, key=lambda r: (r["link"], r["arm"]))
     for r in rows:
         c = r.get("cost") or {}
         tok = c.get("tokens", {})
@@ -1610,15 +1719,119 @@ def report(rows: list[dict[str, Any]]) -> str:
             f"{r['gold_pool']}/{r['gold_total']} ({r['pool']}) | {r['gold_screened']}/{r['gold_total']} ({r['screened']}) | "
             f"{r['gold_judged']}/{r['gold_total']} ({r['judged']}) | {r['grade_elsewhere']} | {r['grade_here']} | "
             f"{exp.get('elsewhere', '-')} / {exp.get('here', '-')} | {r['supports_4_5']['elsewhere']}/{r['supports_4_5']['here']} | "
-            f"{stop} | {calls or '-'} | {tin}/{tout} | {c.get('usd', 0):.3f} | {c.get('wall_s', '-')} |"
+            f"{stop} | {calls or '-'} | {tin}/{tout} | {c.get('usd', 0):.3f} | {r.get('arm_wall_s', c.get('wall_s', '-'))} |"
         )
-    return "# Agentic search eval (task 054)\n\n" + head + "\n".join(out) + "\n"
+    totals = [
+        "",
+        "| arm | links | gold in top 8 | gold in first 20 | elsewhere in band | here in band | est. $ |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for arm in sorted({r["arm"] for r in rows}):
+        rs = [r for r in rows if r["arm"] == arm]
+        f20 = [r["gold_first20"] for r in rs if r["gold_first20"] is not None]
+        totals.append(
+            f"| {arm} | {len(rs)} | {sum(r['gold_judged'] for r in rs)}/{sum(r['gold_total'] for r in rs)} | "
+            f"{(str(sum(f20)) + '/' + str(sum(r['gold_total'] for r in rs))) if f20 else '-'} | "
+            f"{sum(bool(r['in_band_elsewhere']) for r in rs)}/{len(rs)} | {sum(bool(r['in_band_here']) for r in rs)}/{len(rs)} | "
+            f"{sum((r.get('cost') or {}).get('usd', 0) for r in rs):.3f} |"
+        )
+    summary = ""
+    if run:
+        slow = run.get("slowest_link")
+        summary = (
+            f"\nRun: {run['workers']} links at a time, total wall {run['wall_s']} s, slowest link "
+            f"{slow[0][:8] if slow else '-'} at {slow[1] if slow else '-'} s, OpenAlex/other 429 retries "
+            f"{run['rate_limit_retries_429'] or 0}, new spend ${run['spend_this_run_usd']:.3f} "
+            f"(all runs ${run['spend_all_runs_usd']:.3f}). Cached calls replay at no cost and near-zero time.\n"
+        )
+    return (
+        "# Agentic search eval (task 054)\n"
+        + summary
+        + "\n"
+        + head
+        + "\n".join(out)
+        + "\n"
+        + "\n".join(totals)
+        + "\n"
+    )
+
+
+def compare(tags: list[str]) -> str:
+    """Side-by-side table of several runs (for example m56 and m6x), per link and arm."""
+    runs = {
+        t: {
+            (r["link"], r["arm"]): r
+            for r in json.loads((OUT / t / "results.json").read_text())
+        }
+        for t in tags
+    }
+    keys = sorted({k for rows in runs.values() for k in rows})
+    cols = ["gold top 8", "gold first 20", "elsewhere", "here", "$", "wall s"]
+    head = (
+        "| link | arm | expected (e / h) | "
+        + " | ".join(f"{t} {c}" for t in tags for c in cols)
+        + " |\n"
+    )
+    head += "|---|---|---|" + "---|" * (len(tags) * len(cols)) + "\n"
+    lines = []
+    for link, arm in keys:
+        any_row = next(
+            rows[(link, arm)] for rows in runs.values() if (link, arm) in rows
+        )
+        exp = any_row["expected"]
+        cells = []
+        for t in tags:
+            r = runs[t].get((link, arm))
+            if r is None:
+                cells += ["-"] * len(cols)
+                continue
+            mark = {True: " ✓", False: " ✗", None: ""}
+            f20 = r["gold_first20"]
+            cells += [
+                f"{r['gold_judged']}/{r['gold_total']}",
+                "-" if f20 is None else f"{f20}/{r['gold_total']}",
+                r["grade_elsewhere"] + mark[r["in_band_elsewhere"]],
+                r["grade_here"] + mark[r["in_band_here"]],
+                f"{(r.get('cost') or {}).get('usd', 0):.3f}",
+                str(r.get("arm_wall_s", "-")),
+            ]
+        lines.append(
+            f"| {link[:8]} | {arm} | {exp.get('elsewhere', '-')} / {exp.get('here', '-')} | "
+            + " | ".join(cells)
+            + " |"
+        )
+    notes = []
+    for t in tags:
+        for f in sorted((OUT / t).glob("run*.json")):
+            run = json.loads(f.read_text())
+            notes.append(
+                f"- {t} ({f.name}): models {run.get('models', '56')}, {run['workers']} links at a time, wall {run['wall_s']} s, "
+                f"slowest link {run['slowest_link']}, 429 retries {run['rate_limit_retries_429']}, new spend ${run['spend_this_run_usd']:.3f}"
+            )
+    return (
+        "# Agentic search eval: runs side by side (task 054)\n\n✓ = grade inside the expected band.\n\n"
+        + head
+        + "\n".join(lines)
+        + "\n\n"
+        + "\n".join(notes)
+        + "\n"
+    )
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--task", default=DEFAULT_TASK)
-    ap.add_argument("--link", action="append", required=True)
+    ap.add_argument("--link", action="append", default=[])
+    ap.add_argument(
+        "--models", choices=["56", "6x"], default="56", help="read by _route.py"
+    )
+    ap.add_argument("--tag", help="output folder under out/ (default m<models>)")
+    ap.add_argument(
+        "--compare",
+        nargs="+",
+        metavar="TAG",
+        help="only write out/compare.md for these tags",
+    )
     ap.add_argument("--gold", type=Path, default=HERE / "gold.json")
     ap.add_argument("--arms", nargs="+", default=["A", "B", "C"])
     ap.add_argument(
@@ -1627,9 +1840,22 @@ def main() -> None:
         default=2.9,
         help="US dollars of new calls, all runs on this cache",
     )
+    ap.add_argument(
+        "--cache",
+        type=Path,
+        default=OUT / "cache.pkl",
+        help="cache file; a new file means every call is made fresh (real timings)",
+    )
+    ap.add_argument("--workers", type=int, default=1, help="links run at the same time")
     args = ap.parse_args()
+    if args.compare:
+        (OUT / "compare.md").write_text(compare(args.compare))
+        print((OUT / "compare.md").read_text())
+        return
+    out_dir = OUT / (args.tag or f"m{args.models}")
+    out_dir.mkdir(parents=True, exist_ok=True)
     gold_all = json.loads(args.gold.read_text())
-    h = Harness(args.budget)
+    h = Harness(args.budget, args.cache, reuse_labels=args.models == "56")
     print(
         "route",
         h.r.name,
@@ -1639,34 +1865,64 @@ def main() -> None:
         h.r.model_for("screen"),
         file=sys.stderr,
     )
-    results_path = OUT / "results.json"
+    results_path = out_dir / "results.json"
     existing = json.loads(results_path.read_text()) if results_path.exists() else []
-    arms = {"A": arm_a, "B": arm_b, "C": arm_c}
-    try:
-        for link_id in args.link:
-            link = h.load_link(uuid.UUID(args.task), link_id)
-            if not link.hash_matches:
-                print(
-                    f"warning: {link_id} wording changed since it was judged",
-                    file=sys.stderr,
-                )
-            for arm in args.arms:
-                row = arms[arm](h, link, gold_all.get(link_id, {}))
+    arms = {"A": partial(arm_a, rejudge=args.models != "56"), "B": arm_b, "C": arm_c}
+    link_wall: dict[str, float] = {}
+
+    def run_link(link_id: str) -> None:
+        nonlocal existing
+        started = time.monotonic()
+        link = h.load_link(uuid.UUID(args.task), link_id)
+        if not link.hash_matches:
+            print(
+                f"warning: {link_id} wording changed since it was judged",
+                file=sys.stderr,
+            )
+        for arm in args.arms:  # the arms of one link run in sequence
+            arm_started = time.monotonic()
+            row = arms[arm](h, link, gold_all.get(link_id, {}))
+            row["arm_wall_s"] = round(time.monotonic() - arm_started, 1)
+            h.cache.save()
+            with LOCK:
                 existing = [
                     r for r in existing if (r["link"], r["arm"]) != (link_id, arm)
                 ] + [row]
-                h.cache.save()
                 results_path.write_text(json.dumps(existing, indent=1, default=str))
                 print(
-                    f"{link_id[:8]} {arm} done; spend this run ${h.cache.spent:.3f}, all runs ${h.cache.total:.3f}",
+                    f"{link_id[:8]} {arm} done in {row['arm_wall_s']}s; spend this run "
+                    f"${h.cache.spent:.3f}, all runs ${h.cache.total:.3f}",
                     file=sys.stderr,
                 )
+        link_wall[link_id] = round(time.monotonic() - started, 1)
+
+    started = time.monotonic()
+    try:
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            for future in [ex.submit(run_link, link_id) for link_id in args.link]:
+                future.result()
     finally:
         h.cache.save()
         h.fetcher.close()
-        print(f"new spend this run: ${h.cache.spent:.3f}", file=sys.stderr)
-    (OUT / "report.md").write_text(report(existing))
-    print((OUT / "report.md").read_text())
+        run = {
+            "models": args.models,
+            "route": h.r.name,
+            "workers": args.workers,
+            "links": args.link,
+            "arms": args.arms,
+            "wall_s": round(time.monotonic() - started, 1),
+            "link_wall_s": link_wall,
+            "slowest_link": max(link_wall.items(), key=lambda kv: kv[1])
+            if link_wall
+            else None,
+            "rate_limit_retries_429": dict(RETRIES.counts),
+            "spend_this_run_usd": round(h.cache.spent, 4),
+            "spend_all_runs_usd": round(h.cache.total, 4),
+        }
+        (out_dir / "run.json").write_text(json.dumps(run, indent=1))
+        print(json.dumps(run), file=sys.stderr)
+    (out_dir / "report.md").write_text(report(existing, run))
+    print((out_dir / "report.md").read_text())
 
 
 if __name__ == "__main__":
