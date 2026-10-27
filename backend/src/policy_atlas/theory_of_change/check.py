@@ -62,7 +62,14 @@ from policy_atlas.runtime.capability_registry import (
 from policy_atlas.runtime.toc_plan import TOC_LINK_CAP, TOC_LINKS_KEY
 from policy_atlas.theory_of_change import store
 from policy_atlas.theory_of_change.backend import TocBackend
-from policy_atlas.theory_of_change.discover_prompt import DISCOVER_BATCH_SIZE, ProposalWire
+from policy_atlas.theory_of_change.discover_prompt import (
+    CONSOLIDATE_MAX_NEW_FAILURE,
+    CONSOLIDATE_MAX_NEW_SUCCESS,
+    DISCOVER_BATCH_SIZE,
+    ConsolidateResponse,
+    NewLinkWire,
+    ProposalWire,
+)
 from policy_atlas.theory_of_change.draft import plan_data, walk_toc_plan
 from policy_atlas.theory_of_change.evidence.grade import (
     GRADE_ORDER,
@@ -401,6 +408,45 @@ def _route(graph: Graph, link_keys: list[str], short: dict[str, str]) -> list[st
     return [short[steps[0].source], *(short[step.target] for step in steps)]
 
 
+def route_problem(
+    kind: str,
+    route: list[str],
+    *,
+    known: dict[str, str],
+    pairs: set[tuple[str, str]],
+    new_links: list[NewLinkWire],
+) -> str | None:
+    """Why a route cannot be written, or ``None``.
+
+    Args:
+        kind: ``success`` or ``failure``.
+        route: Box keys in order.
+        known: Every usable box key → layer (the theory's and the new ones).
+        pairs: Existing links as ``(source, target)`` keys.
+        new_links: The links the route adds.
+
+    Returns:
+        The problem, or ``None`` when the route passes.
+    """
+    if len(route) < 2 or any(key not in known for key in route):
+        return "the route names unknown boxes"
+    if len(set(route)) != len(route):
+        return "the route visits a box twice"
+    end = "impact" if kind == "success" else "failure_outcome"
+    if known[route[0]] != "input" or known[route[-1]] != end:
+        return f"the route does not run from an input to {end}"
+    links = {(link.source, link.target): link for link in new_links}
+    for source, target in zip(route, route[1:], strict=False):
+        if (source, target) in pairs:
+            continue
+        if (source, target) not in links:
+            return f"no link between {source} and {target}"
+        reason = link_problem(known[source], known[target])
+        if reason:
+            return reason
+    return None
+
+
 def proposal_problem(
     proposal: ProposalWire,
     *,
@@ -408,7 +454,7 @@ def proposal_problem(
     pairs: set[tuple[str, str]],
     documents: dict[str, Document],
 ) -> str | None:
-    """Why a discover proposal cannot be written, or ``None``.
+    """Why a discover proposal cannot be used, or ``None``.
 
     Args:
         proposal: The proposal, keyed by short keys.
@@ -422,27 +468,17 @@ def proposal_problem(
     new_layers = {box.key: box.layer for box in proposal.new_boxes}
     if set(new_layers) & set(layers):
         return "a new box reuses an existing key"
-    known = {**layers, **new_layers}
-    route = proposal.route
-    if len(route) < 2 or any(key not in known for key in route):
-        return "the route names unknown boxes"
-    if len(set(route)) != len(route):
-        return "the route visits a box twice"
-    end = "impact" if proposal.kind == "success" else "failure_outcome"
-    if known[route[0]] != "input" or known[route[-1]] != end:
-        return f"the route does not run from an input to {end}"
-    if set(new_layers) - set(route):
+    problem = route_problem(
+        proposal.kind,
+        proposal.route,
+        known={**layers, **new_layers},
+        pairs=pairs,
+        new_links=proposal.new_links,
+    )
+    if problem:
+        return problem
+    if set(new_layers) - set(proposal.route):
         return "a new box is not on the route"
-    new_links = {(link.source, link.target): link for link in proposal.new_links}
-    for source, target in zip(route, route[1:], strict=False):
-        if (source, target) in pairs:
-            continue
-        link = new_links.get((source, target))
-        if link is None:
-            return f"no link between {source} and {target}"
-        reason = link_problem(known[source], known[target])
-        if reason:
-            return reason
     if not proposal.evidence:
         return "no evidence"
     for evidence in proposal.evidence:
@@ -450,6 +486,30 @@ def proposal_problem(
         if document is None or not quote_found(document.text, evidence.quote):
             return "a passage is not in its document"
     return None
+
+
+def _candidate(proposal_id: str, proposal: ProposalWire) -> dict[str, object]:
+    """A checked proposal as consolidate reads it; its new keys made unique (``q1n1``)."""
+
+    def key(value: str) -> str:
+        return f"{proposal_id}{value}" if value in new else value
+
+    new = {box.key for box in proposal.new_boxes}
+    return {
+        "id": proposal_id,
+        "kind": proposal.kind,
+        "label": proposal.label,
+        "route": [key(value) for value in proposal.route],
+        "new_boxes": [
+            {"key": key(box.key), "layer": box.layer, "text": box.text}
+            for box in proposal.new_boxes
+        ],
+        "new_links": [
+            {**link.model_dump(), "source": key(link.source), "target": key(link.target)}
+            for link in proposal.new_links
+        ],
+        "documents": len({evidence.document_id for evidence in proposal.evidence}),
+    }
 
 
 def toc_discover_scope(
@@ -508,6 +568,9 @@ def toc_discover_scope(
     log_ = store.ChangeLog()
     changes: list[store.Change] = []
     accepted = rejected = failed_batches = 0
+    # Every batch's checked proposals, held back: one consolidate call joins
+    # the repeats and reuses boxes before anything is written (owner, 2026-10-27).
+    candidates: list[dict[str, object]] = []
     for batch, outcome in zip(batches, outcomes, strict=True):
         response = _outcome_value(outcome, usage)
         if response is None:
@@ -520,79 +583,134 @@ def toc_discover_scope(
                 rejected += 1
                 log.info("toc_discover.proposal_dropped", problem=problem)
                 continue
-            accepted += 1
-            # A proposal's new keys are local to it: map them to fresh short keys.
-            local: dict[str, str] = {}
-            for box in proposal.new_boxes:
-                box_id = uuid.uuid4()
-                local[box.key] = f"b{len(layers) + 1}"
-                layers[local[box.key]] = box.layer
-                back[local[box.key]] = str(box_id)
-                store.insert(
-                    conn,
-                    log_,
-                    toc_box,
-                    {
-                        "box_id": box_id,
-                        "task_id": task_id,
-                        "layer": box.layer,
-                        "text": box.text,
-                        "result_criteria": {"definition": None, "timing": None},
-                        "origin": "found_in_evidence",
-                    },
-                )
-            route = [local.get(key, key) for key in proposal.route]
-            new_links = {
-                (local.get(link.source, link.source), local.get(link.target, link.target)): link
-                for link in proposal.new_links
-            }
-            link_ids: list[uuid.UUID] = []
-            for source, target in zip(route, route[1:], strict=False):
-                if (source, target) in link_of_pair:
-                    link_ids.append(uuid.UUID(link_of_pair[(source, target)]))
-                    continue
-                wire = new_links[(source, target)]
-                [conditions] = trim_conditions([list(wire.conditions)], existing=taken)
-                taken.extend(conditions)
-                link_id = uuid.uuid4()
-                store.insert(
-                    conn,
-                    log_,
-                    toc_link,
-                    {
-                        "link_id": link_id,
-                        "task_id": task_id,
-                        "source_box_id": uuid.UUID(back[source]),
-                        "target_box_id": uuid.UUID(back[target]),
-                        "sentence": wire.sentence,
-                        "if_text": wire.if_text,
-                        "for_text": wire.for_text,
-                        "then_text": wire.then_text,
-                        "because_text": wire.because_text,
-                        "conditions": conditions,
-                        "origin": "found_in_evidence",
-                    },
-                )
-                pairs.add((source, target))
-                link_of_pair[(source, target)] = str(link_id)
-                link_ids.append(link_id)
-            pathway_id = uuid.uuid4()
-            store.insert_pathway(
+            candidates.append(_candidate(f"q{len(candidates) + 1}", proposal))
+    kept_kinds = [pathway.kind for pathway in graph.pathways if pathway.status == "kept"]
+    limit = {
+        "success": max(
+            0,
+            min(CONSOLIDATE_MAX_NEW_SUCCESS, MAX_SUCCESS_PATHWAYS - kept_kinds.count("success")),
+        ),
+        "failure": max(
+            0,
+            min(CONSOLIDATE_MAX_NEW_FAILURE, MAX_FAILURE_PATHWAYS - kept_kinds.count("failure")),
+        ),
+    }
+    consolidated: ConsolidateResponse | None = None
+    if candidates and any(limit.values()):
+        consolidated = _outcome_value(
+            _call(
+                "toc_consolidate",
+                lambda: backend.consolidate(
+                    plan=data,
+                    theory=theory,
+                    proposals=candidates,
+                    max_success=limit["success"],
+                    max_failure=limit["failure"],
+                ),
+                "toc_consolidate",
+            ),
+            usage,
+        )
+    new_boxes = {box.key: box for box in consolidated.new_boxes} if consolidated else {}
+    clash = set(new_boxes) & set(layers)
+    ids = {str(candidate["id"]) for candidate in candidates}
+    written: dict[str, str] = {}
+    counts = {"success": 0, "failure": 0}
+    for path in consolidated.pathways if consolidated else []:
+        problem = (
+            "a new box reuses an existing key"
+            if clash & set(path.route)
+            else "it joins no checked proposal"
+            if not set(path.from_proposals) & ids
+            else f"more than {limit[path.kind]} new {path.kind} pathways"
+            if counts[path.kind] >= limit[path.kind]
+            else route_problem(
+                path.kind,
+                path.route,
+                known={**layers, **{key: box.layer for key, box in new_boxes.items()}},
+                pairs=pairs,
+                new_links=path.new_links,
+            )
+        )
+        if problem:
+            rejected += 1
+            log.info("toc_discover.pathway_dropped", problem=problem)
+            continue
+        counts[path.kind] += 1
+        accepted += 1
+        # A new box is written once, the first time a kept route uses it.
+        for key in path.route:
+            if key not in new_boxes or key in written:
+                continue
+            box_id = uuid.uuid4()
+            written[key] = f"b{len(layers) + 1}"
+            layers[written[key]] = new_boxes[key].layer
+            back[written[key]] = str(box_id)
+            store.insert(
                 conn,
                 log_,
-                task_id=task_id,
-                pathway_id=pathway_id,
-                kind=proposal.kind,
-                label=proposal.label,
-                link_ids=link_ids,
-                origin="found_in_evidence",
-            )
-            changes.append(
+                toc_box,
                 {
-                    "text": f"Added a {proposal.kind} pathway from the evidence: {proposal.label}.",
-                    "pathway_id": str(pathway_id),
-                }
+                    "box_id": box_id,
+                    "task_id": task_id,
+                    "layer": new_boxes[key].layer,
+                    "text": new_boxes[key].text,
+                    "result_criteria": {"definition": None, "timing": None},
+                    "origin": "found_in_evidence",
+                },
             )
+        route = [written.get(key, key) for key in path.route]
+        new_links = {
+            (written.get(link.source, link.source), written.get(link.target, link.target)): link
+            for link in path.new_links
+        }
+        link_ids: list[uuid.UUID] = []
+        for source, target in zip(route, route[1:], strict=False):
+            if (source, target) in link_of_pair:
+                link_ids.append(uuid.UUID(link_of_pair[(source, target)]))
+                continue
+            wire = new_links[(source, target)]
+            [conditions] = trim_conditions([list(wire.conditions)], existing=taken)
+            taken.extend(conditions)
+            link_id = uuid.uuid4()
+            store.insert(
+                conn,
+                log_,
+                toc_link,
+                {
+                    "link_id": link_id,
+                    "task_id": task_id,
+                    "source_box_id": uuid.UUID(back[source]),
+                    "target_box_id": uuid.UUID(back[target]),
+                    "sentence": wire.sentence,
+                    "if_text": wire.if_text,
+                    "for_text": wire.for_text,
+                    "then_text": wire.then_text,
+                    "because_text": wire.because_text,
+                    "conditions": conditions,
+                    "origin": "found_in_evidence",
+                },
+            )
+            pairs.add((source, target))
+            link_of_pair[(source, target)] = str(link_id)
+            link_ids.append(link_id)
+        pathway_id = uuid.uuid4()
+        store.insert_pathway(
+            conn,
+            log_,
+            task_id=task_id,
+            pathway_id=pathway_id,
+            kind=path.kind,
+            label=path.label,
+            link_ids=link_ids,
+            origin="found_in_evidence",
+        )
+        changes.append(
+            {
+                "text": f"Added a {path.kind} pathway from the evidence: {path.label}.",
+                "pathway_id": str(pathway_id),
+            }
+        )
     store.record(
         conn, task_id=task_id, run_id=run_id, step="toc_discover", log=log_, changes=changes
     )
@@ -600,12 +718,19 @@ def toc_discover_scope(
         "documents": len(documents),
         "batches": len(batches),
         "failed_batches": failed_batches,
+        "proposals": len(candidates),
         "accepted": accepted,
         "rejected": rejected,
         "backend_mode": backend.mode,
         "usage_totals": usage.payload(),
     }
-    log.info("toc_discover.done", accepted=accepted, rejected=rejected, batches=len(batches))
+    log.info(
+        "toc_discover.done",
+        proposals=len(candidates),
+        accepted=accepted,
+        rejected=rejected,
+        batches=len(batches),
+    )
     return summary
 
 

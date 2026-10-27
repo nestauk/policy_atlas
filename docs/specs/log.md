@@ -1,5 +1,13 @@
 # Spec update log
 
+## 2026-10-27 (task 054, discovery consolidates)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): discover's
+  batch proposals are joined by one `toc_consolidate_v1` call before anything is written: repeats
+  merged, boxes reused, at most 3 new success and 2 new failure pathways. The second live run had
+  written 53 boxes and 80 links because parallel batches could not see each other's boxes. The
+  check screen lists the theory's boxes, not link sentences, to fit the screen's 1,000-character
+  limit. Task 054 contract C24 to C26.
+
 ## 2026-10-27 (task 054, judge v4)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
   judge prompt is `toc_judge_v4`. It names the step's source and target as "the test", counts a

@@ -12,6 +12,7 @@ from policy_atlas.api.routers.toc import toc_graph_out
 from policy_atlas.core.schema import (
     event_log,
     task_agent_transcript,
+    toc_box,
     toc_item_evidence,
     toc_link,
     toc_pathway,
@@ -30,6 +31,9 @@ from policy_atlas.theory_of_change.check import (
     top_case_studies,
 )
 from policy_atlas.theory_of_change.discover_prompt import (
+    CONSOLIDATE_MAX_NEW_SUCCESS,
+    ConsolidatedPathwayWire,
+    ConsolidateResponse,
     DiscoverResponse,
     EvidenceWire,
     NewBoxWire,
@@ -311,6 +315,104 @@ def test_discovered_links_are_judged_against_the_whole_pool(
             )
         ).scalar_one()
     assert pathway == "Found route"
+
+
+class _DiscoversRepeats2(_Discovers):
+    """The first batch proposes one route twice, each with its own copy of a box."""
+
+    def discover(self, *, plan: Any, theory: Any, documents: Any) -> Any:
+        response, usage = super().discover(plan=plan, theory=theory, documents=documents)
+        twice = [response.proposals[0], response.proposals[0]] if response.proposals else []
+        return DiscoverResponse(proposals=twice), usage
+
+
+def _joined(paths: int, *, from_proposals: list[str]) -> Any:
+    """A consolidate answer: ``paths`` success routes through one shared new box."""
+
+    def respond(proposals: list[dict[str, Any]]) -> ConsolidateResponse:
+        first = proposals[0]
+        route = list(first["route"])
+        link = {k: v for k, v in first["new_links"][0].items() if k not in ("source", "target")}
+        return ConsolidateResponse(
+            new_boxes=[NewBoxWire(key="n1", layer="outcome", text="Families cook at home")],
+            pathways=[
+                ConsolidatedPathwayWire(
+                    kind="success",
+                    label=f"Joined route {i}",
+                    from_proposals=from_proposals,
+                    route=[route[0], "n1", route[-1]],
+                    new_links=[
+                        NewLinkWire(source=route[0], target="n1", **link),
+                        NewLinkWire(source="n1", target=route[-1], **link),
+                    ],
+                )
+                for i in range(paths)
+            ],
+        )
+
+    return respond
+
+
+class _Consolidates(_DiscoversRepeats2):
+    paths = 1
+    from_proposals: tuple[str, ...] = ("q1", "q2")
+
+    def consolidate(self, **kwargs: Any) -> Any:
+        self._next("consolidate", {"proposals": kwargs["proposals"]})
+        respond = _joined(self.paths, from_proposals=list(self.from_proposals))
+        return respond(kwargs["proposals"]), None
+
+
+def _found(engine: Engine, task_id: uuid.UUID) -> tuple[list[str], list[str]]:
+    with engine.connect() as conn:
+        boxes = conn.execute(
+            select(toc_box.c.text).where(
+                toc_box.c.task_id == task_id, toc_box.c.origin == "found_in_evidence"
+            )
+        ).scalars()
+        labels = conn.execute(
+            select(toc_pathway.c.label).where(
+                toc_pathway.c.task_id == task_id, toc_pathway.c.origin == "found_in_evidence"
+            )
+        ).scalars()
+        return list(boxes), sorted(labels)
+
+
+def test_repeated_proposals_are_joined_into_one_pathway_and_one_box(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    backend = _Consolidates()
+    task_id = _run(engine, cleanup, backend)
+    # Consolidate saw both proposals, each with its own key for the same box.
+    [call] = backend.inputs["consolidate"]
+    assert [p["id"] for p in call["proposals"]] == ["q1", "q2"]
+    assert {p["route"][1] for p in call["proposals"]} == {"q1n1", "q2n1"}
+    assert _found(engine, task_id) == (["Families cook at home"], ["Joined route 0"])
+
+
+class _ConsolidatesTooMany(_Consolidates):
+    paths = CONSOLIDATE_MAX_NEW_SUCCESS + 2
+
+
+def test_consolidate_adds_at_most_the_new_pathway_limit(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    task_id = _run(engine, cleanup, _ConsolidatesTooMany())
+    boxes, labels = _found(engine, task_id)
+    assert boxes == ["Families cook at home"]  # written once, shared by every route
+    assert 1 <= len(labels) <= CONSOLIDATE_MAX_NEW_SUCCESS
+    assert _summary(engine, task_id, "toc_discover")["rejected"] >= 2
+
+
+class _ConsolidatesUnknown(_Consolidates):
+    from_proposals = ("q9",)
+
+
+def test_a_pathway_that_joins_no_checked_proposal_is_dropped(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    task_id = _run(engine, cleanup, _ConsolidatesUnknown())
+    assert _found(engine, task_id) == ([], [])
 
 
 class _Conditions(StubTocBackend):

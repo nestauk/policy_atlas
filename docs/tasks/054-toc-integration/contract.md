@@ -349,10 +349,25 @@ decisions below. The decisions fix what the spec leaves to the build.
   20. The check walk's screen judges each document against the steps it covers, not the whole
   theory: it passes when it reports evidence (a study, a review, a model, or official monitoring
   or evaluation) on at least one covered link's sentence, in any setting and whatever the
-  intervention. The criterion lists the sentences in `links_to_check` order and stays under about
-  4,000 characters. It is built when the check walk's intent record is minted (the graph is read
-  there) and stored in its context; walks without it fall back to the theory-wide criterion. The
-  draft walk's criterion is unchanged, and the place still never excludes.
+  intervention. The criterion lists the theory's boxes (the changes) in `links_to_check` order,
+  under the screen's 1,000-character limit for one criterion (2026-10-27: a list of link sentences
+  was too long and the live check failed). It is built when the check walk's intent record is
+  minted (the graph is read there) and stored in its context; walks without it fall back to the
+  theory-wide criterion. The draft walk's criterion is unchanged, and the place still never
+  excludes.
+- **C25. Judge v4** (owner approved, 2026-10-27). `toc_judge_v4` adds "the test" (the step's
+  source and target), counts a study of a close proxy, treats a document with no data of its own
+  as not about the step, and decides whether the step depends on place before it answers "holds
+  here". Measured on 34 labelled documents, 3 repeats: 97 of 102 right against 92 for v3. The whole
+  theory is not sent: it made results worse.
+- **C26. Discovery consolidates before it writes** (owner, 2026-10-27: "53 boxes is way too much
+  … do the merges first before evidence checks"). Discover's batches run in parallel and cannot
+  see each other's new boxes, so the second live run wrote the same change up to 10 times (53
+  boxes, 80 links). Now the batches' checked proposals are held back, and one
+  `toc_consolidate_v1` call (merge tier) joins repeats, reuses the theory's boxes, shares a new
+  box between pathways, and returns at most 3 new success and 2 new failure pathways, within the
+  6 + 3 kept-pathway limit. Only what it returns is written; code checks every route as before
+  and drops a pathway that joins no checked proposal. Merge, judge and choose then run as before.
 
 ## ADR scope
 

@@ -28,9 +28,16 @@ from policy_atlas.theory_of_change.choose_prompt import (
     build_choose_messages,
 )
 from policy_atlas.theory_of_change.discover_prompt import (
+    TOC_CONSOLIDATE_MAX_OUTPUT_TOKENS,
+    TOC_CONSOLIDATE_PROMPT_VERSION,
     TOC_DISCOVER_MAX_OUTPUT_TOKENS,
     TOC_DISCOVER_PROMPT_VERSION,
+    ConsolidatedPathwayWire,
+    ConsolidateResponse,
     DiscoverResponse,
+    NewBoxWire,
+    NewLinkWire,
+    build_consolidate_messages,
     build_discover_messages,
 )
 from policy_atlas.theory_of_change.draft_prompt import (
@@ -93,6 +100,18 @@ class TocBackend(Protocol):
         documents: list[dict[str, object]],
     ) -> UsageResult[DiscoverResponse]:
         """Propose routes from one batch of documents (``toc_discover_v1``)."""
+        ...
+
+    def consolidate(
+        self,
+        *,
+        plan: dict[str, object],
+        theory: dict[str, object],
+        proposals: list[dict[str, object]],
+        max_success: int,
+        max_failure: int,
+    ) -> UsageResult[ConsolidateResponse]:
+        """Join every batch's proposals into a few new pathways (``toc_consolidate_v1``)."""
         ...
 
     def merge(
@@ -207,6 +226,30 @@ class OpenAITocBackend:
             step="toc_discover",
             max_output_tokens=TOC_DISCOVER_MAX_OUTPUT_TOKENS,
             prompt_version=TOC_DISCOVER_PROMPT_VERSION,
+        )
+
+    def consolidate(
+        self,
+        *,
+        plan: dict[str, object],
+        theory: dict[str, object],
+        proposals: list[dict[str, object]],
+        max_success: int,
+        max_failure: int,
+    ) -> UsageResult[ConsolidateResponse]:
+        """See :class:`TocBackend`."""
+        return self._call(
+            build_consolidate_messages(
+                plan=plan,
+                theory=theory,
+                proposals=proposals,
+                max_success=max_success,
+                max_failure=max_failure,
+            ),
+            response_format=ConsolidateResponse,
+            step="toc_merge",
+            max_output_tokens=TOC_CONSOLIDATE_MAX_OUTPUT_TOKENS,
+            prompt_version=TOC_CONSOLIDATE_PROMPT_VERSION,
         )
 
     def merge(
@@ -340,6 +383,7 @@ class StubTocBackend:
 
     - ``draft``: :func:`stub_draft`.
     - ``discover``: no proposals.
+    - ``consolidate``: each proposal as it came.
     - ``merge``: keeps every pathway.
     - ``judge``: *worked elsewhere* supports, quoting the first eight words of
       the document text (so the quote check passes); *holds here* not about;
@@ -393,6 +437,37 @@ class StubTocBackend:
         """See :class:`StubTocBackend`."""
         queued = self._next("discover", {"theory": theory, "documents": documents})
         return (queued or DiscoverResponse(proposals=[])), None
+
+    def consolidate(
+        self,
+        *,
+        plan: dict[str, object],
+        theory: dict[str, object],
+        proposals: list[dict[str, object]],
+        max_success: int,
+        max_failure: int,
+    ) -> UsageResult[ConsolidateResponse]:
+        """See :class:`StubTocBackend`: by default, each proposal as it came."""
+        queued = self._next("consolidate", {"proposals": proposals})
+        if queued is not None:
+            return queued, None
+        boxes: list[NewBoxWire] = []
+        pathways: list[ConsolidatedPathwayWire] = []
+        for proposal in proposals:
+            boxes.extend(NewBoxWire.model_validate(b) for b in proposal["new_boxes"])  # type: ignore[attr-defined]
+            pathways.append(
+                ConsolidatedPathwayWire(
+                    kind=proposal["kind"],  # type: ignore[arg-type]
+                    label=str(proposal["label"]),
+                    from_proposals=[str(proposal["id"])],
+                    route=list(proposal["route"]),  # type: ignore[call-overload]
+                    new_links=[
+                        NewLinkWire.model_validate(link)
+                        for link in proposal["new_links"]  # type: ignore[attr-defined]
+                    ],
+                )
+            )
+        return ConsolidateResponse(new_boxes=boxes, pathways=pathways), None
 
     def merge(
         self, *, plan: dict[str, object], pathways: list[dict[str, object]]
