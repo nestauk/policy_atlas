@@ -1,6 +1,8 @@
 # Agentic evidence search per link: design and evaluation (draft)
 
-> **Status:** draft, 2026-10-27 · lead. For the owner's review before any build. Background
+> **Status:** draft, 2026-10-27 · lead. **Owner, 2026-10-27:** "the plan is very good"; add the web
+> for directed searches (e.g. Evaluation Task Force evaluations), add System's findings graph as a
+> tool, and at most **2 rounds** for now. Offline evaluation under way. For the owner's review before any build. Background
 > research folded in (§ What others do; full notes in
 > [agentic-search-research.md](agentic-search-research.md)). Not yet a contract decision.
 
@@ -50,9 +52,17 @@ appraise, the judge and the grade.
      descriptive facts, not impact studies (White 2009), and the planner says so when it applies;
    - **one small query per target type**: the link's cause and effect terms, combined in code with
      that type's terms from a fixed **study-design filter table** (adapted from the Cochrane,
-     McMaster and ISSG filters), sent to the source that fits the type: OpenAlex for trials,
-     reviews and models; Overton for regulation, implementation and local context; the web from
-     increment 3. About 10 results per query; a query that returns nothing is reported.
+     McMaster and ISSG filters), sent to the source that fits the type:
+     - **OpenAlex** for trials, reviews and models;
+     - **System** (system.com findings graph) for mechanisms and health outcomes: cause and
+       effect concepts, the relationship between them, and the studies behind it (DOIs, then
+       OpenAlex). System says about 20% of its extracted findings are inaccurate; it is used only
+       to find studies, which the judge then reads;
+     - **Overton** for regulation, implementation and local context;
+     - the **web** for directed searches of official evaluations and monitoring (the UK Evaluation
+       Task Force's evaluations, gov.uk research, Ofcom, the Advertising Standards Authority,
+       What Works Centres), with site: restrictions. Web pages never raise a grade above weak.
+     About 10 results per query; a query that returns nothing is reported.
 2. **Search** each planned query; pool and de-duplicate per link.
 3. **Screen against the link's own question**, not the whole theory. 🟡 Later step: score each hit
    0 to 10 with a one-line summary against the link, as PaperQA2 does, instead of a plain yes/no.
@@ -64,14 +74,14 @@ appraise, the judge and the grade.
    - **stop: decisive** when a study of a target type (scored 4 or 5, or a robust model) is judged
      to support or challenge the link;
    - **stop: saturated** when a round adds no new relevant records;
-   - **stop: budget** at 3 rounds or the per-link cap;
+   - **stop: budget** at 2 rounds (owner) or the per-link cap;
    - otherwise the planner gets what was found ("only commentaries support; no trial yet"; "no
-     England evidence for holds here") and plans one more round for the missing evidence type.
+     England evidence for holds here") and plans the second and last round for the missing evidence type.
    The stop reason is recorded per link and shown in the Sources tab.
 7. **Absence is unknown, not evidence.** Nothing found in Overton reads as "not found", never as
    "nothing exists": its coverage is uneven by country, language and topic.
 
-**Cost control.** Only links not stopped as decisive after round 1 go on. Per-link caps on
+**Cost control.** Only links not stopped as decisive after round 1 go on, to one more round at most. Per-link caps on
 queries, records and judge calls. The planner is one small call per round; the judge stays the
 main cost. Expected: about one extra call per link plus a second round for weak links.
 
@@ -95,7 +105,7 @@ any arm runs, so no arm's retrieval shapes it.
 |---|---|
 | A | As run today (cap 20, screen against the theory) |
 | B | Cheap fixes: cap 40, screen against the link |
-| C | Agentic: plan by evidence type, filter table, chase from good hits, up to 3 rounds |
+| C | Agentic: plan by evidence type, filter table, OpenAlex, System, Overton and directed web, chase from good hits, at most 2 rounds |
 
 **Measures, per link and in total.**
 - **Recall of the decisive studies at a fixed cut-off**: how many reach the judge's top *K* (8),
