@@ -585,7 +585,7 @@ Filled by the review conversation 2026-10-27 (the contract verifier's evidence, 
 | 12 Staged check and measures | holds, one owner item | M1 reviewer sample 30 / 30; the measures predate the rewording (owner item 5) |
 | 13 ADR | holds | decisions 3 and 5 corrected to as-built |
 | 14 Spec changes and deferred | pending the owner | no spec change applied; deferred.md current |
-| 15 `make verify` + CI | local gate: see § Commands run (post-review gate); CI URL after the push | |
+| 15 `make verify` + CI | holds | local gates in § Commands run; CI `verify` success on `da08267c`, run 40531390296 (§ Known unverified items has the URL and the first run's timeout) |
 | 16 No unapproved gated change | holds, two owner items | the `shortlist` enum value; `potential_impact` as an aspect |
 | 17 Generated files and secrets | holds | |
 | 18 Tests not weakened | holds | two tests changed by the review with their reason (R10, R14); none deleted or skipped |
@@ -613,8 +613,11 @@ Filled by the review conversation 2026-10-27 (the contract verifier's evidence, 
   `tests/runtime/test_option_search.py::test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent`
   at 83 % after 14 minutes; `dev` (`eedf9ef9`) hung at the same test the same morning
   (https://github.com/nestauk/policy_atlas/actions/runs/40487488309) and passed on re-run, so the
-  flake predates this branch (`docs/deferred.md` § Codebase health). The run on the final head is
-  recorded under § Commands run when it ends.
+  flake predates this branch (`docs/deferred.md` § Codebase health). **The run on head `da08267c`
+  (the mark amendment and the rulings) concluded `success`:**
+  https://github.com/nestauk/policy_atlas/actions/runs/40531390296 — `verify` 16 min 26 s, `audit`,
+  `fe-api-smoke` and `mock-journey` all green (2026-10-27 15:28–15:45 UTC). Rubric 15 holds; the
+  docs-only commit that records this line runs once more after it.
 - Cost per proposal was read from Langfuse by run id for all 24 proposals; the live task's walks were
   not costed.
 - Proposal quality beyond the measures (whether the five picks are the five a policy analyst would
