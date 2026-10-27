@@ -118,7 +118,7 @@ function Assumptions({ graph }: { graph: TocGraph }) {
             <p className="text-meta font-bold text-navy">{group.label}</p>
             {links.map((link) => (
               <div key={link.link_id} className="mt-3">
-                <ul className={`list-disc pl-5 font-semibold text-navy ${REPORT_BODY_CLASS}`}>
+                <ul className={`list-disc pl-5 ${REPORT_BODY_CLASS}`}>
                   {link.conditions.map((condition) => (
                     <li key={condition}>{scrub(condition)}</li>
                   ))}

@@ -61,7 +61,7 @@ type TocEdge = Edge<EdgeData, "toc">;
 const LABEL_W = 200;
 const LABEL_H = 20;
 /** Never zoom out below this on load: smaller and the box text is hard to read. */
-const MIN_START_ZOOM = 0.75;
+const MIN_START_ZOOM = 1;
 const VIEW_PADDING = 0.08;
 const HANDLE_CLASS = "!h-1 !w-1 !border-0 !bg-transparent";
 
@@ -207,12 +207,14 @@ export function TocCanvas({
           return { x: left, y: top, width: right - left, height: bottom - top };
         })();
   const boxRef = useRef<HTMLDivElement>(null);
+  // Full screen takes the whole row (canvas and detail panel), which is the canvas's parent.
+  const fsEl = () => boxRef.current?.parentElement ?? null;
   const [fullscreen, setFullscreen] = useState(false);
   const [refit, setRefit] = useState(0);
   const canFullscreen = typeof document !== "undefined" && document.fullscreenEnabled === true;
   useEffect(() => {
     const onChange = () => {
-      setFullscreen(document.fullscreenElement === boxRef.current);
+      setFullscreen(document.fullscreenElement === fsEl());
       // Let the canvas settle to its new size, then fit again.
       window.setTimeout(() => setRefit((count) => count + 1), 150);
     };
@@ -220,8 +222,8 @@ export function TocCanvas({
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
   const toggleFullscreen = useCallback(() => {
-    if (document.fullscreenElement === boxRef.current) void document.exitFullscreen();
-    else void boxRef.current?.requestFullscreen();
+    if (document.fullscreenElement === fsEl()) void document.exitFullscreen();
+    else void fsEl()?.requestFullscreen();
   }, []);
 
   const nodes: Array<BoxNode | LabelNode> = [
