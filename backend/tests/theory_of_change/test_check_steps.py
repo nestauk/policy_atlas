@@ -25,7 +25,6 @@ from policy_atlas.theory_of_change.check import (
     CASE_STUDIES_PER_BOX,
     JUDGE_TOP_K,
     LINK_LISTS,
-    LINK_PICK,
     NOT_SELECTED_REASON,
     SELECTED_REASON,
     UNSETTLED_SENTENCE,
@@ -49,6 +48,7 @@ from policy_atlas.theory_of_change.discover_prompt import (
 from policy_atlas.theory_of_change.draft_prompt import DraftPathwayWire
 from policy_atlas.theory_of_change.evidence.grade import Grade, GradeResult
 from policy_atlas.theory_of_change.evidence.judge_prompt import JudgeResponse, StanceWire
+from policy_atlas.theory_of_change.evidence.pick_prompt import PICK_N
 from policy_atlas.theory_of_change.graph import Box, Graph, Link, Pathway
 from policy_atlas.theory_of_change.summary_prompt import LinkSentencesWire
 from tests.theory_of_change.test_walks import (
@@ -104,10 +104,22 @@ def test_the_80_link_cap_takes_kept_pathway_links_first() -> None:
         for i in range(90)
     }
     tail = [f"l{i}" for i in range(85, 90)]
-    graph = Graph(boxes=boxes, links=links, pathways=[Pathway(key="p", kind="success", links=tail)])
+    dropped = [f"l{i}" for i in range(80, 85)]
+    graph = Graph(
+        boxes=boxes,
+        links=links,
+        pathways=[
+            Pathway(key="p", kind="success", links=tail),
+            Pathway(key="q", kind="failure", links=[*dropped, "l85"], status="set_aside"),
+        ],
+    )
     keys, left_out = links_to_check(graph)
-    assert len(keys) == 80 and left_out == 10
+    # l80-l84 sit only on a set-aside pathway (C29): not checked. l85 is also on a kept one.
+    assert len(keys) == 80 and left_out == 5
     assert keys[:5] == tail
+    assert not set(dropped) & set(keys)
+    # A link the user names is checked even when only on a set-aside pathway.
+    assert links_to_check(graph, ["l80"]) == (["l80"], 0)
 
 
 def test_neighbour_lines_name_the_steps_before_and_after() -> None:
@@ -245,8 +257,8 @@ def test_each_link_reads_at_most_k_documents_of_its_own_search(
     assert stage["total"] == 4 and stage["failed"] == 0
     # toc_select (C27): 10 picked per link screened in, the rest screened out, no model.
     picked = _summary(engine, task_id, "toc_select")
-    assert picked["relevant"] == 4 * LINK_PICK
-    assert picked["not_relevant"] == picked["screened"] - 4 * LINK_PICK > 0
+    assert picked["relevant"] == 4 * PICK_N
+    assert picked["not_relevant"] == picked["screened"] - 4 * PICK_N > 0
     with engine.connect() as conn:
         flags = {
             (payload["status"], payload["aggregation_flags"][0])
@@ -607,6 +619,7 @@ def test_merge_keeps_one_of_each_kind_and_the_thread_lists_its_changes(
     from policy_atlas.theory_of_change.merge_prompt import MergeDecisionWire, MergeResponse
 
     merge = MergeResponse(
+        box_merges=[],
         decisions=[
             MergeDecisionWire(pathway="p1", action="set_aside", into=None, reason="Misses it."),
             MergeDecisionWire(pathway="p2", action="set_aside", into=None, reason="Misses it."),
@@ -654,7 +667,7 @@ def _replies(engine: Engine, task_id: uuid.UUID) -> list[str]:
 class _DiscoversThenMerges(_Discovers):
     """The found route is merged into the first success pathway in the same check."""
 
-    def merge(self, *, plan: Any, pathways: Any) -> Any:
+    def merge(self, *, plan: Any, boxes: Any, pathways: Any) -> Any:
         from policy_atlas.theory_of_change.merge_prompt import MergeDecisionWire, MergeResponse
 
         self._next("merge", {})
@@ -668,7 +681,7 @@ class _DiscoversThenMerges(_Discovers):
             )
             for p in pathways
         ]
-        return MergeResponse(decisions=decisions), None
+        return MergeResponse(box_merges=[], decisions=decisions), None
 
 
 def test_the_check_message_names_found_pathways_it_kept_once(
@@ -763,7 +776,7 @@ def _doc(i: int) -> Any:
 
 def test_select_for_link_takes_the_lists_in_turn_with_abstracts_first() -> None:
     def cand(n: int, source: tuple[str, str], rank: int, abstract: bool = True) -> LinkCandidate:
-        return LinkCandidate(uuid.UUID(int=n), source, rank, abstract)
+        return LinkCandidate(uuid.UUID(int=n), source, rank, abstract="a" if abstract else "")
 
     q1, q2, ov = LINK_LISTS
     candidates = [
@@ -775,8 +788,8 @@ def test_select_for_link_takes_the_lists_in_turn_with_abstracts_first() -> None:
     picked = [tss.int for tss in select_for_link(candidates)]
     # q1 #1, q2 #1, overton #1, q1 #2, ...; overton's #2 has no abstract and is skipped.
     assert picked == [0, 10, 21, 1, 11, 23, 2, 12, 3, 4]
-    assert len(picked) == LINK_PICK
-    # Fewer than LINK_PICK with an abstract: the rest are filled from those without.
+    assert len(picked) == PICK_N
+    # Fewer than PICK_N with an abstract: the rest are filled from those without.
     few = [cand(1, q1, 1), cand(2, q1, 2, abstract=False), cand(3, ov, 1)]
     assert [tss.int for tss in select_for_link(few)] == [1, 3, 2]
 

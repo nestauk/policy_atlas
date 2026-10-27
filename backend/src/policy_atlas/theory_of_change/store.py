@@ -200,6 +200,23 @@ def update(
     return True
 
 
+def delete(conn: Connection, log: ChangeLog, table: Table, row_id: uuid.UUID) -> None:
+    """Delete one graph row and keep its before-state, marked deleted (C9).
+
+    Args:
+        conn: Open connection.
+        log: The step's change log.
+        table: A ``toc_*`` table with a single-column key.
+        row_id: The row.
+    """
+    key = table.c[_PRIMARY_KEY[table.name]]
+    current = conn.execute(select(table).where(key == row_id)).one_or_none()
+    if current is None:
+        return
+    conn.execute(table.delete().where(key == row_id))
+    log.before.append({"table": table.name, "row": row_state(current), "deleted": True})
+
+
 def record(
     conn: Connection,
     *,

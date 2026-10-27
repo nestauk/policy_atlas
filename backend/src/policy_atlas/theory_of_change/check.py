@@ -35,6 +35,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Row
 
+from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import (
     EMBEDDING_PROFILE,
     UNIT_POLICY,
@@ -56,6 +57,7 @@ from policy_atlas.core.schema import (
     toc_item_evidence,
     toc_link,
     toc_pathway,
+    toc_pathway_link,
 )
 from policy_atlas.core.usage import UsageAccumulator
 from policy_atlas.evidence_search.assess.screen import ScreenContext, screen_in
@@ -66,6 +68,7 @@ from policy_atlas.evidence_search.corpus.ranking import (
     validate_ranked,
 )
 from policy_atlas.evidence_search.extract.quote_verify import QuoteMatcher, build_basis
+from policy_atlas.evidence_search.sourcing.search_live import crossref_abstracts
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.model_calls import CallOutcome, call_with_retry
 from policy_atlas.runtime.capability_registry import (
@@ -92,7 +95,9 @@ from policy_atlas.theory_of_change.evidence.grade import (
     Judgement,
     counted_score,
     grade,
+    trusted_publisher,
 )
+from policy_atlas.theory_of_change.evidence.pick_prompt import PICK_N
 from policy_atlas.theory_of_change.graph import (
     MAX_CONDITIONS_PER_LINK,
     MAX_FAILURE_PATHWAYS,
@@ -111,8 +116,8 @@ log = structlog.get_logger()
 #: with its own search skips the rerank.
 JUDGE_TOP_K = 10
 
-#: Documents ``toc_select`` keeps per link (C27).
-LINK_PICK = 10
+#: Pick calls in flight at once (C28).
+PICK_WORKERS = 16
 
 #: The link search's result lists, ``(backend, query origin)``, in turn order (C27).
 LINK_LISTS: tuple[tuple[str, str], ...] = (
@@ -217,8 +222,9 @@ def appraisals_for(
         evidence_rows: ``toc_item_evidence`` rows.
 
     Returns:
-        Document id → appraisal; an unscored document has ``score=None``.
-        Web pages arrive in increment 3 (``web=False`` here).
+        Document id → appraisal; an unscored document has ``score=None``. A
+        web page (``backend`` ``web``) is trusted when its address's host is
+        on the trusted publisher list (C23).
     """
     pairs = {(row.capability_run_id, row.task_source_snapshot_id) for row in evidence_rows}
     if not pairs:
@@ -260,11 +266,27 @@ def appraisals_for(
             .where(source_classification_result.c.task_source_snapshot_id.in_(tss_ids))
         )
     }
+    web = {
+        row.task_source_snapshot_id: trusted_publisher(row.source_locator)
+        for row in conn.execute(
+            select(task_source_snapshot.c.task_source_snapshot_id, source_snapshot.c.source_locator)
+            .join(
+                source_snapshot,
+                source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
+            )
+            .where(task_source_snapshot.c.task_id == task_id)
+            .where(task_source_snapshot.c.task_source_snapshot_id.in_(tss_ids))
+            .where(source_snapshot.c.metadata["backend"].astext == "web")
+        )
+    }
     out: dict[str, DocAppraisal] = {}
     for walk, tss in sorted(pairs, key=str):
         key = (scope_of.get(walk), tss)
         out[str(tss)] = DocAppraisal(
-            score=scores.get(key), modelling=types.get(key) == MODELLING_TYPE
+            score=scores.get(key),
+            web=tss in web,
+            modelling=types.get(key) == MODELLING_TYPE,
+            trusted=web.get(tss, False),
         )
     return out
 
@@ -313,17 +335,28 @@ def _current_hash(graph: Graph, key: str) -> str:
 
 
 def _kept_links_first(graph: Graph) -> list[str]:
-    """Link keys: those on kept pathways first, in pathway order, then the rest."""
+    """Link keys: those on kept pathways first, in pathway order, then the rest.
+
+    A link that sits only on set-aside pathways is left out (C29); a link on
+    no pathway stays, after the rest.
+    """
     ordered: list[str] = []
+    set_aside: set[str] = set()
     for pathway in graph.pathways:
         if pathway.status == "kept":
             ordered.extend(key for key in pathway.links if key in graph.links)
-    ordered.extend(graph.links)
+        else:
+            set_aside.update(pathway.links)
+    on_kept = set(ordered)
+    ordered.extend(key for key in graph.links if key not in set_aside or key in on_kept)
     return list(dict.fromkeys(ordered))
 
 
 def links_to_check(graph: Graph, named: list[str] | None = None) -> tuple[list[str], int]:
-    """The links a check walk covers, kept pathways first, capped at 80 (C5).
+    """The links a check walk covers, kept pathways first, capped at 80 (C5, C29).
+
+    Links only on set-aside pathways are not checked, unless the user named them
+    (Search for more).
 
     Args:
         graph: The theory.
@@ -332,10 +365,12 @@ def links_to_check(graph: Graph, named: list[str] | None = None) -> tuple[list[s
     Returns:
         ``(links, left_out)``.
     """
-    ordered = _kept_links_first(graph)
     if named is not None:
         wanted = set(named)
-        ordered = [key for key in ordered if key in wanted]
+        ordered = [key for key in [*_kept_links_first(graph), *graph.links] if key in wanted]
+        ordered = list(dict.fromkeys(ordered))
+    else:
+        ordered = _kept_links_first(graph)
     return ordered[:TOC_LINK_CAP], max(0, len(ordered) - TOC_LINK_CAP)
 
 
@@ -393,6 +428,17 @@ def _outcome_value[T](outcome: CallOutcome[T], usage: UsageAccumulator) -> T | N
     for item in outcome.usages:
         usage.add(item)
     return outcome.value
+
+
+def _map_traced[A, R](fn: Callable[[A], R], items: list[A], workers: int) -> list[R]:
+    """Run ``fn`` over ``items`` in a thread pool, in order, each under the caller's context.
+
+    The context carries the run's Langfuse trace and session (the task id), so
+    every model call in the pool is traced under the task's session (C30).
+    """
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [tracing.submit_with_context(executor, fn, item) for item in items]
+        return [future.result() for future in futures]
 
 
 def _call[T](name: str, call: Callable[[], Any], event: str) -> CallOutcome[T]:
@@ -583,8 +629,7 @@ def toc_discover_scope(
             "toc_discover",
         )
 
-    with ThreadPoolExecutor(max_workers=DISCOVER_WORKERS) as pool:
-        outcomes = list(pool.map(run_batch, batches))
+    outcomes = _map_traced(run_batch, batches, DISCOVER_WORKERS)
 
     usage = UsageAccumulator()
     layers = {short[key]: box.layer for key, box in graph.boxes.items()}
@@ -776,6 +821,129 @@ def _keep_one_of_each(order: list[str], kinds: dict[str, str], kept: set[str]) -
     return kept
 
 
+#: Box origins that mean the user wrote the box (C29).
+_USER_ORIGINS = frozenset({"user", "imported"})
+
+
+def _user_written(row: Row[Any]) -> bool:
+    return bool(row.user_edited) or row.origin in _USER_ORIGINS
+
+
+def fold_problem(rows: store.GraphRows, box: str, into: str) -> str | None:
+    """Why one box may not be folded into another, or ``None`` when it may (C29).
+
+    Args:
+        rows: The current graph rows.
+        box: The box to fold away (row id as text).
+        into: The box it would be folded into.
+
+    Returns:
+        The reason, or ``None``.
+    """
+    if box not in rows.boxes or into not in rows.boxes:
+        return "a box does not exist"
+    if box == into:
+        return "it is the same box"
+    if rows.boxes[box].layer != rows.boxes[into].layer:
+        return "the boxes are in different layers"
+    if _user_written(rows.boxes[box]) and not _user_written(rows.boxes[into]):
+        return "a box the user wrote is never folded into one they did not"
+    return None
+
+
+class _FoldSkipped(Exception):
+    """A row changed under the fold: the fold is rolled back (C10)."""
+
+
+def fold_box(
+    conn: Connection,
+    log_: store.ChangeLog,
+    *,
+    task_id: uuid.UUID,
+    box: str,
+    into: str,
+) -> bool:
+    """Fold one box into another of the same layer (C29).
+
+    Every link from or to ``box`` is re-pointed at ``into``. A link that would
+    then join a box to itself is dropped from its pathways and deleted. Two
+    links that would then join the same pair become one: the user-edited one
+    is kept, else the older, and the other's pathway steps point at it. Then
+    ``box`` is deleted. All of it, or nothing when a row changed meanwhile.
+
+    Args:
+        conn: Open connection inside the component transaction.
+        log_: The step's change log.
+        task_id: The task.
+        box: The box to fold away (row id as text).
+        into: The box to keep.
+
+    Returns:
+        Whether the fold was applied.
+    """
+    _, rows = store.load_graph(conn, task_id)
+    if fold_problem(rows, box, into) is not None:
+        return False
+    old, new = uuid.UUID(box), uuid.UUID(into)
+
+    def ends(row: Row[Any]) -> tuple[uuid.UUID, uuid.UUID]:
+        swap = {old: new}
+        return swap.get(row.source_box_id, row.source_box_id), swap.get(
+            row.target_box_id, row.target_box_id
+        )
+
+    links = list(rows.links.values())
+    moved = [row for row in links if old in (row.source_box_id, row.target_box_id)]
+    by_pair: dict[tuple[uuid.UUID, uuid.UUID], list[Row[Any]]] = {}
+    for row in links:
+        by_pair.setdefault(ends(row), []).append(row)
+    attempt = store.ChangeLog()
+    nested = conn.begin_nested()
+    try:
+        for row in moved:
+            source, target = ends(row)
+            if source == target:
+                conn.execute(
+                    toc_pathway_link.delete().where(toc_pathway_link.c.link_id == row.link_id)
+                )
+                store.delete(conn, attempt, toc_link, row.link_id)
+                continue
+            pair = by_pair[(source, target)]
+            survivor = min(pair, key=lambda r: (not r.user_edited, r.created_at))
+            for loser in pair:
+                if loser.link_id == survivor.link_id:
+                    continue
+                conn.execute(
+                    toc_pathway_link.update()
+                    .where(toc_pathway_link.c.link_id == loser.link_id)
+                    .values(link_id=survivor.link_id)
+                )
+                store.delete(conn, attempt, toc_link, loser.link_id)
+            pair[:] = [survivor]
+        for row in moved:
+            source, target = ends(row)
+            if source == target or by_pair[(source, target)][0].link_id != row.link_id:
+                continue
+            if not store.update(
+                conn,
+                attempt,
+                toc_link,
+                row.link_id,
+                observed_revision=row.revision,
+                values={"source_box_id": source, "target_box_id": target},
+            ):
+                raise _FoldSkipped
+        store.delete(conn, attempt, toc_box, old)
+    except _FoldSkipped:
+        nested.rollback()
+        log_.skipped.append({"table": "toc_box", "id": box})
+        return False
+    nested.commit()
+    log_.created.extend(attempt.created)
+    log_.before.extend(attempt.before)
+    return True
+
+
 def toc_merge_scope(
     conn: Connection,
     *,
@@ -784,7 +952,11 @@ def toc_merge_scope(
     context: ScopeContext,
     backend: TocBackend,
 ) -> dict[str, Any]:
-    """Merge pathways that share a mechanism; set aside those that miss the change.
+    """Fold repeated boxes, merge pathways that share a mechanism, set aside misses (C29).
+
+    The box folds the call names are applied first, each checked by
+    :func:`fold_problem` and done by :func:`fold_box`; then the pathway
+    decisions.
 
     Args:
         conn: Open connection inside the component transaction.
@@ -801,7 +973,7 @@ def toc_merge_scope(
     """
     plan = walk_toc_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
     graph, rows = store.load_graph(conn, task_id)
-    short, _ = _short_keys(graph)
+    short, back = _short_keys(graph)
     kept_paths = [pathway for pathway in graph.pathways if pathway.status == "kept"]
     pkey = {pathway.key: f"p{i}" for i, pathway in enumerate(kept_paths, start=1)}
     by_short = {value: key for key, value in pkey.items()}
@@ -827,15 +999,54 @@ def toc_merge_scope(
                 ],
             }
         )
+    on_kept = {
+        end
+        for pathway in kept_paths
+        for key in pathway.links
+        if key in graph.links
+        for end in (graph.links[key].source, graph.links[key].target)
+    }
+    boxes: list[dict[str, object]] = [
+        {
+            "key": short[key],
+            "layer": box.layer,
+            "text": box.text,
+            "user_edited": _user_written(rows.boxes[key]),
+        }
+        for key, box in graph.boxes.items()
+        if key in on_kept
+    ]
     usage = UsageAccumulator()
     response = _outcome_value(
         _call(
-            "toc_merge", lambda: backend.merge(plan=plan_data(plan), pathways=payload), "toc_merge"
+            "toc_merge",
+            lambda: backend.merge(plan=plan_data(plan), boxes=boxes, pathways=payload),
+            "toc_merge",
         ),
         usage,
     )
     if response is None:
         raise RuntimeError("toc_merge: the merge call failed")
+    log_ = store.ChangeLog()
+    changes: list[store.Change] = []
+    # Box folds first (C29): the pathway decisions were made on the folded boxes.
+    folded: dict[str, str] = {}
+    box_folds = refused = 0
+    for wire in response.box_merges:
+        box, into = back.get(wire.box), back.get(wire.into)
+        while into in folded:  # a chain of folds ends at the box that stays
+            into = folded[into]
+        if box is None or into is None or box in folded:
+            refused += 1
+            continue
+        if fold_box(conn, log_, task_id=task_id, box=box, into=into):
+            folded[box] = into
+            box_folds += 1
+            changes.append(
+                f"Merged box “{graph.boxes[box].text}” into “{graph.boxes[into].text}”"
+            )
+        else:
+            refused += 1
     decisions = {
         by_short[decision.pathway]: decision
         for decision in response.decisions
@@ -845,8 +1056,6 @@ def toc_merge_scope(
     order = [pathway.key for pathway in kept_paths]
     kept = {key for key in order if key not in decisions or decisions[key].action == "keep"}
     kept = _keep_one_of_each(order, kinds, kept)
-    log_ = store.ChangeLog()
-    changes: list[store.Change] = []
     merged = set_aside = 0
     for key in order:
         if key in kept:
@@ -880,6 +1089,8 @@ def toc_merge_scope(
         "kept": len(order) - merged - set_aside,
         "merged": merged,
         "set_aside": set_aside,
+        "box_folds": box_folds,
+        "box_folds_refused": refused,
         "skipped": len(log_.skipped),
         "backend_mode": backend.mode,
         "usage_totals": usage.payload(),
@@ -893,28 +1104,38 @@ def toc_merge_scope(
 
 @dataclass(frozen=True)
 class LinkCandidate:
-    """One document a link's own search acquired, as the pick rule sees it.
+    """One document a link's own search acquired, as the pick sees it.
 
     Attributes:
         tss_id: The document.
         source_list: The result list it came from, ``(backend, query origin)``.
         rank: Its pool rank; within one list, lower is earlier in that list.
-        has_abstract: Whether it has an abstract.
+        title: Its title.
+        abstract: Its abstract, ``""`` when it has none.
+        doi: Its DOI, when it has one.
+        snapshot_id: The source snapshot its metadata lives on.
     """
 
     tss_id: uuid.UUID
     source_list: tuple[str, str]
     rank: int
-    has_abstract: bool
+    title: str = ""
+    abstract: str = ""
+    doi: str | None = None
+    snapshot_id: uuid.UUID | None = None
+
+    @property
+    def has_abstract(self) -> bool:
+        """Whether it has an abstract."""
+        return bool(self.abstract.strip())
 
 
 def select_for_link(candidates: list[LinkCandidate]) -> list[uuid.UUID]:
-    """The pick rule: which of a link's documents are judged (C27).
+    """The round-robin rule: the pick call's top-up and its fallback (C27, C28).
 
     In turn from the result lists (:data:`LINK_LISTS` order) in rank order,
-    :data:`LINK_PICK` documents. A document with no abstract is taken only
-    when fewer than :data:`LINK_PICK` have one. The one place the rule lives:
-    it is expected to change after the pick-rule experiment.
+    :data:`PICK_N` documents. A document with no abstract is taken only when
+    fewer than :data:`PICK_N` have one.
 
     Args:
         candidates: The link's documents.
@@ -934,7 +1155,28 @@ def select_for_link(candidates: list[LinkCandidate]) -> list[uuid.UUID]:
 
     with_abstract = in_turn([c for c in candidates if c.has_abstract])
     without = in_turn([c for c in candidates if not c.has_abstract])
-    return (with_abstract + without)[:LINK_PICK]
+    return (with_abstract + without)[:PICK_N]
+
+
+def picked_ids(ids: list[str], candidates: list[LinkCandidate]) -> list[uuid.UUID]:
+    """Map a pick answer's short ids (``d1``...) back, topped up by round-robin (C28).
+
+    Unknown and repeated ids are dropped; a short answer is filled from
+    :func:`select_for_link` in its order.
+
+    Args:
+        ids: The ids the pick call returned, most likely first.
+        candidates: The link's documents; ``d1`` is the first.
+
+    Returns:
+        At most :data:`PICK_N` documents.
+    """
+    short = {f"d{i}": c.tss_id for i, c in enumerate(candidates, start=1)}
+    chosen: list[uuid.UUID] = []
+    for tss in [*(short[i] for i in ids if i in short), *select_for_link(candidates)]:
+        if tss not in chosen:
+            chosen.append(tss)
+    return chosen[:PICK_N]
 
 
 def _link_candidates(
@@ -965,10 +1207,14 @@ def _link_candidates(
         )
     if not found:
         return {}
-    abstracts = {
-        row.task_source_snapshot_id: bool(str(row.metadata.get("abstract") or "").strip())
+    meta = {
+        row.task_source_snapshot_id: (row.source_snapshot_id, row.metadata or {})
         for row in conn.execute(
-            select(task_source_snapshot.c.task_source_snapshot_id, source_snapshot.c.metadata)
+            select(
+                task_source_snapshot.c.task_source_snapshot_id,
+                source_snapshot.c.source_snapshot_id,
+                source_snapshot.c.metadata,
+            )
             .join(
                 source_snapshot,
                 source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
@@ -979,9 +1225,65 @@ def _link_candidates(
     }
     out: dict[str, list[LinkCandidate]] = {}
     for tss, (link_id, source_list, rank) in found.items():
+        snapshot_id, metadata = meta.get(tss, (None, {}))
         out.setdefault(link_id, []).append(
-            LinkCandidate(tss, source_list, rank, abstracts.get(tss, False))
+            LinkCandidate(
+                tss,
+                source_list,
+                rank,
+                title=str(metadata.get("title") or ""),
+                abstract=str(metadata.get("abstract") or ""),
+                doi=metadata.get("doi") or None,
+                snapshot_id=snapshot_id,
+            )
         )
+    for docs in out.values():
+        docs.sort(key=lambda c: (c.source_list, c.rank))
+    return out
+
+
+def _fill_abstracts(
+    conn: Connection, candidates: dict[str, list[LinkCandidate]]
+) -> dict[str, list[LinkCandidate]]:
+    """Store Crossref abstracts on the snapshots of candidates that lack one (C30).
+
+    The abstract goes on the snapshot's metadata with ``abstract_source``
+    ``crossref``, so the pick, classify, appraise and the judge all read it.
+
+    Returns:
+        The candidates, with the found abstracts filled in.
+    """
+    wanted = {
+        c.doi
+        for docs in candidates.values()
+        for c in docs
+        if not c.has_abstract and c.doi and c.snapshot_id
+    }
+    found = crossref_abstracts(sorted(wanted))
+    if not found:
+        return candidates
+    stored: set[uuid.UUID] = set()
+    out: dict[str, list[LinkCandidate]] = {}
+    for link_id, docs in candidates.items():
+        filled = []
+        for c in docs:
+            text = found.get(c.doi or "") if not c.has_abstract else None
+            if text and c.snapshot_id is not None:
+                if c.snapshot_id not in stored:
+                    conn.execute(
+                        source_snapshot.update()
+                        .where(source_snapshot.c.source_snapshot_id == c.snapshot_id)
+                        .values(
+                            metadata=source_snapshot.c.metadata.op("||")(
+                                {"abstract": text, "abstract_source": "crossref"}
+                            )
+                        )
+                    )
+                    stored.add(c.snapshot_id)
+                c = LinkCandidate(**{**c.__dict__, "abstract": text})
+            filled.append(c)
+        out[link_id] = filled
+    log.info("toc_select.crossref_abstracts", asked=len(wanted), found=len(found))
     return out
 
 
@@ -991,26 +1293,70 @@ def toc_select_scope(
     task_id: uuid.UUID,
     run_id: uuid.UUID,
     context: ScopeContext,
+    backend: TocBackend,
 ) -> dict[str, Any]:
-    """Pick each link's documents by code and write the screen's rows (C27).
+    """Pick each link's documents and write the screen's rows (C27, C28).
 
-    Each link search already searched its own sentence by meaning, so no model
-    screens its documents: :func:`select_for_link` picks the ones judged
-    (screened in), and the rest are screened out. The rows are the screen's
-    own, so classify, appraise and the later steps read them unchanged.
+    No screen model call: each link search already searched its own sentence
+    by meaning. One small pick call per link (in parallel) chooses the
+    :data:`PICK_N` documents most likely to test the step; a short answer is
+    topped up, and a failed call replaced, by :func:`select_for_link`. A link
+    with no more than :data:`PICK_N` documents keeps them all, with no call.
+    Picked documents are screened in, the rest screened out; the rows are the
+    screen's own, so classify, appraise and the later steps read them
+    unchanged. A live backend first fills missing abstracts from Crossref.
 
     Args:
         conn: Open connection inside the component transaction.
         task_id: The task.
         run_id: This run.
         context: The check walk's intent record.
+        backend: The ToC model seam.
 
     Returns:
-        ``screened``, ``relevant``, ``not_relevant`` and ``excluded_retracted`` counts.
+        Screen counts, pick call counts and the pick usage.
     """
     walk_id = walk_of_run(conn, task_id=task_id, run_id=run_id)
     candidates = _link_candidates(conn, task_id=task_id, walk_id=walk_id)
-    picked = {tss for found in candidates.values() for tss in select_for_link(found)}
+    if backend.mode == "live":
+        candidates = _fill_abstracts(conn, candidates)
+    plan = walk_toc_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
+    graph, _ = store.load_graph(conn, task_id)
+    texts: dict[str, str] = {}
+    for key in candidates:
+        link = graph.links.get(key)
+        if link is not None:
+            texts[key] = item_text(
+                link,
+                source_text=graph.boxes[link.source].text,
+                target_text=graph.boxes[link.target].text,
+                population=plan.target_population,
+                place=plan.where,
+            )
+    called = [k for k, docs in candidates.items() if k in texts and len(docs) > PICK_N]
+
+    def run_pick(key: str) -> CallOutcome[Any]:
+        shown: list[dict[str, object]] = [
+            {"id": f"d{i}", "title": c.title, "abstract": c.abstract}
+            for i, c in enumerate(candidates[key], start=1)
+        ]
+        return _call(
+            "toc_pick",
+            lambda: backend.pick(item_text=texts[key], candidates=shown),
+            "toc_pick",
+        )
+
+    outcomes = dict(zip(called, _map_traced(run_pick, called, PICK_WORKERS), strict=True))
+    usage = UsageAccumulator()
+    failed = 0
+    picked: set[uuid.UUID] = set()
+    for key, docs in candidates.items():
+        response = _outcome_value(outcomes[key], usage) if key in outcomes else None
+        if key in outcomes and response is None:
+            failed += 1
+        picked.update(
+            picked_ids(response.ids, docs) if response is not None else select_for_link(docs)
+        )
     everything = {c.tss_id for found in candidates.values() for c in found}
     screen = ScreenContext(
         scope_id=context.scope_id, intent=context.intent, context=context.context
@@ -1038,6 +1384,10 @@ def toc_select_scope(
         "relevant": kept["relevant"],
         "not_relevant": dropped["not_relevant"],
         "excluded_retracted": kept["excluded_retracted"] + dropped["excluded_retracted"],
+        "pick_calls": len(called),
+        "failed_pick_calls": failed,
+        "backend_mode": backend.mode,
+        "usage_totals": usage.payload(),
     }
 
 
@@ -1341,8 +1691,7 @@ def toc_judge_scope(
             "toc_judge",
         )
 
-    with ThreadPoolExecutor(max_workers=JUDGE_WORKERS) as executor:
-        outcomes = list(executor.map(run_job, jobs))
+    outcomes = _map_traced(run_job, jobs, JUDGE_WORKERS)
 
     stored = unverified = failed = 0
     for job, outcome in zip(jobs, outcomes, strict=True):

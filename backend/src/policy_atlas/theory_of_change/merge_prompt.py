@@ -1,4 +1,4 @@
-"""The ``toc_merge_v1`` prompt: merge and set aside before judging (task 054, C6).
+"""The ``toc_merge_v2`` prompt: merge and set aside before judging (task 054, C6).
 
 Lead-authored and versioned. One frontier call over every pathway, drafted or
 found in the evidence: pathways that share a mechanism merge (the duplicate is
@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_MERGE_PROMPT_VERSION = "toc_merge_v1"
+TOC_MERGE_PROMPT_VERSION = "toc_merge_v2"
 
 TOC_MERGE_MAX_OUTPUT_TOKENS = 16_000
 
@@ -45,11 +45,23 @@ class MergeDecisionWire(BaseModel):
     )
 
 
-class MergeResponse(BaseModel):
-    """One decision per pathway."""
+class BoxMergeWire(BaseModel):
+    """Two boxes that name the same change: one is folded into the other."""
 
     model_config = ConfigDict(extra="forbid")
 
+    box: str = Field(description="The key of the box to fold away, copied exactly.")
+    into: str = Field(description="The key of the box it is the same as, same layer.")
+
+
+class MergeResponse(BaseModel):
+    """Boxes to fold together, then one decision per pathway."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    box_merges: list[BoxMergeWire] = Field(
+        description="Pairs of boxes in the same layer that name the same change; often none."
+    )
     decisions: list[MergeDecisionWire]
 
 
@@ -69,8 +81,17 @@ wrote or edited. Decide, for every pathway, one of:
   this population in this place, or a failure route that is not realistic
   for this intervention.
 
+First, fold together boxes that name the same change in different words
+("Children choose and eat fewer less healthy foods" and "Children choose less
+healthy food less often"). Fold only boxes in the same layer; keep the
+clearer wording; never fold a box the user wrote into one they did not. Then
+decide the pathways on the folded boxes.
+
 Two routes are distinct when they work for a different reason (their
-BECAUSE text differs in substance), not when their wording differs. Judge
+because text differs in substance), not when their wording differs. Routes
+that pass through the same boxes except one, or whose extra box only
+restates a neighbour, are one route: merge them. Fewer, clearer pathways
+are better than many overlapping ones. Judge
 relevance against the plan's intended change, population and place; never
 against what the evidence will show, which you do not see.
 
@@ -88,22 +109,30 @@ TOC_MERGE_USER_TEMPLATE = """\
 <plan>
 {plan_json}
 </plan>
+<boxes>
+{boxes_json}
+</boxes>
 <pathways>
 {pathways_json}
 </pathways>
 
-Give one decision for every pathway: keep, merge (with into) or set_aside,
-each with a one-line reason.
+List the boxes to fold together, then give one decision for every pathway:
+keep, merge (with into) or set_aside, each with a one-line reason.
 """
 
 
 def build_merge_messages(
-    *, plan: dict[str, object], pathways: list[dict[str, object]]
+    *,
+    plan: dict[str, object],
+    boxes: list[dict[str, object]],
+    pathways: list[dict[str, object]],
 ) -> list[ChatCompletionMessageParam]:
     """Assemble the merge call's messages.
 
     Args:
         plan: The plan fields as data.
+        boxes: Every box on a kept pathway: ``key``, ``layer``, ``text`` and
+            ``user_edited``.
         pathways: One entry per pathway: ``key``, ``kind``, ``label``,
             ``origin``, ``user_edited`` and ``route`` (each step's source,
             target, sentence and because text).
@@ -117,6 +146,7 @@ def build_merge_messages(
             "role": "user",
             "content": TOC_MERGE_USER_TEMPLATE.format(
                 plan_json=_fence_safe(json.dumps(plan, ensure_ascii=False, sort_keys=True)),
+                boxes_json=_fence_safe(json.dumps(boxes, ensure_ascii=False)),
                 pathways_json=_fence_safe(json.dumps(pathways, ensure_ascii=False)),
             ),
         },

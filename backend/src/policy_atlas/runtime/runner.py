@@ -164,6 +164,7 @@ from policy_atlas.runtime.toc_plan import (
     TOC_WALK_KEY,
 )
 from policy_atlas.theory_of_change.backend import TocBackend
+from policy_atlas.theory_of_change.cost import walk_cost
 
 log = structlog.get_logger()
 
@@ -190,6 +191,7 @@ LLM_BEARING_COMPONENTS = frozenset(
         "option_profile",
         # Task 054: every theory-of-change step makes model calls.
         "toc_draft",
+        "toc_select",
         "toc_discover",
         "toc_merge",
         "toc_judge",
@@ -5657,12 +5659,24 @@ def _finish_run(
                 .where(capability_run.c.task_id == task_id)
                 .values(status=status, ended_at=ended_at)
             )
+            finished: dict[str, Any] = {
+                "capability_run_id": str(capability_run_id),
+                "status": status,
+            }
+            if purpose == TOC_PURPOSE and not is_child:
+                # The run-level cost line (task 054, C30): tokens per step, US dollars.
+                finished["cost"] = walk_cost(conn, task_id=task_id, walk_id=capability_run_id)
+                log.info(
+                    "toc_check.cost",
+                    capability_run_id=str(capability_run_id),
+                    **finished["cost"],
+                )
             events.append(
                 conn,
                 task_id=task_id,
                 run_id=None,
                 event_type="run.finished",
-                payload={"capability_run_id": str(capability_run_id), "status": status},
+                payload=finished,
             )
         # A completed run closes its task_agent conversation atomically with the
         # terminal status + run.finished event (029 strand 2): a crash can

@@ -57,6 +57,13 @@ from policy_atlas.theory_of_change.evidence.judge_prompt import (
     StanceWire,
     build_judge_messages,
 )
+from policy_atlas.theory_of_change.evidence.pick_prompt import (
+    PICK_N,
+    TOC_PICK_MAX_OUTPUT_TOKENS,
+    TOC_PICK_PROMPT_VERSION,
+    PickResponse,
+    build_pick_messages,
+)
 from policy_atlas.theory_of_change.merge_prompt import (
     TOC_MERGE_MAX_OUTPUT_TOKENS,
     TOC_MERGE_PROMPT_VERSION,
@@ -115,9 +122,19 @@ class TocBackend(Protocol):
         ...
 
     def merge(
-        self, *, plan: dict[str, object], pathways: list[dict[str, object]]
+        self,
+        *,
+        plan: dict[str, object],
+        boxes: list[dict[str, object]],
+        pathways: list[dict[str, object]],
     ) -> UsageResult[MergeResponse]:
-        """Merge and set aside pathways (``toc_merge_v1``)."""
+        """Fold repeated boxes, then merge and set aside pathways (``toc_merge_v2``)."""
+        ...
+
+    def pick(
+        self, *, item_text: str, candidates: list[dict[str, object]]
+    ) -> UsageResult[PickResponse]:
+        """Pick the documents the judge reads for one link (``toc_pick_v1``)."""
         ...
 
     def judge(self, **kwargs: Any) -> UsageResult[JudgeResponse]:
@@ -257,15 +274,31 @@ class OpenAITocBackend:
         )
 
     def merge(
-        self, *, plan: dict[str, object], pathways: list[dict[str, object]]
+        self,
+        *,
+        plan: dict[str, object],
+        boxes: list[dict[str, object]],
+        pathways: list[dict[str, object]],
     ) -> UsageResult[MergeResponse]:
         """See :class:`TocBackend`."""
         return self._call(
-            build_merge_messages(plan=plan, pathways=pathways),
+            build_merge_messages(plan=plan, boxes=boxes, pathways=pathways),
             response_format=MergeResponse,
             step="toc_merge",
             max_output_tokens=TOC_MERGE_MAX_OUTPUT_TOKENS,
             prompt_version=TOC_MERGE_PROMPT_VERSION,
+        )
+
+    def pick(
+        self, *, item_text: str, candidates: list[dict[str, object]]
+    ) -> UsageResult[PickResponse]:
+        """See :class:`TocBackend`."""
+        return self._call(
+            build_pick_messages(item_text=item_text, candidates=candidates),
+            response_format=PickResponse,
+            step="toc_pick",
+            max_output_tokens=TOC_PICK_MAX_OUTPUT_TOKENS,
+            prompt_version=TOC_PICK_PROMPT_VERSION,
         )
 
     def judge(self, **kwargs: Any) -> UsageResult[JudgeResponse]:
@@ -388,7 +421,8 @@ class StubTocBackend:
     - ``draft``: :func:`stub_draft`.
     - ``discover``: no proposals.
     - ``consolidate``: each proposal as it came.
-    - ``merge``: keeps every pathway.
+    - ``merge``: folds no boxes and keeps every pathway.
+    - ``pick``: the first :data:`PICK_N` candidates, in order.
     - ``judge``: *worked elsewhere* supports, quoting the first eight words of
       the document text (so the quote check passes); *holds here* not about;
       not about both when the text is empty.
@@ -474,11 +508,16 @@ class StubTocBackend:
         return ConsolidateResponse(new_boxes=boxes, pathways=pathways), None
 
     def merge(
-        self, *, plan: dict[str, object], pathways: list[dict[str, object]]
+        self,
+        *,
+        plan: dict[str, object],
+        boxes: list[dict[str, object]],
+        pathways: list[dict[str, object]],
     ) -> UsageResult[MergeResponse]:
         """See :class:`StubTocBackend`."""
-        queued = self._next("merge", {"pathways": pathways})
+        queued = self._next("merge", {"boxes": boxes, "pathways": pathways})
         default = MergeResponse(
+            box_merges=[],
             decisions=[
                 MergeDecisionWire(
                     pathway=str(p["key"]), action="keep", into=None, reason="Distinct route."
@@ -486,6 +525,14 @@ class StubTocBackend:
                 for p in pathways
             ]
         )
+        return (queued or default), None
+
+    def pick(
+        self, *, item_text: str, candidates: list[dict[str, object]]
+    ) -> UsageResult[PickResponse]:
+        """See :class:`StubTocBackend`: by default, the first :data:`PICK_N` ids."""
+        queued = self._next("pick", {"item_text": item_text, "candidates": candidates})
+        default = PickResponse(ids=[str(c["id"]) for c in candidates[:PICK_N]])
         return (queued or default), None
 
     def judge(self, **kwargs: Any) -> UsageResult[JudgeResponse]:

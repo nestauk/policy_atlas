@@ -6,15 +6,17 @@ non-credential request parameter so differing filters do not collide. API keys
 and polite-pool mailto values are excluded from cache structures.
 """
 
+import html
 import os
 import re
 import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from typing import Any, cast
-from urllib.parse import parse_qsl, urlparse
+from urllib.parse import parse_qsl, quote, urlparse
 
 import httpx
 import structlog
@@ -1074,3 +1076,62 @@ def _validate_overton_next_page_url(next_page_url: str) -> str:
     if parsed.scheme != "https" or parsed.hostname != "app.overton.io":
         raise SearchTransportError(status_code=None, host=parsed.hostname or "")
     return next_page_url
+
+
+# --- Crossref abstracts (task 054, C30) -------------------------------------------
+# Many OpenAlex works carry a DOI but no abstract. Crossref often has the
+# publisher's abstract, marked up in JATS (an XML format publishers use). One
+# lookup per DOI, in parallel, with a short timeout; any failure means no
+# abstract, never an error. The theory-of-change link pick calls this only
+# when its model backend is live.
+
+CROSSREF_URL = "https://api.crossref.org/works/{doi}"
+CROSSREF_TIMEOUT_S = 5.0
+CROSSREF_WORKERS = 8
+
+_TAG = re.compile(r"<[^>]+>")
+
+
+def _plain(jats: str) -> str:
+    """JATS markup to plain text: tags dropped, entities decoded, spaces collapsed."""
+    text = " ".join(html.unescape(_TAG.sub(" ", jats)).split())
+    return text.removeprefix("Abstract ").strip()
+
+
+def _user_agent() -> str:
+    # Crossref's "polite pool": a contact address in the User-Agent.
+    email = os.environ.get("OPENALEX_EMAIL")
+    return f"PolicyAtlas/1.0 (mailto:{email})" if email else "PolicyAtlas/1.0"
+
+
+def crossref_abstracts(dois: list[str], *, client: httpx.Client | None = None) -> dict[str, str]:
+    """Look up each DOI's abstract on Crossref.
+
+    Args:
+        dois: DOIs, bare (``10.1/abc``).
+        client: Optional HTTP client (tests pass one with a mock transport).
+
+    Returns:
+        DOI → plain-text abstract, for the DOIs Crossref had one for.
+    """
+    if not dois:
+        return {}
+    http = client or httpx.Client(timeout=CROSSREF_TIMEOUT_S, headers={"User-Agent": _user_agent()})
+
+    def one(doi: str) -> tuple[str, str | None]:
+        try:
+            response = http.get(CROSSREF_URL.format(doi=quote(doi, safe="/")))
+            response.raise_for_status()
+            jats = response.json().get("message", {}).get("abstract")
+        except Exception as exc:  # noqa: BLE001 - a missing abstract is not an error
+            log.info("crossref.abstract_failed", doi=doi, error_type=type(exc).__name__)
+            return doi, None
+        return doi, (_plain(jats) or None) if isinstance(jats, str) else None
+
+    try:
+        with ThreadPoolExecutor(max_workers=CROSSREF_WORKERS) as executor:
+            found = list(executor.map(one, dois))
+    finally:
+        if client is None:
+            http.close()
+    return {doi: text for doi, text in found if text}
