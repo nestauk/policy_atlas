@@ -10,13 +10,14 @@ A theory of change runs two walks (C3), told apart by the intent record's
 - ``draft``: ``inherit`` (only when the task starts from an option) →
   ``toc_draft``. Pasted text in the existing-theory entry point drafts too: the
   draft prompt keeps the user's words (``toc_import`` is increment 5).
-- ``check``: ``screen_abstract → classify → appraise → toc_discover →
+- ``check``: ``toc_select → classify → appraise → toc_discover →
   toc_merge → toc_judge → toc_choose → toc_summarise``. With ``context.links``
   (Search for more) the same chain without discover, merge and choose.
 
 The item searches a check walk dispatches are ``targeted`` walks with
-``acquire_only`` in their context; each runs ``acquire`` alone. They are a
-runner stage, not a chain step (S3).
+``acquire_only`` in their context; each runs ``acquire`` alone at the
+``link`` search depth (C27). They are a runner stage, not a chain step (S3).
+``toc_select`` keeps every document they acquired, with no model call.
 
 The lattice is empty (C12): a theory-of-change walk never pauses, so the plan
 is always ``unattended`` and declares no standing defaults.
@@ -30,7 +31,6 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from policy_atlas.evidence_search.assess.screen import SCREENING_CRITERION_MAX
 from policy_atlas.runtime.scoping_plan import (
     ACQUIRE_ONLY_KEY,
     TARGETED_PURPOSE,
@@ -60,14 +60,8 @@ TOC_WALK_RECHECK = "recheck"
 #: The intent-record context key naming the links a check walk covers.
 TOC_LINKS_KEY = "links"
 
-#: The intent-record context key holding a check walk's screening criterion:
-#: the steps it covers, written when the walk is minted (arm B).
-TOC_SCREEN_CRITERION_KEY = "screening_criterion"
-
-#: The steps criterion stays under this many characters.
-TOC_SCREEN_CRITERION_MAX_CHARS = SCREENING_CRITERION_MAX
-
-#: Records each item search may acquire per backend (🟡, S3; arm B).
+#: Records each item search may keep per backend: every distinct result of
+#: its three calls (C27). ``toc_select`` then picks the documents judged.
 TOC_ITEM_RECORD_CAP = 40
 
 #: Links judged per check walk at most (C5).
@@ -76,7 +70,7 @@ TOC_LINK_CAP = 80
 #: The check walk's chain. Discover and summarise degrade the walk when they
 #: fail; every other step fails it.
 TOC_CHECK_CHAIN: tuple[tuple[str, bool], ...] = (
-    ("screen_abstract", True),
+    ("toc_select", True),
     ("classify", True),
     ("appraise", True),
     ("toc_discover", False),
@@ -211,62 +205,10 @@ def toc_scope_constraints(plan: TocPlan) -> ScopeConstraints:
     return ScopeConstraints.model_validate(restriction.model_dump(exclude_none=True))
 
 
-def _screening_criterion(plan: TocPlan) -> str:
-    """The theory-wide screening criterion: the theory, never the place.
-
-    The fallback for check walks minted before arm B, which carry no steps
-    criterion in their context.
-
-    The place is the user's place, carried in the intent and shown; it never
-    excludes a document (spec § Plan slots).
-    """
-    doing = (
-        f"{plan.intervention} or a similar intervention"
-        if plan.intervention is not None
-        else "an intervention or mechanism"
-    )
-    return (
-        f"The document reports on {doing} and whether it brings about "
-        f"{plan.intended_change} for {plan.target_population}, or on a step "
-        "along the way."
-    )
-
-
-def steps_screening_criterion(changes: list[str]) -> str | None:
-    """The check walk's screening criterion: evidence on any step of the theory (arm B).
-
-    A document passes when it reports how one of the theory's changes (its
-    boxes) leads to another, in any setting and whatever the intervention.
-    Boxes are listed, not link sentences, because the screen caps one
-    criterion at :data:`TOC_SCREEN_CRITERION_MAX_CHARS` and twenty sentences
-    do not fit. Boxes are kept in order until the cap. The place never
-    excludes a document (spec § Plan slots).
-
-    Args:
-        changes: The covered links' box texts, most important first, no repeats.
-
-    Returns:
-        The criterion, or ``None`` when no box fits.
-    """
-    text = (
-        "The document reports evidence (a study, a review, a model, or official "
-        "monitoring or evaluation) on how one of these changes leads to another, "
-        "in any setting and whatever the intervention that caused it:"
-    )
-    kept = 0
-    for change in changes:
-        line = f"\n- {change.strip()}"
-        if len(text) + len(line) > TOC_SCREEN_CRITERION_MAX_CHARS:
-            break
-        text += line
-        kept += 1
-    return text if kept else None
-
-
 def _item_search_directive(plan: TocPlan) -> dict[str, Any]:
     """One item search's acquire directive (``depth · filters · guidance · record_cap``)."""
     search: dict[str, Any] = {
-        "depth": "rapid",
+        "depth": "link",
         "record_cap": TOC_ITEM_RECORD_CAP,
         "guidance": list(ITEM_SEARCH_GUIDANCE),
     }
@@ -276,14 +218,10 @@ def _item_search_directive(plan: TocPlan) -> dict[str, Any]:
     return search
 
 
-def _chain(
-    steps: list[tuple[str, bool]], plan: TocPlan, criterion: str | None = None
-) -> ComposedChain:
+def _chain(steps: list[tuple[str, bool]], plan: TocPlan) -> ComposedChain:
     def delta(component: str) -> dict[str, Any]:
         if component == "acquire":
             return {"search": _item_search_directive(plan)}
-        if component == "screen_abstract":
-            return {"screening": {"criteria": [criterion or _screening_criterion(plan)]}}
         return {}
 
     return ComposedChain(
@@ -322,15 +260,11 @@ def compose_toc(
             steps = [("inherit", True)] if plan.from_option is not None else []
             return _chain([*steps, ("toc_draft", True)], plan)
         if walk == TOC_WALK_CHECK:
-            # Walks minted before arm B carry no criterion: the theory-wide one.
-            criterion = context.get(TOC_SCREEN_CRITERION_KEY)
             if context.get(TOC_LINKS_KEY):
                 return _chain(
-                    [step for step in TOC_CHECK_CHAIN if step[0] not in _NAMED_LINK_SKIPS],
-                    plan,
-                    criterion,
+                    [step for step in TOC_CHECK_CHAIN if step[0] not in _NAMED_LINK_SKIPS], plan
                 )
-            return _chain(list(TOC_CHECK_CHAIN), plan, criterion)
+            return _chain(list(TOC_CHECK_CHAIN), plan)
         if walk == TOC_WALK_RECHECK:
             raise ValueError("the recheck walk lands in increment 2")
         raise ValueError(f"no theory-of-change walk {walk!r}")

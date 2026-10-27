@@ -39,6 +39,7 @@ COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     # Theory of change, task 054 (ADR 0042). Each reads the walk's intent
     # record and the task's graph.
     "toc_draft": {"requires": ["evidence_scope_id"]},
+    "toc_select": {"requires": ["evidence_scope_id"]},
     "toc_discover": {"requires": ["evidence_scope_id"]},
     "toc_merge": {"requires": ["evidence_scope_id"]},
     "toc_judge": {"requires": ["evidence_scope_id"]},

@@ -15,9 +15,9 @@ from policy_atlas.core.schema import (
     conversation,
     event_log,
     evidence_scope,
+    source_screening_result,
     task,
     task_agent_transcript,
-    toc_box,
     toc_item_evidence,
     toc_link,
 )
@@ -97,6 +97,15 @@ class Records:
             )
             for i in range(self.per_call)
         ]
+
+    def search_semantic(
+        self,
+        text: str,
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
+        return self.search(text, wire_params=wire_params, max_results=max_results)
 
     def fetch_citations(self, record_id: str, *, max_results: int | None = None) -> list[Any]:
         raise NotImplementedError
@@ -273,6 +282,7 @@ def _walks(engine: Engine, task_id: uuid.UUID) -> list[Any]:
                     capability_run.c.status,
                     evidence_scope.c.context,
                     evidence_scope.c.intent,
+                    evidence_scope.c.evidence_scope_id,
                 )
                 .join(
                     evidence_scope,
@@ -299,11 +309,14 @@ def test_start_drafts_then_checks_and_the_thread_stays_open(
     ]
     assert "children aged 4 to 11" in walks[1].intent
     assert "London" not in walks[1].intent
-    # The check screens against the theory's changes (arm B), minted from the graph.
-    criterion = walks[1].context["screening_criterion"]
+    # No model screen (C27): every document the link searches found is screened in.
     with engine.connect() as conn:
-        boxes = conn.execute(select(toc_box.c.text).where(toc_box.c.task_id == task_id)).scalars()
-        assert all(f"- {text}" in criterion for text in boxes)
+        statuses = conn.execute(
+            select(source_screening_result.c.status).where(
+                source_screening_result.c.evidence_scope_id == walks[1].evidence_scope_id
+            )
+        ).scalars().all()
+    assert statuses and set(statuses) == {"relevant"}
     replies = _replies(engine, task_id)
     assert replies[0] == DRAFT_LANDED_MESSAGE
     assert replies[-1].endswith(STRESS_TEST_MESSAGE)
@@ -311,6 +324,7 @@ def test_start_drafts_then_checks_and_the_thread_stays_open(
     assert order == [
         "toc_draft",
         "toc_item_searches",
+        "toc_select",
         "toc_discover",
         "toc_merge",
         "toc_judge",

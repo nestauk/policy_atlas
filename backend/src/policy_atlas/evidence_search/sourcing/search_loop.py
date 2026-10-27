@@ -45,7 +45,7 @@ from policy_atlas.evidence_search.sourcing.search_prompts import (
     validated_queries,
 )
 
-SearchDepth = Literal["rapid", "standard", "deep"]
+SearchDepth = Literal["rapid", "standard", "deep", "link"]
 SearchDirectiveError = _SearchDirectiveError
 QueryOrigin = Literal[
     "generated",
@@ -57,6 +57,7 @@ QueryOrigin = Literal[
     "snowball_forward",
     "snowball_backward",
     "semantic",
+    "semantic_place",
     "landmark",
     "suggestion_doi",
     "suggestion_title",
@@ -106,7 +107,22 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
         "policy_cap": 200,
         "call_budget": {"openalex": 45, "overton": 30},
     },
+    # The theory-of-change link search (task 054, C27): no generation call,
+    # two OpenAlex semantic calls and one Overton call on the first line of
+    # the intent (the link sentence), every distinct result kept. See ``_link_pools``.
+    "link": {
+        "papers_cap": 40,
+        "policy_cap": 40,
+        "call_budget": {"openalex": 2, "overton": 1},
+    },
 }
+
+#: The link depth's three calls: results each keeps, and the place suffix of
+#: the second OpenAlex call (C27).
+LINK_SEMANTIC_RESULTS = 20
+LINK_PLACE_RESULTS = 10
+LINK_OVERTON_RESULTS = 10
+LINK_PLACE_SUFFIX = " in the United Kingdom"
 
 
 SR_CLAUSE = '("systematic review" OR "meta-analysis" OR "narrative synthesis")'
@@ -538,7 +554,7 @@ def parse_search_directive(
         raw_depth = raw["depth"]
         if not isinstance(raw_depth, str) or raw_depth not in DEPTH_CONSTANTS:
             raise SearchDirectiveError(
-                "search directive depth must be 'rapid', 'standard', or 'deep'"
+                "search directive depth must be 'rapid', 'standard', 'deep' or 'link'"
             )
         depth = raw_depth
     if "filters" in raw and raw["filters"] is None:
@@ -943,6 +959,28 @@ def _semantic_record_passes(validated: dict[str, Any], record: dict[str, Any]) -
     return not countries or pool.country_predicate(record, set(countries))
 
 
+def _semantic_scope(
+    variants: list[dict[str, Any]],
+) -> tuple[dict[str, str], list[str], Callable[[dict[str, Any]], bool] | None, list[str]]:
+    """The wire params, local filters and local check every semantic call shares.
+
+    The variants split only the keyword calls' country clause (at most 100
+    codes per request); every local country check sees the whole list.
+
+    Returns:
+        ``(wire, local_filters, keep, countries)``.
+    """
+    countries = [
+        code for variant in variants for code in variant.get("author_affiliation_countries") or []
+    ]
+    local_scope = (
+        {**variants[0], "author_affiliation_countries": countries} if countries else variants[0]
+    )
+    wire, local_filters = _semantic_filter_parts(local_scope)
+    keep = (lambda record: _semantic_record_passes(local_scope, record)) if local_filters else None
+    return wire, local_filters, keep, countries
+
+
 def _without_country_filter(wire_params: dict[str, str]) -> dict[str, str]:
     """Drop the affiliation-country clause from an OpenAlex wire filter.
 
@@ -1220,16 +1258,7 @@ def _openalex_leg(
         )
         for plan, wire in keyword_plans
     ]
-    # The variants split only the keyword calls' country clause (at most 100
-    # codes per request); every local country check sees the whole list.
-    countries = [
-        code for variant in variants for code in variant.get("author_affiliation_countries") or []
-    ]
-    local_scope = (
-        {**variants[0], "author_affiliation_countries": countries} if countries else variants[0]
-    )
-    semantic_wire, local_filters = _semantic_filter_parts(local_scope)
-    keep = (lambda record: _semantic_record_passes(local_scope, record)) if local_filters else None
+    semantic_wire, local_filters, keep, countries = _semantic_scope(variants)
     semantic_specs = [
         _CallSpec(
             verb="search_semantic",
@@ -1360,17 +1389,14 @@ def _openalex_leg(
     return search.entries([c.record for c in ranked], "openalex"), summary, local_filters
 
 
-def _overton_leg(
-    search: _Pass,
-    backend: acquire.SearchBackendBase,
-    *,
-    intent: str,
-    paraphrases: list[str],
-    validated: dict[str, Any],
-    wire: dict[str, str],
-) -> tuple[list[PoolEntry], _LegSummary]:
-    """Relevance results, title dedup, landmarks, ranking: the policy pool."""
-    summary = _LegSummary()
+def _overton_fetch(
+    backend: acquire.SearchBackendBase, validated: dict[str, Any], wire: dict[str, str]
+) -> Callable[[str], Fetch]:
+    """The Overton search for one text, with the source-country post filter when set.
+
+    Raises:
+        SearchDirectiveError: If the post filter is set and the backend cannot apply it.
+    """
     post_filter = validated.get("source_country_post_filter")
     if isinstance(post_filter, list) and not hasattr(backend, "search_with_post_filter"):
         # Fail closed: silently searching unfiltered would admit
@@ -1392,6 +1418,112 @@ def _overton_leg(
                 ),
             )
         return _search_fetch(backend, query, wire)
+
+    return fetch_for
+
+
+def _link_pools(
+    passes: dict[str, _Pass],
+    backends: list[acquire.SearchBackendBase],
+    *,
+    text: str,
+    cap: int,
+    variants: dict[str, list[dict[str, Any]]],
+    validated: dict[str, dict[str, Any]],
+    wires: dict[str, list[dict[str, str]]],
+) -> tuple[dict[str, list[PoolEntry]], list[str]]:
+    """The link depth's search: three calls on one sentence, ``cap`` records at most (C27).
+
+    OpenAlex semantic search on the sentence (origin ``semantic``) and on the
+    sentence with :data:`LINK_PLACE_SUFFIX` (``semantic_place``), and Overton,
+    itself a search by meaning, on the sentence (``verbatim``). No query
+    generation, keyword calls, citation chasing or landmarks. Duplicates are
+    dropped by the usual paper and policy keys, the copy from the earlier list
+    kept. Each record's origin and pool rank go on its ``source.acquired``
+    event, and each list's own order survives in the pool rank, so the check
+    walk's selection step can rebuild the three ranked lists.
+
+    Returns:
+        The pool entries per backend (the kept records first, so acquire's cap
+        is the number kept), and the semantic filters applied locally.
+    """
+    found: dict[str, list[list[dict[str, Any]]]] = {}
+    backend_of: dict[int, str] = {}
+    local_filters: list[str] = []
+    for backend in backends:
+        search = passes[backend.name]
+        calls: list[ExecutedCall | None] = []
+        if backend.name == "openalex":
+            extended = cast(acquire.ExtendedSearchBackend, backend)
+            wire, local_filters, keep, _ = _semantic_scope(variants["openalex"])
+            semantic_calls: list[tuple[str, int, QueryOrigin]] = [
+                (text, LINK_SEMANTIC_RESULTS, "semantic"),
+                (text + LINK_PLACE_SUFFIX, LINK_PLACE_RESULTS, "semantic_place"),
+            ]
+            calls = search.execute_batch(
+                backend,
+                [
+                    _CallSpec(
+                        verb="search_semantic",
+                        query=query,
+                        origin=origin,
+                        wire_params=wire,
+                        max_records=size,
+                        fetch=_semantic_fetch(extended, query, wire),
+                        keep=keep,
+                    )
+                    for query, size, origin in semantic_calls
+                ],
+            )
+        elif backend.name == "overton":
+            wire = wires["overton"][0]
+            calls = [
+                search.execute(
+                    backend,
+                    _CallSpec(
+                        verb="search",
+                        query=text,
+                        origin="verbatim",
+                        wire_params=wire,
+                        max_records=LINK_OVERTON_RESULTS,
+                        fetch=_overton_fetch(backend, validated["overton"], wire)(text),
+                    ),
+                )
+            ]
+        for call in calls:
+            if call is not None:
+                found.setdefault(backend.name, []).append(call.records)
+                backend_of.update({id(record): backend.name for record in call.records})
+
+    def key(record: dict[str, Any]) -> str:
+        if backend_of[id(record)] == "overton":
+            return "overton:" + pool.policy_key(record)
+        return "openalex:" + pool.paper_key(record)
+
+    lists = [*found.get("openalex", []), *found.get("overton", [])]
+    kept = pool.interleave(lists, key)[:cap]
+    pools = {
+        backend.name: passes[backend.name].entries(
+            [record for record in kept if backend_of[id(record)] == backend.name], backend.name
+        )
+        for backend in backends
+    }
+    return pools, local_filters
+
+
+def _overton_leg(
+    search: _Pass,
+    backend: acquire.SearchBackendBase,
+    *,
+    intent: str,
+    paraphrases: list[str],
+    validated: dict[str, Any],
+    wire: dict[str, str],
+) -> tuple[list[PoolEntry], _LegSummary]:
+    """Relevance results, title dedup, landmarks, ranking: the policy pool."""
+    summary = _LegSummary()
+    post_filter = validated.get("source_country_post_filter")
+    fetch_for = _overton_fetch(backend, validated, wire)
 
     # 1. Three relevance-ordered searches sharing OVERTON_DOCS documents.
     per_text = -(-pool.OVERTON_DOCS // 3)
@@ -1503,13 +1635,19 @@ def run_search(
     record_cap = parse_record_cap(context.context)
     started = time.monotonic()
 
-    wire, usage = generation_backend.generate_queries(
-        QueriesPayload(intent=context.intent, guidance=guidance)
-    )
     usage_totals = UsageAccumulator()
-    usage_totals.add(usage)
-    queries, paraphrases = validated_queries(wire)
-    queries_dropped = len(wire.queries) - len(queries)
+    queries: list[str] = []
+    paraphrases: list[str] = []
+    queries_dropped = 0
+    generation_calls = 0
+    if depth != "link":
+        wire, usage = generation_backend.generate_queries(
+            QueriesPayload(intent=context.intent, guidance=guidance)
+        )
+        usage_totals.add(usage)
+        queries, paraphrases = validated_queries(wire)
+        queries_dropped = len(wire.queries) - len(queries)
+        generation_calls = 1
 
     # The two legs run side by side (plan S13): one pass state per backend, so
     # each has a single writer; the legs never touch the database connection;
@@ -1518,7 +1656,7 @@ def run_search(
     variant_count = {name: len(variants[name]) for name in names}
     passes = {name: _Pass(constants, variant_count) for name in names}
     leg_jobs: dict[str, Callable[[], Any]] = {}
-    for backend in backends:
+    for backend in backends if depth != "link" else []:
         if backend.name == "openalex":
             leg_jobs[backend.name] = partial(
                 _openalex_leg,
@@ -1553,6 +1691,17 @@ def run_search(
                 pools[name], summaries[name], local_filters = outcome
             else:
                 pools[name], summaries[name] = outcome
+    if depth == "link":
+        # The link sentence is the intent's first line (``item_text``).
+        pools, local_filters = _link_pools(
+            passes,
+            backends,
+            text=context.intent.strip().splitlines()[0],
+            cap=record_cap or constants["papers_cap"],
+            variants=variants,
+            validated=validated,
+            wires=wires,
+        )
     executed = [call for name in names for call in passes[name].executed]
     calls_made = {name: passes[name].calls.get(name, 0) for name in names}
     ranked_count = {name: passes[name].ranked_count.get(name, 0) for name in names}
@@ -1588,7 +1737,7 @@ def run_search(
         "queries_dropped": queries_dropped,
         "fallback_to_verbatim": {name: legs[name].fallback_to_verbatim for name in names},
         "wall_clock_s": time.monotonic() - started,
-        "generation_calls": 1,
+        "generation_calls": generation_calls,
         "semantic_local_filters": local_filters,
         "seeds": legs["openalex"].seeds if "openalex" in legs else 0,
         "backward_targets": legs["openalex"].backward_targets if "openalex" in legs else 0,

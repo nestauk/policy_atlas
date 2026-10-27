@@ -129,6 +129,7 @@ OPTIONS_SCOPING_STEPS: tuple[str, ...] = (
 #: The steps only a theory-of-change chain composes (task 054, S3).
 TOC_STEPS: tuple[str, ...] = (
     "toc_draft",
+    "toc_select",
     "toc_discover",
     "toc_merge",
     "toc_judge",

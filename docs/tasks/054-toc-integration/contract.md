@@ -368,6 +368,27 @@ decisions below. The decisions fix what the spec leaves to the build.
   box between pathways, and returns at most 3 new success and 2 new failure pathways, within the
   6 + 3 kept-pathway limit. Only what it returns is written; code checks every route as before
   and drops a pathway that joins no checked proposal. Merge, judge and choose then run as before.
+- **C27. Light link check** (owner approved, 2026-10-27). Each link asks one narrow question, but
+  each link ran a full Evidence search (about 50 calls, 40 records), then a model screen, and the
+  judge reranked up to 493 documents per link (about 65 minutes in the last live run). On the live
+  runs, OpenAlex search by meaning found 9 to 10 of the gold key studies and 31 of the 40
+  documents the judge used; keyword queries and citation chasing added little. Now, in the check
+  walk only: (1) each item search runs the Evidence search's new `link` depth: no query-generation
+  call, OpenAlex search by meaning on the link sentence (20 results) and on the sentence plus
+  " in the United Kingdom" (10), and Overton on the sentence (10); every distinct result is kept
+  (record cap 40), with its list and rank on its `source.acquired` event. The sentence is the
+  first line of the item text, the child's intent. The plan's filters still apply. (2) No model
+  screen: a code step, `toc_select`, picks each link's documents with `select_for_link` (for now:
+  10, in turn from the three lists in rank order, documents with an abstract first) and writes the
+  screen's own rows: picked ones screened in ("selected by the link search"), the rest screened
+  out ("not selected by the link search"). The pick rule lives in that one function and is
+  expected to change after the pick-rule experiment. (3) The judge reads up to *K* = 10 documents
+  per link, so a link with its own search skips the rerank. (4) A link with no search of its own
+  (added by discovery) reads the 10 screened-in documents closest by meaning to its item text,
+  using the embeddings acquire stores (a document with none ranks last), not a rerank of the
+  whole pool. Replaces C24's record cap of 40 per search and its box-list screen; the steps
+  criterion is deleted. The draft walk, the Evidence search's other depths and Options scoping
+  are unchanged.
 
 ## ADR scope
 

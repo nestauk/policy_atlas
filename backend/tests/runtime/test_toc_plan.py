@@ -11,16 +11,13 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core.schema import evidence_scope
-from policy_atlas.evidence_search.assess.screen import _parse_screen_directive
 from policy_atlas.evidence_search.sourcing.search_loop import parse_search_directive
 from policy_atlas.runtime import option_search, runner
 from policy_atlas.runtime.agent import persist_approved_plan
 from policy_atlas.runtime.toc_plan import (
     TOC_ITEM_RECORD_CAP,
-    TOC_SCREEN_CRITERION_MAX_CHARS,
     TocPlan,
     compose_toc,
-    steps_screening_criterion,
 )
 from policy_atlas.theory_of_change.evidence.item_search_prompt import ITEM_SEARCH_GUIDANCE
 from tests.helpers import delete_task_data, seed_task_and_run, seed_walk
@@ -56,7 +53,7 @@ def test_the_draft_walk_drafts_and_inherits_only_from_an_option() -> None:
 def test_the_check_walk_runs_the_spine_then_the_toc_steps() -> None:
     chain = compose_toc(_plan(), "toc", {"toc_walk": "check"})
     assert [(s.component, s.spine) for s in chain.steps] == [
-        ("screen_abstract", True),
+        ("toc_select", True),
         ("classify", True),
         ("appraise", True),
         ("toc_discover", False),
@@ -67,7 +64,7 @@ def test_the_check_walk_runs_the_spine_then_the_toc_steps() -> None:
     ]
     named = compose_toc(_plan(), "toc", {"toc_walk": "check", "links": ["l1"]})
     assert named.components == [
-        "screen_abstract",
+        "toc_select",
         "classify",
         "appraise",
         "toc_judge",
@@ -75,44 +72,9 @@ def test_the_check_walk_runs_the_spine_then_the_toc_steps() -> None:
     ]
 
 
-def test_the_screen_criterion_names_the_theory_and_never_the_place() -> None:
+def test_the_check_walk_has_no_screen_directive() -> None:
     step = compose_toc(_plan(), "toc", {"toc_walk": "check"}).steps[0]
-    _stage, criteria, _rescreen = _parse_screen_directive(step.directive_delta)
-    assert len(criteria) == 1
-    assert "junk-food advertising ban" in criteria[0]
-    assert "children aged 4 to 11" in criteria[0]
-    assert "London" not in criteria[0]
-
-
-def test_the_check_screen_judges_against_the_steps_when_the_walk_carries_them() -> None:
-    criterion = steps_screening_criterion(["Ads shown fall", "Energy intake falls"])
-    assert criterion is not None
-    assert "how one of these changes leads to another" in criterion
-    assert "in any setting and whatever the intervention" in criterion
-    assert criterion.endswith("\n- Ads shown fall\n- Energy intake falls")
-    for context in (
-        {"toc_walk": "check", "screening_criterion": criterion},
-        {"toc_walk": "check", "links": ["l1"], "screening_criterion": criterion},
-    ):
-        step = compose_toc(_plan(), "toc", context).steps[0]
-        _stage, criteria, _rescreen = _parse_screen_directive(step.directive_delta)
-        assert criteria == [criterion]
-
-
-def test_the_steps_criterion_keeps_the_first_links_under_the_cap() -> None:
-    changes = [f"Change {i} " + "x" * 80 for i in range(40)]
-    criterion = steps_screening_criterion(changes)
-    assert criterion is not None
-    assert len(criterion) <= TOC_SCREEN_CRITERION_MAX_CHARS
-    assert "Change 0 " in criterion
-    assert "Change 39 " not in criterion
-    # The screen itself accepts it: a criterion over its cap fails the walk.
-    composed = compose_toc(
-        _plan(), "toc", {"toc_walk": "check", "screening_criterion": criterion}
-    )
-    _stage, criteria, _rescreen = _parse_screen_directive(composed.steps[0].directive_delta)
-    assert criteria == [criterion]
-    assert steps_screening_criterion([]) is None
+    assert step.directive_delta == {}
 
 
 def test_an_item_search_only_acquires_under_the_plan_s_restriction() -> None:
@@ -120,11 +82,11 @@ def test_an_item_search_only_acquires_under_the_plan_s_restriction() -> None:
     chain = compose_toc(plan, "targeted", {"acquire_only": True})
     assert chain.components == ["acquire"]
     directive = chain.steps[0].directive_delta
-    assert directive["search"]["record_cap"] == TOC_ITEM_RECORD_CAP
+    assert directive["search"]["record_cap"] == TOC_ITEM_RECORD_CAP == 40
     assert directive["search"]["guidance"] == list(ITEM_SEARCH_GUIDANCE)
     # The search loop's own parser admits it.
     depth, filters, guidance = parse_search_directive(directive)
-    assert (depth, filters) == ("rapid", {"shared": {"published_after": "2015-01-01"}})
+    assert (depth, filters) == ("link", {"shared": {"published_after": "2015-01-01"}})
     assert guidance == list(ITEM_SEARCH_GUIDANCE)
 
 

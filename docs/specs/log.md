@@ -1,5 +1,16 @@
 # Spec update log
 
+## 2026-10-27 (task 054, light link check)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): each
+  link's item search now searches the link sentence by meaning (two OpenAlex calls and one
+  Overton call, no query generation, the Evidence search's new `link` depth) and keeps every
+  distinct result. A code step, `toc_select`, replaces the model screen in the check walk: it
+  picks 10 documents per link (in turn from the three result lists, documents with an abstract
+  first) and screens out the rest; the rule is expected to change after a pick-rule experiment.
+  The judge reads up to 10 documents per link with no rerank; a link added by discovery reads the
+  10 closest by meaning. The last live run's rerank alone took about 65 minutes. Task 054
+  contract C27, replacing C24's record cap and box-list screen.
+
 ## 2026-10-27 (task 054, discovery consolidates)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): discover's
   batch proposals are joined by one `toc_consolidate_v1` call before anything is written: repeats

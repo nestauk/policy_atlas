@@ -469,9 +469,11 @@ def _scoping_node(name: str) -> Any:
 
 
 #: The theory-of-change steps (task 054), each ``(conn, *, task_id, run_id,
-#: context, backend)`` on the ToC backend, like the scoping steps.
+#: context, backend)`` on the ToC backend, like the scoping steps;
+#: ``toc_select`` makes no model call and takes no backend (C27).
 _TOC_STEPS: dict[str, Callable[..., dict[str, Any]]] = {
     "toc_draft": toc_draft_scope,
+    "toc_select": toc_check.toc_select_scope,
     "toc_discover": toc_check.toc_discover_scope,
     "toc_merge": toc_check.toc_merge_scope,
     "toc_judge": toc_check.toc_judge_scope,
@@ -483,10 +485,12 @@ _TOC_STEPS: dict[str, Callable[..., dict[str, Any]]] = {
 def _toc_node(name: str) -> Any:
     def run(state: HarnessState) -> HarnessState:
         step = _TOC_STEPS[name]  # read at run time, so a test can swap a step
-        kwargs: dict[str, Any] = {"backend": state["toc_backend"]}
+        kwargs: dict[str, Any] = {} if name == "toc_select" else {"backend": state["toc_backend"]}
         if name == "toc_judge":
-            # Judge reranks each link's candidates with select's rerank backend (C5).
+            # Judge reranks each link's candidates with select's rerank backend
+            # (C5), and picks a searchless link's documents by embedding (C27).
             kwargs["ranker"] = state["ranking_backend"]
+            kwargs["embedder"] = state["embedding_backend"]
         return _run_scope_component(state, ScopeContext, functools.partial(step, **kwargs))
 
     return run

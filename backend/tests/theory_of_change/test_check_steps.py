@@ -24,10 +24,16 @@ from policy_atlas.theory_of_change.backend import StubTocBackend, stub_draft
 from policy_atlas.theory_of_change.check import (
     CASE_STUDIES_PER_BOX,
     JUDGE_TOP_K,
+    LINK_LISTS,
+    LINK_PICK,
+    NOT_SELECTED_REASON,
+    SELECTED_REASON,
     UNSETTLED_SENTENCE,
+    LinkCandidate,
     critical_link,
     links_to_check,
     neighbour_lines,
+    select_for_link,
     top_case_studies,
 )
 from policy_atlas.theory_of_change.discover_prompt import (
@@ -237,6 +243,23 @@ def test_each_link_reads_at_most_k_documents_of_its_own_search(
     assert len({tss for _, tss in per_link}) == len(per_link)
     stage = _summary(engine, task_id, "toc_item_searches")
     assert stage["total"] == 4 and stage["failed"] == 0
+    # toc_select (C27): 10 picked per link screened in, the rest screened out, no model.
+    picked = _summary(engine, task_id, "toc_select")
+    assert picked["relevant"] == 4 * LINK_PICK
+    assert picked["not_relevant"] == picked["screened"] - 4 * LINK_PICK > 0
+    with engine.connect() as conn:
+        flags = {
+            (payload["status"], payload["aggregation_flags"][0])
+            for payload in conn.execute(
+                select(event_log.c.payload)
+                .where(event_log.c.task_id == task_id)
+                .where(event_log.c.event_type == "source.screened")
+            ).scalars()
+        }
+    assert flags == {
+        ("relevant", SELECTED_REASON),
+        ("not_relevant", NOT_SELECTED_REASON),
+    }
 
 
 class _Discovers(StubTocBackend):
@@ -727,3 +750,68 @@ def test_judge_candidates_are_reranked_by_select_s_rerank_backend() -> None:
     assert [by_id[str(d.tss_id)] for d in ranked] == sorted(by_id.values(), reverse=True)
     # No backend: the candidates' own order.
     assert rerank(None, docs, intent="x", usage=UsageAccumulator()) == docs
+
+
+def _doc(i: int) -> Any:
+    from policy_atlas.theory_of_change.check import Document
+
+    return Document(
+        tss_id=uuid.UUID(int=i), title=f"t{i}", year=None, abstract="a", evidence_type=None,
+        score=None,
+    )
+
+
+def test_select_for_link_takes_the_lists_in_turn_with_abstracts_first() -> None:
+    def cand(n: int, source: tuple[str, str], rank: int, abstract: bool = True) -> LinkCandidate:
+        return LinkCandidate(uuid.UUID(int=n), source, rank, abstract)
+
+    q1, q2, ov = LINK_LISTS
+    candidates = [
+        # Out of order on purpose: the rule sorts by list, then rank.
+        cand(23, ov, 3), cand(21, ov, 1), cand(22, ov, 2, abstract=False),
+        *[cand(10 + i, q2, 30 + i) for i in range(3)],
+        *[cand(i, q1, i + 1) for i in range(8)],
+    ]
+    picked = [tss.int for tss in select_for_link(candidates)]
+    # q1 #1, q2 #1, overton #1, q1 #2, ...; overton's #2 has no abstract and is skipped.
+    assert picked == [0, 10, 21, 1, 11, 23, 2, 12, 3, 4]
+    assert len(picked) == LINK_PICK
+    # Fewer than LINK_PICK with an abstract: the rest are filled from those without.
+    few = [cand(1, q1, 1), cand(2, q1, 2, abstract=False), cand(3, ov, 1)]
+    assert [tss.int for tss in select_for_link(few)] == [1, 3, 2]
+
+
+def test_ten_candidates_skip_the_rerank() -> None:
+    from policy_atlas.core.usage import UsageAccumulator
+    from policy_atlas.theory_of_change.check import rerank
+
+    class NeverCalled:
+        def rank(self, *_: Any, **__: Any) -> Any:
+            raise AssertionError("a link with 10 candidates is not reranked")
+
+    docs = [_doc(i) for i in range(JUDGE_TOP_K)]
+    assert JUDGE_TOP_K == 10
+    assert rerank(NeverCalled(), docs, intent="x", usage=UsageAccumulator()) == docs  # type: ignore[arg-type]
+
+
+def test_a_link_without_its_own_search_reads_the_closest_documents() -> None:
+    from policy_atlas.core.embeddings import EMBEDDING_DIMENSIONS
+    from policy_atlas.theory_of_change.check import nearest
+
+    def vec(*head: float) -> list[float]:
+        return [*head, *([0.0] * (EMBEDDING_DIMENSIONS - len(head)))]
+
+    class Embedder:
+        mode = "stub"
+
+        def embed_texts(self, texts: list[str], *, kind: str = "document") -> list[list[float]]:
+            assert kind == "query" and texts == ["the step"]
+            return [vec(1.0, 0.0)]
+
+    docs = [_doc(i) for i in range(14)]
+    # Doc i points further from the query as i grows; doc 0 has no embedding.
+    vectors = {d.tss_id: [vec(1.0, float(i))] for i, d in enumerate(docs) if i}
+    picked = nearest(Embedder(), docs, vectors, text="the step")
+    assert [d.tss_id.int for d in picked] == list(range(1, 11))
+    # Doc 0 ranks last; no embedder keeps the pool order.
+    assert nearest(None, docs, vectors, text="the step") == docs[:JUDGE_TOP_K]

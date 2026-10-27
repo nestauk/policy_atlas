@@ -792,6 +792,79 @@ def _run_stage1(
     }
 
 
+def screen_in(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: ScreenContext,
+    tss_ids: set[uuid.UUID],
+    status: Literal["relevant", "not_relevant"],
+    reason: str,
+) -> dict[str, Any]:
+    """Screen chosen documents in or out by code, with no model call (task 054, C27).
+
+    Writes the same stage-1 rows and ``source.screened`` events the screen
+    writes: each chosen document not yet screened in this scope gets
+    ``status`` at full confidence, ``reason`` the event's only flag. A
+    retracted document is excluded as the screen excludes it.
+
+    Args:
+        conn: Open connection inside the component transaction.
+        task_id: The task.
+        run_id: This run.
+        context: The scope being screened.
+        tss_ids: The documents to screen.
+        status: ``relevant`` (screened in) or ``not_relevant`` (screened out).
+        reason: Why, recorded on each event.
+
+    Returns:
+        ``screened``, ``status`` and ``excluded_retracted`` counts.
+    """
+    docs = [
+        doc
+        for doc in _load_stage1_docs(
+            conn, task_id=task_id, scope_id=context.scope_id, intent=context.intent
+        )
+        if doc.tss_id in tss_ids
+    ]
+    kept, retracted = _exclude_retracted_docs(
+        conn, task_id=task_id, run_id=run_id, context=context, all_docs=docs
+    )
+    for doc in kept:
+        _insert_screen_row(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            scope_id=context.scope_id,
+            tss_id=doc.tss_id,
+            status=status,
+            basis=doc.basis,
+            confidence=1.0,
+            stage=1,
+        )
+        _append_screened_event(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            scope_id=context.scope_id,
+            source_snapshot_id=doc.source_snapshot_id,
+            tss_id=doc.tss_id,
+            status=status,
+            basis=doc.basis,
+            confidence=1.0,
+            stage=1,
+            reps=[],
+            agreement={"agreeing": 0, "survivors": 0},
+            flags=[reason],
+        )
+    return {
+        "screened": len(docs),
+        status: len(kept),
+        "excluded_retracted": len(retracted),
+    }
+
+
 def _stage2_text_snapshot_id(
     *,
     envelope_snapshot_id: uuid.UUID,

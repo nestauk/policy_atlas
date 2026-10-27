@@ -55,7 +55,7 @@ S3. **Walk kinds and chains** (C3). Every main ToC walk's intent record carries 
 `context.toc_walk ∈ {draft, check, recheck}`; recheck and named-link checks add `context.links`.
 `compose_toc(plan, purpose, context)`:
 - `draft`: `inherit` (only with `from_option`) → `toc_draft` (or `toc_import`).
-- `check`: `screen_abstract` → `classify` → `appraise` → `toc_discover` → `toc_merge` →
+- `check`: `toc_select` → `classify` → `appraise` → `toc_discover` → `toc_merge` →
   `toc_judge` → `toc_choose` → `toc_summarise`. With `context.links` (Search for more), the same
   chain without discover, merge and choose.
 - `recheck` (C19, user-started): `toc_same_meaning` → `toc_judge` over the documents already
@@ -65,14 +65,14 @@ S3. **Walk kinds and chains** (C3). Every main ToC walk's intent record carries 
   the route's web search is enabled, increment 3).
 **Item searches are a runner stage, not a chain step**: the runner dispatches the children in a
 `purpose == 'toc'` branch beside `LONGLIST_PURPOSE`, before the first chain step of a check walk,
-and joins them before `screen_abstract`, emitting `toc_item_searches` as an event. Each new step
+and joins them before `toc_select`, emitting `toc_item_searches` as an event. Each new step
 gets a `COMPONENT_REGISTRY` entry, a `TOC_STEPS` tuple in `task_plan._validate_registry`, and a
 harness node; `build_graph`'s edge map is built from the step dictionaries.
-**Directives.** Item search: the item text as intent; guidance asking for evidence on the step and
-on each of its conditions, for and against; a record cap of 🟡 40 per link (20 until the arm B ruling, 2026-10-27); the plan's evidence
-restriction as filters; no ingest. Screen: the steps the check covers (each link's sentence; arm B ruling, contract C24) as the
-screening criterion, the place carried as the user's place and never a criterion. Each walk
-screens only documents its own children acquired plus inherited ones not yet screened in the task.
+**Directives.** Item search: the item text as intent; the `link` search depth (contract C27: the
+sentence searched by meaning, no query generation); a record cap of 🟡 40 per link, every
+distinct result of the three calls; the plan's evidence restriction as filters; no ingest. No
+model screen (C27): `toc_select` picks each link's documents in code (🟡 10 for now) and writes
+the screen's rows, the rest screened out. The place never excludes a document.
 
 S4. **Sequence driver and dispatch** (C3, C19). `run_toc_sequence(engine, *, task_id,
 first_outcome)` in `api/toc_start.py` follows `draft → check` (one hop) with a duplicate guard.

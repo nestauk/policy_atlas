@@ -970,7 +970,7 @@ def _run_plan_impl(
     option_searches_joined = False
     # A theory-of-change check walk's item searches (task 054, S3): the same
     # two barriers, dispatched before the first step and joined before
-    # ``screen_abstract``. A ToC walk never pauses, so never resumes.
+    # ``toc_select``. A ToC walk never pauses, so never resumes.
     toc_check = (
         resume_from is None
         and purpose == TOC_PURPOSE
@@ -1117,7 +1117,7 @@ def _run_plan_impl(
                     session_id=session_id,
                     links=scope_context.get(TOC_LINKS_KEY),
                 )
-            if step.component == "screen_abstract" and not toc_joined:
+            if step.component == "toc_select" and not toc_joined:
                 toc_joined = True
                 joined = option_search.join_children(
                     engine,

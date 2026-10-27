@@ -1,14 +1,16 @@
 """The check walk's theory-of-change steps (task 054, step 1.4; C5, C6, C20).
 
-After the spine steps have screened, classified and appraised the documents
-the item searches found, five steps run in order (W16):
+``toc_select`` keeps every document the item searches found (C27: no model
+call), the spine steps classify and appraise them, and five steps run in
+order (W16):
 
 - ``toc_discover``: batches of screened-in documents propose routes the
   theory lacks; a proposal whose route breaks a structure rule or whose
   passages are not in the documents is dropped. Insert-only.
 - ``toc_merge``: one call joins pathways that share a mechanism and sets
   aside those that miss the intended change.
-- ``toc_judge``: per link, the top *K* documents read with one call each;
+- ``toc_judge``: per link, its own search's documents (or, for a link with
+  none, the *K* pool documents closest by meaning) read with one call each;
   both stances with verified quotes. Insert-only, keyed by item hash.
 - ``toc_choose``: within the 6 / 3 limits, conditions supports recorded,
   and the critical connection by the C6 rule.
@@ -21,18 +23,29 @@ context, backend)``, and writes through :mod:`~policy_atlas.theory_of_change.sto
 
 from __future__ import annotations
 
+import math
 import uuid
 from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from itertools import zip_longest
 from typing import Any
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Row
 
+from policy_atlas.core.embeddings import (
+    EMBEDDING_PROFILE,
+    UNIT_POLICY,
+    EmbeddingBackend,
+    validate_vector,
+)
 from policy_atlas.core.schema import (
     capability_run,
+    chunk,
+    chunk_embedding,
+    event_log,
     evidence_scope,
     runs,
     source_appraisal_result,
@@ -45,6 +58,7 @@ from policy_atlas.core.schema import (
     toc_pathway,
 )
 from policy_atlas.core.usage import UsageAccumulator
+from policy_atlas.evidence_search.assess.screen import ScreenContext, screen_in
 from policy_atlas.evidence_search.corpus.characterise import screened_sources
 from policy_atlas.evidence_search.corpus.ranking import (
     RERANK_BATCH_SIZE,
@@ -93,8 +107,23 @@ from policy_atlas.theory_of_change.graph import (
 
 log = structlog.get_logger()
 
-#: Documents judged per link (C5).
-JUDGE_TOP_K = 8
+#: Documents judged per link (C5): an item search keeps 10 (C27), so a link
+#: with its own search skips the rerank.
+JUDGE_TOP_K = 10
+
+#: Documents ``toc_select`` keeps per link (C27).
+LINK_PICK = 10
+
+#: The link search's result lists, ``(backend, query origin)``, in turn order (C27).
+LINK_LISTS: tuple[tuple[str, str], ...] = (
+    ("openalex", "semantic"),
+    ("openalex", "semantic_place"),
+    ("overton", "verbatim"),
+)
+
+#: The reasons ``toc_select`` records on the documents it screens in and out (C27).
+SELECTED_REASON = "selected_by_link_search"
+NOT_SELECTED_REASON = "not_selected_by_link_search"
 
 #: Discover batches in flight at once.
 DISCOVER_WORKERS = 4
@@ -859,16 +888,166 @@ def toc_merge_scope(
     return summary
 
 
+# --- select ---------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class LinkCandidate:
+    """One document a link's own search acquired, as the pick rule sees it.
+
+    Attributes:
+        tss_id: The document.
+        source_list: The result list it came from, ``(backend, query origin)``.
+        rank: Its pool rank; within one list, lower is earlier in that list.
+        has_abstract: Whether it has an abstract.
+    """
+
+    tss_id: uuid.UUID
+    source_list: tuple[str, str]
+    rank: int
+    has_abstract: bool
+
+
+def select_for_link(candidates: list[LinkCandidate]) -> list[uuid.UUID]:
+    """The pick rule: which of a link's documents are judged (C27).
+
+    In turn from the result lists (:data:`LINK_LISTS` order) in rank order,
+    :data:`LINK_PICK` documents. A document with no abstract is taken only
+    when fewer than :data:`LINK_PICK` have one. The one place the rule lives:
+    it is expected to change after the pick-rule experiment.
+
+    Args:
+        candidates: The link's documents.
+
+    Returns:
+        The picked documents, in pick order.
+    """
+
+    def order(source_list: tuple[str, str]) -> int:
+        return LINK_LISTS.index(source_list) if source_list in LINK_LISTS else len(LINK_LISTS)
+
+    def in_turn(pool: list[LinkCandidate]) -> list[uuid.UUID]:
+        lists: dict[tuple[str, str], list[uuid.UUID]] = {}
+        for c in sorted(pool, key=lambda c: (order(c.source_list), c.source_list, c.rank)):
+            lists.setdefault(c.source_list, []).append(c.tss_id)
+        return [tss for row in zip_longest(*lists.values()) for tss in row if tss is not None]
+
+    with_abstract = in_turn([c for c in candidates if c.has_abstract])
+    without = in_turn([c for c in candidates if not c.has_abstract])
+    return (with_abstract + without)[:LINK_PICK]
+
+
+def _link_candidates(
+    conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID
+) -> dict[str, list[LinkCandidate]]:
+    """Link id → the documents its own search acquired, from acquire's events."""
+    child_link = _child_links(conn, task_id=task_id, walk_id=walk_id)
+    if not child_link:
+        return {}
+    found: dict[uuid.UUID, tuple[str, tuple[str, str], int]] = {}
+    for row in conn.execute(
+        select(event_log.c.payload, runs.c.capability_run_id)
+        .select_from(
+            event_log.join(
+                runs,
+                (runs.c.run_id == event_log.c.run_id) & (runs.c.task_id == event_log.c.task_id),
+            )
+        )
+        .where(event_log.c.task_id == task_id)
+        .where(event_log.c.event_type == "source.acquired")
+        .where(runs.c.capability_run_id.in_(list(child_link)))
+    ):
+        payload = row.payload
+        found[uuid.UUID(payload["task_source_snapshot_id"])] = (
+            child_link[row.capability_run_id],
+            (str(payload["backend"]), str(payload["query_origin"])),
+            int(payload["pool_rank"]),
+        )
+    if not found:
+        return {}
+    abstracts = {
+        row.task_source_snapshot_id: bool(str(row.metadata.get("abstract") or "").strip())
+        for row in conn.execute(
+            select(task_source_snapshot.c.task_source_snapshot_id, source_snapshot.c.metadata)
+            .join(
+                source_snapshot,
+                source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
+            )
+            .where(task_source_snapshot.c.task_id == task_id)
+            .where(task_source_snapshot.c.task_source_snapshot_id.in_(list(found)))
+        )
+    }
+    out: dict[str, list[LinkCandidate]] = {}
+    for tss, (link_id, source_list, rank) in found.items():
+        out.setdefault(link_id, []).append(
+            LinkCandidate(tss, source_list, rank, abstracts.get(tss, False))
+        )
+    return out
+
+
+def toc_select_scope(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: ScopeContext,
+) -> dict[str, Any]:
+    """Pick each link's documents by code and write the screen's rows (C27).
+
+    Each link search already searched its own sentence by meaning, so no model
+    screens its documents: :func:`select_for_link` picks the ones judged
+    (screened in), and the rest are screened out. The rows are the screen's
+    own, so classify, appraise and the later steps read them unchanged.
+
+    Args:
+        conn: Open connection inside the component transaction.
+        task_id: The task.
+        run_id: This run.
+        context: The check walk's intent record.
+
+    Returns:
+        ``screened``, ``relevant``, ``not_relevant`` and ``excluded_retracted`` counts.
+    """
+    walk_id = walk_of_run(conn, task_id=task_id, run_id=run_id)
+    candidates = _link_candidates(conn, task_id=task_id, walk_id=walk_id)
+    picked = {tss for found in candidates.values() for tss in select_for_link(found)}
+    everything = {c.tss_id for found in candidates.values() for c in found}
+    screen = ScreenContext(
+        scope_id=context.scope_id, intent=context.intent, context=context.context
+    )
+    kept = screen_in(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=screen,
+        tss_ids=picked,
+        status="relevant",
+        reason=SELECTED_REASON,
+    )
+    dropped = screen_in(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=screen,
+        tss_ids=everything - picked,
+        status="not_relevant",
+        reason=NOT_SELECTED_REASON,
+    )
+    return {
+        "screened": kept["screened"] + dropped["screened"],
+        "relevant": kept["relevant"],
+        "not_relevant": dropped["not_relevant"],
+        "excluded_retracted": kept["excluded_retracted"] + dropped["excluded_retracted"],
+    }
+
+
 # --- judge ----------------------------------------------------------------------
 
 
-def _own_search_documents(
+def _child_links(
     conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID
-) -> dict[str, set[uuid.UUID]]:
-    """Link id → documents its own item search acquired in this walk.
-
-    A link absent from the map had no search of its own.
-    """
+) -> dict[uuid.UUID, str]:
+    """Item-search child walk id → the link it searched, for this walk."""
     children = conn.execute(
         select(capability_run.c.capability_run_id, evidence_scope.c.context)
         .select_from(
@@ -881,13 +1060,22 @@ def _own_search_documents(
         .where(capability_run.c.task_id == task_id)
         .where(capability_run.c.parent_capability_run_id == walk_id)
     ).all()
-    out: dict[str, set[uuid.UUID]] = {}
-    child_link: dict[uuid.UUID, str] = {}
-    for child in children:
-        link_id = (child.context or {}).get("link_id")
-        if link_id:
-            child_link[child.capability_run_id] = str(link_id)
-            out.setdefault(str(link_id), set())
+    return {
+        child.capability_run_id: str(link_id)
+        for child in children
+        if (link_id := (child.context or {}).get("link_id"))
+    }
+
+
+def _own_search_documents(
+    conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID
+) -> dict[str, set[uuid.UUID]]:
+    """Link id → documents its own item search acquired in this walk.
+
+    A link absent from the map had no search of its own.
+    """
+    child_link = _child_links(conn, task_id=task_id, walk_id=walk_id)
+    out: dict[str, set[uuid.UUID]] = {link_id: set() for link_id in child_link.values()}
     if not child_link:
         return out
     # ponytail: a document two searches both found is filed under the first
@@ -949,6 +1137,69 @@ def rerank(
     )
 
 
+def _document_vectors(
+    conn: Connection, tss_ids: Iterable[uuid.UUID]
+) -> dict[uuid.UUID, list[list[float]]]:
+    """The embedding vectors acquire stored for each document's text, by document."""
+    out: dict[uuid.UUID, list[list[float]]] = {}
+    for row in conn.execute(
+        select(task_source_snapshot.c.task_source_snapshot_id, chunk_embedding.c.vector)
+        .select_from(
+            chunk_embedding.join(chunk, chunk.c.chunk_id == chunk_embedding.c.chunk_id).join(
+                task_source_snapshot,
+                task_source_snapshot.c.source_snapshot_id == chunk.c.source_snapshot_id,
+            )
+        )
+        .where(task_source_snapshot.c.task_source_snapshot_id.in_(list(tss_ids)))
+        .where(chunk_embedding.c.embedding_profile == EMBEDDING_PROFILE)
+        .where(chunk_embedding.c.unit_policy == UNIT_POLICY)
+    ):
+        out.setdefault(row.task_source_snapshot_id, []).append(validate_vector(row.vector))
+    return out
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    norms = math.sqrt(math.sumprod(a, a)) * math.sqrt(math.sumprod(b, b))
+    return math.sumprod(a, b) / norms if norms else 0.0
+
+
+def nearest(
+    embedder: EmbeddingBackend | None,
+    candidates: list[Document],
+    vectors: Mapping[uuid.UUID, list[list[float]]],
+    *,
+    text: str,
+) -> list[Document]:
+    """The :data:`JUDGE_TOP_K` candidates closest by meaning to the item text (C27).
+
+    For a link with no search of its own. A document's closeness is its
+    best-matching stored embedding unit; a document with no embedding ranks
+    last. With no embedder, or a failed query embedding, the candidates keep
+    their own order.
+
+    Args:
+        embedder: The embedding backend, or ``None``.
+        candidates: The pool documents not yet judged for this link.
+        vectors: Stored vectors by document (:func:`_document_vectors`).
+        text: The link's item text.
+
+    Returns:
+        At most :data:`JUDGE_TOP_K` documents, closest first.
+    """
+    if embedder is None or len(candidates) <= JUDGE_TOP_K:
+        return candidates[:JUDGE_TOP_K]
+    try:
+        query = validate_vector(embedder.embed_texts([text], kind="query")[0])
+    except Exception as exc:  # noqa: BLE001 - a failed embedding keeps the order
+        log.warning("toc_judge.embed_failed", error_type=type(exc).__name__)
+        return candidates[:JUDGE_TOP_K]
+
+    def closeness(doc: Document) -> float:
+        return max((_cosine(query, v) for v in vectors.get(doc.tss_id, [])), default=-2.0)
+
+    return sorted(candidates, key=closeness, reverse=True)[:JUDGE_TOP_K]
+
+
 @dataclass
 class _JudgeJob:
     link_key: str
@@ -999,6 +1250,7 @@ def toc_judge_scope(
     context: ScopeContext,
     backend: TocBackend,
     ranker: RankingBackend | None = None,
+    embedder: EmbeddingBackend | None = None,
 ) -> dict[str, Any]:
     """Judge each link against its top documents, both questions at once (C5).
 
@@ -1009,6 +1261,8 @@ def toc_judge_scope(
         context: The check walk's intent record.
         backend: The ToC model seam.
         ranker: The rerank backend ``select`` uses, or ``None`` to keep order.
+        embedder: The embedding backend that picks the closest pool documents
+            for a link with no search of its own (C27), or ``None``.
 
     Returns:
         Link, call and judgement counts, ``unverified_dropped`` and the usage.
@@ -1021,6 +1275,7 @@ def toc_judge_scope(
     pool = screened_documents(conn, task_id=task_id, scope_id=context.scope_id)
     pool_by_id = {doc.tss_id: doc for doc in pool}
     own = _own_search_documents(conn, task_id=task_id, walk_id=walk_id)
+    vectors: dict[uuid.UUID, list[list[float]]] | None = None  # read once, when needed
     usage = UsageAccumulator()
     place = plan.where
     jobs: list[_JudgeJob] = []
@@ -1035,10 +1290,6 @@ def toc_judge_scope(
             population=plan.target_population,
             place=place,
         )
-        if key in own:
-            candidates = [pool_by_id[tss] for tss in sorted(own[key], key=str) if tss in pool_by_id]
-        else:
-            candidates = list(pool)
         judged = set(
             conn.execute(
                 select(toc_item_evidence.c.task_source_snapshot_id)
@@ -1047,8 +1298,20 @@ def toc_judge_scope(
                 .where(toc_item_evidence.c.item_hash == current)
             ).scalars()
         )
-        candidates = [doc for doc in candidates if doc.tss_id not in judged]
-        for document in rerank(ranker, candidates, intent=text, usage=usage)[:JUDGE_TOP_K]:
+        if key in own:
+            candidates = [
+                pool_by_id[tss]
+                for tss in sorted(own[key], key=str)
+                if tss in pool_by_id and tss not in judged
+            ]
+            chosen = rerank(ranker, candidates, intent=text, usage=usage)[:JUDGE_TOP_K]
+        else:
+            # Added by discovery after the fan-out: the closest pool documents.
+            if vectors is None:
+                vectors = _document_vectors(conn, pool_by_id)
+            candidates = [doc for doc in pool if doc.tss_id not in judged]
+            chosen = nearest(embedder, candidates, vectors, text=text)
+        for document in chosen:
             jobs.append(
                 _JudgeJob(
                     key,

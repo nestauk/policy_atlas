@@ -53,15 +53,11 @@ from policy_atlas.runtime.runner import RunnerBackends, RunPlanOutcome, run_plan
 from policy_atlas.runtime.toc_plan import (
     TOC_LINKS_KEY,
     TOC_PURPOSE,
-    TOC_SCREEN_CRITERION_KEY,
     TOC_WALK_CHECK,
     TOC_WALK_DRAFT,
     TOC_WALK_KEY,
     TocPlan,
-    steps_screening_criterion,
 )
-from policy_atlas.theory_of_change import store
-from policy_atlas.theory_of_change.check import links_to_check
 from policy_atlas.theory_of_change.store import TOC_CHANGED_EVENT, has_graph
 
 log = structlog.get_logger()
@@ -121,35 +117,6 @@ def check_intent(plan: TocPlan) -> str:
     )
 
 
-def check_screening_context(
-    conn: Connection, *, task_id: uuid.UUID, links: list[str] | None
-) -> dict[str, str]:
-    """The check walk's screening criterion, as an intent-record context entry (arm B).
-
-    The graph is read here, where the walk is minted, because the chain
-    composer has none. Links come in the order :func:`links_to_check` gives.
-
-    Args:
-        conn: Open connection.
-        task_id: The task.
-        links: The links a named-link check covers, or ``None`` for all.
-
-    Returns:
-        ``{TOC_SCREEN_CRITERION_KEY: criterion}``, or empty when the graph has
-        no links (the composer then uses the theory-wide criterion).
-    """
-    graph, _ = store.load_graph(conn, task_id)
-    keys, _ = links_to_check(graph, links)
-    changes: list[str] = []
-    for key in keys:
-        for box in (graph.links[key].source, graph.links[key].target):
-            text = graph.boxes[box].text
-            if text not in changes:
-                changes.append(text)
-    criterion = steps_screening_criterion(changes)
-    return {TOC_SCREEN_CRITERION_KEY: criterion} if criterion else {}
-
-
 def mint_scope(
     conn: Connection,
     *,
@@ -178,8 +145,6 @@ def mint_scope(
         context[TOC_LINKS_KEY] = links
     if draft_run_id is not None:
         context[DRAFT_WALK_KEY] = str(draft_run_id)
-    if toc_walk == TOC_WALK_CHECK:
-        context.update(check_screening_context(conn, task_id=task_id, links=links))
     scope_id = uuid.uuid4()
     conn.execute(
         evidence_scope.insert().values(
