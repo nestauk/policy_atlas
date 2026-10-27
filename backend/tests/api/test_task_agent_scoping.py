@@ -33,7 +33,7 @@ from policy_atlas.core.schema import (
     evidence_scope,
     task_plan,
 )
-from policy_atlas.runtime.scoping_plan import BASELINE_TIME_BAND
+from policy_atlas.runtime.scoping_plan import BASELINE_TIME_BAND, ScopingPlan, longlist_inputs
 from policy_atlas.runtime.task_agent_scoping import StubScopingTaskAgentBackend
 from tests.api.resource_support import (
     api_client,
@@ -207,6 +207,44 @@ def test_a_rebuild_after_a_change_reads_the_new_version(
     assert plans[2]["payload"]["steer_point_defaults"] == [
         {"steer_point": "baseline_confirm", "action": "proceed_flag"}
     ]
+
+
+def test_an_appetite_only_patch_mints_a_version_and_leaves_the_longlist_inputs(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Task 055 item 1: the appetite is a plan field the patch can change alone."""
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
+        before = client.get(f"/api/v1/tasks/{task_id}/plan", headers=owner).json()
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"scoping": {"risk_appetite": "open_to_untested"}},
+        )
+        assert patched.status_code == 200, patched.text
+
+    assert before["scoping"]["risk_appetite"] == "mostly_tried"
+    body = patched.json()
+    assert body["version"] == 2
+    assert body["scoping"]["risk_appetite"] == "open_to_untested"
+    plans = _plan_rows(engine, task_id)
+    assert [p["payload"]["risk_appetite"] for p in plans] == ["mostly_tried", "open_to_untested"]
+    older, newer = (ScopingPlan.model_validate(p["payload"]) for p in plans)
+    assert longlist_inputs(older) == longlist_inputs(newer)
+
+
+def test_an_unknown_appetite_in_a_patch_is_refused(engine: Engine, tmp_path: Path) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
+        refused = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"scoping": {"risk_appetite": "reckless"}},
+        )
+    assert refused.status_code == 422, refused.text
+    assert len(_plan_rows(engine, task_id)) == 1
 
 
 # --- GET /plan --------------------------------------------------------------

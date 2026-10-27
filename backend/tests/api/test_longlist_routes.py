@@ -43,6 +43,7 @@ from policy_atlas.core.schema import (
     source_classification_result,
     task,
     task_link,
+    task_plan,
     task_source_snapshot,
 )
 from policy_atlas.options_scoping.constrain.constrain import (
@@ -1655,3 +1656,131 @@ def test_an_option_from_the_evidence_search_names_its_report_section(
     assert card.from_section == "What works for employers"
 
 
+
+
+# --- task 055: the shortlist place, the proposal and the plan inputs -----------
+
+
+def _approve_version(conn: Connection, walk: _Walk, version: int, plan: ScopingPlan) -> None:
+    """Supersede the current plan version and approve ``plan`` as ``version``."""
+    conn.execute(
+        update(task_plan)
+        .where(task_plan.c.task_id == walk.task_id)
+        .where(task_plan.c.status == "approved")
+        .values(status="superseded")
+    )
+    conn.execute(
+        task_plan.insert().values(
+            plan_id=uuid.uuid4(),
+            task_id=walk.task_id,
+            version=version,
+            status="approved",
+            payload=plan.model_dump(mode="json"),
+            created_at=now(),
+            created_by="user",
+        )
+    )
+
+
+def test_null_shortlist_columns_read_as_no_place(conn: Connection) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    picked = walk.option("Wage subsidy", origin="added_by_you")
+    walk.build(_Scripted())
+    unplaced = walk.options()["Youth guarantee"].option_id
+    conn.execute(
+        update(option)
+        .where(option.c.option_id == picked)
+        .values(shortlist_state="proposed", shortlist_reason="Tried at scale in Wales.")
+    )
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    by_id = {o.option_id: o for o in listed.options}
+    assert by_id[unplaced].shortlist is None
+    placed = by_id[picked].shortlist
+    assert placed is not None
+    assert (placed.state, placed.reason) == ("proposed", "Tried at scale in Wales.")
+    card = repository.option_out(conn, walk.task_id, unplaced)
+    assert card is not None and card.shortlist is None
+    picked_card = repository.option_out(conn, walk.task_id, picked)
+    assert picked_card is not None and picked_card.shortlist == placed
+
+
+def test_a_longlist_with_no_proposal_serves_an_empty_stale_shortlist(conn: Connection) -> None:
+    """A row written before the shortlist existed holds ``{}`` (PG1: stale)."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert listed.shortlist.note is None
+    assert listed.shortlist.provenance == {}
+    assert listed.shortlist.places_target == 5
+    assert listed.shortlist.stale is True
+    assert listed.plan_inputs_changed is False
+
+
+def test_the_proposal_is_stale_when_the_plan_s_appetite_moves(conn: Connection) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    run_id, _ = walk.build(_Scripted())
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.run_id == run_id)
+        .values(
+            shortlist={
+                "note": "Leaves out the untested ideas.",
+                "provenance": {"appetite": "mostly_tried", "plan_version": 2},
+            }
+        )
+    )
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert listed.shortlist.note == "Leaves out the untested ideas."
+    assert listed.shortlist.provenance["appetite"] == "mostly_tried"
+    assert listed.shortlist.stale is False
+
+    cautious = scoping_plan().model_copy(update={"risk_appetite": "tried_only"})
+    _approve_version(conn, walk, 3, cautious)
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert listed.shortlist.stale is True
+    # A6: the appetite is not a longlist input.
+    assert listed.plan_inputs_changed is False
+
+
+def test_an_outcome_change_makes_the_plan_inputs_changed(conn: Connection) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    base = scoping_plan()
+    earnings = base.outcomes[0].model_copy(update={"text": "earnings"})
+    moved = base.model_copy(update={"outcomes": [*base.outcomes, earnings]})
+    _approve_version(conn, walk, 3, moved)
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert listed.plan_inputs_changed is True
+
+
+def test_plan_inputs_changed_is_false_when_the_pinned_version_cannot_be_read(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    conn.execute(
+        update(task_plan)
+        .where(task_plan.c.task_id == walk.task_id)
+        .where(task_plan.c.version == 2)
+        .values(payload={"not": "a scoping plan"}, status="superseded")
+    )
+    base = scoping_plan()
+    _approve_version(
+        conn,
+        walk,
+        3,
+        base.model_copy(update={"depth": "rapid" if base.depth == "standard" else "standard"}),
+    )
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert listed.plan_inputs_changed is False

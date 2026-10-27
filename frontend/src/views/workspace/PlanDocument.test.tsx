@@ -186,6 +186,7 @@ function fullScopingPlan(overrides: Partial<ScopingPlanDraft> = {}): ScopingPlan
     ],
     time_band: "10-15 minutes",
     baseline_confirmed: null,
+    risk_appetite: "mostly_tried",
     ready: true,
     ...overrides,
   };

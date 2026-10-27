@@ -408,6 +408,17 @@ def test_an_intent_record_may_name_only_a_plan_of_its_own_task(conn: Connection)
 
 def test_an_intent_record_s_purpose_is_closed(conn: Connection) -> None:
     task_id = _seed_bare_task(conn)
+    # Task 055 adds "shortlist" to the closed set.
+    conn.execute(
+        evidence_scope.insert().values(
+            evidence_scope_id=uuid.uuid4(),
+            task_id=task_id,
+            intent="shortlist",
+            context={},
+            created_at=datetime.now(UTC),
+            purpose="shortlist",
+        )
+    )
     with pytest.raises(IntegrityError, match="ck_scope_purpose"):
         conn.execute(
             evidence_scope.insert().values(
@@ -416,6 +427,6 @@ def test_an_intent_record_s_purpose_is_closed(conn: Connection) -> None:
                 intent="baseline",
                 context={},
                 created_at=datetime.now(UTC),
-                purpose="shortlist",
+                purpose="assessment",
             )
         )

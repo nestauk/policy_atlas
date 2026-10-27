@@ -2873,6 +2873,11 @@ export interface components {
          *             earlier version can show that version's wording (task 046).
          *         taxonomy_version: The lever-type list version.
          *         depth_label: The depth label every longlist surface carries.
+         *         shortlist: The latest shortlist proposal (task 055).
+         *         plan_inputs_changed: The current approved plan differs from the plan
+         *             the longlist was built from in a field the longlist reads, so a
+         *             rebuild would give a different longlist. A change to the risk
+         *             appetite alone leaves it false (task 055, A6).
          */
         LonglistOut: {
             /** Capability Run Id */
@@ -2894,6 +2899,11 @@ export interface components {
             lever_types?: string[];
             /** Options */
             options?: components["schemas"]["OptionSummaryOut"][];
+            /**
+             * Plan Inputs Changed
+             * @default false
+             */
+            plan_inputs_changed: boolean;
             /** Plan Version */
             plan_version: number;
             /**
@@ -2901,6 +2911,7 @@ export interface components {
              * Format: uuid
              */
             run_id: string;
+            shortlist: components["schemas"]["ShortlistOut"];
             /** Taxonomy Version */
             taxonomy_version?: string | null;
             /** Themes */
@@ -3219,6 +3230,7 @@ export interface components {
             search_pending: boolean;
             /** Secondary Lever Types */
             secondary_lever_types?: string[];
+            shortlist?: components["schemas"]["ShortlistStateOut"] | null;
             /**
              * State
              * @enum {string}
@@ -3366,6 +3378,8 @@ export interface components {
          *             document measured (R76).
          *         outcomes_total: The outcome count of the plan the longlist was built
          *             from (R76).
+         *         shortlist: Its place on the shortlist (task 055); `null` when it
+         *             holds none.
          */
         OptionSummaryOut: {
             /** Also Found As */
@@ -3437,6 +3451,7 @@ export interface components {
             search_pending: boolean;
             /** Secondary Lever Types */
             secondary_lever_types?: string[];
+            shortlist?: components["schemas"]["ShortlistStateOut"] | null;
             /**
              * State
              * @enum {string}
@@ -4361,6 +4376,8 @@ export interface components {
          *         steps: The three display steps, in order.
          *         time_band: The coarse compute band for the baseline.
          *         baseline_confirmed: The confirm-baseline record, once written.
+         *         risk_appetite: How far the shortlist may reach beyond options tried
+         *             elsewhere (task 055); set on every approved plan.
          *         ready: Whether the draft has validated into an executable plan.
          */
         ScopingPlanDraft: {
@@ -4408,6 +4425,11 @@ export interface components {
              * @default false
              */
             ready: boolean;
+            /**
+             * Risk Appetite
+             * @default null
+             */
+            risk_appetite: ("tried_only" | "mostly_tried" | "open_to_untested") | null;
             /**
              * Steer Point Defaults
              * @default null
@@ -4465,6 +4487,9 @@ export interface components {
          *         steering_mode: Replacement check-in cadence.
          *         steer_point_defaults: Replacement standing instructions.
          *         assumptions: Replacement assumptions.
+         *         risk_appetite: Replacement risk appetite (task 055). The longlist
+         *             does not read it, so a patch carrying only this field never makes
+         *             the longlist out of date.
          */
         ScopingPlanPatch: {
             /** Assumptions */
@@ -4476,6 +4501,8 @@ export interface components {
             intended_change?: components["schemas"]["TaggedOut"] | null;
             /** Outcomes */
             outcomes?: components["schemas"]["TaggedOut"][] | null;
+            /** Risk Appetite */
+            risk_appetite?: ("tried_only" | "mostly_tried" | "open_to_untested") | null;
             /** Steer Point Defaults */
             steer_point_defaults?: components["schemas"]["ScopingSteerPointDefaultOut"][] | null;
             /** Steering Mode */
@@ -4539,6 +4566,53 @@ export interface components {
             summary_status?: ("pending" | "verified" | "failed") | null;
             /** Title */
             title: string;
+        };
+        /**
+         * ShortlistOut
+         * @description The latest shortlist proposal on a longlist (task 055).
+         *
+         *     Args:
+         *         note: The proposal's short "what this leaves out" note; `null` before
+         *             the first proposal.
+         *         provenance: How the proposal was made (prompt version, model,
+         *             appetite, plan version, …); empty before the first proposal.
+         *         places_target: How many places a proposal fills to.
+         *         stale: The proposal does not match the plan's current risk appetite,
+         *             or a built longlist has no proposal yet. The view then asks the
+         *             user to press Suggest more to re-propose.
+         */
+        ShortlistOut: {
+            /** Note */
+            note?: string | null;
+            /**
+             * Places Target
+             * @default 5
+             */
+            places_target: number;
+            /** Provenance */
+            provenance?: {
+                [key: string]: unknown;
+            };
+            /** Stale */
+            stale: boolean;
+        };
+        /**
+         * ShortlistStateOut
+         * @description An option's place on the shortlist (task 055).
+         *
+         *     Args:
+         *         state: `proposed` (Policy Atlas's pick), `added_by_you`, or
+         *             `set_aside` (a pick the user removed).
+         *         reason: The one-line reason for a Policy Atlas pick; `null` otherwise.
+         */
+        ShortlistStateOut: {
+            /** Reason */
+            reason?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "proposed" | "added_by_you" | "set_aside";
         };
         /**
          * SourceDossierOut

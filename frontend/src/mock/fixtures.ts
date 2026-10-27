@@ -720,6 +720,7 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
   ],
   time_band: "10-15 minutes",
   baseline_confirmed: null,
+  risk_appetite: "mostly_tried",
   ready: true,
 };
 
@@ -1471,5 +1472,7 @@ export function mockLonglist(): components["schemas"]["LonglistOut"] {
     },
     taxonomy_version: "lever-types-v1",
     depth_label: "scoping pass",
+    shortlist: { note: null, provenance: {}, places_target: 5, stale: true },
+    plan_inputs_changed: false,
   };
 }

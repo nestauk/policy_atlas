@@ -236,6 +236,10 @@ CheckedAt = Literal["longlist", "assessment", "retrieval"]
 #: Scoping depth. Mirrors `scoping_plan.ScopingPlan.depth`.
 ScopingDepth = Literal["rapid", "standard"]
 
+#: How far the shortlist may reach beyond options tried elsewhere (task 055,
+#: S2). Mirrors `scoping_plan.RiskAppetite`.
+ScopingRiskAppetite = Literal["tried_only", "mostly_tried", "open_to_untested"]
+
 #: One entry's kind in Your context. Mirrors `scoping_plan.YourContextEntry`.
 YourContextType = Literal["present_fact", "commitment"]
 
@@ -410,6 +414,8 @@ class ScopingPlanDraft(BaseModel):
         steps: The three display steps, in order.
         time_band: The coarse compute band for the baseline.
         baseline_confirmed: The confirm-baseline record, once written.
+        risk_appetite: How far the shortlist may reach beyond options tried
+            elsewhere (task 055); set on every approved plan.
         ready: Whether the draft has validated into an executable plan.
     """
 
@@ -431,6 +437,7 @@ class ScopingPlanDraft(BaseModel):
     steps: list[PlanStep] = Field(default_factory=list)
     time_band: str | None = None
     baseline_confirmed: BaselineConfirmedOut | None = None
+    risk_appetite: ScopingRiskAppetite | None = None
     ready: bool = False
 
 
@@ -453,6 +460,9 @@ class ScopingPlanPatch(BaseModel):
         steering_mode: Replacement check-in cadence.
         steer_point_defaults: Replacement standing instructions.
         assumptions: Replacement assumptions.
+        risk_appetite: Replacement risk appetite (task 055). The longlist
+            does not read it, so a patch carrying only this field never makes
+            the longlist out of date.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -468,6 +478,7 @@ class ScopingPlanPatch(BaseModel):
     steering_mode: SteeringMode | None = None
     steer_point_defaults: list[ScopingSteerPointDefaultOut] | None = None
     assumptions: list[str] | None = None
+    risk_appetite: ScopingRiskAppetite | None = None
 
 
 class ConfirmBaselineIn(BaseModel):

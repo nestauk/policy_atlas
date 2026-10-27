@@ -139,6 +139,23 @@ PROFILE_LINE_KEYS: tuple[str, ...] = get_args(ProfileLineKey)
 #: ``transferability`` (B1).
 ConsiderationAspect = Literal[ProfileLineKey, "transferability"]
 
+#: How far the shortlist may reach beyond options already tried elsewhere
+#: (task 055, contract S2, S3). It sets the mix of tested and untested places,
+#: never an order. ``api.contract.task_agent.ScopingRiskAppetite`` mirrors it.
+RiskAppetite = Literal["tried_only", "mostly_tried", "open_to_untested"]
+
+#: The plan's appetite when the user has not chosen one (contract S2: "Default:
+#: the middle").
+DEFAULT_RISK_APPETITE: RiskAppetite = "mostly_tried"
+
+#: The three answers in the words the user sees (contract S2). The frontend
+#: holds the same words once in ``planVocabulary.ts`` (A25).
+RISK_APPETITE_LABELS: dict[str, str] = {
+    "tried_only": "Only options tried elsewhere",
+    "mostly_tried": "Mostly tried, one or two new",
+    "open_to_untested": "Include the biggest ideas, even untested",
+}
+
 #: The scoping steering lattice's point names. Pinned here, not imported from
 #: the registry, which imports this module.
 SCOPING_STEER_POINTS: frozenset[str] = frozenset({"baseline_confirm"})
@@ -568,6 +585,11 @@ class ScopingPlan(BaseModel):
         time_band: The coarse compute band. Code-supplied.
         source_turn_index: The Task Agent turn that approved this version.
         baseline_confirmed: The confirm-baseline record, once written.
+        risk_appetite: How far the shortlist may reach beyond options tried
+            elsewhere (task 055, S2). A payload stored before the field
+            existed reads as the default, ``mostly_tried``. The longlist does
+            not read it, so changing it alone never makes the longlist stale
+            (see :func:`longlist_inputs`).
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -601,6 +623,7 @@ class ScopingPlan(BaseModel):
     time_band: str = BASELINE_TIME_BAND
     source_turn_index: int | None = None
     baseline_confirmed: BaselineConfirmed | None = None
+    risk_appetite: RiskAppetite = DEFAULT_RISK_APPETITE
 
     @model_validator(mode="after")
     def validate_default_constraints(self) -> Self:
@@ -655,6 +678,44 @@ class ScopingPlan(BaseModel):
                 "the baseline"
             )
         return self
+
+
+#: The plan fields the longlist chain reads (task 055, A6): the fields
+#: ``compose_scoping`` and the longlist components take from the plan. A
+#: change to any of them makes a built longlist out of date; a change to any
+#: other field (the appetite, the steering mode, the title) does not.
+LONGLIST_INPUT_FIELDS: frozenset[str] = frozenset(
+    {
+        "intended_change",
+        "target_unit",
+        "where",
+        "outcomes",
+        "depth",
+        "constraints",
+        "your_options",
+        "your_context",
+        "linked_task_ids",
+        "removed_defaults",
+    }
+)
+
+
+def longlist_inputs(plan: ScopingPlan) -> dict[str, Any]:
+    """Return the part of a plan the longlist was built from (task 055, A6).
+
+    Two plan versions whose projections are equal would build the same
+    longlist, so the "Rebuild longlist" prompt compares these rather than
+    version numbers. A payload stored before a field existed has already been
+    given that field's default by validation, so an older plan projects with
+    defaults.
+
+    Args:
+        plan: A validated scoping plan.
+
+    Returns:
+        The ten longlist input fields as plain JSON-ready values.
+    """
+    return plan.model_dump(mode="json", include=set(LONGLIST_INPUT_FIELDS))
 
 
 def _tagged_from_wire(value: TaggedText, *, field_name: str) -> Tagged:

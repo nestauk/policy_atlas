@@ -65,6 +65,8 @@ from policy_atlas.api.contract import (
     ReferenceOut,
     RelationOut,
     SectionOut,
+    ShortlistOut,
+    ShortlistStateOut,
     SourceDossierOut,
     SourceRecordsOut,
     SourceTagOut,
@@ -77,6 +79,7 @@ from policy_atlas.api.contract.read_models import EvaluatedCountryOut, PlaceSent
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
 from policy_atlas.core.schema import (
     GROUPING_FACETS,
+    OPTION_SHORTLIST_STATES,
     addressable_unit,
     annotation,
     artefact,
@@ -162,6 +165,7 @@ from policy_atlas.runtime.capability_registry import (
 from policy_atlas.runtime.scoping_plan import (
     PROFILE_LINE_KEYS,
     ScopingPlan,
+    longlist_inputs,
 )
 from policy_atlas.runtime.steering_events import canonical_actor
 from policy_atlas.runtime.steering_history import steering_history
@@ -3519,7 +3523,56 @@ def _option_summary_fields(
         "evaluated_countries": _evaluated_countries_out(coverage.get("evaluated_countries")),
         "outcomes_evaluated": _count(coverage.get("outcomes_evaluated")),
         "outcomes_total": outcomes_total,
+        "shortlist": _shortlist_state_out(row),
     }
+
+
+def _shortlist_state_out(row: Any) -> ShortlistStateOut | None:
+    """The option's place on the shortlist; ``None`` when it holds none (task 055)."""
+    if row.shortlist_state not in OPTION_SHORTLIST_STATES:
+        return None
+    return ShortlistStateOut(state=row.shortlist_state, reason=row.shortlist_reason)
+
+
+def _shortlist_out(stored: object, current: ScopingPlan | None) -> ShortlistOut:
+    """The latest shortlist proposal, as the longlist serves it (task 055, PG1).
+
+    A row written before the shortlist existed holds ``{}``: no note, no
+    provenance. The proposal is stale when it was made under another risk
+    appetite than the current plan's, or when there is none yet (the caller
+    only asks when a built longlist exists).
+
+    Args:
+        stored: ``longlist_result.shortlist``.
+        current: The current approved plan, or ``None`` when it cannot be read.
+
+    Returns:
+        The served proposal.
+    """
+    shortlist = _as_mapping(stored)
+    provenance = dict(_as_mapping(shortlist.get("provenance")))
+    note = shortlist.get("note")
+    if "appetite" not in provenance:
+        stale = True
+    else:
+        stale = current is not None and provenance["appetite"] != current.risk_appetite
+    return ShortlistOut(
+        note=note if isinstance(note, str) and note.strip() else None,
+        provenance=provenance,
+        stale=stale,
+    )
+
+
+def _plan_inputs_changed(current: ScopingPlan | None, built_from: ScopingPlan | None) -> bool:
+    """Whether the current plan would build a different longlist (task 055, A6).
+
+    Compares :func:`longlist_inputs` of the current approved plan with that of
+    the plan version the longlist was built from. ``False`` when either plan
+    cannot be read, so an unreadable row never prompts a rebuild.
+    """
+    if current is None or built_from is None:
+        return False
+    return longlist_inputs(current) != longlist_inputs(built_from)
 
 
 def _report_sections(
@@ -3900,6 +3953,8 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
     by_id = {row.option_id: row for row in rows}
     relations = _option_relations(conn, task_id, {row.option_id: row.name for row in rows})
     built_from = _scoping_plan_version(conn, task_id, int(result.plan_version))
+    current = _scoping_plan_version(conn, task_id, None)
+    current_plan = current[1] if current is not None else None
 
     themes: list[LonglistThemeOut] = []
     themed: list[uuid.UUID] = []
@@ -4004,6 +4059,10 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
             ]
         },
         taxonomy_version=taxonomy if isinstance(taxonomy, str) else TAXONOMY_VERSION,
+        shortlist=_shortlist_out(result.shortlist, current_plan),
+        plan_inputs_changed=_plan_inputs_changed(
+            current_plan, built_from[1] if built_from else None
+        ),
     )
 
 

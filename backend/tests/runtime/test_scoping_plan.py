@@ -504,3 +504,93 @@ def test_wire_draft_from_plan_round_trips_into_a_ready_build() -> None:
     assert again.where == plan.where
     assert again.depth == plan.depth
     assert [c.text for c in again.constraints] == [c.text for c in plan.constraints]
+
+
+# --- task 055: the risk appetite and the longlist inputs --------------------
+
+
+def test_the_appetite_labels_are_the_three_answers_of_s2() -> None:
+    """Contract S2: three answers in words; the keys are the Literal's values."""
+    from policy_atlas.runtime.scoping_plan import RISK_APPETITE_LABELS, RiskAppetite
+
+    assert RISK_APPETITE_LABELS == {
+        "tried_only": "Only options tried elsewhere",
+        "mostly_tried": "Mostly tried, one or two new",
+        "open_to_untested": "Include the biggest ideas, even untested",
+    }
+    assert set(RISK_APPETITE_LABELS) == set(get_args(RiskAppetite))
+    assert get_args(contract.ScopingRiskAppetite) == get_args(RiskAppetite)
+
+
+def test_a_stored_plan_without_an_appetite_reads_as_mostly_tried() -> None:
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[])
+    payload = plan.model_dump(mode="json")
+    payload.pop("risk_appetite")
+    stored = ScopingPlan.model_validate(payload)
+    assert stored.risk_appetite == "mostly_tried"
+    via_registry = validate_plan(OPTIONS_SCOPING, payload)
+    assert isinstance(via_registry, ScopingPlan)
+    assert via_registry.risk_appetite == "mostly_tried"
+
+
+def test_an_unknown_appetite_is_refused() -> None:
+    payload = build_scoping_plan(_ready_draft(), linked_task_ids=[]).model_dump(mode="json")
+    payload["risk_appetite"] = "reckless"
+    with pytest.raises(ValidationError):
+        ScopingPlan.model_validate(payload)
+
+
+def test_the_approved_draft_serves_the_appetite() -> None:
+    """``PlanOut.scoping`` is the approved draft projected from the payload."""
+    from policy_atlas.runtime.task_agent_scoping import scoping_draft_from_plan
+
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[]).model_copy(
+        update={"risk_appetite": "open_to_untested"}
+    )
+    assert scoping_draft_from_plan(plan).risk_appetite == "open_to_untested"
+
+
+def test_the_longlist_inputs_are_the_ten_fields_of_a6() -> None:
+    from policy_atlas.runtime.scoping_plan import longlist_inputs
+
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[])
+    assert set(longlist_inputs(plan)) == {
+        "intended_change",
+        "target_unit",
+        "where",
+        "outcomes",
+        "depth",
+        "constraints",
+        "your_options",
+        "your_context",
+        "linked_task_ids",
+        "removed_defaults",
+    }
+
+
+def test_an_older_payload_projects_with_defaults() -> None:
+    """A6: a payload stored before the newer keys existed projects with defaults."""
+    from policy_atlas.runtime.scoping_plan import longlist_inputs
+
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[])
+    payload = plan.model_dump(mode="json")
+    for newer in ("risk_appetite", "removed_defaults", "your_options", "linked_task_ids"):
+        payload.pop(newer)
+    older = ScopingPlan.model_validate(payload)
+    projected = longlist_inputs(older)
+    assert projected["removed_defaults"] == []
+    assert projected["your_options"] == []
+    assert projected["linked_task_ids"] == []
+    assert projected == longlist_inputs(plan)
+
+
+def test_an_appetite_change_leaves_the_longlist_inputs_and_an_outcome_change_does_not() -> None:
+    from policy_atlas.runtime.scoping_plan import Tagged, longlist_inputs
+
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[])
+    appetite = plan.model_copy(update={"risk_appetite": "tried_only"})
+    assert longlist_inputs(appetite) == longlist_inputs(plan)
+    outcome = plan.model_copy(
+        update={"outcomes": [*plan.outcomes, Tagged(text="earnings", origin="your_call")]}
+    )
+    assert longlist_inputs(outcome) != longlist_inputs(plan)
