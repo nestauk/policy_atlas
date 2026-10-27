@@ -143,3 +143,40 @@ def test_round_robin_and_s2_dois() -> None:
         {"externalIds": {"DOI": "10.1234/a"}},
     ]
     assert h.s2_dois(papers) == ["10.1234/a"]
+
+
+def test_pick_rules() -> None:
+    def doc(key: str, abstract: str = "") -> h.Doc:
+        return h.Doc(
+            key=key,
+            title="t " + key,
+            abstract=abstract,
+            year=None,
+            source="x",
+            doi="10.1234/" + key,
+        )
+
+    q1 = [
+        doc("a"),
+        doc("b", "x"),
+        doc("c", "x"),
+        doc("d", "x"),
+        doc("e"),
+        doc("f", "x"),
+        doc("g", "x"),
+        doc("h"),
+    ]
+    q2 = [doc("i"), doc("j", "x"), doc("a")]
+    ov = [doc("k", "x"), doc("l"), doc("m", "x")]
+    abs_pick = [d.key for d in h.pick_rule([q1, q2, ov], 6, "abs")]
+    assert abs_pick == ["b", "j", "k", "c", "m", "d"]
+    assert (
+        len(h.pick_rule([q1, q2, ov], 14, "abs")) == 13
+    )  # topped up without abstracts
+    q = [d.key for d in h.pick_rule([q1, q2, ov], 10, "q1")]
+    assert (
+        q[:6] == ["b", "c", "d", "f", "g", "a"]
+        and q[6:8] == ["j", "i"]
+        and q[8:10] == ["k", "m"]
+    )
+    assert len(set(q)) == 10
