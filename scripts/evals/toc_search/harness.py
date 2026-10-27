@@ -1789,6 +1789,7 @@ def arm_l(
     rule: str = "rr",
     n: int = LIGHT_N,
     name: str | None = None,
+    q1_n: int = 20,
 ) -> dict[str, Any]:
     """Light link check: three (or four, with Semantic Scholar) plain searches on the
     link sentence, ``n`` documents by a pick rule (round-robin by default), no screen
@@ -1807,7 +1808,10 @@ def arm_l(
         )
         return [d for r in records if (d := from_openalex(r, "openalex"))]
 
-    lists = [semantic(sentence, 20), semantic(sentence + " in the United Kingdom", 10)]
+    lists = [
+        semantic(sentence, q1_n),
+        semantic(sentence + " in the United Kingdom", 10),
+    ]
     overton = [
         d
         for r in h.overton_search(meter, sentence)
@@ -1858,6 +1862,7 @@ def arm_l(
         extra={
             "list_sizes": [len(x) for x in lists],
             "rule": rule,
+            "gold_q1": len(gold_found(gold.get("gold", []), lists[0])),
             "picked_with_abstract": sum(bool(d.abstract.strip()) for d in picked),
             "picked_from": dict(Counter(d.source for d in picked)),
         },
@@ -2249,6 +2254,7 @@ def main() -> None:
         "L-q1": partial(arm_l, rule="q1", name="L-q1"),
         "L-pick": partial(arm_l, rule="pick", name="L-pick"),
         "L-pick15": partial(arm_l, rule="pick", n=15, name="L-pick15"),
+        "L-pick50": partial(arm_l, rule="pick", name="L-pick50", q1_n=50),
     }
     link_wall: dict[str, float] = {}
 
