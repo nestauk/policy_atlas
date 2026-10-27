@@ -1,5 +1,13 @@
 # Spec update log
 
+## 2026-10-27 (task 054, study-design search and classify after the judge)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): each
+  link search adds one generated keyword query, run with the systematic-review and trial clauses
+  (5 search calls and 1 generation call per link, up to 60 documents). Each link's pick also sees
+  the 10 documents from the other links' searches closest to it, so a study found for one step
+  can serve another. Classify and appraise now run after the judge, only on documents it found
+  on topic. Crossref lookups respect its limit of 3 at a time. Task 054 contract C31.
+
 ## 2026-10-27 (task 054, pick call, box folds, trusted publishers)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): one
   small model call per link now picks the 10 documents the judge reads (6 of 38 key studies

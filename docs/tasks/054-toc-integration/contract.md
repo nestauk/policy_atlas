@@ -424,6 +424,30 @@ decisions below. The decisions fix what the spec leaves to the build.
   `run.finished` event carries `cost` (tokens per step, model, a USD estimate from a small price
   table; a model not in the table is listed as unpriced, never $0), also logged as
   `toc_check.cost`.
+- **C31. Study-design search, shared pick pool, classify after the judge** (owner approved,
+  2026-10-27, after the fourth live run: about 5 minutes and $0.36 for the whole theory; calorie
+  intake to obesity weak; 5 links with no evidence; most Crossref lookups failed). (1) Crossref
+  runs 3 lookups at a time (its polite-pool limit); a 429 waits for Retry-After (or 1 second) and
+  retries once; one summary line per walk counts found, no abstract and failed. (2) The `link`
+  depth adds one query-generation call (the existing writer and prompt; only its first OpenAlex
+  query is used) and runs that query on OpenAlex keyword search with the existing
+  systematic-review and trial clauses, 10 results each. A link now makes 5 search calls (4
+  OpenAlex, 1 Overton) and 1 generation call; the record cap is 60. The lists are named by origin
+  (`semantic`, `semantic_place`, `verbatim` for Overton, `variant_sr`, `variant_rct`), so select
+  and the pick see them. If generation fails, the link still searches by meaning. (3) In
+  `toc_select`, each link chooses from its own search's documents plus the 10 documents of the
+  whole walk's searches closest by meaning to its item text; the picks are written per link in a
+  `toc_select.picked` event, which the judge reads. Discovered links still use the nearest
+  documents of the screened-in pool. (4) The check chain is `toc_select → toc_discover →
+  toc_merge → toc_judge → classify → appraise → toc_choose → toc_summarise`. After judging, every
+  screened-in document no link found supports or challenges (either question) is screened out
+  ("judged not about any step", at the next screen generation), so classify and appraise read
+  only what is left. Grades, case-study ranking and the critical connection read appraisals at
+  grade time, so they still work; the Sources tab shows judged "not about" documents without an
+  evidence type or score. The judge no longer gets a modelling flag (`toc_judge_v5` tells a
+  modelling study from the text) and stores `robust_model` as it said it; a robust model counts as
+  one only when classify also calls it a modelling study, and choose logs the documents where the
+  two disagree.
 
 ## ADR scope
 
