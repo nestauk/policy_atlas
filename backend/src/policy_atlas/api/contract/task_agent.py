@@ -81,6 +81,7 @@ PlanStageKey = Literal[
     "option_profile",
     "constrain",
     "theme",
+    "shortlist",
 ]
 
 #: Country-group membership provenance. Mirrors

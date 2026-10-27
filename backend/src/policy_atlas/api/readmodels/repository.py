@@ -159,6 +159,9 @@ from policy_atlas.options_scoping.option_profile.place_sentences import (
     place_name,
     template_sentence,
 )
+from policy_atlas.options_scoping.shortlist.shortlist import (
+    SHORTLIST_PROPOSED as SHORTLIST_PROPOSED,
+)
 from policy_atlas.runtime.capability_registry import (
     OPTIONS_SCOPING,
     expect_scoping_plan,
@@ -1500,6 +1503,10 @@ OPTION_ADDED = "option.added"
 OPTION_EXCLUDED = "option.excluded"
 OPTION_INCLUDED = "option.included"
 OPTION_EVENT_KINDS: tuple[str, ...] = (OPTION_ADDED, OPTION_EXCLUDED, OPTION_INCLUDED)
+#: Policy Atlas's shortlist proposal (task 055, A7): one event per proposal,
+#: the record of its places, note, appetite and versions. Written by the
+#: ``shortlist`` component; ``SHORTLIST_PROPOSED`` is imported from there (top
+#: of this module) so the writer and the readers share one name.
 
 
 # The allowlisted audit events. The four lifecycle kinds appear under BOTH

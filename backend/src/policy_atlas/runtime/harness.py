@@ -112,6 +112,7 @@ from policy_atlas.options_scoping.longlist.longlist_backend import (
 )
 from policy_atlas.options_scoping.longlist_intent import plan_tagging_context
 from policy_atlas.options_scoping.option_profile.option_profile import option_profile_scope
+from policy_atlas.options_scoping.shortlist.shortlist import shortlist_scope
 from policy_atlas.options_scoping.suggest.suggest import SuggestBackend, suggest_options
 from policy_atlas.options_scoping.theme.theme import theme_scope
 from policy_atlas.runtime.agent_backend import StubAgentBackend
@@ -440,8 +441,8 @@ def _inherit_sources(
 #: ``inherit`` (task 045, S6) completes even when a link cannot be read, its
 #: ``degrades_walk`` flag making a degraded walk; ``option_profile`` is a
 #: spine step (a failure fails the walk); ``theme`` is not (a failure
-#: degrades the walk). ``constrain``, ``option_profile`` and ``theme`` ride
-#: the longlist backend.
+#: degrades the walk), nor is ``shortlist`` (task 055). ``constrain``,
+#: ``option_profile``, ``theme`` and ``shortlist`` ride the longlist backend.
 _BackendKey = Literal["suggest_backend", "longlist_backend"]
 _SCOPING_STEPS: dict[str, tuple[Callable[..., dict[str, Any]], _BackendKey | None]] = {
     "inherit": (_inherit_sources, None),
@@ -450,6 +451,7 @@ _SCOPING_STEPS: dict[str, tuple[Callable[..., dict[str, Any]], _BackendKey | Non
     "option_profile": (option_profile_scope, "longlist_backend"),
     "constrain": (constrain_scope, "longlist_backend"),
     "theme": (theme_scope, "longlist_backend"),
+    "shortlist": (shortlist_scope, "longlist_backend"),
 }
 
 
@@ -698,6 +700,7 @@ def build_graph() -> Any:
             "option_profile": "option_profile",
             "constrain": "constrain",
             "theme": "theme",
+            "shortlist": "shortlist",
             "group": "group",
             "synthesise": "synthesise",
         },
@@ -717,6 +720,7 @@ def build_graph() -> Any:
     g.add_edge("option_profile", "finish")
     g.add_edge("constrain", "finish")
     g.add_edge("theme", "finish")
+    g.add_edge("shortlist", "finish")
     g.add_edge("group", "finish")
     g.add_edge("synthesise", "finish")
     g.add_edge("finish", END)

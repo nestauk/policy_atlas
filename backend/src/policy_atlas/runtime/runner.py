@@ -181,6 +181,8 @@ LLM_BEARING_COMPONENTS = frozenset(
         "theme",
         # Task 046 (R37): option_profile makes the lever-typing calls.
         "option_profile",
+        # Task 055: shortlist makes the one proposal call (and its re-ask).
+        "shortlist",
     }
 )
 SPINE_COMPONENTS = frozenset(SPINE)

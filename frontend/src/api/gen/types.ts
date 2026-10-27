@@ -3944,7 +3944,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
         };
         /**
          * PlanUpdatedFrame
@@ -4795,7 +4795,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
             /** Summary */
             summary?: {
                 [key: string]: number | string;
@@ -4833,7 +4833,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4865,7 +4865,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5395,7 +5395,7 @@ export interface components {
              * Stage
              * @default null
              */
-            stage: ("acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme") | null;
+            stage: ("acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist") | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}

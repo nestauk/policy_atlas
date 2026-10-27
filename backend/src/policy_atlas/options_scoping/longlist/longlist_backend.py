@@ -38,7 +38,11 @@ backend (task 046, S20). Each call has one lead-authored prompt builder
 - ``place_sentences`` — the ``option_profile`` step's second wave: one call
   per option with evaluating documents, one sentence per place (mini model;
   task 046, amendment 4, R80; S31;
-  :mod:`~policy_atlas.options_scoping.option_profile.place_sentences_prompt`).
+  :mod:`~policy_atlas.options_scoping.option_profile.place_sentences_prompt`);
+- ``propose_shortlist`` — the ``shortlist`` step's one proposal call over the
+  assembled messages (judgment model; task 055, P6;
+  :mod:`~policy_atlas.options_scoping.shortlist.shortlist_prompt`). It takes
+  the messages, not the data, so the step can append its re-ask turn.
 
 Backends parse structurally and return the wire; the component and the shared
 clustering engine own every semantic check. :class:`StubLonglistBackend` is
@@ -48,6 +52,7 @@ deterministic and makes no call.
 from __future__ import annotations
 
 import os
+import re
 import threading
 import uuid
 from collections import Counter, defaultdict
@@ -126,6 +131,12 @@ from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
     PlaceSentencesResponse,
     PlaceSentenceWire,
     build_place_sentences_messages,
+)
+from policy_atlas.options_scoping.shortlist.shortlist_prompt import (
+    SHORTLIST_MAX_OUTPUT_TOKENS,
+    SHORTLIST_PROMPT_VERSION,
+    ShortlistPickWire,
+    ShortlistWire,
 )
 from policy_atlas.options_scoping.text import fold_text
 from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
@@ -423,6 +434,20 @@ class LonglistBackend(Protocol):
 
         Returns:
             The parsed labels and token usage.
+        """
+        ...
+
+    def propose_shortlist(
+        self, *, messages: list[ChatCompletionMessageParam]
+    ) -> UsageResult[ShortlistWire]:
+        """Propose the shortlist's places over the assembled messages (task 055, P6).
+
+        Args:
+            messages: The system and user messages, plus, on the second
+                attempt, the first answer and the re-ask turn.
+
+        Returns:
+            The parsed proposal and token usage.
         """
         ...
 
@@ -738,6 +763,23 @@ class OpenAILonglistBackend:
             prompt_version=CONSTRAIN_PROMPT_VERSION,
         )
 
+    def propose_shortlist(
+        self, *, messages: list[ChatCompletionMessageParam]
+    ) -> UsageResult[ShortlistWire]:
+        """The proposal call on the judgment model (see :class:`LonglistBackend`).
+
+        Its static Langfuse name is ``longlist:shortlist`` and its usage
+        event ``longlist.shortlist.usage``.
+        """
+        return self._call(
+            messages,
+            response_format=ShortlistWire,
+            model=LONGLIST_JUDGMENT_MODEL,
+            max_output_tokens=SHORTLIST_MAX_OUTPUT_TOKENS,
+            name="longlist:shortlist",
+            prompt_version=SHORTLIST_PROMPT_VERSION,
+        )
+
 
 #: The stub's one discovered option.
 STUB_DISCOVERED_LABEL = "Stub discovered option"
@@ -796,12 +838,17 @@ class StubLonglistBackend:
       each place in the input gets ``"{documents_total} evaluations in
       {place}."``, which passes the trace check. Its calls and inputs are
       recorded under the lock.
+    - ``propose_shortlist`` answers from its own FIFO queue the same way (a
+      queued exception is raised); with none, it picks the first N candidate
+      ids in the order the user message lists them, N being the message's
+      "Places to fill", each with the reason ``"stub reason"``, and the note
+      ``"stub note"``. Its messages are recorded under ``inputs["shortlist"]``.
 
     Each call is counted in :attr:`calls` (``line`` and ``fold`` per key in
     :attr:`line_calls` and :attr:`fold_calls`) and its inputs appended to
     ``inputs[name]``, the name being ``constrain``, ``distinct``,
     ``authority``, ``line``, ``potential_impact``, ``ambition``, ``setting``,
-    ``fold`` or ``place_sentence``.
+    ``fold``, ``place_sentence`` or ``shortlist``.
 
     Args:
         constrain_responses: Canned :class:`ConstrainResponse` value(s), or
@@ -824,6 +871,9 @@ class StubLonglistBackend:
             deterministic default.
         potential_impact_responses: Canned :class:`PotentialImpactResponse`
             value(s), or ``None`` for the deterministic default.
+        shortlist_responses: Canned proposal answers (a
+            :class:`ShortlistWire`, or an exception to raise), or ``None``
+            for the deterministic default.
     """
 
     mode = "stub"
@@ -842,6 +892,7 @@ class StubLonglistBackend:
         potential_impact_responses: PotentialImpactResponse
         | list[PotentialImpactResponse]
         | None = None,
+        shortlist_responses: Any = None,
     ) -> None:
         self._queues: dict[str, list[Any]] = {
             "constrain": _as_queue(constrain_responses),
@@ -851,6 +902,7 @@ class StubLonglistBackend:
             "setting": _as_queue(setting_responses),
             "place_sentence": _as_queue(place_sentence_responses),
             "potential_impact": _as_queue(potential_impact_responses),
+            "shortlist": _as_queue(shortlist_responses),
             **{f"line:{k}": _as_queue(v) for k, v in (line_responses or {}).items()},
             **{f"fold:{k}": _as_queue(v) for k, v in (fold_responses or {}).items()},
         }
@@ -1132,6 +1184,37 @@ class StubLonglistBackend:
         if isinstance(response, BaseException):
             raise response
         return response, None
+
+    def propose_shortlist(
+        self, *, messages: list[ChatCompletionMessageParam]
+    ) -> UsageResult[ShortlistWire]:
+        """Answer from the queue (an exception is raised), else the first N candidates."""
+        response: Any = self._answer(
+            "shortlist", list(messages), lambda: _stub_shortlist(messages)
+        )
+        if isinstance(response, BaseException):
+            raise response
+        return response, None
+
+
+#: The first user message's "Places to fill" line and its candidate id lines.
+_STUB_TO_FILL = re.compile(r"^Places to fill \(data\): (\d+)$", re.MULTILINE)
+_STUB_CANDIDATE_ID = re.compile(r"^id: (o\d+)$", re.MULTILINE)
+
+
+def _stub_shortlist(messages: list[ChatCompletionMessageParam]) -> ShortlistWire:
+    """The first N candidate ids of the first user message, in listed order."""
+    text = next(
+        str(message.get("content", "")) for message in messages if message["role"] == "user"
+    )
+    found = _STUB_TO_FILL.search(text)
+    to_fill = int(found.group(1)) if found else 0
+    candidates_at = text.find("Candidates (data")
+    ids = _STUB_CANDIDATE_ID.findall(text[candidates_at:] if candidates_at >= 0 else "")
+    return ShortlistWire(
+        picks=[ShortlistPickWire(option_id=oid, reason="stub reason") for oid in ids[:to_fill]],
+        note="stub note",
+    )
 
 
 def _stub_place_sentences(places: list[dict[str, Any]]) -> PlaceSentencesResponse:

@@ -222,6 +222,9 @@ def default_transferability_text(where_text: str) -> str:
 BASELINE_PURPOSE = "baseline"
 LONGLIST_PURPOSE = "longlist"
 TARGETED_PURPOSE = "targeted"
+#: A shortlist walk: the one ``shortlist`` step, opened by a risk-appetite
+#: change or by Suggest more (task 055, S17).
+SHORTLIST_PURPOSE = "shortlist"
 
 #: The six components a scoping baseline walk runs.
 SCOPING_SPINE: tuple[str, ...] = (
@@ -239,7 +242,10 @@ SCOPING_SPINE: tuple[str, ...] = (
 #: ``longlist`` and ``constrain``: ``longlist`` makes the list,
 #: ``option_profile`` writes what is said about each option (task 046, R37).
 #: ``theme`` runs after ``constrain`` has committed, so its failure cannot
-#: touch the verdicts (task 046, R28). No step ingests full text (R13).
+#: touch the verdicts (task 046, R28). ``shortlist`` runs last, after the
+#: themes are stored, and degrades the walk when it fails: the longlist, the
+#: verdicts and the themes stand, and the previous places stay (task 055).
+#: No step ingests full text (R13).
 LONGLIST_CHAIN: tuple[tuple[str, bool], ...] = (
     ("inherit", False),
     ("suggest", False),
@@ -252,7 +258,12 @@ LONGLIST_CHAIN: tuple[tuple[str, bool], ...] = (
     ("option_profile", True),
     ("constrain", True),
     ("theme", False),
+    ("shortlist", False),
 )
+
+#: The shortlist walk's chain (task 055, S17): one non-spine step, so a failed
+#: proposal ends the walk ``degraded`` and leaves the previous places.
+SHORTLIST_CHAIN: tuple[tuple[str, bool], ...] = (("shortlist", False),)
 
 #: The verb *add*'s option search (a targeted walk with no parent). Every step
 #: is spine for that walk. Its intent is the option's design (task 046, AM1).
@@ -1465,7 +1476,8 @@ def compose_scoping(
         plan: The validated scoping plan.
         purpose: The intent record's ``purpose``. ``None`` or ``"baseline"``
             compose the baseline; ``"longlist"`` and ``"targeted"`` compose
-            the longlist walk's chain and one option search's chain.
+            the longlist walk's chain and one option search's chain;
+            ``"shortlist"`` composes the shortlist walk's one step.
         context: The intent record's ``context``. A ``targeted`` record whose
             context carries ``acquire_only: true`` (a longlist walk's option
             search, task 046, AM4) composes :data:`ACQUIRE_ONLY_CHAIN`; without
@@ -1508,6 +1520,13 @@ def compose_scoping(
                     spine=spine,
                 )
                 for component, spine in LONGLIST_CHAIN
+            ]
+        )
+    if purpose == SHORTLIST_PURPOSE:
+        return ComposedChain(
+            steps=[
+                ComponentStep(component=component, directive_delta={}, spine=spine)
+                for component, spine in SHORTLIST_CHAIN
             ]
         )
     if purpose == TARGETED_PURPOSE:

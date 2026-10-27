@@ -17,6 +17,10 @@ open it:
 Every surface takes the admission ``POST /runs`` takes — the dispatch lock,
 no ``running | paused`` parentless walk, the pre-insert reservation — so two
 walks can never race into existence (A23).
+
+The shortlist walk (task 055, P8) takes the same admission through
+:func:`open_shortlist_walk`: its intent record has ``purpose = 'shortlist'``
+and composes the one ``shortlist`` step.
 """
 
 from __future__ import annotations
@@ -30,7 +34,7 @@ from typing import Any
 import structlog
 from fastapi import HTTPException
 from sqlalchemy import select
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.contract import LatestRun
@@ -44,7 +48,13 @@ from policy_atlas.api.routers.runs import (
     executor_full,
     release_when_open,
 )
-from policy_atlas.core.schema import capability_run, evidence_scope, longlist_result, task_plan
+from policy_atlas.core.schema import (
+    capability_run,
+    evidence_scope,
+    longlist_result,
+    option,
+    task_plan,
+)
 from policy_atlas.options_scoping.longlist_intent import compile_longlist_intent
 from policy_atlas.runtime.capability_registry import (
     OPTIONS_SCOPING,
@@ -53,7 +63,13 @@ from policy_atlas.runtime.capability_registry import (
     validate_plan,
 )
 from policy_atlas.runtime.runner import RunnerBackends
-from policy_atlas.runtime.scoping_plan import LONGLIST_PURPOSE, compose_longlist_screen_intent
+from policy_atlas.runtime.scoping_plan import (
+    LONGLIST_PURPOSE,
+    SHORTLIST_PURPOSE,
+    ScopingPlan,
+    compose_longlist_screen_intent,
+    longlist_inputs,
+)
 
 log = structlog.get_logger()
 
@@ -68,7 +84,8 @@ class LonglistRefused(Exception):
 
     Args:
         reason: ``not_scoping`` · ``run_active`` · ``capacity`` ·
-            ``plan_stale`` · ``plan_too_long`` · ``no_plan``.
+            ``plan_stale`` · ``plan_too_long`` · ``no_plan``; for a shortlist
+            walk also ``no_longlist`` and ``nothing_to_propose`` (task 055).
         message: A sentence for the error body.
     """
 
@@ -120,6 +137,7 @@ def admit_and_mint(
     executor: ThreadPoolExecutor | None = None,
     backends: RunnerBackends | None = None,
     user_id: str | None = None,
+    shortlist_suggest: bool | None = None,
 ) -> AdmittedLonglist:
     """Admit a longlist walk and mint its intent record, under the dispatch lock.
 
@@ -143,6 +161,9 @@ def admit_and_mint(
             (the follow-on runs the walk inline).
         backends: The runner backend bundle (with ``executor``).
         user_id: The user traces are attributed to (with ``executor``).
+        shortlist_suggest: ``None`` for a longlist walk. ``True`` or
+            ``False`` mints a shortlist walk's intent record instead (task
+            055, P8): Suggest more, or a re-proposal after an appetite change.
 
     Returns:
         The admitted walk.
@@ -170,23 +191,32 @@ def admit_and_mint(
                     "the plan moved on since it was confirmed — review it, then confirm",
                 )
             plan = expect_scoping_plan(validate_plan(OPTIONS_SCOPING, current["payload"]))
-            try:
-                compose_longlist_screen_intent(plan)
-            except ValueError as exc:
-                raise LonglistRefused(
-                    "plan_too_long",
-                    "the plan's outcomes and requirements are too long to screen a "
-                    f"longlist against — shorten them, then confirm ({exc})",
-                ) from exc
+            if shortlist_suggest is None:
+                try:
+                    compose_longlist_screen_intent(plan)
+                except ValueError as exc:
+                    raise LonglistRefused(
+                        "plan_too_long",
+                        "the plan's outcomes and requirements are too long to screen a "
+                        f"longlist against — shorten them, then confirm ({exc})",
+                    ) from exc
+                purpose, intent = LONGLIST_PURPOSE, compile_longlist_intent(plan)
+                context: dict[str, Any] = {"capability": OPTIONS_SCOPING}
+            else:
+                _refuse_shortlist(conn, task_id=task_id, plan=plan, suggest=shortlist_suggest)
+                purpose, intent = SHORTLIST_PURPOSE, "shortlist"
+                context = {"capability": OPTIONS_SCOPING}
+                if shortlist_suggest:
+                    context["suggest"] = True
             scope_id = uuid.uuid4()
             conn.execute(
                 evidence_scope.insert().values(
                     evidence_scope_id=scope_id,
                     task_id=task_id,
-                    intent=compile_longlist_intent(plan),
-                    context={"capability": OPTIONS_SCOPING},
+                    intent=intent,
+                    context=context,
                     created_at=datetime.now(UTC),
-                    purpose=LONGLIST_PURPOSE,
+                    purpose=purpose,
                     plan_id=current["plan_id"],
                 )
             )
@@ -216,7 +246,7 @@ def admit_and_mint(
                 _dispatching_tasks.discard(task_id)
                 raise
     log.info(
-        "longlist.opened",
+        "longlist.opened" if shortlist_suggest is None else "shortlist.opened",
         task_id=str(task_id),
         capability_run_id=str(admitted.capability_run_id),
         plan_version=admitted.plan_row["version"],
@@ -281,6 +311,118 @@ def open_longlist_walk(
         )
     finally:
         # Once the row exists the database's ``running`` count owns capacity.
+        with _dispatch_lock:
+            _dispatching_tasks.discard(task_id)
+    return admitted.capability_run_id
+
+
+def _refuse_shortlist(
+    conn: Connection, *, task_id: uuid.UUID, plan: ScopingPlan, suggest: bool
+) -> None:
+    """Refuse a shortlist walk that has nothing to work on (task 055, P8).
+
+    Args:
+        conn: The admission's connection, inside its transaction.
+        task_id: The task.
+        plan: The current approved plan.
+        suggest: Whether the walk is Suggest more.
+
+    Raises:
+        LonglistRefused: ``no_longlist`` when the task has no longlist;
+            ``plan_stale`` when the plan changed in a field the longlist
+            reads since it was built (a Rebuild is due, not a proposal);
+            ``nothing_to_propose`` (Suggest more only) when every included
+            option already holds a place or was set aside.
+    """
+    built = conn.execute(
+        select(longlist_result.c.plan_version)
+        .where(longlist_result.c.task_id == task_id)
+        .order_by(
+            longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    if built is None:
+        raise LonglistRefused("no_longlist", "the task has no longlist to shortlist from")
+    pinned = conn.execute(
+        select(task_plan.c.payload)
+        .where(task_plan.c.task_id == task_id)
+        .where(task_plan.c.version == built)
+    ).scalar_one_or_none()
+    pinned_plan = (
+        expect_scoping_plan(validate_plan(OPTIONS_SCOPING, pinned)) if pinned is not None else None
+    )
+    if pinned_plan is None or longlist_inputs(plan) != longlist_inputs(pinned_plan):
+        raise LonglistRefused(
+            "plan_stale",
+            "the plan changed since the longlist was built — rebuild the longlist first",
+        )
+    if suggest:
+        open_option = conn.execute(
+            select(option.c.option_id)
+            .where(option.c.task_id == task_id)
+            .where(option.c.state == "included")
+            .where(option.c.merged_into_option_id.is_(None))
+            .where(option.c.shortlist_state.is_(None))
+            .limit(1)
+        ).scalar_one_or_none()
+        if open_option is None:
+            raise LonglistRefused(
+                "nothing_to_propose",
+                "every included option already holds a place or was set aside",
+            )
+
+
+def open_shortlist_walk(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    backends: RunnerBackends,
+    executor: ThreadPoolExecutor,
+    user_id: str,
+    suggest: bool,
+) -> uuid.UUID:
+    """Open a shortlist walk on the current approved plan (task 055, P8).
+
+    The longlist walk's shape (:func:`open_longlist_walk`): the same
+    admission under the dispatch lock, then a wait for the walk's row. The
+    intent record has ``purpose = 'shortlist'`` and, for Suggest more, the
+    context ``{"suggest": true}``.
+
+    Args:
+        engine: Database engine.
+        task_id: The options-scoping task.
+        backends: The runner backend bundle.
+        executor: The walk executor.
+        user_id: The user traces are attributed to.
+        suggest: ``True`` for Suggest more (keep the places, fill up to five
+            or one more); ``False`` to release Policy Atlas's picks and
+            propose again (an appetite change).
+
+    Returns:
+        The opened walk's ``capability_run_id``.
+
+    Raises:
+        LonglistRefused: ``run_active``, ``capacity``, ``no_plan``,
+            ``no_longlist``, ``plan_stale`` or ``nothing_to_propose``.
+    """
+    admitted = admit_and_mint(
+        engine,
+        task_id=task_id,
+        capacity=executor._max_workers,
+        executor=executor,
+        backends=backends,
+        user_id=user_id,
+        shortlist_suggest=suggest,
+    )
+    try:
+        _await_new_run(
+            engine,
+            task_id=task_id,
+            existing_ids=set(),
+            capability_run_id=admitted.capability_run_id,
+        )
+    finally:
         with _dispatch_lock:
             _dispatching_tasks.discard(task_id)
     return admitted.capability_run_id

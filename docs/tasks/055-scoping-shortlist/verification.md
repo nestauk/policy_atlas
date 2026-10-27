@@ -6,7 +6,20 @@ option names and quoted reasons only; traces, read-backs and drive scripts stay 
 
 ## Build-open baseline (Phase 0)
 
-_To be filled._
+Branch head at open: `e3e60392` (ADR 0041 committed at step 4). `make verify` on 2026-10-27:
+`4 failed, 3588 passed` in the backend suite.
+
+- Three failures were `test_every_depth_runs_the_same_pass_and_cuts_at_its_caps[rapid|standard|deep]`
+  (Evidence search sourcing). Pre-existing on this machine: the same three fail on the untouched
+  `dev` head `eedf9ef9` in a second worktree, while CI's `verify` on that commit is green. Cause:
+  the fake backends record calls in thread order and the test asserts plan order over eight
+  threads. Fixed in the test only (one thread for that test), commit `9f77bf82`. No file under
+  `evidence_search/` source changed.
+- One failure, `test_an_intent_record_s_purpose_is_closed`, came from the Phase 1 delegate's
+  in-flight schema change (the purpose check now admits `shortlist`) landing while the baseline
+  ran; the test was updated in Phase 1.
+- Docker Desktop's engine was wedged at open (every `docker` call hung); recovered with
+  `docker desktop restart` before the baseline could run.
 
 ## Commands run
 
@@ -18,6 +31,10 @@ _To be filled._
 
 | Phase | Commit | Gate |
 |---|---|---|
+| 0 | `9f77bf82` | baseline (above) |
+| 1 | `83fa1bfd` | full `make verify` on snapshot `8543cfa0`: 3608 backend passed, 882 frontend passed, drift-check OK, prompt-guard OK |
+| 2a + 3a + 5a (prompts) | `d1e4cd96` | shares the Phase 2 gate tree (snapshot `15620802`); the three lead-authored prompts were written before the plumbing was delegated, as the plan requires, and committed together with their re-pin |
+| 2b | `e771c16e` | `verify-fast` + `prompt-guard` + `openapi-sync` (clean) + `drift-check` + `frontend-verify` on snapshot `15620802`: 3630 backend passed, frontend green |
 
 ## Checks beyond the build
 

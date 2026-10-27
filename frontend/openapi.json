@@ -5559,7 +5559,8 @@
               "longlist",
               "option_profile",
               "constrain",
-              "theme"
+              "theme",
+              "shortlist"
             ],
             "title": "Stage",
             "type": "string"
@@ -7390,7 +7391,8 @@
               "longlist",
               "option_profile",
               "constrain",
-              "theme"
+              "theme",
+              "shortlist"
             ],
             "title": "Stage",
             "type": "string"
@@ -7483,7 +7485,8 @@
               "longlist",
               "option_profile",
               "constrain",
-              "theme"
+              "theme",
+              "shortlist"
             ],
             "title": "Stage",
             "type": "string"
@@ -7557,7 +7560,8 @@
               "longlist",
               "option_profile",
               "constrain",
-              "theme"
+              "theme",
+              "shortlist"
             ],
             "title": "Stage",
             "type": "string"
@@ -8493,7 +8497,8 @@
                   "longlist",
                   "option_profile",
                   "constrain",
-                  "theme"
+                  "theme",
+                  "shortlist"
                 ],
                 "type": "string"
               },
