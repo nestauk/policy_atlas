@@ -2943,6 +2943,45 @@ export interface components {
             theme_id: string;
         };
         /**
+         * MaturityOut
+         * @description How well tried an option is, read from its coverage (task 055, item 7).
+         *
+         *     Args:
+         *         rung: `proposal_only` (no document names it) · `described` (documents
+         *             describe or recommend it) · `evaluated` (a document measured an
+         *             effect) · `reviewed` (a systematic review or meta-analysis did).
+         *         design_mix: The evaluating documents' evidence types as text, most
+         *             frequent first; empty when none evaluated it.
+         *         none_in_your_setting: It was evaluated, but not in the plan's Where
+         *             country.
+         *         latest_evaluation_year: The newest evaluating document's year.
+         *         stale: The newest evaluation is more than five years old.
+         */
+        MaturityOut: {
+            /**
+             * Design Mix
+             * @default
+             */
+            design_mix: string;
+            /** Latest Evaluation Year */
+            latest_evaluation_year?: number | null;
+            /**
+             * None In Your Setting
+             * @default false
+             */
+            none_in_your_setting: boolean;
+            /**
+             * Rung
+             * @enum {string}
+             */
+            rung: "proposal_only" | "described" | "evaluated" | "reviewed";
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
+        };
+        /**
          * MeOut
          * @description The authenticated caller's own identity row.
          *
@@ -3183,6 +3222,7 @@ export interface components {
             lever_none_fits_reason?: string | null;
             /** Lever Reason */
             lever_reason?: string | null;
+            maturity?: components["schemas"]["MaturityOut"] | null;
             /** Name */
             name: string;
             /**
@@ -3380,6 +3420,8 @@ export interface components {
          *             from (R76).
          *         shortlist: Its place on the shortlist (task 055); `null` when it
          *             holds none.
+         *         maturity: Its maturity rung (task 055); `null` for a longlist
+         *             written before the rung existed.
          */
         OptionSummaryOut: {
             /** Also Found As */
@@ -3410,6 +3452,7 @@ export interface components {
             lever_none_fits_reason?: string | null;
             /** Lever Reason */
             lever_reason?: string | null;
+            maturity?: components["schemas"]["MaturityOut"] | null;
             /** Name */
             name: string;
             /**
@@ -3944,7 +3987,7 @@ export interface components {
              * Key
              * @enum {string}
              */
-            key: "cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity";
+            key: "cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity" | "potential_impact";
             /** Mark */
             mark?: ("less" | "more") | null;
             /** Sentence */
@@ -4297,7 +4340,7 @@ export interface components {
              * Aspect
              * @default null
              */
-            aspect: ("cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity" | "transferability") | null;
+            aspect: ("cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity" | "potential_impact" | "transferability") | null;
             /**
              * Checked At
              * @enum {string}

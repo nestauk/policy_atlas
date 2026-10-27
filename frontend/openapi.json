@@ -3516,6 +3516,52 @@
         "title": "LonglistThemeOut",
         "type": "object"
       },
+      "MaturityOut": {
+        "description": "How well tried an option is, read from its coverage (task 055, item 7).\n\nArgs:\n    rung: `proposal_only` (no document names it) \u00b7 `described` (documents\n        describe or recommend it) \u00b7 `evaluated` (a document measured an\n        effect) \u00b7 `reviewed` (a systematic review or meta-analysis did).\n    design_mix: The evaluating documents' evidence types as text, most\n        frequent first; empty when none evaluated it.\n    none_in_your_setting: It was evaluated, but not in the plan's Where\n        country.\n    latest_evaluation_year: The newest evaluating document's year.\n    stale: The newest evaluation is more than five years old.",
+        "properties": {
+          "design_mix": {
+            "default": "",
+            "title": "Design Mix",
+            "type": "string"
+          },
+          "latest_evaluation_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Evaluation Year"
+          },
+          "none_in_your_setting": {
+            "default": false,
+            "title": "None In Your Setting",
+            "type": "boolean"
+          },
+          "rung": {
+            "enum": [
+              "proposal_only",
+              "described",
+              "evaluated",
+              "reviewed"
+            ],
+            "title": "Rung",
+            "type": "string"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "rung"
+        ],
+        "title": "MaturityOut",
+        "type": "object"
+      },
       "MeOut": {
         "description": "The authenticated caller's own identity row.\n\nReturned by `GET /api/v1/me`, which also provisions the row on first call\n(contract \u00a7 2). The frontend keys the whole tenancy UI off this shape: a\n`null` organisation hides the scope switcher entirely, which is what makes\nthe slice a dark launch for anyone not yet enrolled.\n\nArgs:\n    user_id: The caller's token subject \u2014 the identity the API keys on.\n    display_name: How the caller is named on screen. Never an address:\n        the ops-set name, or a rendering derived from `user_id` for a\n        caller provisioned by their first `/me` call.\n    email: The caller's own address once ops has resolved it, else\n        `None`. Ops- and admin-facing; never another person's.\n    organisation: The caller's organisation, or `None` when unenrolled.\n    is_admin: Whether the caller holds the read-across-organisations\n        support role. Read-only in every sense: no route and no request\n        body can set it, and no write path consults it.",
         "properties": {
@@ -4002,6 +4048,16 @@
             ],
             "title": "Lever Reason"
           },
+          "maturity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MaturityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -4301,7 +4357,7 @@
         "type": "object"
       },
       "OptionSummaryOut": {
-        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `less` \u00b7 `more` \u00b7 `null`: how big a proposal the option is\n        against the baseline, compared with the other options of the list;\n        `null` when it does not stand out or is not profiled yet.\n    ambition_reason: The one-line justification.\n    profile: What the option would take (task 046); `null` when the\n        option has no complete profile.\n    authority: Who can act on it (task 046, R43); `null` when none was\n        recorded.\n    taxonomy_version: The lever-type list version it was typed under.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    relations: Its relations to other options.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.\n    from_section: The Evidence search report section a *from your\n        evidence search* option was drawn from; `null` for any other\n        origin, or when the section was not recorded (task 045, F3).\n    also_found_as: The names of the duplicates merged into this option\n        (their documents are its documents); empty when none.\n    lever_reason: One sentence on why the option has its lever type,\n        when the typing pass recorded one; `null` otherwise (task 046,\n        R29).\n    evaluated_countries: The countries of its evaluating documents, the\n        plan's Where country first, then most documents first (task 046,\n        amendment 4, R76); empty when no evaluation gives a country.\n    outcomes_evaluated: The plan outcomes at least one evaluating\n        document measured (R76).\n    outcomes_total: The outcome count of the plan the longlist was built\n        from (R76).\n    shortlist: Its place on the shortlist (task 055); `null` when it\n        holds none.",
+        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `less` \u00b7 `more` \u00b7 `null`: how big a proposal the option is\n        against the baseline, compared with the other options of the list;\n        `null` when it does not stand out or is not profiled yet.\n    ambition_reason: The one-line justification.\n    profile: What the option would take (task 046); `null` when the\n        option has no complete profile.\n    authority: Who can act on it (task 046, R43); `null` when none was\n        recorded.\n    taxonomy_version: The lever-type list version it was typed under.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    relations: Its relations to other options.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.\n    from_section: The Evidence search report section a *from your\n        evidence search* option was drawn from; `null` for any other\n        origin, or when the section was not recorded (task 045, F3).\n    also_found_as: The names of the duplicates merged into this option\n        (their documents are its documents); empty when none.\n    lever_reason: One sentence on why the option has its lever type,\n        when the typing pass recorded one; `null` otherwise (task 046,\n        R29).\n    evaluated_countries: The countries of its evaluating documents, the\n        plan's Where country first, then most documents first (task 046,\n        amendment 4, R76); empty when no evaluation gives a country.\n    outcomes_evaluated: The plan outcomes at least one evaluating\n        document measured (R76).\n    outcomes_total: The outcome count of the plan the longlist was built\n        from (R76).\n    shortlist: Its place on the shortlist (task 055); `null` when it\n        holds none.\n    maturity: Its maturity rung (task 055); `null` for a longlist\n        written before the rung existed.",
         "properties": {
           "also_found_as": {
             "items": {
@@ -4409,6 +4465,16 @@
               }
             ],
             "title": "Lever Reason"
+          },
+          "maturity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MaturityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "name": {
             "title": "Name",
@@ -5572,7 +5638,8 @@
               "who_decides",
               "dependencies",
               "coordination",
-              "delivery_complexity"
+              "delivery_complexity",
+              "potential_impact"
             ],
             "title": "Key",
             "type": "string"
@@ -6116,6 +6183,7 @@
                   "dependencies",
                   "coordination",
                   "delivery_complexity",
+                  "potential_impact",
                   "transferability"
                 ],
                 "type": "string"

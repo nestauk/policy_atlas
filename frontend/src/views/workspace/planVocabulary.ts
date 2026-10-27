@@ -329,7 +329,8 @@ const CONSIDERATION_ASPECT_EFFECT: Record<string, string> = {
   transferability: "Kept for the assessment. It excludes nothing.",
 };
 
-/** The nine profile lines' screen names (R36). Reused by later phases. */
+/** The profile lines' screen names (R36): the nine on the card, Potential
+ *  impact last (task 055), then transferability. Reused by later phases. */
 export const PROFILE_LINE_LABELS: Record<string, string> = {
   cost: "Cost",
   time_to_set_up: "Time to set up",
@@ -339,6 +340,7 @@ export const PROFILE_LINE_LABELS: Record<string, string> = {
   dependencies: "Dependencies",
   coordination: "Coordination requirements",
   delivery_complexity: "Delivery complexity",
+  potential_impact: "Potential impact",
   transferability: "Transferability",
 };
 

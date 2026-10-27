@@ -6,7 +6,8 @@ import html
 import uuid
 from collections import Counter
 from collections.abc import Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import date
 from functools import cmp_to_key
 from typing import Any, Literal, cast
 
@@ -50,6 +51,7 @@ from policy_atlas.api.contract import (
     LonglistCountsOut,
     LonglistOut,
     LonglistThemeOut,
+    MaturityOut,
     MostRelevantNoteOut,
     OptionDesignOut,
     OptionDocumentOut,
@@ -140,6 +142,7 @@ from policy_atlas.options_scoping.longlist.lever_types import (
     LEVER_TYPES,
     TAXONOMY_VERSION,
 )
+from policy_atlas.options_scoping.longlist.maturity import maturity_of
 from policy_atlas.options_scoping.longlist.where_tried import (
     NOT_STATED,
     country_level,
@@ -3216,7 +3219,9 @@ _DOCUMENT_ROLES = frozenset({"evaluated", "described", "recommended", "mentioned
 _LINKED_FINDING_ROLE: dict[str, str] = {"iof": "evaluated", "icf": "described"}
 _PROFILE_MARKS = frozenset({"less", "more"})
 #: The two lines that state a fact, not a comparison: never marked (R37).
-_UNMARKED_LINES = frozenset({"who_decides", "dependencies"})
+#: The one profile line a row may lack (rows built before task 055 hold eight).
+OPTIONAL_PROFILE_LINE = "potential_impact"
+_UNMARKED_LINES = frozenset({"who_decides", "dependencies", "potential_impact"})
 _AUTHORITY_LABELS = frozenset({"within_your_power", "needs_action_by", "unclear"})
 log = structlog.get_logger()
 
@@ -3414,9 +3419,11 @@ def _string_list(value: object) -> list[str]:
 def _profile_out(entry: Mapping[str, Any], option_id: uuid.UUID) -> OptionProfileOut | None:
     """The option's profile from its ``option_profile`` entry (R36, R37, R41).
 
-    Served only when the entry holds all eight lines, each with a sentence;
-    otherwise ``None`` and a warning. A mark that is not ``less`` or ``more``
-    is ``None``; ``who_decides`` and ``dependencies`` never carry one.
+    Served only when the entry holds the eight legacy lines, each with a
+    sentence; otherwise ``None`` and a warning. The ninth line,
+    ``potential_impact`` (task 055), is added when present and not blank. A
+    mark that is not ``less`` or ``more`` is ``None``; ``who_decides``,
+    ``dependencies`` and ``potential_impact`` never carry one.
     """
     if not entry:
         return None
@@ -3425,6 +3432,9 @@ def _profile_out(entry: Mapping[str, Any], option_id: uuid.UUID) -> OptionProfil
     for key in PROFILE_LINE_KEYS:
         line = _as_mapping(stored.get(key))
         sentence = line.get("sentence")
+        if key == OPTIONAL_PROFILE_LINE and (not isinstance(sentence, str) or not sentence.strip()):
+            # A row written before the ninth line existed serves its eight.
+            continue
         if not isinstance(sentence, str) or not sentence.strip():
             log.warning("readmodel.option_profile_incomplete", option_id=str(option_id))
             return None
@@ -3495,7 +3505,9 @@ def _option_summary_fields(
     also_found_as: list[str] | None = None,
     lever_reason: str | None = None,
     outcomes_total: int = 0,
+    where_country: str | None = None,
 ) -> dict[str, Any]:
+    maturity = maturity_of(coverage, where_country=where_country, today_year=date.today().year)
     return {
         "option_id": row.option_id,
         "name": row.name,
@@ -3524,6 +3536,7 @@ def _option_summary_fields(
         "outcomes_evaluated": _count(coverage.get("outcomes_evaluated")),
         "outcomes_total": outcomes_total,
         "shortlist": _shortlist_state_out(row),
+        "maturity": MaturityOut(**asdict(maturity)) if maturity is not None else None,
     }
 
 
@@ -3862,6 +3875,7 @@ def _search_coverage(
                 outcome_tag=unit.outcome_tag,
                 programme_name=unit.programme_name,
                 study_country=unit.study_country,
+                year=_year(_as_mapping(unit.metadata)),
             )
             for unit in search.units
         ],
@@ -4020,6 +4034,7 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
                 also_found_as=merged.get(oid),
                 lever_reason=_lever_reason(result, oid),
                 outcomes_total=len(plan_outcomes),
+                where_country=where_country,
             )
         )
         for oid in [*themed, *unthemed]
@@ -4495,6 +4510,7 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             also_found_as=_also_found_as(conn, task_id, option_id).get(option_id),
             lever_reason=_lever_reason(result, option_id),
             outcomes_total=len(plan_outcomes),
+            where_country=where_country,
         ),
         design=design,
         design_features=list(design.design_features),

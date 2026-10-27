@@ -120,8 +120,8 @@ CHECKED_AT_BY_KIND: dict[ConstraintKind, CheckedAt] = {
     "evidence_restriction": "retrieval",
 }
 
-#: The eight lines of an option's profile, in the order they are shown
-#: (task 046, R37). A consideration's ``aspect`` names one of them, or
+#: The lines of an option's profile, in the order they are shown (task 046,
+#: R37; ``potential_impact`` last, task 055). A consideration's ``aspect`` names one of them, or
 #: ``transferability`` (B1).
 ProfileLineKey = Literal[
     "cost",
@@ -132,6 +132,7 @@ ProfileLineKey = Literal[
     "dependencies",
     "coordination",
     "delivery_complexity",
+    "potential_impact",
 ]
 PROFILE_LINE_KEYS: tuple[str, ...] = get_args(ProfileLineKey)
 

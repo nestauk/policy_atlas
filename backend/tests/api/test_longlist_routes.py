@@ -919,6 +919,67 @@ def test_an_option_without_a_profile_entry_or_with_an_incomplete_one_has_none(
     assert _summary_and_card(conn, walk, option_id)[1].profile is None
 
 
+def test_an_eight_line_row_serves_eight_lines_and_a_nine_line_row_nine(
+    conn: Connection,
+) -> None:
+    eight = _stored_profile()
+    del eight["lines"]["potential_impact"]
+    walk, option_id = _profiled(conn, profile=eight)
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.profile is not None
+        assert [line.key for line in out.profile.lines] == list(PROFILE_LINE_KEYS[:8])
+    blank = _stored_profile()
+    blank["lines"]["potential_impact"]["sentence"] = "  "
+    walk, option_id = _profiled(conn, profile=blank)
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.profile is not None
+        assert len(out.profile.lines) == 8
+    walk, option_id = _profiled(conn, profile=_stored_profile())
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.profile is not None
+        assert len(out.profile.lines) == 9
+        assert out.profile.lines[-1].key == "potential_impact"
+        assert out.profile.lines[-1].mark is None
+
+
+def test_the_maturity_rung_is_served_from_the_stored_coverage(conn: Connection) -> None:
+    walk, option_id = _profiled(conn, profile=None)
+    latest = repository._latest_longlist_row(conn, walk.task_id)
+    assert latest is not None
+    stored = walk.result(latest.run_id)
+    coverage = {oid: dict(cov) for oid, cov in stored.coverage.items()}
+    # A list written before the rung existed: no key, no rung.
+    coverage[str(option_id)].pop("evaluating_evidence_type", None)
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.run_id == latest.run_id)
+        .values(coverage=coverage)
+    )
+    assert all(out.maturity is None for out in _summary_and_card(conn, walk, option_id))
+    coverage[str(option_id)].update(
+        {
+            "role": {"evaluated": 2, "described": 0, "recommended": 0},
+            "evaluating_evidence_type": {"Observational Research Studies": 2},
+            "latest_evaluation_year": 2001,
+            "evaluated_countries": [],
+        }
+    )
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.run_id == latest.run_id)
+        .values(coverage=coverage)
+    )
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.maturity is not None
+        assert out.maturity.model_dump() == {
+            "rung": "evaluated",
+            "design_mix": "2 Observational Research Studies",
+            "none_in_your_setting": out.maturity.none_in_your_setting,
+            "latest_evaluation_year": 2001,
+            "stale": True,
+        }
+
+
 def test_the_authority_label_is_served_and_is_not_a_judgement(conn: Connection) -> None:
     entry = {
         "label": "needs_action_by",

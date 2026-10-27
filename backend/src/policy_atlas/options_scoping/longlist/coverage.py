@@ -169,6 +169,8 @@ class CoverageMember:
         outcome_tag: The record's outcome tag (a plan outcome's text or
             ``other``), ``None`` when not tagged and for a linked finding
             (R42).
+        year: The document's publication year, ``None`` when absent or
+            malformed (task 055, A3).
     """
 
     unit_kind: str
@@ -186,6 +188,25 @@ class CoverageMember:
     outcome_tag: str | None = None
     programme_name: str | None = None
     study_country: str | None = None
+    year: int | None = None
+
+
+def document_year(metadata: Mapping[str, Any] | None) -> int | None:
+    """A document's publication year from its snapshot metadata.
+
+    The same two-key rule as the read path's ``_year``: ``publication_year``,
+    then ``year``. Anything that is not a whole number is ``None``.
+
+    Args:
+        metadata: The snapshot metadata, or ``None``.
+
+    Returns:
+        The year, or ``None``.
+    """
+    if not metadata:
+        return None
+    value = metadata.get("publication_year", metadata.get("year"))
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 @dataclass(frozen=True)
@@ -623,6 +644,8 @@ def option_coverage(
     abstract_only = 0
     inherited_labels = 0
     evaluating_documents = 0
+    evaluating_evidence_type: Counter[str] = Counter()
+    evaluation_years: list[int] = []
     outcome_documents = dict.fromkeys((fold_text(o) for o in plan_outcomes), 0)
     outcome_evaluated = dict.fromkeys(outcome_documents, 0)
     measures_lookup = fold_lookup(folds, "measures")
@@ -645,6 +668,15 @@ def option_coverage(
             role[role_key] += 1
         evaluated = [m for m in doc_members if m.role == "evaluated"]
         evaluating_documents += int(bool(evaluated))
+        if evaluated:
+            if label is None or label.provenance == "absent":
+                evaluating_evidence_type[NOT_RATED] += 1
+            else:
+                evaluating_evidence_type[label.evidence_type or NOT_RATED] += 1
+            # A DOI-collapsed document takes the newest year among its copies.
+            years = [m.year for m in doc_members if m.year is not None]
+            if years:
+                evaluation_years.append(max(years))
         doc_outcomes = {fold_text(m.outcome_tag) for m in doc_members if m.outcome_tag}
         doc_outcomes_evaluated = {fold_text(m.outcome_tag) for m in evaluated if m.outcome_tag}
         if measures_lookup is not None:
@@ -720,6 +752,8 @@ def option_coverage(
         "evidence_type": _sorted(evidence_type),
         "tier": _sorted(tier),
         "role": role,
+        "evaluating_evidence_type": _sorted(evaluating_evidence_type),
+        "latest_evaluation_year": max(evaluation_years) if evaluation_years else None,
         "settings": _sorted(settings),
         "tried_on": [
             {"unit": unit, "documents": documents}

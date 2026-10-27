@@ -16,8 +16,10 @@ from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
     LINE_QUESTIONS,
     MARKED_LINE_SYSTEM_PROMPT,
     PLAIN_LINE_SYSTEM_PROMPT,
+    POTENTIAL_IMPACT_BASELINE_MAX_CHARS,
     WHO_DECIDES_CONSIDERATIONS_BLOCK,
     build_line_messages,
+    build_potential_impact_messages,
     line_is_marked,
 )
 from policy_atlas.runtime.scoping_plan import PROFILE_LINE_KEYS
@@ -38,19 +40,23 @@ _OPTIONS: list[dict[str, object]] = [
     }
 ]
 
+_OTHER_LINES = [k for k in PROFILE_LINE_KEYS if k not in ("who_decides", "potential_impact")]
 
-def test_the_line_questions_are_the_eight_line_keys_in_order() -> None:
+
+def test_the_line_questions_are_the_nine_line_keys_in_order() -> None:
     assert tuple(LINE_QUESTIONS) == PROFILE_LINE_KEYS
     assert tuple(LINE_NAMES) == PROFILE_LINE_KEYS
+    assert len(PROFILE_LINE_KEYS) == 9
+    assert PROFILE_LINE_KEYS[-1] == "potential_impact"
 
 
 def test_six_lines_carry_a_mark() -> None:
     marked = {key for key in PROFILE_LINE_KEYS if line_is_marked(key)}
-    assert marked == set(PROFILE_LINE_KEYS) - {"who_decides", "dependencies"}
+    assert marked == set(PROFILE_LINE_KEYS) - {"who_decides", "dependencies", "potential_impact"}
     assert set(LINE_MARK_MEANING) == marked
 
 
-@pytest.mark.parametrize("line_key", [k for k in PROFILE_LINE_KEYS if k != "who_decides"])
+@pytest.mark.parametrize("line_key", _OTHER_LINES)
 def test_where_given_to_another_line_raises(line_key: str) -> None:
     with pytest.raises(ValueError, match="who_decides"):
         build_line_messages(
@@ -86,7 +92,7 @@ def test_the_marked_and_plain_prompts_differ_only_by_the_mark_rules() -> None:
 _WHO_CAN_ACT = "Only the council can act; it cannot change national law"
 
 
-@pytest.mark.parametrize("line_key", [k for k in PROFILE_LINE_KEYS if k != "who_decides"])
+@pytest.mark.parametrize("line_key", _OTHER_LINES)
 def test_considerations_given_to_another_line_raises(line_key: str) -> None:
     with pytest.raises(ValueError, match="who_decides"):
         build_line_messages(
@@ -135,3 +141,36 @@ def test_no_considerations_leaves_the_who_decides_prompt_as_it_was() -> None:
             == omitted
         )
     assert WHO_DECIDES_CONSIDERATIONS_BLOCK.split("{")[0] not in str(omitted[1]["content"])
+
+
+# --- task 055, item 6: the Potential impact line --------------------------------------------
+
+
+def test_potential_impact_is_a_plain_line() -> None:
+    assert line_is_marked("potential_impact") is False
+    assert "potential_impact" not in LINE_MARK_MEANING
+    assert LINE_NAMES["potential_impact"] == "Potential impact"
+
+
+def test_potential_impact_messages_carry_the_baseline_and_the_outcomes_as_written() -> None:
+    plan = {**_PLAN, "where": "Powys"}
+    messages = build_potential_impact_messages(
+        plan=plan,
+        baseline_sections=[("Drivers", "Employers hire few under-25s.")],
+        options=_OPTIONS,
+    )
+    user = str(messages[1]["content"])
+    assert "Employers hire few under-25s." in user
+    assert "the NEET rate" in user
+    assert "Powys" in user
+    assert "cut at" not in user
+
+
+def test_potential_impact_messages_name_a_cut_of_a_long_baseline() -> None:
+    long_text = "x" * (POTENTIAL_IMPACT_BASELINE_MAX_CHARS + 500)
+    messages = build_potential_impact_messages(
+        plan=_PLAN, baseline_sections=[("Drivers", long_text)], options=_OPTIONS
+    )
+    user = str(messages[1]["content"])
+    assert f"cut at {POTENTIAL_IMPACT_BASELINE_MAX_CHARS} characters" in user
+    assert "x" * (POTENTIAL_IMPACT_BASELINE_MAX_CHARS + 1) not in user

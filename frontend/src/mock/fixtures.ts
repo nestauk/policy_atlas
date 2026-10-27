@@ -974,7 +974,7 @@ const MOCK_LONGLIST_COST_PREFERENCE = "Prefer options with a lower cost per part
 
 type ProfileFixture = NonNullable<OptionOutFixture["profile"]>;
 
-/** One eight-line profile for a longlist fixture: a sentence per line and a
+/** One nine-line profile for a longlist fixture: a sentence per line and a
  *  mark where the option stands out (`who_decides` and `dependencies` never
  *  carry one). */
 function mockProfile(
@@ -984,7 +984,7 @@ function mockProfile(
   const line = (key: ProfileFixture["lines"][number]["key"], sentence: string) => ({
     key,
     sentence,
-    mark: key === "who_decides" || key === "dependencies" ? null : (marks[key] ?? null),
+    mark: key === "who_decides" || key === "dependencies" || key === "potential_impact" ? null : (marks[key] ?? null),
   });
   return {
     lines: [
@@ -996,6 +996,7 @@ function mockProfile(
       line("dependencies", "Depends on shared data between schools and Jobcentre Plus."),
       line("coordination", "Schools, Jobcentres and councils must agree who refers whom."),
       line("delivery_complexity", "One referral route; few moving parts once the data is shared."),
+      line("potential_impact", "Moderate if it works: it targets late referral, a main driver of the baseline; would apply to 16 to 24 year olds, tried on 18 to 24 year olds; the records describe proposals only."),
     ],
     settings,
   };

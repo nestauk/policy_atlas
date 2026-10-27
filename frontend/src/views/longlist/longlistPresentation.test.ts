@@ -87,7 +87,7 @@ describe("longlist presentation (task 046)", () => {
 
 // Task 046, amendment 2 (R40, R41, R42, R43, R44): the words of the profile.
 describe("longlist presentation (amendment 2 words)", () => {
-  it("names the eight lines and ambition exactly", () => {
+  it("names the nine lines and ambition exactly, Potential impact last", () => {
     expect(PROFILE_LINE_KEYS.map((key) => LINE_NAMES[key])).toEqual([
       "Cost",
       "Time to set up",
@@ -97,8 +97,10 @@ describe("longlist presentation (amendment 2 words)", () => {
       "Dependencies",
       "Coordination requirements",
       "Delivery complexity",
+      "Potential impact",
     ]);
     expect(LINE_NAMES.ambition).toBe("Ambition");
+    expect(GRID_COLUMN_LINES).not.toContain("potential_impact");
   });
 
   it("gives each line exactly the table's level words", () => {
@@ -111,6 +113,7 @@ describe("longlist presentation (amendment 2 words)", () => {
     expect(words("dependencies")).toEqual([null, null]);
     expect(words("coordination")).toEqual(["Lower", "Higher"]);
     expect(words("delivery_complexity")).toEqual(["Simpler", "More complex"]);
+    expect(words("potential_impact")).toEqual([null, null]);
     expect(words("ambition")).toEqual(["Smaller", "Bigger"]);
     const all = Object.values(LEVEL_WORDS).flatMap((pair) => [pair.less, pair.more]);
     expect(all.filter((word) => word !== null)).toHaveLength(14);

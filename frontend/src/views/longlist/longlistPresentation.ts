@@ -245,8 +245,9 @@ type ProfileLineKey = components["schemas"]["ProfileLineOut"]["key"];
 type Mark = "less" | "more";
 type AuthorityOut = components["schemas"]["AuthorityOut"];
 
-/** The eight profile lines, in display order (R37); the ninth entry of the
- *  shared vocabulary, transferability, is read at assessment and not listed. */
+/** The nine profile lines, in display order (R37; Potential impact last, task
+ *  055); the last entry of the shared vocabulary, transferability, is read at
+ *  assessment and not listed. */
 export const PROFILE_LINE_KEYS = (Object.keys(PROFILE_LINE_LABELS) as string[]).filter(
   (key): key is ProfileLineKey => key !== "transferability",
 );
@@ -268,6 +269,7 @@ export const LEVEL_WORDS: Record<ProfileLineKey | "ambition", Record<Mark, strin
   dependencies: { less: null, more: null },
   coordination: { less: "Lower", more: "Higher" },
   delivery_complexity: { less: "Simpler", more: "More complex" },
+  potential_impact: { less: null, more: null },
   ambition: { less: "Smaller", more: "Bigger" },
 };
 

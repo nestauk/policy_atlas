@@ -246,6 +246,9 @@ class _Scripted:
     def profile_line(self, **kwargs: Any) -> Any:
         return self.profiler.profile_line(**kwargs)
 
+    def profile_potential_impact(self, **kwargs: Any) -> Any:
+        return self.profiler.profile_potential_impact(**kwargs)
+
     def profile_ambition(self, **kwargs: Any) -> Any:
         return self.profiler.profile_ambition(**kwargs)
 

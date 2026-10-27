@@ -837,6 +837,7 @@ ProfileLineKey = Literal[
     "dependencies",
     "coordination",
     "delivery_complexity",
+    "potential_impact",
 ]
 ProfileMark = Literal["less", "more"]
 AuthorityLabel = Literal["within_your_power", "needs_action_by", "unclear"]
@@ -927,6 +928,28 @@ class ShortlistStateOut(BaseModel):
     reason: str | None = None
 
 
+class MaturityOut(BaseModel):
+    """How well tried an option is, read from its coverage (task 055, item 7).
+
+    Args:
+        rung: `proposal_only` (no document names it) · `described` (documents
+            describe or recommend it) · `evaluated` (a document measured an
+            effect) · `reviewed` (a systematic review or meta-analysis did).
+        design_mix: The evaluating documents' evidence types as text, most
+            frequent first; empty when none evaluated it.
+        none_in_your_setting: It was evaluated, but not in the plan's Where
+            country.
+        latest_evaluation_year: The newest evaluating document's year.
+        stale: The newest evaluation is more than five years old.
+    """
+
+    rung: Literal["proposal_only", "described", "evaluated", "reviewed"]
+    design_mix: str = ""
+    none_in_your_setting: bool = False
+    latest_evaluation_year: int | None = None
+    stale: bool = False
+
+
 class OptionSummaryOut(BaseModel):
     """One option as the list view and the grid show it.
 
@@ -975,6 +998,8 @@ class OptionSummaryOut(BaseModel):
             from (R76).
         shortlist: Its place on the shortlist (task 055); `null` when it
             holds none.
+        maturity: Its maturity rung (task 055); `null` for a longlist
+            written before the rung existed.
     """
 
     option_id: uuid.UUID
@@ -1004,6 +1029,7 @@ class OptionSummaryOut(BaseModel):
     outcomes_evaluated: int = 0
     outcomes_total: int = 0
     shortlist: ShortlistStateOut | None = None
+    maturity: MaturityOut | None = None
 
 
 class LeverTypeOut(BaseModel):

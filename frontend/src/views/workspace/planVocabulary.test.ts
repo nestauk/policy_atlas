@@ -260,8 +260,8 @@ describe("options-scoping plan vocabulary (task 044)", () => {
     ]);
   });
 
-  it("names the nine profile lines and labels a consideration only", () => {
-    expect(Object.keys(PROFILE_LINE_LABELS)).toHaveLength(9);
+  it("names the ten profile labels and labels a consideration only", () => {
+    expect(Object.keys(PROFILE_LINE_LABELS)).toHaveLength(10);
     expect(PROFILE_LINE_LABELS.workforce).toBe("Workforce requirements");
     expect(constraintKindLines(constraint({ kind: "boundary" }))).toEqual([]);
     expect(constraintKindLines(constraint({ kind: "consideration", aspect: "cost", hard: true }))).toEqual([

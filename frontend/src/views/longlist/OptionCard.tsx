@@ -319,7 +319,9 @@ export function OptionCard() {
   const noneMeasured = planOutcomes.length > 0 && planOutcomes.every((entry) => entry.evaluated === 0);
   const opener = evidenceOpener(item.evaluated_count, item.document_count);
   const profile = item.profile ?? null;
-  const profileLines = profile === null ? [] : PROFILE_LINE_KEYS.map((key) => ({ key, line: profile.lines.find((line) => line.key === key) }));
+  const profileLines = profile === null ? [] : PROFILE_LINE_KEYS.map((key) => ({ key, line: profile.lines.find((line) => line.key === key) }))
+    // A profile written before the ninth line existed has eight; show no empty row.
+    .filter(({ key, line }) => key !== "potential_impact" || line !== undefined);
   const cellLines = profile === null ? [] : GRID_COLUMN_LINES.map((key) => ({
     key,
     mark: key === "ambition" ? (item.ambition ?? null) : (profile.lines.find((line) => line.key === key)?.mark ?? null),

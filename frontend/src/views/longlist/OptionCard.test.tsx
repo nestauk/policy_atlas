@@ -233,13 +233,13 @@ describe("OptionCard", () => {
     expect(within(section).getAllByRole("listitem")[0]).toHaveTextContent("AmbitionMiddle");
   });
 
-  it("shows a table after a click on the heading, Ambition first, then the eight lines", async () => {
+  it("shows a table after a click on the heading, Ambition first, then the nine lines", async () => {
     const user = userEvent.setup();
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     await user.click(screen.getByRole("button", { name: /What it would take/ }));
     const section = document.getElementById("what-it-would-take") as HTMLElement;
     const rows = within(section).getAllByRole("row");
-    expect(rows).toHaveLength(9);
+    expect(rows).toHaveLength(10);
     expect(within(rows[0]).getByRole("rowheader")).toHaveTextContent("Ambition");
     expect(rows[0]).toHaveTextContent("Bigger");
     expect(rows[0]).toHaveTextContent("Changes who is entitled to a national benefit");
@@ -252,11 +252,25 @@ describe("OptionCard", () => {
       "Dependencies",
       "Coordination requirements",
       "Delivery complexity",
+      "Potential impact",
     ]);
+    expect(rows[9]).toHaveTextContent("Moderate if it works");
     expect(rows[1]).toHaveTextContent("Cheaper");
     expect(rows[2]).toHaveTextContent("Middle");
     expect(within(section).getByText("Costs are mostly staff time; no capital spend is reported.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /What it would take/ })).toHaveTextContent("Policy Atlas's estimate");
+  });
+
+  it("shows eight lines for a profile written before Potential impact existed", async () => {
+    const user = userEvent.setup();
+    const profile = mockLonglistOptionCards[MOCK_OPTION_ID_EXCLUDED].profile;
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      profile: { ...profile, lines: profile!.lines.filter((line) => line.key !== "potential_impact") },
+    });
+    await user.click(screen.getByRole("button", { name: /What it would take/ }));
+    const section = document.getElementById("what-it-would-take") as HTMLElement;
+    expect(within(section).getAllByRole("row")).toHaveLength(9);
+    expect(within(section).queryByRole("rowheader", { name: "Potential impact" })).not.toBeInTheDocument();
   });
 
   // Amendment 3 (§ 2.5): the authority label sits on the "Who decides" row, only with an entry.

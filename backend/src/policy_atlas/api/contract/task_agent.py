@@ -227,6 +227,7 @@ ConsiderationAspect = Literal[
     "dependencies",
     "coordination",
     "delivery_complexity",
+    "potential_impact",
     "transferability",
 ]
 
