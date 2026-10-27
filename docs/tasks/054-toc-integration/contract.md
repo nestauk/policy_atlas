@@ -448,6 +448,17 @@ decisions below. The decisions fix what the spec leaves to the build.
   modelling study from the text) and stores `robust_model` as it said it; a robust model counts as
   one only when classify also calls it a modelling study, and choose logs the documents where the
   two disagree.
+- **C32. Links discovery adds get their own search** (owner approved, 2026-10-27: "implement if
+  it adds"; in the second-round experiment a no-evidence discovered link found 4 relevant studies
+  with its own light search). After `toc_merge`, the runner dispatches and joins one link-depth
+  item search per kept link with no search of its own in this walk (stage
+  `toc_new_link_searches`, the same fan-out and join as the first). A new code step,
+  `toc_search_new` (not a spine step), then picks for those links exactly as `toc_select` does:
+  own documents plus the 10 nearest from the whole walk, one pick call, round-robin fallback. A
+  picked document already screened out is screened in again at the next screen generation, and
+  the picks are merged into the picks event the judge reads, so the judge treats these links like
+  any other. A link whose search fails or finds nothing keeps the nearest-pool fallback.
+  Named-link checks (Search for more) are unchanged.
 
 ## ADR scope
 

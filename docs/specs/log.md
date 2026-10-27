@@ -1,5 +1,10 @@
 # Spec update log
 
+## 2026-10-27 (task 054, searches for discovered links)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): after
+  merge, each kept link that discovery added gets its own light search and pick, as the first
+  links do, instead of only borrowing the closest documents from the pool. Task 054 contract C32.
+
 ## 2026-10-27 (task 054, study-design search and classify after the judge)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): each
   link search adds one generated keyword query, run with the systematic-review and trial clauses
