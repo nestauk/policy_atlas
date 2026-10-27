@@ -160,8 +160,10 @@ def exclude_option(
     Writes ``state = "excluded"`` and ``exclusion = {constraint: "your
     decision", reason, by: "user"}`` — reversible by :func:`include_option`,
     and never overridden by a rebuild's ``constrain``. An excluded option holds
-    no shortlist place, so its place is cleared too, whatever it was (task
-    055, PR10); including it again does not restore the place.
+    no shortlist place, so a place (``proposed`` or ``added_by_you``) is
+    cleared too (task 055, PR10); including it again does not restore the
+    place. A set-aside stays set aside, so including the option again never
+    makes it a candidate again (S9).
 
     Args:
         conn: The caller's open transaction, holding the task row lock.
@@ -179,15 +181,19 @@ def exclude_option(
     # A reason is optional on the button and the verb alike (owner, 2026-09-24):
     # a blank one is recorded empty, never invented.
     text = clean_text(reason)
+    place: dict[str, Any] = (
+        {}
+        if row.shortlist_state == "set_aside"
+        else {"shortlist_state": None, "shortlist_reason": None}
+    )
     conn.execute(
         option.update()
         .where(option.c.task_id == task_id, option.c.option_id == option_id)
         .values(
             state="excluded",
             exclusion={"constraint": USER_DECISION, "reason": text or "", "by": "user"},
-            shortlist_state=None,
-            shortlist_reason=None,
             updated_at=datetime.now(UTC),
+            **place,
         )
     )
     _event(

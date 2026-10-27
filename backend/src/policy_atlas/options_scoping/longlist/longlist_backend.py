@@ -838,8 +838,8 @@ class StubLonglistBackend:
       each place in the input gets ``"{documents_total} evaluations in
       {place}."``, which passes the trace check. Its calls and inputs are
       recorded under the lock.
-    - ``propose_shortlist`` answers from its own FIFO queue the same way (a
-      queued exception is raised); with none, it picks the first N candidate
+    - ``propose_shortlist`` answers from its own first-in, first-out queue the
+      same way (a queued exception is raised); with none, it picks the first N candidate
       ids in the order the user message lists them, N being the message's
       "Places to fill", each with the reason ``"stub reason"``, and the note
       ``"stub note"``. Its messages are recorded under ``inputs["shortlist"]``.

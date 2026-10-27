@@ -677,9 +677,13 @@ def _build_plan(draft: ScopingPlanDraftWire, inputs: ScopingInputs, turn_index: 
         previous=inputs.previous,
     )
     # The appetite rides here rather than inside build_scoping_plan: the wire's
-    # value when it is one of the three, otherwise the plan's own default.
+    # value when it is one of the three, otherwise the previous version's (so a
+    # later version from the conversation keeps a chosen appetite), otherwise
+    # the plan's own default.
     if draft.risk_appetite in APPETITE_OPTION_IDS.values():
         plan = plan.model_copy(update={"risk_appetite": draft.risk_appetite})
+    elif inputs.previous is not None:
+        plan = plan.model_copy(update={"risk_appetite": inputs.previous.risk_appetite})
     return plan
 
 

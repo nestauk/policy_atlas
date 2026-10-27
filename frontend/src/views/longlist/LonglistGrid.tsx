@@ -202,6 +202,12 @@ export function LonglistGrid({
                                 excluded={option.state === "excluded"}
                                 className="mt-1 block"
                               />
+                              {actions.notice !== null &&
+                                actions.notice.optionId === option.option_id && (
+                                  <p role="alert" className="mt-1 text-meta text-red">
+                                    {actions.notice.text}
+                                  </p>
+                                )}
                             </li>
                           ))}
                         </ul>

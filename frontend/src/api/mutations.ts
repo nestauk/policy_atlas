@@ -343,8 +343,9 @@ export function useShortlistVerb(taskId: string, verb: "shortlist" | "unshortlis
 }
 
 /** `POST .../shortlist/suggest` (no body, 202): opens a shortlist walk that
- *  fills the open places. Refused with 409 `run_active`,
- *  `nothing_to_propose` or `no_longlist`. */
+ *  fills the open places. Refused with 409 `run_active`, `capacity`,
+ *  `plan_stale` or `nothing_to_propose`; the view words `plan_stale` with
+ *  `suggestConflictSentences`. */
 export function useSuggestMore(taskId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();

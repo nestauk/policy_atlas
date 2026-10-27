@@ -69,6 +69,7 @@ from policy_atlas.runtime.scoping_plan import (
     ScopingPlan,
     compose_longlist_screen_intent,
     longlist_inputs,
+    shortlist_proposal_stale,
 )
 
 log = structlog.get_logger()
@@ -213,10 +214,12 @@ def admit_and_mint(
                 purpose, intent = LONGLIST_PURPOSE, compile_longlist_intent(plan)
                 context: dict[str, Any] = {"capability": OPTIONS_SCOPING}
             else:
-                _refuse_shortlist(conn, task_id=task_id, plan=plan, suggest=shortlist_suggest)
+                keep_places = _refuse_shortlist(
+                    conn, task_id=task_id, plan=plan, suggest=shortlist_suggest
+                )
                 purpose, intent = SHORTLIST_PURPOSE, "shortlist"
                 context = {"capability": OPTIONS_SCOPING}
-                if shortlist_suggest:
+                if keep_places:
                     context["suggest"] = True
             scope_id = uuid.uuid4()
             conn.execute(
@@ -362,8 +365,14 @@ def longlist_pinned_plan(
 
 def _refuse_shortlist(
     conn: Connection, *, task_id: uuid.UUID, plan: ScopingPlan, suggest: bool
-) -> None:
+) -> bool:
     """Refuse a shortlist walk that has nothing to work on (task 055, P8).
+
+    Suggest more on a stale proposal (none yet, or made under another risk
+    appetite: :func:`shortlist_proposal_stale`, the rule the longlist view
+    serves as ``shortlist.stale``) opens a re-proposal instead: the screen
+    asks for Suggest more after an appetite change, and keeping the old picks
+    would only fill the gaps.
 
     Args:
         conn: The admission's connection, inside its transaction.
@@ -371,12 +380,17 @@ def _refuse_shortlist(
         plan: The current approved plan.
         suggest: Whether the walk is Suggest more.
 
+    Returns:
+        Whether the walk keeps Policy Atlas's picks (Suggest more on a
+        current proposal); ``False`` re-proposes.
+
     Raises:
         LonglistRefused: ``no_longlist`` when the task has no longlist;
             ``plan_stale`` when the plan changed in a field the longlist
             reads since it was built (a Rebuild is due, not a proposal);
-            ``nothing_to_propose`` (Suggest more only) when every included
-            option already holds a place or was set aside.
+            ``nothing_to_propose`` (Suggest more on a current proposal only)
+            when every included option already holds a place or was set
+            aside.
     """
     built = longlist_pinned_plan(conn, task_id=task_id)
     if built is None:
@@ -387,20 +401,33 @@ def _refuse_shortlist(
             "plan_stale",
             "the plan changed since the longlist was built — rebuild the longlist first",
         )
-    if suggest:
-        open_option = conn.execute(
-            select(option.c.option_id)
-            .where(option.c.task_id == task_id)
-            .where(option.c.state == "included")
-            .where(option.c.merged_into_option_id.is_(None))
-            .where(option.c.shortlist_state.is_(None))
-            .limit(1)
-        ).scalar_one_or_none()
-        if open_option is None:
-            raise LonglistRefused(
-                "nothing_to_propose",
-                "every included option already holds a place or was set aside",
-            )
+    if not suggest:
+        return False
+    stored = conn.execute(
+        select(longlist_result.c.shortlist)
+        .where(longlist_result.c.task_id == task_id)
+        .order_by(
+            longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    provenance = stored.get("provenance") if isinstance(stored, dict) else None
+    if shortlist_proposal_stale(provenance if isinstance(provenance, dict) else {}, plan):
+        return False
+    open_option = conn.execute(
+        select(option.c.option_id)
+        .where(option.c.task_id == task_id)
+        .where(option.c.state == "included")
+        .where(option.c.merged_into_option_id.is_(None))
+        .where(option.c.shortlist_state.is_(None))
+        .limit(1)
+    ).scalar_one_or_none()
+    if open_option is None:
+        raise LonglistRefused(
+            "nothing_to_propose",
+            "every included option already holds a place or was set aside",
+        )
+    return True
 
 
 def open_shortlist_walk(
@@ -426,7 +453,8 @@ def open_shortlist_walk(
         executor: The walk executor.
         user_id: The user traces are attributed to.
         suggest: ``True`` for Suggest more (keep the places, fill up to five
-            or one more); ``False`` to release Policy Atlas's picks and
+            or one more), which re-proposes instead when the stored
+            proposal is stale; ``False`` to release Policy Atlas's picks and
             propose again (an appetite change).
 
     Returns:

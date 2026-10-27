@@ -41,7 +41,11 @@ def _seed(engine: Engine, *, plan: ScopingPlan | None = None) -> tuple[uuid.UUID
 
 
 def _longlist(engine: Engine, task_id: uuid.UUID, plan_id: uuid.UUID, version: int = 1) -> None:
-    """A finished longlist walk's result, built from one plan version."""
+    """A finished longlist walk's result, built from one plan version.
+
+    It holds a proposal made under the default appetite, so Suggest more on it
+    keeps the places (a stale proposal re-proposes instead).
+    """
     run_id = uuid.uuid4()
     with engine.begin() as conn:
         scope_id = uuid.uuid4()
@@ -82,6 +86,7 @@ def _longlist(engine: Engine, task_id: uuid.UUID, plan_id: uuid.UUID, version: i
                 option_profile={},
                 counts={},
                 provenance={},
+                shortlist={"note": "A note.", "provenance": {"appetite": "mostly_tried"}},
                 created_at=now(),
             )
         )

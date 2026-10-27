@@ -906,11 +906,14 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const open = Object.values(mockLonglistOptionCards).filter(
       (option) => option.state === "included" && option.shortlist == null,
     );
-    if (open.length === 0) return mockConflict("nothing_to_propose", "Nothing is left to propose.");
+    if (open.length === 0 && !mockShortlistState.stale) {
+      return mockConflict("nothing_to_propose", "Nothing is left to propose.");
+    }
     const held = Object.values(mockLonglistOptionCards).filter(
       (option) => option.shortlist?.state === "proposed" || option.shortlist?.state === "added_by_you",
     ).length;
-    for (const option of open.slice(0, Math.max(0, MOCK_SHORTLIST_PLACES_TARGET - held))) {
+    // Up to the target; past it, Suggest more still adds one place.
+    for (const option of open.slice(0, Math.max(1, MOCK_SHORTLIST_PLACES_TARGET - held))) {
       option.shortlist = { state: "proposed", reason: "Mock reason: names a fact on the card." };
     }
     mockShortlistState.note = "Mock note: nothing here tackles the wider labour market.";
@@ -945,6 +948,8 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const reason = isRecord(body) && typeof body.reason === "string" ? body.reason : "";
     option.state = "excluded";
     option.exclusion = { by: "user", constraint: "your decision", reason };
+    // An excluded option loses its place; a set-aside mark stays.
+    if (option.shortlist?.state === "proposed" || option.shortlist?.state === "added_by_you") option.shortlist = null;
     return json(option);
   }
   if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/options`)) {

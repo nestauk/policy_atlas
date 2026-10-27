@@ -32,8 +32,9 @@ class Maturity:
     Attributes:
         rung: The rung.
         design_mix: The evaluating documents' evidence types as text, most
-            frequent first, for example "1 RCT, 2 observational"; empty when
-            none evaluated the option.
+            frequent first, for example "1 RCT, 2 observational" (RCT: a
+            randomised controlled trial); empty when none evaluated the
+            option.
         none_in_your_setting: Documents evaluated the option but none in the
             plan's Where country.
         latest_evaluation_year: The newest evaluating document's year, or

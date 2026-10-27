@@ -214,6 +214,18 @@ describe("LonglistGrid", () => {
     expect(within(excluded).queryByRole("button")).not.toBeInTheDocument();
   });
 
+  it("shows a refused shortlist action's notice under its tile", async () => {
+    const user = userEvent.setup();
+    shortlistMutate.mockImplementationOnce((_vars, options: { onError: (error: Error) => void }) =>
+      options.onError(new Error("network")),
+    );
+    renderGrid();
+    const mentoring = screen.getByRole("link", { name: "School-based mentoring" }).closest("li") as HTMLElement;
+    await user.click(within(mentoring).getByRole("button", { name: "Add to shortlist" }));
+    expect(within(mentoring).getByRole("alert")).toHaveTextContent("The option couldn't be added to the shortlist. Try again.");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+  });
+
   it("disables the shortlist actions while a walk is running", () => {
     renderGrid(false, undefined, { capability_run_id: "x", status: "running", started_at: "2026-10-27T00:00:00Z" });
     for (const button of screen.getAllByRole("button", { name: /shortlist/ })) expect(button).toBeDisabled();

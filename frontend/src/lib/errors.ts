@@ -18,7 +18,6 @@ type ConflictCode =
   | "link_source_unfinished"
   | "link_source_capability"
   | "nothing_to_propose"
-  | "no_longlist"
   | "not_included";
 
 /** Human-readable, trigger-local conflict copy — the one place this
@@ -44,7 +43,6 @@ export const conflictSentences: Record<ConflictCode, string> = {
   link_source_capability: "A task can only start from an Evidence search task.",
   // Task 055: the shortlist's refusals.
   nothing_to_propose: "Every included option already has a place or was set aside. There is nothing left to propose.",
-  no_longlist: "There is no longlist yet. Build it first.",
   not_included: "Only an included option can be on the shortlist.",
 };
 
@@ -61,11 +59,23 @@ export function isConflictCode(code: string | undefined | null): code is Conflic
   return code !== undefined && code !== null && code in conflictSentences;
 }
 
-/** A failed action's notice: the API's conflict sentence when the thrown
+/** Suggest more's own words for a shared code: there, `plan_stale` means
+ *  the longlist predates a changed plan input (task 055). */
+export const suggestConflictSentences: Partial<Record<ConflictCode, string>> = {
+  plan_stale: "The plan has changed since the longlist was built. Rebuild the longlist first.",
+};
+
+/** A failed action's notice: the action's own sentence for the code when
+ *  `overrides` has one, else the API's conflict sentence when the thrown
  *  error names one, else the action's own fallback. */
-export function actionFailedNotice(error: unknown, fallback: string): string {
+export function actionFailedNotice(
+  error: unknown,
+  fallback: string,
+  overrides: Partial<Record<ConflictCode, string>> = {},
+): string {
   const code = (error as { code?: string } | null | undefined)?.code;
-  return isConflictCode(code) ? conflictSentences[code] : fallback;
+  if (!isConflictCode(code)) return fallback;
+  return overrides[code] ?? conflictSentences[code];
 }
 
 /**

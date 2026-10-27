@@ -550,11 +550,27 @@ def test_the_approved_draft_serves_the_appetite() -> None:
     assert scoping_draft_from_plan(plan).risk_appetite == "open_to_untested"
 
 
-def test_the_longlist_inputs_are_the_ten_fields_of_a6() -> None:
+def test_a_later_version_without_an_appetite_keeps_the_previous_one() -> None:
+    """A wire draft with no appetite carries the previous version's, not the default."""
+    from policy_atlas.runtime.task_agent_scoping import ScopingInputs, _build_plan
+
+    previous = build_scoping_plan(_ready_draft(), linked_task_ids=[]).model_copy(
+        update={"risk_appetite": "open_to_untested"}
+    )
+    draft = _ready_draft()
+    assert draft.risk_appetite is None
+    plan = _build_plan(draft, ScopingInputs([], [], previous=previous), 3)
+    assert plan.risk_appetite == "open_to_untested"
+    first = _build_plan(draft, ScopingInputs([], []), 0)
+    assert first.risk_appetite == ScopingPlan.model_fields["risk_appetite"].default
+
+
+def test_the_longlist_inputs_are_the_eleven_fields_of_a6() -> None:
     from policy_atlas.runtime.scoping_plan import longlist_inputs
 
     plan = build_scoping_plan(_ready_draft(), linked_task_ids=[])
     assert set(longlist_inputs(plan)) == {
+        "question",
         "intended_change",
         "target_unit",
         "where",
@@ -594,3 +610,12 @@ def test_an_appetite_change_leaves_the_longlist_inputs_and_an_outcome_change_doe
         update={"outcomes": [*plan.outcomes, Tagged(text="earnings", origin="your_call")]}
     )
     assert longlist_inputs(outcome) != longlist_inputs(plan)
+
+
+def test_a_question_change_changes_the_longlist_inputs() -> None:
+    """Suggest, constrain, theme, the profile and the shortlist read the question."""
+    from policy_atlas.runtime.scoping_plan import longlist_inputs
+
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[])
+    edited = plan.model_copy(update={"question": f"{plan.question} in rural areas"})
+    assert longlist_inputs(edited) != longlist_inputs(plan)

@@ -172,6 +172,7 @@ from policy_atlas.runtime.scoping_plan import (
     PROFILE_LINE_KEYS,
     ScopingPlan,
     longlist_inputs,
+    shortlist_proposal_stale,
 )
 from policy_atlas.runtime.steering_events import canonical_actor
 from policy_atlas.runtime.steering_history import steering_history
@@ -3600,14 +3601,10 @@ def _shortlist_out(stored: object, current: ScopingPlan | None) -> ShortlistOut:
     shortlist = _as_mapping(stored)
     provenance = dict(_as_mapping(shortlist.get("provenance")))
     note = shortlist.get("note")
-    if "appetite" not in provenance:
-        stale = True
-    else:
-        stale = current is not None and provenance["appetite"] != current.risk_appetite
     return ShortlistOut(
         note=note if isinstance(note, str) and note.strip() else None,
         provenance=provenance,
-        stale=stale,
+        stale=shortlist_proposal_stale(provenance, current),
     )
 
 
@@ -3615,11 +3612,16 @@ def _plan_inputs_changed(current: ScopingPlan | None, built_from: ScopingPlan | 
     """Whether the current plan would build a different longlist (task 055, A6).
 
     Compares :func:`longlist_inputs` of the current approved plan with that of
-    the plan version the longlist was built from. ``False`` when either plan
-    cannot be read, so an unreadable row never prompts a rebuild.
+    the plan version the longlist was built from. ``False`` when the current
+    plan cannot be read; ``True`` when only the pinned plan cannot be, which
+    is what the shortlist opener refuses as ``plan_stale``
+    (:func:`~policy_atlas.api.longlist_start._refuse_shortlist`), so the
+    screen offers the rebuild the server asks for.
     """
-    if current is None or built_from is None:
+    if current is None:
         return False
+    if built_from is None:
+        return True
     return longlist_inputs(current) != longlist_inputs(built_from)
 
 

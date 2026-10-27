@@ -12,7 +12,8 @@ Upgrade
                                     no place on the shortlist.
     ``option.shortlist_reason``     nullable text: the one-line reason for a
                                     Policy Atlas pick.
-    ``longlist_result.shortlist``   JSONB, NOT NULL, holding the latest
+    ``longlist_result.shortlist``   JSONB (PostgreSQL's binary JSON column
+                                    type), NOT NULL, holding the latest
                                     proposal's note and provenance. Existing
                                     rows are filled with ``'{}'`` through a
                                     server default that is **kept** (unlike

@@ -1823,9 +1823,10 @@ def test_an_outcome_change_makes_the_plan_inputs_changed(conn: Connection) -> No
     assert listed.plan_inputs_changed is True
 
 
-def test_plan_inputs_changed_is_false_when_the_pinned_version_cannot_be_read(
+def test_plan_inputs_changed_is_true_when_the_pinned_version_cannot_be_read(
     conn: Connection,
 ) -> None:
+    """It agrees with the shortlist opener, which refuses that case as ``plan_stale``."""
     walk = _Walk(conn)
     walk.option("Youth guarantee", origin="added_by_you")
     walk.build(_Scripted())
@@ -1844,4 +1845,4 @@ def test_plan_inputs_changed_is_false_when_the_pinned_version_cannot_be_read(
     )
     listed = repository.longlist_out(conn, walk.task_id)
     assert listed is not None
-    assert listed.plan_inputs_changed is False
+    assert listed.plan_inputs_changed is True

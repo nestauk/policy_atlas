@@ -451,10 +451,13 @@ function ScopingSettingsSection({
   onEdit,
   readOnly,
   onChangeAppetite,
+  appetitePending = false,
 }: {
   scoping: ScopingPlanDraft;
   onEdit: () => void;
   readOnly: boolean;
+  /** True while a patch is in flight, so two quick changes cannot race. */
+  appetitePending?: boolean;
   /** A direct plan patch (task 055, A25); omitted while the plan cannot be
    *  edited directly, which leaves the label read-only. */
   onChangeAppetite?: (value: RiskAppetite) => void;
@@ -481,7 +484,7 @@ function ScopingSettingsSection({
             {onChangeAppetite === undefined ? (
               RISK_APPETITE_LABELS[appetite]
             ) : (
-              <RiskAppetiteSelect value={appetite} disabled={false} onChange={onChangeAppetite} />
+              <RiskAppetiteSelect value={appetite} disabled={appetitePending} onChange={onChangeAppetite} />
             )}
           </dd>
         </div>
@@ -815,6 +818,7 @@ function ScopingPlanSections({
               ? (value) => patchPlan.mutate({ scoping: { risk_appetite: value } })
               : undefined
           }
+          appetitePending={patchPlan.isPending}
         />
         <ConstraintsSection
           constraints={constraints}

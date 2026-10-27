@@ -347,8 +347,9 @@ def test_every_depth_runs_the_same_pass_and_cuts_at_its_caps(
 ) -> None:
     # The fake backends record calls in the order the threads reach them, and
     # this test asserts the plan order of the first fifteen; with eight threads
-    # that order depends on the machine (green on CI, red on an Apple laptop,
-    # 2026-10-27). One thread makes the two orders the same thing.
+    # that order depends on the machine (green on CI, the continuous
+    # integration server; red on an Apple laptop, 2026-10-27). One thread
+    # makes the two orders the same thing.
     monkeypatch.setattr(search_loop_module, "SEARCH_CONCURRENCY", 1)
     task_id, run_id = seed_task_and_run(conn)
     scope_id = seed_scope(conn, task_id)

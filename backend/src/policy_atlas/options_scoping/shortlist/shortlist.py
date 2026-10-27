@@ -1,9 +1,10 @@
 """The ``shortlist`` component: Policy Atlas proposes the places (task 055, items 3-5).
 
-ADR 0041; plan P4-P8. The step reads every included option's card (the same
-text the user sees), the plan, the baseline, the reader's risk appetite, the
-reader's own places, the set-asides, one line per excluded option and the
-previous proposal, and makes one judgment-model call
+ADR 0041 (architecture decision record); plan P4-P8. The step reads every
+included option's card (the same text the user sees), the plan, the
+baseline, the reader's risk appetite, the reader's own places, the
+set-asides, one line per excluded option and the previous proposal, and
+makes one judgment-model call
 (:mod:`~policy_atlas.options_scoping.shortlist.shortlist_prompt`). It writes the
 picks onto the option rows (``shortlist_state = "proposed"`` with a reason),
 the note and how it was made onto the task's newest ``longlist_result``, and
@@ -17,8 +18,8 @@ one earlier write is the clearing of picks whose option was since excluded or
 merged (O1), which stands whatever the call does.
 
 Code checks only the hard things (plan P5): every pick is a candidate, none
-twice, exactly as many as asked, each reason and the note present and short
-enough. A failed check re-asks once with the failures named; a second failure
+twice, exactly as many as asked, each reason and the note present, short
+enough and free of links. A failed check re-asks once with the failures named; a second failure
 raises.
 """
 
@@ -39,6 +40,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core import events
+from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.core.schema import event_log, longlist_result, option
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.longlist.longlist import latest_longlist
@@ -86,6 +88,12 @@ _STATE_WORDS = {"proposed": "Policy Atlas's pick", "added_by_you": "added by you
 
 #: The ambition words, as the card says them (``LEVEL_WORDS.ambition``).
 _AMBITION_WORDS = {"less": "Smaller", "more": "Bigger"}
+
+#: The cap on one side-block field (a name, a reason, the note), as on a card.
+_LINE_MAX_CHARS = 4_000
+
+#: What marks a link in a reason or the note; the card shows neither (plan P5).
+_LINK_MARKS = ("http://", "https://", "www.", "](")
 
 
 class ShortlistFailure(Exception):
@@ -151,7 +159,9 @@ def _previous_proposal(conn: Connection, task_id: uuid.UUID) -> str:
 
 
 def _one_line(value: object) -> str:
-    return " ".join(str(value or "").split())
+    """One field as prompt text: scrubbed of control characters, on one line."""
+    text = sanitize_prompt_field(str(value or ""), max_chars=_LINE_MAX_CHARS)
+    return " ".join(text.split())
 
 
 def _excluded_line(row: Any) -> str:
@@ -237,6 +247,11 @@ def _checks(
         failures.append("The note is empty.")
     elif len(note) > SHORTLIST_NOTE_MAX_CHARS:
         failures.append(f"The note is longer than {SHORTLIST_NOTE_MAX_CHARS} characters.")
+    for pick in wire.picks:
+        if any(mark in pick.reason.lower() for mark in _LINK_MARKS):
+            failures.append(f"The reason for {pick.option_id} contains a link.")
+    if any(mark in note.lower() for mark in _LINK_MARKS):
+        failures.append("The note contains a link.")
     return failures
 
 
@@ -442,20 +457,28 @@ def shortlist_scope(
         raise ShortlistFailure("shortlist: longlist changed")
     picked_ids = [row.option_id for row, _ in picks]
     still = (
-        set(
-            conn.execute(
-                select(option.c.option_id)
+        {
+            row.option_id: row.shortlist_state
+            for row in conn.execute(
+                select(option.c.option_id, option.c.shortlist_state)
                 .where(option.c.task_id == task_id)
                 .where(option.c.option_id.in_(picked_ids))
                 .where(option.c.state == "included")
                 .where(option.c.merged_into_option_id.is_(None))
-            ).scalars()
-        )
+            )
+        }
         if picked_ids
-        else set()
+        else {}
     )
-    if still != set(picked_ids):
+    if set(still) != set(picked_ids):
         raise ShortlistFailure("shortlist: longlist changed")
+    # Each pick still has the place the snapshot assumed: none for Suggest
+    # more; for a re-proposal, not the reader's own place nor a set-aside.
+    if any(
+        state is not None if suggest else state in ("added_by_you", "set_aside")
+        for state in still.values()
+    ):
+        raise ShortlistFailure("shortlist: places changed")
 
     now = datetime.now(UTC)
     if not suggest:

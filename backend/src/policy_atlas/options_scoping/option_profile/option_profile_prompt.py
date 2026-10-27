@@ -40,8 +40,8 @@ OPTION_PROFILE_MAX_OUTPUT_TOKENS = 16_384
 #: The ceiling on one Potential impact sentence (task 055, contract item 6).
 #: Checked in code after the call, not on the wire: a ``max_length`` on the
 #: wire makes the constrained decoder stop mid-word at the limit (seen on the
-#: stored tasks in the build) instead of failing the attempt. A longer answer
-#: fails the check and the attempt is repeated once.
+#: stored tasks in the build) instead of failing the attempt. The model is
+#: told this ceiling; how the check treats a longer answer is below.
 #:
 #: ``option_profile`` is a spine step: a second failure fails the whole
 #: longlist walk. So the stated ceiling is a target the model is told, and

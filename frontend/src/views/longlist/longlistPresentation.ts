@@ -515,6 +515,10 @@ export function placeWithDetail(
 
 type MaturityOut = components["schemas"]["MaturityOut"];
 
+/** The backend's `MATURITY_RECENT_YEARS`: an evaluation older than this
+ *  many years is stale. */
+const MATURITY_RECENT_YEARS = 5;
+
 /** The maturity rung's word (task 055, item 7). */
 export const MATURITY_WORDS: Record<MaturityOut["rung"], string> = {
   proposal_only: "Proposed, not yet implemented",
@@ -525,7 +529,7 @@ export const MATURITY_WORDS: Record<MaturityOut["rung"], string> = {
 
 /** The rung line: the rung word, then ` · {design mix}` when there is one,
  *  then each modifier as ` · {modifier}`. "most recent evaluation before
- *  {year}" is the current year minus five and shows only when the newest
+ *  {year}" is the current year minus `MATURITY_RECENT_YEARS` and shows only when the newest
  *  evaluation is stale. `null` maturity (a longlist written before the rung
  *  existed) gives `null`: nothing new to show. */
 export function maturityLine(maturity: MaturityOut | null | undefined, now: Date = new Date()): string | null {
@@ -533,17 +537,7 @@ export function maturityLine(maturity: MaturityOut | null | undefined, now: Date
   const parts: string[] = [MATURITY_WORDS[maturity.rung]];
   if (maturity.design_mix !== "") parts.push(maturity.design_mix);
   if (maturity.none_in_your_setting) parts.push("none in your setting");
-  if (maturity.stale) parts.push(`most recent evaluation before ${now.getFullYear() - 5}`);
-  return parts.join(" · ");
-}
-
-/** The rung and its two modifiers only (no design mix): the shortlist rows'
- *  words. The mix stays on the card's Evidence section (`maturityLine`). */
-export function maturityWords(maturity: MaturityOut | null | undefined, now: Date = new Date()): string | null {
-  if (maturity == null) return null;
-  const parts: string[] = [MATURITY_WORDS[maturity.rung]];
-  if (maturity.none_in_your_setting) parts.push("none in your setting");
-  if (maturity.stale) parts.push(`most recent evaluation before ${now.getFullYear() - 5}`);
+  if (maturity.stale) parts.push(`most recent evaluation before ${now.getFullYear() - MATURITY_RECENT_YEARS}`);
   return parts.join(" · ");
 }
 
@@ -560,7 +554,7 @@ export function maturityPhrase(
   if (maturity.rung === "proposal_only" || maturity.rung === "described") return MATURITY_WORDS[maturity.rung];
   const parts: string[] = [MATURITY_WORDS[maturity.rung]];
   if (maturity.none_in_your_setting) parts.push(where ? `not in ${where}` : "not in your setting");
-  if (maturity.stale) parts.push(`last before ${now.getFullYear() - 5}`);
+  if (maturity.stale) parts.push(`last before ${now.getFullYear() - MATURITY_RECENT_YEARS}`);
   return parts.join(", ");
 }
 

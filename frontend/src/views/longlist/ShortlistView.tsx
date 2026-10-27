@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router";
 import type { components } from "../../api/gen/types";
 import { usePatchPlan, useSuggestMore } from "../../api/mutations";
 import { usePlan, useRuns, useTask } from "../../api/queries";
-import { actionFailedNotice } from "../../lib/errors";
+import { actionFailedNotice, suggestConflictSentences } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { Chip } from "../../ui/brand/Chip";
@@ -97,7 +97,9 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
   const hasOpenOption = options.some((option) => option.state === "included" && option.shortlist == null);
   const shortlist = longlist.shortlist;
   const appetite: RiskAppetite = plan.data?.scoping?.risk_appetite ?? "mostly_tried";
-  const where = plan.data?.scoping?.where?.text ?? null;
+  // The longlist's setting words were judged against the plan it was built
+  // from; after a plan change, name no place until the Rebuild.
+  const where = longlist.plan_inputs_changed ? null : (plan.data?.scoping?.where?.text ?? null);
 
   // A shortlist walk that could not propose (P17): the task's newest
   // parentless walk has the purpose "shortlist" and ended degraded or
@@ -117,7 +119,9 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
   }
   if (baselineCut !== null && baselineCut > 0) footerLines.push("The baseline was cut");
 
-  const suggestTitle = walkActive ? "A walk is running" : !hasOpenOption ? "Nothing left to propose" : undefined;
+  // A stale shortlist re-proposes, so it needs no open option.
+  const canSuggest = hasOpenOption || shortlist.stale;
+  const suggestTitle = walkActive ? "A walk is running" : !canSuggest ? "Nothing left to propose" : undefined;
   const hasNote = shortlist.note != null && shortlist.note !== "";
 
   const renderPlaceRow = (option: OptionSummaryOut) => {
@@ -247,7 +251,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
         <Button
           variant="primary"
           size="sm"
-          disabled={walkActive || !hasOpenOption || suggest.isPending}
+          disabled={walkActive || !canSuggest || suggest.isPending}
           title={suggestTitle}
           onClick={() => suggest.mutate()}
         >
@@ -267,7 +271,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
       )}
       {suggest.isError && (
         <p role="alert" className="mt-2 text-body text-red">
-          {actionFailedNotice(suggest.error, "Policy Atlas couldn't start. Try again.")}
+          {actionFailedNotice(suggest.error, "Policy Atlas couldn't start. Try again.", suggestConflictSentences)}
         </p>
       )}
 

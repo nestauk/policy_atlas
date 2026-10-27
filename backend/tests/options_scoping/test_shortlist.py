@@ -344,6 +344,14 @@ def _check_walk(conn: Connection) -> tuple[_Walk, dict[str, uuid.UUID]]:
         ([("o1", "r"), ("o2", "r")], "2 picks, where exactly 3 are asked for."),
         ([("o1", "r"), ("o2", "r"), ("o3", "  ")], "The reason for o3 is empty."),
         ([("o1", "r"), ("o1", "r"), ("o2", "r")], "o1 is proposed more than once."),
+        (
+            [("o1", "r"), ("o2", "r"), ("o3", "See https://example.org.")],
+            "The reason for o3 contains a link.",
+        ),
+        (
+            [("o1", "r"), ("o2", "r"), ("o3", "Read [the review](review).")],
+            "The reason for o3 contains a link.",
+        ),
     ],
 )
 def test_each_failed_check_re_asks_once_naming_it_then_fails(
@@ -363,6 +371,15 @@ def test_each_failed_check_re_asks_once_naming_it_then_fails(
     assert reask["role"] == "user" and failure in str(reask["content"])
     assert "exactly 3 picks" in str(reask["content"])
     assert _states(walk) == before  # nothing written
+
+
+def test_a_note_with_a_link_re_asks_naming_it(conn: Connection) -> None:
+    walk, _ = _check_walk(conn)
+    picks = [("o1", "r"), ("o2", "r"), ("o3", "r")]
+    backend = StubLonglistBackend(shortlist_responses=_wire(picks, note="See www.example.org."))
+    with pytest.raises(ShortlistFailure, match="The note contains a link."):
+        _shortlist(walk, backend)
+    assert backend.calls["shortlist"] == 2
 
 
 def test_a_good_second_answer_is_written_and_attempts_are_recorded(conn: Connection) -> None:
@@ -488,6 +505,45 @@ def test_a_longlist_rebuilt_during_the_call_refuses_the_write(conn: Connection) 
     with pytest.raises(ShortlistFailure, match="longlist changed"):
         _shortlist(walk, _Rebuilds())
     assert all(state is None for state, _ in _states(walk).values())
+
+
+@pytest.mark.parametrize(
+    ("suggest", "flipped_to"),
+    [(True, "set_aside"), (True, "proposed"), (False, "added_by_you"), (False, "set_aside")],
+)
+def test_a_place_changed_during_the_call_refuses_the_write(
+    conn: Connection, suggest: bool, flipped_to: str
+) -> None:
+    """The late check: each pick still has the place the snapshot assumed."""
+    walk = _Walk(conn)
+    ids = _listed(walk, ["A"])
+
+    class _Flips(StubLonglistBackend):
+        def propose_shortlist(self, *, messages: Any) -> Any:
+            _set(walk, ids["A"], shortlist_state=flipped_to)  # the reader acts mid-call
+            return super().propose_shortlist(messages=messages)
+
+    with pytest.raises(ShortlistFailure, match="places changed"):
+        _shortlist(walk, _Flips(), suggest=suggest)
+    assert _states(walk)["A"] == (flipped_to, None)
+
+
+def test_the_side_blocks_are_scrubbed_of_control_characters(conn: Connection) -> None:
+    walk = _Walk(conn)
+    ids = _listed(walk, ["A", "B", "C"])
+    _set(walk, ids["B"], shortlist_state="set_aside", name="Set\u202easide\x1b one")
+    _set(
+        walk,
+        ids["C"],
+        state="excluded",
+        exclusion={"constraint": "your decision", "reason": "too\u2066 costly\x07", "by": "user"},
+    )
+    backend = StubLonglistBackend()
+    _shortlist(walk, backend)
+    text = _user_text(backend)
+    assert "s1 · Setaside one" in text
+    assert "your decision: too costly" in text
+    assert not any(char in text for char in "\u202e\u2066\x1b\x07")
 
 
 # --- the ceiling ------------------------------------------------------------------------

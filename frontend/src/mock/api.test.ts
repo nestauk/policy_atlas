@@ -495,6 +495,40 @@ describe("mock API", () => {
       expect(filled.shortlist).toEqual({ state: "proposed", reason: "Mock reason: names a fact on the card." });
     });
 
+    it("suggest still adds one place when five or more places are held", async () => {
+      resetMockScenario();
+      const added: string[] = [];
+      for (const text of ["Option A", "Option B", "Option C", "Option D"]) {
+        const body = (await (
+          await mockFetch(`${base}/options`, { method: "POST", body: JSON.stringify({ text }) })
+        ).json()) as { option: { option_id: string } };
+        added.push(body.option.option_id);
+      }
+      // Two places in the fixture plus three added by you: five held, one open.
+      for (const id of added.slice(0, 3)) await post(`/options/${id}/shortlist`);
+      const response = await post("/shortlist/suggest");
+      expect(response.status).toBe(202);
+      const after = await longlist();
+      expect(after.options.find((option) => option.option_id === added[3])!.shortlist?.state).toBe("proposed");
+      resetMockScenario();
+    });
+
+    it("exclude clears a place but keeps a set-aside mark", async () => {
+      resetMockScenario();
+      const before = await longlist();
+      const exclude = (id: string) =>
+        mockFetch(`${base}/options/${id}/exclude`, { method: "POST", body: JSON.stringify({ reason: "No." }) }).then(
+          (r) => r.json() as Promise<{ shortlist: { state: string } | null }>,
+        );
+      for (const state of ["proposed", "added_by_you"]) {
+        const id = before.options.find((option) => option.shortlist?.state === state)!.option_id;
+        expect((await exclude(id)).shortlist).toBeNull();
+      }
+      const asideId = before.options.find((option) => option.shortlist?.state === "set_aside")!.option_id;
+      expect((await exclude(asideId)).shortlist).toEqual({ state: "set_aside", reason: null });
+      resetMockScenario();
+    });
+
     it("refuses every shortlist route with run_active while a walk is running", async () => {
       resetMockScenario();
       const confirm = await mockFetch(`${base}/plan/confirm-baseline`, {

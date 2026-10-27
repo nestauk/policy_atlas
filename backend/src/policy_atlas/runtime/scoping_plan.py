@@ -697,9 +697,12 @@ class ScopingPlan(BaseModel):
 #: The plan fields the longlist chain reads (task 055, A6): the fields
 #: ``compose_scoping`` and the longlist components take from the plan. A
 #: change to any of them makes a built longlist out of date; a change to any
-#: other field (the appetite, the steering mode, the title) does not.
+#: other field (the appetite, the steering mode, the title) does not. The
+#: question is one: suggest, constrain, theme, the profile and the shortlist
+#: all read it.
 LONGLIST_INPUT_FIELDS: frozenset[str] = frozenset(
     {
+        "question",
         "intended_change",
         "target_unit",
         "where",
@@ -727,9 +730,28 @@ def longlist_inputs(plan: ScopingPlan) -> dict[str, Any]:
         plan: A validated scoping plan.
 
     Returns:
-        The ten longlist input fields as plain JSON-ready values.
+        The eleven longlist input fields as plain JSON-ready values.
     """
     return plan.model_dump(mode="json", include=set(LONGLIST_INPUT_FIELDS))
+
+
+def shortlist_proposal_stale(provenance: Mapping[str, Any], plan: ScopingPlan | None) -> bool:
+    """Whether the stored shortlist proposal is out of date (task 055, PG1).
+
+    It is when there is none yet (no appetite recorded) or when it was made
+    under another risk appetite than the plan's. A plan that cannot be read
+    (``None``) leaves a recorded proposal as it is.
+
+    Args:
+        provenance: ``longlist_result.shortlist["provenance"]``.
+        plan: The current approved plan, or ``None``.
+
+    Returns:
+        Whether a new proposal is due.
+    """
+    if "appetite" not in provenance:
+        return True
+    return plan is not None and provenance["appetite"] != plan.risk_appetite
 
 
 def _tagged_from_wire(value: TaggedText, *, field_name: str) -> Tagged:

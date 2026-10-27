@@ -18,14 +18,15 @@ vi.mock("../../api/queries", () => ({
   useLonglist: vi.fn(),
 }));
 
-const { patchMutate, confirmMutate } = vi.hoisted(() => ({
+const { patchMutate, confirmMutate, patchState } = vi.hoisted(() => ({
   patchMutate: vi.fn(),
   confirmMutate: vi.fn(),
+  patchState: { isPending: false },
 }));
 
 vi.mock("../../api/mutations", () => ({
   useStartRun: () => ({ mutate: vi.fn(), isPending: false }),
-  usePatchPlan: () => ({ mutate: patchMutate, isPending: false }),
+  usePatchPlan: () => ({ mutate: patchMutate, isPending: patchState.isPending }),
   useConfirmBaseline: () => ({ mutate: confirmMutate, isPending: false }),
 }));
 
@@ -841,6 +842,17 @@ describe("PlanDocument — options scoping (task 044)", () => {
     expect(select).toHaveValue("mostly_tried");
     await userEvent.selectOptions(select, "open_to_untested");
     expect(patchMutate).toHaveBeenCalledWith({ scoping: { risk_appetite: "open_to_untested" } });
+  });
+
+  it("disables the risk appetite select while its patch is in flight", () => {
+    patchState.isPending = true;
+    try {
+      mockUsePlan({ data: scopingPlanOut({ risk_appetite: "mostly_tried" }) });
+      renderPlan();
+      expect(screen.getByRole("combobox", { name: "Risk appetite" })).toBeDisabled();
+    } finally {
+      patchState.isPending = false;
+    }
   });
 
   it("hides Edit and the start area when the plan is a read-only record", () => {
