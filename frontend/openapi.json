@@ -8563,6 +8563,13 @@
             ],
             "title": "Appraisal Score"
           },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
           "condition": {
             "anyOf": [
               {
@@ -8576,6 +8583,11 @@
           },
           "elsewhere": {
             "$ref": "#/components/schemas/TocStanceOut"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
           },
           "evidence_type": {
             "anyOf": [
@@ -8637,8 +8649,10 @@
           }
         },
         "required": [
+          "evidence_id",
           "task_source_snapshot_id",
           "title",
+          "authors",
           "year",
           "url",
           "source_type",
@@ -12976,6 +12990,85 @@
           }
         ],
         "summary": "Get Toc Evidence",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context": {
+      "get": {
+        "description": "Return one judgement's quote highlighted in its passage.\n\n``question`` (``elsewhere`` or ``here``) picks the stance. It is checked\nafter access, so an unreadable task stays the same 404 with or without it.",
+        "operationId": "get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "question",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "elsewhere",
+                    "here"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Question"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkContextOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Toc Evidence Context",
         "tags": [
           "theory-of-change"
         ]

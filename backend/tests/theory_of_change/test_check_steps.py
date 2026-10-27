@@ -21,10 +21,13 @@ from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.steering import pause_points
 from policy_atlas.theory_of_change.backend import StubTocBackend, stub_draft
 from policy_atlas.theory_of_change.check import (
+    CASE_STUDIES_PER_BOX,
     JUDGE_TOP_K,
     UNSETTLED_SENTENCE,
     critical_link,
     links_to_check,
+    neighbour_lines,
+    top_case_studies,
 )
 from policy_atlas.theory_of_change.discover_prompt import (
     DiscoverResponse,
@@ -95,6 +98,45 @@ def test_the_80_link_cap_takes_kept_pathway_links_first() -> None:
     keys, left_out = links_to_check(graph)
     assert len(keys) == 80 and left_out == 10
     assert keys[:5] == tail
+
+
+def test_neighbour_lines_name_the_steps_before_and_after() -> None:
+    boxes = {k: Box(key=k, layer="outcome", text=k) for k in ("a", "b", "c", "d")}
+    links = {
+        "ab": Link(key="ab", source="a", target="b", sentence="A leads to B."),
+        "bc": Link(key="bc", source="b", target="c", sentence="B leads to C."),
+        "cd": Link(key="cd", source="c", target="d"),  # no sentence: the fallback
+    }
+    graph = Graph(boxes=boxes, links=links, pathways=[])
+    assert neighbour_lines(graph, "bc") == "Before: A leads to B.\nAfter: c leads to d"
+    assert neighbour_lines(graph, "ab") == "After: B leads to C."
+    lone = Graph(boxes=boxes, links={"ab": links["ab"]}, pathways=[])
+    assert neighbour_lines(lone, "ab") == ""
+
+
+def test_each_judge_call_carries_its_neighbouring_steps(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    backend = StubTocBackend()
+    _run(engine, cleanup, backend)
+    sent = {call["neighbours"] for call in backend.inputs["judge"]}
+    # Stub draft: l1 b1->b2, l2 b2->b3, l3 b3->b4, l4 b2->b5.
+    assert "Before: Step l1 leads on.\nAfter: Step l3 leads on." in sent  # l2
+    assert "After: Step l2 leads on.\nAfter: Step l4 leads on." in sent  # l1
+
+
+def test_case_studies_are_deduplicated_ranked_and_capped() -> None:
+    candidates = [
+        ("low", "Scheme", "Leeds", 2, True),
+        ("dup", "scheme ", "LEEDS", 5, False),  # same programme and place, better score
+        ("challenge", "Other", None, 4, False),
+        ("support", "Third", None, 4, True),
+        *[(f"x{i}", f"P{i}", None, 1, False) for i in range(6)],
+    ]
+    kept = top_case_studies(candidates)
+    assert kept[:3] == ["dup", "support", "challenge"]
+    assert "low" not in kept and len(kept) == CASE_STUDIES_PER_BOX
+    assert kept[3:] == ["x0", "x1"]
 
 
 def _grades(pairs: dict[str, tuple[Grade, Grade]]) -> dict[str, tuple[GradeResult, GradeResult]]:

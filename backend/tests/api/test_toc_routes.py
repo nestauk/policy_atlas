@@ -20,10 +20,16 @@ from tests.api.resource_support import (
 from tests.api.test_api_conformance import _flatten_api_routes
 from tests.helpers import seed_toc_task
 
-ROUTES = ["/api/v1/tasks/{task_id}/toc", "/api/v1/tasks/{task_id}/toc/evidence"]
+CONTEXT = "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context"
+ROUTES = ["/api/v1/tasks/{task_id}/toc", "/api/v1/tasks/{task_id}/toc/evidence", CONTEXT]
 
 
-def test_both_reads_are_mounted_and_in_the_openapi_document() -> None:
+def _url(route: str, task_id: uuid.UUID | str, evidence_id: uuid.UUID) -> str:
+    url = route.format(task_id=task_id, evidence_id=evidence_id)
+    return f"{url}?question=elsewhere" if route == CONTEXT else url
+
+
+def test_the_reads_are_mounted_and_in_the_openapi_document() -> None:
     app = create_app()
     mounted = {route.path for route in _flatten_api_routes(app.routes)}
     paths = app.openapi()["paths"]
@@ -65,10 +71,10 @@ def test_the_access_matrix(
             "same_org": colleague.headers,
             "cross_org": outsider.headers,
         }[caller]
-        response = client.get(route.format(task_id=ids["task_id"]), headers=headers)
+        response = client.get(_url(route, ids["task_id"], ids["evidence"]), headers=headers)
         assert response.status_code == expected, response.text
         if expected == 404:
-            unknown = client.get(route.format(task_id=uuid.uuid4()), headers=headers)
+            unknown = client.get(_url(route, uuid.uuid4(), ids["evidence"]), headers=headers)
             assert response.content == unknown.content
 
 
@@ -78,7 +84,7 @@ def test_a_public_task_that_is_not_a_theory_is_toc_not_found(tmp_path: Path, rou
         task_id = create_task(client, owner)
         shared = client.patch(f"/api/v1/tasks/{task_id}", headers=owner, json={"is_public": True})
         assert shared.status_code == 200
-        response = client.get(route.format(task_id=task_id))
+        response = client.get(_url(route, task_id, uuid.uuid4()))
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "toc_not_found"
 
@@ -107,3 +113,30 @@ def test_the_reads_serve_the_contract_shapes(engine: Engine, tmp_path: Path) -> 
         [doc] = evidence["links"][0]["documents"]
         assert doc["previous_wording"] is True
         assert doc["elsewhere"] == {"stance": "supports", "quote": "It worked."}
+        assert doc["evidence_id"] == str(ids["evidence"])
+        assert doc["authors"] == ["Ada Lovelace"]
+
+
+def test_the_context_read_highlights_the_quote_in_its_passage(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with api_client(tmp_path) as (client, owner, _other):
+        with seeded(engine) as conn:
+            ids = seed_toc_task(conn)
+            other = seed_toc_task(conn)
+            conn.execute(
+                update(task)
+                .where(task.c.task_id.in_([ids["task_id"], other["task_id"]]))
+                .values(is_public=True)
+            )
+        url = CONTEXT.format(task_id=ids["task_id"], evidence_id=ids["evidence"])
+        body = client.get(f"{url}?question=elsewhere").json()
+        assert body["context"][body["span_start"] : body["span_end"]] == "It worked."
+        assert "Schools in Leeds" in body["context"]
+        assert body["authorships"] == [{"name": "Ada Lovelace", "institutions": []}]
+        # No quote for holds here; the question is required.
+        assert client.get(f"{url}?question=here").status_code == 404
+        assert client.get(url).status_code == 422
+        # Another task's judgement is not found under this task.
+        foreign = CONTEXT.format(task_id=ids["task_id"], evidence_id=other["evidence"])
+        assert client.get(f"{foreign}?question=elsewhere").status_code == 404

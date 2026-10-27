@@ -32,6 +32,9 @@ LAYER_RANK: dict[str, int] = {
 MAX_SUCCESS_PATHWAYS = 6
 MAX_FAILURE_PATHWAYS = 3
 
+#: At most this many conditions on one link; a condition sits on one link only.
+MAX_CONDITIONS_PER_LINK = 2
+
 
 @dataclass
 class Box:
@@ -123,8 +126,9 @@ def pathway_problem(graph: Graph, pathway: Pathway) -> str | None:
 def check_graph(graph: Graph) -> list[str]:
     """Run the E1 structure checks.
 
-    Checks: every link joins known boxes with layers in order; every link has
-    at least one condition; no box is an orphan; every kept pathway is a
+    Checks: every link joins known boxes with layers in order; no link has
+    more than two conditions and no condition sits on two links (case and
+    spacing ignored); no box is an orphan; every kept pathway is a
     connected route from an input to an impact (success) or a failure outcome
     (failure); at least one kept failure pathway.
 
@@ -135,7 +139,17 @@ def check_graph(graph: Graph) -> list[str]:
         Plain-language problems; empty when the graph passes.
     """
     problems: list[str] = []
+    first_seen: dict[str, str] = {}
     for link in graph.links.values():
+        conditions = [c for c in link.conditions if c.strip()]
+        if len(conditions) > MAX_CONDITIONS_PER_LINK:
+            problems.append(
+                f"step {link.key} has more than {MAX_CONDITIONS_PER_LINK} conditions"
+            )
+        for condition in conditions:
+            owner = first_seen.setdefault(_norm(condition), link.key)
+            if owner != link.key:
+                problems.append(f"step {link.key} repeats a condition of step {owner}")
         source, target = graph.boxes.get(link.source), graph.boxes.get(link.target)
         if source is None or target is None:
             problems.append(f"step {link.key} joins an unknown box")
@@ -145,8 +159,6 @@ def check_graph(graph: Graph) -> list[str]:
         reason = link_problem(source.layer, target.layer)
         if reason:
             problems.append(f"step {link.key}: {reason}")
-        if not [c for c in link.conditions if c.strip()]:
-            problems.append(f"step {link.key} has no conditions")
     linked = {key for link in graph.links.values() for key in (link.source, link.target)}
     problems.extend(f"box {key} is on no step" for key in graph.boxes if key not in linked)
     kept = [p for p in graph.pathways if p.status == "kept"]
@@ -185,6 +197,32 @@ def assumption_type(source_layer: str, target_layer: str) -> str:
 
 def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def trim_conditions(conditions_per_link: list[list[str]]) -> list[list[str]]:
+    """Apply the conditions rule to links in order (code, not the prompt).
+
+    Drops blank conditions and any condition whose normalised text already
+    appeared, on an earlier link or earlier on the same one, then keeps the
+    first :data:`MAX_CONDITIONS_PER_LINK` of each link.
+
+    Args:
+        conditions_per_link: Each link's conditions, links in draft order.
+
+    Returns:
+        The trimmed lists, same order and length.
+    """
+    seen: set[str] = set()
+    trimmed: list[list[str]] = []
+    for conditions in conditions_per_link:
+        kept: list[str] = []
+        for condition in conditions:
+            key = _norm(condition)
+            if key and key not in seen and len(kept) < MAX_CONDITIONS_PER_LINK:
+                seen.add(key)
+                kept.append(condition)
+        trimmed.append(kept)
+    return trimmed
 
 
 def item_hash(link: Link, source_text: str, target_text: str) -> str:

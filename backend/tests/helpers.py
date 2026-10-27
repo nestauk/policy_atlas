@@ -1135,7 +1135,15 @@ def seed_toc_task(conn: Connection) -> dict[str, uuid.UUID]:
         context={"toc_walk": "check"},
         plan_payload={},
     ).walk_id
-    _snap, ids["tss"] = seed_source(conn, task_id)
+    _snap, ids["tss"] = seed_source(
+        conn,
+        task_id,
+        {
+            "title": "A school meals trial",
+            "abstract": "Schools in Leeds took part. It worked. Lunch uptake rose.",
+            "provider_fields": {"authorships": [{"author_name": "Ada Lovelace"}]},
+        },
+    )
     conn.execute(
         toc_item_evidence.insert().values(
             evidence_id=ids["evidence"],

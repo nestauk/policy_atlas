@@ -26,7 +26,14 @@ from policy_atlas.runtime.toc_plan import TocPlan
 from policy_atlas.theory_of_change import store
 from policy_atlas.theory_of_change.backend import TocBackend
 from policy_atlas.theory_of_change.draft_prompt import TOC_DRAFT_PROMPT_VERSION, DraftResponse
-from policy_atlas.theory_of_change.graph import Box, Graph, Link, Pathway, check_graph
+from policy_atlas.theory_of_change.graph import (
+    Box,
+    Graph,
+    Link,
+    Pathway,
+    check_graph,
+    trim_conditions,
+)
 
 log = structlog.get_logger()
 
@@ -133,6 +140,24 @@ def draft_graph(draft: DraftResponse) -> Graph:
     )
 
 
+def with_trimmed_conditions(draft: DraftResponse) -> DraftResponse:
+    """The draft with at most two conditions per link, none repeated across links.
+
+    A condition whose normalised text appeared on an earlier link is dropped
+    (:func:`~policy_atlas.theory_of_change.graph.trim_conditions`), so the
+    model's repeats never fail the structure checks or reach the database.
+    """
+    trimmed = trim_conditions([list(link.conditions) for link in draft.links])
+    return draft.model_copy(
+        update={
+            "links": [
+                link.model_copy(update={"conditions": conditions})
+                for link, conditions in zip(draft.links, trimmed, strict=True)
+            ]
+        }
+    )
+
+
 def draft_problems(draft: DraftResponse) -> list[str]:
     """The E1 problems of a draft, plus the checks only a draft can fail."""
     problems = check_graph(draft_graph(draft))
@@ -178,6 +203,7 @@ def toc_draft_scope(
     usage = UsageAccumulator()
     draft, call_usage = backend.draft(plan=data, existing_theory=plan.existing_theory_text)
     usage.add(call_usage)
+    draft = with_trimmed_conditions(draft)
     problems = draft_problems(draft)
     attempts = 1
     if problems:
@@ -186,6 +212,7 @@ def toc_draft_scope(
             plan=data, existing_theory=plan.existing_theory_text, problems=problems
         )
         usage.add(call_usage)
+        draft = with_trimmed_conditions(draft)
         attempts = 2
         problems = draft_problems(draft)
         if problems:

@@ -1,9 +1,10 @@
 """The theory-of-change read routes (task 054, S14; C17).
 
-Two reads under ``/api/v1/tasks/{task_id}/toc``, public-readable like the
+Three reads under ``/api/v1/tasks/{task_id}/toc``, public-readable like the
 Result and Sources tabs (the read grade or the narrow public leg, through
-``_readable``): the graph with both grades, link states and the summary, and
-every judged document and case study. Grades and states are computed on read
+``_readable``): the graph with both grades, link states and the summary;
+every judged document and case study; and one judgement's quote in its
+passage. Grades and states are computed on read
 (C4, C19). A readable task that is not a theory of change is a 404
 ``toc_not_found``; an unreadable one keeps the generic ``not_found``.
 """
@@ -13,12 +14,13 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any, Literal, cast
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Row
 
 from policy_atlas.api.app import ApiNotFound
 from policy_atlas.api.auth import AuthenticatedUser
+from policy_atlas.api.contract.read_models import ChunkContextOut
 from policy_atlas.api.contract.toc import (
     TocBoxEvidenceOut,
     TocBoxOut,
@@ -36,7 +38,7 @@ from policy_atlas.api.contract.toc import (
     TocSummaryOut,
 )
 from policy_atlas.api.deps import get_conn, get_optional_user
-from policy_atlas.api.readmodels.repository import _url
+from policy_atlas.api.readmodels.repository import _authorships, _clamped_quote_window, _url
 from policy_atlas.api.routers._access import readable_or_public_task
 from policy_atlas.core.schema import (
     capability_run,
@@ -54,12 +56,16 @@ from policy_atlas.runtime.option_search import TOC_ITEM_SEARCHES_STAGE
 from policy_atlas.runtime.toc_plan import TOC_PURPOSE, TOC_WALK_CHECK, TOC_WALK_KEY
 from policy_atlas.theory_of_change import store
 from policy_atlas.theory_of_change.check import (
+    MODELLING_TYPE,
+    Document,
     appraisals_for,
     counted_judgements,
     is_merged,
     link_grades,
+    row_case_score,
+    top_case_studies,
 )
-from policy_atlas.theory_of_change.evidence.grade import lower, rule_text
+from policy_atlas.theory_of_change.evidence.grade import DocAppraisal, lower, rule_text
 from policy_atlas.theory_of_change.graph import assumption_type, item_hash, link_state
 
 router = APIRouter(prefix="/api/v1/tasks/{task_id}/toc", tags=["theory-of-change"])
@@ -324,7 +330,9 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
         )
     )
     documents: dict[str, dict[uuid.UUID, TocDocumentOut]] = {key: {} for key in rows.links}
-    case_studies: dict[str, list[TocCaseStudyOut]] = {key: [] for key in rows.boxes}
+    case_studies: dict[str, list[tuple[TocCaseStudyOut, str, str | None, int, bool]]] = {
+        key: [] for key in rows.boxes
+    }
     indicators: dict[str, list[str]] = {key: [] for key in rows.boxes}
     for row in evidence:
         key = str(row.link_id)
@@ -342,8 +350,10 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
         # One entry per document: the counted judgement wins over an earlier wording's.
         if existing is None or (existing.previous_wording and not previous):
             documents[key][row.task_source_snapshot_id] = TocDocumentOut(
+                evidence_id=row.evidence_id,
                 task_source_snapshot_id=row.task_source_snapshot_id,
                 title=title,
+                authors=[author.name for author in _authorships(metadata)],
                 year=year,
                 url=url,
                 source_type=source_type,
@@ -357,18 +367,22 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
         box = str(row.case_box_id) if row.case_box_id is not None else None
         if box in case_studies and row.case_study is not None:
             case = row.case_study
+            out = TocCaseStudyOut(
+                task_source_snapshot_id=row.task_source_snapshot_id,
+                programme=str(case.get("programme") or ""),
+                place=case.get("place"),
+                note=str(case.get("note") or ""),
+                quote=str(case.get("quote") or ""),
+                title=title,
+                year=year,
+                url=url,
+                source_type=source_type,
+            )
+            appraisal = DocAppraisal(
+                score=row.quality_score, modelling=row.primary_evidence_type == MODELLING_TYPE
+            )
             case_studies[box].append(
-                TocCaseStudyOut(
-                    task_source_snapshot_id=row.task_source_snapshot_id,
-                    programme=str(case.get("programme") or ""),
-                    place=case.get("place"),
-                    note=str(case.get("note") or ""),
-                    quote=str(case.get("quote") or ""),
-                    title=title,
-                    year=year,
-                    url=url,
-                    source_type=source_type,
-                )
+                (out, out.programme, out.place, *row_case_score(row, appraisal))
             )
         if box in indicators and row.indicator and row.indicator not in indicators[box]:
             indicators[box].append(row.indicator)
@@ -379,7 +393,9 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
         ],
         boxes=[
             TocBoxEvidenceOut(
-                box_id=uuid.UUID(key), case_studies=case_studies[key], indicators=indicators[key]
+                box_id=uuid.UUID(key),
+                case_studies=top_case_studies(case_studies[key]),
+                indicators=indicators[key],
             )
             for key in rows.boxes
         ],
@@ -406,3 +422,85 @@ def get_toc_evidence(
     """Return every judged document per link and every case study per box."""
     _readable_toc(conn, task_id, user)
     return toc_evidence_out(conn, task_id)
+
+
+def toc_evidence_context_out(
+    conn: Connection, task_id: uuid.UUID, evidence_id: uuid.UUID, question: str
+) -> ChunkContextOut | None:
+    """One judgement's verified quote, highlighted in the text the judge read.
+
+    The judge read the document's title and abstract (``check.Document.text``),
+    so the passage comes from the same text, through the window helper the
+    report's citation sidebar uses.
+
+    Args:
+        conn: Open connection.
+        task_id: The task; another task's judgement is not found.
+        evidence_id: The ``toc_item_evidence`` row.
+        question: ``elsewhere`` or ``here``, the stance whose quote to show.
+
+    Returns:
+        The window, or ``None`` when the row is unknown, has no quote for that
+        question, or the quote is not found once in the text.
+    """
+    row = conn.execute(
+        select(
+            toc_item_evidence.c.task_source_snapshot_id,
+            toc_item_evidence.c.quote_elsewhere,
+            toc_item_evidence.c.quote_here,
+            source_snapshot.c.source_snapshot_id,
+            source_snapshot.c.metadata,
+        )
+        .select_from(
+            toc_item_evidence.join(
+                task_source_snapshot,
+                (
+                    task_source_snapshot.c.task_source_snapshot_id
+                    == toc_item_evidence.c.task_source_snapshot_id
+                )
+                & (task_source_snapshot.c.task_id == toc_item_evidence.c.task_id),
+            ).join(
+                source_snapshot,
+                source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
+            )
+        )
+        .where(toc_item_evidence.c.task_id == task_id)
+        .where(toc_item_evidence.c.evidence_id == evidence_id)
+    ).one_or_none()
+    if row is None:
+        return None
+    quote = row.quote_elsewhere if question == "elsewhere" else row.quote_here
+    if not quote:
+        return None
+    metadata = cast(dict[str, Any], row.metadata or {})
+    text = Document(
+        tss_id=row.task_source_snapshot_id,
+        title=str(metadata.get("title") or ""),
+        year=None,
+        abstract=str(metadata.get("abstract") or ""),
+        evidence_type=None,
+        score=None,
+    ).text
+    return _clamped_quote_window(conn, task_id, text, quote, None, row.source_snapshot_id)
+
+
+@router.get("/evidence/{evidence_id}/context", response_model=ChunkContextOut)
+def get_toc_evidence_context(
+    task_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser | None, Depends(get_optional_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+    question: Literal["elsewhere", "here"] | None = None,
+) -> ChunkContextOut:
+    """Return one judgement's quote highlighted in its passage.
+
+    ``question`` (``elsewhere`` or ``here``) picks the stance. It is checked
+    after access, so an unreadable task stays the same 404 with or without it.
+    """
+    _readable_toc(conn, task_id, user)
+    if question is None:
+        raise HTTPException(status_code=422, detail="question is required")
+    result = toc_evidence_context_out(conn, task_id, evidence_id, question)
+    if result is None:
+        raise HTTPException(status_code=404, detail="resource not found")
+    return result

@@ -1148,6 +1148,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc Evidence Context
+         * @description Return one judgement's quote highlighted in its passage.
+         *
+         *     ``question`` (``elsewhere`` or ``here``) picks the stance. It is checked
+         *     after access, so an unreadable task stays the same 404 with or without it.
+         */
+        get: operations["get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/waitlist": {
         parameters: {
             query?: never;
@@ -5419,9 +5442,16 @@ export interface components {
         TocDocumentOut: {
             /** Appraisal Score */
             appraisal_score: number | null;
+            /** Authors */
+            authors: string[];
             /** Condition */
             condition: string | null;
             elsewhere: components["schemas"]["TocStanceOut"];
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
             /** Evidence Type */
             evidence_type: string | null;
             here: components["schemas"]["TocStanceOut"];
@@ -7553,6 +7583,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TocEvidenceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get: {
+        parameters: {
+            query?: {
+                question?: ("elsewhere" | "here") | null;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChunkContextOut"];
                 };
             };
             /** @description Validation Error */

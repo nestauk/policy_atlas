@@ -56,6 +56,7 @@ _CONDITIONALLY_PUBLIC_GETS = frozenset(
         # Task 054 (S14, C17): the theory of change, public like the Result tab.
         "/api/v1/tasks/{task_id}/toc",
         "/api/v1/tasks/{task_id}/toc/evidence",
+        "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context",
     }
 )
 
@@ -74,6 +75,7 @@ _PUBLIC_STRUCTURAL_GETS = _CONDITIONALLY_PUBLIC_GETS - frozenset(
         # 404 ``toc_not_found`` on a task that is not a theory of change.
         "/api/v1/tasks/{task_id}/toc",
         "/api/v1/tasks/{task_id}/toc/evidence",
+        "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context",
     }
 )
 

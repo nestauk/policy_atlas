@@ -69,6 +69,7 @@ from policy_atlas.theory_of_change.evidence.grade import (
     DocAppraisal,
     GradeResult,
     Judgement,
+    counted_score,
     grade,
 )
 from policy_atlas.theory_of_change.graph import (
@@ -440,8 +441,6 @@ def proposal_problem(
         reason = link_problem(known[source], known[target])
         if reason:
             return reason
-        if not [c for c in link.conditions if c.strip()]:
-            return "a new link has no conditions"
     if not proposal.evidence:
         return "no evidence"
     for evidence in proposal.evidence:
@@ -827,6 +826,38 @@ class _JudgeJob:
     item_hash: str
     source_key: str
     target_key: str
+    neighbours: str
+
+
+#: Neighbouring steps shown to the judge on each side of a link.
+NEIGHBOURS_PER_SIDE = 3
+
+
+def neighbour_lines(graph: Graph, key: str) -> str:
+    """The steps just before and after a link, for the judge (``toc_judge_v3``).
+
+    One ``Before: <sentence>`` line per link that ends at this link's source
+    box and one ``After: <sentence>`` line per link that starts at its target
+    box, at most :data:`NEIGHBOURS_PER_SIDE` each, in graph order.
+
+    Args:
+        graph: The current theory.
+        key: The link being judged.
+
+    Returns:
+        The lines joined by newlines, or ``""`` when the link has no neighbours.
+    """
+    link = graph.links[key]
+
+    def sentence(other: Link) -> str:
+        return other.sentence.strip() or (
+            f"{graph.boxes[other.source].text} leads to {graph.boxes[other.target].text}"
+        )
+
+    others = [other for k, other in graph.links.items() if k != key]
+    before = [f"Before: {sentence(o)}" for o in others if o.target == link.source]
+    after = [f"After: {sentence(o)}" for o in others if o.source == link.target]
+    return "\n".join(before[:NEIGHBOURS_PER_SIDE] + after[:NEIGHBOURS_PER_SIDE])
 
 
 def toc_judge_scope(
@@ -887,7 +918,17 @@ def toc_judge_scope(
         )
         candidates = [doc for doc in candidates if doc.tss_id not in judged]
         for document in rerank(ranker, candidates, intent=text, usage=usage)[:JUDGE_TOP_K]:
-            jobs.append(_JudgeJob(key, document, text, current, link.source, link.target))
+            jobs.append(
+                _JudgeJob(
+                    key,
+                    document,
+                    text,
+                    current,
+                    link.source,
+                    link.target,
+                    neighbour_lines(graph, key),
+                )
+            )
 
     def run_job(job: _JudgeJob) -> CallOutcome[Any]:
         return _call(
@@ -901,6 +942,7 @@ def toc_judge_scope(
                 year=job.document.year,
                 text=job.document.text,
                 modelling=job.document.evidence_type == MODELLING_TYPE,
+                neighbours=job.neighbours,
             ),
             "toc_judge",
         )
@@ -1407,6 +1449,53 @@ def toc_summarise_scope(
     return summary
 
 
+#: Case studies shown per box, after de-duplication (read time).
+CASE_STUDIES_PER_BOX = 5
+
+
+def top_case_studies[T](
+    candidates: Iterable[tuple[T, str, str | None, int, bool]],
+) -> list[T]:
+    """One box's case studies to show, best first (read time).
+
+    Ranks by the document's appraisal score (a robust model counts as 3, C4),
+    then supporting documents before others, then the given order; keeps
+    the first of each programme and place (case and spacing ignored) and at
+    most :data:`CASE_STUDIES_PER_BOX`.
+
+    Args:
+        candidates: ``(item, programme, place, score, supports)`` per case
+            study, in their existing order.
+
+    Returns:
+        The kept items.
+    """
+    ranked = sorted(enumerate(candidates), key=lambda p: (-p[1][3], not p[1][4], p[0]))
+    seen: set[tuple[str, str]] = set()
+    kept: list[T] = []
+    for _, (item, programme, place, _score, _supports) in ranked:
+        key = (_norm(programme), _norm(place or ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(item)
+        if len(kept) == CASE_STUDIES_PER_BOX:
+            break
+    return kept
+
+
+def row_case_score(row: Row[Any], appraisal: DocAppraisal | None) -> tuple[int, bool]:
+    """A judgement row's ``(score, supports)`` for :func:`top_case_studies`."""
+    judgement = Judgement(
+        document_id=str(row.task_source_snapshot_id),
+        stance_elsewhere=row.stance_elsewhere,
+        stance_here=row.stance_here,
+        robust_model=row.robust_model,
+    )
+    supports = "supports" in (row.stance_elsewhere, row.stance_here)
+    return counted_score(judgement, appraisal), supports
+
+
 def _titles(
     conn: Connection, *, task_id: uuid.UUID, tss_ids: set[uuid.UUID]
 ) -> dict[str, tuple[str, int | None]]:
@@ -1437,13 +1526,24 @@ def _theory_for_summary(
     titles: dict[str, tuple[str, int | None]],
     short: dict[str, str],
 ) -> dict[str, object]:
-    case_studies: dict[str, list[dict[str, object]]] = {}
+    candidates: dict[str, list[tuple[dict[str, object], str, str | None, int, bool]]] = {}
     for group in counted.values():
         for row in group:
             if row.case_box_id is not None and row.case_study is not None:
-                case_studies.setdefault(str(row.case_box_id), []).append(
-                    {"document_id": str(row.task_source_snapshot_id), **row.case_study}
+                case = row.case_study
+                score, supports = row_case_score(
+                    row, appraisals.get(str(row.task_source_snapshot_id))
                 )
+                candidates.setdefault(str(row.case_box_id), []).append(
+                    (
+                        {"document_id": str(row.task_source_snapshot_id), **case},
+                        str(case.get("programme") or ""),
+                        case.get("place"),
+                        score,
+                        supports,
+                    )
+                )
+    case_studies = {box: top_case_studies(items) for box, items in candidates.items()}
     links = []
     for key, link in graph.links.items():
         group = counted.get(key, [])

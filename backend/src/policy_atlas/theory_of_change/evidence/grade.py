@@ -94,7 +94,7 @@ class GradeResult:
     supports: int
 
 
-def _counted_score(judgement: Judgement, appraisal: DocAppraisal | None) -> int:
+def counted_score(judgement: Judgement, appraisal: DocAppraisal | None) -> int:
     """The score a document counts with toward medium and strong; 0 = never."""
     if appraisal is None or appraisal.web or appraisal.score is None:
         return 0
@@ -123,7 +123,7 @@ def grade(
     challenges: list[int] = []
     for judgement in judgements:
         stance = judgement.stance_elsewhere if question == "elsewhere" else judgement.stance_here
-        score = _counted_score(judgement, appraisals.get(judgement.document_id))
+        score = counted_score(judgement, appraisals.get(judgement.document_id))
         if stance == "supports":
             supports.append(score)
         elif stance == "challenges":

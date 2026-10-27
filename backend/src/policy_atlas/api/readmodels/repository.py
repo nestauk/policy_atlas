@@ -3043,7 +3043,7 @@ def _clamped_quote_window(
     task_id: uuid.UUID,
     text: str,
     quote: str,
-    sequence: int,
+    sequence: int | None,
     source_snapshot_id: uuid.UUID,
 ) -> ChunkContextOut | None:
     """Clamp a unique quote to a local window, with short edge neighbours.
@@ -3053,7 +3053,9 @@ def _clamped_quote_window(
         task_id: Owning task (for year/venue).
         text: The cited chunk's raw content.
         quote: The citation or chat quote, as stored.
-        sequence: Chunk sequence in the snapshot.
+        sequence: Chunk sequence in the snapshot, or ``None`` when ``text``
+            is not a chunk (a theory-of-change judgement read the title and
+            abstract): then no neighbouring chunk is shown.
         source_snapshot_id: Snapshot the chunk belongs to.
 
     Returns:
@@ -3067,11 +3069,11 @@ def _clamped_quote_window(
     end_window = min(len(text), end + _CONTEXT_SIDE_CHARS)
     previous = None
     following = None
-    if start_window == 0:
+    if start_window == 0 and sequence is not None:
         raw = _adjacent_chunk(conn, source_snapshot_id, sequence - 1)
         if raw:
             previous = _edge_snippet(raw, from_end=True)
-    if end_window == len(text):
+    if end_window == len(text) and sequence is not None:
         raw = _adjacent_chunk(conn, source_snapshot_id, sequence + 1)
         if raw:
             following = _edge_snippet(raw, from_end=False)

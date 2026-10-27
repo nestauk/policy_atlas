@@ -150,8 +150,12 @@ class TocDocumentOut(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    #: The judgement row; ``GET /toc/evidence/{evidence_id}/context`` shows its quote.
+    evidence_id: uuid.UUID
     task_source_snapshot_id: uuid.UUID
     title: str
+    #: Author display names, as the Evidence search references show them; empty when unknown.
+    authors: list[str]
     year: int | None
     url: str | None
     source_type: Literal["academic", "policy", "web"]

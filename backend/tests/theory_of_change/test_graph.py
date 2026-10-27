@@ -10,6 +10,7 @@ from policy_atlas.theory_of_change.graph import (
     item_hash,
     item_text,
     link_state,
+    trim_conditions,
 )
 
 
@@ -37,17 +38,29 @@ def test_a_good_graph_passes() -> None:
 
 def test_structure_problems_are_named() -> None:
     graph = _graph()
-    graph.links["l2"].conditions = []
+    graph.links["l2"].conditions = []  # no conditions is allowed
+    graph.links["l3"].conditions = ["a", "b", "c"]
+    graph.links["l4"].conditions = ["rules  are ENFORCED"]  # l1's, reworded only in case
     graph.boxes["b6"] = Box("b6", "outcome", "Orphan")
     graph.links["l5"] = Link("l5", "b1", "b4", conditions=["x"])
     graph.pathways[0].links = ["l1", "l3"]
     graph.pathways[1].status = "set_aside"
     problems = check_graph(graph)
-    assert "step l2 has no conditions" in problems
+    assert not any("step l2" in p for p in problems)
+    assert "step l3 has more than 2 conditions" in problems
+    assert "step l4 repeats a condition of step l1" in problems
     assert "box b6 is on no step" in problems
     assert "step l5: an input cannot lead straight to an impact" in problems
     assert "pathway p1 is broken between l1 and l3" in problems
     assert "there is no failure pathway" in problems
+
+
+def test_trim_conditions_drops_repeats_and_keeps_two_per_link() -> None:
+    assert trim_conditions([["A", "b", "c"], ["a ", "D", ""], ["B", "e"]]) == [
+        ["A", "b"],
+        ["D"],
+        ["e"],
+    ]
 
 
 def test_backwards_and_same_layer_steps() -> None:
@@ -106,3 +119,18 @@ def test_link_state_follows_the_c19_table() -> None:
     assert state("h2", "h1", "h2", "check") == "no_change"
     assert state("h2", "h1", "h2", "choose") == "checked"
     assert state("h3", "h1", "h2", "user") == "pending"
+
+
+def test_a_stored_draft_has_its_conditions_trimmed() -> None:
+    from policy_atlas.theory_of_change.backend import stub_draft
+    from policy_atlas.theory_of_change.draft import draft_problems, with_trimmed_conditions
+
+    draft = stub_draft({})
+    links = [
+        draft.links[0].model_copy(update={"conditions": ["Shared", "One", "Two"]}),
+        draft.links[1].model_copy(update={"conditions": ["shared"]}),
+        *draft.links[2:],
+    ]
+    trimmed = with_trimmed_conditions(draft.model_copy(update={"links": links}))
+    assert [list(link.conditions) for link in trimmed.links[:2]] == [["Shared", "One"], []]
+    assert draft_problems(trimmed) == []
