@@ -46,6 +46,9 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
         "Every option checked against the plan's requirements.",
     ),
     "theme": ("Grouping into themes", "Included options grouped into themes."),
+    # Task 055 (PG3): its own key, so the Evidence search's "select" blurb (a
+    # ranking claim) never describes the shortlist proposal.
+    "shortlist": ("Shortlisting", "Proposing places for close reading."),
 }
 
 STAGE_BY_REGISTRY: dict[str, StageKey] = {
@@ -67,6 +70,7 @@ STAGE_BY_REGISTRY: dict[str, StageKey] = {
     "option_profile": "option_profile",
     "constrain": "constrain",
     "theme": "theme",
+    "shortlist": "shortlist",
 }
 
 

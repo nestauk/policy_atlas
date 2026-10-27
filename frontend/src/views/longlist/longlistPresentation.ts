@@ -95,6 +95,8 @@ export function originShort(
  *  alone while the option's own search runs. */
 export function rowMetaParts(option: OptionSummaryOut): string[] {
   const parts: string[] = [];
+  const place = placeWord(option.shortlist?.state);
+  if (place !== null) parts.push(place);
   const origin = originShort(option.origin, option.from_section);
   if (origin !== null) parts.push(origin);
   for (const relation of option.relations ?? []) parts.push(relationLabel(relation));
@@ -245,8 +247,9 @@ type ProfileLineKey = components["schemas"]["ProfileLineOut"]["key"];
 type Mark = "less" | "more";
 type AuthorityOut = components["schemas"]["AuthorityOut"];
 
-/** The eight profile lines, in display order (R37); the ninth entry of the
- *  shared vocabulary, transferability, is read at assessment and not listed. */
+/** The nine profile lines, in display order (R37; Potential impact last, task
+ *  055); the last entry of the shared vocabulary, transferability, is read at
+ *  assessment and not listed. */
 export const PROFILE_LINE_KEYS = (Object.keys(PROFILE_LINE_LABELS) as string[]).filter(
   (key): key is ProfileLineKey => key !== "transferability",
 );
@@ -258,7 +261,8 @@ export const LINE_NAMES = { ...PROFILE_LINE_LABELS, ambition: "Ambition" } as Re
 >;
 
 /** The level word each mark takes on each line (R40, R44); `null` where the
- *  line never carries a mark. */
+ *  line never carries a mark (who decides, dependencies). Potential impact
+ *  carries a mark since 2026-10-27 (task 055). */
 export const LEVEL_WORDS: Record<ProfileLineKey | "ambition", Record<Mark, string | null>> = {
   cost: { less: "Cheaper", more: "Costlier" },
   time_to_set_up: { less: "Quicker", more: "Slower" },
@@ -268,11 +272,12 @@ export const LEVEL_WORDS: Record<ProfileLineKey | "ambition", Record<Mark, strin
   dependencies: { less: null, more: null },
   coordination: { less: "Lower", more: "Higher" },
   delivery_complexity: { less: "Simpler", more: "More complex" },
+  potential_impact: { less: "Lower", more: "Higher" },
   ambition: { less: "Smaller", more: "Bigger" },
 };
 
-/** The lines the grid can put in its columns: the seven that carry a mark,
- *  ambition first (R41). */
+/** The lines the grid can put in its columns: the eight that carry a mark,
+ *  ambition first (R41), Potential impact last (task 055). */
 export const GRID_COLUMN_LINES: readonly (ProfileLineKey | "ambition")[] = [
   "ambition",
   "cost",
@@ -281,6 +286,7 @@ export const GRID_COLUMN_LINES: readonly (ProfileLineKey | "ambition")[] = [
   "workforce",
   "coordination",
   "delivery_complexity",
+  "potential_impact",
 ];
 
 /** The shape every tinted word shares (level words, authority words). */
@@ -507,4 +513,65 @@ export function placeWithDetail(
   const label = documentPlaceLabel(place);
   const below = (detail ?? "").trim();
   return { place: label, detail: below !== "" && fold(below) !== fold(place ?? "") ? below : null };
+}
+
+type MaturityOut = components["schemas"]["MaturityOut"];
+
+/** The backend's `MATURITY_RECENT_YEARS`: an evaluation older than this
+ *  many years is stale. */
+const MATURITY_RECENT_YEARS = 5;
+
+/** The maturity rung's word (task 055, item 7). */
+export const MATURITY_WORDS: Record<MaturityOut["rung"], string> = {
+  proposal_only: "Proposed, not yet implemented",
+  described: "Implemented, not yet evaluated",
+  evaluated: "Evaluated",
+  reviewed: "Evaluated, including a review",
+};
+
+/** The rung line: the rung word, then ` · {design mix}` when there is one,
+ *  then each modifier as ` · {modifier}`. "most recent evaluation before
+ *  {year}" is the current year minus `MATURITY_RECENT_YEARS` and shows only when the newest
+ *  evaluation is stale. `null` maturity (a longlist written before the rung
+ *  existed) gives `null`: nothing new to show. */
+export function maturityLine(maturity: MaturityOut | null | undefined, now: Date = new Date()): string | null {
+  if (maturity == null) return null;
+  const parts: string[] = [MATURITY_WORDS[maturity.rung]];
+  if (maturity.design_mix !== "") parts.push(maturity.design_mix);
+  if (maturity.none_in_your_setting) parts.push("none in your setting");
+  if (maturity.stale) parts.push(`most recent evaluation before ${now.getFullYear() - MATURITY_RECENT_YEARS}`);
+  return parts.join(" · ");
+}
+
+/** The shortlist row's evidence footing in plain words (owner, 2026-10-27:
+ *  the rung line read as jargon): the rung's words, then ", not in {Where}"
+ *  and ", last before {year}" as they apply. Policy Atlas assesses;
+ *  documents evaluate — the words keep that line. */
+export function maturityPhrase(
+  maturity: MaturityOut | null | undefined,
+  where: string | null | undefined,
+  now: Date = new Date(),
+): string | null {
+  if (maturity == null) return null;
+  if (maturity.rung === "proposal_only" || maturity.rung === "described") return MATURITY_WORDS[maturity.rung];
+  const parts: string[] = [MATURITY_WORDS[maturity.rung]];
+  if (maturity.none_in_your_setting) parts.push(where ? `not in ${where}` : "not in your setting");
+  if (maturity.stale) parts.push(`last before ${now.getFullYear() - MATURITY_RECENT_YEARS}`);
+  return parts.join(", ");
+}
+
+type ShortlistState = NonNullable<OptionSummaryOut["shortlist"]>["state"];
+
+/** Whether the option holds a place (a pick or one added by you); a
+ *  set-aside pick holds none. */
+export function holdsPlace(option: Pick<OptionSummaryOut, "shortlist">): boolean {
+  const state = option.shortlist?.state;
+  return state === "proposed" || state === "added_by_you";
+}
+
+/** The one word the grey line gains for a place; nothing for set-aside. */
+export function placeWord(state: ShortlistState | null | undefined): string | null {
+  if (state === "proposed") return "Policy Atlas's pick";
+  if (state === "added_by_you") return "Added by you";
+  return null;
 }

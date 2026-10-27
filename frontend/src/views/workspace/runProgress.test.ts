@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { beatSentence } from "./runProgress";
+import { beatSentence, FINISHED_NOTICE, finishedNotice, runFinishedSignpost, runningCardCopy, walkKind } from "./runProgress";
 
 describe("beatSentence", () => {
   it("suggest: counts suggestions, appends the from-report clause when positive", () => {
@@ -84,5 +84,36 @@ describe("beatSentence", () => {
 
   it("never returns a beat for an unknown stage", () => {
     expect(beatSentence("some_future_stage", { total: 5 })).toBeNull();
+  });
+});
+
+describe("walkKind — the shortlist walk (task 055)", () => {
+  it("names a shortlist walk by its purpose and by its stage", () => {
+    expect(walkKind("options_scoping", [], "shortlist")).toBe("shortlist");
+    expect(walkKind("options_scoping", [{ stage: "shortlist" } as never], null)).toBe("shortlist");
+    // The longlist walk ends in a shortlist step: still a longlist walk.
+    expect(walkKind("options_scoping", [{ stage: "theme" }, { stage: "shortlist" }] as never, null)).toBe("longlist");
+    expect(runningCardCopy("running", "shortlist").title).toBe("Proposing a shortlist…");
+    expect(runningCardCopy("succeeded", "shortlist").title).toBe("The shortlist is proposed");
+    expect(FINISHED_NOTICE.shortlist.before).toContain("proposed a shortlist");
+  });
+
+  it("says the proposal failed when a shortlist walk ends degraded", () => {
+    expect(runningCardCopy("degraded", "shortlist")).toEqual({
+      tone: "stopped",
+      eyebrow: "STOPPED",
+      title: "Policy Atlas could not propose",
+    });
+    expect(finishedNotice("shortlist", "degraded")).toEqual({
+      before: "Policy Atlas could not propose a shortlist. Your places are unchanged. Open the",
+      after: "tab.",
+    });
+    expect(runFinishedSignpost("t1", "degraded", "shortlist")?.message).toMatch(
+      /^Policy Atlas could not propose a shortlist\. Your places are unchanged\. Open the .+ tab\.$/,
+    );
+    expect(runFinishedSignpost("t1", "degraded", "shortlist")?.href).toBe("/tasks/t1/result?view=shortlist");
+    // A degraded longlist walk keeps its done words.
+    expect(runningCardCopy("degraded", "longlist").tone).toBe("done");
+    expect(finishedNotice("shortlist", "succeeded")).toBe(FINISHED_NOTICE.shortlist);
   });
 });

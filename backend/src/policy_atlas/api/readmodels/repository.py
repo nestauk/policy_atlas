@@ -6,7 +6,8 @@ import html
 import uuid
 from collections import Counter
 from collections.abc import Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import date
 from functools import cmp_to_key
 from typing import Any, Literal, cast
 
@@ -50,6 +51,7 @@ from policy_atlas.api.contract import (
     LonglistCountsOut,
     LonglistOut,
     LonglistThemeOut,
+    MaturityOut,
     MostRelevantNoteOut,
     OptionDesignOut,
     OptionDocumentOut,
@@ -65,6 +67,8 @@ from policy_atlas.api.contract import (
     ReferenceOut,
     RelationOut,
     SectionOut,
+    ShortlistOut,
+    ShortlistStateOut,
     SourceDossierOut,
     SourceRecordsOut,
     SourceTagOut,
@@ -77,6 +81,7 @@ from policy_atlas.api.contract.read_models import EvaluatedCountryOut, PlaceSent
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
 from policy_atlas.core.schema import (
     GROUPING_FACETS,
+    OPTION_SHORTLIST_STATES,
     addressable_unit,
     annotation,
     artefact,
@@ -137,6 +142,7 @@ from policy_atlas.options_scoping.longlist.lever_types import (
     LEVER_TYPES,
     TAXONOMY_VERSION,
 )
+from policy_atlas.options_scoping.longlist.maturity import maturity_of
 from policy_atlas.options_scoping.longlist.where_tried import (
     NOT_STATED,
     country_level,
@@ -153,6 +159,9 @@ from policy_atlas.options_scoping.option_profile.place_sentences import (
     place_name,
     template_sentence,
 )
+from policy_atlas.options_scoping.shortlist.shortlist import (
+    SHORTLIST_PROPOSED as SHORTLIST_PROPOSED,
+)
 from policy_atlas.runtime.capability_registry import (
     OPTIONS_SCOPING,
     expect_scoping_plan,
@@ -162,6 +171,8 @@ from policy_atlas.runtime.capability_registry import (
 from policy_atlas.runtime.scoping_plan import (
     PROFILE_LINE_KEYS,
     ScopingPlan,
+    longlist_inputs,
+    shortlist_proposal_stale,
 )
 from policy_atlas.runtime.steering_events import canonical_actor
 from policy_atlas.runtime.steering_history import steering_history
@@ -1492,7 +1503,22 @@ def _finding_groups(conn: Connection, task_id: uuid.UUID) -> dict[uuid.UUID, dic
 OPTION_ADDED = "option.added"
 OPTION_EXCLUDED = "option.excluded"
 OPTION_INCLUDED = "option.included"
-OPTION_EVENT_KINDS: tuple[str, ...] = (OPTION_ADDED, OPTION_EXCLUDED, OPTION_INCLUDED)
+#: The user's two shortlist buttons (task 055, P9): *add to shortlist* and
+#: *remove from shortlist*, written by the same module.
+OPTION_SHORTLISTED = "option.shortlisted"
+OPTION_UNSHORTLISTED = "option.unshortlisted"
+OPTION_EVENT_KINDS: tuple[str, ...] = (
+    OPTION_ADDED,
+    OPTION_EXCLUDED,
+    OPTION_INCLUDED,
+    OPTION_SHORTLISTED,
+    OPTION_UNSHORTLISTED,
+)
+#: Policy Atlas's shortlist proposal (task 055, A7): one event per proposal,
+#: the record of its places, note, appetite and versions. Written by the
+#: ``shortlist`` component; ``SHORTLIST_PROPOSED`` is imported from there (top
+#: of this module) so the writer and the readers share one name. History
+#: renders it as Policy Atlas's decision (``decided_by = "agent"``).
 
 
 # The allowlisted audit events. The four lifecycle kinds appear under BOTH
@@ -1509,6 +1535,7 @@ _EVENT_KINDS = {
     "run.interrupted",
     "plan.approved",
     *OPTION_EVENT_KINDS,
+    SHORTLIST_PROPOSED,
 } | both_generations(*LIFECYCLE_EVENT_KINDS)
 
 
@@ -1516,6 +1543,10 @@ def _option_event_summary(event_type: str, payload: Mapping[str, Any]) -> str:
     """One History sentence naming the verb, the option and the reason."""
     name = str(payload.get("option_name") or "an option")
     reason = payload.get("reason")
+    if event_type in (OPTION_SHORTLISTED, OPTION_UNSHORTLISTED):
+        verb = "Added" if event_type == OPTION_SHORTLISTED else "Removed"
+        where = "to" if event_type == OPTION_SHORTLISTED else "from"
+        return f"{verb} \u201c{name}\u201d {where} the shortlist."
     verb = {
         OPTION_ADDED: "Added the option",
         OPTION_EXCLUDED: "Excluded the option",
@@ -1538,6 +1569,18 @@ def _event_decision(row: Any, walk_id: uuid.UUID | None = None) -> DecisionOut:
             kind=row.event_type,
             summary=_option_event_summary(row.event_type, payload),
             decided_by=cast(Any, "user") if actor else None,
+            detail=dict(payload),
+            capability_run_id=walk_id,
+        )
+    if row.event_type == SHORTLIST_PROPOSED:
+        places = payload.get("places")
+        count = len(places) if isinstance(places, list) else 0
+        return DecisionOut(
+            sequence=int(row.sequence),
+            occurred_at=row.occurred_at,
+            kind=row.event_type,
+            summary=f"Policy Atlas proposed {count} place{'' if count == 1 else 's'}.",
+            decided_by=cast(Any, "agent"),
             detail=dict(payload),
             capability_run_id=walk_id,
         )
@@ -3212,6 +3255,8 @@ _DOCUMENT_ROLES = frozenset({"evaluated", "described", "recommended", "mentioned
 _LINKED_FINDING_ROLE: dict[str, str] = {"iof": "evaluated", "icf": "described"}
 _PROFILE_MARKS = frozenset({"less", "more"})
 #: The two lines that state a fact, not a comparison: never marked (R37).
+#: The one profile line a row may lack (rows built before task 055 hold eight).
+OPTIONAL_PROFILE_LINE = "potential_impact"
 _UNMARKED_LINES = frozenset({"who_decides", "dependencies"})
 _AUTHORITY_LABELS = frozenset({"within_your_power", "needs_action_by", "unclear"})
 log = structlog.get_logger()
@@ -3410,9 +3455,12 @@ def _string_list(value: object) -> list[str]:
 def _profile_out(entry: Mapping[str, Any], option_id: uuid.UUID) -> OptionProfileOut | None:
     """The option's profile from its ``option_profile`` entry (R36, R37, R41).
 
-    Served only when the entry holds all eight lines, each with a sentence;
-    otherwise ``None`` and a warning. A mark that is not ``less`` or ``more``
-    is ``None``; ``who_decides`` and ``dependencies`` never carry one.
+    Served only when the entry holds the eight legacy lines, each with a
+    sentence; otherwise ``None`` and a warning. The ninth line,
+    ``potential_impact`` (task 055), is added when present and not blank and
+    carries a mark like the six marked lines (owner, 2026-10-27, at the 055
+    review). A mark that is not ``less`` or ``more`` is ``None``;
+    ``who_decides`` and ``dependencies`` never carry one.
     """
     if not entry:
         return None
@@ -3421,6 +3469,9 @@ def _profile_out(entry: Mapping[str, Any], option_id: uuid.UUID) -> OptionProfil
     for key in PROFILE_LINE_KEYS:
         line = _as_mapping(stored.get(key))
         sentence = line.get("sentence")
+        if key == OPTIONAL_PROFILE_LINE and (not isinstance(sentence, str) or not sentence.strip()):
+            # A row written before the ninth line existed serves its eight.
+            continue
         if not isinstance(sentence, str) or not sentence.strip():
             log.warning("readmodel.option_profile_incomplete", option_id=str(option_id))
             return None
@@ -3491,7 +3542,9 @@ def _option_summary_fields(
     also_found_as: list[str] | None = None,
     lever_reason: str | None = None,
     outcomes_total: int = 0,
+    where_country: str | None = None,
 ) -> dict[str, Any]:
+    maturity = maturity_of(coverage, where_country=where_country, today_year=date.today().year)
     return {
         "option_id": row.option_id,
         "name": row.name,
@@ -3519,7 +3572,58 @@ def _option_summary_fields(
         "evaluated_countries": _evaluated_countries_out(coverage.get("evaluated_countries")),
         "outcomes_evaluated": _count(coverage.get("outcomes_evaluated")),
         "outcomes_total": outcomes_total,
+        "shortlist": _shortlist_state_out(row),
+        "maturity": MaturityOut(**asdict(maturity)) if maturity is not None else None,
     }
+
+
+def _shortlist_state_out(row: Any) -> ShortlistStateOut | None:
+    """The option's place on the shortlist; ``None`` when it holds none (task 055)."""
+    if row.shortlist_state not in OPTION_SHORTLIST_STATES:
+        return None
+    return ShortlistStateOut(state=row.shortlist_state, reason=row.shortlist_reason)
+
+
+def _shortlist_out(stored: object, current: ScopingPlan | None) -> ShortlistOut:
+    """The latest shortlist proposal, as the longlist serves it (task 055, PG1).
+
+    A row written before the shortlist existed holds ``{}``: no note, no
+    provenance. The proposal is stale when it was made under another risk
+    appetite than the current plan's, or when there is none yet (the caller
+    only asks when a built longlist exists).
+
+    Args:
+        stored: ``longlist_result.shortlist``.
+        current: The current approved plan, or ``None`` when it cannot be read.
+
+    Returns:
+        The served proposal.
+    """
+    shortlist = _as_mapping(stored)
+    provenance = dict(_as_mapping(shortlist.get("provenance")))
+    note = shortlist.get("note")
+    return ShortlistOut(
+        note=note if isinstance(note, str) and note.strip() else None,
+        provenance=provenance,
+        stale=shortlist_proposal_stale(provenance, current),
+    )
+
+
+def _plan_inputs_changed(current: ScopingPlan | None, built_from: ScopingPlan | None) -> bool:
+    """Whether the current plan would build a different longlist (task 055, A6).
+
+    Compares :func:`longlist_inputs` of the current approved plan with that of
+    the plan version the longlist was built from. ``False`` when the current
+    plan cannot be read; ``True`` when only the pinned plan cannot be, which
+    is what the shortlist opener refuses as ``plan_stale``
+    (:func:`~policy_atlas.api.longlist_start._refuse_shortlist`), so the
+    screen offers the rebuild the server asks for.
+    """
+    if current is None:
+        return False
+    if built_from is None:
+        return True
+    return longlist_inputs(current) != longlist_inputs(built_from)
 
 
 def _report_sections(
@@ -3809,6 +3913,7 @@ def _search_coverage(
                 outcome_tag=unit.outcome_tag,
                 programme_name=unit.programme_name,
                 study_country=unit.study_country,
+                year=_year(_as_mapping(unit.metadata)),
             )
             for unit in search.units
         ],
@@ -3900,6 +4005,8 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
     by_id = {row.option_id: row for row in rows}
     relations = _option_relations(conn, task_id, {row.option_id: row.name for row in rows})
     built_from = _scoping_plan_version(conn, task_id, int(result.plan_version))
+    current = _scoping_plan_version(conn, task_id, None)
+    current_plan = current[1] if current is not None else None
 
     themes: list[LonglistThemeOut] = []
     themed: list[uuid.UUID] = []
@@ -3965,6 +4072,7 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
                 also_found_as=merged.get(oid),
                 lever_reason=_lever_reason(result, oid),
                 outcomes_total=len(plan_outcomes),
+                where_country=where_country,
             )
         )
         for oid in [*themed, *unthemed]
@@ -4004,6 +4112,10 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
             ]
         },
         taxonomy_version=taxonomy if isinstance(taxonomy, str) else TAXONOMY_VERSION,
+        shortlist=_shortlist_out(result.shortlist, current_plan),
+        plan_inputs_changed=_plan_inputs_changed(
+            current_plan, built_from[1] if built_from else None
+        ),
     )
 
 
@@ -4436,6 +4548,7 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
             also_found_as=_also_found_as(conn, task_id, option_id).get(option_id),
             lever_reason=_lever_reason(result, option_id),
             outcomes_total=len(plan_outcomes),
+            where_country=where_country,
         ),
         design=design,
         design_features=list(design.design_features),

@@ -22,6 +22,10 @@ import {
   noOutcomeMeasuredLine,
   outcomeCountLabel,
   placeWithDetail,
+  MATURITY_WORDS,
+  maturityLine,
+  placeWord,
+  holdsPlace,
 } from "./longlistPresentation";
 
 // Task 046: the card's new lines and the lever definition by version.
@@ -87,7 +91,7 @@ describe("longlist presentation (task 046)", () => {
 
 // Task 046, amendment 2 (R40, R41, R42, R43, R44): the words of the profile.
 describe("longlist presentation (amendment 2 words)", () => {
-  it("names the eight lines and ambition exactly", () => {
+  it("names the nine lines and ambition exactly, Potential impact last", () => {
     expect(PROFILE_LINE_KEYS.map((key) => LINE_NAMES[key])).toEqual([
       "Cost",
       "Time to set up",
@@ -97,8 +101,10 @@ describe("longlist presentation (amendment 2 words)", () => {
       "Dependencies",
       "Coordination requirements",
       "Delivery complexity",
+      "Potential impact",
     ]);
     expect(LINE_NAMES.ambition).toBe("Ambition");
+    expect(GRID_COLUMN_LINES).toContain("potential_impact");
   });
 
   it("gives each line exactly the table's level words", () => {
@@ -111,13 +117,14 @@ describe("longlist presentation (amendment 2 words)", () => {
     expect(words("dependencies")).toEqual([null, null]);
     expect(words("coordination")).toEqual(["Lower", "Higher"]);
     expect(words("delivery_complexity")).toEqual(["Simpler", "More complex"]);
+    expect(words("potential_impact")).toEqual(["Lower", "Higher"]);
     expect(words("ambition")).toEqual(["Smaller", "Bigger"]);
     const all = Object.values(LEVEL_WORDS).flatMap((pair) => [pair.less, pair.more]);
-    expect(all.filter((word) => word !== null)).toHaveLength(14);
+    expect(all.filter((word) => word !== null)).toHaveLength(16);
     expect(all).not.toContain("Middle");
   });
 
-  it("offers the seven lines that carry a mark as grid columns, ambition first", () => {
+  it("offers the eight lines that carry a mark as grid columns, ambition first", () => {
     expect(GRID_COLUMN_LINES.map((key) => LINE_NAMES[key])).toEqual([
       "Ambition",
       "Cost",
@@ -126,6 +133,7 @@ describe("longlist presentation (amendment 2 words)", () => {
       "Workforce requirements",
       "Coordination requirements",
       "Delivery complexity",
+      "Potential impact",
     ]);
   });
 
@@ -265,5 +273,57 @@ describe("longlist presentation (amendment 4)", () => {
     });
     expect(placeWithDetail("Denmark", "denmark").detail).toBeNull();
     expect(placeWithDetail("not stated", null)).toEqual({ place: "place not stated", detail: null });
+  });
+});
+
+describe("maturityLine (task 055)", () => {
+  const base = { design_mix: "", none_in_your_setting: false, latest_evaluation_year: null, stale: false };
+
+  it("words the four rungs", () => {
+    expect(MATURITY_WORDS).toEqual({
+      proposal_only: "Proposed, not yet implemented",
+      described: "Implemented, not yet evaluated",
+      evaluated: "Evaluated",
+      reviewed: "Evaluated, including a review",
+    });
+    expect(maturityLine({ ...base, rung: "proposal_only" })).toBe("Proposed, not yet implemented");
+    expect(maturityLine({ ...base, rung: "described" })).toBe("Implemented, not yet evaluated");
+    expect(maturityLine({ ...base, rung: "evaluated" })).toBe("Evaluated");
+    expect(maturityLine({ ...base, rung: "reviewed" })).toBe("Evaluated, including a review");
+  });
+
+  it("adds the design mix after the rung word", () => {
+    expect(maturityLine({ ...base, rung: "evaluated", design_mix: "1 RCT, 2 observational" })).toBe(
+      "Evaluated · 1 RCT, 2 observational",
+    );
+  });
+
+  it("adds each modifier, the stale year being five years before now", () => {
+    const now = new Date("2026-10-27T00:00:00Z");
+    expect(maturityLine({ ...base, rung: "evaluated", none_in_your_setting: true }, now)).toBe(
+      "Evaluated · none in your setting",
+    );
+    expect(maturityLine({ ...base, rung: "evaluated", stale: true }, now)).toBe(
+      "Evaluated · most recent evaluation before 2021",
+    );
+    expect(
+      maturityLine({ ...base, rung: "reviewed", design_mix: "3 observational", none_in_your_setting: true, stale: true }, now),
+    ).toBe("Evaluated, including a review · 3 observational · none in your setting · most recent evaluation before 2021");
+  });
+
+  it("renders nothing for a null maturity", () => {
+    expect(maturityLine(null)).toBeNull();
+    expect(maturityLine(undefined)).toBeNull();
+  });
+});
+
+describe("place words (task 055)", () => {
+  it("words a pick and a user place, and nothing for set-aside or no place", () => {
+    expect(placeWord("proposed")).toBe("Policy Atlas's pick");
+    expect(placeWord("added_by_you")).toBe("Added by you");
+    expect(placeWord("set_aside")).toBeNull();
+    expect(placeWord(null)).toBeNull();
+    expect(holdsPlace({ shortlist: { state: "set_aside", reason: null } })).toBe(false);
+    expect(holdsPlace({ shortlist: { state: "proposed", reason: "r" } })).toBe(true);
   });
 });

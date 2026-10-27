@@ -168,6 +168,8 @@ def test_theme_needs_a_longlist(conn: Connection) -> None:
             True,
         ),
         ("theme", ("Grouping into themes", "Included options grouped into themes."), False),
+        # Task 055 (PG3): its own stage key and words, not the Evidence search's select.
+        ("shortlist", ("Shortlisting", "Proposing places for close reading."), False),
     ],
 )
 def test_the_registry_the_graph_the_plan_mapping_and_the_stream_know_the_step(
@@ -187,11 +189,12 @@ def test_the_registry_the_graph_the_plan_mapping_and_the_stream_know_the_step(
         "Clustering into options",
         "Records grouped into options.",
     )
-    assert [c for c, _ in LONGLIST_CHAIN][-4:] == [
+    assert [c for c, _ in LONGLIST_CHAIN][-5:] == [
         "longlist",
         "option_profile",
         "constrain",
         "theme",
+        "shortlist",
     ]
     assert dict(LONGLIST_CHAIN)[component] is spine
 
@@ -226,8 +229,14 @@ def test_option_profile_then_constrain_then_theme_run_last_and_the_stream_carrie
         task_id, outcome = _longlist_walk(engine)
         assert outcome.status == "succeeded"
         components = [step.component for step in outcome.steps]
-        assert components[-4:] == ["longlist", "option_profile", "constrain", "theme"]
-        profile_step, theme_step = outcome.steps[-3], outcome.steps[-1]
+        assert components[-5:] == [
+            "longlist",
+            "option_profile",
+            "constrain",
+            "theme",
+            "shortlist",
+        ]
+        profile_step, theme_step = outcome.steps[-4], outcome.steps[-2]
         assert profile_step.status == theme_step.status == "succeeded"
         step_runs = {profile_step.run_id, theme_step.run_id}
         with engine.connect() as conn:

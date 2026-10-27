@@ -34,6 +34,7 @@ import {
   evidenceSignal,
   leverLabel,
   leverLine,
+  maturityLine,
   noOutcomeMeasuredLine,
   originLabel,
   outcomeCountLabel,
@@ -41,7 +42,7 @@ import {
   relationLabel,
   servesOutcome,
 } from "./longlistPresentation";
-import { ExcludeReasonForm, OptionActionButton, useOptionActions } from "./optionActions";
+import { ExcludeReasonForm, OptionActionButton, ShortlistActionButton, useOptionActions } from "./optionActions";
 
 type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
 
@@ -317,13 +318,19 @@ export function OptionCard() {
   const placeSentences = item.place_sentences ?? [];
   const planOutcomes = evidence.outcome_counts?.by_outcome ?? [];
   const noneMeasured = planOutcomes.length > 0 && planOutcomes.every((entry) => entry.evaluated === 0);
+  const maturity = maturityLine(item.maturity);
   const opener = evidenceOpener(item.evaluated_count, item.document_count);
   const profile = item.profile ?? null;
-  const profileLines = profile === null ? [] : PROFILE_LINE_KEYS.map((key) => ({ key, line: profile.lines.find((line) => line.key === key) }));
-  const cellLines = profile === null ? [] : GRID_COLUMN_LINES.map((key) => ({
-    key,
-    mark: key === "ambition" ? (item.ambition ?? null) : (profile.lines.find((line) => line.key === key)?.mark ?? null),
-  }));
+  const profileLines = profile === null ? [] : PROFILE_LINE_KEYS.map((key) => ({ key, line: profile.lines.find((line) => line.key === key) }))
+    // A profile written before the ninth line existed has eight; show no empty row.
+    .filter(({ key, line }) => key !== "potential_impact" || line !== undefined);
+  const cellLines = profile === null ? [] : GRID_COLUMN_LINES
+    // Likewise no Potential impact cell for a profile without that line.
+    .filter((key) => key !== "potential_impact" || profile.lines.some((line) => line.key === key))
+    .map((key) => ({
+      key,
+      mark: key === "ambition" ? (item.ambition ?? null) : (profile.lines.find((line) => line.key === key)?.mark ?? null),
+    }));
   const ambitionMark = item.ambition ?? null;
   const leverText = leverLine(item.primary_lever_type, item.secondary_lever_types);
   // One reason only: the none-fits reason says what the option does instead.
@@ -348,6 +355,12 @@ export function OptionCard() {
       <header className="mb-8">
         <ReportKindRow kind="Option">
           <div className="print-hide flex items-center gap-2">
+            <ShortlistActionButton
+              actions={actions}
+              optionId={optionId}
+              shortlistState={item.shortlist?.state}
+              excluded={excluded}
+            />
             <OptionActionButton actions={actions} optionId={optionId} excluded={excluded} />
           </div>
         </ReportKindRow>
@@ -458,7 +471,8 @@ export function OptionCard() {
         </CardSection>
       )}
 
-      <CardSection id="evidence-base" summary={opener}>
+      <CardSection id="evidence-base" summary={maturity === null ? opener : `${maturity}. ${opener}`}>
+        {maturity !== null && <p className="font-semibold text-navy">{maturity}</p>}
         <p>{opener}</p>
         {item.document_count > 0 && (
           <>

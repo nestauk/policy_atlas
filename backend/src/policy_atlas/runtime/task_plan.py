@@ -125,6 +125,7 @@ OPTIONS_SCOPING_STEPS: tuple[str, ...] = (
     "option_profile",
     "constrain",
     "theme",
+    "shortlist",
 )
 DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(("select", "extract", "group"))
 DEEP_GROUPING_FACETS: tuple[GroupingFacet, ...] = (

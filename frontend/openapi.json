@@ -3376,7 +3376,7 @@
         "type": "object"
       },
       "LonglistOut": {
-        "description": "The `longlist` read model: the options grouped by theme, with their states.\n\nArgs:\n    run_id: The longlist component run the longlist came from.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version the longlist was built from.\n    counts: The header counts.\n    themes: The themes, in display order.\n    unthemed_option_ids: Options in no theme (including options added\n        since the build).\n    options: Every option of the task, themed ones first in theme order.\n    lever_types: The lever-type list the options were typed against, in\n        order (the grid's rows).\n    lever_type_definitions: The same list with each type's one-line\n        definition (the list view's group headings).\n    lever_type_definitions_by_version: Every lever-type taxonomy version's\n        definitions, keyed by version, so an option typed under an\n        earlier version can show that version's wording (task 046).\n    taxonomy_version: The lever-type list version.\n    depth_label: The depth label every longlist surface carries.",
+        "description": "The `longlist` read model: the options grouped by theme, with their states.\n\nArgs:\n    run_id: The longlist component run the longlist came from.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version the longlist was built from.\n    counts: The header counts.\n    themes: The themes, in display order.\n    unthemed_option_ids: Options in no theme (including options added\n        since the build).\n    options: Every option of the task, themed ones first in theme order.\n    lever_types: The lever-type list the options were typed against, in\n        order (the grid's rows).\n    lever_type_definitions: The same list with each type's one-line\n        definition (the list view's group headings).\n    lever_type_definitions_by_version: Every lever-type taxonomy version's\n        definitions, keyed by version, so an option typed under an\n        earlier version can show that version's wording (task 046).\n    taxonomy_version: The lever-type list version.\n    depth_label: The depth label every longlist surface carries.\n    shortlist: The latest shortlist proposal (task 055).\n    plan_inputs_changed: The current approved plan differs from the plan\n        the longlist was built from in a field the longlist reads, so a\n        rebuild would give a different longlist. A change to the risk\n        appetite alone leaves it false (task 055, A6).",
         "properties": {
           "capability_run_id": {
             "anyOf": [
@@ -3430,6 +3430,11 @@
             "title": "Options",
             "type": "array"
           },
+          "plan_inputs_changed": {
+            "default": false,
+            "title": "Plan Inputs Changed",
+            "type": "boolean"
+          },
           "plan_version": {
             "title": "Plan Version",
             "type": "integer"
@@ -3438,6 +3443,9 @@
             "format": "uuid",
             "title": "Run Id",
             "type": "string"
+          },
+          "shortlist": {
+            "$ref": "#/components/schemas/ShortlistOut"
           },
           "taxonomy_version": {
             "anyOf": [
@@ -3469,7 +3477,8 @@
         "required": [
           "run_id",
           "plan_version",
-          "counts"
+          "counts",
+          "shortlist"
         ],
         "title": "LonglistOut",
         "type": "object"
@@ -3505,6 +3514,52 @@
           "description"
         ],
         "title": "LonglistThemeOut",
+        "type": "object"
+      },
+      "MaturityOut": {
+        "description": "How well tried an option is, read from its coverage (task 055, item 7).\n\nArgs:\n    rung: `proposal_only` (no document names it) \u00b7 `described` (documents\n        describe or recommend it) \u00b7 `evaluated` (a document measured an\n        effect) \u00b7 `reviewed` (a systematic review or meta-analysis did).\n    design_mix: The evaluating documents' evidence types as text, most\n        frequent first; empty when none evaluated it.\n    none_in_your_setting: It was evaluated, but not in the plan's Where\n        country.\n    latest_evaluation_year: The newest evaluating document's year.\n    stale: The newest evaluation is more than five years old.",
+        "properties": {
+          "design_mix": {
+            "default": "",
+            "title": "Design Mix",
+            "type": "string"
+          },
+          "latest_evaluation_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Evaluation Year"
+          },
+          "none_in_your_setting": {
+            "default": false,
+            "title": "None In Your Setting",
+            "type": "boolean"
+          },
+          "rung": {
+            "enum": [
+              "proposal_only",
+              "described",
+              "evaluated",
+              "reviewed"
+            ],
+            "title": "Rung",
+            "type": "string"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "rung"
+        ],
+        "title": "MaturityOut",
         "type": "object"
       },
       "MeOut": {
@@ -3993,6 +4048,16 @@
             ],
             "title": "Lever Reason"
           },
+          "maturity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MaturityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -4103,6 +4168,16 @@
             },
             "title": "Secondary Lever Types",
             "type": "array"
+          },
+          "shortlist": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShortlistStateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "state": {
             "enum": [
@@ -4282,7 +4357,7 @@
         "type": "object"
       },
       "OptionSummaryOut": {
-        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `less` \u00b7 `more` \u00b7 `null`: how big a proposal the option is\n        against the baseline, compared with the other options of the list;\n        `null` when it does not stand out or is not profiled yet.\n    ambition_reason: The one-line justification.\n    profile: What the option would take (task 046); `null` when the\n        option has no complete profile.\n    authority: Who can act on it (task 046, R43); `null` when none was\n        recorded.\n    taxonomy_version: The lever-type list version it was typed under.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    relations: Its relations to other options.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.\n    from_section: The Evidence search report section a *from your\n        evidence search* option was drawn from; `null` for any other\n        origin, or when the section was not recorded (task 045, F3).\n    also_found_as: The names of the duplicates merged into this option\n        (their documents are its documents); empty when none.\n    lever_reason: One sentence on why the option has its lever type,\n        when the typing pass recorded one; `null` otherwise (task 046,\n        R29).\n    evaluated_countries: The countries of its evaluating documents, the\n        plan's Where country first, then most documents first (task 046,\n        amendment 4, R76); empty when no evaluation gives a country.\n    outcomes_evaluated: The plan outcomes at least one evaluating\n        document measured (R76).\n    outcomes_total: The outcome count of the plan the longlist was built\n        from (R76).",
+        "description": "One option as the list view and the grid show it.\n\nArgs:\n    option_id: Stable option identity.\n    name: Option name.\n    description: One-sentence description.\n    outcomes_served: The plan's outcomes the option serves.\n    origin: Where it came from.\n    state: Included or excluded.\n    exclusion: Why it is excluded; `null` when included.\n    no_in_scope_evidence: Included, but none of its documents passes the\n        plan's evidence restriction.\n    primary_lever_type: The primary lever type; `null` when none fits or\n        the option is not typed yet.\n    lever_none_fits_reason: Why no lever type fits.\n    secondary_lever_types: The other lever types it also touches.\n    ambition: `less` \u00b7 `more` \u00b7 `null`: how big a proposal the option is\n        against the baseline, compared with the other options of the list;\n        `null` when it does not stand out or is not profiled yet.\n    ambition_reason: The one-line justification.\n    profile: What the option would take (task 046); `null` when the\n        option has no complete profile.\n    authority: Who can act on it (task 046, R43); `null` when none was\n        recorded.\n    taxonomy_version: The lever-type list version it was typed under.\n    document_count: Its documents (DOI-collapsed).\n    evaluated_count: Documents that evaluate it.\n    relations: Its relations to other options.\n    search_pending: An option added since the build whose own option\n        search is still running or paused; its counts read zero until it ends.\n    from_section: The Evidence search report section a *from your\n        evidence search* option was drawn from; `null` for any other\n        origin, or when the section was not recorded (task 045, F3).\n    also_found_as: The names of the duplicates merged into this option\n        (their documents are its documents); empty when none.\n    lever_reason: One sentence on why the option has its lever type,\n        when the typing pass recorded one; `null` otherwise (task 046,\n        R29).\n    evaluated_countries: The countries of its evaluating documents, the\n        plan's Where country first, then most documents first (task 046,\n        amendment 4, R76); empty when no evaluation gives a country.\n    outcomes_evaluated: The plan outcomes at least one evaluating\n        document measured (R76).\n    outcomes_total: The outcome count of the plan the longlist was built\n        from (R76).\n    shortlist: Its place on the shortlist (task 055); `null` when it\n        holds none.\n    maturity: Its maturity rung (task 055); `null` for a longlist\n        written before the rung existed.",
         "properties": {
           "also_found_as": {
             "items": {
@@ -4391,6 +4466,16 @@
             ],
             "title": "Lever Reason"
           },
+          "maturity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MaturityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -4471,6 +4556,16 @@
             },
             "title": "Secondary Lever Types",
             "type": "array"
+          },
+          "shortlist": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShortlistStateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "state": {
             "enum": [
@@ -5240,7 +5335,7 @@
         "type": "object"
       },
       "PlanOut": {
-        "description": "Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.\n\nArgs:\n    plan: The current Evidence search plan, or null on a scoping task.\n    scoping: The current options-scoping plan, or null on an Evidence\n        search task.\n    capability: Which of the two the task is, so a reader never has to\n        infer it from which field is null.\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).\n    opened_run: The longlist walk `POST .../plan/confirm-baseline` opened,\n        on that route's response. Absent on every other plan read.",
+        "description": "Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.\n\nArgs:\n    plan: The current Evidence search plan, or null on a scoping task.\n    scoping: The current options-scoping plan, or null on an Evidence\n        search task.\n    capability: Which of the two the task is, so a reader never has to\n        infer it from which field is null.\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).\n    opened_run: The walk a plan write opened: the longlist walk\n        `POST .../plan/confirm-baseline` opened, or the shortlist walk a\n        `PATCH .../plan` that changed the risk appetite opened (task 055).\n        Null on every other plan read, and when the opener was refused.",
         "properties": {
           "capability": {
             "default": "evidence_search",
@@ -5464,7 +5559,8 @@
               "longlist",
               "option_profile",
               "constrain",
-              "theme"
+              "theme",
+              "shortlist"
             ],
             "title": "Stage",
             "type": "string"
@@ -5543,7 +5639,8 @@
               "who_decides",
               "dependencies",
               "coordination",
-              "delivery_complexity"
+              "delivery_complexity",
+              "potential_impact"
             ],
             "title": "Key",
             "type": "string"
@@ -6087,6 +6184,7 @@
                   "dependencies",
                   "coordination",
                   "delivery_complexity",
+                  "potential_impact",
                   "transferability"
                 ],
                 "type": "string"
@@ -6214,7 +6312,7 @@
         "type": "object"
       },
       "ScopingPlanDraft": {
-        "description": "Draft or approved options-scoping plan, as surfaced to the client.\n\nMirrors the runtime `ScopingPlan` field-by-field. Every field except\n`steps`/`ready` may be `None`/absent while drafting.\n\nArgs:\n    title: Short user-visible name for the task.\n    question: The user's ask.\n    intended_change: What we are trying to change.\n    target_unit: Who or what should change.\n    where: The jurisdiction the policy would apply to.\n    outcomes: The outcomes evidence is read against.\n    depth: The scoping depth the user chose.\n    constraints: Typed constraints and preferences, including the default\n        transferability preference (marked by `default`).\n    your_context: The user's own situation, verbatim.\n    your_options: Options the user already has in mind, each with its\n        proposed design.\n    entry_branch: `explore` is the only branch in this release.\n    linked_task_ids: The tasks this plan starts from.\n    steering_mode: Check-in cadence for the run.\n    steer_point_defaults: Standing instructions.\n    assumptions: Every guess the plan is making.\n    steps: The three display steps, in order.\n    time_band: The coarse compute band for the baseline.\n    baseline_confirmed: The confirm-baseline record, once written.\n    ready: Whether the draft has validated into an executable plan.",
+        "description": "Draft or approved options-scoping plan, as surfaced to the client.\n\nMirrors the runtime `ScopingPlan` field-by-field. Every field except\n`steps`/`ready` may be `None`/absent while drafting.\n\nArgs:\n    title: Short user-visible name for the task.\n    question: The user's ask.\n    intended_change: What we are trying to change.\n    target_unit: Who or what should change.\n    where: The jurisdiction the policy would apply to.\n    outcomes: The outcomes evidence is read against.\n    depth: The scoping depth the user chose.\n    constraints: Typed constraints and preferences, including the default\n        transferability preference (marked by `default`).\n    your_context: The user's own situation, verbatim.\n    your_options: Options the user already has in mind, each with its\n        proposed design.\n    entry_branch: `explore` is the only branch in this release.\n    linked_task_ids: The tasks this plan starts from.\n    steering_mode: Check-in cadence for the run.\n    steer_point_defaults: Standing instructions.\n    assumptions: Every guess the plan is making.\n    steps: The three display steps, in order.\n    time_band: The coarse compute band for the baseline.\n    baseline_confirmed: The confirm-baseline record, once written.\n    risk_appetite: How far the shortlist may reach beyond options tried\n        elsewhere (task 055); set on every approved plan.\n    ready: Whether the draft has validated into an executable plan.",
         "properties": {
           "assumptions": {
             "anyOf": [
@@ -6345,6 +6443,23 @@
             "title": "Ready",
             "type": "boolean"
           },
+          "risk_appetite": {
+            "anyOf": [
+              {
+                "enum": [
+                  "tried_only",
+                  "mostly_tried",
+                  "open_to_untested"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Risk Appetite"
+          },
           "steer_point_defaults": {
             "anyOf": [
               {
@@ -6467,7 +6582,7 @@
       },
       "ScopingPlanPatch": {
         "additionalProperties": false,
-        "description": "Typed replace-field edits for a scoping plan.\n\nOmitted fields stay as they are; a supplied field replaces its counterpart\noutright. The merged result must still be a valid executable scoping plan.\n\nArgs:\n    intended_change: Replacement intended change.\n    target_unit: Replacement target unit.\n    where: Replacement jurisdiction.\n    outcomes: Replacement outcome list.\n    depth: Replacement depth.\n    constraints: Replacement constraint list. Omitting the default\n        transferability preference removes it for good.\n    your_context: Replacement Your context list.\n    your_options: Replacement options list, by the user's words.\n    steering_mode: Replacement check-in cadence.\n    steer_point_defaults: Replacement standing instructions.\n    assumptions: Replacement assumptions.",
+        "description": "Typed replace-field edits for a scoping plan.\n\nOmitted fields stay as they are; a supplied field replaces its counterpart\noutright. The merged result must still be a valid executable scoping plan.\n\nArgs:\n    intended_change: Replacement intended change.\n    target_unit: Replacement target unit.\n    where: Replacement jurisdiction.\n    outcomes: Replacement outcome list.\n    depth: Replacement depth.\n    constraints: Replacement constraint list. Omitting the default\n        transferability preference removes it for good.\n    your_context: Replacement Your context list.\n    your_options: Replacement options list, by the user's words.\n    steering_mode: Replacement check-in cadence.\n    steer_point_defaults: Replacement standing instructions.\n    assumptions: Replacement assumptions.\n    risk_appetite: Replacement risk appetite (task 055). The longlist\n        does not read it, so a patch carrying only this field never makes\n        the longlist out of date.",
         "properties": {
           "assumptions": {
             "anyOf": [
@@ -6535,6 +6650,22 @@
               }
             ],
             "title": "Outcomes"
+          },
+          "risk_appetite": {
+            "anyOf": [
+              {
+                "enum": [
+                  "tried_only",
+                  "mostly_tried",
+                  "open_to_untested"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Appetite"
           },
           "steer_point_defaults": {
             "anyOf": [
@@ -6725,6 +6856,71 @@
           "role"
         ],
         "title": "SectionOut",
+        "type": "object"
+      },
+      "ShortlistOut": {
+        "description": "The latest shortlist proposal on a longlist (task 055).\n\nArgs:\n    note: The proposal's short \"what this leaves out\" note; `null` before\n        the first proposal.\n    provenance: How the proposal was made (prompt version, model,\n        appetite, plan version, \u2026); empty before the first proposal.\n    places_target: How many places a proposal fills to.\n    stale: The proposal does not match the plan's current risk appetite,\n        or a built longlist has no proposal yet. The view then asks the\n        user to press Suggest more to re-propose.",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "places_target": {
+            "default": 5,
+            "title": "Places Target",
+            "type": "integer"
+          },
+          "provenance": {
+            "additionalProperties": true,
+            "title": "Provenance",
+            "type": "object"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "stale"
+        ],
+        "title": "ShortlistOut",
+        "type": "object"
+      },
+      "ShortlistStateOut": {
+        "description": "An option's place on the shortlist (task 055).\n\nArgs:\n    state: `proposed` (Policy Atlas's pick), `added_by_you`, or\n        `set_aside` (a pick the user removed).\n    reason: The one-line reason for a Policy Atlas pick; `null` otherwise.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "state": {
+            "enum": [
+              "proposed",
+              "added_by_you",
+              "set_aside"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "ShortlistStateOut",
         "type": "object"
       },
       "SourceDossierOut": {
@@ -7195,7 +7391,8 @@
               "longlist",
               "option_profile",
               "constrain",
-              "theme"
+              "theme",
+              "shortlist"
             ],
             "title": "Stage",
             "type": "string"
@@ -7288,7 +7485,8 @@
               "longlist",
               "option_profile",
               "constrain",
-              "theme"
+              "theme",
+              "shortlist"
             ],
             "title": "Stage",
             "type": "string"
@@ -7362,7 +7560,8 @@
               "longlist",
               "option_profile",
               "constrain",
-              "theme"
+              "theme",
+              "shortlist"
             ],
             "title": "Stage",
             "type": "string"
@@ -8298,7 +8497,8 @@
                   "longlist",
                   "option_profile",
                   "constrain",
-                  "theme"
+                  "theme",
+                  "shortlist"
                 ],
                 "type": "string"
               },
@@ -11251,6 +11451,124 @@
         ]
       }
     },
+    "/api/v1/tasks/{task_id}/options/{option_id}/shortlist": {
+      "post": {
+        "description": "Put an included option on the shortlist as the user's own place (task 055).\n\nRepeating it on a place the user already holds is a no-op. Refused with\n409 ``not_included`` for an excluded or merged option and 409\n``run_active`` while a walk runs.",
+        "operationId": "post_shortlist_api_v1_tasks__task_id__options__option_id__shortlist_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "option_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Option Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Post Shortlist",
+        "tags": [
+          "longlist"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/options/{option_id}/unshortlist": {
+      "post": {
+        "description": "Take an option off the shortlist (task 055).\n\nA Policy Atlas pick becomes set aside; the user's own place clears. No\nwalk opens and nothing refills the place. An option with no place is a\nno-op. Refused with 409 ``run_active`` while a walk runs.",
+        "operationId": "post_unshortlist_api_v1_tasks__task_id__options__option_id__unshortlist_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "option_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Option Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Post Unshortlist",
+        "tags": [
+          "longlist"
+        ]
+      }
+    },
     "/api/v1/tasks/{task_id}/plan": {
       "get": {
         "description": "Return the durable approved plan or latest completed durable draft.\n\nOwner-only sweep, for the reason :func:`list_task_agent_turns` states: a\ncolleague's or an administrator's read must not write the owner's rows.",
@@ -11300,7 +11618,7 @@
         ]
       },
       "patch": {
-        "description": "Apply typed edits to the current plan and persist a new approved version.",
+        "description": "Apply typed edits to the current plan and persist a new approved version.\n\nOn an options-scoping task whose risk appetite changed, once the new\nversion has committed the route opens a shortlist walk that proposes the\nplaces again (task 055, P10; :func:`_open_shortlist_after_patch`) and\nnames it in ``opened_run``.",
         "operationId": "patch_plan_api_v1_tasks__task_id__plan_patch",
         "parameters": [
           {
@@ -11611,6 +11929,55 @@
         "summary": "Get Run",
         "tags": [
           "runs"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/shortlist/suggest": {
+      "post": {
+        "description": "Open a shortlist walk that fills the open places (Suggest more; task 055).\n\nThe access check runs in its own short transaction, then the opener takes\nthe dispatch lock and the task row itself (the order ``create_run``\nuses). Refused with 409 ``run_active``, ``capacity``, ``plan_stale`` or\n``nothing_to_propose``, and 404 when the task has no longlist.",
+        "operationId": "post_suggest_more_api_v1_tasks__task_id__shortlist_suggest_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LatestRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Post Suggest More",
+        "tags": [
+          "longlist"
         ]
       }
     },

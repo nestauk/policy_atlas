@@ -54,6 +54,10 @@ _CONFLICT_CODES = {
     "link_project_mismatch",
     "link_source_unfinished",
     "link_source_capability",
+    # Task 055 (P9): Suggest more when every included option already holds a
+    # place or was set aside; a shortlist place for an excluded or merged option.
+    "nothing_to_propose",
+    "not_included",
 }
 
 _CAPACITY_CODES = {"chat_capacity"}

@@ -133,6 +133,7 @@ from policy_atlas.options_scoping.longlist.coverage import (
     CoverageMember,
     FoldedSeed,
     document_key,
+    document_year,
     normalise_doi,
     option_coverage,
 )
@@ -250,6 +251,8 @@ class _Unit:
     object_tag: str | None = None
     programme_name: str | None = None
     study_country: str | None = None
+    # The document's publication year, ``None`` when absent or malformed.
+    year: int | None = None
 
 
 def _bound(value: object, limit: int = UNIT_TEXT_MAX) -> str | None:
@@ -576,6 +579,7 @@ def _own_units(
                 object_tag=object_tag,
                 programme_name=row.programme_name,
                 study_country=row.study_country,
+                year=document_year(row.metadata),
             )
         )
     return _OwnUnits(
@@ -766,6 +770,7 @@ def _finding_units(
                 outcome=row.outcome,
                 study_geography=row.study_geography,
                 payload=payload,
+                year=document_year(row.metadata),
             )
         )
     return units
@@ -808,7 +813,7 @@ def _seeds(conn: Connection, *, task_id: uuid.UUID) -> list[_Seed]:
     merged (its name is a :func:`_merged_names` entry instead).
     """
     # Imported here: ``constrain`` imports this module.
-    from policy_atlas.options_scoping.constrain.constrain import user_holds_state
+    from policy_atlas.options_scoping.constrain.constrain import merge_protected
 
     rows = conn.execute(
         select(
@@ -818,6 +823,7 @@ def _seeds(conn: Connection, *, task_id: uuid.UUID) -> list[_Seed]:
             option.c.design,
             option.c.origin,
             option.c.exclusion,
+            option.c.shortlist_state,
             option.c.created_at,
         )
         .where(option.c.task_id == task_id)
@@ -855,7 +861,8 @@ def _seeds(conn: Connection, *, task_id: uuid.UUID) -> list[_Seed]:
                 description=description,
                 design_features=features,
                 origin=row.origin,
-                user_held=user_holds_state(row.exclusion),
+                # A user's shortlist place is never folded either (O1).
+                user_held=merge_protected(row),
                 name=row.name,
                 outcomes=outcomes,
             )
@@ -1353,6 +1360,7 @@ def _coverage_member(unit: _Unit, *, flagged: bool) -> CoverageMember:
         outcome_tag=unit.outcome_tag if unit.kind == "interventions" else None,
         programme_name=unit.programme_name,
         study_country=unit.study_country,
+        year=unit.year,
     )
 
 

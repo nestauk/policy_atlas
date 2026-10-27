@@ -53,8 +53,10 @@ from policy_atlas.api.gate_turns import PausedGate, read_paused_gate
 from policy_atlas.api.longlist_start import (
     LonglistRefused,
     http_error,
+    longlist_pinned_plan,
     longlist_walk_exists,
     open_longlist_walk,
+    open_shortlist_walk,
     opened_run,
     plan_row_of_walk,
 )
@@ -111,6 +113,7 @@ from policy_atlas.runtime.scoping_plan import (
     BaselineConfirmed,
     ScopingPlan,
     compose_longlist_screen_intent,
+    longlist_inputs,
     merge_your_options,
     propose_option_designs,
     settle_patched_defaults,
@@ -1498,9 +1501,18 @@ def patch_plan(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
     agent: Annotated[AgentBackend, Depends(get_agent_backend)],
+    executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
+    backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
 ) -> PlanOut:
-    """Apply typed edits to the current plan and persist a new approved version."""
+    """Apply typed edits to the current plan and persist a new approved version.
+
+    On an options-scoping task whose risk appetite changed, once the new
+    version has committed the route opens a shortlist walk that proposes the
+    places again (task 055, P10; :func:`_open_shortlist_after_patch`) and
+    names it in ``opened_run``.
+    """
     designs: dict[str, OptionDesign] = {}
+    scoped: tuple[ScopingPlan, ScopingPlan] | None = None
     if payload.scoping is not None and payload.scoping.your_options is not None:
         # Model calls stay outside the locked transaction below (review
         # finding I2): propose designs for the new or reworded options first.
@@ -1542,19 +1554,101 @@ def patch_plan(
                 )
             if payload.scoping is None:
                 raise HTTPException(status_code=422, detail="scoping edits are required")
-            return _patch_scoping_plan(conn, task_id, payload.scoping, designs=designs)
-        if payload.scoping is not None:
-            raise HTTPException(
-                status_code=422,
-                detail="'scoping' edits an options-scoping plan, not an Evidence search one",
+            previous, current_scoping, out = _patch_scoping_plan(
+                conn, task_id, payload.scoping, designs=designs
             )
-        current, conversation_id = _load_editable_plan(conn, task_id, capability)
-        try:
-            patched = _apply_plan_patch(current, payload)
-        except (ValidationError, ValueError) as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        row = _persist_version(conn, task_id, patched, conversation_id)
-    return _plan_out(EVIDENCE_SEARCH, patched, row)
+            scoped = (previous, current_scoping)
+        else:
+            if payload.scoping is not None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="'scoping' edits an options-scoping plan, not an Evidence search one",
+                )
+            current, conversation_id = _load_editable_plan(conn, task_id, capability)
+            try:
+                patched = _apply_plan_patch(current, payload)
+            except (ValidationError, ValueError) as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            row = _persist_version(conn, task_id, patched, conversation_id)
+            out = _plan_out(EVIDENCE_SEARCH, patched, row)
+    if scoped is None:
+        return out
+    # Committed. The opener takes the dispatch lock and the task row itself.
+    return _open_shortlist_after_patch(
+        engine,
+        task_id=task_id,
+        user=user,
+        executor=executor,
+        backends=backends,
+        previous=scoped[0],
+        current=scoped[1],
+        out=out,
+    )
+
+
+def _open_shortlist_after_patch(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    user: AuthenticatedUser,
+    executor: ThreadPoolExecutor,
+    backends: RunnerBackends,
+    previous: ScopingPlan,
+    current: ScopingPlan,
+    out: PlanOut,
+) -> PlanOut:
+    """Re-propose the shortlist after an appetite change (task 055, P10).
+
+    Called outside any transaction, after the new version has committed. It
+    opens a shortlist walk (Policy Atlas's picks are released and proposed
+    again; the user's places stay) only when all three hold: the risk
+    appetite changed; the task has a longlist; and the fields the longlist
+    reads are the same as in the version that longlist was built from (PR6).
+    When those fields differ, a Rebuild is due and its chain proposes again,
+    so nothing opens here.
+
+    A refused opener (``run_active``, ``capacity``, …) opens nothing and is
+    not an error: the version has already been saved, and the longlist read
+    model's ``shortlist.stale`` tells the user to press Suggest more.
+
+    Args:
+        engine: Database engine.
+        task_id: The options-scoping task.
+        user: The user traces are attributed to.
+        executor: The walk executor.
+        backends: The runner backend bundle.
+        previous: The approved plan before the patch.
+        current: The plan the patch saved.
+        out: The patch's response.
+
+    Returns:
+        ``out``, with ``opened_run`` set when a walk opened.
+    """
+    if previous.risk_appetite == current.risk_appetite:
+        return out
+    with engine.connect() as conn:
+        built = longlist_pinned_plan(conn, task_id=task_id)
+    if built is None or built[1] is None:
+        return out
+    if longlist_inputs(current) != longlist_inputs(built[1]):
+        return out
+    try:
+        run_id = open_shortlist_walk(
+            engine,
+            task_id=task_id,
+            backends=backends,
+            executor=executor,
+            user_id=user.user_id,
+            suggest=False,
+        )
+    except LonglistRefused as exc:
+        log.info(
+            "shortlist.after_patch_refused", task_id=str(task_id), reason=exc.reason
+        )
+        return out
+    return out.model_copy(
+        update={"opened_run": opened_run(engine, task_id=task_id, capability_run_id=run_id)}
+    )
 
 
 def _persist_new_scoping_version(
@@ -1625,8 +1719,12 @@ def _patch_scoping_plan(
     patch: Any,
     *,
     designs: dict[str, OptionDesign] | None = None,
-) -> PlanOut:
-    """Apply typed scoping edits and persist a new approved version."""
+) -> tuple[ScopingPlan, ScopingPlan, PlanOut]:
+    """Apply typed scoping edits and persist a new approved version.
+
+    Returns:
+        The plan before the edits, the plan saved, and the response.
+    """
     current, _row = _load_approved_scoping_plan(conn, task_id)
     latest_turn = _latest_completed_turn(conn, task_id)
     try:
@@ -1638,7 +1736,7 @@ def _patch_scoping_plan(
         )
     except (ValidationError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return _persist_new_scoping_version(conn, task_id, patched)
+    return current, patched, _persist_new_scoping_version(conn, task_id, patched)
 
 
 @router.post("/{task_id}/plan/confirm-baseline", response_model=PlanOut)

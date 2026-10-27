@@ -120,8 +120,8 @@ CHECKED_AT_BY_KIND: dict[ConstraintKind, CheckedAt] = {
     "evidence_restriction": "retrieval",
 }
 
-#: The eight lines of an option's profile, in the order they are shown
-#: (task 046, R37). A consideration's ``aspect`` names one of them, or
+#: The lines of an option's profile, in the order they are shown (task 046,
+#: R37; ``potential_impact`` last, task 055). A consideration's ``aspect`` names one of them, or
 #: ``transferability`` (B1).
 ProfileLineKey = Literal[
     "cost",
@@ -132,12 +132,30 @@ ProfileLineKey = Literal[
     "dependencies",
     "coordination",
     "delivery_complexity",
+    "potential_impact",
 ]
 PROFILE_LINE_KEYS: tuple[str, ...] = get_args(ProfileLineKey)
 
 #: The line a consideration speaks of: one of :data:`PROFILE_LINE_KEYS`, or
 #: ``transferability`` (B1).
 ConsiderationAspect = Literal[ProfileLineKey, "transferability"]
+
+#: How far the shortlist may reach beyond options already tried elsewhere
+#: (task 055, contract S2, S3). It sets the mix of tested and untested places,
+#: never an order. ``api.contract.task_agent.ScopingRiskAppetite`` mirrors it.
+RiskAppetite = Literal["tried_only", "mostly_tried", "open_to_untested"]
+
+#: The plan's appetite when the user has not chosen one (contract S2: "Default:
+#: the middle").
+DEFAULT_RISK_APPETITE: RiskAppetite = "mostly_tried"
+
+#: The three answers in the words the user sees (contract S2). The frontend
+#: holds the same words once in ``planVocabulary.ts`` (A25).
+RISK_APPETITE_LABELS: dict[str, str] = {
+    "tried_only": "Cautious: only options that have been evaluated somewhere",
+    "mostly_tried": "Balanced: mostly evaluated, plus one or two not yet evaluated",
+    "open_to_untested": "Ambitious: the biggest ideas, even those never implemented",
+}
 
 #: The scoping steering lattice's point names. Pinned here, not imported from
 #: the registry, which imports this module.
@@ -204,6 +222,9 @@ def default_transferability_text(where_text: str) -> str:
 BASELINE_PURPOSE = "baseline"
 LONGLIST_PURPOSE = "longlist"
 TARGETED_PURPOSE = "targeted"
+#: A shortlist walk: the one ``shortlist`` step, opened by a risk-appetite
+#: change or by Suggest more (task 055, S17).
+SHORTLIST_PURPOSE = "shortlist"
 
 #: The six components a scoping baseline walk runs.
 SCOPING_SPINE: tuple[str, ...] = (
@@ -221,7 +242,10 @@ SCOPING_SPINE: tuple[str, ...] = (
 #: ``longlist`` and ``constrain``: ``longlist`` makes the list,
 #: ``option_profile`` writes what is said about each option (task 046, R37).
 #: ``theme`` runs after ``constrain`` has committed, so its failure cannot
-#: touch the verdicts (task 046, R28). No step ingests full text (R13).
+#: touch the verdicts (task 046, R28). ``shortlist`` runs last, after the
+#: themes are stored, and degrades the walk when it fails: the longlist, the
+#: verdicts and the themes stand, and the previous places stay (task 055).
+#: No step ingests full text (R13).
 LONGLIST_CHAIN: tuple[tuple[str, bool], ...] = (
     ("inherit", False),
     ("suggest", False),
@@ -234,7 +258,12 @@ LONGLIST_CHAIN: tuple[tuple[str, bool], ...] = (
     ("option_profile", True),
     ("constrain", True),
     ("theme", False),
+    ("shortlist", False),
 )
+
+#: The shortlist walk's chain (task 055, S17): one non-spine step, so a failed
+#: proposal ends the walk ``degraded`` and leaves the previous places.
+SHORTLIST_CHAIN: tuple[tuple[str, bool], ...] = (("shortlist", False),)
 
 #: The verb *add*'s option search (a targeted walk with no parent). Every step
 #: is spine for that walk. Its intent is the option's design (task 046, AM1).
@@ -280,12 +309,14 @@ SCOPING_STEPS: tuple[PlanStep, ...] = (
         stage="acquire",
     ),
     PlanStep(
-        label="Shortlist and assessment",
+        label="Shortlist",
         blurb=(
-            "Review the proposed reading set. Assessment runs only when you "
-            "say so. Not in this release."
+            "Policy Atlas proposes about five places for close reading, one "
+            "reason each, mixed to your risk appetite. Add, remove, ask for "
+            "more. Assessment of the shortlisted options is not in this "
+            "release."
         ),
-        stage="select",
+        stage="shortlist",
     ),
 )
 
@@ -568,6 +599,11 @@ class ScopingPlan(BaseModel):
         time_band: The coarse compute band. Code-supplied.
         source_turn_index: The Task Agent turn that approved this version.
         baseline_confirmed: The confirm-baseline record, once written.
+        risk_appetite: How far the shortlist may reach beyond options tried
+            elsewhere (task 055, S2). A payload stored before the field
+            existed reads as the default, ``mostly_tried``. The longlist does
+            not read it, so changing it alone never makes the longlist stale
+            (see :func:`longlist_inputs`).
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -601,6 +637,7 @@ class ScopingPlan(BaseModel):
     time_band: str = BASELINE_TIME_BAND
     source_turn_index: int | None = None
     baseline_confirmed: BaselineConfirmed | None = None
+    risk_appetite: RiskAppetite = DEFAULT_RISK_APPETITE
 
     @model_validator(mode="after")
     def validate_default_constraints(self) -> Self:
@@ -655,6 +692,66 @@ class ScopingPlan(BaseModel):
                 "the baseline"
             )
         return self
+
+
+#: The plan fields the longlist chain reads (task 055, A6): the fields
+#: ``compose_scoping`` and the longlist components take from the plan. A
+#: change to any of them makes a built longlist out of date; a change to any
+#: other field (the appetite, the steering mode, the title) does not. The
+#: question is one: suggest, constrain, theme, the profile and the shortlist
+#: all read it.
+LONGLIST_INPUT_FIELDS: frozenset[str] = frozenset(
+    {
+        "question",
+        "intended_change",
+        "target_unit",
+        "where",
+        "outcomes",
+        "depth",
+        "constraints",
+        "your_options",
+        "your_context",
+        "linked_task_ids",
+        "removed_defaults",
+    }
+)
+
+
+def longlist_inputs(plan: ScopingPlan) -> dict[str, Any]:
+    """Return the part of a plan the longlist was built from (task 055, A6).
+
+    Two plan versions whose projections are equal would build the same
+    longlist, so the "Rebuild longlist" prompt compares these rather than
+    version numbers. A payload stored before a field existed has already been
+    given that field's default by validation, so an older plan projects with
+    defaults.
+
+    Args:
+        plan: A validated scoping plan.
+
+    Returns:
+        The eleven longlist input fields as plain JSON-ready values.
+    """
+    return plan.model_dump(mode="json", include=set(LONGLIST_INPUT_FIELDS))
+
+
+def shortlist_proposal_stale(provenance: Mapping[str, Any], plan: ScopingPlan | None) -> bool:
+    """Whether the stored shortlist proposal is out of date (task 055, PG1).
+
+    It is when there is none yet (no appetite recorded) or when it was made
+    under another risk appetite than the plan's. A plan that cannot be read
+    (``None``) leaves a recorded proposal as it is.
+
+    Args:
+        provenance: ``longlist_result.shortlist["provenance"]``.
+        plan: The current approved plan, or ``None``.
+
+    Returns:
+        Whether a new proposal is due.
+    """
+    if "appetite" not in provenance:
+        return True
+    return plan is not None and provenance["appetite"] != plan.risk_appetite
 
 
 def _tagged_from_wire(value: TaggedText, *, field_name: str) -> Tagged:
@@ -1403,7 +1500,8 @@ def compose_scoping(
         plan: The validated scoping plan.
         purpose: The intent record's ``purpose``. ``None`` or ``"baseline"``
             compose the baseline; ``"longlist"`` and ``"targeted"`` compose
-            the longlist walk's chain and one option search's chain.
+            the longlist walk's chain and one option search's chain;
+            ``"shortlist"`` composes the shortlist walk's one step.
         context: The intent record's ``context``. A ``targeted`` record whose
             context carries ``acquire_only: true`` (a longlist walk's option
             search, task 046, AM4) composes :data:`ACQUIRE_ONLY_CHAIN`; without
@@ -1446,6 +1544,13 @@ def compose_scoping(
                     spine=spine,
                 )
                 for component, spine in LONGLIST_CHAIN
+            ]
+        )
+    if purpose == SHORTLIST_PURPOSE:
+        return ComposedChain(
+            steps=[
+                ComponentStep(component=component, directive_delta={}, spine=spine)
+                for component, spine in SHORTLIST_CHAIN
             ]
         )
     if purpose == TARGETED_PURPOSE:

@@ -1697,3 +1697,77 @@ def test_a_duplicate_merged_in_this_run_gets_no_label(conn: Connection) -> None:
     assert AUTHORITY_KEY in judgements[str(kept)]["1"]
     assert AUTHORITY_KEY not in judgements[str(dup)]["1"]
     assert _latest(walk).counts["authority_labelled"] == 1
+
+
+# --- a user's shortlist place at a Rebuild (task 055, P11, O1) ------------------------
+
+
+def test_a_shortlisted_duplicate_is_never_merged_away(conn: Connection) -> None:
+    walk = _walk(conn)
+    kept, dup = _duplicate_pair(walk, shortlist_state="added_by_you")
+    walk.build(StubLonglistBackend())
+
+    _constrain(walk, _duplicate_breach(kept, dup))
+
+    row = _row(walk, dup)
+    assert row.merged_into_option_id is None
+    assert (row.state, row.shortlist_state) == ("included", "added_by_you")
+    assert (_members(walk, kept), _members(walk, dup)) == (1, 1)
+    assert _latest(walk).counts["merged"] == 0
+    distinct = _latest(walk).judgements[str(dup)]["1"]["distinct"]
+    assert (distinct["verdict"], distinct["reason"]) == ("passes", DUPLICATE_KEPT_REASON)
+
+
+def test_two_shortlisted_duplicates_both_stay(conn: Connection) -> None:
+    walk = _walk(conn)
+    kept, dup = _duplicate_pair(walk, shortlist_state="added_by_you")
+    conn.execute(
+        update(option).where(option.c.option_id == kept).values(shortlist_state="added_by_you")
+    )
+    walk.build(StubLonglistBackend())
+
+    _constrain(walk, _duplicate_breach(kept, dup))
+
+    assert _row(walk, kept).merged_into_option_id is None
+    assert _row(walk, dup).merged_into_option_id is None
+    assert {_row(walk, oid).shortlist_state for oid in (kept, dup)} == {"added_by_you"}
+
+
+def test_an_unshortlisted_duplicate_still_merges_into_a_shortlisted_kept_option(
+    conn: Connection,
+) -> None:
+    walk = _walk(conn)
+    kept, dup = _duplicate_pair(walk)
+    conn.execute(
+        update(option).where(option.c.option_id == kept).values(shortlist_state="added_by_you")
+    )
+    walk.build(StubLonglistBackend())
+
+    _constrain(walk, _duplicate_breach(kept, dup))
+
+    assert _row(walk, dup).merged_into_option_id == kept
+    assert _row(walk, kept).shortlist_state == "added_by_you"
+
+
+def test_a_shortlisted_option_constrain_excludes_keeps_its_place_and_the_breach(
+    conn: Connection,
+) -> None:
+    walk = _walk(conn, _requirement("No benefit sanctions"))
+    kept = walk.option("Youth guarantee")
+    placed = walk.option("Sanctioned work search", shortlist_state="added_by_you")
+    walk.build(StubLonglistBackend())
+    backend = StubLonglistBackend(
+        constrain_responses=_response(
+            [kept, placed], ["req-1", *SCREEN_IDS], verdicts={(placed, "req-1"): "breaks"}
+        )
+    )
+
+    _constrain(walk, backend)
+
+    row = _row(walk, placed)
+    assert (row.state, row.shortlist_state) == ("excluded", "added_by_you")
+    assert row.exclusion["by"] == "constrain"
+    assert row.exclusion["constraint"] == "No benefit sanctions"
+    card = repository.option_out(conn, walk.task_id, placed)
+    assert card is not None
+    assert card.exclusion is not None and card.exclusion.constraint == "No benefit sanctions"

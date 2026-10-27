@@ -36,6 +36,7 @@ COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     "constrain": {"requires": ["evidence_scope_id"]},
     # Task 046 (R28): the included options grouped into themes, after constrain.
     "theme": {"requires": ["evidence_scope_id"]},
+    "shortlist": {"requires": ["evidence_scope_id"]},
 }
 VALID_COMPONENTS = set(COMPONENT_REGISTRY.keys())
 

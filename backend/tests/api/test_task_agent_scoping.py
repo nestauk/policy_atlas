@@ -27,14 +27,25 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.deps import get_executor, get_task_agent_backend
+from policy_atlas.api.longlist_start import LonglistRefused
+from policy_atlas.api.readmodels import repository
+from policy_atlas.api.routers import task_agent as task_agent_router
 from policy_atlas.core.schema import (
     artefact,
     capability_run,
     evidence_scope,
     task_plan,
 )
-from policy_atlas.runtime.scoping_plan import BASELINE_TIME_BAND
-from policy_atlas.runtime.task_agent_scoping import StubScopingTaskAgentBackend
+from policy_atlas.runtime.scoping_plan import (
+    BASELINE_TIME_BAND,
+    ScopingPlan,
+    longlist_inputs,
+    wire_draft_from_plan,
+)
+from policy_atlas.runtime.task_agent_scoping import (
+    StubScopingTaskAgentBackend,
+    _seed_draft,
+)
 from tests.api.resource_support import (
     api_client,
     create_scoping_task,
@@ -44,6 +55,8 @@ from tests.api.resource_support import (
     to_ready,
 )
 from tests.api.test_longlist_start import RecordingExecutor
+from tests.api.test_shortlist_start import _longlist as _seed_longlist
+from tests.api.test_shortlist_start import _option as _seed_option
 
 
 def _scope_rows(engine: Engine, task_id: str) -> list[dict[str, Any]]:
@@ -84,7 +97,7 @@ def _overrides() -> dict[Callable[..., object], Callable[..., object]]:
 # --- the conversation -------------------------------------------------------
 
 
-def test_the_stub_conversation_reaches_a_ready_plan_in_three_turns(
+def test_the_stub_conversation_reaches_a_ready_plan_in_four_turns(
     engine: Engine, tmp_path: Path
 ) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
@@ -96,6 +109,7 @@ def test_the_stub_conversation_reaches_a_ready_plan_in_three_turns(
     plan = final["scoping_plan"]
     assert plan["ready"] is True
     assert plan["depth"] == "standard"
+    assert plan["risk_appetite"] == "mostly_tried"
     assert plan["target_unit"] == {"text": "16 to 24 year olds", "origin": "your_call"}
     assert plan["where"] == {"text": "United Kingdom", "origin": "assumed"}
     assert plan["steering_mode"] == "moderate"
@@ -103,7 +117,7 @@ def test_the_stub_conversation_reaches_a_ready_plan_in_three_turns(
     assert [step["label"] for step in plan["steps"]] == [
         "Baseline",
         "Longlist",
-        "Shortlist and assessment",
+        "Shortlist",
     ]
 
 
@@ -116,6 +130,80 @@ def test_the_depth_card_carries_no_recommendation(engine: Engine, tmp_path: Path
     options = second["part"]["options"]
     assert [option["id"] for option in options] == ["rapid_pass", "standard_pass"]
     assert not any(option["primary"] for option in options)
+
+
+def test_the_appetite_card_offers_three_options_with_the_middle_primary(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        task_agent_turn_ok(client, owner, task_id, "Young people are not getting into work.")
+        task_agent_turn_ok(client, owner, task_id, "16 to 24 year olds")
+        third = task_agent_turn_ok(
+            client, owner, task_id, "[confirm part=depth option=rapid_pass]"
+        )
+    assert third["scoping_plan"]["ready"] is False
+    part = third["part"]
+    assert part["id"] == "appetite"
+    assert [(o["id"], o["primary"]) for o in part["options"]] == [
+        ("appetite_tried", False),
+        ("appetite_mostly", True),
+        ("appetite_open", False),
+    ]
+
+
+def test_an_appetite_chosen_by_marker_or_in_words_sets_the_plan(
+    engine: Engine, tmp_path: Path
+) -> None:
+    for answer, expected in (
+        ("[confirm part=appetite option=appetite_open]", "open_to_untested"),
+        ("only options that have been tried elsewhere", "tried_only"),
+    ):
+        with api_client(tmp_path, _overrides()) as (client, owner, _other):
+            task_id = create_scoping_task(client, owner)
+            task_agent_turn_ok(client, owner, task_id, "Young people are not getting into work.")
+            task_agent_turn_ok(client, owner, task_id, "16 to 24 year olds")
+            task_agent_turn_ok(client, owner, task_id, "[confirm part=depth option=rapid_pass]")
+            ready = task_agent_turn_ok(client, owner, task_id, answer)
+        assert ready["scoping_plan"]["ready"] is True
+        assert ready["scoping_plan"]["risk_appetite"] == expected
+
+
+def test_no_appetite_choice_reads_mostly_tried(engine: Engine, tmp_path: Path) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        task_agent_turn_ok(client, owner, task_id, "Young people are not getting into work.")
+        task_agent_turn_ok(client, owner, task_id, "16 to 24 year olds")
+        task_agent_turn_ok(client, owner, task_id, "[confirm part=depth option=rapid_pass]")
+        ready = task_agent_turn_ok(client, owner, task_id, "carry on")
+    assert ready["scoping_plan"]["ready"] is True
+    assert ready["scoping_plan"]["risk_appetite"] == "mostly_tried"
+    assert _plan_rows(engine, task_id)[0]["payload"]["risk_appetite"] == "mostly_tried"
+
+
+def test_a_chosen_appetite_survives_approval_seeding_and_a_later_patch(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        task_agent_turn_ok(client, owner, task_id, "Young people are not getting into work.")
+        task_agent_turn_ok(client, owner, task_id, "16 to 24 year olds")
+        task_agent_turn_ok(client, owner, task_id, "[confirm part=depth option=rapid_pass]")
+        task_agent_turn_ok(client, owner, task_id, "[confirm part=appetite option=appetite_open]")
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"scoping": {"where": {"text": "England", "origin": "your_call"}}},
+        )
+        assert patched.status_code == 200, patched.text
+
+    plans = _plan_rows(engine, task_id)
+    assert [p["payload"]["risk_appetite"] for p in plans] == ["open_to_untested"] * 2
+    seeded = wire_draft_from_plan(ScopingPlan.model_validate(plans[0]["payload"]))
+    assert "risk_appetite" not in seeded  # the seed helper adds it, in the profile
+    assert _seed_draft(ScopingPlan.model_validate(plans[0]["payload"]))[
+        "risk_appetite"
+    ] == "open_to_untested"
 
 
 def test_an_evidence_search_task_still_gets_the_evidence_search_shape(
@@ -207,6 +295,44 @@ def test_a_rebuild_after_a_change_reads_the_new_version(
     assert plans[2]["payload"]["steer_point_defaults"] == [
         {"steer_point": "baseline_confirm", "action": "proceed_flag"}
     ]
+
+
+def test_an_appetite_only_patch_mints_a_version_and_leaves_the_longlist_inputs(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Task 055 item 1: the appetite is a plan field the patch can change alone."""
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
+        before = client.get(f"/api/v1/tasks/{task_id}/plan", headers=owner).json()
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"scoping": {"risk_appetite": "open_to_untested"}},
+        )
+        assert patched.status_code == 200, patched.text
+
+    assert before["scoping"]["risk_appetite"] == "mostly_tried"
+    body = patched.json()
+    assert body["version"] == 2
+    assert body["scoping"]["risk_appetite"] == "open_to_untested"
+    plans = _plan_rows(engine, task_id)
+    assert [p["payload"]["risk_appetite"] for p in plans] == ["mostly_tried", "open_to_untested"]
+    older, newer = (ScopingPlan.model_validate(p["payload"]) for p in plans)
+    assert longlist_inputs(older) == longlist_inputs(newer)
+
+
+def test_an_unknown_appetite_in_a_patch_is_refused(engine: Engine, tmp_path: Path) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
+        refused = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"scoping": {"risk_appetite": "reckless"}},
+        )
+    assert refused.status_code == 422, refused.text
+    assert len(_plan_rows(engine, task_id)) == 1
 
 
 # --- GET /plan --------------------------------------------------------------
@@ -378,3 +504,138 @@ def test_confirm_baseline_does_not_apply_to_an_evidence_search_task(
             json={"artefact_id": str(uuid.uuid4()), "plan_version": 1},
         )
     assert refused.status_code == 422, refused.text
+
+
+# --- the appetite patch re-proposes the shortlist (task 055, P10) -----------------------
+
+
+def _with_longlist(engine: Engine, task_id: str) -> None:
+    """A finished longlist built from plan version 1, with one included option."""
+    plan_id = _plan_rows(engine, task_id)[0]["plan_id"]
+    _seed_longlist(engine, uuid.UUID(task_id), plan_id, version=1)
+    _seed_option(engine, uuid.UUID(task_id))
+
+
+def _shortlist_scopes(engine: Engine, task_id: str) -> list[dict[str, Any]]:
+    return [s for s in _scope_rows(engine, task_id) if s["purpose"] == "shortlist"]
+
+
+def _patch(client: Any, owner: Any, task_id: str, scoping: dict[str, Any]) -> Any:
+    return client.patch(f"/api/v1/tasks/{task_id}/plan", headers=owner, json={"scoping": scoping})
+
+
+def _executor_overrides(
+    executor: RecordingExecutor,
+) -> dict[Callable[..., object], Callable[..., object]]:
+    return {**_overrides(), get_executor: lambda: executor}
+
+
+def test_an_appetite_patch_with_a_longlist_opens_a_shortlist_walk(
+    engine: Engine, tmp_path: Path
+) -> None:
+    executor = RecordingExecutor(status="succeeded")
+    with api_client(tmp_path, _executor_overrides(executor)) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
+        _with_longlist(engine, task_id)
+        patched = _patch(client, owner, task_id, {"risk_appetite": "open_to_untested"})
+        assert patched.status_code == 200, patched.text
+
+    body = patched.json()
+    assert body["version"] == 2
+    assert body["opened_run"] is not None
+    assert [str(c["capability_run_id"]) for c in executor.submitted] == [
+        body["opened_run"]["capability_run_id"]
+    ]
+    (scope,) = _shortlist_scopes(engine, task_id)
+    assert scope["evidence_scope_id"] == executor.submitted[0]["evidence_scope_id"]
+    assert "suggest" not in scope["context"]  # release the picks and propose again
+    assert scope["plan_id"] == _plan_rows(engine, task_id)[1]["plan_id"]
+
+
+def test_an_appetite_patch_without_a_longlist_opens_nothing(
+    engine: Engine, tmp_path: Path
+) -> None:
+    executor = RecordingExecutor(status="succeeded")
+    with api_client(tmp_path, _executor_overrides(executor)) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
+        patched = _patch(client, owner, task_id, {"risk_appetite": "tried_only"})
+        assert patched.status_code == 200, patched.text
+    assert patched.json()["version"] == 2
+    assert patched.json()["opened_run"] is None
+    assert executor.submitted == []
+    assert _shortlist_scopes(engine, task_id) == []
+
+
+def test_the_version_commits_before_the_opener_and_a_refusal_leaves_the_proposal_stale(
+    engine: Engine, tmp_path: Path, monkeypatch: Any
+) -> None:
+    seen: list[list[int]] = []
+
+    def refuse(engine_: Engine, *, task_id: uuid.UUID, **_: Any) -> uuid.UUID:
+        # Read on a fresh connection: the patch's version is already committed.
+        seen.append([row["version"] for row in _plan_rows(engine_, str(task_id))])
+        raise LonglistRefused("capacity", "the walk executor is at capacity")
+
+    monkeypatch.setattr(task_agent_router, "open_shortlist_walk", refuse)
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
+        _with_longlist(engine, task_id)
+        patched = _patch(client, owner, task_id, {"risk_appetite": "open_to_untested"})
+        assert patched.status_code == 200, patched.text
+
+    assert seen == [[1, 2]]
+    assert patched.json()["version"] == 2
+    assert patched.json()["opened_run"] is None
+    with engine.connect() as conn:
+        served = repository.longlist_out(conn, uuid.UUID(task_id))
+    assert served is not None
+    assert served.shortlist.stale is True
+    assert served.plan_inputs_changed is False
+
+
+def test_an_outcome_change_opens_no_shortlist_walk_and_asks_for_a_rebuild(
+    engine: Engine, tmp_path: Path
+) -> None:
+    executor = RecordingExecutor(status="succeeded")
+    with api_client(tmp_path, _executor_overrides(executor)) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
+        _with_longlist(engine, task_id)
+        patched = _patch(
+            client,
+            owner,
+            task_id,
+            {
+                "outcomes": [{"text": "earnings at 25", "origin": "your_call"}],
+                "risk_appetite": "open_to_untested",
+            },
+        )
+        assert patched.status_code == 200, patched.text
+    assert patched.json()["opened_run"] is None
+    assert executor.submitted == []
+    with engine.connect() as conn:
+        served = repository.longlist_out(conn, uuid.UUID(task_id))
+    assert served is not None
+    assert served.plan_inputs_changed is True
+
+
+def test_a_second_caller_during_the_appetite_walk_is_run_active(
+    engine: Engine, tmp_path: Path
+) -> None:
+    executor = RecordingExecutor(status="running")
+    with api_client(tmp_path, _executor_overrides(executor)) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        to_ready(client, owner, task_id)
+        _with_longlist(engine, task_id)
+        first = _patch(client, owner, task_id, {"risk_appetite": "open_to_untested"})
+        assert first.status_code == 200, first.text
+        assert first.json()["opened_run"]["status"] == "running"
+        suggest = client.post(f"/api/v1/tasks/{task_id}/shortlist/suggest", headers=owner)
+        second = _patch(client, owner, task_id, {"risk_appetite": "tried_only"})
+    for refused in (suggest, second):
+        assert refused.status_code == 409, refused.text
+        assert refused.json()["error"]["code"] == "run_active"
+    assert len(executor.submitted) == 1

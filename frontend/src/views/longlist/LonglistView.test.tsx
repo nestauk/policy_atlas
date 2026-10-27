@@ -6,21 +6,33 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MOCK_OPTION_ID_EXCLUDED, MOCK_OPTION_ID_NO_IN_SCOPE, mockLonglist } from "../../mock/fixtures";
 import { LonglistView } from "./LonglistView";
 import { rowMetaParts } from "./longlistPresentation";
+import {
+  MOCK_OPTION_ID_PACKAGE,
+} from "../../mock/fixtures";
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
 
 vi.mock("../../api/queries", () => ({
   useTask: vi.fn(),
   usePlan: vi.fn(),
+  useRuns: vi.fn(),
 }));
 
 const excludeMutate = vi.fn();
 const includeMutate = vi.fn();
 const addMutate = vi.fn();
 
+const shortlistMutate = vi.fn();
+const unshortlistMutate = vi.fn();
+const suggestMutate = vi.fn();
+const patchMutate = vi.fn();
+
 vi.mock("../../api/mutations", () => ({
   useAddOption: vi.fn(),
   useOptionVerb: vi.fn(),
+  useShortlistVerb: vi.fn(),
+  useSuggestMore: vi.fn(),
+  usePatchPlan: vi.fn(),
 }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
@@ -28,6 +40,7 @@ const TASK_ID = "11111111-1111-1111-1111-111111111111";
 function renderLonglist(
   taskOverrides: Partial<{ active_run: unknown }> = {},
   adjust?: (longlist: ReturnType<typeof mockLonglist>) => void,
+  runs: { purpose?: string | null; status: string; capability_run_id: string }[] = [],
 ) {
   vi.mocked(queries.useTask).mockReturnValue(
     {
@@ -45,6 +58,19 @@ function renderLonglist(
         typeof mutations.useOptionVerb
       >,
   );
+  vi.mocked(mutations.useShortlistVerb).mockImplementation(
+    (_taskId, verb) =>
+      ({ mutate: verb === "shortlist" ? shortlistMutate : unshortlistMutate, isPending: false }) as unknown as ReturnType<
+        typeof mutations.useShortlistVerb
+      >,
+  );
+  vi.mocked(mutations.useSuggestMore).mockReturnValue(
+    { mutate: suggestMutate, isPending: false, isError: false } as unknown as ReturnType<typeof mutations.useSuggestMore>,
+  );
+  vi.mocked(mutations.usePatchPlan).mockReturnValue(
+    { mutate: patchMutate, isPending: false, isError: false } as unknown as ReturnType<typeof mutations.usePatchPlan>,
+  );
+  vi.mocked(queries.useRuns).mockReturnValue({ data: { data: runs } } as unknown as ReturnType<typeof queries.useRuns>);
   vi.mocked(mutations.useAddOption).mockReturnValue(
     { mutate: addMutate, isPending: false } as unknown as ReturnType<typeof mutations.useAddOption>,
   );
@@ -60,6 +86,10 @@ function renderLonglist(
 }
 
 beforeEach(() => {
+  shortlistMutate.mockClear();
+  unshortlistMutate.mockClear();
+  suggestMutate.mockClear();
+  patchMutate.mockClear();
   excludeMutate.mockClear();
   includeMutate.mockClear();
   addMutate.mockClear();
@@ -323,5 +353,24 @@ describe("LonglistView", () => {
     expect(screen.queryByText("National sanctions regime")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Show excluded/ }));
     expect(screen.getByText("National sanctions regime")).toBeInTheDocument();
+  });
+});
+
+describe("LonglistView — shortlist actions on rows (task 055)", () => {
+  it("List rows carry the place word on the grey line and the shortlist action", () => {
+    renderLonglist();
+    expect(rowMetaParts(mockLonglist().options!.find((o) => o.option_id === MOCK_OPTION_ID_PACKAGE)!)).toContain(
+      "Policy Atlas's pick",
+    );
+    expect(
+      rowMetaParts(mockLonglist().options!.find((o) => o.option_id === MOCK_OPTION_ID_NO_IN_SCOPE)!),
+    ).not.toContain("Policy Atlas's pick");
+  });
+
+  it("List rows show Add and Remove, disabled while a walk runs", async () => {
+    const user = userEvent.setup();
+    renderLonglist({ active_run: { capability_run_id: "x", status: "running", started_at: "2026-10-27T00:00:00Z" } });
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    for (const button of screen.getAllByRole("button", { name: /shortlist/ })) expect(button).toBeDisabled();
   });
 });

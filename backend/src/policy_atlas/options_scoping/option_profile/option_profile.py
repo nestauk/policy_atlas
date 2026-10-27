@@ -130,9 +130,13 @@ from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
 )
 from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
     OPTION_PROFILE_PROMPT_VERSION,
+    POTENTIAL_IMPACT_HARD_MAX_CHARS,
+    POTENTIAL_IMPACT_LINE,
+    POTENTIAL_IMPACT_MAX_CHARS,
     AmbitionResponse,
     MarkedLineResponse,
     PlainLineResponse,
+    PotentialImpactResponse,
     SettingResponse,
     line_is_marked,
 )
@@ -506,7 +510,7 @@ def _evidence_records(
 def _profile_payload(
     options: Sequence[_ProfiledOption], records: Mapping[uuid.UUID, list[dict[str, object]]]
 ) -> tuple[list[dict[str, object]], dict[str, uuid.UUID]]:
-    """The one option list all ten profile calls read (S16).
+    """The one option list all the profile calls read (S16).
 
     Short ids ``o1 … oN`` in list order, mapped back to the option ids in
     code.
@@ -526,6 +530,43 @@ def _profile_payload(
         for short_id, o in zip(short_ids, options, strict=True)
     ]
     return payload, short_ids
+
+
+def _potential_impact_payload(
+    payload: Sequence[Mapping[str, object]],
+    short_ids: Mapping[str, uuid.UUID],
+    coverage: object,
+) -> list[dict[str, object]]:
+    """The Potential impact call's option list: the shared entries plus the reach (P13).
+
+    Per option, from its stored coverage entry: ``tried_on`` (the units its
+    records were tried on), ``evaluated_countries`` and ``role`` (documents
+    that describe, recommend or evaluate it). An option with no coverage entry
+    gets empty values.
+
+    Args:
+        payload: The shared per-option payload.
+        short_ids: Short id to option id.
+        coverage: ``longlist_result.coverage``.
+
+    Returns:
+        One dict per option, in the payload's order.
+    """
+    stored = coverage if isinstance(coverage, Mapping) else {}
+    out: list[dict[str, object]] = []
+    for entry in payload:
+        option_id = short_ids[str(entry["option_id"])]
+        held = stored.get(str(option_id))
+        held = held if isinstance(held, Mapping) else {}
+        out.append(
+            {
+                **entry,
+                "tried_on": list(held.get("tried_on") or []),
+                "evaluated_countries": list(held.get("evaluated_countries") or []),
+                "role": dict(held.get("role") or {}),
+            }
+        )
+    return out
 
 
 def _covers_the_list(answered: Sequence[str], short_ids: Mapping[str, uuid.UUID]) -> bool:
@@ -559,7 +600,9 @@ def _checked_line(
     On ``who_decides`` and ``dependencies`` the mark is ``None`` whatever
     the response holds (R36).
     """
-    pairs = _answered(response, (MarkedLineResponse, PlainLineResponse), short_ids)
+    pairs = _answered(
+        response, (MarkedLineResponse, PlainLineResponse, PotentialImpactResponse), short_ids
+    )
     if pairs is None:
         return None
     marked = line_is_marked(line_key)
@@ -568,6 +611,15 @@ def _checked_line(
         sentence = wire.answer.strip()
         if not sentence:
             return None
+        if line_key == POTENTIAL_IMPACT_LINE and len(sentence) > POTENTIAL_IMPACT_MAX_CHARS:
+            log.warning(
+                "option_profile.potential_impact_over_ceiling",
+                option_id=short_id,
+                chars=len(sentence),
+                hard_max=POTENTIAL_IMPACT_HARD_MAX_CHARS,
+            )
+            if len(sentence) > POTENTIAL_IMPACT_HARD_MAX_CHARS:
+                return None
         stands_out = getattr(wire, "stands_out", "no") if marked else "no"
         lines[short_id] = _Line(sentence=sentence, mark=_mark(stands_out))
     return lines
@@ -619,11 +671,15 @@ def _profile_calls(
     payload: list[dict[str, object]],
     short_ids: Mapping[str, uuid.UUID],
     considerations: list[str] | None = None,
+    impact_payload: list[dict[str, object]] | None = None,
+    impact_plan: dict[str, object] | None = None,
 ) -> list[tuple[str, Callable[[], UsageResult[Any]], Callable[[Any], Mapping[str, Any] | None]]]:
-    """The ten profile calls: one per line, the ambition, the setting (R36, R40, R41).
+    """The eleven profile calls: one per line, the ambition, the setting (R36, R40, R41).
 
     Where and the plan's who-can-act constraint texts reach the ``who_decides``
-    call only (task 046, amendment 4: R89; S35).
+    call only (task 046, amendment 4: R89; S35). The ``potential_impact`` line
+    has its own call and payload (task 055, P13): ``impact_payload`` and
+    ``impact_plan`` (the shared ones when not given).
     """
 
     def _line(line_key: str) -> Callable[[], UsageResult[Any]]:
@@ -641,7 +697,22 @@ def _profile_calls(
 
     calls: list[
         tuple[str, Callable[[], UsageResult[Any]], Callable[[Any], Mapping[str, Any] | None]]
-    ] = [(line_key, _line(line_key), _line_check(line_key)) for line_key in PROFILE_LINE_KEYS]
+    ] = [
+        (line_key, _line(line_key), _line_check(line_key))
+        for line_key in PROFILE_LINE_KEYS
+        if line_key != POTENTIAL_IMPACT_LINE
+    ]
+    calls.append(
+        (
+            POTENTIAL_IMPACT_LINE,
+            lambda: backend.profile_potential_impact(
+                plan=impact_plan if impact_plan is not None else plan,
+                baseline_sections=baseline,
+                options=impact_payload if impact_payload is not None else payload,
+            ),
+            _line_check(POTENTIAL_IMPACT_LINE),
+        )
+    )
     calls.append(
         (
             _AMBITION_CALL,
@@ -869,6 +940,8 @@ def option_profile_scope(
     options = _profiled_options(conn, task_id=task_id)
     records = _evidence_records(conn, task_id=task_id, option_ids=[o.option_id for o in options])
     payload, short_ids = _profile_payload(options, records)
+    impact_payload = _potential_impact_payload(payload, short_ids, result_row.coverage)
+    impact_plan = {**plan_data, "where": plan.where.text}
     # The folding calls read the distinct words of every member (S21).
     membership = read_membership(
         conn,
@@ -891,6 +964,8 @@ def option_profile_scope(
             payload=payload,
             short_ids=short_ids,
             considerations=who_decides_considerations(plan) or None,
+            impact_payload=impact_payload,
+            impact_plan=impact_plan,
         )
         if options
         else []
