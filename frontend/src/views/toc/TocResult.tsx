@@ -20,7 +20,7 @@ export function TocResult({ taskId }: { taskId: string }) {
   const graph = toc.data;
   if (graph == null || graph.boxes.length === 0) {
     return (
-      <main aria-busy={toc.isPending} className="mx-auto w-full max-w-[1280px] px-6 py-10">
+      <main aria-busy={toc.isPending} className="mx-auto my-8 w-full max-w-[1280px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
         <p className="text-body text-grey">{toc.isPending ? "Loading the theory of change…" : "The theory of change is being drafted."}</p>
       </main>
     );
@@ -29,7 +29,7 @@ export function TocResult({ taskId }: { taskId: string }) {
   const running = graph.check_status === "drafting" || graph.check_status === "checking";
   const titles = pathwayTitles(graph);
   return (
-    <main className="mx-auto w-full max-w-[1280px] px-6 py-8 max-md:px-4">
+    <main className="mx-auto my-8 w-full max-w-[1280px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0">
       <h1 className="text-title font-extrabold leading-tight tracking-[-0.2px] text-navy">{scrub(tocTitle(graph))}</h1>
       {(graph.summary !== null || running) && (
         <div className="mt-3 grid max-w-[1000px] gap-x-8 gap-y-3 text-body md:grid-cols-2">

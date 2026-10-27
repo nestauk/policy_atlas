@@ -124,7 +124,7 @@ describe("detailed information", () => {
     // Take-up holds link 3 (critical) and link 6.
     const takeUp = within(info).getByText("Take-up").parentElement as HTMLElement;
     expect(within(takeUp).getByText("Condition for link 6")).toBeInTheDocument();
-    expect(within(takeUp).getByText(/Critical connection · test this first\./)).toBeInTheDocument();
+    expect(within(takeUp).getByText(/Critical connection · test this first/)).toBeInTheDocument();
   });
 
   it("lists the set-aside pathways and the evaluation questions", async () => {

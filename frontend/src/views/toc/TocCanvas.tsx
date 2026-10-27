@@ -1,8 +1,11 @@
 import "@xyflow/react/dist/style.css";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BaseEdge,
+  ControlButton,
   Controls,
+  getViewportForBounds,
   getSmoothStepPath,
   Handle,
   MarkerType,
@@ -12,6 +15,9 @@ import {
   type EdgeProps,
   type Node,
   type NodeProps,
+  useReactFlow,
+  useStore,
+  useStoreApi,
 } from "@xyflow/react";
 
 import { scrub } from "../../lib/scrub";
@@ -52,6 +58,11 @@ type BoxNode = Node<BoxData, "box">;
 type LabelNode = Node<LabelData, "label">;
 type TocEdge = Edge<EdgeData, "toc">;
 
+const LABEL_W = 200;
+const LABEL_H = 20;
+/** Never zoom out below this on load: smaller and the box text is hard to read. */
+const MIN_START_ZOOM = 0.75;
+const VIEW_PADDING = 0.08;
 const HANDLE_CLASS = "!h-1 !w-1 !border-0 !bg-transparent";
 
 function BoxView({ data }: NodeProps<BoxNode>) {
@@ -123,6 +134,37 @@ const HANDLES = [
 ];
 
 /**
+ * Sets the viewport: the whole graph (or the chosen pathway) fitted to the
+ * view but never below MIN_START_ZOOM. When the graph is wider than fits at
+ * that zoom it starts at the left edge, vertically centred, so the user pans
+ * right. Also serves the "fit view" button and full-screen changes.
+ */
+function ViewFitter({ boxes, bounds, refit }: { boxes: number; bounds: Bounds; refit: number }) {
+  const { setViewport } = useReactFlow();
+  const store = useStoreApi();
+  const ready = useStore((state) => state.width > 0 && state.height > 0);
+  const { x, y, width, height } = bounds;
+  useEffect(() => {
+    if (!ready) return;
+    const { width: viewW, height: viewH } = store.getState();
+    const fitted = getViewportForBounds({ x, y, width, height }, viewW, viewH, 0.1, 2, VIEW_PADDING);
+    if (fitted.zoom >= MIN_START_ZOOM) {
+      void setViewport(fitted);
+      return;
+    }
+    void setViewport({ x: 24 - x * MIN_START_ZOOM, y: (viewH - height * MIN_START_ZOOM) / 2 - y * MIN_START_ZOOM, zoom: MIN_START_ZOOM });
+  }, [ready, boxes, x, y, width, height, refit, setViewport, store]);
+  return null;
+}
+
+interface Bounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
  * The canvas: boxes in four layer columns, curved connections coloured by
  * their lower grade, failure pathways under a line. Read-only; clicking a box
  * or a connection selects it. Set-aside pathways never appear here.
@@ -153,6 +195,35 @@ export function TocCanvas({
     }
   }
 
+  const placedInView = layout.boxes.filter((placed) => pathway === "all" || inView.has(placed.id));
+  const bounds: Bounds =
+    placedInView.length === 0
+      ? { x: 0, y: 0, width: layout.width, height: BOX_H }
+      : (() => {
+          const left = pathway === "all" ? 0 : Math.min(...placedInView.map((placed) => placed.x));
+          const right = pathway === "all" ? layout.width : Math.max(...placedInView.map((placed) => placed.x + BOX_W));
+          const top = pathway === "all" ? 0 : Math.min(...placedInView.map((placed) => placed.y));
+          const bottom = Math.max(...placedInView.map((placed) => placed.y + BOX_H));
+          return { x: left, y: top, width: right - left, height: bottom - top };
+        })();
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [refit, setRefit] = useState(0);
+  const canFullscreen = typeof document !== "undefined" && document.fullscreenEnabled === true;
+  useEffect(() => {
+    const onChange = () => {
+      setFullscreen(document.fullscreenElement === boxRef.current);
+      // Let the canvas settle to its new size, then fit again.
+      window.setTimeout(() => setRefit((count) => count + 1), 150);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement === boxRef.current) void document.exitFullscreen();
+    else void boxRef.current?.requestFullscreen();
+  }, []);
+
   const nodes: Array<BoxNode | LabelNode> = [
     ...layout.headings.map(
       (heading, index): LabelNode => ({
@@ -160,6 +231,10 @@ export function TocCanvas({
         type: "label",
         position: { x: heading.x, y: HEADER_H - 36 },
         data: { text: heading.label },
+        // Explicit sizes: a node without them loses its measurement each time the
+        // nodes array is rebuilt, and React Flow's "fit view" then waits forever.
+        width: LABEL_W,
+        height: LABEL_H,
         draggable: false,
         selectable: false,
         focusable: false,
@@ -173,6 +248,8 @@ export function TocCanvas({
             type: "label",
             position: { x: 0, y: layout.lineY },
             data: { text: "", line: true, width: layout.width },
+            width: layout.width,
+            height: 1,
             draggable: false,
             selectable: false,
             focusable: false,
@@ -182,6 +259,8 @@ export function TocCanvas({
             type: "label",
             position: { x: 0, y: layout.lineY + 10 },
             data: { text: "If it goes wrong" },
+            width: LABEL_W,
+            height: LABEL_H,
             draggable: false,
             selectable: false,
             focusable: false,
@@ -235,7 +314,7 @@ export function TocCanvas({
     });
 
   return (
-    <div className="toc-canvas h-[560px] min-w-0 flex-1 border border-line bg-paper-2" role="group" aria-label="Theory of change canvas">
+    <div ref={boxRef} className={`toc-canvas min-w-0 flex-1 border border-line bg-paper-2 ${fullscreen ? "h-screen" : "h-[640px]"}`} role="group" aria-label="Theory of change canvas">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -244,8 +323,6 @@ export function TocCanvas({
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
-        fitView
-        fitViewOptions={{ padding: 0.08 }}
         minZoom={0.3}
         onNodeClick={(_, node) => {
           if (node.type === "box") onSelect({ kind: "box", id: node.id });
@@ -253,7 +330,22 @@ export function TocCanvas({
         onEdgeClick={(_, edge) => onSelect({ kind: "link", id: edge.id })}
         onPaneClick={() => onSelect(null)}
       >
-        <Controls showInteractive={false} />
+        <ViewFitter boxes={layout.boxes.length} bounds={bounds} refit={refit} />
+        <Controls showInteractive={false} showFitView={false}>
+          {/* Our own fit button: the library's would fit below the minimum zoom. */}
+          <ControlButton onClick={() => setRefit((count) => count + 1)} title="Fit view" aria-label="Fit view">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+              <rect x="5" y="5" width="14" height="14" />
+            </svg>
+          </ControlButton>
+          {canFullscreen && (
+            <ControlButton onClick={toggleFullscreen} title={fullscreen ? "Exit full screen" : "Full screen"} aria-label={fullscreen ? "Exit full screen" : "Full screen"}>
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                {fullscreen ? <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /> : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}
+              </svg>
+            </ControlButton>
+          )}
+        </Controls>
       </ReactFlow>
     </div>
   );
