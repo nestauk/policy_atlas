@@ -810,8 +810,13 @@ class Harness:
     """Shared clients, the cache, and the repo's pipeline steps."""
 
     def __init__(
-        self, budget: float, cache_path: Path, reuse_labels: bool = True
+        self,
+        budget: float,
+        cache_path: Path,
+        reuse_labels: bool = True,
+        task: str = DEFAULT_TASK,
     ) -> None:
+        self.task = task
         OUT.mkdir(exist_ok=True)
         (OUT / ".gitignore").write_text("*\n")
         self.cache = Cache(cache_path, budget)
@@ -848,7 +853,7 @@ class Harness:
         )
         out: dict[str, str] = {}
         with get_engine().connect() as conn:
-            for row in conn.execute(q, {"t": DEFAULT_TASK}):
+            for row in conn.execute(q, {"t": self.task}):
                 for k in (
                     norm_doi(row.doi) and "doi:" + norm_doi(row.doi),
                     short_oa(row.rid) and "oa:" + short_oa(row.rid),
@@ -1502,6 +1507,9 @@ def metrics(
         "judged_docs": [
             {
                 "title": d.title[:160],
+                "year": d.year,
+                "key": d.key,
+                "url": d.url or (f"https://doi.org/{d.doi}" if d.doi else None),
                 "source": d.source,
                 "type": d.evidence_type,
                 "score": d.score,
@@ -2025,7 +2033,9 @@ def no_evidence(judged: dict[str, tuple[Doc, dict]]) -> bool:
     )
 
 
-def arm_r2(h: Harness, link: Link, gold: dict[str, Any]) -> list[dict[str, Any]]:
+def arm_r2(
+    h: Harness, link: Link, gold: dict[str, Any], force: bool = False
+) -> list[dict[str, Any]]:
     """Round 1 = the product's light link check with the keyword pair; round 2 (broad,
     and broad plus a trusted-site web search) for links with no evidence, and in the
     "-weak" variants also for links whose better grade is weak. One row per variant;
@@ -2048,8 +2058,8 @@ def arm_r2(h: Harness, link: Link, gold: dict[str, Any]) -> list[dict[str, Any]]
     judged1 = judge_and_classify(h, m1, link, picked1)
     wall1 = round(time.monotonic() - t1, 1)
     ge, gh = grades(judged1)
-    trig_none = no_evidence(judged1)
-    trig_weak = max(
+    trig_none = force or no_evidence(judged1)
+    trig_weak = force or max(
         GRADE_ORDER.index(ge.grade), GRADE_ORDER.index(gh.grade)
     ) <= GRADE_ORDER.index("weak")
     base = metrics(
@@ -2494,7 +2504,9 @@ def compare(tags: list[str]) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--task", default=DEFAULT_TASK)
+    ap.add_argument(
+        "--task", default=DEFAULT_TASK, help="the task whose links are loaded"
+    )
     ap.add_argument("--link", action="append", default=[])
     ap.add_argument(
         "--models", choices=["56", "6x"], default="56", help="read by _route.py"
@@ -2547,7 +2559,9 @@ def main() -> None:
     out_dir = OUT / (args.tag or f"m{args.models}")
     out_dir.mkdir(parents=True, exist_ok=True)
     gold_all = json.loads(args.gold.read_text())
-    h = Harness(args.budget, args.cache, reuse_labels=args.models == "56")
+    h = Harness(
+        args.budget, args.cache, reuse_labels=args.models == "56", task=args.task
+    )
     print(
         "route",
         h.r.name,
@@ -2571,6 +2585,7 @@ def main() -> None:
         "L-pick15": partial(arm_l, rule="pick", n=15, name="L-pick15"),
         "L-pick50": partial(arm_l, rule="pick", name="L-pick50", q1_n=50),
         "R2": arm_r2,
+        "R2force": partial(arm_r2, force=True),  # round 2 whatever round 1 found
     }
     link_wall: dict[str, float] = {}
 
