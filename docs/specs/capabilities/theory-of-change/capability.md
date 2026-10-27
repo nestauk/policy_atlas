@@ -232,7 +232,8 @@ plan ══approve══▶ draft or import ─▶ search and screen (background
 
 ✅ The canvas is the default view of the Result tab (approach § 7). ✅ The layout follows the owner's
 wireframe review of 2026-10-26 (`docs/tasks/054-toc-integration/wireframes.html`, version 21).
-Visual rules: one font, the app's own, in the app's sizes; colour means evidence grade and nothing
+Visual rules: one font, the app's own, in the app's sizes, with the Evidence search report's four
+text styles on a white card ([report typography](../../../knowledge/report-typography.md)); colour means evidence grade and nothing
 else; blue means actions and things to review; no counts, badges or captions on the canvas; detail
 appears on hover, on click, and in Detailed information.
 

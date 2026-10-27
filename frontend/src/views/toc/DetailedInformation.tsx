@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
-import { REPORT_BODY_CLASS, REPORT_PART_HEADING_CLASS } from "../artefactPresentation";
+import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS } from "../artefactPresentation";
 import { SectionDisclosure } from "../ArtefactOutline";
 import { GradeWords, QuestionDocuments } from "./Documents";
 import { groupAssumptions, GRADE_VAR, keptPathways, LAYER_LABEL, pathwayTitles } from "./tocModel";
@@ -43,7 +43,7 @@ function WithDocuments({ documents, question, children }: { documents: TocDocume
 function BoxRow({ box }: { box: TocBox }) {
   return (
     <div className="py-3">
-      <p className="text-meta text-grey">{LAYER_LABEL[box.layer]}</p>
+      <p className={REPORT_LABEL_CLASS}>{LAYER_LABEL[box.layer]}</p>
       <p className={`${REPORT_BODY_CLASS} font-bold text-navy`}>{scrub(box.text)}</p>
       {box.description !== null && <p className={P}>{scrub(box.description)}</p>}
     </div>
@@ -58,7 +58,7 @@ function LinkRow({ link, documents }: { link: TocLink; documents: TocDocument[] 
       className="my-1 ml-3 border-l-2 py-2 pl-5"
       style={{ borderLeftColor: pending ? "var(--color-line-2)" : GRADE_VAR[grade], borderLeftStyle: grade === "weak" || grade === "none" ? "dashed" : "solid" }}
     >
-      {link.critical && <p className="text-meta font-bold text-navy">{CRITICAL}</p>}
+      {link.critical && <p className={REPORT_LABEL_CLASS}>{CRITICAL}</p>}
       <p className={P}>{scrub(link.sentence)}</p>
       {link.merged ? (
         <WithDocuments documents={documents} question="elsewhere">
@@ -108,28 +108,29 @@ function Assumptions({ graph }: { graph: TocGraph }) {
   const groups = groupAssumptions(graph);
   const boxText = new Map(graph.boxes.map((box) => [box.box_id, box.text]));
   if (groups.length === 0) return <p className={P}>No assumptions recorded.</p>;
+  // Report typography only: a label per type, then body text. One entry per
+  // link: the step it belongs to, its conditions, then its evidence once.
   return (
     <>
       {groups.map((group) => {
-        // One entry per link: its conditions together, then its evidence once.
         const links = [...new Map(group.items.map(({ link }) => [link.link_id, link])).values()];
         return (
-          <div key={group.key} className="mt-4">
-            <p className="text-meta font-bold text-navy">{group.label}</p>
+          <div key={group.key} className="mt-5">
+            <p className={REPORT_LABEL_CLASS}>{group.label}</p>
             {links.map((link) => (
-              <div key={link.link_id} className="mt-3">
-                <ul className={`list-disc pl-5 ${REPORT_BODY_CLASS}`}>
+              <div key={link.link_id} className={`mt-2 max-w-[44em] ${REPORT_BODY_CLASS}`}>
+                <p>
+                  On the step from {scrub(boxText.get(link.source_box_id) ?? "")} to {scrub(boxText.get(link.target_box_id) ?? "")}:
+                </p>
+                <ul className="mt-1 list-disc pl-6">
                   {link.conditions.map((condition) => (
                     <li key={condition}>{scrub(condition)}</li>
                   ))}
                 </ul>
-                <p className={P}>
+                <p className="mt-1">
                   <GradeWords grade={link.here.grade} question="here" />
-                  {link.here_sentence !== null && <> {scrub(link.here_sentence)}</>}
-                </p>
-                <p className="text-meta text-grey">
-                  On {scrub(boxText.get(link.source_box_id) ?? "")} → {scrub(boxText.get(link.target_box_id) ?? "")}
-                  {link.critical && <span className="font-bold text-navy"> · {CRITICAL}</span>}
+                  {link.here.grade !== "none" && link.here_sentence !== null && <> {scrub(link.here_sentence)}</>}
+                  {link.critical && <strong className="text-navy"> {CRITICAL}.</strong>}
                 </p>
               </div>
             ))}

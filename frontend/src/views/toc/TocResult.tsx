@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { useToc, useTocEvidence } from "../../api/queries";
 import { scrub } from "../../lib/scrub";
+import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS } from "../artefactPresentation";
 import { Button } from "../../ui/brand/Button";
 import { DetailedInformation } from "./DetailedInformation";
 import { DetailPanel, type Selection } from "./DetailPanel";
@@ -32,18 +33,18 @@ export function TocResult({ taskId }: { taskId: string }) {
     <main className="mx-auto my-8 w-full max-w-[1280px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0">
       <h1 className="text-title font-extrabold leading-tight tracking-[-0.2px] text-navy">{scrub(tocTitle(graph))}</h1>
       {(graph.summary !== null || running) && (
-        <div className="mt-3 grid max-w-[1000px] gap-x-8 gap-y-3 text-body md:grid-cols-2">
+        <div className={`mt-4 grid max-w-[1100px] gap-x-10 gap-y-4 md:grid-cols-2 ${REPORT_BODY_CLASS}`}>
           {running ? (
             <p className="md:col-span-2">Policy Atlas is checking each step against the evidence. Steps take their colour as they are checked.</p>
           ) : (
             graph.summary !== null && (
               <>
                 <div>
-                  <h2 className="text-body font-bold text-navy">About this theory</h2>
+                  <h2 className={REPORT_LABEL_CLASS}>About this theory</h2>
                   <p>{scrub(graph.summary.about)}</p>
                 </div>
                 <div>
-                  <h2 className="text-body font-bold text-navy">What the evidence says</h2>
+                  <h2 className={REPORT_LABEL_CLASS}>What the evidence says</h2>
                   <p>{scrub(graph.summary.evidence_says)}</p>
                 </div>
               </>

@@ -12,6 +12,8 @@ export const REPORT_PART_HEADING_CLASS =
   "text-[28px] font-extrabold uppercase tracking-[0.06em] leading-[1.2] text-navy max-md:text-[22px]";
 export const REPORT_SECTION_HEADING_CLASS = "text-heading font-bold text-navy max-md:text-[20px]";
 export const REPORT_BODY_CLASS = "text-lead text-ink max-md:text-body";
+/** A short label above content ("REPORT", "SOURCES", "INPUT"): never a sentence. */
+export const REPORT_LABEL_CLASS = "text-meta font-bold uppercase tracking-[0.06em] text-grey";
 
 /** Contents-sidebar anchors for report part headings. */
 export const EXECUTIVE_SUMMARY_ANCHOR = "executive-summary";
