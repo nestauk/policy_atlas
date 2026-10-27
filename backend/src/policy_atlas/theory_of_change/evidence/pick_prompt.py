@@ -19,7 +19,7 @@ from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
 TOC_PICK_PROMPT_VERSION = "toc_pick_v1"
-TOC_PICK_MAX_OUTPUT_TOKENS = 1_000
+TOC_PICK_MAX_OUTPUT_TOKENS = 4_000  # gpt-6-luna reasons before answering; 1,000 ran out (eval, 2026-10-27)
 
 #: Documents picked per link, and the abstract length each candidate shows.
 PICK_N = 10
