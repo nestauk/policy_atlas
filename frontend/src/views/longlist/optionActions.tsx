@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-import { useOptionVerb } from "../../api/mutations";
+import type { components } from "../../api/gen/types";
+import { useOptionVerb, useShortlistVerb } from "../../api/mutations";
 import { actionFailedNotice } from "../../lib/errors";
 import { Button } from "../../ui/brand/Button";
 
@@ -18,6 +19,8 @@ export type ActionNotice = { optionId: string | null; text: string };
 export function useOptionActions(taskId: string, walkActive: boolean) {
   const excludeOption = useOptionVerb(taskId, "exclude");
   const includeOption = useOptionVerb(taskId, "include");
+  const shortlistOption = useShortlistVerb(taskId, "shortlist");
+  const unshortlistOption = useShortlistVerb(taskId, "unshortlist");
   const [excludingId, setExcludingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<ActionNotice | null>(null);
 
@@ -45,6 +48,33 @@ export function useOptionActions(taskId: string, walkActive: boolean) {
     );
   };
 
+  const shortlist = (optionId: string) => {
+    if (shortlistOption.isPending || walkActive) return;
+    setNotice(null);
+    shortlistOption.mutate(
+      { optionId },
+      {
+        onError: (error) =>
+          setNotice({ optionId, text: actionFailedNotice(error, "The option couldn't be added to the shortlist. Try again.") }),
+      },
+    );
+  };
+
+  const unshortlist = (optionId: string) => {
+    if (unshortlistOption.isPending || walkActive) return;
+    setNotice(null);
+    unshortlistOption.mutate(
+      { optionId },
+      {
+        onError: (error) =>
+          setNotice({
+            optionId,
+            text: actionFailedNotice(error, "The option couldn't be removed from the shortlist. Try again."),
+          }),
+      },
+    );
+  };
+
   return {
     walkActive,
     excludingId,
@@ -53,12 +83,61 @@ export function useOptionActions(taskId: string, walkActive: boolean) {
     setNotice,
     exclude,
     include,
+    shortlist,
+    unshortlist,
+    shortlistPending: shortlistOption.isPending,
+    unshortlistPending: unshortlistOption.isPending,
     excludePending: excludeOption.isPending,
     includePending: includeOption.isPending,
   };
 }
 
 type OptionActions = ReturnType<typeof useOptionActions>;
+type ShortlistState = NonNullable<components["schemas"]["OptionSummaryOut"]["shortlist"]>["state"];
+
+/** "Add to shortlist" on an included option holding no place (or only a
+ *  Policy Atlas pick), "Remove from shortlist" on one holding any place
+ *  (task 055). Nothing for an excluded or merged option. */
+export function ShortlistActionButton({
+  actions,
+  optionId,
+  shortlistState,
+  excluded,
+  className,
+}: {
+  actions: OptionActions;
+  optionId: string;
+  shortlistState: ShortlistState | null | undefined;
+  excluded: boolean;
+  className?: string;
+}) {
+  const holds = shortlistState === "proposed" || shortlistState === "added_by_you";
+  if (holds) {
+    return (
+      <Button
+        variant="secondary"
+        size="sm"
+        className={className}
+        disabled={actions.unshortlistPending || actions.walkActive}
+        onClick={() => actions.unshortlist(optionId)}
+      >
+        Remove from shortlist
+      </Button>
+    );
+  }
+  if (excluded) return null;
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      className={className}
+      disabled={actions.shortlistPending || actions.walkActive}
+      onClick={() => actions.shortlist(optionId)}
+    >
+      Add to shortlist
+    </Button>
+  );
+}
 
 /** "Include again" on an excluded option, else "Exclude" (hidden while its
  *  reason form is open). */

@@ -6,21 +6,34 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MOCK_OPTION_ID_EXCLUDED, MOCK_OPTION_ID_NO_IN_SCOPE, mockLonglist } from "../../mock/fixtures";
 import { LonglistView } from "./LonglistView";
 import { rowMetaParts } from "./longlistPresentation";
+import {
+  MOCK_OPTION_ID_ADDED_BY_YOU,
+  MOCK_OPTION_ID_PACKAGE,
+} from "../../mock/fixtures";
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
 
 vi.mock("../../api/queries", () => ({
   useTask: vi.fn(),
   usePlan: vi.fn(),
+  useRuns: vi.fn(),
 }));
 
 const excludeMutate = vi.fn();
 const includeMutate = vi.fn();
 const addMutate = vi.fn();
 
+const shortlistMutate = vi.fn();
+const unshortlistMutate = vi.fn();
+const suggestMutate = vi.fn();
+const patchMutate = vi.fn();
+
 vi.mock("../../api/mutations", () => ({
   useAddOption: vi.fn(),
   useOptionVerb: vi.fn(),
+  useShortlistVerb: vi.fn(),
+  useSuggestMore: vi.fn(),
+  usePatchPlan: vi.fn(),
 }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
@@ -28,6 +41,7 @@ const TASK_ID = "11111111-1111-1111-1111-111111111111";
 function renderLonglist(
   taskOverrides: Partial<{ active_run: unknown }> = {},
   adjust?: (longlist: ReturnType<typeof mockLonglist>) => void,
+  runs: { purpose?: string | null; status: string; capability_run_id: string }[] = [],
 ) {
   vi.mocked(queries.useTask).mockReturnValue(
     {
@@ -45,6 +59,19 @@ function renderLonglist(
         typeof mutations.useOptionVerb
       >,
   );
+  vi.mocked(mutations.useShortlistVerb).mockImplementation(
+    (_taskId, verb) =>
+      ({ mutate: verb === "shortlist" ? shortlistMutate : unshortlistMutate, isPending: false }) as unknown as ReturnType<
+        typeof mutations.useShortlistVerb
+      >,
+  );
+  vi.mocked(mutations.useSuggestMore).mockReturnValue(
+    { mutate: suggestMutate, isPending: false, isError: false } as unknown as ReturnType<typeof mutations.useSuggestMore>,
+  );
+  vi.mocked(mutations.usePatchPlan).mockReturnValue(
+    { mutate: patchMutate, isPending: false, isError: false } as unknown as ReturnType<typeof mutations.usePatchPlan>,
+  );
+  vi.mocked(queries.useRuns).mockReturnValue({ data: { data: runs } } as unknown as ReturnType<typeof queries.useRuns>);
   vi.mocked(mutations.useAddOption).mockReturnValue(
     { mutate: addMutate, isPending: false } as unknown as ReturnType<typeof mutations.useAddOption>,
   );
@@ -60,6 +87,10 @@ function renderLonglist(
 }
 
 beforeEach(() => {
+  shortlistMutate.mockClear();
+  unshortlistMutate.mockClear();
+  suggestMutate.mockClear();
+  patchMutate.mockClear();
   excludeMutate.mockClear();
   includeMutate.mockClear();
   addMutate.mockClear();
@@ -323,5 +354,209 @@ describe("LonglistView", () => {
     expect(screen.queryByText("National sanctions regime")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Show excluded/ }));
     expect(screen.getByText("National sanctions regime")).toBeInTheDocument();
+  });
+});
+
+describe("LonglistView — Shortlist mode (task 055)", () => {
+  async function openShortlist(
+    taskOverrides: Parameters<typeof renderLonglist>[0] = {},
+    adjust?: Parameters<typeof renderLonglist>[1],
+    runs?: Parameters<typeof renderLonglist>[2],
+  ) {
+    const user = userEvent.setup();
+    renderLonglist(taskOverrides, adjust, runs);
+    await user.click(screen.getByRole("button", { name: "Shortlist" }));
+    return user;
+  }
+
+  const open = (longlist: ReturnType<typeof mockLonglist>, id: string, state: "proposed" | "added_by_you" | "set_aside" | null) => {
+    const option = longlist.options?.find((entry) => entry.option_id === id);
+    if (option === undefined) throw new Error("fixture option missing");
+    option.shortlist = state === null ? null : { state, reason: state === "proposed" ? "Because." : null };
+  };
+
+  it("adds a third mode chip beside List and Grid", () => {
+    renderLonglist();
+    expect(screen.getByRole("button", { name: "Shortlist" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("renders the header, the fixed baseline line, both groups and the rows", async () => {
+    await openShortlist();
+    expect(screen.getByText("2 places")).toBeInTheDocument();
+    expect(screen.getByText(/Appetite: Mostly tried, one or two new/)).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Risk appetite" })).toHaveValue("mostly_tried");
+    expect(screen.getByText(/^The situation today:/)).toHaveTextContent("The situation today: Baseline");
+    expect(screen.getByRole("link", { name: "Baseline" })).toHaveAttribute(
+      "href",
+      `/tasks/${TASK_ID}/result?view=baseline`,
+    );
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
+    expect(headings.slice(0, 2)).toEqual(["Added by you", "Policy Atlas's picks"]);
+    // The pick: name, reason, lever, rung line and Remove.
+    expect(screen.getByRole("link", { name: "Universal youth offer bundle" })).toBeInTheDocument();
+    expect(screen.getByText("Mock reason: names a fact on the card.")).toBeInTheDocument();
+    expect(screen.getByText("Reviewed · 1 systematic review, 4 observational")).toBeInTheDocument();
+    expect(screen.getByText("Proposal only")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Remove from shortlist" })).toHaveLength(2);
+  });
+
+  it("puts a user place's row reason as 'Added by you' and lists places alphabetically within a group", async () => {
+    await openShortlist({}, (longlist) => {
+      open(longlist, MOCK_OPTION_ID_NO_IN_SCOPE, "added_by_you");
+    });
+    const addedGroup = screen.getByRole("heading", { name: "Added by you" }).closest("section") as HTMLElement;
+    const names = within(addedGroup).getAllByRole("link").map((link) => link.textContent);
+    expect(names).toEqual(["School-based mentoring", "Youth guarantee"]);
+    expect(within(addedGroup).getAllByText("Added by you").length).toBeGreaterThan(0);
+  });
+
+  it("calls Remove from shortlist for a place", async () => {
+    const user = await openShortlist();
+    const row = screen.getByRole("link", { name: "Universal youth offer bundle" }).closest("li") as HTMLElement;
+    await user.click(within(row).getByRole("button", { name: "Remove from shortlist" }));
+    expect(unshortlistMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_PACKAGE }, expect.anything());
+  });
+
+  it("patches the plan with the appetite only when the select changes", async () => {
+    const user = await openShortlist();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Risk appetite" }), "tried_only");
+    expect(patchMutate).toHaveBeenCalledWith({ scoping: { risk_appetite: "tried_only" } });
+  });
+
+  it("disables the appetite control while a walk runs and says Shortlisting", async () => {
+    await openShortlist({ active_run: { capability_run_id: "x", status: "running", started_at: "2026-10-27T00:00:00Z" } });
+    expect(screen.getByRole("combobox", { name: "Risk appetite" })).toBeDisabled();
+    expect(screen.getByText("Shortlisting…")).toBeInTheDocument();
+  });
+
+  it("Suggest more is disabled with its reason when nothing is left to propose", async () => {
+    await openShortlist();
+    const button = screen.getByRole("button", { name: "Suggest more" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", "Nothing left to propose");
+  });
+
+  it("Suggest more is disabled while a walk runs", async () => {
+    await openShortlist(
+      { active_run: { capability_run_id: "x", status: "running", started_at: "2026-10-27T00:00:00Z" } },
+      (longlist) => open(longlist, MOCK_OPTION_ID_NO_IN_SCOPE, null),
+    );
+    const button = screen.getByRole("button", { name: "Suggest more" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", "A walk is running");
+  });
+
+  it("Suggest more posts once when an included option is left", async () => {
+    const user = await openShortlist({}, (longlist) => open(longlist, MOCK_OPTION_ID_NO_IN_SCOPE, null));
+    await user.click(screen.getByRole("button", { name: "Suggest more" }));
+    expect(suggestMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the stale line only when the proposal is stale", async () => {
+    await openShortlist({}, (longlist) => {
+      longlist.shortlist.stale = true;
+    });
+    expect(screen.getByText("Press Suggest more to re-propose")).toBeInTheDocument();
+  });
+
+  it("omits the stale line when the proposal is current", async () => {
+    await openShortlist({}, (longlist) => {
+      longlist.shortlist.stale = false;
+    });
+    expect(screen.queryByText("Press Suggest more to re-propose")).not.toBeInTheDocument();
+  });
+
+  it("shows the not-covered note under its label, and hides both when there is no note", async () => {
+    await openShortlist({}, (longlist) => {
+      longlist.shortlist.note = "Nothing here tackles the wider labour market.";
+    });
+    expect(screen.getByRole("heading", { name: "What this shortlist leaves out" })).toBeInTheDocument();
+    expect(screen.getByText("Nothing here tackles the wider labour market.")).toBeInTheDocument();
+  });
+
+  it("hides the note section when the note is null", async () => {
+    await openShortlist({}, (longlist) => {
+      longlist.shortlist.note = null;
+    });
+    expect(screen.queryByRole("heading", { name: "What this shortlist leaves out" })).not.toBeInTheDocument();
+  });
+
+  it("adds the provenance footer only when it carries a total", async () => {
+    await openShortlist({}, (longlist) => {
+      longlist.shortlist.note = "A note.";
+      longlist.shortlist.provenance = { document_lines_cut: 12, document_lines_total: 100, baseline_chars_cut: 40 };
+    });
+    expect(screen.getByText("Policy Atlas read 88 of 100 document lines")).toBeInTheDocument();
+    expect(screen.getByText("The baseline was cut")).toBeInTheDocument();
+  });
+
+  it("leaves the document-lines footer out when the provenance has no total", async () => {
+    await openShortlist({}, (longlist) => {
+      longlist.shortlist.note = "A note.";
+      longlist.shortlist.provenance = { document_lines_cut: 12 };
+    });
+    expect(screen.queryByText(/document lines/)).not.toBeInTheDocument();
+  });
+
+  it("shows Assess disabled with its line", async () => {
+    await openShortlist();
+    expect(screen.getByRole("button", { name: "Assess these 2" })).toBeDisabled();
+    expect(screen.getByText("Assessment is not yet available.")).toBeInTheDocument();
+  });
+
+  it("lists included options holding no place under Other options, with Add; excluded ones are absent", async () => {
+    const user = await openShortlist({}, (longlist) => open(longlist, MOCK_OPTION_ID_NO_IN_SCOPE, null));
+    const section = screen.getByRole("heading", { name: "Other options" }).closest("section") as HTMLElement;
+    expect(within(section).getByRole("link", { name: "School-based mentoring" })).toBeInTheDocument();
+    expect(within(section).queryByText("National sanctions regime")).not.toBeInTheDocument();
+    await user.click(within(section).getByRole("button", { name: "Add to shortlist" }));
+    expect(shortlistMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_NO_IN_SCOPE }, expect.anything());
+  });
+
+  it("says Policy Atlas is proposing while a walk runs and nothing is placed yet", async () => {
+    await openShortlist(
+      { active_run: { capability_run_id: "x", status: "running", started_at: "2026-10-27T00:00:00Z" } },
+      (longlist) => {
+        for (const option of longlist.options ?? []) option.shortlist = null;
+      },
+    );
+    expect(screen.getByText("Policy Atlas is proposing a shortlist…")).toBeInTheDocument();
+  });
+
+  it("shows the could-not-propose notice only when the newest walk is a failed shortlist walk", async () => {
+    await openShortlist({}, undefined, [{ capability_run_id: "r1", purpose: "shortlist", status: "degraded" }]);
+    expect(screen.getByText("Policy Atlas could not propose; your places are unchanged.")).toBeInTheDocument();
+  });
+
+  it("shows no notice for an unrelated degraded walk or a succeeded shortlist walk", async () => {
+    await openShortlist({}, undefined, [{ capability_run_id: "r1", purpose: "longlist", status: "degraded" }]);
+    expect(screen.queryByText(/could not propose/)).not.toBeInTheDocument();
+  });
+
+  it("shows a breach notice on a user place that a constraint now excludes", async () => {
+    await openShortlist({}, (longlist) => {
+      const option = longlist.options?.find((entry) => entry.option_id === MOCK_OPTION_ID_ADDED_BY_YOU);
+      if (option === undefined) throw new Error("fixture option missing");
+      option.state = "excluded";
+      option.exclusion = { by: "constrain", constraint: "Only include options a local authority can fund directly", reason: "It needs national funding." };
+    });
+    expect(screen.getByText(/It needs national funding\./)).toBeInTheDocument();
+  });
+
+  it("List rows carry the place word on the grey line and the shortlist action", () => {
+    renderLonglist();
+    expect(rowMetaParts(mockLonglist().options!.find((o) => o.option_id === MOCK_OPTION_ID_PACKAGE)!)).toContain(
+      "Policy Atlas's pick",
+    );
+    expect(
+      rowMetaParts(mockLonglist().options!.find((o) => o.option_id === MOCK_OPTION_ID_NO_IN_SCOPE)!),
+    ).not.toContain("Policy Atlas's pick");
+  });
+
+  it("List rows show Add and Remove, disabled while a walk runs", async () => {
+    const user = userEvent.setup();
+    renderLonglist({ active_run: { capability_run_id: "x", status: "running", started_at: "2026-10-27T00:00:00Z" } });
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    for (const button of screen.getAllByRole("button", { name: /shortlist/ })) expect(button).toBeDisabled();
   });
 });

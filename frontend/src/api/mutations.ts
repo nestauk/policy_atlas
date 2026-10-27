@@ -320,6 +320,59 @@ export function useOptionVerb(taskId: string, verb: "exclude" | "include") {
   });
 }
 
+/** The slice of the API client the shortlist routes need. Task 055's three
+ *  routes are not in the generated types yet (`make openapi-sync` brings
+ *  them); until then the calls go through this narrow, path-as-string shape. */
+type LooseClient = {
+  POST(
+    path: string,
+    init: { params: { path: Record<string, string> }; body?: unknown },
+  ): Promise<{ data?: unknown; error?: unknown; response: Response }>;
+};
+
+/** `POST .../options/{option_id}/shortlist` or `.../unshortlist` (no body):
+ *  puts an option on the shortlist as added by you, or takes it off (a
+ *  Policy Atlas pick becomes set aside). Returns the option's card, written
+ *  straight into its query, like exclude and include. */
+export function useShortlistVerb(taskId: string, verb: "shortlist" | "unshortlist") {
+  const client = useApiClient() as unknown as LooseClient;
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { optionId: string }) => {
+      const { data, error, response } = await client.POST(`/api/v1/tasks/{task_id}/options/{option_id}/${verb}`, {
+        params: { path: { task_id: taskId, option_id: input.optionId } },
+      });
+      if (data === undefined) raise(error, response.status);
+      return data as components["schemas"]["OptionOut"];
+    },
+    onSuccess: (data, input) => {
+      queryClient.setQueryData([...queryKeys.taskRoot(taskId), "options", input.optionId], data);
+      invalidateLonglist(queryClient, taskId);
+    },
+  });
+}
+
+/** `POST .../shortlist/suggest` (no body, 202): opens a shortlist walk that
+ *  fills the open places. Refused with 409 `run_active`,
+ *  `nothing_to_propose` or `no_longlist`. */
+export function useSuggestMore(taskId: string) {
+  const client = useApiClient() as unknown as LooseClient;
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error, response } = await client.POST("/api/v1/tasks/{task_id}/shortlist/suggest", {
+        params: { path: { task_id: taskId } },
+      });
+      if (data === undefined) raise(error, response.status);
+      return data as components["schemas"]["LatestRun"];
+    },
+    onSuccess: () => {
+      invalidateLonglist(queryClient, taskId);
+      queryClient.invalidateQueries({ queryKey: queryKeys.taskRoot(taskId) });
+    },
+  });
+}
+
 /** `POST .../check-ins/{id}/response` — option/abort answers and the free-text
  *  compile→confirm ladder (202 carries the compiled render + confirm token). */
 export function useAnswerCheckIn(taskId: string) {

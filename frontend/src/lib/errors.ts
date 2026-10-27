@@ -16,7 +16,10 @@ type ConflictCode =
   | "visibility_conflict"
   | "link_project_mismatch"
   | "link_source_unfinished"
-  | "link_source_capability";
+  | "link_source_capability"
+  | "nothing_to_propose"
+  | "no_longlist"
+  | "not_included";
 
 /** Human-readable, trigger-local conflict copy — the one place this
  *  copy lives; call sites wire it in rather than inlining their own. */
@@ -39,6 +42,10 @@ export const conflictSentences: Record<ConflictCode, string> = {
   link_project_mismatch: `That Evidence search is in a different ${PROJECT.one}. Put both in the same ${PROJECT.one} first.`,
   link_source_unfinished: "That Evidence search has not finished a run yet. Wait for it, then try again.",
   link_source_capability: "A task can only start from an Evidence search task.",
+  // Task 055: the shortlist's refusals.
+  nothing_to_propose: "Every included option already has a place or was set aside. There is nothing left to propose.",
+  no_longlist: "There is no longlist yet. Build it first.",
+  not_included: "Only an included option can be on the shortlist.",
 };
 
 /**

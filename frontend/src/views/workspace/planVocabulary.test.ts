@@ -13,6 +13,7 @@ import {
   constraintEffectLines,
   constraintKindLines,
   PROFILE_LINE_LABELS,
+  RISK_APPETITE_LABELS,
   RESEARCH_APPROACH_CUSTOM,
   researchApproachId,
   researchApproachLabel,
@@ -279,5 +280,16 @@ describe("options-scoping plan vocabulary (task 044)", () => {
       "Language: not yet applied at retrieval",
     ]);
     expect(constraintEffectLines(constraint({ kind: "boundary", languages: [] }))).toHaveLength(1);
+  });
+});
+
+describe("RISK_APPETITE_LABELS", () => {
+  it("holds the three approved answers, one per generated enum value", () => {
+    expect(RISK_APPETITE_LABELS).toEqual({
+      tried_only: "Only options tried elsewhere",
+      mostly_tried: "Mostly tried, one or two new",
+      open_to_untested: "Include the biggest ideas, even untested",
+    });
+    expect(Object.keys(RISK_APPETITE_LABELS).sort()).toEqual(["mostly_tried", "open_to_untested", "tried_only"]);
   });
 });

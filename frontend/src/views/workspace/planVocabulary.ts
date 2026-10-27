@@ -288,6 +288,17 @@ export const SCOPING_DEPTH_LABEL: Record<string, string> = {
   standard: "Standard scoping",
 };
 
+/** The shortlist's risk appetite (task 055, A25): how far it may reach beyond
+ *  options already tried elsewhere. The backend holds the same three answers
+ *  (`RISK_APPETITE_LABELS` in `scoping_plan.py`); a test pins the key set to
+ *  the generated enum. */
+export type RiskAppetite = NonNullable<components["schemas"]["ScopingPlanPatch"]["risk_appetite"]>;
+export const RISK_APPETITE_LABELS = {
+  tried_only: "Only options tried elsewhere",
+  mostly_tried: "Mostly tried, one or two new",
+  open_to_untested: "Include the biggest ideas, even untested",
+} satisfies Record<RiskAppetite, string>;
+
 /** Check-ins (steering mode) screen words for a scoping plan — its own
  *  wording, distinct from the ES's `STEERING_MODE_LABEL` above. */
 export const SCOPING_STEERING_MODE_LABEL: Record<string, string> = {

@@ -23,8 +23,12 @@ vi.mock("../../api/queries", () => ({
 const excludeMutate = vi.fn();
 const includeMutate = vi.fn();
 
+const shortlistMutate = vi.fn();
+const unshortlistMutate = vi.fn();
+
 vi.mock("../../api/mutations", () => ({
   useOptionVerb: vi.fn(),
+  useShortlistVerb: vi.fn(),
 }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
@@ -46,6 +50,12 @@ function renderCard(optionId: string, overrides: Record<string, unknown> = {}) {
         typeof mutations.useOptionVerb
       >,
   );
+  vi.mocked(mutations.useShortlistVerb).mockImplementation(
+    (_taskId, verb) =>
+      ({ mutate: verb === "shortlist" ? shortlistMutate : unshortlistMutate, isPending: false }) as unknown as ReturnType<
+        typeof mutations.useShortlistVerb
+      >,
+  );
   return render(
     <TooltipProvider>
       <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/options/${optionId}`]}>
@@ -60,6 +70,48 @@ function renderCard(optionId: string, overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   excludeMutate.mockClear();
   includeMutate.mockClear();
+  shortlistMutate.mockClear();
+  unshortlistMutate.mockClear();
+});
+
+describe("OptionCard — shortlist (task 055)", () => {
+  it("shows the maturity rung line above the Evidence opener", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    expect(screen.getByText("Evaluated · 1 RCT, 2 observational")).toBeInTheDocument();
+  });
+
+  it("shows both modifiers on the rung line", () => {
+    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
+    expect(
+      screen.getByText(
+        `Evaluated · 2 observational · none in your setting · most recent evaluation before ${new Date().getFullYear() - 5}`,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no rung line for a card written before the rung existed", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, { maturity: null });
+    expect(screen.queryByText(/^Evaluated · /)).not.toBeInTheDocument();
+  });
+
+  it("offers Remove from shortlist on a place and Add to shortlist on an option holding none", async () => {
+    const user = userEvent.setup();
+    renderCard(MOCK_OPTION_ID_ADDED_BY_YOU);
+    await user.click(screen.getByRole("button", { name: "Remove from shortlist" }));
+    expect(unshortlistMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_ADDED_BY_YOU }, expect.anything());
+  });
+
+  it("offers Add to shortlist on a set-aside option", async () => {
+    const user = userEvent.setup();
+    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
+    await user.click(screen.getByRole("button", { name: "Add to shortlist" }));
+    expect(shortlistMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_NO_IN_SCOPE }, expect.anything());
+  });
+
+  it("offers no shortlist action on an excluded option", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    expect(screen.queryByRole("button", { name: /shortlist/ })).not.toBeInTheDocument();
+  });
 });
 
 describe("OptionCard", () => {

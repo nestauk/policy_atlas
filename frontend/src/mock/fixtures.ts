@@ -1286,13 +1286,72 @@ function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixt
     evaluated_countries: option.evaluated_countries,
     outcomes_evaluated: option.outcomes_evaluated,
     outcomes_total: option.outcomes_total,
+    shortlist: option.shortlist ?? null,
+    maturity: option.maturity ?? null,
   };
+}
+
+/** The shortlist's in-memory state (task 055, A17): the note, whether the
+ *  proposal is stale against the plan's appetite, and the appetite the
+ *  mock's plan holds. The shortlist routes in `api.ts` change it. */
+export const mockShortlistState: { note: string | null; stale: boolean; inputsChanged: boolean } = {
+  note: null,
+  stale: false,
+  inputsChanged: false,
+};
+
+/** Places the shortlist fills up to. */
+export const MOCK_SHORTLIST_PLACES_TARGET = 5;
+
+/** Put the shortlist fixtures back to where they start: one pick with a
+ *  reason (the bundle), one place added by you, one pick set aside, a
+ *  maturity rung on every option and a note. Runs at load and on
+ *  `resetMockScenario`. */
+export function resetMockShortlist() {
+  const cards = mockLonglistOptionCards;
+  cards[MOCK_OPTION_ID_PACKAGE].shortlist = { state: "proposed", reason: "Mock reason: names a fact on the card." };
+  cards[MOCK_OPTION_ID_ADDED_BY_YOU].shortlist = { state: "added_by_you", reason: null };
+  cards[MOCK_OPTION_ID_NO_IN_SCOPE].shortlist = { state: "set_aside", reason: null };
+  cards[MOCK_OPTION_ID_EXCLUDED].shortlist = null;
+  cards[MOCK_OPTION_ID_EXCLUDED].maturity = {
+    rung: "evaluated",
+    design_mix: "1 RCT, 2 observational",
+    none_in_your_setting: false,
+    latest_evaluation_year: 2021,
+    stale: false,
+  };
+  cards[MOCK_OPTION_ID_NO_IN_SCOPE].maturity = {
+    rung: "evaluated",
+    design_mix: "2 observational",
+    none_in_your_setting: true,
+    latest_evaluation_year: 2016,
+    stale: true,
+  };
+  cards[MOCK_OPTION_ID_ADDED_BY_YOU].maturity = {
+    rung: "proposal_only",
+    design_mix: "",
+    none_in_your_setting: false,
+    latest_evaluation_year: null,
+    stale: false,
+  };
+  cards[MOCK_OPTION_ID_PACKAGE].maturity = {
+    rung: "reviewed",
+    design_mix: "1 systematic review, 4 observational",
+    none_in_your_setting: false,
+    latest_evaluation_year: 2023,
+    stale: false,
+  };
+  for (const id of mockLonglistExtraOptionIds) mockLonglistOptionCards[id].shortlist = null;
+  mockShortlistState.note = "Mock note: nothing here tackles the wider labour market.";
+  mockShortlistState.stale = false;
+  mockShortlistState.inputsChanged = false;
 }
 
 /** Option ids added by hand or by chat verb since the walk built the four
  *  fixture options above (`POST /options`, `mockFetch`) — always unthemed,
  *  like a real rebuild's new entrants. */
 export const mockLonglistExtraOptionIds: string[] = [];
+resetMockShortlist();
 
 /** Build one `OptionOut` for `POST /options` (the button's and the chat
  *  verb's shared path, D13): minted *added by you*, zero documents, not yet
@@ -1473,7 +1532,12 @@ export function mockLonglist(): components["schemas"]["LonglistOut"] {
     },
     taxonomy_version: "lever-types-v1",
     depth_label: "scoping pass",
-    shortlist: { note: null, provenance: {}, places_target: 5, stale: true },
-    plan_inputs_changed: false,
+    shortlist: {
+      note: mockShortlistState.note,
+      provenance: {},
+      places_target: MOCK_SHORTLIST_PLACES_TARGET,
+      stale: mockShortlistState.stale,
+    },
+    plan_inputs_changed: mockShortlistState.inputsChanged,
   };
 }

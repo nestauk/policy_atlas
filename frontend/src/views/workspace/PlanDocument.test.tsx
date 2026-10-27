@@ -213,13 +213,19 @@ function mockUseTask(
   );
 }
 
-function mockUseLonglist(longlist: { plan_version: number; options: number } | null) {
+function mockUseLonglist(
+  longlist: { plan_version: number; options: number; plan_inputs_changed?: boolean } | null,
+) {
   vi.mocked(queries.useLonglist).mockReturnValue(
     {
       data:
         longlist === null
           ? null
-          : { plan_version: longlist.plan_version, counts: { options: longlist.options } },
+          : {
+              plan_version: longlist.plan_version,
+              counts: { options: longlist.options },
+              plan_inputs_changed: longlist.plan_inputs_changed ?? false,
+            },
     } as unknown as ReturnType<typeof queries.useLonglist>,
   );
 }
@@ -783,7 +789,7 @@ describe("PlanDocument — options scoping (task 044)", () => {
       mockUsePlan({ data: scopingPlanOut(confirmedV2, 3) });
       mockUseRuns([longlistWalk, baselineRun({ plan_version: 1 })]);
       mockUseTask([], { has_longlist: true });
-      mockUseLonglist({ plan_version: 2, options: 14 });
+      mockUseLonglist({ plan_version: 2, options: 14, plan_inputs_changed: true });
       renderPlan();
       expect(
         screen.getByText("Longlist built from plan version 2 · the plan has changed"),
@@ -809,11 +815,32 @@ describe("PlanDocument — options scoping (task 044)", () => {
       mockUsePlan({ data: scopingPlanOut(confirmedV2, 3) });
       mockUseRuns([runningChild, longlistWalk, baselineRun({ plan_version: 1 })]);
       mockUseTask([], { has_longlist: true, active_run: runningChild });
-      mockUseLonglist({ plan_version: 2, options: 14 });
+      mockUseLonglist({ plan_version: 2, options: 14, plan_inputs_changed: true });
       renderPlan();
       expect(screen.getByText("Building the longlist")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Rebuild longlist" })).toBeNull();
     });
+  });
+
+  it("a newer plan version that changed only the appetite leaves the longlist built, not rebuilt", () => {
+    mockUsePlan({ data: scopingPlanOut({ baseline_confirmed: { artefact_id: "artefact-1", plan_version: 2 } }, 3) });
+    mockUseRuns([baselineRun({ plan_version: 1 })]);
+    mockUseTask([], { has_longlist: true });
+    mockUseLonglist({ plan_version: 2, options: 14, plan_inputs_changed: false });
+    renderPlan();
+    expect(screen.getByText("Longlist built · 14 options")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Rebuild longlist" })).toBeNull();
+  });
+
+  it("shows the risk appetite and patches it directly, with no chat seeding", async () => {
+    patchMutate.mockReset();
+    mockUsePlan({ data: scopingPlanOut({ risk_appetite: "mostly_tried" }) });
+    renderPlan();
+    expect(screen.getByText("Risk appetite")).toBeInTheDocument();
+    const select = screen.getByRole("combobox", { name: "Risk appetite" });
+    expect(select).toHaveValue("mostly_tried");
+    await userEvent.selectOptions(select, "open_to_untested");
+    expect(patchMutate).toHaveBeenCalledWith({ scoping: { risk_appetite: "open_to_untested" } });
   });
 
   it("hides Edit and the start area when the plan is a read-only record", () => {

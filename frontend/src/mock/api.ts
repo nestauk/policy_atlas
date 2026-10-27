@@ -46,6 +46,9 @@ import {
   mockLonglist,
   mockLonglistExtraOptionIds,
   mockLonglistOptionCards,
+  mockShortlistState,
+  MOCK_SHORTLIST_PLACES_TARGET,
+  resetMockShortlist,
 } from "./fixtures";
 
 type MeOut = components["schemas"]["MeOut"];
@@ -230,6 +233,7 @@ export function resetMockScenario() {
   currentMe = { ...mockMeUnenrolled };
   mockProjects = [{ ...mockProject }];
   resetMockLonglistWalks();
+  resetMockShortlist();
 }
 
 function currentMockScenario(requestUrl: URL): MockScenario {
@@ -519,6 +523,18 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     // (unchanged words keep their design; the mock proposes none for new ones).
     if (mockTask.capability === "options_scoping" && isRecord(body) && isRecord(body.scoping)) {
       const edits = body.scoping;
+      if (typeof edits.risk_appetite === "string") {
+        // The appetite alone: a new plan version, a stale proposal, and no
+        // change to what the longlist reads (task 055, A6).
+        currentScopingPlan = {
+          ...currentScopingPlan,
+          risk_appetite: edits.risk_appetite as NonNullable<typeof currentScopingPlan.risk_appetite>,
+        };
+        mockShortlistState.stale = true;
+      }
+      if (Array.isArray(edits.constraints) || Array.isArray(edits.your_options)) {
+        mockShortlistState.inputsChanged = true;
+      }
       if (Array.isArray(edits.constraints)) {
         currentScopingPlan = {
           ...currentScopingPlan,
@@ -865,6 +881,56 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   // refetch after a mutation shows the flipped state.
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/longlist`)) {
     return json(mockLonglist());
+  }
+  // task 055 — the shortlist: the two option verbs and Suggest more, over
+  // the same in-memory cards. The 409s are the API's: `run_active` while a
+  // walk runs, `not_included` for an excluded option, `nothing_to_propose`
+  // when every included option holds a place or was set aside.
+  const shortlistVerbMatch = new RegExp(`^/api/v1/tasks/${MOCK_TASK_ID}/options/([^/]+)/(shortlist|unshortlist)$`).exec(path);
+  if (method === "POST" && shortlistVerbMatch) {
+    const option = mockLonglistOptionCards[shortlistVerbMatch[1]];
+    if (option === undefined) return json({ detail: "resource not found" }, 404);
+    if (mockTask.active_run != null) return mockConflict("run_active", "A walk is already running.");
+    if (shortlistVerbMatch[2] === "shortlist") {
+      if (option.state !== "included") return mockConflict("not_included", "Only an included option can be shortlisted.");
+      option.shortlist = { state: "added_by_you", reason: null };
+    } else if (option.shortlist?.state === "proposed") {
+      option.shortlist = { state: "set_aside", reason: null };
+    } else if (option.shortlist?.state === "added_by_you") {
+      option.shortlist = null;
+    }
+    return json(option);
+  }
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/shortlist/suggest`)) {
+    if (mockTask.active_run != null) return mockConflict("run_active", "A walk is already running.");
+    const open = Object.values(mockLonglistOptionCards).filter(
+      (option) => option.state === "included" && option.shortlist == null,
+    );
+    if (open.length === 0) return mockConflict("nothing_to_propose", "Nothing is left to propose.");
+    const held = Object.values(mockLonglistOptionCards).filter(
+      (option) => option.shortlist?.state === "proposed" || option.shortlist?.state === "added_by_you",
+    ).length;
+    for (const option of open.slice(0, Math.max(0, MOCK_SHORTLIST_PLACES_TARGET - held))) {
+      option.shortlist = { state: "proposed", reason: "Mock reason: names a fact on the card." };
+    }
+    mockShortlistState.note = "Mock note: nothing here tackles the wider labour market.";
+    mockShortlistState.stale = false;
+    const startedAt = new Date().toISOString();
+    const walk: RunOut = {
+      capability_run_id: crypto.randomUUID(),
+      task_id: MOCK_TASK_ID,
+      plan_id: MOCK_PLAN_ID,
+      plan_version: mockScopingPlanVersion,
+      status: "succeeded",
+      started_at: startedAt,
+      ended_at: startedAt,
+      artefact_id: null,
+      parent_capability_run_id: null,
+      purpose: "shortlist",
+    };
+    mockLonglistWalks = [walk, ...mockLonglistWalks];
+    mockTask.latest_run = latestRunOf(walk);
+    return json(latestRunOf(walk), 202);
   }
   const optionVerbMatch = new RegExp(`^/api/v1/tasks/${MOCK_TASK_ID}/options/([^/]+)/(exclude|include)$`).exec(path);
   if (method === "POST" && optionVerbMatch) {
@@ -1302,6 +1368,11 @@ function resetMockLonglistWalks() {
   mockTask.has_longlist = false;
 }
 
+/** A 409 in the API's error envelope. */
+function mockConflict(code: string, message: string): Response {
+  return json({ error: { code, message } }, 409);
+}
+
 function latestRunOf(run: RunOut): components["schemas"]["LatestRun"] {
   return {
     capability_run_id: run.capability_run_id,
@@ -1333,6 +1404,7 @@ function requestMockLonglistWalk(planVersion: number): components["schemas"]["La
     purpose: "longlist",
   };
   mockLonglistWalks = [walk, ...mockLonglistWalks];
+  mockShortlistState.inputsChanged = false;
   mockTask.active_run = latestRunOf(walk);
   mockTask.latest_run = latestRunOf(walk);
   mockLonglistPending.push(walk.capability_run_id);

@@ -39,6 +39,7 @@ import {
   RESEARCH_APPROACH_TITLE,
   researchApproachId,
   researchApproachLabel,
+  RISK_APPETITE_LABELS,
   SCOPING_DEPTH_LABEL,
   SCOPING_STEERING_MODE_LABEL,
   SEARCH_EFFORT_LABEL,
@@ -56,7 +57,9 @@ import {
   YOUR_OPTIONS_DESIGN_PENDING,
   YOUR_OPTIONS_NONE,
   YOUR_OPTIONS_TITLE,
+  type RiskAppetite,
 } from "./planVocabulary";
+import { RiskAppetiteSelect } from "../longlist/ShortlistView";
 
 type ScopingPlanDraft = components["schemas"]["ScopingPlanDraft"];
 type TaggedOut = components["schemas"]["TaggedOut"];
@@ -447,11 +450,16 @@ function ScopingSettingsSection({
   scoping,
   onEdit,
   readOnly,
+  onChangeAppetite,
 }: {
   scoping: ScopingPlanDraft;
   onEdit: () => void;
   readOnly: boolean;
+  /** A direct plan patch (task 055, A25); omitted while the plan cannot be
+   *  edited directly, which leaves the label read-only. */
+  onChangeAppetite?: (value: RiskAppetite) => void;
 }) {
+  const appetite: RiskAppetite = scoping.risk_appetite ?? "mostly_tried";
   const depthLabel = scoping.depth != null ? (SCOPING_DEPTH_LABEL[scoping.depth] ?? null) : null;
   const checkInsLabel =
     scoping.steering_mode != null ? (SCOPING_STEERING_MODE_LABEL[scoping.steering_mode] ?? null) : null;
@@ -465,6 +473,16 @@ function ScopingSettingsSection({
           <dt className={panelHintClass}>Depth</dt>
           <dd className={panelValueClass}>
             {depthLabel ?? <NotDecided />}
+          </dd>
+        </div>
+        <div>
+          <dt className={panelHintClass}>Risk appetite</dt>
+          <dd className={panelValueClass}>
+            {onChangeAppetite === undefined ? (
+              RISK_APPETITE_LABELS[appetite]
+            ) : (
+              <RiskAppetiteSelect value={appetite} disabled={false} onChange={onChangeAppetite} />
+            )}
           </dd>
         </div>
         <div>
@@ -792,6 +810,11 @@ function ScopingPlanSections({
           scoping={scoping}
           onEdit={() => seedComposer("Change a setting: ")}
           readOnly={readOnly}
+          onChangeAppetite={
+            approved && !runActive && !readOnly
+              ? (value) => patchPlan.mutate({ scoping: { risk_appetite: value } })
+              : undefined
+          }
         />
         <ConstraintsSection
           constraints={constraints}

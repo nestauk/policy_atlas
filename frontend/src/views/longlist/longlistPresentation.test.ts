@@ -22,6 +22,10 @@ import {
   noOutcomeMeasuredLine,
   outcomeCountLabel,
   placeWithDetail,
+  MATURITY_WORDS,
+  maturityLine,
+  placeWord,
+  holdsPlace,
 } from "./longlistPresentation";
 
 // Task 046: the card's new lines and the lever definition by version.
@@ -268,5 +272,57 @@ describe("longlist presentation (amendment 4)", () => {
     });
     expect(placeWithDetail("Denmark", "denmark").detail).toBeNull();
     expect(placeWithDetail("not stated", null)).toEqual({ place: "place not stated", detail: null });
+  });
+});
+
+describe("maturityLine (task 055)", () => {
+  const base = { design_mix: "", none_in_your_setting: false, latest_evaluation_year: null, stale: false };
+
+  it("words the four rungs", () => {
+    expect(MATURITY_WORDS).toEqual({
+      proposal_only: "Proposal only",
+      described: "Described",
+      evaluated: "Evaluated",
+      reviewed: "Reviewed",
+    });
+    expect(maturityLine({ ...base, rung: "proposal_only" })).toBe("Proposal only");
+    expect(maturityLine({ ...base, rung: "described" })).toBe("Described");
+    expect(maturityLine({ ...base, rung: "evaluated" })).toBe("Evaluated");
+    expect(maturityLine({ ...base, rung: "reviewed" })).toBe("Reviewed");
+  });
+
+  it("adds the design mix after the rung word", () => {
+    expect(maturityLine({ ...base, rung: "evaluated", design_mix: "1 RCT, 2 observational" })).toBe(
+      "Evaluated · 1 RCT, 2 observational",
+    );
+  });
+
+  it("adds each modifier, the stale year being five years before now", () => {
+    const now = new Date("2026-10-27T00:00:00Z");
+    expect(maturityLine({ ...base, rung: "evaluated", none_in_your_setting: true }, now)).toBe(
+      "Evaluated · none in your setting",
+    );
+    expect(maturityLine({ ...base, rung: "evaluated", stale: true }, now)).toBe(
+      "Evaluated · most recent evaluation before 2021",
+    );
+    expect(
+      maturityLine({ ...base, rung: "reviewed", design_mix: "3 observational", none_in_your_setting: true, stale: true }, now),
+    ).toBe("Reviewed · 3 observational · none in your setting · most recent evaluation before 2021");
+  });
+
+  it("renders nothing for a null maturity", () => {
+    expect(maturityLine(null)).toBeNull();
+    expect(maturityLine(undefined)).toBeNull();
+  });
+});
+
+describe("place words (task 055)", () => {
+  it("words a pick and a user place, and nothing for set-aside or no place", () => {
+    expect(placeWord("proposed")).toBe("Policy Atlas's pick");
+    expect(placeWord("added_by_you")).toBe("Added by you");
+    expect(placeWord("set_aside")).toBeNull();
+    expect(placeWord(null)).toBeNull();
+    expect(holdsPlace({ shortlist: { state: "set_aside", reason: null } })).toBe(false);
+    expect(holdsPlace({ shortlist: { state: "proposed", reason: "r" } })).toBe(true);
   });
 });

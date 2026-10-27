@@ -389,7 +389,7 @@ describe("useScopingPlanStart — the longlist's states (task 045, S13/S15)", ()
     baselineConfirmed?: { artefact_id: string; plan_version: number } | null;
     runs: unknown[];
     task?: { has_longlist?: boolean; active_run?: unknown };
-    longlist?: { plan_version: number; options: number } | null;
+    longlist?: { plan_version: number; options: number; plan_inputs_changed?: boolean } | null;
     longlistError?: boolean;
     confirmBaseline?: MutationStub;
   }) {
@@ -410,7 +410,13 @@ describe("useScopingPlanStart — the longlist's states (task 045, S13/S15)", ()
     } as unknown as ReturnType<typeof queries.useTask>);
     vi.mocked(queries.useLonglist).mockReturnValue({
       data:
-        longlist === null ? null : { plan_version: longlist.plan_version, counts: { options: longlist.options } },
+        longlist === null
+          ? null
+          : {
+              plan_version: longlist.plan_version,
+              counts: { options: longlist.options },
+              plan_inputs_changed: longlist.plan_inputs_changed ?? false,
+            },
       isError: longlistError,
     } as unknown as ReturnType<typeof queries.useLonglist>);
     vi.mocked(mutations.useStartRun).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<
@@ -463,7 +469,7 @@ describe("useScopingPlanStart — the longlist's states (task 045, S13/S15)", ()
       baselineConfirmed: confirmedAt(2),
       runs: [longlistWalk, baseline],
       task: { has_longlist: true },
-      longlist: { plan_version: 2, options: 14 },
+      longlist: { plan_version: 2, options: 14, plan_inputs_changed: true },
       confirmBaseline,
     });
     if (result.current.kind !== "rebuild_longlist") throw new Error(`got ${result.current.kind}`);
@@ -530,7 +536,7 @@ describe("useScopingPlanStart — the longlist's states (task 045, S13/S15)", ()
       baselineConfirmed: confirmedAt(2),
       runs: [child, longlistWalk, baseline],
       task: { has_longlist: true, active_run: child },
-      longlist: { plan_version: 2, options: 14 },
+      longlist: { plan_version: 2, options: 14, plan_inputs_changed: true },
     });
     expect(result.current.kind).toBe("none");
   });
@@ -545,6 +551,17 @@ describe("useScopingPlanStart — the longlist's states (task 045, S13/S15)", ()
   it("post-baseline, pre-longlist after a plan change stays rebuild_or_confirm", () => {
     const { result } = setup({ version: 2, runs: [baseline] });
     expect(result.current.kind).toBe("rebuild_or_confirm");
+  });
+
+  it("a newer plan version whose longlist inputs are unchanged (an appetite change) stays longlist_built", () => {
+    const { result } = setup({
+      version: 3,
+      baselineConfirmed: confirmedAt(2),
+      runs: [longlistWalk, baseline],
+      task: { has_longlist: true },
+      longlist: { plan_version: 2, options: 14, plan_inputs_changed: false },
+    });
+    expect(result.current).toEqual({ kind: "longlist_built", options: 14 });
   });
 
   it("the line counts one option in the singular", () => {

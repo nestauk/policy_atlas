@@ -34,6 +34,7 @@ import {
   evidenceSignal,
   leverLabel,
   leverLine,
+  maturityLine,
   noOutcomeMeasuredLine,
   originLabel,
   outcomeCountLabel,
@@ -41,7 +42,7 @@ import {
   relationLabel,
   servesOutcome,
 } from "./longlistPresentation";
-import { ExcludeReasonForm, OptionActionButton, useOptionActions } from "./optionActions";
+import { ExcludeReasonForm, OptionActionButton, ShortlistActionButton, useOptionActions } from "./optionActions";
 
 type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
 
@@ -317,6 +318,7 @@ export function OptionCard() {
   const placeSentences = item.place_sentences ?? [];
   const planOutcomes = evidence.outcome_counts?.by_outcome ?? [];
   const noneMeasured = planOutcomes.length > 0 && planOutcomes.every((entry) => entry.evaluated === 0);
+  const maturity = maturityLine(item.maturity);
   const opener = evidenceOpener(item.evaluated_count, item.document_count);
   const profile = item.profile ?? null;
   const profileLines = profile === null ? [] : PROFILE_LINE_KEYS.map((key) => ({ key, line: profile.lines.find((line) => line.key === key) }))
@@ -350,6 +352,12 @@ export function OptionCard() {
       <header className="mb-8">
         <ReportKindRow kind="Option">
           <div className="print-hide flex items-center gap-2">
+            <ShortlistActionButton
+              actions={actions}
+              optionId={optionId}
+              shortlistState={item.shortlist?.state}
+              excluded={excluded}
+            />
             <OptionActionButton actions={actions} optionId={optionId} excluded={excluded} />
           </div>
         </ReportKindRow>
@@ -460,7 +468,8 @@ export function OptionCard() {
         </CardSection>
       )}
 
-      <CardSection id="evidence-base" summary={opener}>
+      <CardSection id="evidence-base" summary={maturity === null ? opener : `${maturity}. ${opener}`}>
+        {maturity !== null && <p className="font-semibold text-navy">{maturity}</p>}
         <p>{opener}</p>
         {item.document_count > 0 && (
           <>

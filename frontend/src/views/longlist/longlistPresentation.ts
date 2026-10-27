@@ -95,6 +95,8 @@ export function originShort(
  *  alone while the option's own search runs. */
 export function rowMetaParts(option: OptionSummaryOut): string[] {
   const parts: string[] = [];
+  const place = placeWord(option.shortlist?.state);
+  if (place !== null) parts.push(place);
   const origin = originShort(option.origin, option.from_section);
   if (origin !== null) parts.push(origin);
   for (const relation of option.relations ?? []) parts.push(relationLabel(relation));
@@ -509,4 +511,44 @@ export function placeWithDetail(
   const label = documentPlaceLabel(place);
   const below = (detail ?? "").trim();
   return { place: label, detail: below !== "" && fold(below) !== fold(place ?? "") ? below : null };
+}
+
+type MaturityOut = components["schemas"]["MaturityOut"];
+
+/** The maturity rung's word (task 055, item 7). */
+export const MATURITY_WORDS: Record<MaturityOut["rung"], string> = {
+  proposal_only: "Proposal only",
+  described: "Described",
+  evaluated: "Evaluated",
+  reviewed: "Reviewed",
+};
+
+/** The rung line: the rung word, then ` · {design mix}` when there is one,
+ *  then each modifier as ` · {modifier}`. "most recent evaluation before
+ *  {year}" is the current year minus five and shows only when the newest
+ *  evaluation is stale. `null` maturity (a longlist written before the rung
+ *  existed) gives `null`: nothing new to show. */
+export function maturityLine(maturity: MaturityOut | null | undefined, now: Date = new Date()): string | null {
+  if (maturity == null) return null;
+  const parts: string[] = [MATURITY_WORDS[maturity.rung]];
+  if (maturity.design_mix !== "") parts.push(maturity.design_mix);
+  if (maturity.none_in_your_setting) parts.push("none in your setting");
+  if (maturity.stale) parts.push(`most recent evaluation before ${now.getFullYear() - 5}`);
+  return parts.join(" · ");
+}
+
+type ShortlistState = NonNullable<OptionSummaryOut["shortlist"]>["state"];
+
+/** Whether the option holds a place (a pick or one added by you); a
+ *  set-aside pick holds none. */
+export function holdsPlace(option: Pick<OptionSummaryOut, "shortlist">): boolean {
+  const state = option.shortlist?.state;
+  return state === "proposed" || state === "added_by_you";
+}
+
+/** The one word the grey line gains for a place; nothing for set-aside. */
+export function placeWord(state: ShortlistState | null | undefined): string | null {
+  if (state === "proposed") return "Policy Atlas's pick";
+  if (state === "added_by_you") return "Added by you";
+  return null;
 }

@@ -1,14 +1,38 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mockLonglist } from "../../mock/fixtures";
 import { LonglistGrid } from "./LonglistGrid";
+import * as queries from "../../api/queries";
+import * as mutations from "../../api/mutations";
+
+vi.mock("../../api/queries", () => ({ useTask: vi.fn() }));
+
+const shortlistMutate = vi.fn();
+const unshortlistMutate = vi.fn();
+
+vi.mock("../../api/mutations", () => ({
+  useOptionVerb: vi.fn(),
+  useShortlistVerb: vi.fn(),
+}));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
-function renderGrid(showExcluded = false, adjust?: (longlist: ReturnType<typeof mockLonglist>) => void) {
+function renderGrid(
+  showExcluded = false,
+  adjust?: (longlist: ReturnType<typeof mockLonglist>) => void,
+  activeRun: unknown = null,
+) {
+  vi.mocked(queries.useTask).mockReturnValue({ data: { capability: "options_scoping", active_run: activeRun } } as unknown as ReturnType<typeof queries.useTask>);
+  vi.mocked(mutations.useOptionVerb).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useOptionVerb>);
+  vi.mocked(mutations.useShortlistVerb).mockImplementation(
+    (_taskId, verb) =>
+      ({ mutate: verb === "shortlist" ? shortlistMutate : unshortlistMutate, isPending: false }) as unknown as ReturnType<
+        typeof mutations.useShortlistVerb
+      >,
+  );
   const longlist = mockLonglist();
   adjust?.(longlist);
   return render(
@@ -17,6 +41,11 @@ function renderGrid(showExcluded = false, adjust?: (longlist: ReturnType<typeof 
     </MemoryRouter>,
   );
 }
+
+beforeEach(() => {
+  shortlistMutate.mockClear();
+  unshortlistMutate.mockClear();
+});
 
 describe("LonglistGrid", () => {
   it("lays out rows by lever type (plus None fits) and columns by the chosen line, Ambition first", () => {
@@ -166,9 +195,28 @@ describe("LonglistGrid", () => {
     expect(screen.getByRole("button", { name: "+1 more" })).toBeInTheDocument();
   });
 
-  it("has no shortlist action", () => {
-    renderGrid();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  it("carries the place word and the shortlist action on tiles", async () => {
+    const user = userEvent.setup();
+    renderGrid(true);
+    // The bundle is Policy Atlas's pick; the youth guarantee was added by you.
+    const bundle = screen.getByRole("link", { name: "Universal youth offer bundle" }).closest("li") as HTMLElement;
+    expect(within(bundle).getByText("Policy Atlas's pick")).toBeInTheDocument();
+    expect(within(bundle).getByRole("button", { name: "Remove from shortlist" })).toBeEnabled();
+    const guarantee = screen.getByRole("link", { name: "Youth guarantee" }).closest("li") as HTMLElement;
+    expect(within(guarantee).getByText("Added by you")).toBeInTheDocument();
+    // A set-aside pick has no word and offers Add.
+    const mentoring = screen.getByRole("link", { name: "School-based mentoring" }).closest("li") as HTMLElement;
+    expect(within(mentoring).queryByText(/Policy Atlas's pick|Added by you/)).not.toBeInTheDocument();
+    await user.click(within(mentoring).getByRole("button", { name: "Add to shortlist" }));
+    expect(shortlistMutate).toHaveBeenCalledWith({ optionId: expect.any(String) }, expect.anything());
+    // An excluded option offers neither.
+    const excluded = screen.getByRole("link", { name: "National sanctions regime" }).closest("li") as HTMLElement;
+    expect(within(excluded).queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("disables the shortlist actions while a walk is running", () => {
+    renderGrid(false, undefined, { capability_run_id: "x", status: "running", started_at: "2026-10-27T00:00:00Z" });
+    for (const button of screen.getAllByRole("button", { name: /shortlist/ })) expect(button).toBeDisabled();
   });
 
   it("links a tile through to the option card", () => {
