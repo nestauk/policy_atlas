@@ -80,6 +80,15 @@ the task 054 contract fixes the build. This record keeps the consequential decis
     increment; the contract verifier, a Codex adversarial pass and `/simplify` once before the
     merge to `dev`. Three schema revisions, one per increment that needs one.
 
+## Amendment, 2026-10-27: web pages by publisher
+
+Decision 3's blanket rule ("web pages never raise a grade above weak") is replaced (owner: "If it
+comes from Eval Task Force, for example, it could be quite strong"). Every web page is classified
+and appraised like any document. A page from a trusted publisher (a configured list: government,
+the Evaluation Task Force, regulators, statistics and audit bodies, What Works Centres,
+universities, journals) counts by its appraisal score; any other page keeps the old cap. Task 054
+contract C23.
+
 ## Consequences
 
 - Positive: a policy team gets a Magenta Book theory of change whose every step shows, in

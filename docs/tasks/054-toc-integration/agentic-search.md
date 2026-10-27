@@ -61,7 +61,8 @@ appraise, the judge and the grade.
      - **Overton** for regulation, implementation and local context;
      - the **web** for directed searches of official evaluations and monitoring (the UK Evaluation
        Task Force's evaluations, gov.uk research, Ofcom, the Advertising Standards Authority,
-       What Works Centres), with site: restrictions. Web pages never raise a grade above weak.
+       What Works Centres), with site: restrictions. A page from a trusted publisher counts by its
+       design like a paper; other pages count only toward weak (contract C23).
      About 10 results per query; a query that returns nothing is reported.
 2. **Search** each planned query; pool and de-duplicate per link.
 3. **Screen against the link's own question**, not the whole theory. 🟡 Later step: score each hit

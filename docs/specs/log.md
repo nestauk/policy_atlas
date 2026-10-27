@@ -1,5 +1,12 @@
 # Spec update log
 
+## 2026-10-27 (task 054, web pages)
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Trust rules: web
+  pages are classified and appraised like any document; a page from a trusted publisher (configured
+  list) counts by its appraisal score, any other page keeps the cap at *weak* (owner: "If it comes
+  from Eval Task Force, for example, it could be quite strong"). Task 054 contract C23; ADR 0042
+  amended.
+
 ## 2026-10-27 (task 054, iteration loop 2)
 * **Update**: [Theory of change](capabilities/theory-of-change/capability.md): conditions are 0 to 2
   per link, only those most likely to fail here, each once in the whole theory; E1 checks that

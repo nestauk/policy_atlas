@@ -344,9 +344,16 @@ assessment is grounded** ([../options-scoping/trust.md](../options-scoping/trust
   unchanged. Abstracts often omit how a model was built, so most models will stay at 2 until the
   full-text depth (⏸) exists.
 
-  Web pages show and count toward
-  the flags and toward *weak*, but never toward *medium* or *strong* (Options scoping trust rule:
-  "a web case study never raises an evidence-strength rating"). The rule is a banding, which
+  ✅ **Web pages are judged by what they are, not where they were found** (owner, 2026-10-27:
+  "If it comes from Eval Task Force, for example, it could be quite strong"). Every fetched page is
+  classified and appraised like any document. A page from a **trusted publisher** counts by its
+  appraisal score, as a paper would: an evaluation report on gov.uk that describes a randomised
+  trial counts as a trial. Trusted publishers are a short list kept in configuration: gov.uk and
+  its departments, the Evaluation Task Force, the National Audit Office, ONS, the NHS, regulators
+  (Ofcom, the Advertising Standards Authority), NICE, What Works Centres, WHO, OECD, universities
+  (.ac.uk) and journal pages. Any other page (news, blogs, company statements) shows and counts
+  toward the flags and toward *weak*, but never toward *medium* or *strong*, as before. The rule
+  is a banding, which
   Options scoping does not allow in v1 without its own eval; ToC adopts it deliberately, records it
   in the task ADR, and tunes it with evals E2, E2b and E7 (owner, S6).
 - 🟡 **Every evidence item carries a quote**, checked by the existing quote verifier against the

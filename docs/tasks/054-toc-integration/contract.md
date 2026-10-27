@@ -144,8 +144,9 @@ decisions below. The decisions fix what the spec leaves to the build.
   question) -> Grade` in `theory_of_change/evidence/grade.py`. The caller passes only the link's
   judgements whose `item_hash` equals its `counted_hash` (C19); `appraisals` maps each document to
   its appraisal score and evidence type; `robust_model` is read from the judgement. The rule is with the rule from the spec § Trust
-  rules, once for *worked elsewhere* and once for *holds here*. Never stored. Web judgements count
-  toward *weak* and the evidence-against flag, never *medium* or *strong*. A modelling study the
+  rules, once for *worked elsewhere* and once for *holds here*. Never stored. A web page from a
+  trusted publisher counts by its appraisal score like a paper; any other web page counts toward
+  *weak* and the evidence-against flag only, never *medium* or *strong* (C23). A modelling study the
   judge marks robust counts as score 3, so it can support *medium*, never *strong* (W15); the
   shared `appraise` rubric is unchanged. The reading guide's rule text is generated from the same
   constants. The canvas colour is the lower of the two grades.
@@ -334,6 +335,14 @@ decisions below. The decisions fix what the spec leaves to the build.
   (`GET /toc/evidence/{evidence_id}/context`). The Result page sits on a white card with the ES
   report's type styles; the canvas opens at a readable zoom, fits a chosen pathway, and has a
   working fit-view control and a full-screen view.
+
+- **C23. Web pages by publisher** (owner, 2026-10-27: "If it comes from Eval Task Force, for
+  example, it could be quite strong"). Every fetched page is classified and appraised. A page whose
+  domain is on the **trusted publisher list** (configuration, not code: gov.uk and subdomains, the
+  Evaluation Task Force, nao.org.uk, ons.gov.uk, NHS, Ofcom, ASA, NICE, What Works Centres, WHO,
+  OECD, .ac.uk, journal landing pages of works that resolve in OpenAlex) counts by its appraisal
+  score. Any other page keeps the web cap. The grade function takes the publisher verdict as an
+  input; the grade table test gains rows for both. Replaces the blanket web cap in C4 and C7.
 
 ## ADR scope
 

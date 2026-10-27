@@ -273,7 +273,9 @@ Record it. Stop condition if refused.
 
 3.2 **Route config, call, pages — `deep-reasoner`.** `WebSearchRoute` and its parser; the three
 route tables; fixture TOMLs; the non-web address test; S12; the `toc_web` child step; "web not
-searched"; the fetch limits with a test; the web cap end to end; one smoke call per route. Commit per piece.
+searched"; the fetch limits with a test; web pages classified and appraised, with the C23
+trusted-publisher list in configuration and `grade.py`'s `web` flag replaced by "web and not
+trusted"; the web cap end to end for untrusted pages; one smoke call per route. Commit per piece.
 
 Exit: try it (3); full `make verify`; PR; `/code-review` and the security lane on egress and page
 text.
