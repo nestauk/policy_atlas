@@ -35,6 +35,17 @@ Every intermediate gate ran on a snapshot in the second worktree `../policy_atla
 commit was made only when the index tree still equalled the gated tree (six gates; the first exit
 attempt was red at `prompt-guard` only, after the last ceiling edit; re-pinned and re-run green).
 
+**Post-build amendment gates (the Shortlist tab, the icons, the appetite wording).** The tab and
+icon commit `c99406ef` passed a full `make verify` on its snapshot (3742 backend, 928 frontend). The
+appetite-wording snapshot's full gate was red on one Server-Sent-Events test
+(`test_an_administrator_stream_on_an_ownerless_task_survives_its_polls`, a 5-second timeout) that
+passed on an immediate re-run of its file (19 / 19) and in every earlier gate; the same snapshot's
+frontend runs then timed out on 2 to 14 unrelated tests (splash page, nav underline, workspace) at the
+5-second limit while another session's test run, Google Drive and the Docker virtual machine each
+held most of a core. The identical tree had passed the frontend gate (928 / 928) before the load
+began; re-run once the load cleared: 928 / 928, build OK. Committed as the appetite-wording commit
+after `c99406ef`.
+
 ## Phase commits
 
 | Phase | Commit | Gate |
