@@ -5,8 +5,8 @@ example the screen and rerank model names), so this runs first. ``backend/.env``
 select the Bedrock route; this evaluation runs on OpenAI directly (task 054 brief):
 
 - default (``--models 56``): the product's ``openai-direct`` route (gpt-5.6 Luna/Terra);
-- ``--models 6x``: the harness-only route in ``model_route_6x.toml`` (screen on
-  gpt-6-luna; classify, rerank, judge, planner and web search on gpt-6.1-terra), loaded
+- ``--models 6x``: the harness-only route in ``model_route_6x.toml`` (screen,
+  classify and rerank on gpt-6-luna; judge, planner and web search on gpt-6.1-terra), loaded
   through the route file's overlay variable. The product route file is not touched.
 """
 

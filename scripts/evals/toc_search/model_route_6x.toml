@@ -1,5 +1,7 @@
 # Harness-only model route for the task 054 search eval (owner request 2026-10-27):
-# screen on gpt-6-luna; classify, rerank, judge, planner and web search on gpt-6.1-terra.
+# screen, classify and rerank on gpt-6-luna (the fast tier, as the product runs them);
+# judge, planner and web search on gpt-6.1-terra. Until the arm L run (2026-10-27,
+# results tag m6xL) classify and rerank were on gpt-6.1-terra; tag m6x used that.
 # Loaded through POLICY_ATLAS_MODEL_ROUTE_FILE by _route.py; the product route is unchanged.
 
 [routes.eval-6x]
@@ -10,10 +12,6 @@ api_key_env = "OPENAI_API_KEY"
 fast = "gpt-6-luna"
 standard = "gpt-6.1-terra"
 frontier = "gpt-6.1-terra"
-
-[routes.eval-6x.steps]
-classify = "standard"
-rerank = "standard"
 
 [routes.eval-6x.knobs.reasoning_effort]
 # The same setting the 5.6 route gives Terra, so the two runs differ only by model.

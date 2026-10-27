@@ -152,6 +152,7 @@ CHASE_KEEP = 20
 CHASE_FETCH = 100
 MAX_ROUNDS = 2
 WORKERS = 8
+LIGHT_N = 10
 
 #: Web pages whose appraisal counts like a paper's (owner ruling 2026-10-27). A host
 #: matches a domain when it equals it or ends with "." + domain. Edit freely.
@@ -676,6 +677,91 @@ def clean_url(url: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
 
 
+class S2Client:
+    """Semantic Scholar snippet search, throttled to about one request per second.
+
+    Snippet hits carry a corpus id; the batch endpoint maps those to DOIs, and the
+    harness then reads the papers from OpenAlex by DOI (papers without a DOI drop out).
+    """
+
+    base = "https://api.semanticscholar.org/graph/v1"
+    interval_s = 1.1
+
+    def __init__(self, api_key: str) -> None:
+        self.http = httpx.Client(headers={"x-api-key": api_key}, timeout=30)
+        self.lock = threading.Lock()
+        self.last = 0.0
+        self.calls = 0
+        self.retries_429 = 0
+
+    def request(self, method: str, path: str, **kw: Any) -> Any:
+        for attempt in range(10):
+            with self.lock:  # one request at a time, spaced out
+                wait = self.last + self.interval_s - time.monotonic()
+                if wait > 0:
+                    time.sleep(wait)
+                r = self.http.request(method, self.base + path, **kw)
+                self.last = time.monotonic()
+                self.calls += 1
+            if r.status_code != 429:
+                r.raise_for_status()
+                return r.json()
+            self.retries_429 += 1
+            time.sleep(min(30.0, 3.0 * (attempt + 1)))
+        r.raise_for_status()
+        return None
+
+    def snippet_dois(self, query: str, limit: int = 10) -> list[str]:
+        """DOIs of the papers behind the top snippet hits, in rank order."""
+        data = (
+            self.request(
+                "GET", "/snippet/search", params={"query": query, "limit": limit}
+            )
+            or {}
+        )
+        corpus = []
+        for hit in data.get("data") or []:
+            cid = (hit.get("paper") or {}).get("corpusId")
+            if cid and f"CorpusId:{cid}" not in corpus:
+                corpus.append(f"CorpusId:{cid}")
+        if not corpus:
+            return []
+        papers = (
+            self.request(
+                "POST",
+                "/paper/batch",
+                params={"fields": "externalIds"},
+                json={"ids": corpus},
+            )
+            or []
+        )
+        return s2_dois(papers)
+
+
+def s2_dois(papers: list[dict[str, Any] | None]) -> list[str]:
+    """Bare DOIs from a /paper/batch answer, in order (missing papers and DOIs skipped)."""
+    out: list[str] = []
+    for paper in papers:
+        d = norm_doi(((paper or {}).get("externalIds") or {}).get("DOI"))
+        if d and d not in out:
+            out.append(d)
+    return out
+
+
+def round_robin(lists: list[list[Doc]], n: int) -> list[Doc]:
+    """Take ``n`` documents across the lists in rank order (1st of each, then 2nd of
+    each, ...), skipping duplicates (DOI, OpenAlex id, URL) and untitled records."""
+    pool = Pool()
+    picked: list[Doc] = []
+    for rank in range(max((len(x) for x in lists), default=0)):
+        for docs in lists:
+            if len(picked) >= n:
+                return picked
+            if rank < len(docs) and docs[rank].title.strip():
+                picked.extend(pool.add([docs[rank]]))
+    return picked
+
+
 def page_text(body: bytes, content_type: str) -> str:
     """Readable text of a fetched page: trafilatura for HTML, PyMuPDF for PDF."""
     if content_type == "application/pdf":
@@ -725,6 +811,7 @@ class Harness:
         )
         self.overton = OvertonLiveBackend(os.environ["OVERTON_API_KEY"])
         self.system = SystemClient(os.environ["SYSTEM_API_KEY"])
+        self.s2 = S2Client(os.environ.get("SEMANTIC_SCHOLAR_API_KEY", ""))
         self.screener = OpenAIScreeningBackend()
         self.classifier = OpenAIClassificationBackend()
         self.ranker = OpenAIRankingBackend()
@@ -1590,6 +1677,76 @@ def round_summary(
     return "\n".join(lines)
 
 
+def arm_l(
+    h: Harness, link: Link, gold: dict[str, Any], s2: bool = False
+) -> dict[str, Any]:
+    """Light link check: three (or four, with Semantic Scholar) plain searches on the
+    link sentence, 10 documents round-robin, no screen and no rerank, classify and
+    judge all 10."""
+    meter = Meter()
+    sentence = link.item_text.splitlines()[0].strip()
+
+    def semantic(text: str, n: int) -> list[Doc]:
+        records = h.cache.call(
+            meter,
+            ("openalex_semantic", text, n),
+            lambda: (
+                h.openalex.search_semantic(text, max_results=n),
+                [Cost("search_openalex_semantic", usd=OPENALEX_USD_PER_CALL)],
+            ),
+        )
+        return [d for r in records if (d := from_openalex(r, "openalex"))]
+
+    lists = [semantic(sentence, 20), semantic(sentence + " in the United Kingdom", 10)]
+    overton = [
+        d
+        for r in h.overton_search(meter, sentence)
+        if (d := from_overton(r, "overton"))
+    ]
+    lists.append(overton)
+    if s2:
+
+        def run() -> tuple[Any, list[Cost]]:
+            before = h.s2.calls
+            dois = h.s2.snippet_dois(sentence, 10)
+            return dois, [Cost("s2", calls=h.s2.calls - before)]
+
+        dois = h.cache.call(meter, ("s2_snippet", sentence, 10), run)
+        by_doi = {norm_doi(r.get("doi")): r for r in h.openalex_dois(meter, dois)}
+        lists.append(
+            [
+                d
+                for doi in dois
+                if doi in by_doi and (d := from_openalex(by_doi[doi], "s2"))
+            ]
+        )
+    pool = Pool()
+    for docs in lists:
+        pool.add(docs)
+    picked = round_robin(lists, LIGHT_N)
+    h.parallel(lambda d: h.classify(meter, d), picked)
+    judged = {
+        d.key: (d, v)
+        for d, v in zip(
+            picked, h.parallel(lambda d: h.judge(meter, link, d), picked), strict=True
+        )
+    }
+    return metrics(
+        "L+S2" if s2 else "L",
+        link,
+        gold,
+        first20=None,
+        pool=pool.docs,
+        screened=picked,
+        judged=judged,
+        meter=meter,
+        extra={
+            "list_sizes": [len(x) for x in lists],
+            "picked_from": dict(Counter(d.source for d in picked)),
+        },
+    )
+
+
 def arm_c(h: Harness, link: Link, gold: dict[str, Any]) -> dict[str, Any]:
     """Agentic: plan by evidence type, search four sources, chase, at most two rounds."""
     meter = Meter()
@@ -1756,6 +1913,91 @@ def report(rows: list[dict[str, Any]], run: dict[str, Any] | None = None) -> str
     )
 
 
+def compare_arms(tag: str, arms: list[str]) -> str:
+    """One run, arms side by side per link: gold recall, grades against the band,
+    strong-design supports, cost, wall time and calls."""
+    rows = {
+        (r["link"], r["arm"]): r
+        for r in json.loads((OUT / tag / "results.json").read_text())
+    }
+    links = sorted({k[0] for k in rows})
+    cols = [
+        "gold judged",
+        "gold pool",
+        "elsewhere",
+        "here",
+        "s45 e/h",
+        "$",
+        "wall s",
+        "calls",
+    ]
+    mark = {True: " ✓", False: " ✗", None: ""}
+    head = (
+        "| link | expected (e / h) | "
+        + " | ".join(f"{a} {c}" for a in arms for c in cols)
+        + " |\n"
+    )
+    head += "|---|---|" + "---|" * (len(arms) * len(cols)) + "\n"
+    lines, tot = [], {a: Counter() for a in arms}
+    for link in links:
+        exp = next(r["expected"] for (lk, _), r in rows.items() if lk == link)
+        cells = []
+        for a in arms:
+            r = rows.get((link, a))
+            if r is None:
+                cells += ["-"] * len(cols)
+                continue
+            c = r.get("cost") or {}
+            calls = sum(
+                v for k, v in c.get("calls", {}).items() if k != "classify_reused"
+            )
+            t = tot[a]
+            t["judged"] += r["gold_judged"]
+            t["pool"] += r["gold_pool"]
+            t["total"] += r["gold_total"]
+            t["band_e"] += bool(r["in_band_elsewhere"])
+            t["band_h"] += bool(r["in_band_here"])
+            t["s45"] += r["supports_4_5"]["elsewhere"]
+            t["usd"] += c.get("usd", 0)
+            t["calls"] += calls
+            t["links"] += 1
+            t["wall_max"] = max(t["wall_max"], r.get("arm_wall_s") or 0)
+            cells += [
+                f"{r['gold_judged']}/{r['gold_total']} ({r['judged']})",
+                f"{r['gold_pool']}/{r['gold_total']} ({r['pool']})",
+                r["grade_elsewhere"] + mark[r["in_band_elsewhere"]],
+                r["grade_here"] + mark[r["in_band_here"]],
+                f"{r['supports_4_5']['elsewhere']}/{r['supports_4_5']['here']}",
+                f"{c.get('usd', 0):.3f}",
+                str(r.get("arm_wall_s", "-")),
+                str(calls),
+            ]
+        lines.append(
+            f"| {link[:8]} | {exp.get('elsewhere', '-')} / {exp.get('here', '-')} | "
+            + " | ".join(cells)
+            + " |"
+        )
+    summary = [
+        "",
+        "| arm | gold judged | gold pool | elsewhere in band | here in band | strong supports (e) | $ | slowest arm s | calls |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for a in arms:
+        t = tot[a]
+        summary.append(
+            f"| {a} | {t['judged']}/{t['total']} | {t['pool']}/{t['total']} | {t['band_e']}/{t['links']} | "
+            f"{t['band_h']}/{t['links']} | {t['s45']} | {t['usd']:.3f} | {t['wall_max']} | {t['calls']} |"
+        )
+    return (
+        f"# Arms side by side, run {tag} (task 054)\n\n✓ = grade inside the expected band. Gold judged: (n) = documents judged.\n\n"
+        + head
+        + "\n".join(lines)
+        + "\n"
+        + "\n".join(summary)
+        + "\n"
+    )
+
+
 def compare(tags: list[str]) -> str:
     """Side-by-side table of several runs (for example m56 and m6x), per link and arm."""
     runs = {
@@ -1832,6 +2074,14 @@ def main() -> None:
         metavar="TAG",
         help="only write out/compare.md for these tags",
     )
+    ap.add_argument(
+        "--compare-arms", nargs="+", help="with one --compare tag: arms side by side"
+    )
+    ap.add_argument(
+        "--compare-name",
+        default="arms",
+        help="file name part: out/compare_<name>.md",
+    )
     ap.add_argument("--gold", type=Path, default=HERE / "gold.json")
     ap.add_argument("--arms", nargs="+", default=["A", "B", "C"])
     ap.add_argument(
@@ -1848,6 +2098,11 @@ def main() -> None:
     )
     ap.add_argument("--workers", type=int, default=1, help="links run at the same time")
     args = ap.parse_args()
+    if args.compare and args.compare_arms:
+        path = OUT / f"compare_{args.compare_name}.md"
+        path.write_text(compare_arms(args.compare[0], args.compare_arms))
+        print(path.read_text())
+        return
     if args.compare:
         (OUT / "compare.md").write_text(compare(args.compare))
         print((OUT / "compare.md").read_text())
@@ -1867,7 +2122,13 @@ def main() -> None:
     )
     results_path = out_dir / "results.json"
     existing = json.loads(results_path.read_text()) if results_path.exists() else []
-    arms = {"A": partial(arm_a, rejudge=args.models != "56"), "B": arm_b, "C": arm_c}
+    arms = {
+        "A": partial(arm_a, rejudge=args.models != "56"),
+        "B": arm_b,
+        "C": arm_c,
+        "L": arm_l,
+        "L+S2": partial(arm_l, s2=True),
+    }
     link_wall: dict[str, float] = {}
 
     def run_link(link_id: str) -> None:

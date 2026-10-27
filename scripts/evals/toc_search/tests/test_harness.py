@@ -125,3 +125,21 @@ def test_cache_keeps_every_entry_across_threads(tmp_path) -> None:
     assert len([k for k in cache.data if k != "__total_spent__"]) == 400
     assert meter.calls["x"] == 400 and abs(cache.total - 0.4) < 1e-9
     assert len(h.Cache(tmp_path / "c.pkl", budget=1.0).data) == 401
+
+
+def test_round_robin_and_s2_dois() -> None:
+    def doc(key: str, doi: str | None, title: str = "t") -> h.Doc:
+        return h.Doc(key=key, title=title, abstract="", year=None, source="x", doi=doi)
+
+    q1 = [doc("a", "1"), doc("b", "2"), doc("c", "3")]
+    q2 = [doc("d", "1"), doc("e", "4")]  # d duplicates a by DOI
+    ov = [doc("f", None, title=" "), doc("g", "5")]  # f has no title
+    assert [d.key for d in h.round_robin([q1, q2, ov], 10)] == ["a", "b", "e", "g", "c"]
+    assert [d.key for d in h.round_robin([q1, q2, ov], 2)] == ["a", "b"]
+    papers = [
+        {"externalIds": {"DOI": "10.1234/A"}},
+        None,
+        {"externalIds": {}},
+        {"externalIds": {"DOI": "10.1234/a"}},
+    ]
+    assert h.s2_dois(papers) == ["10.1234/a"]
