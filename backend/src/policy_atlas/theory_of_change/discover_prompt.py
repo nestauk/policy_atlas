@@ -21,7 +21,7 @@ from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 from policy_atlas.theory_of_change.draft_prompt import BoxLayer
 
-TOC_DISCOVER_PROMPT_VERSION = "toc_discover_v1"
+TOC_DISCOVER_PROMPT_VERSION = "toc_discover_v2"
 
 TOC_DISCOVER_MAX_OUTPUT_TOKENS = 12_000
 
@@ -55,7 +55,9 @@ class NewLinkWire(BaseModel):
     for_text: str
     then_text: str
     because_text: str
-    conditions: list[str] = Field(description="1 to 3 short statements of what must hold.")
+    conditions: list[str] = Field(
+        description="0 to 2 short statements of what must hold, none already in the theory."
+    )
 
 
 class EvidenceWire(BaseModel):
@@ -122,7 +124,8 @@ keys wherever the route passes through them, and add new boxes only where
 the route needs them. Links go from a box to one in the same or a later
 layer; an input never links straight to an impact. For every pair of
 neighbouring boxes the theory does not already link, add one new link with
-its sentence, IF / FOR / THEN / BECAUSE and 1 to 3 conditions.
+its sentence, IF / FOR / THEN / BECAUSE and 0 to 2 conditions: only those
+most likely to fail here, and none that the theory already states.
 
 Each proposal cites 1 to 3 documents with an exact passage from each, copied
 character for character; code checks every passage and drops a proposal
