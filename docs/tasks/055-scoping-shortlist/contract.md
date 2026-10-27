@@ -343,8 +343,8 @@ verdict "material change needed". The lead checked the code claims of findings 1
   today. When a longlist exists, the route **commits the version first, then** opens a
   shortlist walk through the same opener `confirm_baseline` uses (A4); the response's
   `opened_run` names it. If the opener refuses (`run_active`, capacity), the response carries
-  the new version, `opened_run = null` and `shortlist_pending: true`, and the shortlist view
-  shows "Press Suggest more to re-propose". `plan_inputs_changed` on `LonglistOut` is
+  the new version and `opened_run = null`; the shortlist view's derived `shortlist.stale`
+  (PG1) then shows "Press Suggest more to re-propose". `plan_inputs_changed` on `LonglistOut` is
   `longlist_inputs(current) ≠ longlist_inputs(pinned)`, where `longlist_inputs(plan)` projects
   `intended_change`, `target_unit`, `where`, `outcomes`, `depth`, `constraints`,
   `your_options`, `your_context`, `linked_task_ids`, `removed_defaults` — the fields
@@ -453,6 +453,18 @@ Applied only on the owner's word, in accepted wording, with one line each in
 9. OS capability § Output structure: the `shortlist.proposed` event as the shortlist assembly
    record (A7, O2); History shows "Policy Atlas proposed N places".
 
+## Amendments at the plan gate (2026-10-27)
+
+The plan-stage review ([plan.md](plan.md) § Plan-review folds) changed four details of this
+contract. None changes a ruling.
+
+| # | Earlier text | Now |
+|---|---|---|
+| PG1 | `PlanOut.shortlist_pending` (A4) | No flag. `LonglistOut.shortlist.stale: bool`, derived: the latest proposal's appetite differs from the plan's, or a built longlist has no proposal. The view says "Press Suggest more to re-propose" when true. |
+| PG2 | The ceiling cuts document lines only | The baseline text is capped at 20,000 characters for the pick (and 12,000 for the Potential impact call); a cut is counted as `baseline_chars_cut` and named in the note's footer beside the document-line count. The whole request is under the ceiling or the proposal fails with a named error — never a silent truncation. |
+| PG3 | Registry `shortlist` under stage `select` with its shared words | Still under `select` for the stage key; its label and blurb are a per-registry override ("Shortlisting", "Proposing places for close reading.", words at 6b) because the shared blurb "The strongest, most varied set" is a ranking claim. |
+| PG4 | "21 proposals" in § Verification evidence | 24 proposals (21 + the three second `mostly_tried` runs of A21). |
+
 ## Scope / Out of scope
 
 - **In:** items 1–14 as the surface map states them; one migration; the ADR; tests; the staged
@@ -493,7 +505,7 @@ Approval is this contract's sign-off.
   build); one new whole-list line call in `option_profile`. The baseline text and the plan
   reach the inference route in both, as they do today for suggest and typing.
 - **Public interface, additive only:** `risk_appetite` on `ScopingPlan`, `ScopingPlanPatch`
-  and `PlanOut`; `shortlist_pending` on `PlanOut`; `shortlist` and `maturity` on
+  and `PlanOut`; `shortlist` (with `stale`, PG1) and `maturity` on
   `OptionSummaryOut`; `shortlist` and `plan_inputs_changed` on `LonglistOut`;
   `potential_impact` in `ProfileLineKey`; the three routes of § The user's actions with
   their refusal codes; three event types (`option.shortlisted`, `option.unshortlisted`,
@@ -517,7 +529,7 @@ Approval is this contract's sign-off.
 ## Public / private boundary
 
 Contract, rubric, plan, ADR and `verification.md` are public-safe. The research reports,
-the read-backs of the 21 proposals, traces and any drive script stay in the gitignored
+the read-backs of the 24 proposals, traces and any drive script stay in the gitignored
 `research/` and `evidence/` folders. `verification.md` carries counts, option names and the
 reasons as quoted sentences only.
 
@@ -553,7 +565,7 @@ cost of the longlist walk.
 - **Reasons are the model's words.** The prompt requires a card fact; code does not verify
   the citation (S12, S16). The hand reading in the staged check is the measure.
 - **The mix is a prompt rule.** A proposal that breaks the stated mix is shown as it is; the
-  build reads the 21 proposals and reports how often it happens (M3).
+  build reads the 24 proposals and reports how often it happens (M3).
 - **Potential impact rests on model reasoning**, as the legal-change line does (046 R38),
   labelled as such.
 - **Maturity depends on retrieval**: "Proposal only" means no evaluating document among the
@@ -576,7 +588,7 @@ longlist-input change with the version mechanism as built; scope would grow into
   - item 1: a plan with no `risk_appetite` validates to `mostly_tried`; an appetite-only
     patch mints a version, leaves `plan_inputs_changed` false and opens a shortlist walk when
     a longlist exists, no walk when none exists; the version is committed before the opener
-    runs, and a refused opener returns `shortlist_pending: true` (A4); an outcome change sets
+    runs, and after a refused opener `LonglistOut.shortlist.stale` is true (A4, PG1); an outcome change sets
     `plan_inputs_changed` true and opens no walk; `longlist_inputs` projects an older payload
     with defaults (A6); the migration round-trip seeds three plan versions and the downgrade
     strips the key from each (A15).
@@ -648,7 +660,7 @@ longlist-input change with the version mechanism as built; scope would grow into
 ## Verification evidence expected
 
 Command tails; the migration round-trip; the OpenAPI diff; the three prompt texts and the hash
-diff; the 21 proposals (option names, reasons, notes) and the M1–M7 table, each number read
+diff; the 24 proposals (option names, reasons, notes) and the M1–M7 table, each number read
 back from the saved file; the hand reading per proposal; the token and cost figures beside the
 longlist walk's; the browser check notes with the places before and after each action; known
 gaps; the `docs/deferred.md` delta; the spec changes applied, each with the owner's accepting

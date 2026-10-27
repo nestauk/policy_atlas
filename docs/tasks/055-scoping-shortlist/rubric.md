@@ -49,7 +49,7 @@ does not restate them.
     `evidence_search/` changed.
 11. [ ] **Prompts.** `shortlist_v1`, `option_profile_v4`, `task_agent_scoping_v6` pinned;
     every other hash unchanged; prompt texts recorded in `verification.md`.
-12. [ ] **Staged check and measures (item 13).** The 21 stored proposals and the live rapid run
+12. [ ] **Staged check and measures (item 13).** The 24 stored proposals and the live rapid run
     done; M1, M2, M4 and M7 pass; M3, M5, M6 reported with each number read back from the saved
     file; tuning on four tasks, the check set read once.
 13. [ ] **ADR (item 11)** written and Accepted with a rollback plan.
