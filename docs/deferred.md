@@ -3226,10 +3226,6 @@ Recorded by the task 055 contract, plan and build (`docs/tasks/055-scoping-short
   propose one from the question's words and show it as a guess for the user to confirm.
 - **Direction of effect from abstracts (046 R42).** Stays with assessment; a reason may say an
   option "bears on" an outcome, never that it moves it.
-- **`question` is not among the longlist inputs (A6).** `longlist_inputs()` projects the ten fields
-  the contract named; `suggest`, `constrain` and `theme` also read `plan.question`, which a Task Agent
-  re-approval can change without flagging the longlist stale. Add it to the projection if that path
-  turns out to be used.
 - **The shortlist stage key.** Built as its own key (the pattern of every other scoping component),
   not as `select` with an override (contract PG3). If the owner wants the override, it is a lookup by
   registry name at four call sites in `routers/sse.py` and `checkin_read`.
@@ -3242,6 +3238,27 @@ Recorded by the task 055 contract, plan and build (`docs/tasks/055-scoping-short
   backend's check-in bundle (Who · Where · Outcomes · Depth); adding "Risk appetite" is one bundle
   key and one label in `checkInPresentation.ts`. The plan document beside the card shows it.
 - **Potential impact length.** The ceiling is a code check (a `max_length` on the wire made the
-  constrained decoder cut sentences mid-word at the limit). If the judgment model keeps writing over
-  400 characters on verbose lists, the target in the prompt (about 300) goes down before the ceiling
-  goes up.
+  constrained decoder cut sentences mid-word at the limit): the prompt states a target (about 300,
+  never more than 380), a line over 400 is kept with a warning, and only a line over the hard bound
+  (600) fails the attempt, because `option_profile` is a spine step. If the judgment model keeps
+  writing over 400 characters on verbose lists, the target in the prompt goes down before either
+  number goes up. The contract says "under 400"; the owner rules on the number at the 055 review.
+- **One card build per option before the shortlist call.** `option_cards()` calls
+  `repository.option_out` once per included option, and each call re-reads the task-wide data (the
+  newest longlist row, every option name, all relations, the plan version). A 40-option list makes
+  several hundred queries before one model call, on every appetite change and Suggest more; measured
+  at 9–27 s wall per proposal in the staged check, so not a user-visible problem yet. A batch reader
+  belongs to a system-level cost and latency task (owner ruling 2026-09-28: Evidence search
+  components are not edited for cost inside a capability slice).
+- **The "could not propose" notice stays until the next walk.** The shortlist view derives it from
+  the task's newest parentless run; it says "Your places are unchanged" even after the user has since
+  added or removed places by hand. Clearing it on the first user action after the failed walk needs
+  the walk id on the view's state.
+- **The model does not see a breach on a kept place.** When constrain excludes an option the user
+  added, the user sees the breach on the row (O1) but the card text sent to the shortlist call omits
+  the exclusion block (contract card-text matrix: exclusion block out). One breach line for kept,
+  excluded places would let the note say so.
+- **Appetite changes are an unmetered model-cost lever.** Each `PATCH /plan` that flips the appetite
+  opens a full shortlist walk (about USD 0.15 at 25–43 options). Bounded by `run_active`
+  serialisation and executor capacity only, the same posture as Rebuild; a per-task cap belongs with
+  the price envelope (open question 2).

@@ -44,3 +44,9 @@ timestamp: 2026-09-24
 
 Each line burned real time in the 027 G.1 drive (2026-07-29); none is
 discoverable from the code without already knowing where to look.
+
+055 addendum (2026-10-27): uvicorn `--reload` waits for open connections before it restarts;
+the frontend's event stream (and the Vite proxy's keep-alive) holds one open, so a backend
+file save during a browser session leaves the dev server at "Waiting for connections to
+close" until the stack is restarted. Save backend files between browser sessions, or restart
+`make dev` after.

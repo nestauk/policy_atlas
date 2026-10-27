@@ -582,3 +582,14 @@
   [event-log sequence](event-log-sequence.md), [block content_hash](block-content-hash.md)).
 * **Update**: Added the [plan→config compile fails-closed](plan-compile-fails-closed.md) invariant —
   also verified by task 001, missed in the initial seed.
+* **Update** (2026-10-27, task 055 review): four concepts — [wire max_length truncates](wire-max-length-truncates-not-fails.md),
+  [plan-field additions carry from previous](plan-field-additions-carry-from-previous.md),
+  [recovery copy names a route that recovers](recovery-copy-names-a-route-that-recovers.md),
+  [short ids leak into free text](short-ids-leak-into-free-text.md); folds into
+  [docker wedge](macos-swap-presents-as-docker-wedge.md) (engine stops answering; `docker desktop restart`),
+  [live-check runbook](live-check-drive-runbook.md) (`--reload` waits on the event stream),
+  [executor fan-out](executor-fanout-context-and-usage.md) (thread-order assertions),
+  [gate snapshots](gate-snapshots-commit-from-tree-ids.md) (splitting a gated tree),
+  [evidence readbacks](evidence-readbacks-name-the-task-they-read.md) (hand marks written back).
+  Declined as knowledge: the stub `to_ready` helper adds a turn per plan part and
+  `_folded_coverage` copies only `outcome_counts` (both code-local, recorded in 055 verification.md).

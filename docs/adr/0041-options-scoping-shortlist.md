@@ -13,7 +13,7 @@
   [ADR 0037](0037-options-scoping-task-kind-links-and-baseline-gate.md)
   (the scoping plan; one field added); [ADR 0013](0013-mandatory-eb-spine.md)
   (the spine; the new step is not spine); [ADR 0027](0027-durable-planning-transcript-artefact-streaming.md)
-  (progress events; the existing `select` stage key reused).
+  (progress events; one stage key added, `shortlist`).
 
 ## Context
 
@@ -67,7 +67,9 @@ must point at something the user can open.
    plan fit, the reason rules); code checks only the hard things (ids,
    count, picks kept, set-asides not re-proposed, reasons present) with one
    re-ask, then the walk degrades and the previous places stay. Input is
-   shuffled per attempt. The judgment model, not the mini model. Rejected:
+   shuffled once per proposal (the re-ask keeps the first order, so the
+   failure it names points at the same labels; as built, 055 review). The
+   judgment model, not the mini model. Rejected:
    a deterministic quota ladder, a model-filled criteria table with rules
    over it, a pairwise tournament, enforced spread checks, a per-option
    "why not" sentence. (S11–S16.)
@@ -82,9 +84,14 @@ must point at something the user can open.
 5. **Re-proposal runs as a one-component shortlist walk.** An appetite
    change (when the longlist's inputs are otherwise unchanged) and Suggest
    more open it; the longlist chain gains `shortlist` after `theme` so a
-   Rebuild proposes again around the user's picks. The walk shows under the
-   existing stage key `select` with a scoping-only label. Update-in-place of
-   the longlist stays deferred; Rebuild stays. (S10, S17, S25.)
+   Rebuild proposes again around the user's picks. The walk shows under its
+   own stage key `shortlist` ("Shortlisting", "Proposing places for close
+   reading."), the pattern of every other scoping component, not under
+   `select` as the plan gate wrote (PG3): the shared `select` blurb is a
+   ranking claim, and the registry guard tests assume one key per
+   component. One more value in the public stage enum; the owner adjudicates
+   at the 055 review (verification.md § Diff summary, item 2). Update-in-place
+   of the longlist stays deferred; Rebuild stays. (S10, S17, S25.)
 
 6. **Potential impact is a ninth "What it would take" line and a reason to
    pick.** One conditional sentence per option from `option_profile`,

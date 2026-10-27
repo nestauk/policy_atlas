@@ -26,6 +26,7 @@ Branch head at open: `e3e60392` (ADR 0041 committed at step 4). `make verify` on
 | Command | Result | Notes |
 |---|---:|---|
 | `make verify` (step-6 exit, full) | pass | on the gated snapshot `055bd662` = commit `7a8d0563`'s tree: okf-validate 174 concepts 0 violations · backend 3742 passed (14 min 51 s) · eval-check · infra test · audit-paths 202 files 0 violations · prompt-guard 36 unchanged · font-guard · drift-check OK · frontend typecheck, lint, 929 vitest passed, build |
+| `make verify` (review exit, full, 2026-10-27) | pass | on the working tree after the review's fixes R1–R21 (committed as the two commits after `1bd434e5`): okf-validate 178 concepts 0 violations · backend 3755 passed (19 min 13 s) · mypy 430 files clean · ruff clean · eval-check 93 passed · infra test · audit-paths 202 files 0 violations · prompt-guard 36 unchanged (one comment-only re-pin, R20) · font-guard · drift-check OK · frontend typecheck, lint, 936 vitest passed (88 files), build |
 | `make test` | pass | inside the above |
 | `make typecheck` | pass | mypy 430 source files, no issues |
 | `make lint` | pass | ruff, all checks passed |
@@ -58,14 +59,23 @@ after `c99406ef`.
 | 6a | `ef3c63f0` | shares the Phase 3 gate tree |
 | 4 (+ lead edits: step wording, view polish, walk kind, Potential impact round 2) | `257faff8` | `verify-fast` + `prompt-guard` + `openapi-sync` (clean) + `drift-check` + `frontend-verify` on snapshot `572b58af` (3741 backend, 929 frontend); the Phase 5 full gate ran before Phase 4 (above), so Phase 4 is covered by the step-6 exit's full gate |
 | 7–8 (prompt rounds, the ceiling, evidence, deferred) | `7a8d0563` | full `make verify` on snapshot `055bd662` (3742 backend, 929 frontend) |
-| 8 (this file's closing lines) | _the commit after `7a8d0563`_ | docs only |
+| 8 (this file's closing lines) | `646e68bf` | docs only |
+| owner amendments (own tab, icons; stances) | `c99406ef`, `9e9c6a00`, `1bd434e5` | see § Commands run, post-build amendment gates |
 | 2b | `e771c16e` | `verify-fast` + `prompt-guard` + `openapi-sync` (clean) + `drift-check` + `frontend-verify` on snapshot `15620802`: 3630 backend passed, frontend green |
 
 ## Checks beyond the build
 
 ### Deterministic tests
 
-_To be filled per phase._
+The acceptance checks of the contract are the test files the branch adds or extends (see the
+diff stat): `test_migration_055_shortlist.py` (round-trip, three plan versions), `test_scoping_plan.py`
+(the appetite default, `longlist_inputs`), `test_task_agent_scoping.py` (the offer, the patch, the
+walk it opens), `test_shortlist.py` (the component: checks, re-ask, seeds, the ceiling cut, the
+event, places), `test_constrain.py` (a user place never merged or folded), `test_shortlist_routes.py`
+and `test_shortlist_start.py` (the three routes, Suggest more arithmetic, refusals), `test_card_text.py`
+(the golden matrix), `test_maturity.py` (four rungs, two modifiers), `test_option_profile*.py` (the
+ninth line, its inputs, the ceiling), and the vitest files beside each view. Counts per gate are in
+§ Phase commits; the review's additions are in § Review findings.
 
 ### The staged check (item 13)
 
@@ -96,7 +106,7 @@ Round 1 on the four tuning tasks (figures read from the driver's summary lines a
 |---|---:|---:|---:|---:|---:|---:|
 | neet | 37 | 37 | 1 | 384 | 14,131 / 3,983 | 54 |
 | heat-pumps | 43 | 43 | 1 | 383 | 14,265 / 4,834 | 65 |
-| caregiving | 24 | 24 | 1 | 355 | 12,157 / 3,158 | 45 |
+| caregiving | 24 read (22 included; the two excluded options get a line too) | 24 | 1 | 355 | 12,157 / 3,158 | 45 |
 | obesity | 25 | 25 | 1 | 382 | 11,633 / 4,144 | 55 |
 
 Hand reading of the 129 lines against the contract's form (conditional magnitude · pathway against
@@ -120,10 +130,12 @@ wire description; `option_profile_v4` keeps its name (it has not shipped) and is
 mid-word, 8 of them on obesity-deprived; several of those stop short of 400 without a full stop. That
 showed the real cause: `max_length=400` on the wire makes the constrained decoder stop at the limit
 mid-word instead of failing the attempt (the plan P13 assumed a longer answer would fail). **Round 3**
-removes `max_length` from the wire and enforces the 400-character ceiling in the code check (a longer
-answer fails the attempt; the existing one retry applies), with the prompt's 300/380 rule unchanged.
-Flagged as a plan-assumption correction (minor; the contract's rule "under 400, a longer answer fails
-the attempt" is now true). Reading 3 is reported below.
+removes `max_length` from the wire and moves the ceiling to the code check, with the prompt's 300/380
+rule unchanged. As first built the code check failed any line over 400; after the live run (stage 2,
+point 3) it became a target with a hard bound: a line over 400 is kept with a warning, a line over
+600 fails the attempt (the existing one retry applies). The contract's rule "under 400, a longer
+answer fails the attempt" therefore does **not** hold as built — see § Diff summary, item 15 (the
+review corrected this paragraph, which had claimed it did). Reading 3 is reported below.
 
 **Round 3** (all seven tasks, one attempt each, 204 lines, longest 397, mean 344 characters; no
 over-ceiling retry happened): 0 lines cut or over 400; every line ends with a full stop. Hand reading
@@ -170,7 +182,7 @@ holds all 24; `measures.json` is computed over them).
 
 | # | Measure | Result | Pass? |
 |---|---|---|---|
-| M1 | Reasons that name a fact on the option's card (hand) | 120 / 120 reasons across the 24 proposals (60 tuning round 2 + 60 check) | pass |
+| M1 | Reasons that name a fact on the option's card (hand) | 120 / 120 reasons across the 24 proposals (60 tuning round 2 + 60 check). The build's marks were not written into `measures.json` (every `m1_names_card_fact` stayed null); the review re-read 30 reasons across six proposals (one per task, two per appetite): 30 / 30, recorded in the file under `M1.review_sample` | pass (build reading; reviewer sample) |
 | M2 | Reasons or notes using study count, tier, "works", "effective", "proven", "promising", "strong/weak evidence", "studies" | code: 15 hits over 120 reasons + 24 notes, every one the word "works" inside the permitted conditional "if it works"; hand: 0 breaches | pass |
 | M3 | Proposals whose mix matches the stated appetite (S4) | 21 / 21 first proposals (the script's rule: tried_only = all picks Evaluated/Reviewed; mostly_tried = 1–2 untested of 5; open_to_untested = at least one Evaluated/Reviewed anchor) | reported |
 | M4 | Potential impact lines in conditional form, naming a pathway and a reach, no claim of effect | 75 / 75 on the three check tasks (reading 3; reading 1 was 71 / 75, see above) | pass |
@@ -180,6 +192,19 @@ holds all 24; `measures.json` is computed over them).
 
 The ceiling (400,000 characters) is far above what a 25–43 option list produces (≈165k); the
 contract's estimate "about 55k tokens for 25 options" is close to the measured 20k–32k.
+
+**Review read-back (2026-10-27).** M3 (21 / 21), M5 (attempts all 1; input tokens 19,601–31,717,
+mean 25,872; output 546–1,731, mean 857; 0 cuts), M6 (4 / 5 · 3 / 5 · 2 / 5) and the 204 Potential
+impact lines (longest 397, mean 345, none over 400, every one ending in a full stop) recompute from
+the saved files exactly as reported. The 24 notes carry no short id. The lexical sweep over the 204
+lines finds one hit, "likely to be owner-occupied" (describing homes, not an effect).
+
+**The measures predate the final prompt words.** Commit `9e9c6a00` (the owner's third amendment)
+reworded the mix labels and the rung words in `shortlist_v1`, the card text the model reads, and the
+appetite offer in `task_agent_scoping_v6`, after the 24 proposals and the live check were run. The
+change is words only (the same three mixes and four rungs under new names; diff in that commit).
+No proposal was re-run after it; the owner decides whether one check task is re-run (three
+proposals, about USD 0.45) or the word-swap precedent of 2026-09-04 applies.
 
 #### Stage 2 — the live rapid run in the browser (M7)
 
@@ -234,9 +259,12 @@ branch base `e3e60392`:
 
 | File | Version | Hash before → after |
 |---|---|---|
-| `options_scoping/option_profile/option_profile_prompt.py` | `option_profile_v4` | `d02c7843…` → `57da8122…` (three rounds: words; length headroom; ceiling moved to code) |
-| `options_scoping/shortlist/shortlist_prompt.py` (new) | `shortlist_v1` | — → `d0077c39…` (two rounds: the names-not-ids note rule) |
-| `runtime/task_agent_scoping_prompt.py` | `task_agent_scoping_v6` | `c08fdab0…` → `82036a24…` |
+| `options_scoping/option_profile/option_profile_prompt.py` | `option_profile_v4` | `d02c7843…` → `f2b7e24f…` (three rounds: words; length headroom; ceiling moved to code, then the hard bound) |
+| `options_scoping/shortlist/shortlist_prompt.py` (new) | `shortlist_v1` | — → `29e2268a…` (two rounds: the names-not-ids note rule; then the stance and rung words of `9e9c6a00`) |
+| `runtime/task_agent_scoping_prompt.py` | `task_agent_scoping_v6` | `c08fdab0…` → `2b1806a1…` (the stance words of `9e9c6a00`) |
+
+The hashes above are the pinned values at the review (the build's table had the pre-amendment
+ones). The prompt texts are in the tracked files, not copied here.
 
 ### OpenAPI diff (since `e3e60392`, regenerated by `make openapi-sync`)
 
@@ -293,10 +321,12 @@ here, not silent)._
    `baseline_sections()` + `render_baseline_blocks()` (what every other longlist prompt reads), capped at
    20,000 characters with the cut counted (PG2). No new `baseline_text` helper was extracted from the
    chat renderer (plan P4/PR15): the public reader already existed.
-4. **Picks are released at the final write, not before the call.** The harness commits a component's
-   writes on a caught failure; releasing the previous picks before the model call would lose them on a
-   degraded walk, which the contract forbids ("the previous places stay"). Clearing picks whose option
-   was excluded or merged still happens first and stands (O1).
+4. **Picks are released at the final write, not before the call.** Releasing the previous picks before
+   the model call would lose them on a degraded walk, which the contract forbids ("the previous places
+   stay"). Clearing picks whose option was excluded or merged still happens first and stands (O1): the
+   harness catches the component's failure, appends `component.failed` on the same connection and
+   returns, so the runner's transaction commits (`harness.py` `_run_scope_component`). The security
+   lane read this as a rollback; the review checked the harness and the build's text holds.
 5. **`longlist_inputs` projects the ten fields of A6 exactly.** `question` is not among them although
    `suggest`, `constrain` and `theme` read it; a Task Agent re-approval that changes the question would
    not flag the longlist stale. The ten fields were fixed by the contract amendment; left as specified,
@@ -370,20 +400,162 @@ here, not silent)._
     merged rows for this one action); Remove on a merged option stays a 404.
 14. **The local dev database was migrated to `b33ffb8c3a16`** by the driver-script delegate (needed for
     the staged check; additive, with a downgrade).
+15. **The Potential impact ceiling is a target with a hard bound** (found by three lanes; the build had
+    not listed it). Contract item 6: "Under `POTENTIAL_IMPACT_MAX_CHARS` (400)", a longer answer fails
+    the attempt. As built (`option_profile_prompt.py:52–53`, `option_profile.py:614–622`): the prompt
+    asks for about 300 and never more than 380; a line over 400 is kept with a warning; only a line
+    over 600 fails the attempt. Reason: `option_profile` is a spine step, and the live run produced
+    405- and 427-character lines on two attempts in a row, which failed the profile step once under a
+    strict 400. **Owner's call** (the review did not change the code): keep the two numbers and amend
+    the contract's "under 400", or return to a strict 400 with a per-option drop of the over-long line
+    instead of a step failure.
+16. **Exclude cleared a set-aside** (contract verifier, M3). `exclude_option` set `shortlist_state` to
+    null whatever it was, so Exclude then Include again made a set-aside a candidate again, against S9.
+    Fixed in the review: Exclude clears a place (`proposed`, `added_by_you`) and leaves `set_aside`.
+17. **Suggest more on a stale appetite re-proposes** (Codex lane). The plan-gate words "Press Suggest
+    more to re-propose" (PG1) sat over a route that kept the picks and filled gaps, and a button that
+    was disabled at five places. Fixed in the review: when the stored proposal's appetite differs from
+    the plan's, the Suggest more opener runs the walk as a re-proposal and the view enables the button.
 
 ## Review findings
 
-Added after the review stack (step 7).
+Review conversation 2026-10-27 (fresh; the build conversation wrote no finding here). Lanes:
+`contract-verifier` (Opus, read-only) · `/code-review medium` (the Claude half) · one security lane
+(`agent-skills:security-auditor`, Tier 4) · the Codex adversarial pass (`codex-rescue`, read-only;
+all code on the branch is Claude-written, so Codex anchors the whole diff) · the lead's evidence
+read-back (§ Measures, "Review read-back"). Diff scoping excluded `frontend/openapi.json`,
+`frontend/src/api/gen/types.ts`, the `option_out_full.json` fixture and `scripts/prompt_hashes.json`;
+the lead confirmed the generated files carry the generator header and the hashes match the files.
+Budget: reasoning-class subagents 281k (verifier) + 159k (security) + 32k (Codex) ≈ 472k tokens,
+over the 250k guideline — the verifier alone read a 10k-line diff against a 690-line contract;
+`/code-review` 175k. No fast-worker lane. The review's own `make verify` baseline was stopped at 21 %
+after 35 minutes under the four lanes' load; the post-fix full gate below is the review's gate.
 
-- **Contract verifier:**
-- **`/code-review`:**
-- **`/security-review`:**
-- **Adversarial review:**
-- **`/simplify`:**
+**Convergent (two or more lanes):** the `question` staleness hole (code-review, Codex; the build's
+deviation 5) · the Potential impact ceiling as 400 target / 600 hard bound, unlisted (verifier, Codex,
+lead) · the `shortlist` stage key in the public enum (verifier, Codex; deviation 2). **Unique to one
+lane and adopted:** the appetite reset across plan versions (code-review) · the stale-appetite
+recovery that could not recover (Codex) · the degraded shortlist walk shown as "DONE" (Codex) · a
+set-aside revived by Exclude then Include again (verifier) · the late check's shortlist-state gap,
+the unsanitised side blocks, the link check, the access tests (security).
+
+### Adopted and fixed in the review (code)
+
+| # | Lane | Finding | Fix |
+|---|---|---|---|
+| R1 | code-review, Codex | `question` not in `longlist_inputs()`; a question edit never marks the longlist stale | `question` added to `LONGLIST_INPUT_FIELDS`; test renamed and extended; deferred.md seam removed |
+| R2 | code-review | `_build_plan` applies the appetite from the wire only; a later plan version resets it to `mostly_tried` | falls back to the previous version's appetite; direct test of the builder |
+| R3 | code-review | the grid never renders the action notice; a 409 on Add/Remove in Grid mode is silent | notice rendered under the tile |
+| R4 | code-review | `_plan_inputs_changed` says False when the pinned plan is unreadable while the opener says `plan_stale`: Rebuild hidden, Suggest more refused | returns True when the pinned plan cannot be read |
+| R5 | code-review | the plan document's appetite select is never disabled while a patch is pending | disabled while pending, as the shortlist view does |
+| R6 | code-review | `maturityWords` unused; three copies of the literal 5 | deleted; one `MATURITY_RECENT_YEARS` constant |
+| R7 | code-review | new docstrings say FIFO, RCT, JSONB unexpanded (CLAUDE.md) | expanded |
+| R8 | Codex | "Press Suggest more to re-propose" over a fill-the-gaps route; button disabled at five places | stale appetite → the opener re-proposes; button enabled when stale (deviation 17) |
+| R9 | Codex | a degraded shortlist walk reads "DONE — The shortlist is proposed" | tone stopped, "Policy Atlas could not propose"; the finished notice says the places are unchanged |
+| R10 | Codex | `walkKind` fallback names a `shortlist` stage "longlist"; the test pinned it | shortlist stage → shortlist; test corrected |
+| R11 | Codex | `plan_stale` on Suggest more shows the Task Agent sentence | the suggest mutation's own sentence: rebuild the longlist first |
+| R12 | Codex, verifier | the `no_longlist` conflict sentence is unreachable (deviation 12) | deleted |
+| R13 | Codex | maturity words name the current plan's country after a Where change, before Rebuild | generic words while `plan_inputs_changed` |
+| R14 | verifier | Exclude cleared `set_aside`; Include again revived it (S9) | Exclude clears a place only (deviation 16); test corrected |
+| R15 | verifier | the mock's Suggest more at five adds nothing; the mock's exclude keeps the place | mock fixed |
+| R16 | security LOW | the late re-check verifies "still included" only; the `run_active` fence is the single guard for the user's places | the picked options' `shortlist_state` is re-checked too |
+| R17 | security LOW | `_one_line` (set-aside, excluded, previous-proposal lines) skips the prompt sanitiser | passes through `sanitize_prompt_field` |
+| R18 | security LOW | no hard check on links in reasons or the note | `http://`, `https://`, `www.`, `](` fail the check and name the re-ask |
+| R19 | security LOW | no non-owner test on the three routes | outsider 404, same-org reader 403, other-task option 404 |
+| R20 | verifier | the ceiling comment's first paragraph said a longer answer fails the attempt | corrected; comment-only change to a prompt file, re-pinned (`option_profile_prompt.py`, words only, no prompt text changed). The security lane's INFO that the O1 clear rolls back was checked against `harness.py` and declined: the harness catches the failure and the transaction commits, so the comment "stands whatever the call does" is true |
+| R21 | verifier | stale test name "the appetite on the picks' heading" | renamed |
+
+### Adopted in the records only
+
+Verifier m1 (stale verification.md: hash table, "to be filled", the Phase 8 commit, deferred "to
+be written", 929/928, caregiving 22/24, M1 marks): corrected above. Verifier 13: ADR 0041 decisions
+3 ("shuffled per attempt" → once) and 5 (`select` → own key) now say what was built. Lead: M1's hand
+marks were never written to `measures.json`; a reviewer sample of 30 / 30 is recorded there.
+
+### Declined, with the reason
+
+- **code-review: a model call with zero places to fill** (five user places, appetite change).
+  Contract § Places to fill: "Zero places to fill still writes the note." The call is the note.
+- **security: a vocabulary check in code** on reasons and the note. S16: code checks only the hard
+  things; the words are the hand reading's (M2). The link check (R18) is a hard thing and was adopted.
+- **verifier m7: a leftover `Mode` type in `LonglistView`.** Two modes remain (List · Grid); nothing to cut.
+- **Codex 5 (return to a strict 400):** not the review's call — deviation 15 goes to the owner with
+  both options.
+
+### Deferred to `docs/deferred.md`
+
+One card build per option before the shortlist call (code-review) · the sticky "could not propose"
+notice (code-review) · the breach on a kept, excluded place not reaching the model (Codex 4) · appetite
+changes as a cost lever (security INFO).
+
+### For the owner (not changed by the review)
+
+1. **Deviation 15, the ceiling:** keep 400 target / 600 hard bound (recommendation: yes — a 600-character
+   line renders; the spine step stays robust) and amend contract item 6's number, or strict 400 with a
+   per-option drop.
+2. **Deviation 2, the `shortlist` stage key** as its own public enum value (verifier, Codex) instead of
+   the PG3 override. Recommendation: keep; the enum is additive and only this repo's frontend reads it.
+3. **Add on a pick from the screen** (verifier M4): the route turns a pick into "added by you" and is
+   tested; the Shortlist view offers only Remove on a pick. Owner's design call.
+4. **`ConsiderationAspect` admits `potential_impact`** (verifier, rubric 16): a plan preference may
+   now target the ninth line, as it may any other. Recommendation: keep.
+5. **The measures predate the stance and rung rewording** (§ Measures): re-run one check task, or apply
+   the word-swap precedent.
+6. **"In the documents we found"** (contract § Disciplines) is not in the rung words the owner chose
+   (verifier m5). Owner's copy call.
+7. **The build's open items:** a lower/middle/higher mark and a grid column for Potential impact (lead:
+   no, S22/A23); the rung beside the longlist rows' counts (lead: counts on the longlist, rung on the
+   shortlist and card); the lead copy of deviation 10/11; the three 409 sentences (lead: fine as they
+   are); deviation 12 (the generic 404).
+8. **The spec changes 1–9, 4b, 4c** of the contract: none applied; each needs the owner's words.
+9. **Rollback note** (verifier m6): after a downgrade, shortlist-purpose scopes read as purpose-less
+   under the previous image (per contract A1/A15); harmless for finished runs.
+
+### Live-trace lane
+
+The build's one anomaly "for the review" was the live run's profile-step failure (stage 2, point 3):
+two Potential impact lines of 405 and 427 characters on two attempts in a row failed the strict 400
+check; the runner's retry saved the walk. Cause confirmed from the code path (`_checked_line` returned
+None for the whole batch on any over-ceiling line); the fix is the hard bound of deviation 15. Langfuse
+was not opened in this conversation (the `.env` read was refused by the permission mode); the model
+I/O was read from the 24 proposal files and the 7 Potential impact files instead, which hold every
+reason, note and line verbatim with the usage per attempt. Content read: every note says what the set
+leaves out and, at a re-proposal, which places changed by name; the reasons name design features, the
+lever, the rung word, an evaluated country or an outcome borne on; the only conditional magnitude words
+are "could be large if…" forms. The `offline-check/` folder is the driver's stub-mode run
+(`gpt-5.4`, synthetic notes), not part of the 24.
+
+### `/simplify`
+
+Not run as a separate pass: `/code-review` carried the cleanup angles and their findings (R6, R12,
+R7) were applied; a second same-family pass over the same diff would add nothing.
 
 ## Rubric status
 
-Filled by the review conversation.
+Filled by the review conversation 2026-10-27 (the contract verifier's evidence, re-checked by the lead).
+
+| # | Status | Note |
+|---|---|---|
+| 1 Risk appetite | holds | after R2 (the appetite carries across versions) and R4 |
+| 2 Places and actions | holds | after R14; Add on a pick is a route without a button (owner item 3) |
+| 3 The component | holds | shuffled once, not per attempt (ADR corrected); R16–R18 tighten the checks |
+| 4 The walks | holds, one owner item | the stage key is `shortlist`, not `select` (deviation 2) |
+| 5 Suggest more | holds | after R8 (a stale appetite re-proposes) |
+| 6 Potential impact | holds, one owner item | the ceiling is 400 target / 600 hard bound (deviation 15); "size of the prize" appears only as the prohibition in the prompt |
+| 7 Maturity rung | holds | R13 for the words after a Where change |
+| 8 The shortlist view | holds as amended | the owner's own-tab amendment (deviation 11) replaces the contract's third mode |
+| 9 Chat and plan surfaces | holds | |
+| 10 Schema and interface | holds | one test file under `evidence_search/` changed (the thread pin), no source |
+| 11 Prompts | holds | hashes re-pinned at the review's values; texts in the tracked files |
+| 12 Staged check and measures | holds, one owner item | M1 reviewer sample 30 / 30; the measures predate the rewording (owner item 5) |
+| 13 ADR | holds | decisions 3 and 5 corrected to as-built |
+| 14 Spec changes and deferred | pending the owner | no spec change applied; deferred.md current |
+| 15 `make verify` + CI | local gate: see § Commands run (post-review gate); CI URL after the push | |
+| 16 No unapproved gated change | holds, two owner items | the `shortlist` enum value; `potential_impact` as an aspect |
+| 17 Generated files and secrets | holds | |
+| 18 Tests not weakened | holds | two tests changed by the review with their reason (R10, R14); none deleted or skipped |
+| 19 Evidence recorded | holds | stale sections corrected |
+| 20 Review stack | holds | this section |
 
 ## Intent & assumptions
 
@@ -417,8 +589,9 @@ tracked tree.
 
 ## Review handoff (step-7/8 inputs)
 
-- **Adjudication items:** the flagged deviations 1–13 in § Diff summary; the spec changes awaiting
-  the owner; the three 409 sentences in `frontend/src/lib/errors.ts` (delegate's words).
+- **Adjudication items:** the flagged deviations 1–17 in § Diff summary (adjudicated in § Review
+  findings; 2, 15 and the owner items listed there remain the owner's); the spec changes awaiting
+  the owner; the three 409 sentences in `frontend/src/lib/errors.ts` (lead: kept).
 - **Executor provenance (family flip):** Phases 1, 3b and 4 `deep-reasoner` (Opus); Phases 2b, 5b
   and 6a `fast-worker` (Sonnet); the drivers `deep-reasoner`; prompts, copy, the two Potential impact
   fixes, the shortlist note rule, `SCOPING_STEPS`, the walk kind and the view polish: lead. No Codex.
@@ -461,4 +634,7 @@ tracked tree.
 
 ## Deferred work
 
-Seams left open → [docs/deferred.md](../../deferred.md) (to be written in Phase 8).
+Seams left open → [docs/deferred.md](../../deferred.md) § Options scoping shortlist (task 055
+seams): written in Phase 8; the review removed the `question` seam (fixed) and added four (one card
+build per option; the sticky "could not propose" notice; the breach on a kept place not reaching the
+model; appetite changes as a cost lever).
