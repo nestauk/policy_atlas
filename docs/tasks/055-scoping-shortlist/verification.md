@@ -25,7 +25,15 @@ Branch head at open: `e3e60392` (ADR 0041 committed at step 4). `make verify` on
 
 | Command | Result | Notes |
 |---|---:|---|
-| `make verify` (step-6 exit) | _pending_ | |
+| `make verify` (step-6 exit, full) | pass | on the gated snapshot `055bd662` = commit `7a8d0563`'s tree: okf-validate 174 concepts 0 violations · backend 3742 passed (14 min 51 s) · eval-check · infra test · audit-paths 202 files 0 violations · prompt-guard 36 unchanged · font-guard · drift-check OK · frontend typecheck, lint, 929 vitest passed, build |
+| `make test` | pass | inside the above |
+| `make typecheck` | pass | mypy 430 source files, no issues |
+| `make lint` | pass | ruff, all checks passed |
+| `make build` | pass | frontend build inside `frontend-verify` |
+
+Every intermediate gate ran on a snapshot in the second worktree `../policy_atlas-gate` and the
+commit was made only when the index tree still equalled the gated tree (six gates; the first exit
+attempt was red at `prompt-guard` only, after the last ceiling edit; re-pinned and re-run green).
 
 ## Phase commits
 
@@ -37,6 +45,9 @@ Branch head at open: `e3e60392` (ADR 0041 committed at step 4). `make verify` on
 | 3b | `612f3f80` | full `make verify` on snapshot `d17d465c` (3715 backend passed, 928 frontend passed, prompt-guard 36 unchanged, drift-check OK); shared with 5b and 6a |
 | 5b | `9c71237e` | shares the Phase 3 gate tree (the plan's Phase 5 full gate ran here, before Phase 4; Phase 4 closes on `verify-fast` and the step-6 exit's full gate) |
 | 6a | `ef3c63f0` | shares the Phase 3 gate tree |
+| 4 (+ lead edits: step wording, view polish, walk kind, Potential impact round 2) | `257faff8` | `verify-fast` + `prompt-guard` + `openapi-sync` (clean) + `drift-check` + `frontend-verify` on snapshot `572b58af` (3741 backend, 929 frontend); the Phase 5 full gate ran before Phase 4 (above), so Phase 4 is covered by the step-6 exit's full gate |
+| 7–8 (prompt rounds, the ceiling, evidence, deferred) | `7a8d0563` | full `make verify` on snapshot `055bd662` (3742 backend, 929 frontend) |
+| 8 (this file's closing lines) | _the commit after `7a8d0563`_ | docs only |
 | 2b | `e771c16e` | `verify-fast` + `prompt-guard` + `openapi-sync` (clean) + `drift-check` + `frontend-verify` on snapshot `15620802`: 3630 backend passed, frontend green |
 
 ## Checks beyond the build
@@ -338,6 +349,14 @@ Filled by the review conversation.
 
 ## Known unverified items
 
+- The `verify` workflow's conclusion on the branch head (rubric 15) is read after the push, which is
+  the owner's step; the local full gate is recorded above.
+- Cost per proposal was read from Langfuse by run id for all 24 proposals; the live task's walks were
+  not costed.
+- Proposal quality beyond the measures (whether the five picks are the five a policy analyst would
+  read first) is not measured in this slice; shortlist recall after assessment is the deferred
+  measure.
+
 ## Public safety
 
 This file carries counts, option names, quoted reasons and notes from the team's test questions
@@ -363,7 +382,13 @@ tracked tree.
     without the GUI; a scripted quit-and-reopen of the app was refused by the permission mode.
   - A `max_length` on a structured-output wire field does not fail a long answer: the constrained
     decoder stops at the limit mid-word (and sometimes a few characters short of it). A character
-    ceiling belongs in the code check after the call, with the target stated in the prompt.
+    ceiling belongs in the code check after the call, with the target stated in the prompt — and on
+    a spine step the code check must not be strict at the target: the live run produced 405- and
+    427-character lines twice in a row and the strict check failed the profile step once (the
+    runner's retry saved the walk). Target in the prompt, hard bound in code, warning in between.
+  - uvicorn `--reload` waits for open connections before it restarts; the frontend's event stream
+    (and the Vite proxy's keep-alive) holds one open, so a backend file save during a browser session
+    leaves the dev server "Waiting for connections to close" until the stack is restarted.
   - A listwise model call that gets short ids will use them in free text (the note) unless told
     that the reader never sees them.
   - `test_every_depth_runs_the_same_pass_and_cuts_at_its_caps` asserted plan order over calls
