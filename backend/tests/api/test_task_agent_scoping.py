@@ -33,8 +33,16 @@ from policy_atlas.core.schema import (
     evidence_scope,
     task_plan,
 )
-from policy_atlas.runtime.scoping_plan import BASELINE_TIME_BAND, ScopingPlan, longlist_inputs
-from policy_atlas.runtime.task_agent_scoping import StubScopingTaskAgentBackend
+from policy_atlas.runtime.scoping_plan import (
+    BASELINE_TIME_BAND,
+    ScopingPlan,
+    longlist_inputs,
+    wire_draft_from_plan,
+)
+from policy_atlas.runtime.task_agent_scoping import (
+    StubScopingTaskAgentBackend,
+    _seed_draft,
+)
 from tests.api.resource_support import (
     api_client,
     create_scoping_task,
@@ -84,7 +92,7 @@ def _overrides() -> dict[Callable[..., object], Callable[..., object]]:
 # --- the conversation -------------------------------------------------------
 
 
-def test_the_stub_conversation_reaches_a_ready_plan_in_three_turns(
+def test_the_stub_conversation_reaches_a_ready_plan_in_four_turns(
     engine: Engine, tmp_path: Path
 ) -> None:
     with api_client(tmp_path, _overrides()) as (client, owner, _other):
@@ -96,6 +104,7 @@ def test_the_stub_conversation_reaches_a_ready_plan_in_three_turns(
     plan = final["scoping_plan"]
     assert plan["ready"] is True
     assert plan["depth"] == "standard"
+    assert plan["risk_appetite"] == "mostly_tried"
     assert plan["target_unit"] == {"text": "16 to 24 year olds", "origin": "your_call"}
     assert plan["where"] == {"text": "United Kingdom", "origin": "assumed"}
     assert plan["steering_mode"] == "moderate"
@@ -116,6 +125,80 @@ def test_the_depth_card_carries_no_recommendation(engine: Engine, tmp_path: Path
     options = second["part"]["options"]
     assert [option["id"] for option in options] == ["rapid_pass", "standard_pass"]
     assert not any(option["primary"] for option in options)
+
+
+def test_the_appetite_card_offers_three_options_with_the_middle_primary(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        task_agent_turn_ok(client, owner, task_id, "Young people are not getting into work.")
+        task_agent_turn_ok(client, owner, task_id, "16 to 24 year olds")
+        third = task_agent_turn_ok(
+            client, owner, task_id, "[confirm part=depth option=rapid_pass]"
+        )
+    assert third["scoping_plan"]["ready"] is False
+    part = third["part"]
+    assert part["id"] == "appetite"
+    assert [(o["id"], o["primary"]) for o in part["options"]] == [
+        ("appetite_tried", False),
+        ("appetite_mostly", True),
+        ("appetite_open", False),
+    ]
+
+
+def test_an_appetite_chosen_by_marker_or_in_words_sets_the_plan(
+    engine: Engine, tmp_path: Path
+) -> None:
+    for answer, expected in (
+        ("[confirm part=appetite option=appetite_open]", "open_to_untested"),
+        ("only options that have been tried elsewhere", "tried_only"),
+    ):
+        with api_client(tmp_path, _overrides()) as (client, owner, _other):
+            task_id = create_scoping_task(client, owner)
+            task_agent_turn_ok(client, owner, task_id, "Young people are not getting into work.")
+            task_agent_turn_ok(client, owner, task_id, "16 to 24 year olds")
+            task_agent_turn_ok(client, owner, task_id, "[confirm part=depth option=rapid_pass]")
+            ready = task_agent_turn_ok(client, owner, task_id, answer)
+        assert ready["scoping_plan"]["ready"] is True
+        assert ready["scoping_plan"]["risk_appetite"] == expected
+
+
+def test_no_appetite_choice_reads_mostly_tried(engine: Engine, tmp_path: Path) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        task_agent_turn_ok(client, owner, task_id, "Young people are not getting into work.")
+        task_agent_turn_ok(client, owner, task_id, "16 to 24 year olds")
+        task_agent_turn_ok(client, owner, task_id, "[confirm part=depth option=rapid_pass]")
+        ready = task_agent_turn_ok(client, owner, task_id, "carry on")
+    assert ready["scoping_plan"]["ready"] is True
+    assert ready["scoping_plan"]["risk_appetite"] == "mostly_tried"
+    assert _plan_rows(engine, task_id)[0]["payload"]["risk_appetite"] == "mostly_tried"
+
+
+def test_a_chosen_appetite_survives_approval_seeding_and_a_later_patch(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        task_agent_turn_ok(client, owner, task_id, "Young people are not getting into work.")
+        task_agent_turn_ok(client, owner, task_id, "16 to 24 year olds")
+        task_agent_turn_ok(client, owner, task_id, "[confirm part=depth option=rapid_pass]")
+        task_agent_turn_ok(client, owner, task_id, "[confirm part=appetite option=appetite_open]")
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"scoping": {"where": {"text": "England", "origin": "your_call"}}},
+        )
+        assert patched.status_code == 200, patched.text
+
+    plans = _plan_rows(engine, task_id)
+    assert [p["payload"]["risk_appetite"] for p in plans] == ["open_to_untested"] * 2
+    seeded = wire_draft_from_plan(ScopingPlan.model_validate(plans[0]["payload"]))
+    assert "risk_appetite" not in seeded  # the seed helper adds it, in the profile
+    assert _seed_draft(ScopingPlan.model_validate(plans[0]["payload"]))[
+        "risk_appetite"
+    ] == "open_to_untested"
 
 
 def test_an_evidence_search_task_still_gets_the_evidence_search_shape(

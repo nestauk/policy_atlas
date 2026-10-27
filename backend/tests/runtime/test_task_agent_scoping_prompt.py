@@ -33,6 +33,16 @@ def test_depth_is_offered_as_two_screen_labels_never_the_keys() -> None:
     assert "rapid / standard / moderate" in prompt
 
 
+def test_appetite_option_ids_match_the_plan_values() -> None:
+    from typing import get_args
+
+    from policy_atlas.runtime.scoping_plan import RiskAppetite
+    from policy_atlas.runtime.task_agent_scoping_prompt import APPETITE_OPTION_IDS
+
+    assert set(APPETITE_OPTION_IDS.values()) == set(get_args(RiskAppetite))
+    assert "Risk appetite" in TASK_AGENT_SCOPING_SYSTEM_PROMPT
+
+
 def test_prompt_carries_the_ruled_behaviours() -> None:
     prompt = TASK_AGENT_SCOPING_SYSTEM_PROMPT
     assert 'Default "United Kingdom", tagged assumed' in prompt  # D-ruling: Where default
