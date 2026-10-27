@@ -12,7 +12,7 @@ const CRITICAL = "Critical connection · test this first";
 const P = `mt-1 max-w-[44em] ${REPORT_BODY_CLASS}`;
 
 /** The small "+" after a sentence: shows or hides that question's documents. */
-function WithDocuments({ documents, question, children }: { documents: TocDocument[]; question: "elsewhere" | "here"; children: React.ReactNode }) {
+function WithDocuments({ taskId, documents, question, children }: { taskId: string; documents: TocDocument[]; question: "elsewhere" | "here"; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const count = documents.filter((doc) => doc[question].stance !== "not_about").length;
   return (
@@ -33,7 +33,7 @@ function WithDocuments({ documents, question, children }: { documents: TocDocume
       </p>
       {open && (
         <div className="ml-4 max-w-[44em]">
-          <QuestionDocuments documents={documents} question={question} />
+          <QuestionDocuments taskId={taskId} documents={documents} question={question} />
         </div>
       )}
     </>
@@ -50,7 +50,7 @@ function BoxRow({ box }: { box: TocBox }) {
   );
 }
 
-function LinkRow({ link, documents }: { link: TocLink; documents: TocDocument[] }) {
+function LinkRow({ taskId, link, documents }: { taskId: string; link: TocLink; documents: TocDocument[] }) {
   const pending = link.state === "checking" || link.state === "unchecked";
   const grade = link.lower_grade;
   return (
@@ -61,17 +61,17 @@ function LinkRow({ link, documents }: { link: TocLink; documents: TocDocument[] 
       {link.critical && <p className={REPORT_LABEL_CLASS}>{CRITICAL}</p>}
       <p className={P}>{scrub(link.sentence)}</p>
       {link.merged ? (
-        <WithDocuments documents={documents} question="elsewhere">
+        <WithDocuments taskId={taskId} documents={documents} question="elsewhere">
           <GradeWords grade={link.elsewhere.grade} question="merged" />
           {link.elsewhere_sentence !== null && <> {scrub(link.elsewhere_sentence)}</>}
         </WithDocuments>
       ) : (
         <>
-          <WithDocuments documents={documents} question="elsewhere">
+          <WithDocuments taskId={taskId} documents={documents} question="elsewhere">
             <GradeWords grade={link.elsewhere.grade} question="elsewhere" />
             {link.elsewhere_sentence !== null && <> {scrub(link.elsewhere_sentence)}</>}
           </WithDocuments>
-          <WithDocuments documents={documents} question="here">
+          <WithDocuments taskId={taskId} documents={documents} question="here">
             <GradeWords grade={link.here.grade} question="here" />
             {link.here_sentence !== null && <> {scrub(link.here_sentence)}</>}
           </WithDocuments>
@@ -82,7 +82,7 @@ function LinkRow({ link, documents }: { link: TocLink; documents: TocDocument[] 
 }
 
 /** One pathway, as boxes and the connections between them, in order. */
-function PathwayBody({ pathway, graph, evidence }: { pathway: TocPathway; graph: TocGraph; evidence: TocEvidence | null | undefined }) {
+function PathwayBody({ taskId, pathway, graph, evidence }: { taskId: string; pathway: TocPathway; graph: TocGraph; evidence: TocEvidence | null | undefined }) {
   const linkById = new Map(graph.links.map((link) => [link.link_id, link]));
   const boxById = new Map(graph.boxes.map((box) => [box.box_id, box]));
   const shown = new Set<string>();
@@ -98,7 +98,7 @@ function PathwayBody({ pathway, graph, evidence }: { pathway: TocPathway; graph:
     if (link === undefined) continue;
     addBox(link.source_box_id);
     const documents = evidence?.links.find((entry) => entry.link_id === linkId)?.documents ?? [];
-    rows.push(<LinkRow key={`link-${linkId}`} link={link} documents={documents} />);
+    rows.push(<LinkRow taskId={taskId} key={`link-${linkId}`} link={link} documents={documents} />);
     addBox(link.target_box_id);
   }
   return <>{rows}</>;
@@ -154,7 +154,7 @@ const section = (title: string, summary?: string) => ({
  * the questions for an evaluation. Uses the report's expand/collapse
  * sections, which open on their own when the browser prints.
  */
-export function DetailedInformation({ graph, evidence }: { graph: TocGraph; evidence: TocEvidence | null | undefined }) {
+export function DetailedInformation({ taskId, graph, evidence }: { taskId: string; graph: TocGraph; evidence: TocEvidence | null | undefined }) {
   const titles = pathwayTitles(graph);
   const kept = keptPathways(graph);
   const setAside = graph.pathways.filter((pathway) => pathway.status === "set_aside");
@@ -170,7 +170,7 @@ export function DetailedInformation({ graph, evidence }: { graph: TocGraph; evid
       {kept.map((pathway, index) => (
         <div key={pathway.pathway_id} className="border-t border-line pt-4">
           <SectionDisclosure id={`toc-pathway-${pathway.pathway_id}`} section={section(titles.get(pathway.pathway_id) ?? pathway.label)} defaultOpen={index === 0} collapsible>
-            <PathwayBody pathway={pathway} graph={graph} evidence={evidence} />
+            <PathwayBody taskId={taskId} pathway={pathway} graph={graph} evidence={evidence} />
           </SectionDisclosure>
         </div>
       ))}

@@ -158,6 +158,8 @@ export function tocGraphFixture(overrides: Partial<TocGraph> = {}): TocGraph {
 function doc(n: number, title: string, elsewhere: TocDocument["elsewhere"], here: TocDocument["here"]): TocDocument {
   return {
     task_source_snapshot_id: docId(n),
+    evidence_id: `00000000-0000-4000-8000-0000000e${String(n).padStart(4, "0")}`,
+    authors: ["Smith", "Jones"],
     title,
     year: 2020 + (n % 5),
     url: `https://example.org/doc-${n}`,

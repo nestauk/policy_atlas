@@ -74,9 +74,9 @@ export function TocResult({ taskId }: { taskId: string }) {
       {guideOpen && <ReadingGuide graph={graph} />}
       <div className="flex border border-line bg-paper max-lg:flex-col">
         <TocCanvas graph={graph} pathway={pathway} selection={selection} onSelect={setSelection} />
-        {selection !== null && <DetailPanel graph={graph} evidence={evidence.data} selection={selection} onClose={() => setSelection(null)} />}
+        {selection !== null && <DetailPanel taskId={taskId} graph={graph} evidence={evidence.data} selection={selection} onClose={() => setSelection(null)} />}
       </div>
-      <DetailedInformation graph={graph} evidence={evidence.data} />
+      <DetailedInformation taskId={taskId} graph={graph} evidence={evidence.data} />
     </main>
   );
 }

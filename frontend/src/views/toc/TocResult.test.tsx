@@ -8,11 +8,16 @@ import { boxId, linkId, SHARED_DOC_TITLE, TASK_ID, tocEvidenceFixture, tocGraphF
 import { TocResult } from "./TocResult";
 import type { TocGraph } from "./types";
 
-vi.mock("../../api/queries", () => ({ useToc: vi.fn(), useTocEvidence: vi.fn() }));
+vi.mock("../../api/queries", () => ({ useToc: vi.fn(), useTocEvidence: vi.fn(), useTocDocumentContext: vi.fn() }));
 
 function renderResult(graph: TocGraph = tocGraphFixture()) {
   vi.mocked(queries.useToc).mockReturnValue({ data: graph, isPending: false } as unknown as ReturnType<typeof queries.useToc>);
   vi.mocked(queries.useTocEvidence).mockReturnValue({ data: tocEvidenceFixture() } as unknown as ReturnType<typeof queries.useTocEvidence>);
+  vi.mocked(queries.useTocDocumentContext).mockReturnValue({
+    isPending: false,
+    isError: false,
+    data: { context: "Before. Exposure fell by about half. After.", clamped: false, span_start: 0, span_end: 10 },
+  } as unknown as ReturnType<typeof queries.useTocDocumentContext>);
   return render(
     <MemoryRouter>
       <TocResult taskId={TASK_ID} />
@@ -77,8 +82,9 @@ describe("detail panel", () => {
     expect(within(panel).getByText("Critical connection · test this first")).toBeInTheDocument();
     expect(within(panel).getByLabelText("Worked elsewhere")).toBeInTheDocument();
     expect(within(panel).getByLabelText("Holds here")).toBeInTheDocument();
-    expect(within(panel).getAllByText(SHARED_DOC_TITLE)).toHaveLength(1);
-    expect(within(panel).getByText(/Also counts here: Household purchases/)).toBeInTheDocument();
+    // Listed in full once, plus the one-line "Also counts here" reference.
+    expect(within(panel).getAllByRole("button", { name: SHARED_DOC_TITLE })).toHaveLength(2);
+    expect(within(panel).getAllByText(/Also counts here:/)).toHaveLength(1);
     expect(within(panel).getByText("This is England, so it counts here.")).toBeInTheDocument();
   });
 
@@ -107,6 +113,18 @@ describe("detailed information", () => {
     await user.click(within(info).getAllByRole("button", { name: /Show the 2 documents/ })[0] as HTMLElement);
     expect(within(info).getByText("Exposure fell by about half.")).toBeInTheDocument();
     expect(within(info).getAllByText("Critical connection · test this first").length).toBeGreaterThan(0);
+  });
+
+  it("shows authors and opens the quote in context from a document title", async () => {
+    const user = userEvent.setup();
+    renderResult();
+    const info = screen.getByLabelText("Detailed information");
+    await user.click(within(info).getAllByRole("button", { name: /Show the 2 documents/ })[0] as HTMLElement);
+    expect(within(info).getAllByText(/Smith, Jones · 20\d\d · quasi-experiment/).length).toBeGreaterThan(0);
+    await user.click(within(info).getByRole("button", { name: "Children's exposure after Chile's Law 20.606" }));
+    expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, expect.stringContaining("0000e"), "elsewhere");
+    expect(screen.getByText("Where this comes from")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open the source" })).toHaveAttribute("href", expect.stringContaining("example.org"));
   });
 
   it("lists every condition under Assumptions in its type group", async () => {

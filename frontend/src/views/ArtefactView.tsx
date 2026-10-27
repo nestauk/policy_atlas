@@ -324,8 +324,11 @@ export function CitationProvenanceBlock({
   context,
   quote,
   fallbackNote,
+  hideNumber = false,
 }: {
+  /** Reference number; `hideNumber` drops the "[n]" for callers with no numbering. */
   n: number | null;
+  hideNumber?: boolean;
   sourceTitle: string;
   /** A source id/title to open the dossier with, or `null` when the
    *  citation carries nothing dossier-linkable (renders plain text). */
@@ -344,7 +347,7 @@ export function CitationProvenanceBlock({
   return (
     <div className="border border-line p-4">
       <p className="text-body font-bold leading-snug text-blue">
-        [{n ?? "—"}]{" "}
+        {!hideNumber && <>[{n ?? "—"}] </>}
         {sourceRef !== null ? (
           <button
             type="button"

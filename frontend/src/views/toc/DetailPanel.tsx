@@ -95,7 +95,7 @@ function BoxDetail({ box, evidence }: { box: TocBox; evidence: TocEvidence | nul
   );
 }
 
-function LinkDetail({ link, graph, evidence }: { link: TocLink; graph: TocGraph; evidence: TocEvidence | null | undefined }) {
+function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: TocLink; graph: TocGraph; evidence: TocEvidence | null | undefined }) {
   const documents = evidence?.links.find((entry) => entry.link_id === link.link_id)?.documents ?? [];
   return (
     <>
@@ -128,7 +128,7 @@ function LinkDetail({ link, graph, evidence }: { link: TocLink; graph: TocGraph;
             <GradeWords grade={link.elsewhere.grade} question="merged" />
             {link.elsewhere_sentence !== null && <> {scrub(link.elsewhere_sentence)}</>}
           </p>
-          <QuestionDocuments documents={documents} question="elsewhere" />
+          <QuestionDocuments taskId={taskId} documents={documents} question="elsewhere" />
         </section>
       ) : (
         <>
@@ -138,7 +138,7 @@ function LinkDetail({ link, graph, evidence }: { link: TocLink; graph: TocGraph;
               <GradeWords grade={link.elsewhere.grade} question="elsewhere" />
               {link.elsewhere_sentence !== null && <> {scrub(link.elsewhere_sentence)}</>}
             </p>
-            <QuestionDocuments documents={documents} question="elsewhere" />
+            <QuestionDocuments taskId={taskId} documents={documents} question="elsewhere" />
           </section>
           <section className="mt-4 border-t border-line pt-3 text-meta" aria-label="Holds here">
             <p className="font-bold text-navy">Holds here</p>
@@ -146,7 +146,7 @@ function LinkDetail({ link, graph, evidence }: { link: TocLink; graph: TocGraph;
               <GradeWords grade={link.here.grade} question="here" />
               {link.here_sentence !== null && <> {scrub(link.here_sentence)}</>}
             </p>
-            <QuestionDocuments documents={documents} question="here" />
+            <QuestionDocuments taskId={taskId} documents={documents} question="here" />
           </section>
         </>
       )}
@@ -157,11 +157,13 @@ function LinkDetail({ link, graph, evidence }: { link: TocLink; graph: TocGraph;
 
 /** The right-hand panel: one box or one connection, read-only. */
 export function DetailPanel({
+  taskId,
   graph,
   evidence,
   selection,
   onClose,
 }: {
+  taskId: string;
   graph: TocGraph;
   evidence: TocEvidence | null | undefined;
   selection: Selection;
@@ -176,7 +178,7 @@ export function DetailPanel({
         ×
       </button>
       {box !== undefined && <BoxDetail box={box} evidence={evidence} />}
-      {link !== undefined && <LinkDetail link={link} graph={graph} evidence={evidence} />}
+      {link !== undefined && <LinkDetail taskId={taskId} link={link} graph={graph} evidence={evidence} />}
     </aside>
   );
 }
