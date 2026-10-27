@@ -66,6 +66,7 @@ LEVEL_WORDS: dict[str, dict[str, str]] = {
     "workforce": {"less": "Lower", "more": "Higher"},
     "coordination": {"less": "Lower", "more": "Higher"},
     "delivery_complexity": {"less": "Simpler", "more": "More complex"},
+    "potential_impact": {"less": "Lower", "more": "Higher"},
     "ambition": {"less": "Smaller", "more": "Bigger"},
 }
 

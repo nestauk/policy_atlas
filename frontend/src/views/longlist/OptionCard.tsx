@@ -324,10 +324,13 @@ export function OptionCard() {
   const profileLines = profile === null ? [] : PROFILE_LINE_KEYS.map((key) => ({ key, line: profile.lines.find((line) => line.key === key) }))
     // A profile written before the ninth line existed has eight; show no empty row.
     .filter(({ key, line }) => key !== "potential_impact" || line !== undefined);
-  const cellLines = profile === null ? [] : GRID_COLUMN_LINES.map((key) => ({
-    key,
-    mark: key === "ambition" ? (item.ambition ?? null) : (profile.lines.find((line) => line.key === key)?.mark ?? null),
-  }));
+  const cellLines = profile === null ? [] : GRID_COLUMN_LINES
+    // Likewise no Potential impact cell for a profile without that line.
+    .filter((key) => key !== "potential_impact" || profile.lines.some((line) => line.key === key))
+    .map((key) => ({
+      key,
+      mark: key === "ambition" ? (item.ambition ?? null) : (profile.lines.find((line) => line.key === key)?.mark ?? null),
+    }));
   const ambitionMark = item.ambition ?? null;
   const leverText = leverLine(item.primary_lever_type, item.secondary_lever_types);
   // One reason only: the none-fits reason says what the option does instead.

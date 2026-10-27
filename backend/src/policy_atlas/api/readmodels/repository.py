@@ -3257,7 +3257,7 @@ _PROFILE_MARKS = frozenset({"less", "more"})
 #: The two lines that state a fact, not a comparison: never marked (R37).
 #: The one profile line a row may lack (rows built before task 055 hold eight).
 OPTIONAL_PROFILE_LINE = "potential_impact"
-_UNMARKED_LINES = frozenset({"who_decides", "dependencies", "potential_impact"})
+_UNMARKED_LINES = frozenset({"who_decides", "dependencies"})
 _AUTHORITY_LABELS = frozenset({"within_your_power", "needs_action_by", "unclear"})
 log = structlog.get_logger()
 
@@ -3457,9 +3457,10 @@ def _profile_out(entry: Mapping[str, Any], option_id: uuid.UUID) -> OptionProfil
 
     Served only when the entry holds the eight legacy lines, each with a
     sentence; otherwise ``None`` and a warning. The ninth line,
-    ``potential_impact`` (task 055), is added when present and not blank. A
-    mark that is not ``less`` or ``more`` is ``None``; ``who_decides``,
-    ``dependencies`` and ``potential_impact`` never carry one.
+    ``potential_impact`` (task 055), is added when present and not blank and
+    carries a mark like the six marked lines (owner, 2026-10-27, at the 055
+    review). A mark that is not ``less`` or ``more`` is ``None``;
+    ``who_decides`` and ``dependencies`` never carry one.
     """
     if not entry:
         return None

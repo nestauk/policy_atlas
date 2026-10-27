@@ -940,6 +940,13 @@ def test_an_eight_line_row_serves_eight_lines_and_a_nine_line_row_nine(
         assert len(out.profile.lines) == 9
         assert out.profile.lines[-1].key == "potential_impact"
         assert out.profile.lines[-1].mark is None
+    # Owner, 2026-10-27 (055 review): the ninth line carries a mark like the six.
+    marked = _stored_profile()
+    marked["lines"]["potential_impact"]["mark"] = "more"
+    walk, option_id = _profiled(conn, profile=marked)
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.profile is not None
+        assert out.profile.lines[-1].mark == "more"
 
 
 def test_the_maturity_rung_is_served_from_the_stored_coverage(conn: Connection) -> None:

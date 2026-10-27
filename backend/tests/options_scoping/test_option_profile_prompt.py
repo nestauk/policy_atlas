@@ -17,7 +17,9 @@ from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
     MARKED_LINE_SYSTEM_PROMPT,
     PLAIN_LINE_SYSTEM_PROMPT,
     POTENTIAL_IMPACT_BASELINE_MAX_CHARS,
+    POTENTIAL_IMPACT_SYSTEM_PROMPT,
     WHO_DECIDES_CONSIDERATIONS_BLOCK,
+    PotentialImpactWire,
     build_line_messages,
     build_potential_impact_messages,
     line_is_marked,
@@ -50,9 +52,9 @@ def test_the_line_questions_are_the_nine_line_keys_in_order() -> None:
     assert PROFILE_LINE_KEYS[-1] == "potential_impact"
 
 
-def test_six_lines_carry_a_mark() -> None:
+def test_seven_lines_carry_a_mark() -> None:
     marked = {key for key in PROFILE_LINE_KEYS if line_is_marked(key)}
-    assert marked == set(PROFILE_LINE_KEYS) - {"who_decides", "dependencies", "potential_impact"}
+    assert marked == set(PROFILE_LINE_KEYS) - {"who_decides", "dependencies"}
     assert set(LINE_MARK_MEANING) == marked
 
 
@@ -146,9 +148,12 @@ def test_no_considerations_leaves_the_who_decides_prompt_as_it_was() -> None:
 # --- task 055, item 6: the Potential impact line --------------------------------------------
 
 
-def test_potential_impact_is_a_plain_line() -> None:
-    assert line_is_marked("potential_impact") is False
-    assert "potential_impact" not in LINE_MARK_MEANING
+def test_potential_impact_is_a_marked_line() -> None:
+    """Owner, 2026-10-27 (055 review): a lower/middle/higher mark and a grid column."""
+    assert line_is_marked("potential_impact") is True
+    assert "potential_impact" in LINE_MARK_MEANING
+    assert "stands_out" in PotentialImpactWire.model_fields
+    assert "The mark (stands_out)" in POTENTIAL_IMPACT_SYSTEM_PROMPT
     assert LINE_NAMES["potential_impact"] == "Potential impact"
 
 

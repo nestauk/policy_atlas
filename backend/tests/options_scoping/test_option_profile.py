@@ -1530,11 +1530,15 @@ def test_a_potential_impact_answer_over_the_ceiling_fails_the_attempt_and_retrie
     walk.build(_Scripted())
     too_long = PotentialImpactResponse(
         options=[
-            PotentialImpactWire(option_id="o1", answer="x" * (POTENTIAL_IMPACT_HARD_MAX_CHARS + 1))
+            PotentialImpactWire(
+                option_id="o1", answer="x" * (POTENTIAL_IMPACT_HARD_MAX_CHARS + 1), stands_out="no"
+            )
         ]
     )
     right = PotentialImpactResponse(
-        options=[PotentialImpactWire(option_id="o1", answer="Large if it works.")]
+        options=[
+            PotentialImpactWire(option_id="o1", answer="Large if it works.", stands_out="more")
+        ]
     )
     # No max_length on the wire (the constrained decoder would cut mid-word);
     # the ceiling is a code check that fails the attempt.
@@ -1554,7 +1558,7 @@ def test_a_potential_impact_answer_over_the_target_but_under_the_hard_bound_is_k
     profiler = StubLonglistBackend(
         potential_impact_responses=[
             PotentialImpactResponse(
-                options=[PotentialImpactWire(option_id="o1", answer=long_but_kept)]
+                options=[PotentialImpactWire(option_id="o1", answer=long_but_kept, stands_out="no")]
             )
         ]
     )

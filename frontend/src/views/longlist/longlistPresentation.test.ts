@@ -104,7 +104,7 @@ describe("longlist presentation (amendment 2 words)", () => {
       "Potential impact",
     ]);
     expect(LINE_NAMES.ambition).toBe("Ambition");
-    expect(GRID_COLUMN_LINES).not.toContain("potential_impact");
+    expect(GRID_COLUMN_LINES).toContain("potential_impact");
   });
 
   it("gives each line exactly the table's level words", () => {
@@ -117,14 +117,14 @@ describe("longlist presentation (amendment 2 words)", () => {
     expect(words("dependencies")).toEqual([null, null]);
     expect(words("coordination")).toEqual(["Lower", "Higher"]);
     expect(words("delivery_complexity")).toEqual(["Simpler", "More complex"]);
-    expect(words("potential_impact")).toEqual([null, null]);
+    expect(words("potential_impact")).toEqual(["Lower", "Higher"]);
     expect(words("ambition")).toEqual(["Smaller", "Bigger"]);
     const all = Object.values(LEVEL_WORDS).flatMap((pair) => [pair.less, pair.more]);
-    expect(all.filter((word) => word !== null)).toHaveLength(14);
+    expect(all.filter((word) => word !== null)).toHaveLength(16);
     expect(all).not.toContain("Middle");
   });
 
-  it("offers the seven lines that carry a mark as grid columns, ambition first", () => {
+  it("offers the eight lines that carry a mark as grid columns, ambition first", () => {
     expect(GRID_COLUMN_LINES.map((key) => LINE_NAMES[key])).toEqual([
       "Ambition",
       "Cost",
@@ -133,6 +133,7 @@ describe("longlist presentation (amendment 2 words)", () => {
       "Workforce requirements",
       "Coordination requirements",
       "Delivery complexity",
+      "Potential impact",
     ]);
   });
 

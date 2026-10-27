@@ -1110,7 +1110,9 @@ class StubLonglistBackend:
             {"plan": plan, "baseline_sections": list(baseline_sections), "options": list(options)},
             lambda: PotentialImpactResponse(
                 options=[
-                    PotentialImpactWire(option_id=str(o["option_id"]), answer=STUB_POTENTIAL_IMPACT)
+                    PotentialImpactWire(
+                        option_id=str(o["option_id"]), answer=STUB_POTENTIAL_IMPACT, stands_out="no"
+                    )
                     for o in options
                 ]
             ),

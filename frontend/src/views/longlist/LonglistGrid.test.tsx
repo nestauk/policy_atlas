@@ -61,8 +61,8 @@ describe("LonglistGrid", () => {
     ]);
   });
 
-  // R41: a labelled native select with the seven lines that carry a mark.
-  it("offers a labelled Columns chooser with the seven lines, Ambition by default", () => {
+  // R41: a labelled native select with the eight lines that carry a mark.
+  it("offers a labelled Columns chooser with the eight lines, Ambition by default", () => {
     renderGrid();
     const chooser = screen.getByRole("combobox", { name: "Columns" });
     expect(chooser).toHaveValue("ambition");
@@ -74,6 +74,7 @@ describe("LonglistGrid", () => {
       "Workforce requirements",
       "Coordination requirements",
       "Delivery complexity",
+      "Potential impact",
     ]);
   });
 
@@ -93,6 +94,22 @@ describe("LonglistGrid", () => {
     expect(cellIndex("Youth guarantee")).toBe(heads.indexOf("Untagged"));
     await user.selectOptions(screen.getByRole("combobox", { name: "Columns" }), "delivery_complexity");
     expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toContain("More complex");
+  });
+
+  // Task 055: Potential impact carries a mark (the owner, 2026-10-27).
+  it("columns the grid on Potential impact and places options by its mark", async () => {
+    const user = userEvent.setup();
+    renderGrid(true);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Columns" }), "potential_impact");
+    const heads = screen.getAllByRole("columnheader").map((header) => header.textContent);
+    expect(heads).toEqual(["Lever type", "Lower", "Middle", "Higher", "Untagged"]);
+    const cellIndex = (name: string) => {
+      const cell = screen.getByRole("link", { name }).closest("td") as HTMLElement;
+      return Array.from((cell.parentElement as HTMLElement).children).indexOf(cell);
+    };
+    expect(cellIndex("National sanctions regime")).toBe(heads.indexOf("Higher"));
+    expect(cellIndex("School-based mentoring")).toBe(heads.indexOf("Middle"));
+    expect(cellIndex("Universal youth offer bundle")).toBe(heads.indexOf("Lower"));
   });
 
   it("puts an option with no profile in Untagged whatever its ambition, and shows Untagged only then", () => {

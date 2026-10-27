@@ -261,7 +261,8 @@ export const LINE_NAMES = { ...PROFILE_LINE_LABELS, ambition: "Ambition" } as Re
 >;
 
 /** The level word each mark takes on each line (R40, R44); `null` where the
- *  line never carries a mark. */
+ *  line never carries a mark (who decides, dependencies). Potential impact
+ *  carries a mark since 2026-10-27 (task 055). */
 export const LEVEL_WORDS: Record<ProfileLineKey | "ambition", Record<Mark, string | null>> = {
   cost: { less: "Cheaper", more: "Costlier" },
   time_to_set_up: { less: "Quicker", more: "Slower" },
@@ -271,12 +272,12 @@ export const LEVEL_WORDS: Record<ProfileLineKey | "ambition", Record<Mark, strin
   dependencies: { less: null, more: null },
   coordination: { less: "Lower", more: "Higher" },
   delivery_complexity: { less: "Simpler", more: "More complex" },
-  potential_impact: { less: null, more: null },
+  potential_impact: { less: "Lower", more: "Higher" },
   ambition: { less: "Smaller", more: "Bigger" },
 };
 
-/** The lines the grid can put in its columns: the seven that carry a mark,
- *  ambition first (R41). */
+/** The lines the grid can put in its columns: the eight that carry a mark,
+ *  ambition first (R41), Potential impact last (task 055). */
 export const GRID_COLUMN_LINES: readonly (ProfileLineKey | "ambition")[] = [
   "ambition",
   "cost",
@@ -285,6 +286,7 @@ export const GRID_COLUMN_LINES: readonly (ProfileLineKey | "ambition")[] = [
   "workforce",
   "coordination",
   "delivery_complexity",
+  "potential_impact",
 ];
 
 /** The shape every tinted word shares (level words, authority words). */

@@ -979,13 +979,13 @@ type ProfileFixture = NonNullable<OptionOutFixture["profile"]>;
  *  mark where the option stands out (`who_decides` and `dependencies` never
  *  carry one). */
 function mockProfile(
-  marks: Partial<Record<"cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "coordination" | "delivery_complexity", "less" | "more">>,
+  marks: Partial<Record<"cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "coordination" | "delivery_complexity" | "potential_impact", "less" | "more">>,
   settings: string[],
 ): ProfileFixture {
   const line = (key: ProfileFixture["lines"][number]["key"], sentence: string) => ({
     key,
     sentence,
-    mark: key === "who_decides" || key === "dependencies" || key === "potential_impact" ? null : (marks[key] ?? null),
+    mark: key === "who_decides" || key === "dependencies" ? null : (marks[key] ?? null),
   });
   return {
     lines: [
@@ -1039,7 +1039,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     secondary_lever_types: ["regulate"],
     ambition: "more",
     ambition_reason: "Changes who is entitled to a national benefit, not just how it is delivered.",
-    profile: mockProfile({ cost: "less", time_to_effect: "more", coordination: "more" }, ["Jobcentre", "Secondary school"]),
+    profile: mockProfile({ cost: "less", time_to_effect: "more", coordination: "more", potential_impact: "more" }, ["Jobcentre", "Secondary school"]),
     authority: {
       label: "needs_action_by",
       body: "the Department for Work and Pensions",
@@ -1222,7 +1222,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     secondary_lever_types: ["provide a service"],
     ambition: "less",
     ambition_reason: "Reorganises the existing offer into one application rather than adding anything new.",
-    profile: mockProfile({ cost: "less", delivery_complexity: "more", time_to_set_up: "less" }, ["Jobcentre", "Community centre"]),
+    profile: mockProfile({ cost: "less", delivery_complexity: "more", time_to_set_up: "less", potential_impact: "less" }, ["Jobcentre", "Community centre"]),
     authority: { label: "unclear", body: null, reason: "The sources do not say who could merge the application routes." },
     taxonomy_version: "lever-types-v1",
     document_count: 9,
