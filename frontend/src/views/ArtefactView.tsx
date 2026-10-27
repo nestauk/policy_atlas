@@ -31,6 +31,7 @@ import { RESULT_VIEWS, resultView } from "./lifecycle";
 import { hasLonglist, isBaselineArtefact, statusRun } from "./scopingActivity";
 import { useChatsEnabled } from "./taskResult";
 import { LonglistView } from "./longlist/LonglistView";
+import { ShortlistView } from "./longlist/ShortlistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
@@ -1342,8 +1343,8 @@ function ScopingResult({ taskId }: { taskId: string }) {
   const select = (next: string) => {
     setSearchParams((current) => {
       const params = new URLSearchParams(current);
-      // The longlist is the default; only the baseline needs spelling out.
-      if (next === "baseline") params.set("view", next);
+      // The longlist is the default; the baseline and the shortlist need spelling out.
+      if (next === "baseline" || next === "shortlist") params.set("view", next);
       else params.delete("view");
       return params;
     });
@@ -1371,7 +1372,11 @@ function ScopingResult({ taskId }: { taskId: string }) {
       {view === "baseline" ? (
         <ArtefactReport />
       ) : longlist.data != null ? (
-        <LonglistView taskId={taskId} longlist={longlist.data} />
+        view === "shortlist" ? (
+          <ShortlistView taskId={taskId} longlist={longlist.data} />
+        ) : (
+          <LonglistView taskId={taskId} longlist={longlist.data} />
+        )
       ) : longlist.isPending ? (
         <main aria-busy="true" aria-label="Loading the longlist" className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
           {Array.from({ length: 4 }).map((_, i) => (

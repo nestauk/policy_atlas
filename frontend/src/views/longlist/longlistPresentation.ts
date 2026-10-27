@@ -537,6 +537,34 @@ export function maturityLine(maturity: MaturityOut | null | undefined, now: Date
   return parts.join(" · ");
 }
 
+/** The rung and its two modifiers only (no design mix): the shortlist rows'
+ *  words. The mix stays on the card's Evidence section (`maturityLine`). */
+export function maturityWords(maturity: MaturityOut | null | undefined, now: Date = new Date()): string | null {
+  if (maturity == null) return null;
+  const parts: string[] = [MATURITY_WORDS[maturity.rung]];
+  if (maturity.none_in_your_setting) parts.push("none in your setting");
+  if (maturity.stale) parts.push(`most recent evaluation before ${now.getFullYear() - 5}`);
+  return parts.join(" · ");
+}
+
+/** The shortlist row's evidence footing in plain words (owner, 2026-10-27:
+ *  the rung line read as jargon): "Not yet tried anywhere" · "Described,
+ *  not evaluated" · "Evaluated" / "Evaluated, including a review", then
+ *  ", not in {Where}" and ", last before {year}" as they apply. */
+export function maturityPhrase(
+  maturity: MaturityOut | null | undefined,
+  where: string | null | undefined,
+  now: Date = new Date(),
+): string | null {
+  if (maturity == null) return null;
+  if (maturity.rung === "proposal_only") return "Not yet tried anywhere";
+  if (maturity.rung === "described") return "Described, not evaluated";
+  const parts: string[] = [maturity.rung === "reviewed" ? "Evaluated, including a review" : "Evaluated"];
+  if (maturity.none_in_your_setting) parts.push(where ? `not in ${where}` : "not in your setting");
+  if (maturity.stale) parts.push(`last before ${now.getFullYear() - 5}`);
+  return parts.join(", ");
+}
+
 type ShortlistState = NonNullable<OptionSummaryOut["shortlist"]>["state"];
 
 /** Whether the option holds a place (a pick or one added by you); a

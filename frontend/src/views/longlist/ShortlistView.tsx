@@ -1,5 +1,4 @@
-import type { ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import type { components } from "../../api/gen/types";
 import { usePatchPlan, useSuggestMore } from "../../api/mutations";
@@ -9,6 +8,7 @@ import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { Chip } from "../../ui/brand/Chip";
 import { REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
+import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage } from "../reportPage";
 import { isRunActive } from "../scopingActivity";
 import { SCOPING_RUNS_PAGE_SIZE } from "../workspace/planStart";
 import { RISK_APPETITE_LABELS, type RiskAppetite } from "../workspace/planVocabulary";
@@ -16,8 +16,8 @@ import {
   constraintLabel,
   holdsPlace,
   leverLabel,
-  LEVEL_WORDS,
-  maturityLine,
+  longlistTitle,
+  maturityPhrase,
 } from "./longlistPresentation";
 import { ShortlistActionButton, useOptionActions } from "./optionActions";
 
@@ -25,11 +25,11 @@ type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
 
 const SELECT_CLASS =
-  "border border-line-2 bg-paper px-2 py-1 text-body text-ink focus-visible:outline-2 focus-visible:outline-blue disabled:bg-paper-2 disabled:text-grey";
+  "max-w-full border border-line-2 bg-paper px-2 py-1 text-meta font-semibold text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:bg-paper-2 disabled:text-grey";
 
 /** The risk appetite as a `<select>` over the three approved answers. It
  *  patches the plan directly (no chat seeding); the server re-proposes when
- *  a longlist exists. Shared by the shortlist header and the plan document. */
+ *  a longlist exists. Shared by the shortlist page and the plan document. */
 export function RiskAppetiteSelect({
   value,
   disabled,
@@ -59,40 +59,32 @@ export function RiskAppetiteSelect({
   );
 }
 
-/** One group of the "Other options" list, as the list mode builds it. */
-export type OptionGroup = { key: string; name: string; options: OptionSummaryOut[] };
+/** The small label over a line Policy Atlas wrote (its reason, its note). */
+const VOICE_LABEL_CLASS = "text-caption font-bold uppercase tracking-[0.06em] text-grey";
 
 function byName(a: OptionSummaryOut, b: OptionSummaryOut): number {
   return a.name.localeCompare(b.name);
 }
 
-/** The shortlist's rows read provenance defensively: it is an open object. */
+/** The page reads provenance defensively: it is an open object. */
 function numberOf(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 /**
- * The shortlist view (task 055, item 8; plan P15): the header with the risk
- * appetite, the fixed baseline line, the places in two alphabetical groups,
- * Suggest more, the not-covered note, the disabled Assess button and the
- * included options holding no place. Structure only; the lead polishes the
- * layout.
+ * The Shortlist: its own Result view beside Baseline and Longlist (task 055,
+ * item 8, as amended by the owner after the build). The question as the
+ * title; the places in two groups, each with the option's description and,
+ * for a pick, Policy Atlas's reason; the appetite control on the picks'
+ * heading, since it is what it steers; the not-covered note at the foot of
+ * the picks; Suggest more and a way back to the longlist; the disabled
+ * Assess as the page's end. Adding places happens on the longlist, where
+ * every row and card carries Add to shortlist.
  */
-export function ShortlistView({
-  taskId,
-  longlist,
-  otherGroups,
-  renderOtherRow,
-}: {
-  taskId: string;
-  longlist: LonglistOut;
-  /** The included options holding no place, grouped as List mode groups them. */
-  otherGroups: OptionGroup[];
-  /** A List-mode row (grey line included) for one of those options. */
-  renderOtherRow: (option: OptionSummaryOut) => ReactNode;
-}) {
+export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: LonglistOut }) {
   const task = useTask(taskId);
   const plan = usePlan(taskId);
+  const navigate = useNavigate();
   const patchPlan = usePatchPlan(taskId);
   const suggest = useSuggestMore(taskId);
   const walkActive = isRunActive(task.data);
@@ -105,6 +97,7 @@ export function ShortlistView({
   const hasOpenOption = options.some((option) => option.state === "included" && option.shortlist == null);
   const shortlist = longlist.shortlist;
   const appetite: RiskAppetite = plan.data?.scoping?.risk_appetite ?? "mostly_tried";
+  const where = plan.data?.scoping?.where?.text ?? null;
 
   // A shortlist walk that could not propose (P17): the task's newest
   // parentless walk has the purpose "shortlist" and ended degraded or
@@ -125,118 +118,141 @@ export function ShortlistView({
   if (baselineCut !== null && baselineCut > 0) footerLines.push("The baseline was cut");
 
   const suggestTitle = walkActive ? "A walk is running" : !hasOpenOption ? "Nothing left to propose" : undefined;
+  const hasNote = shortlist.note != null && shortlist.note !== "";
 
   const renderPlaceRow = (option: OptionSummaryOut) => {
     const state = option.shortlist?.state;
     const breach = option.state === "excluded" && option.exclusion != null && option.exclusion.by !== "user";
-    const mark = option.ambition == null ? null : LEVEL_WORDS.ambition[option.ambition];
-    const maturity = maturityLine(option.maturity);
-    const reason = state === "added_by_you" ? "Added by you" : (option.shortlist?.reason ?? "");
+    const footing = maturityPhrase(option.maturity, where);
+    const reason = state === "proposed" ? (option.shortlist?.reason ?? "") : "";
     return (
-      <li key={option.option_id} className="py-4">
-        <div className="flex items-start justify-between gap-4">
-          <Link
-            to={`/tasks/${taskId}/options/${option.option_id}`}
-            className="min-w-0 text-body font-bold text-navy underline-offset-4 hover:underline"
-          >
-            {scrub(option.name)}
-          </Link>
+      <li key={option.option_id} className="py-5">
+        <div className="flex items-start justify-between gap-6">
+          <div className="min-w-0 flex-1">
+            <Link
+              to={`/tasks/${taskId}/options/${option.option_id}`}
+              className="text-lead font-bold text-navy underline-offset-4 hover:underline max-md:text-body"
+            >
+              {scrub(option.name)}
+            </Link>
+            {option.description !== "" && (
+              <p className="mt-1.5 max-w-[62ch] text-body text-ink">{scrub(option.description)}</p>
+            )}
+            <p className="mt-1.5 text-meta text-grey">
+              {scrub(leverLabel(option))}
+              {footing !== null && (
+                <>
+                  <span aria-hidden="true"> · </span>
+                  {footing}
+                </>
+              )}
+            </p>
+            {reason !== "" && (
+              <div className="mt-3 border-l border-line pl-3">
+                <p className={VOICE_LABEL_CLASS}>Policy Atlas's reason</p>
+                <p className="mt-1 max-w-[62ch] text-body text-ink">{scrub(reason)}</p>
+              </div>
+            )}
+            {breach && option.exclusion != null && (
+              <p className="mt-2 text-body text-ink">
+                <Chip tone="red" className="mr-2 align-middle">excluded</Chip>
+                Breaks "{constraintLabel(scrub(option.exclusion.constraint))}". {scrub(option.exclusion.reason)}
+              </p>
+            )}
+            {actions.notice !== null && actions.notice.optionId === option.option_id && (
+              <p role="alert" className="mt-2 text-body text-red">
+                {actions.notice.text}
+              </p>
+            )}
+          </div>
           <ShortlistActionButton
             actions={actions}
             optionId={option.option_id}
             shortlistState={state}
             excluded={option.state === "excluded"}
-            className="-my-2 flex-none"
+            className="-my-1 flex-none"
           />
         </div>
-        <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-grey">
-          <span className="font-semibold text-navy">{scrub(leverLabel(option))}</span>
-          {mark !== null && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span>{mark}</span>
-            </>
-          )}
-          {maturity !== null && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span>{maturity}</span>
-            </>
-          )}
-        </p>
-        {reason !== "" && <p className="mt-1 max-w-[44em] text-body text-ink">{scrub(reason)}</p>}
-        {breach && option.exclusion != null && (
-          <p className="mt-1.5 text-body text-ink">
-            <Chip tone="red" className="mr-2 align-middle">excluded</Chip>
-            Breaks "{constraintLabel(scrub(option.exclusion.constraint))}". {scrub(option.exclusion.reason)}
-          </p>
-        )}
-        {actions.notice !== null && actions.notice.optionId === option.option_id && (
-          <p role="alert" className="mt-2 text-body text-red">
-            {actions.notice.text}
-          </p>
-        )}
       </li>
     );
   };
 
-  const groupedPlaces = [
-    { key: "added", title: "Added by you", rows: addedByYou },
-    { key: "picks", title: "Policy Atlas's picks", rows: picks },
-  ].filter((group) => group.rows.length > 0);
+  const noPlaces = placed.length === 0;
 
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-body text-grey">
-        <span className="font-semibold text-navy">{placed.length} places</span>
-        <span aria-hidden="true">·</span>
-        <label className="flex items-center gap-2">
-          <span>Appetite</span>
-          <RiskAppetiteSelect
-            value={appetite}
-            disabled={walkActive || patchPlan.isPending}
-            onChange={(value) => patchPlan.mutate({ scoping: { risk_appetite: value } })}
-          />
-        </label>
-        {walkActive && <span role="status">Shortlisting…</span>}
-      </div>
-      {patchPlan.isError && (
-        <p role="alert" className="mb-3 text-body text-red">
-          {actionFailedNotice(patchPlan.error, "The appetite couldn't be changed. Try again.")}
-        </p>
-      )}
-
-      <p className="mb-6 text-body text-ink">
-        The situation today:{" "}
-        <Link to={`/tasks/${taskId}/result?view=baseline`} className="font-semibold text-blue underline underline-offset-4">
-          Baseline
-        </Link>
-      </p>
+    <ReportPage>
+      <header>
+        <ReportKindRow kind="Shortlist">
+          {walkActive && (
+            <span role="status" className="text-meta text-grey">
+              Shortlisting…
+            </span>
+          )}
+        </ReportKindRow>
+        <h1 className={REPORT_TITLE_CLASS}>{scrub(longlistTitle(plan.data?.scoping, task.data?.name))}</h1>
+      </header>
 
       {proposalFailed && (
-        <p role="alert" className="mb-4 text-body text-red">
+        <p role="alert" className="mt-6 text-body text-red">
           Policy Atlas could not propose. Your places are unchanged.
         </p>
       )}
 
-      {placed.length === 0 && walkActive ? (
-        <p role="status" className="py-4 text-body text-grey">
-          Policy Atlas is proposing a shortlist…
-        </p>
-      ) : (
-        groupedPlaces.map((group) => (
-          <section key={group.key} className="mb-6">
-            <h2 className={REPORT_SECTION_HEADING_CLASS}>{group.title}</h2>
-            <ul role="list" className="divide-y divide-line border-t border-line">
-              {group.rows.map(renderPlaceRow)}
-            </ul>
-          </section>
-        ))
+      {addedByYou.length > 0 && (
+        <section className="mt-8">
+          <h2 className={REPORT_SECTION_HEADING_CLASS}>Added by you</h2>
+          <ul role="list" className="mt-3 divide-y divide-line border-y border-line">
+            {addedByYou.map(renderPlaceRow)}
+          </ul>
+        </section>
       )}
 
-      <div className="print-hide mb-4 flex flex-wrap items-center gap-3">
+      <section className="mt-8">
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+          <h2 className={REPORT_SECTION_HEADING_CLASS}>Policy Atlas's picks</h2>
+          <label className="flex items-center gap-2 text-meta text-grey">
+            <span>Appetite</span>
+            <RiskAppetiteSelect
+              value={appetite}
+              disabled={walkActive || patchPlan.isPending}
+              onChange={(value) => patchPlan.mutate({ scoping: { risk_appetite: value } })}
+            />
+          </label>
+        </div>
+        {patchPlan.isError && (
+          <p role="alert" className="mt-2 text-body text-red">
+            {actionFailedNotice(patchPlan.error, "The appetite couldn't be changed. Try again.")}
+          </p>
+        )}
+        {picks.length > 0 ? (
+          <ul role="list" className="mt-3 divide-y divide-line border-y border-line">
+            {picks.map(renderPlaceRow)}
+          </ul>
+        ) : (
+          <p role="status" className="mt-3 border-y border-line py-5 text-body text-grey">
+            {walkActive
+              ? "Policy Atlas is proposing a shortlist…"
+              : noPlaces
+                ? "No places yet."
+                : "No picks beside your places. Suggest more asks Policy Atlas for some."}
+          </p>
+        )}
+        {hasNote && (
+          <div className="mt-4">
+            <p className={VOICE_LABEL_CLASS}>What this shortlist leaves out</p>
+            <p className="mt-1 max-w-[62ch] text-body text-ink">{scrub(shortlist.note ?? "")}</p>
+            {footerLines.map((line) => (
+              <p key={line} className="mt-1 text-meta text-grey">
+                {line}
+              </p>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <div className="print-hide mt-6 flex flex-wrap items-center gap-3">
         <Button
-          variant="secondary"
+          variant="primary"
           size="sm"
           disabled={walkActive || !hasOpenOption || suggest.isPending}
           title={suggestTitle}
@@ -244,47 +260,25 @@ export function ShortlistView({
         >
           Suggest more
         </Button>
-        {suggest.isError && (
-          <p role="alert" className="text-body text-red">
-            {actionFailedNotice(suggest.error, "Policy Atlas couldn't start. Try again.")}
-          </p>
+        <Button variant="secondary" size="sm" onClick={() => void navigate(`/tasks/${taskId}/result`)}>
+          Add more from the longlist
+        </Button>
+        {shortlist.stale && !walkActive && (
+          <span className="text-meta text-grey">Press Suggest more to re-propose</span>
         )}
       </div>
-
-      {shortlist.stale && !walkActive && (
-        <p className="mb-4 text-body text-grey">Press Suggest more to re-propose</p>
+      {suggest.isError && (
+        <p role="alert" className="mt-2 text-body text-red">
+          {actionFailedNotice(suggest.error, "Policy Atlas couldn't start. Try again.")}
+        </p>
       )}
 
-      {shortlist.note != null && shortlist.note !== "" && (
-        <section className="mb-6">
-          <h2 className={REPORT_SECTION_HEADING_CLASS}>What this shortlist leaves out</h2>
-          <p className="mt-2 max-w-[44em] text-body text-ink">{scrub(shortlist.note)}</p>
-          {footerLines.map((line) => (
-            <p key={line} className="mt-1 text-meta text-grey">
-              {line}
-            </p>
-          ))}
-        </section>
-      )}
-
-      <div className="mb-8">
-        <Button variant="secondary" disabled>
+      <div className="mt-10 border-t border-line pt-6">
+        <Button variant="primary" disabled>
           Assess these {placed.length}
         </Button>
-        <p className="mt-1.5 text-meta text-grey">Assessment is not yet available.</p>
+        <p className="mt-2 text-meta text-grey">Assessment is not yet available.</p>
       </div>
-
-      <section>
-        <h2 className={REPORT_SECTION_HEADING_CLASS}>Other options</h2>
-        {otherGroups.map((group) => (
-          <div key={group.key} className="mt-4">
-            <h3 className="text-meta font-semibold text-grey">{scrub(group.name)}</h3>
-            <ul role="list" className="divide-y divide-line border-t border-line">
-              {group.options.map(renderOtherRow)}
-            </ul>
-          </div>
-        ))}
-      </section>
-    </div>
+    </ReportPage>
   );
 }

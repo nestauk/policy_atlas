@@ -93,7 +93,7 @@ export const FINISHED_NOTICE: Record<WalkKind, { before: string; after: string }
 
 function resultHref(taskId: string, kind: WalkKind): string {
   if (kind === "longlist" || kind === "option_search") return `/tasks/${taskId}/result?view=longlist`;
-  if (kind === "shortlist") return `/tasks/${taskId}/result?view=longlist&mode=shortlist`;
+  if (kind === "shortlist") return `/tasks/${taskId}/result?view=shortlist`;
   if (kind === "baseline") return `/tasks/${taskId}/result?view=baseline`;
   return `/tasks/${taskId}/result`;
 }

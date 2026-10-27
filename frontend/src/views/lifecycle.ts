@@ -159,16 +159,18 @@ export function taskDestination(
 }
 
 /** The Result's view switch once a scoping task has a longlist (task 045,
- *  deliverable 9): **Baseline · Longlist · Report**, Report shown but not
- *  openable until assessment. */
+ *  deliverable 9; task 055 adds Shortlist): **Baseline · Longlist · Shortlist · Report**,
+ *  Report shown but not openable until assessment. */
 export const RESULT_VIEWS: readonly { key: string; label: string; note?: string }[] = [
   { key: "baseline", label: "Baseline" },
   { key: "longlist", label: "Longlist" },
+  { key: "shortlist", label: "Shortlist" },
   { key: "report", label: "Report", note: "available after assessment" },
 ];
 
 /** Which view the Result opens on: the longlist unless the baseline is asked
  *  for (ruling 50; task 045, A7). */
-export function resultView(requested: string | null): "baseline" | "longlist" {
-  return requested === "baseline" ? "baseline" : "longlist";
+export function resultView(requested: string | null): "baseline" | "longlist" | "shortlist" {
+  if (requested === "baseline" || requested === "shortlist") return requested;
+  return "longlist";
 }

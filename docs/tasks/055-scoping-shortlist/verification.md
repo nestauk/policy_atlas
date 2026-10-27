@@ -312,12 +312,40 @@ here, not silent)._
     plan "Shortlist — Policy Atlas proposes about five places for close reading, one reason each,
     mixed to your risk appetite. Add, remove, ask for more. Assessment of the shortlisted options is
     not in this release."; three 409 sentences in `lib/errors.ts` are the delegate's words.
-11. **A missing longlist answers the generic 404** (`not_found`) on Suggest more, not a `no_longlist`
+11. **Post-build contract amendment (owner, 2026-10-27, "Sounds good" to the lead's proposal): the
+    Shortlist is its own Result view**, a fourth tab Baseline · Longlist · Shortlist · Report, not a
+    third mode of the longlist (contract item 8, S23 "a third mode"). The page: the question as the
+    title under the kind row "Shortlist"; a facts strip Places · Appetite (select) · The situation
+    today → Baseline; the places in the two groups (A22 unchanged) as hairline rows with the reason
+    first and one grey line (lever type · ambition · rung word · modifiers; the design mix stays on the
+    card's Evidence section, off the row); Suggest more beside a link "Add more from the longlist →";
+    the note; "Assess these N" disabled as the page's end. "Other options" is removed from the page:
+    Add to shortlist lives on every longlist row, tile and card. The per-row word "Added by you" is
+    dropped under the group heading of the same name. A finished shortlist walk links to
+    `?view=shortlist`. Tests moved to `ShortlistView.test.tsx`.
+    **Second round on the owner's feedback the same day:** each place shows the option's
+    description, then "Policy Atlas's reason" under a small label; the "The situation today:
+    Baseline" line is dropped (the owner's own O3 ruling, reversed on their word: "Do we really need
+    the 'situation today baseline' thing at the top?"); the appetite select sits on the "Policy Atlas's
+    picks" heading, since it is what it steers, and the facts strip is gone; the not-covered note is a
+    labelled paragraph at the foot of the picks; "Suggest more" is the page's primary button (Assess
+    is disabled) and "Add more from the longlist" a secondary button; the grey line is lever type plus
+    the evidence footing in plain words ("Evaluated, including a review, not in England, last before
+    2021" · "Described, not evaluated" · "Not yet tried anywhere"), ambition and the design mix
+    staying on the card; Add to shortlist, Remove from shortlist, Exclude and Include again are icon
+    buttons (four inline SVG glyphs in `ui/brand/ActionIcons.tsx`, no icon library in the app) with
+    the action name as accessible label and tooltip, on the longlist rows, tiles and card too. Two of
+    the owner's questions were left for their ruling, not built: a lower/middle/higher mark and a grid
+    column for Potential impact (contract S22, A23 say no mark; a mark turns a labelled conditional
+    into a ranking), and whether the rung overlaps the longlist's "N evaluated it · M more describe it"
+    (recommendation: longlist rows keep the counts; the rung is the shortlist's and the card's word).
+    Gate: `make frontend-verify` and the full `make verify` on the final snapshot (below).
+12. **A missing longlist answers the generic 404** (`not_found`) on Suggest more, not a `no_longlist`
     code: the app's 404 handler hides whether a task exists (the existing access-control rule), so the
     contract's named 404 code cannot reach the client. The frontend's `no_longlist` sentence is unused.
-12. **Add to shortlist on a merged option answers 409 `not_included`** (the shared lookup had to admit
+13. **Add to shortlist on a merged option answers 409 `not_included`** (the shared lookup had to admit
     merged rows for this one action); Remove on a merged option stays a 404.
-13. **The local dev database was migrated to `b33ffb8c3a16`** by the driver-script delegate (needed for
+14. **The local dev database was migrated to `b33ffb8c3a16`** by the driver-script delegate (needed for
     the staged check; additive, with a downgrade).
 
 ## Review findings

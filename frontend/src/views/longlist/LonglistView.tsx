@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link } from "react-router";
 
 import type { components } from "../../api/gen/types";
 import { useAddOption } from "../../api/mutations";
@@ -22,7 +22,6 @@ import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage } from "../reportPage";
 import { isRunActive } from "../scopingActivity";
 import { FILTER_CHIP_CLASS } from "../sourcesPresentation";
 import { LonglistGrid } from "./LonglistGrid";
-import { ShortlistView } from "./ShortlistView";
 import {
   SCOPING_PASS_SENTENCE,
   byLeverThenName,
@@ -30,7 +29,6 @@ import {
   constraintLabel,
   countsParts,
   definitionSentence,
-  holdsPlace,
   leverDefinitionFor,
   instrumentsSummary,
   leverLabel,
@@ -55,12 +53,11 @@ const GROUP_BY: { key: GroupBy; label: string }[] = [
   { key: "lever", label: "Lever type" },
 ];
 
-type Mode = "list" | "grid" | "shortlist";
+type Mode = "list" | "grid";
 
 const MODES: { key: Mode; label: string }[] = [
   { key: "list", label: "List" },
   { key: "grid", label: "Grid" },
-  { key: "shortlist", label: "Shortlist" },
 ];
 
 const ADD_OPTION_ANCHOR = "add-option";
@@ -90,11 +87,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
   const plan = usePlan(taskId);
   const addOption = useAddOption(taskId);
 
-  // A finished shortlist walk links here with ?mode=shortlist (task 055).
-  const [searchParams] = useSearchParams();
-  const [mode, setMode] = useState<Mode>(
-    searchParams.get("mode") === "shortlist" ? "shortlist" : "list",
-  );
+  const [mode, setMode] = useState<Mode>("list");
   const [groupBy, setGroupBy] = useState<GroupBy>("theme");
   const [showExcludedInGrid, setShowExcludedInGrid] = useState(false);
   const [addText, setAddText] = useState("");
@@ -326,20 +319,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
         </div>
       )}
 
-      {mode === "shortlist" ? (
-        <ShortlistView
-          taskId={taskId}
-          longlist={longlist}
-          otherGroups={themeGroups
-            .map((group) => ({
-              key: group.key,
-              name: group.name,
-              options: group.options.filter((option) => !holdsPlace(option)),
-            }))
-            .filter((group) => group.options.length > 0)}
-          renderOtherRow={renderOptionRow}
-        />
-      ) : mode === "grid" ? (
+      {mode === "grid" ? (
         <LonglistGrid taskId={taskId} longlist={longlist} showExcluded={showExcludedInGrid} />
       ) : (
         <FullReportExpandProvider key={sectionKey("all")}>

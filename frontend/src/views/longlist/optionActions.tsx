@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import type { components } from "../../api/gen/types";
 import { useOptionVerb, useShortlistVerb } from "../../api/mutations";
 import { actionFailedNotice } from "../../lib/errors";
+import { BanIcon, MinusIcon, PlusIcon, UndoIcon } from "../../ui/brand/ActionIcons";
 import { Button } from "../../ui/brand/Button";
+import { cn } from "../../ui/brand/cn";
+import { Tooltip, TooltipProvider } from "../../ui/radix/Tooltip";
 
 /** The reason and add-option inputs share one look. */
 export const REASON_INPUT_CLASS =
@@ -93,6 +96,43 @@ export function useOptionActions(taskId: string, walkActive: boolean) {
 }
 
 type OptionActions = ReturnType<typeof useOptionActions>;
+
+/** An icon-only row action: a square ghost-grey hit area, the action's name
+ *  as the accessible label and as a hover tooltip in the system's own skin
+ *  (owner, 2026-10-27: icons, not words; hover tooltips). The provider sits
+ *  on each button so the rows need no wrapper. */
+const ICON_BUTTON_CLASS = "h-8 w-8 justify-center px-0 py-0 text-grey hover:text-navy";
+
+function IconAction({
+  label,
+  disabled,
+  onClick,
+  className,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <TooltipProvider delayDuration={250}>
+      <Tooltip content={<p>{label}</p>}>
+        <Button
+          variant="secondary"
+          size="sm"
+          aria-label={label}
+          className={cn(ICON_BUTTON_CLASS, className)}
+          disabled={disabled}
+          onClick={onClick}
+        >
+          {children}
+        </Button>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 type ShortlistState = NonNullable<components["schemas"]["OptionSummaryOut"]["shortlist"]>["state"];
 
 /** "Add to shortlist" on an included option holding no place (or only a
@@ -114,28 +154,26 @@ export function ShortlistActionButton({
   const holds = shortlistState === "proposed" || shortlistState === "added_by_you";
   if (holds) {
     return (
-      <Button
-        variant="secondary"
-        size="sm"
+      <IconAction
+        label="Remove from shortlist"
         className={className}
         disabled={actions.unshortlistPending || actions.walkActive}
         onClick={() => actions.unshortlist(optionId)}
       >
-        Remove from shortlist
-      </Button>
+        <MinusIcon />
+      </IconAction>
     );
   }
   if (excluded) return null;
   return (
-    <Button
-      variant="secondary"
-      size="sm"
+    <IconAction
+      label="Add to shortlist"
       className={className}
       disabled={actions.shortlistPending || actions.walkActive}
       onClick={() => actions.shortlist(optionId)}
     >
-      Add to shortlist
-    </Button>
+      <PlusIcon />
+    </IconAction>
   );
 }
 
@@ -154,28 +192,26 @@ export function OptionActionButton({
 }) {
   if (excluded) {
     return (
-      <Button
-        variant="secondary"
-        size="sm"
+      <IconAction
+        label="Include again"
         className={className}
         disabled={actions.includePending || actions.walkActive}
         onClick={() => actions.include(optionId)}
       >
-        Include again
-      </Button>
+        <UndoIcon />
+      </IconAction>
     );
   }
   if (actions.excludingId === optionId) return null;
   return (
-    <Button
-      variant="secondary"
-      size="sm"
+    <IconAction
+      label="Exclude"
       className={className}
       disabled={actions.walkActive}
       onClick={() => actions.setExcludingId(optionId)}
     >
-      Exclude
-    </Button>
+      <BanIcon />
+    </IconAction>
   );
 }
 
