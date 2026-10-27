@@ -1,5 +1,12 @@
 # Spec update log
 
+## 2026-10-27 (task 054, arm B)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): each
+  item search's record cap goes from 20 to 40, and the check walk's screen judges documents against
+  the steps it covers (any setting, any intervention) instead of the whole theory, after the
+  offline search eval's arm B won (owner approved). A live run had screened out 13 of 20 relevant
+  documents, including the decisive trials for a mid-chain step. Task 054 contract C24.
+
 ## 2026-10-27 (task 054, web pages)
 * **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Trust rules: web
   pages are classified and appraised like any document; a page from a trusted publisher (configured

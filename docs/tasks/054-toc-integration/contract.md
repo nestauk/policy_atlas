@@ -344,6 +344,16 @@ decisions below. The decisions fix what the spec leaves to the build.
   score. Any other page keeps the web cap. The grade function takes the publisher verdict as an
   input; the grade table test gains rows for both. Replaces the blanket web cap in C4 and C7.
 
+- **C24. Item searches and the check screen follow arm B** (owner approved, 2026-10-27; offline
+  search eval, [agentic-search.md](agentic-search.md)). Each item search's record cap is 40, not
+  20. The check walk's screen judges each document against the steps it covers, not the whole
+  theory: it passes when it reports evidence (a study, a review, a model, or official monitoring
+  or evaluation) on at least one covered link's sentence, in any setting and whatever the
+  intervention. The criterion lists the sentences in `links_to_check` order and stays under about
+  4,000 characters. It is built when the check walk's intent record is minted (the graph is read
+  there) and stored in its context; walks without it fall back to the theory-wide criterion. The
+  draft walk's criterion is unchanged, and the place still never excludes.
+
 ## ADR scope
 
 ADR 0042, "A third task kind: theory of change", records: the task kind and its walks (C3); the

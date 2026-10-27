@@ -59,8 +59,15 @@ TOC_WALK_RECHECK = "recheck"
 #: The intent-record context key naming the links a check walk covers.
 TOC_LINKS_KEY = "links"
 
-#: Records each item search may acquire per backend (🟡, S3).
-TOC_ITEM_RECORD_CAP = 20
+#: The intent-record context key holding a check walk's screening criterion:
+#: the steps it covers, written when the walk is minted (arm B).
+TOC_SCREEN_CRITERION_KEY = "screening_criterion"
+
+#: The steps criterion stays under this many characters.
+TOC_SCREEN_CRITERION_MAX_CHARS = 4000
+
+#: Records each item search may acquire per backend (🟡, S3; arm B).
+TOC_ITEM_RECORD_CAP = 40
 
 #: Links judged per check walk at most (C5).
 TOC_LINK_CAP = 80
@@ -204,7 +211,10 @@ def toc_scope_constraints(plan: TocPlan) -> ScopeConstraints:
 
 
 def _screening_criterion(plan: TocPlan) -> str:
-    """The check walk's one screening criterion: the theory, never the place.
+    """The theory-wide screening criterion: the theory, never the place.
+
+    The fallback for check walks minted before arm B, which carry no steps
+    criterion in their context.
 
     The place is the user's place, carried in the intent and shown; it never
     excludes a document (spec § Plan slots).
@@ -221,6 +231,35 @@ def _screening_criterion(plan: TocPlan) -> str:
     )
 
 
+def steps_screening_criterion(sentences: list[str]) -> str | None:
+    """The check walk's screening criterion: evidence on any of these steps (arm B).
+
+    A document passes when it reports evidence on at least one step, in any
+    setting and whatever the intervention. Sentences are kept in order until
+    the criterion would pass :data:`TOC_SCREEN_CRITERION_MAX_CHARS`. The place
+    never excludes a document (spec § Plan slots).
+
+    Args:
+        sentences: The covered links' sentences, most important first.
+
+    Returns:
+        The criterion, or ``None`` when no sentence fits.
+    """
+    text = (
+        "The document reports evidence (a study, a review, a model, or official "
+        "monitoring or evaluation) on at least one of these steps, in any setting "
+        "and whatever the intervention that caused it:"
+    )
+    kept = 0
+    for sentence in sentences:
+        line = f"\n- {sentence.strip()}"
+        if len(text) + len(line) > TOC_SCREEN_CRITERION_MAX_CHARS:
+            break
+        text += line
+        kept += 1
+    return text if kept else None
+
+
 def _item_search_directive(plan: TocPlan) -> dict[str, Any]:
     """One item search's acquire directive (``depth · filters · guidance · record_cap``)."""
     search: dict[str, Any] = {
@@ -234,12 +273,14 @@ def _item_search_directive(plan: TocPlan) -> dict[str, Any]:
     return search
 
 
-def _chain(steps: list[tuple[str, bool]], plan: TocPlan) -> ComposedChain:
+def _chain(
+    steps: list[tuple[str, bool]], plan: TocPlan, criterion: str | None = None
+) -> ComposedChain:
     def delta(component: str) -> dict[str, Any]:
         if component == "acquire":
             return {"search": _item_search_directive(plan)}
         if component == "screen_abstract":
-            return {"screening": {"criteria": [_screening_criterion(plan)]}}
+            return {"screening": {"criteria": [criterion or _screening_criterion(plan)]}}
         return {}
 
     return ComposedChain(
@@ -278,12 +319,15 @@ def compose_toc(
             steps = [("inherit", True)] if plan.from_option is not None else []
             return _chain([*steps, ("toc_draft", True)], plan)
         if walk == TOC_WALK_CHECK:
+            # Walks minted before arm B carry no criterion: the theory-wide one.
+            criterion = context.get(TOC_SCREEN_CRITERION_KEY)
             if context.get(TOC_LINKS_KEY):
                 return _chain(
                     [step for step in TOC_CHECK_CHAIN if step[0] not in _NAMED_LINK_SKIPS],
                     plan,
+                    criterion,
                 )
-            return _chain(list(TOC_CHECK_CHAIN), plan)
+            return _chain(list(TOC_CHECK_CHAIN), plan, criterion)
         if walk == TOC_WALK_RECHECK:
             raise ValueError("the recheck walk lands in increment 2")
         raise ValueError(f"no theory-of-change walk {walk!r}")

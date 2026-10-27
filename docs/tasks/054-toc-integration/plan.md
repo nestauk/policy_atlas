@@ -69,9 +69,9 @@ and joins them before `screen_abstract`, emitting `toc_item_searches` as an even
 gets a `COMPONENT_REGISTRY` entry, a `TOC_STEPS` tuple in `task_plan._validate_registry`, and a
 harness node; `build_graph`'s edge map is built from the step dictionaries.
 **Directives.** Item search: the item text as intent; guidance asking for evidence on the step and
-on each of its conditions, for and against; a record cap of 🟡 20 per link; the plan's evidence
-restriction as filters; no ingest. Screen: the theory (intervention, intended change, population)
-as the screening intent, the place carried as the user's place and never a criterion. Each walk
+on each of its conditions, for and against; a record cap of 🟡 40 per link (20 until the arm B ruling, 2026-10-27); the plan's evidence
+restriction as filters; no ingest. Screen: the steps the check covers (each link's sentence; arm B ruling, contract C24) as the
+screening criterion, the place carried as the user's place and never a criterion. Each walk
 screens only documents its own children acquired plus inherited ones not yet screened in the task.
 
 S4. **Sequence driver and dispatch** (C3, C19). `run_toc_sequence(engine, *, task_id,

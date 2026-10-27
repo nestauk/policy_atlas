@@ -313,7 +313,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
     <li><b>Start from documents already found.</b><span class="tag reused">reused</span>
       <span class="sub">When the theory comes from an option, the option's documents join the pool first. They are shared, not copied.</span></li>
     <li><b>Search once per item.</b><span class="tag reused">reused</span>
-      <span class="sub">Each connection gets its own small search on OpenAlex, Overton and the web, with queries for the step itself and for its conditions, using the parallel walks Options scoping already runs, in a separate pool so the two never slow each other down. Up to 20 records per item, and at most 80 items per check. Web pages are fetched once and stored as fixed text.</span></li>
+      <span class="sub">Each connection gets its own small search on OpenAlex, Overton and the web, with queries for the step itself and for its conditions, using the parallel walks Options scoping already runs, in a separate pool so the two never slow each other down. Up to 40 records per item, and at most 80 items per check. Web pages are fetched once and stored as fixed text.</span></li>
     <li><b>Screen, classify and appraise.</b><span class="tag reused">reused</span>
       <span class="sub">The Evidence search steps, unchanged: is the abstract relevant, what kind of study is it, and how good is it (a score from 1 to 5).</span></li>
     <li><b>Discover what the draft missed.</b><span class="tag new">new</span>

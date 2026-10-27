@@ -15,7 +15,13 @@ from policy_atlas.evidence_search.assess.screen import _parse_screen_directive
 from policy_atlas.evidence_search.sourcing.search_loop import parse_search_directive
 from policy_atlas.runtime import option_search, runner
 from policy_atlas.runtime.agent import persist_approved_plan
-from policy_atlas.runtime.toc_plan import TOC_ITEM_RECORD_CAP, TocPlan, compose_toc
+from policy_atlas.runtime.toc_plan import (
+    TOC_ITEM_RECORD_CAP,
+    TOC_SCREEN_CRITERION_MAX_CHARS,
+    TocPlan,
+    compose_toc,
+    steps_screening_criterion,
+)
 from policy_atlas.theory_of_change.evidence.item_search_prompt import ITEM_SEARCH_GUIDANCE
 from tests.helpers import delete_task_data, seed_task_and_run, seed_walk
 
@@ -76,6 +82,34 @@ def test_the_screen_criterion_names_the_theory_and_never_the_place() -> None:
     assert "junk-food advertising ban" in criteria[0]
     assert "children aged 4 to 11" in criteria[0]
     assert "London" not in criteria[0]
+
+
+def test_the_check_screen_judges_against_the_steps_when_the_walk_carries_them() -> None:
+    criterion = steps_screening_criterion(
+        ["Ads shown fall, so energy intake falls", "Energy intake falls, so obesity falls"]
+    )
+    assert criterion is not None
+    assert "in any setting and whatever the intervention" in criterion
+    assert criterion.endswith(
+        "\n- Ads shown fall, so energy intake falls\n- Energy intake falls, so obesity falls"
+    )
+    for context in (
+        {"toc_walk": "check", "screening_criterion": criterion},
+        {"toc_walk": "check", "links": ["l1"], "screening_criterion": criterion},
+    ):
+        step = compose_toc(_plan(), "toc", context).steps[0]
+        _stage, criteria, _rescreen = _parse_screen_directive(step.directive_delta)
+        assert criteria == [criterion]
+
+
+def test_the_steps_criterion_keeps_the_first_links_under_the_cap() -> None:
+    sentences = [f"Step {i} " + "x" * 200 for i in range(40)]
+    criterion = steps_screening_criterion(sentences)
+    assert criterion is not None
+    assert len(criterion) <= TOC_SCREEN_CRITERION_MAX_CHARS
+    assert "Step 0 " in criterion
+    assert "Step 39 " not in criterion
+    assert steps_screening_criterion([]) is None
 
 
 def test_an_item_search_only_acquires_under_the_plan_s_restriction() -> None:
