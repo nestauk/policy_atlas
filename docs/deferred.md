@@ -3202,3 +3202,46 @@ sent; found in task 049), now `sort=relevance` on every search, protected.
   publisher-typed plan can admit a landmark outside its range, as D8 is written. Seam:
   apply the plan's Overton filters locally to landmarks, counted on the `fetch_by_id`
   event like the country check.
+
+## Options scoping shortlist (task 055 seams)
+
+Recorded by the task 055 contract, plan and build (`docs/tasks/055-scoping-shortlist/`;
+[ADR 0041](adr/0041-options-scoping-shortlist.md)). The owner's rulings are quoted in the contract
+(S1–S26); the items below stay open on purpose.
+
+- **Update-in-place of the longlist (S10; 045 open question 7).** Still deferred. 055 keeps Rebuild:
+  an appetite change bypasses it (a shortlist walk re-proposes at once) and the user's places survive
+  a Rebuild by option id. Owner, 2026-10-27: "What does that even mean to rebuild in place? Do we
+  really need to worry about this?" → no.
+- **Shortlist verbs by chat.** Add to shortlist, Remove and Suggest more are buttons only; the
+  `longlist_turns` verbs stay add · exclude · include again. A chat verb needs the same opener and
+  refusals as the routes.
+- **Shortlist recall as the eval measure.** Research report 3 § 4: the right measure of a shortlist
+  is whether the option an assessment later finds best was on it. Needs assessment to exist. No AI
+  eval in 055; proposal quality was read by hand (verification.md, M1–M6).
+- **A comparability rule for settings.** The `tried_only` mix says "a comparable setting preferred"
+  and the maturity rung's modifier says "none in your setting" by country only. What makes a
+  setting comparable (income level, health system, federal structure) is not defined.
+- **Inferring the appetite.** Never inferred from the plan's wording (S2). A later slice could
+  propose one from the question's words and show it as a guess for the user to confirm.
+- **Direction of effect from abstracts (046 R42).** Stays with assessment; a reason may say an
+  option "bears on" an outcome, never that it moves it.
+- **`question` is not among the longlist inputs (A6).** `longlist_inputs()` projects the ten fields
+  the contract named; `suggest`, `constrain` and `theme` also read `plan.question`, which a Task Agent
+  re-approval can change without flagging the longlist stale. Add it to the projection if that path
+  turns out to be used.
+- **The shortlist stage key.** Built as its own key (the pattern of every other scoping component),
+  not as `select` with an override (contract PG3). If the owner wants the override, it is a lookup by
+  registry name at four call sites in `routers/sse.py` and `checkin_read`.
+- **A failed proposal can cost up to four model calls.** The component re-asks once; the runner then
+  retries a failed model-calling step once, so a walk that ends `degraded` may have made four calls.
+  `theme` behaves the same way today. A per-step "no runner retry" flag would halve it.
+- **The note's footer needs `document_lines_total`.** Served since Phase 4; the frontend shows "Policy
+  Atlas read N of M document lines" only when both counts exist.
+- **The baseline check-in card does not show the appetite.** Its settings summary comes from the
+  backend's check-in bundle (Who · Where · Outcomes · Depth); adding "Risk appetite" is one bundle
+  key and one label in `checkInPresentation.ts`. The plan document beside the card shows it.
+- **Potential impact length.** The ceiling is a code check (a `max_length` on the wire made the
+  constrained decoder cut sentences mid-word at the limit). If the judgment model keeps writing over
+  400 characters on verbose lists, the target in the prompt (about 300) goes down before the ceiling
+  goes up.

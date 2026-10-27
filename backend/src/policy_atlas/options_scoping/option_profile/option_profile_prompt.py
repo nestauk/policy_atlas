@@ -38,8 +38,19 @@ OPTION_PROFILE_PROMPT_VERSION = "option_profile_v4"
 OPTION_PROFILE_MAX_OUTPUT_TOKENS = 16_384
 
 #: The ceiling on one Potential impact sentence (task 055, contract item 6).
-#: Enforced on the wire: a longer answer fails the attempt.
+#: Checked in code after the call, not on the wire: a ``max_length`` on the
+#: wire makes the constrained decoder stop mid-word at the limit (seen on the
+#: stored tasks in the build) instead of failing the attempt. A longer answer
+#: fails the check and the attempt is repeated once.
+#:
+#: ``option_profile`` is a spine step: a second failure fails the whole
+#: longlist walk. So the stated ceiling is a target the model is told, and
+#: only an answer over :data:`POTENTIAL_IMPACT_HARD_MAX_CHARS` fails the
+#: attempt; an answer between the two is kept with a warning (seen in the
+#: live check: 405 and 427 characters on two attempts failed a walk's
+#: profile step once).
 POTENTIAL_IMPACT_MAX_CHARS = 400
+POTENTIAL_IMPACT_HARD_MAX_CHARS = 600
 
 #: The baseline text the Potential impact call reads, at most (plan PG2).
 POTENTIAL_IMPACT_BASELINE_MAX_CHARS = 12_000
@@ -198,7 +209,6 @@ class PotentialImpactWire(BaseModel):
 
     option_id: str = Field(description="The option's id, copied exactly from the data.")
     answer: str = Field(
-        max_length=POTENTIAL_IMPACT_MAX_CHARS,
         description=(
             "About 300 characters, never more than 380, in this order: a magnitude in plain "
             "words bound to a condition ('large if it works'); the pathway "

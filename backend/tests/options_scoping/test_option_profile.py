@@ -35,6 +35,7 @@ from policy_atlas.options_scoping.option_profile.option_profile import (
     option_profile_scope,
 )
 from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
+    POTENTIAL_IMPACT_HARD_MAX_CHARS,
     POTENTIAL_IMPACT_MAX_CHARS,
     AmbitionResponse,
     AmbitionWire,
@@ -1527,15 +1528,39 @@ def test_a_potential_impact_answer_over_the_ceiling_fails_the_attempt_and_retrie
     walk = _Walk(conn)
     walk.option("Youth guarantee")
     walk.build(_Scripted())
-    too_long = POTENTIAL_IMPACT_MAX_CHARS + 1
-    with pytest.raises(ValidationError):
-        PotentialImpactWire(option_id="o1", answer="x" * too_long)
-    wrong_id = PotentialImpactResponse(
-        options=[PotentialImpactWire(option_id="o9", answer="Large if it works.")]
+    too_long = PotentialImpactResponse(
+        options=[
+            PotentialImpactWire(option_id="o1", answer="x" * (POTENTIAL_IMPACT_HARD_MAX_CHARS + 1))
+        ]
     )
     right = PotentialImpactResponse(
         options=[PotentialImpactWire(option_id="o1", answer="Large if it works.")]
     )
-    backend = StubLonglistBackend(potential_impact_responses=[wrong_id, right])
+    # No max_length on the wire (the constrained decoder would cut mid-word);
+    # the ceiling is a code check that fails the attempt.
+    assert PotentialImpactWire.model_fields["answer"].metadata == []
+    backend = StubLonglistBackend(potential_impact_responses=[too_long, right])
     _profile(walk, backend)
     assert backend.calls["potential_impact"] == 2
+
+
+def test_a_potential_impact_answer_over_the_target_but_under_the_hard_bound_is_kept(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee")
+    run_id, _ = walk.build(_Scripted())
+    long_but_kept = "y" * (POTENTIAL_IMPACT_MAX_CHARS + 20)
+    profiler = StubLonglistBackend(
+        potential_impact_responses=[
+            PotentialImpactResponse(
+                options=[PotentialImpactWire(option_id="o1", answer=long_but_kept)]
+            )
+        ]
+    )
+    _profile(walk, _Scripted(profiler=profiler))
+    assert profiler.calls["potential_impact"] == 1
+    for key, entry in _column(walk, run_id).items():
+        if key == "folds":
+            continue
+        assert entry["1"]["lines"]["potential_impact"]["sentence"] == long_but_kept

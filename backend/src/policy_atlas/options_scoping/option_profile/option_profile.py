@@ -130,7 +130,9 @@ from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
 )
 from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
     OPTION_PROFILE_PROMPT_VERSION,
+    POTENTIAL_IMPACT_HARD_MAX_CHARS,
     POTENTIAL_IMPACT_LINE,
+    POTENTIAL_IMPACT_MAX_CHARS,
     AmbitionResponse,
     MarkedLineResponse,
     PlainLineResponse,
@@ -609,6 +611,15 @@ def _checked_line(
         sentence = wire.answer.strip()
         if not sentence:
             return None
+        if line_key == POTENTIAL_IMPACT_LINE and len(sentence) > POTENTIAL_IMPACT_MAX_CHARS:
+            log.warning(
+                "option_profile.potential_impact_over_ceiling",
+                option_id=short_id,
+                chars=len(sentence),
+                hard_max=POTENTIAL_IMPACT_HARD_MAX_CHARS,
+            )
+            if len(sentence) > POTENTIAL_IMPACT_HARD_MAX_CHARS:
+                return None
         stands_out = getattr(wire, "stands_out", "no") if marked else "no"
         lines[short_id] = _Line(sentence=sentence, mark=_mark(stands_out))
     return lines

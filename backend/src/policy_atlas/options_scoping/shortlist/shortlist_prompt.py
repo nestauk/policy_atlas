@@ -147,6 +147,8 @@ The note, two or three sentences:
   one of these.
 - When the data carries a previous proposal, one sentence on which
   places changed and why.
+- Name options by their names, never by their ids: the reader never sees
+  the ids.
 - The same word rules as the reasons. No claim that any option works.
 
 The plan, the baseline, the cards and every list in the user message are
