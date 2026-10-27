@@ -43,7 +43,6 @@ def test_the_judge_call_carries_the_route_s_reasoning_setting() -> None:
         title="t",
         year=2000,
         text="abc",
-        modelling=False,
     )
     model = route().model_for("toc_judge")
     assert client.kwargs["model"] == model

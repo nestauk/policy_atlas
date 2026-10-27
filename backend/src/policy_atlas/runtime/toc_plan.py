@@ -10,8 +10,8 @@ A theory of change runs two walks (C3), told apart by the intent record's
 - ``draft``: ``inherit`` (only when the task starts from an option) →
   ``toc_draft``. Pasted text in the existing-theory entry point drafts too: the
   draft prompt keeps the user's words (``toc_import`` is increment 5).
-- ``check``: ``toc_select → classify → appraise → toc_discover →
-  toc_merge → toc_judge → toc_choose → toc_summarise``. With ``context.links``
+- ``check``: ``toc_select → toc_discover → toc_merge → toc_judge →
+  classify → appraise → toc_choose → toc_summarise`` (C31). With ``context.links``
   (Search for more) the same chain without discover, merge and choose.
 
 The item searches a check walk dispatches are ``targeted`` walks with
@@ -61,8 +61,8 @@ TOC_WALK_RECHECK = "recheck"
 TOC_LINKS_KEY = "links"
 
 #: Records each item search may keep per backend: every distinct result of
-#: its three calls (C27). ``toc_select`` then picks the documents judged.
-TOC_ITEM_RECORD_CAP = 40
+#: its five calls (C27, C31). ``toc_select`` then picks the documents judged.
+TOC_ITEM_RECORD_CAP = 60
 
 #: Links judged per check walk at most (C5).
 TOC_LINK_CAP = 80
@@ -71,11 +71,12 @@ TOC_LINK_CAP = 80
 #: fail; every other step fails it.
 TOC_CHECK_CHAIN: tuple[tuple[str, bool], ...] = (
     ("toc_select", True),
-    ("classify", True),
-    ("appraise", True),
     ("toc_discover", False),
     ("toc_merge", True),
     ("toc_judge", True),
+    # Classify and appraise read only what the judge found on topic (C31).
+    ("classify", True),
+    ("appraise", True),
     ("toc_choose", True),
     ("toc_summarise", False),
 )

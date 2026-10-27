@@ -50,24 +50,24 @@ def test_the_draft_walk_drafts_and_inherits_only_from_an_option() -> None:
     ]
 
 
-def test_the_check_walk_runs_the_spine_then_the_toc_steps() -> None:
+def test_the_check_walk_classifies_only_after_the_judge() -> None:
     chain = compose_toc(_plan(), "toc", {"toc_walk": "check"})
     assert [(s.component, s.spine) for s in chain.steps] == [
         ("toc_select", True),
-        ("classify", True),
-        ("appraise", True),
         ("toc_discover", False),
         ("toc_merge", True),
         ("toc_judge", True),
+        ("classify", True),
+        ("appraise", True),
         ("toc_choose", True),
         ("toc_summarise", False),
     ]
     named = compose_toc(_plan(), "toc", {"toc_walk": "check", "links": ["l1"]})
     assert named.components == [
         "toc_select",
+        "toc_judge",
         "classify",
         "appraise",
-        "toc_judge",
         "toc_summarise",
     ]
 
@@ -82,7 +82,7 @@ def test_an_item_search_only_acquires_under_the_plan_s_restriction() -> None:
     chain = compose_toc(plan, "targeted", {"acquire_only": True})
     assert chain.components == ["acquire"]
     directive = chain.steps[0].directive_delta
-    assert directive["search"]["record_cap"] == TOC_ITEM_RECORD_CAP == 40
+    assert directive["search"]["record_cap"] == TOC_ITEM_RECORD_CAP == 60
     assert directive["search"]["guidance"] == list(ITEM_SEARCH_GUIDANCE)
     # The search loop's own parser admits it.
     depth, filters, guidance = parse_search_directive(directive)

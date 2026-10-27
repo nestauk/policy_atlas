@@ -778,7 +778,7 @@ def test_select_for_link_takes_the_lists_in_turn_with_abstracts_first() -> None:
     def cand(n: int, source: tuple[str, str], rank: int, abstract: bool = True) -> LinkCandidate:
         return LinkCandidate(uuid.UUID(int=n), source, rank, abstract="a" if abstract else "")
 
-    q1, q2, ov = LINK_LISTS
+    q1, q2, ov = LINK_LISTS[:3]
     candidates = [
         # Out of order on purpose: the rule sorts by list, then rank.
         cand(23, ov, 3), cand(21, ov, 1), cand(22, ov, 2, abstract=False),

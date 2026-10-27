@@ -801,6 +801,7 @@ def screen_in(
     tss_ids: set[uuid.UUID],
     status: Literal["relevant", "not_relevant"],
     reason: str,
+    rescreen: bool = False,
 ) -> dict[str, Any]:
     """Screen chosen documents in or out by code, with no model call (task 054, C27).
 
@@ -817,19 +818,32 @@ def screen_in(
         tss_ids: The documents to screen.
         status: ``relevant`` (screened in) or ``not_relevant`` (screened out).
         reason: Why, recorded on each event.
+        rescreen: Screen documents that already have a row: the new rows go
+            in at the next screen generation, which wins for those documents
+            only (the re-screen mechanism, ADR 0022).
 
     Returns:
         ``screened``, ``status`` and ``excluded_retracted`` counts.
     """
+    generation = _next_screen_generation(conn, scope_id=context.scope_id) if rescreen else 0
     docs = [
         doc
         for doc in _load_stage1_docs(
-            conn, task_id=task_id, scope_id=context.scope_id, intent=context.intent
+            conn,
+            task_id=task_id,
+            scope_id=context.scope_id,
+            intent=context.intent,
+            rescreen=rescreen,
         )
         if doc.tss_id in tss_ids
     ]
     kept, retracted = _exclude_retracted_docs(
-        conn, task_id=task_id, run_id=run_id, context=context, all_docs=docs
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=context,
+        all_docs=docs,
+        generation=generation,
     )
     for doc in kept:
         _insert_screen_row(
@@ -842,6 +856,7 @@ def screen_in(
             basis=doc.basis,
             confidence=1.0,
             stage=1,
+            generation=generation,
         )
         _append_screened_event(
             conn,
@@ -857,6 +872,7 @@ def screen_in(
             reps=[],
             agreement={"agreeing": 0, "survivors": 0},
             flags=[reason],
+            generation=generation,
         )
     return {
         "screened": len(docs),

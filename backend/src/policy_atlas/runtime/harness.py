@@ -486,6 +486,9 @@ def _toc_node(name: str) -> Any:
     def run(state: HarnessState) -> HarnessState:
         step = _TOC_STEPS[name]  # read at run time, so a test can swap a step
         kwargs: dict[str, Any] = {"backend": state["toc_backend"]}
+        if name == "toc_select":
+            # The shared pool: the walk's documents closest to each link (C31).
+            kwargs["embedder"] = state["embedding_backend"]
         if name == "toc_judge":
             # Judge reranks each link's candidates with select's rerank backend
             # (C5), and picks a searchless link's documents by embedding (C27).

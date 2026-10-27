@@ -20,7 +20,6 @@ def _user(item_text: str) -> str:
         title="A trial",
         year=2004,
         text="Abstract.",
-        modelling=False,
     )
     return str(messages[1]["content"])
 

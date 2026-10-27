@@ -1,4 +1,4 @@
-"""The ``toc_judge_v4`` prompt: one link against one document (task 054, C5).
+"""The ``toc_judge_v5`` prompt: one link against one document (task 054, C5).
 
 Lead-authored and versioned. One call per link and document returns two
 stances, each with its own verbatim quote: *worked elsewhere* (where this step
@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_JUDGE_PROMPT_VERSION = "toc_judge_v4"
+TOC_JUDGE_PROMPT_VERSION = "toc_judge_v5"
 
 TOC_JUDGE_MAX_OUTPUT_TOKENS = 4_000
 
@@ -98,10 +98,11 @@ class JudgeResponse(BaseModel):
     indicator: IndicatorWire | None
     robust_model: bool | None = Field(
         description=(
-            "Only when the document is marked as a modelling study: true when the "
-            "text shows the model is built on or calibrated against real outcome "
-            "data, tested with sensitivity or uncertainty analysis, or validated "
-            "against observed results; false otherwise. Null for any other document."
+            "Only when the document is a modelling or simulation study (it estimates "
+            "effects with a model rather than observing them): true when the text "
+            "shows the model is built on or calibrated against real outcome data, "
+            "tested with sensitivity or uncertainty analysis, or validated against "
+            "observed results; false otherwise. Null for any other document."
         )
     )
 
@@ -187,8 +188,8 @@ what it took). Otherwise null.
 indicator: when the document names a measure for the source or target.
 Otherwise null.
 
-robust_model: only for a document marked as a modelling study; null for
-every other document.
+robust_model: only for a modelling or simulation study, which you tell from
+the text; null for every other document.
 
 ## What tests this step
 
@@ -237,7 +238,7 @@ Target (what should follow): {target}
 Population: {population}
 Place: {place}
 </place_and_population>
-<document id="{document_id}" modelling_study="{modelling}">
+<document id="{document_id}">
 Title: {title}
 Year: {year}
 Text:
@@ -275,7 +276,6 @@ def build_judge_messages(
     title: str,
     year: int | None,
     text: str,
-    modelling: bool,
     neighbours: str = "",
 ) -> list[ChatCompletionMessageParam]:
     """Assemble one judge call's messages.
@@ -288,7 +288,6 @@ def build_judge_messages(
         title: The document title.
         year: Publication year, or ``None``.
         text: The abstract or page excerpt.
-        modelling: Whether classify marked the document a modelling study.
         neighbours: The steps just before and after this one, one sentence per
             line, so the judge can tell a neighbouring step's evidence apart.
 
@@ -310,7 +309,6 @@ def build_judge_messages(
                     sanitize_prompt_field(neighbours or "none", max_chars=ITEM_TEXT_MAX)
                 ),
                 document_id=document_id,
-                modelling="yes" if modelling else "no",
                 title=_fence_safe(sanitize_prompt_field(title, max_chars=500)),
                 year=year if year is not None else "unknown",
                 text=_fence_safe(sanitize_prompt_field(text, max_chars=DOCUMENT_TEXT_MAX)),

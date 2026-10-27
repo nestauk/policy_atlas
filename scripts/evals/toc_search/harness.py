@@ -1022,7 +1022,6 @@ class Harness:
                 title=doc.title,
                 year=doc.year,
                 text=doc.text,
-                modelling=modelling,
                 neighbours=link.neighbours,
             )
             out: dict[str, Any] = {

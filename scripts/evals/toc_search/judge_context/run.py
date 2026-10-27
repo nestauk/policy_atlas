@@ -107,12 +107,11 @@ def the_test(l):
     return f"Source (what changes first): {src}\nTarget (what should follow): {tgt}"
 
 def messages(v, l, policy, chain, doc):
-    modelling = False
     if v == "V0":
         return JP.build_judge_messages(item_text=l.item_text, population=l.population, place=l.place, document_id="d",
-            title=doc["title"], year=doc["year"], text=doc["abstract"], modelling=modelling, neighbours=l.neighbours)
+            title=doc["title"], year=doc["year"], text=doc["abstract"], neighbours=l.neighbours)
     msgs = JP.build_judge_messages(item_text=clean(l.item_text), population=l.population, place=l.place, document_id="d",
-        title=doc["title"], year=doc["year"], text=doc["abstract"], modelling=modelling, neighbours=l.neighbours)
+        title=doc["title"], year=doc["year"], text=doc["abstract"], neighbours=l.neighbours)
     extra = "" if v == "V4" else f"<policy>\n{policy}\n</policy>\n<whole_theory>\n{chain}\n</whole_theory>\n"
     if v in ("V2", "V3", "V4"):
         extra += f"<the_test>\n{the_test(l)}\n</the_test>\n"

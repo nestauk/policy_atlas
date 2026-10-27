@@ -29,13 +29,13 @@ from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from itertools import zip_longest
-from typing import Any
+from typing import Any, Protocol
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Row
 
-from policy_atlas.core import tracing
+from policy_atlas.core import events, tracing
 from policy_atlas.core.embeddings import (
     EMBEDDING_PROFILE,
     UNIT_POLICY,
@@ -124,11 +124,19 @@ LINK_LISTS: tuple[tuple[str, str], ...] = (
     ("openalex", "semantic"),
     ("openalex", "semantic_place"),
     ("overton", "verbatim"),
+    ("openalex", "variant_sr"),
+    ("openalex", "variant_rct"),
 )
 
 #: The reasons ``toc_select`` records on the documents it screens in and out (C27).
 SELECTED_REASON = "selected_by_link_search"
 NOT_SELECTED_REASON = "not_selected_by_link_search"
+
+#: The reason ``toc_judge`` records on a document no link found on topic (C31).
+NOT_ABOUT_REASON = "judged_not_about_any_step"
+
+#: The event ``toc_select`` writes with each link's picked documents; the judge reads it (C31).
+PICKED_EVENT = "toc_select.picked"
 
 #: Discover batches in flight at once.
 DISCOVER_WORKERS = 4
@@ -1283,7 +1291,6 @@ def _fill_abstracts(
                 c = LinkCandidate(**{**c.__dict__, "abstract": text})
             filled.append(c)
         out[link_id] = filled
-    log.info("toc_select.crossref_abstracts", asked=len(wanted), found=len(found))
     return out
 
 
@@ -1294,14 +1301,20 @@ def toc_select_scope(
     run_id: uuid.UUID,
     context: ScopeContext,
     backend: TocBackend,
+    embedder: EmbeddingBackend | None = None,
 ) -> dict[str, Any]:
-    """Pick each link's documents and write the screen's rows (C27, C28).
+    """Pick each link's documents and write the screen's rows (C27, C28, C31).
 
     No screen model call: each link search already searched its own sentence
     by meaning. One small pick call per link (in parallel) chooses the
     :data:`PICK_N` documents most likely to test the step; a short answer is
-    topped up, and a failed call replaced, by :func:`select_for_link`. A link
-    with no more than :data:`PICK_N` documents keeps them all, with no call.
+    topped up, and a failed call replaced, by :func:`select_for_link`. Each
+    link chooses from its own search's documents plus the :data:`PICK_N`
+    documents of the whole walk's searches closest by meaning to its item text
+    (C31), so a study one link's search found can serve another link. A link
+    with no more than :data:`PICK_N` documents to choose from keeps them all,
+    with no call. The picks are written as one ``toc_select.picked`` event,
+    which the judge reads.
     Picked documents are screened in, the rest screened out; the rows are the
     screen's own, so classify, appraise and the later steps read them
     unchanged. A live backend first fills missing abstracts from Crossref.
@@ -1312,6 +1325,7 @@ def toc_select_scope(
         run_id: This run.
         context: The check walk's intent record.
         backend: The ToC model seam.
+        embedder: The embedding backend for the shared pool, or ``None``.
 
     Returns:
         Screen counts, pick call counts and the pick usage.
@@ -1333,6 +1347,18 @@ def toc_select_scope(
                 population=plan.target_population,
                 place=plan.where,
             )
+    # The shared pool (C31): the walk's other documents closest to each link.
+    walk_pool = list({c.tss_id: c for docs in candidates.values() for c in docs}.values())
+    vectors = _document_vectors(conn, [c.tss_id for c in walk_pool]) if texts else {}
+    shared = 0
+    for key, own in list(candidates.items()):
+        if key not in texts:
+            continue
+        mine = {c.tss_id for c in own}
+        others = [c for c in walk_pool if c.tss_id not in mine]
+        extra = nearest(embedder, others, vectors, text=texts[key])
+        shared += len(extra)
+        candidates[key] = [*own, *extra]
     called = [k for k, docs in candidates.items() if k in texts and len(docs) > PICK_N]
 
     def run_pick(key: str) -> CallOutcome[Any]:
@@ -1349,14 +1375,22 @@ def toc_select_scope(
     outcomes = dict(zip(called, _map_traced(run_pick, called, PICK_WORKERS), strict=True))
     usage = UsageAccumulator()
     failed = 0
-    picked: set[uuid.UUID] = set()
+    per_link: dict[str, list[uuid.UUID]] = {}
     for key, docs in candidates.items():
         response = _outcome_value(outcomes[key], usage) if key in outcomes else None
         if key in outcomes and response is None:
             failed += 1
-        picked.update(
+        per_link[key] = (
             picked_ids(response.ids, docs) if response is not None else select_for_link(docs)
         )
+    picked = {tss for chosen in per_link.values() for tss in chosen}
+    events.append(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        event_type=PICKED_EVENT,
+        payload={key: [str(tss) for tss in chosen] for key, chosen in per_link.items()},
+    )
     everything = {c.tss_id for found in candidates.values() for c in found}
     screen = ScreenContext(
         scope_id=context.scope_id, intent=context.intent, context=context.context
@@ -1386,6 +1420,7 @@ def toc_select_scope(
         "excluded_retracted": kept["excluded_retracted"] + dropped["excluded_retracted"],
         "pick_calls": len(called),
         "failed_pick_calls": failed,
+        "shared_candidates": shared,
         "backend_mode": backend.mode,
         "usage_totals": usage.payload(),
     }
@@ -1445,6 +1480,33 @@ def _own_search_documents(
     ):
         out[child_link[row.capability_run_id]].add(row.task_source_snapshot_id)
     return out
+
+
+def _walk_picks(
+    conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID
+) -> dict[str, set[uuid.UUID]] | None:
+    """Link id → the documents ``toc_select`` picked for it in this walk, or ``None``.
+
+    ``None`` for a walk from before C31, whose judge reads each link's own
+    search's documents instead.
+    """
+    payload = conn.execute(
+        select(event_log.c.payload)
+        .select_from(
+            event_log.join(
+                runs,
+                (runs.c.run_id == event_log.c.run_id) & (runs.c.task_id == event_log.c.task_id),
+            )
+        )
+        .where(event_log.c.task_id == task_id)
+        .where(runs.c.capability_run_id == walk_id)
+        .where(event_log.c.event_type == PICKED_EVENT)
+        .order_by(event_log.c.sequence.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if payload is None:
+        return None
+    return {key: {uuid.UUID(tss) for tss in ids} for key, ids in payload.items()}
 
 
 def rerank(
@@ -1513,13 +1575,18 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return math.sumprod(a, b) / norms if norms else 0.0
 
 
-def nearest(
+class _HasId(Protocol):
+    @property
+    def tss_id(self) -> uuid.UUID: ...
+
+
+def nearest[D: _HasId](
     embedder: EmbeddingBackend | None,
-    candidates: list[Document],
+    candidates: list[D],
     vectors: Mapping[uuid.UUID, list[list[float]]],
     *,
     text: str,
-) -> list[Document]:
+) -> list[D]:
     """The :data:`JUDGE_TOP_K` candidates closest by meaning to the item text (C27).
 
     For a link with no search of its own. A document's closeness is its
@@ -1544,7 +1611,7 @@ def nearest(
         log.warning("toc_judge.embed_failed", error_type=type(exc).__name__)
         return candidates[:JUDGE_TOP_K]
 
-    def closeness(doc: Document) -> float:
+    def closeness(doc: D) -> float:
         return max((_cosine(query, v) for v in vectors.get(doc.tss_id, [])), default=-2.0)
 
     return sorted(candidates, key=closeness, reverse=True)[:JUDGE_TOP_K]
@@ -1624,7 +1691,10 @@ def toc_judge_scope(
     link_keys, left_out = links_to_check(graph, list(named) if named else None)
     pool = screened_documents(conn, task_id=task_id, scope_id=context.scope_id)
     pool_by_id = {doc.tss_id: doc for doc in pool}
-    own = _own_search_documents(conn, task_id=task_id, walk_id=walk_id)
+    # Each link reads what toc_select picked for it (C31); older walks, its own search's.
+    own = _walk_picks(conn, task_id=task_id, walk_id=walk_id) or _own_search_documents(
+        conn, task_id=task_id, walk_id=walk_id
+    )
     vectors: dict[uuid.UUID, list[list[float]]] | None = None  # read once, when needed
     usage = UsageAccumulator()
     place = plan.where
@@ -1685,7 +1755,6 @@ def toc_judge_scope(
                 title=job.document.title,
                 year=job.document.year,
                 text=job.document.text,
-                modelling=job.document.evidence_type == MODELLING_TYPE,
                 neighbours=job.neighbours,
             ),
             "toc_judge",
@@ -1750,9 +1819,9 @@ def toc_judge_scope(
                     else None
                 ),
                 "indicator": indicator.text if indicator is not None else None,
-                "robust_model": (
-                    response.robust_model if job.document.evidence_type == MODELLING_TYPE else None
-                ),
+                # Stored as the judge said it; it counts only when classify,
+                # which now runs after the judge, also calls it a modelling study (C31).
+                "robust_model": response.robust_model,
                 "item_hash": job.item_hash,
             },
         )
@@ -1771,8 +1840,36 @@ def toc_judge_scope(
             values={"counted_hash": _current_hash(graph, key), "kept_hash": None, "kept_by": None},
         )
     store.record(conn, task_id=task_id, run_id=run_id, step="toc_judge", log=log_)
+    # Classify and appraise run after the judge, on what it found on topic (C31):
+    # every other document is screened out here.
+    on_topic = set(
+        conn.execute(
+            select(toc_item_evidence.c.task_source_snapshot_id)
+            .where(toc_item_evidence.c.task_id == task_id)
+            .where(toc_item_evidence.c.task_source_snapshot_id.in_(list(pool_by_id)))
+            .where(
+                toc_item_evidence.c.stance_elsewhere.in_(("supports", "challenges"))
+                | toc_item_evidence.c.stance_here.in_(("supports", "challenges"))
+            )
+        ).scalars()
+    )
+    off_topic = set(pool_by_id) - on_topic
+    if off_topic:
+        screen_in(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            context=ScreenContext(
+                scope_id=context.scope_id, intent=context.intent, context=context.context
+            ),
+            tss_ids=off_topic,
+            status="not_relevant",
+            reason=NOT_ABOUT_REASON,
+            rescreen=True,
+        )
     summary = {
         "links": len(link_keys),
+        "screened_out_not_about": len(off_topic),
         "links_left_out": left_out,
         "calls": len(jobs),
         "failed_calls": failed,
@@ -1864,6 +1961,17 @@ def toc_choose_scope(
         conn, task_id=task_id, evidence_rows=[row for group in counted.values() for row in group]
     )
     grades = {key: link_grades(counted.get(key, []), appraisals) for key in graph.links}
+    not_models = {
+        str(row.task_source_snapshot_id)
+        for group in counted.values()
+        for row in group
+        if row.robust_model
+        and not getattr(appraisals.get(str(row.task_source_snapshot_id)), "modelling", False)
+    }
+    if not_models:
+        # The judge called these robust models, but classify did not call them
+        # modelling studies: they count by their score, not as a model (C31).
+        log.info("toc_choose.robust_not_modelling", documents=len(not_models))
     short, back = _short_keys(graph)
     kept_paths = [p for p in graph.pathways if p.status == "kept"]
     pkey = {p.key: f"p{i}" for i, p in enumerate(kept_paths, start=1)}

@@ -71,7 +71,9 @@ def test_a_failed_pick_call_falls_back_to_round_robin(
     task_id = _run(engine, cleanup, backend, per_call=12)
     summary = _summary(engine, task_id, "toc_select")
     assert summary["failed_pick_calls"] == 4
-    assert summary["relevant"] == 4 * PICK_N
+    # Round-robin picks 10 per link; with the shared pool two links may pick one document.
+    assert all(len(ids) == PICK_N for ids in _picks(engine, task_id).values())
+    assert summary["relevant"] <= 4 * PICK_N
 
 
 # --- box folds (C29) --------------------------------------------------------------
@@ -272,3 +274,113 @@ def test_a_toc_walk_records_its_cost_on_its_finish_event(
         )
     costs = [payload["cost"] for payload in finished if "cost" in payload]
     assert costs and all({"steps", "usd", "unpriced"} <= set(cost) for cost in costs)
+
+
+# --- round 3 (C31) ----------------------------------------------------------------
+
+
+def _picks(engine: Engine, task_id: uuid.UUID) -> dict[str, list[str]]:
+    with engine.connect() as conn:
+        return dict(
+            conn.execute(
+                select(event_log.c.payload)
+                .where(event_log.c.task_id == task_id)
+                .where(event_log.c.event_type == check.PICKED_EVENT)
+            ).scalar_one()
+        )
+
+
+class _PicksTheShared(StubTocBackend):
+    """Picks the last 10 candidates: the shared ones from other links' searches."""
+
+    def pick(self, *, item_text: str, candidates: list[dict[str, object]]) -> Any:
+        from policy_atlas.theory_of_change.evidence.pick_prompt import PickResponse
+
+        self._next("pick", {"candidates": candidates})
+        return PickResponse(ids=[str(c["id"]) for c in candidates[-PICK_N:]]), None
+
+
+def test_a_link_can_pick_and_judge_a_study_another_link_found(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    from policy_atlas.core.schema import toc_item_evidence
+
+    task_id = _run(engine, cleanup, _PicksTheShared(), per_call=12)
+    assert _summary(engine, task_id, "toc_select")["shared_candidates"] == 4 * PICK_N
+    picks = _picks(engine, task_id)
+    with engine.connect() as conn:
+        walk_id = conn.execute(
+            select(toc_item_evidence.c.capability_run_id).where(
+                toc_item_evidence.c.task_id == task_id
+            )
+        ).first()[0]  # type: ignore[index]
+        own = check._own_search_documents(conn, task_id=task_id, walk_id=walk_id)
+        judged = conn.execute(
+            select(toc_item_evidence.c.link_id, toc_item_evidence.c.task_source_snapshot_id).where(
+                toc_item_evidence.c.task_id == task_id
+            )
+        ).all()
+    for link_id, ids in picks.items():
+        # Every pick came from other links' searches, and the judge read exactly those.
+        assert not {uuid.UUID(i) for i in ids} & own[link_id]
+        assert {tss for lid, tss in judged if str(lid) == link_id} == {uuid.UUID(i) for i in ids}
+
+
+class _JudgesHalfOffTopic(StubTocBackend):
+    """Not about the step for documents whose id ends in an even hex digit."""
+
+    def judge(self, **kwargs: Any) -> Any:
+        from policy_atlas.theory_of_change.evidence.judge_prompt import JudgeResponse, StanceWire
+
+        if int(str(kwargs["document_id"])[-1], 16) % 2 == 0:
+            self._next("judge", kwargs)
+            off = StanceWire(stance="not_about", quote=None)
+            return JudgeResponse(
+                worked_elsewhere=off,
+                holds_here=off,
+                condition=None,
+                case_study=None,
+                indicator=None,
+                robust_model=None,
+            ), None
+        return super().judge(**kwargs)
+
+
+def test_classify_reads_only_what_the_judge_found_on_topic(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    from policy_atlas.core.schema import source_classification_result, toc_item_evidence
+
+    task_id = _run(engine, cleanup, _JudgesHalfOffTopic(), per_call=12)
+    judge = _summary(engine, task_id, "toc_judge")
+    assert judge["screened_out_not_about"] > 0
+    with engine.connect() as conn:
+        on_topic = set(
+            conn.execute(
+                select(toc_item_evidence.c.task_source_snapshot_id)
+                .where(toc_item_evidence.c.task_id == task_id)
+                .where(toc_item_evidence.c.stance_elsewhere == "supports")
+            ).scalars()
+        )
+        classified = set(
+            conn.execute(
+                select(source_classification_result.c.task_source_snapshot_id).where(
+                    source_classification_result.c.task_id == task_id
+                )
+            ).scalars()
+        )
+    assert on_topic and classified == on_topic
+
+
+def test_crossref_retries_once_after_a_429() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        if len(calls) == 1:
+            return httpx.Response(429, headers={"Retry-After": "0"})
+        return httpx.Response(200, content=json.dumps({"message": {"abstract": "Found."}}))
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    assert crossref_abstracts(["10.1/a"], client=client) == {"10.1/a": "Found."}
+    assert len(calls) == 2
