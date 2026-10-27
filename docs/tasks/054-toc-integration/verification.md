@@ -244,3 +244,25 @@ What changed:
 - The owner chooses the iteration targets from the findings above.
 - Then E1, E2 and E6 (step 1.7).
 - Rebase onto `dev` after PR #84 merges.
+
+## Live runs 4–7: the light link check (2026-10-27, lead)
+
+Same opening message each time; openai-6x route (gpt-6-luna / gpt-6.1-terra / gpt-6.1-sol).
+Cost is the model cost from `toc_check.cost` (draft + check walks).
+
+| Run | Task | Build | Time | Cost | Boxes / links / kept pathways | Links with no evidence |
+|---|---|---|---|---|---|---|
+| 4 | `0bd0e121` | light search, pick call, consolidate, merge v2 | ~5 min | $0.36 | 13 / 17 / 6 | 5 |
+| 5 | `560bee1f` | + design keyword pair, shared pool, classify after judge, Crossref limit | 4 min | $0.31 | 12 / 15 / 4 | 4 (merge v2 over-merged) |
+| 6 | `07e88cc7` | + merge v3 (keep the general route) | 5 min | $0.36 | 13 / 16 / 7 | 2 (both discovered links) |
+| 7 | `3e357c2b` | + discovered links get their own light search (C32) | **5 min** | **$0.37** | 12 / 14 / 6 | **0** |
+
+Run 7 grades (worked elsewhere / holds here): strong/strong 4, strong/medium 1, medium/medium 5,
+weak/medium 2, weak/weak 1, medium/none 1. Lower excess energy → obesity: medium/medium (weak in
+run 4). Critical connection: fewer requests → households buy fewer requested foods (medium/none).
+
+Before the light check (runs 1–3): 16 min (run 1), and 50+ min (runs 2–3, stopped) with full
+Evidence searches per link and an LLM rerank.
+
+Not built, by evidence: a second search round for empty links (eval and live test on run 6's
+empty links found nothing new; the gap came from discovered links having no search of their own).
