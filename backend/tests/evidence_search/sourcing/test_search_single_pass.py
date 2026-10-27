@@ -29,6 +29,7 @@ from policy_atlas.core.schema import (
     task_source_snapshot,
 )
 from policy_atlas.evidence_search.sourcing import pool, search_live
+from policy_atlas.evidence_search.sourcing import search_loop as search_loop_module
 from policy_atlas.evidence_search.sourcing.acquire import AcquireContext, BackendCaps
 from policy_atlas.evidence_search.sourcing.country_filters import ISO_3166_ALPHA2
 from policy_atlas.evidence_search.sourcing.search_live import (
@@ -341,7 +342,14 @@ def _overton_with_landmarks() -> ScriptedBackend:
 
 
 @pytest.mark.parametrize("depth", ["rapid", "standard", "deep"])
-def test_every_depth_runs_the_same_pass_and_cuts_at_its_caps(conn: Connection, depth: str) -> None:
+def test_every_depth_runs_the_same_pass_and_cuts_at_its_caps(
+    conn: Connection, depth: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The fake backends record calls in the order the threads reach them, and
+    # this test asserts the plan order of the first fifteen; with eight threads
+    # that order depends on the machine (green on CI, red on an Apple laptop,
+    # 2026-10-27). One thread makes the two orders the same thing.
+    monkeypatch.setattr(search_loop_module, "SEARCH_CONCURRENCY", 1)
     task_id, run_id = seed_task_and_run(conn)
     scope_id = seed_scope(conn, task_id)
     openalex = _openalex_with_graph()
