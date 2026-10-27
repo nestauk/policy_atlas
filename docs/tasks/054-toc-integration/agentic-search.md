@@ -198,3 +198,29 @@ exposure), each judged 3 times. Labels list the acceptable stances per question.
 
 **Proposal (not applied; R&D rule, no backend edits during experiments):** `toc_judge_v4` =
 V2's additions without V1's whole-theory block. Then rerun the search eval arms on it.
+
+## Second round for links with no evidence (draft for the owner, 2026-10-27)
+
+**Why.** In live runs 4 and 5 (the light link check), 4 to 5 of 15–17 links ended "no evidence
+found" on both questions. Some had no documents at all; some had ten, all judged not about the
+step.
+
+**When it runs.** After the judge, once, only for links where no document supports or challenges
+on either question. (Weak links may join later, if the eval shows a gain.)
+
+**What it does, per such link, in parallel:**
+1. A broader search by meaning on the step's core, cause then effect in plain words, without the
+   policy or place (for example "children eat fewer snacks; children's energy intake falls").
+2. The study-design keyword pair (reviews, trials) from looser terms: the two box texts only.
+3. For steps that depend on place (rules, media, markets, firms): one directed web search limited
+   to trusted publishers (gov.uk, Ofcom, ASA, Evaluation Task Force, What Works Centres), fetching
+   up to 5 pages. Trusted pages count by their design (C23).
+4. The same pick (10), judge, and later classify as round 1. Then stop: a link with nothing after
+   round 2 stays "no evidence found", stated plainly.
+
+**Cost and time.** About 5 search calls, 1 pick and 10 judge calls per link: roughly $0.02–0.03
+and 30–60 seconds, links in parallel.
+
+**How we check it helps.** Eval harness first, on the gold links that came back thin (the
+exposure-failure link, "foods judged less healthy", "parents still exposed"): key studies and
+grades gained against round 1 alone. Then one live run.
