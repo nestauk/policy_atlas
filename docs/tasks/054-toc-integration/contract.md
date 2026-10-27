@@ -389,6 +389,41 @@ decisions below. The decisions fix what the spec leaves to the build.
   whole pool. Replaces C24's record cap of 40 per search and its box-list screen; the steps
   criterion is deleted. The draft walk, the Evidence search's other depths and Options scoping
   are unchanged.
+- **C28. One pick call per link** (owner approved, 2026-10-27: "use the best performing option, L
+  + one pick call"). In the eval, round-robin put 3 of 38 key studies in front of the judge; one
+  small pick call put 6. `toc_select` now makes one `toc_pick_v1` call per link on the fast tier
+  (links in parallel), over all the link's documents (short ids `d1`...; title and the start of
+  the abstract). It returns ids only; code drops unknown ids, tops up a short answer with
+  C27's round-robin, and uses round-robin alone when the call fails. A link with 10 or fewer
+  documents makes no call. The pick usage is in `toc_select`'s summary. Two fixes from the lead
+  land with it: ToC calls now send the route's reasoning setting (`c7c9a5b4`; without it Terra
+  ran at its default and the judge called a decisive trial "not about" its step 3 to 5 times in
+  5), and the draft and discover schemas no longer write "If IF" (`7a72f1c1`; prompts
+  `toc_draft_v3`, `toc_discover_v3`, `toc_consolidate_v2`).
+- **C29. Merge folds repeated boxes; only kept-pathway links are checked** (owner approved,
+  2026-10-27). `toc_merge_v2` also returns `box_merges` (box, into), applied before the pathway
+  decisions. Code checks each: both boxes exist, same layer, not the same box, and never a box
+  the user wrote (user-edited, or from their own theory) into one they did not. A fold re-points
+  every link from the folded box to the kept one; two links that then join the same pair become
+  one (the user-edited one, else the older, with pathway steps re-pointed to it); a link from a
+  box to itself is dropped from its pathways; then the box is deleted. All of one fold, or none
+  when a row changed meanwhile. The thread lists "Merged box X into Y". `links_to_check` leaves
+  out links that sit only on set-aside pathways (a link the user names in Search for more is
+  still checked).
+- **C30. C23 implemented; Crossref abstracts; a cost line** (owner approved, 2026-10-27). (1) A web
+  page (`backend = web`) whose address's host is on `trusted_publishers.toml` (gov.uk and its
+  subdomains including the Evaluation Task Force and ONS, NAO, NHS, Ofcom, ASA, NICE, What Works
+  Centres, WHO, OECD, .ac.uk) counts by its appraisal score like a paper; other web pages and
+  unscored documents count only toward weak. Papers and Overton policy documents are not web
+  pages. C23's "journal landing pages of works that resolve in OpenAlex" is not built. (2) Before
+  the pick, a document with a DOI and no abstract gets one Crossref lookup (parallel, 5-second
+  timeout, a mailto in the User-Agent); a found abstract is stored on the snapshot with
+  `abstract_source = crossref`, so the pick, classify, appraise and the judge read it. Only when
+  the ToC backend is live. (3) Every ToC model call runs under the task's Langfuse session: the
+  discover, pick and judge thread pools now carry the run's tracing context. Each ToC walk's
+  `run.finished` event carries `cost` (tokens per step, model, a USD estimate from a small price
+  table; a model not in the table is listed as unpriced, never $0), also logged as
+  `toc_check.cost`.
 
 ## ADR scope
 

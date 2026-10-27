@@ -1,5 +1,16 @@
 # Spec update log
 
+## 2026-10-27 (task 054, pick call, box folds, trusted publishers)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): one
+  small model call per link now picks the 10 documents the judge reads (6 of 38 key studies
+  judged in the eval, against 3 for round-robin), with round-robin as the top-up and fallback.
+  Merge also folds boxes that name the same change (same layer, never a user's box into a model
+  one), re-pointing and de-duplicating links. Links only on set-aside pathways are not checked.
+  Web pages from trusted publishers (gov.uk, ONS, NHS, Ofcom, ASA, What Works Centres and others,
+  in one committed list) count by their appraisal score. Missing abstracts come from Crossref.
+  Each walk's finish event carries its token totals and a dollar estimate. Task 054 contract C28
+  to C30.
+
 ## 2026-10-27 (task 054, light link check)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): each
   link's item search now searches the link sentence by meaning (two OpenAlex calls and one
