@@ -162,3 +162,39 @@ Full notes, sources and numbers: [agentic-search-research.md](agentic-search-res
 3. Where web search sits: in the planner's source menu from increment 3, or earlier.
 4. The 0-to-10 relevance score with a summary in the screen (PaperQA2's biggest gain): try it in
    the eval as a fourth arm, or after C is settled.
+
+## Judge context experiment (2026-10-27, lead)
+
+**Question (owner):** is the judge given enough context? Scripts and lead labels:
+`scripts/evals/toc_search/judge_context/` (`run.py <dir> <variants> <model> <repeats>`, then
+`score.py <dir>`). 34 documents on 3 links (energy to obesity, ads to snacks, ads absent to
+exposure), each judged 3 times. Labels list the acceptable stances per question.
+
+| Version | What the judge gets | Both questions right | Same answer 3 of 3 | $ per 100 calls |
+|---|---|---|---|---|
+| V0 on gpt-5.6-terra | today's prompt (`toc_judge_v3`) | 92/96 | 29/32 | 0.25 |
+| V0 on gpt-6.1-terra | today's prompt | 92/102 | 31/34 | 0.09 |
+| V1 | + the policy and the whole theory, cleaned step text | 115/128 | 27/32 | 0.11 |
+| V2 | + "the test" (source and target), a proxy rule, a no-data rule, and an explicit place-dependence rule for holds here | **95/102** | 26/34 | 0.09 |
+| V3 | V2 + the judge first writes what the study changed, measured, where | 93/96 | 24/32 | 0.17 |
+
+(V1 and V3 ran before 2 commentaries were added to the set, so their totals are out of 96 or 128.)
+
+**Findings.**
+1. On clean abstracts of the right documents, today's judge is already right about 9 times in
+   10, and gives the same answer on repeat about 9 times in 10. The run-to-run grade swings in
+   the search eval come mostly from *which documents reach the judge* (search and rerank), not
+   from the judge.
+2. One real gap: **proxies.** On gpt-6.1-terra, today's prompt calls the 2004 England fizzy-drinks
+   trial "not about" energy to obesity, 3 times of 3, because the trial measured drinks, not
+   "excess energy". V2's test block and proxy rule fix it (3 of 3 supports).
+3. **More context is not better.** The whole theory and the policy (V1) made the judge more
+   cautious: it called exposure studies "not about" the exposure step. Reading first (V3)
+   added cost and lowered consistency, with no accuracy gain.
+4. gpt-6.1-terra judges as well as gpt-5.6-terra at about a third of the price.
+5. Commentaries: V2's no-data rule moved one commentary to "not about" in 2 of 3 runs. A 2004
+   narrative review still "supports"; the grade gives it a low score, which is the right place
+   to weigh it (narrative review is deferred as its own type).
+
+**Proposal (not applied; R&D rule, no backend edits during experiments):** `toc_judge_v4` =
+V2's additions without V1's whole-theory block. Then rerun the search eval arms on it.
