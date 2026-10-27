@@ -200,7 +200,7 @@ class PotentialImpactWire(BaseModel):
     answer: str = Field(
         max_length=POTENTIAL_IMPACT_MAX_CHARS,
         description=(
-            "At most 400 characters, in this order: a magnitude in plain "
+            "About 300 characters, never more than 380, in this order: a magnitude in plain "
             "words bound to a condition ('large if it works'); the pathway "
             "against the baseline's drivers; the reach (would apply to, "
             "against tried on); the evidence footing as one short clause."
@@ -428,7 +428,8 @@ What the line is:
   general knowledge of this kind of action, and say in the footing clause
   that the records describe a proposal only.
 
-The sentence, in this order, in at most 400 characters:
+The sentence, in this order, in about 300 characters and never more than
+380, so that the last clause is never cut:
 1. A magnitude in plain words, always bound to a condition: "large if it
    works", "moderate if scaled beyond the pilots", "small even if it
    works". Never an unconditional magnitude, never a probability, never a

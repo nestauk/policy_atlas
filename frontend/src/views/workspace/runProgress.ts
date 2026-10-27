@@ -38,7 +38,7 @@ export const SEE_PLAN_CTA_CLASS =
  *  scoping task's baseline walk, its longlist walk, or an added option's own
  *  search. The words on the card and the finished notice follow it — "the
  *  evidence base is ready" is wrong for a longlist. */
-export type WalkKind = "evidence_search" | "baseline" | "longlist" | "option_search";
+export type WalkKind = "evidence_search" | "baseline" | "longlist" | "option_search" | "shortlist";
 
 const LONGLIST_STAGES = new Set([
   "inherit",
@@ -49,6 +49,7 @@ const LONGLIST_STAGES = new Set([
   "option_profile",
   "constrain",
   "theme",
+  "shortlist",
 ]);
 
 /** Decide the walk kind from the task's capability and the run's own
@@ -61,7 +62,7 @@ export function walkKind(
 ): WalkKind {
   if (!isScoping({ capability })) return "evidence_search";
   if (purpose === "targeted") return "option_search";
-  if (purpose === "longlist" || purpose === "baseline") return purpose;
+  if (purpose === "longlist" || purpose === "baseline" || purpose === "shortlist") return purpose;
   return stages.some((entry) => LONGLIST_STAGES.has(entry.stage)) ? "longlist" : "baseline";
 }
 
@@ -70,6 +71,7 @@ const DONE_TITLE: Record<WalkKind, string> = {
   baseline: "The baseline is ready",
   longlist: "The longlist is ready",
   option_search: "The option's search is done",
+  shortlist: "The shortlist is proposed",
 };
 
 const RESULTS_LABEL: Record<WalkKind, string> = {
@@ -77,6 +79,7 @@ const RESULTS_LABEL: Record<WalkKind, string> = {
   baseline: "Read the baseline",
   longlist: "Read the longlist",
   option_search: "Read the longlist",
+  shortlist: "Read the shortlist",
 };
 
 /** The finished notice, split around the Result-tab link it carries. */
@@ -85,10 +88,12 @@ export const FINISHED_NOTICE: Record<WalkKind, { before: string; after: string }
   baseline: { before: "The baseline is written. Read it in the", after: "tab." },
   longlist: { before: "The longlist is built. Open it in the", after: "tab." },
   option_search: { before: "The option's search is done. See it in the", after: "tab." },
+  shortlist: { before: "Policy Atlas has proposed a shortlist. Open it in the", after: "tab." },
 };
 
 function resultHref(taskId: string, kind: WalkKind): string {
   if (kind === "longlist" || kind === "option_search") return `/tasks/${taskId}/result?view=longlist`;
+  if (kind === "shortlist") return `/tasks/${taskId}/result?view=longlist&mode=shortlist`;
   if (kind === "baseline") return `/tasks/${taskId}/result?view=baseline`;
   return `/tasks/${taskId}/result`;
 }
@@ -113,6 +118,9 @@ export function runningCardCopy(
   }
   if (kind === "option_search") {
     return { tone: "running", eyebrow: "RUNNING", title: "Searching for the option's evidence" };
+  }
+  if (kind === "shortlist") {
+    return { tone: "running", eyebrow: "RUNNING", title: "Proposing a shortlist…" };
   }
   return { tone: "running", eyebrow: "RUNNING", title: "Analysis running…" };
 }

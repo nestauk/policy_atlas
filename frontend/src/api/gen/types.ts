@@ -895,6 +895,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/options/{option_id}/shortlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Shortlist
+         * @description Put an included option on the shortlist as the user's own place (task 055).
+         *
+         *     Repeating it on a place the user already holds is a no-op. Refused with
+         *     409 ``not_included`` for an excluded or merged option and 409
+         *     ``run_active`` while a walk runs.
+         */
+        post: operations["post_shortlist_api_v1_tasks__task_id__options__option_id__shortlist_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/options/{option_id}/unshortlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Unshortlist
+         * @description Take an option off the shortlist (task 055).
+         *
+         *     A Policy Atlas pick becomes set aside; the user's own place clears. No
+         *     walk opens and nothing refills the place. An option with no place is a
+         *     no-op. Refused with 409 ``run_active`` while a walk runs.
+         */
+        post: operations["post_unshortlist_api_v1_tasks__task_id__options__option_id__unshortlist_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}/plan": {
         parameters: {
             query?: never;
@@ -918,6 +966,11 @@ export interface paths {
         /**
          * Patch Plan
          * @description Apply typed edits to the current plan and persist a new approved version.
+         *
+         *     On an options-scoping task whose risk appetite changed, once the new
+         *     version has committed the route opens a shortlist walk that proposes the
+         *     places again (task 055, P10; :func:`_open_shortlist_after_patch`) and
+         *     names it in ``opened_run``.
          */
         patch: operations["patch_plan_api_v1_tasks__task_id__plan_patch"];
         trace?: never;
@@ -1006,6 +1059,31 @@ export interface paths {
         get: operations["get_run_api_v1_tasks__task_id__runs__run_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/shortlist/suggest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Suggest More
+         * @description Open a shortlist walk that fills the open places (Suggest more; task 055).
+         *
+         *     The access check runs in its own short transaction, then the opener takes
+         *     the dispatch lock and the task row itself (the order ``create_run``
+         *     uses). Refused with 409 ``run_active``, ``capacity``, ``plan_stale`` or
+         *     ``nothing_to_propose``, and 404 when the task has no longlist.
+         */
+        post: operations["post_suggest_more_api_v1_tasks__task_id__shortlist_suggest_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3862,8 +3940,10 @@ export interface components {
          *             infer it from which field is null.
          *         version: Plan row version.
          *         status: Plan status (e.g. `draft`, `approved`).
-         *         opened_run: The longlist walk `POST .../plan/confirm-baseline` opened,
-         *             on that route's response. Absent on every other plan read.
+         *         opened_run: The walk a plan write opened: the longlist walk
+         *             `POST .../plan/confirm-baseline` opened, or the shortlist walk a
+         *             `PATCH .../plan` that changed the risk appetite opened (task 055).
+         *             Null on every other plan read, and when the opener was refused.
          */
         PlanOut: {
             /**
@@ -6826,6 +6906,70 @@ export interface operations {
             };
         };
     };
+    post_shortlist_api_v1_tasks__task_id__options__option_id__shortlist_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_unshortlist_api_v1_tasks__task_id__options__option_id__unshortlist_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_plan_api_v1_tasks__task_id__plan_get: {
         parameters: {
             query?: never;
@@ -7016,6 +7160,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_suggest_more_api_v1_tasks__task_id__shortlist_suggest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LatestRun"];
                 };
             };
             /** @description Validation Error */

@@ -713,9 +713,10 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
         "Suggest options, search widely, read every abstract for the interventions it covers, cluster them into options, apply your constraints.",
     },
     {
-      stage: "select",
-      label: "Shortlist and assessment",
-      blurb: "Review the proposed reading set. Assessment runs only when you say so. Not in this release.",
+      stage: "shortlist",
+      label: "Shortlist",
+      blurb:
+        "Policy Atlas proposes about five places for close reading, one reason each, mixed to your risk appetite. Add, remove, ask for more. Assessment of the shortlisted options is not in this release.",
     },
   ],
   time_band: "10-15 minutes",

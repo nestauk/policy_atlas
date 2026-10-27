@@ -14,6 +14,7 @@ places rules at the chain end and at Suggest more.
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -47,6 +48,13 @@ from policy_atlas.runtime.scoping_plan import (
     compose_scoping,
 )
 from tests.helpers import now
+from tests.options_scoping.test_constrain import (
+    SCREEN_IDS,
+    _constrain,
+    _pairs,
+    _requirement,
+    _response,
+)
 from tests.options_scoping.test_longlist import _Scripted, _Walk
 from tests.runtime.test_baseline_gate import (
     insert_scoping_plan_row,
@@ -232,6 +240,48 @@ def test_a_pick_whose_option_is_excluded_or_merged_is_cleared_first(conn: Connec
     assert states["A"] == (None, None) and states["B"] == (None, None)
     # A user place is never cleared, even when its option is excluded (O1).
     assert states["D"] == ("added_by_you", None)
+
+
+def test_at_a_rebuild_a_user_place_stays_through_constrain_and_a_lost_pick_is_cleared(
+    conn: Connection,
+) -> None:
+    """O1 end to end: constrain then the chain's ``shortlist`` (stub backends)."""
+    walk = _Walk(conn, scoping_plan(constraints=[_requirement("No benefit sanctions")]))
+    t0 = now()
+    names = ["Mine", "Picked", "Kept", "Merged", "Other"]  # the kept one is the older
+    ids = {
+        name: walk.option(name, created_at=t0 + timedelta(seconds=i))
+        for i, name in enumerate(names)
+    }
+    walk.build(_Scripted())
+    _set(walk, ids["Mine"], shortlist_state="added_by_you")
+    _set(walk, ids["Picked"], shortlist_state="proposed", shortlist_reason="r")
+    _set(walk, ids["Merged"], shortlist_state="proposed", shortlist_reason="r")
+    every = list(ids.values())
+    _constrain(
+        walk,
+        StubLonglistBackend(
+            constrain_responses=_response(
+                every,
+                ["req-1", *SCREEN_IDS],
+                verdicts={(ids["Mine"], "req-1"): "breaks", (ids["Picked"], "req-1"): "breaks"},
+            ),
+            distinct_responses=_pairs((ids["Merged"], ids["Kept"], "The same offer.")),
+        ),
+    )
+    _shortlist(walk, StubLonglistBackend())
+    rows = {
+        row.name: row
+        for row in walk.conn.execute(select(option).where(option.c.task_id == walk.task_id))
+    }
+    assert (rows["Mine"].state, rows["Mine"].shortlist_state) == ("excluded", "added_by_you")
+    assert rows["Mine"].exclusion["by"] == "constrain"
+    assert rows["Picked"].state == "excluded"
+    assert rows["Picked"].shortlist_state is None
+    assert rows["Merged"].merged_into_option_id == ids["Kept"]
+    assert rows["Merged"].shortlist_state is None
+    # The two included, unmerged options are the new picks.
+    assert {rows["Other"].shortlist_state, rows["Kept"].shortlist_state} == {"proposed"}
 
 
 def test_the_clearing_stands_when_the_call_fails_and_the_places_stay(conn: Connection) -> None:
@@ -477,6 +527,21 @@ def test_the_ceiling_cuts_document_lines_and_counts_the_cut(
     assert total == summary["input_chars"] <= ceiling
     kept = 30 - summary["document_lines_cut"]
     assert f"Policy Atlas read {kept} of 30 document lines" in str(request[1]["content"])
+    # The stored provenance carries the count and the total, for the view's footer.
+    stored = walk.conn.execute(
+        select(longlist_result.c.shortlist)
+        .where(longlist_result.c.task_id == walk.task_id)
+        .order_by(longlist_result.c.created_at.desc())
+        .limit(1)
+    ).scalar_one()
+    provenance = stored["provenance"]
+    assert provenance["document_lines_total"] == 30
+    assert provenance["document_lines_cut"] == summary["document_lines_cut"]
+    assert set(provenance) == {
+        "prompt_version", "model", "appetite", "plan_version", "run_id", "input_chars",
+        "document_lines_cut", "document_lines_total", "baseline_chars_cut", "to_fill",
+        "attempts", "usage",
+    }
     # Oldest first: every card loses its 2000 line before any loses its 2001 line.
     text = str(request[1]["content"])
     assert ".0 x" not in text

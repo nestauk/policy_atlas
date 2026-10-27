@@ -1502,11 +1502,22 @@ def _finding_groups(conn: Connection, task_id: uuid.UUID) -> dict[uuid.UUID, dic
 OPTION_ADDED = "option.added"
 OPTION_EXCLUDED = "option.excluded"
 OPTION_INCLUDED = "option.included"
-OPTION_EVENT_KINDS: tuple[str, ...] = (OPTION_ADDED, OPTION_EXCLUDED, OPTION_INCLUDED)
+#: The user's two shortlist buttons (task 055, P9): *add to shortlist* and
+#: *remove from shortlist*, written by the same module.
+OPTION_SHORTLISTED = "option.shortlisted"
+OPTION_UNSHORTLISTED = "option.unshortlisted"
+OPTION_EVENT_KINDS: tuple[str, ...] = (
+    OPTION_ADDED,
+    OPTION_EXCLUDED,
+    OPTION_INCLUDED,
+    OPTION_SHORTLISTED,
+    OPTION_UNSHORTLISTED,
+)
 #: Policy Atlas's shortlist proposal (task 055, A7): one event per proposal,
 #: the record of its places, note, appetite and versions. Written by the
 #: ``shortlist`` component; ``SHORTLIST_PROPOSED`` is imported from there (top
-#: of this module) so the writer and the readers share one name.
+#: of this module) so the writer and the readers share one name. History
+#: renders it as Policy Atlas's decision (``decided_by = "agent"``).
 
 
 # The allowlisted audit events. The four lifecycle kinds appear under BOTH
@@ -1523,6 +1534,7 @@ _EVENT_KINDS = {
     "run.interrupted",
     "plan.approved",
     *OPTION_EVENT_KINDS,
+    SHORTLIST_PROPOSED,
 } | both_generations(*LIFECYCLE_EVENT_KINDS)
 
 
@@ -1530,6 +1542,10 @@ def _option_event_summary(event_type: str, payload: Mapping[str, Any]) -> str:
     """One History sentence naming the verb, the option and the reason."""
     name = str(payload.get("option_name") or "an option")
     reason = payload.get("reason")
+    if event_type in (OPTION_SHORTLISTED, OPTION_UNSHORTLISTED):
+        verb = "Added" if event_type == OPTION_SHORTLISTED else "Removed"
+        where = "to" if event_type == OPTION_SHORTLISTED else "from"
+        return f"{verb} \u201c{name}\u201d {where} the shortlist."
     verb = {
         OPTION_ADDED: "Added the option",
         OPTION_EXCLUDED: "Excluded the option",
@@ -1552,6 +1568,18 @@ def _event_decision(row: Any, walk_id: uuid.UUID | None = None) -> DecisionOut:
             kind=row.event_type,
             summary=_option_event_summary(row.event_type, payload),
             decided_by=cast(Any, "user") if actor else None,
+            detail=dict(payload),
+            capability_run_id=walk_id,
+        )
+    if row.event_type == SHORTLIST_PROPOSED:
+        places = payload.get("places")
+        count = len(places) if isinstance(places, list) else 0
+        return DecisionOut(
+            sequence=int(row.sequence),
+            occurred_at=row.occurred_at,
+            kind=row.event_type,
+            summary=f"Policy Atlas proposed {count} place{'' if count == 1 else 's'}.",
+            decided_by=cast(Any, "agent"),
             detail=dict(payload),
             capability_run_id=walk_id,
         )

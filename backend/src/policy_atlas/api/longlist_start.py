@@ -85,7 +85,8 @@ class LonglistRefused(Exception):
     Args:
         reason: ``not_scoping`` · ``run_active`` · ``capacity`` ·
             ``plan_stale`` · ``plan_too_long`` · ``no_plan``; for a shortlist
-            walk also ``no_longlist`` and ``nothing_to_propose`` (task 055).
+            walk also ``no_longlist`` and ``nothing_to_propose``, and for the
+            shortlist button ``not_included`` (task 055).
         message: A sentence for the error body.
     """
 
@@ -103,12 +104,21 @@ def http_error(refusal: LonglistRefused) -> Exception:
 
     Returns:
         ``ApiConflict`` for a state the user can wait out or refresh past
-        (``run_active``, ``capacity``, ``plan_stale``); a ``422`` for a plan the
-        longlist cannot be built from (``plan_too_long``, ``not_scoping``,
-        ``no_plan``).
+        (``run_active``, ``capacity``, ``plan_stale``, and for the shortlist
+        ``nothing_to_propose`` and ``not_included``); a ``404`` for
+        ``no_longlist``; a ``422`` for a plan the longlist cannot be built from
+        (``plan_too_long``, ``not_scoping``, ``no_plan``).
     """
-    if refusal.reason in {"run_active", "capacity", "plan_stale"}:
+    if refusal.reason in {
+        "run_active",
+        "capacity",
+        "plan_stale",
+        "nothing_to_propose",
+        "not_included",
+    }:
         return ApiConflict(refusal.reason, refusal.message)
+    if refusal.reason == "no_longlist":
+        return HTTPException(status_code=404, detail=refusal.message)
     return HTTPException(status_code=422, detail=refusal.message)
 
 
@@ -316,6 +326,40 @@ def open_longlist_walk(
     return admitted.capability_run_id
 
 
+def longlist_pinned_plan(
+    conn: Connection, *, task_id: uuid.UUID
+) -> tuple[int, ScopingPlan | None] | None:
+    """The plan version the task's newest longlist was built from (task 055, PR6).
+
+    Args:
+        conn: Open database connection.
+        task_id: The task.
+
+    Returns:
+        ``None`` when the task has no longlist; otherwise the newest
+        longlist's ``plan_version`` and that version's plan, or ``None`` for
+        the plan when the version's row cannot be read.
+    """
+    built = conn.execute(
+        select(longlist_result.c.plan_version)
+        .where(longlist_result.c.task_id == task_id)
+        .order_by(
+            longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    if built is None:
+        return None
+    pinned = conn.execute(
+        select(task_plan.c.payload)
+        .where(task_plan.c.task_id == task_id)
+        .where(task_plan.c.version == built)
+    ).scalar_one_or_none()
+    if pinned is None:
+        return int(built), None
+    return int(built), expect_scoping_plan(validate_plan(OPTIONS_SCOPING, pinned))
+
+
 def _refuse_shortlist(
     conn: Connection, *, task_id: uuid.UUID, plan: ScopingPlan, suggest: bool
 ) -> None:
@@ -334,24 +378,10 @@ def _refuse_shortlist(
             ``nothing_to_propose`` (Suggest more only) when every included
             option already holds a place or was set aside.
     """
-    built = conn.execute(
-        select(longlist_result.c.plan_version)
-        .where(longlist_result.c.task_id == task_id)
-        .order_by(
-            longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
-        )
-        .limit(1)
-    ).scalar_one_or_none()
+    built = longlist_pinned_plan(conn, task_id=task_id)
     if built is None:
         raise LonglistRefused("no_longlist", "the task has no longlist to shortlist from")
-    pinned = conn.execute(
-        select(task_plan.c.payload)
-        .where(task_plan.c.task_id == task_id)
-        .where(task_plan.c.version == built)
-    ).scalar_one_or_none()
-    pinned_plan = (
-        expect_scoping_plan(validate_plan(OPTIONS_SCOPING, pinned)) if pinned is not None else None
-    )
+    pinned_plan = built[1]
     if pinned_plan is None or longlist_inputs(plan) != longlist_inputs(pinned_plan):
         raise LonglistRefused(
             "plan_stale",

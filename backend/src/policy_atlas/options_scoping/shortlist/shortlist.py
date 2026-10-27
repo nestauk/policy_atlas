@@ -481,6 +481,8 @@ def shortlist_scope(
         "run_id": str(run_id),
         "input_chars": input_chars,
         "document_lines_cut": lines_cut,
+        # Before any cut, so the view can say "read N of M document lines".
+        "document_lines_total": lines_total,
         "baseline_chars_cut": baseline_chars_cut,
         "to_fill": to_fill,
         "attempts": attempts,

@@ -309,12 +309,14 @@ SCOPING_STEPS: tuple[PlanStep, ...] = (
         stage="acquire",
     ),
     PlanStep(
-        label="Shortlist and assessment",
+        label="Shortlist",
         blurb=(
-            "Review the proposed reading set. Assessment runs only when you "
-            "say so. Not in this release."
+            "Policy Atlas proposes about five places for close reading, one "
+            "reason each, mixed to your risk appetite. Add, remove, ask for "
+            "more. Assessment of the shortlisted options is not in this "
+            "release."
         ),
-        stage="select",
+        stage="shortlist",
     ),
 )
 

@@ -5335,7 +5335,7 @@
         "type": "object"
       },
       "PlanOut": {
-        "description": "Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.\n\nArgs:\n    plan: The current Evidence search plan, or null on a scoping task.\n    scoping: The current options-scoping plan, or null on an Evidence\n        search task.\n    capability: Which of the two the task is, so a reader never has to\n        infer it from which field is null.\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).\n    opened_run: The longlist walk `POST .../plan/confirm-baseline` opened,\n        on that route's response. Absent on every other plan read.",
+        "description": "Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.\n\nArgs:\n    plan: The current Evidence search plan, or null on a scoping task.\n    scoping: The current options-scoping plan, or null on an Evidence\n        search task.\n    capability: Which of the two the task is, so a reader never has to\n        infer it from which field is null.\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).\n    opened_run: The walk a plan write opened: the longlist walk\n        `POST .../plan/confirm-baseline` opened, or the shortlist walk a\n        `PATCH .../plan` that changed the risk appetite opened (task 055).\n        Null on every other plan read, and when the opener was refused.",
         "properties": {
           "capability": {
             "default": "evidence_search",
@@ -11451,6 +11451,124 @@
         ]
       }
     },
+    "/api/v1/tasks/{task_id}/options/{option_id}/shortlist": {
+      "post": {
+        "description": "Put an included option on the shortlist as the user's own place (task 055).\n\nRepeating it on a place the user already holds is a no-op. Refused with\n409 ``not_included`` for an excluded or merged option and 409\n``run_active`` while a walk runs.",
+        "operationId": "post_shortlist_api_v1_tasks__task_id__options__option_id__shortlist_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "option_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Option Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Post Shortlist",
+        "tags": [
+          "longlist"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/options/{option_id}/unshortlist": {
+      "post": {
+        "description": "Take an option off the shortlist (task 055).\n\nA Policy Atlas pick becomes set aside; the user's own place clears. No\nwalk opens and nothing refills the place. An option with no place is a\nno-op. Refused with 409 ``run_active`` while a walk runs.",
+        "operationId": "post_unshortlist_api_v1_tasks__task_id__options__option_id__unshortlist_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "option_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Option Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Post Unshortlist",
+        "tags": [
+          "longlist"
+        ]
+      }
+    },
     "/api/v1/tasks/{task_id}/plan": {
       "get": {
         "description": "Return the durable approved plan or latest completed durable draft.\n\nOwner-only sweep, for the reason :func:`list_task_agent_turns` states: a\ncolleague's or an administrator's read must not write the owner's rows.",
@@ -11500,7 +11618,7 @@
         ]
       },
       "patch": {
-        "description": "Apply typed edits to the current plan and persist a new approved version.",
+        "description": "Apply typed edits to the current plan and persist a new approved version.\n\nOn an options-scoping task whose risk appetite changed, once the new\nversion has committed the route opens a shortlist walk that proposes the\nplaces again (task 055, P10; :func:`_open_shortlist_after_patch`) and\nnames it in ``opened_run``.",
         "operationId": "patch_plan_api_v1_tasks__task_id__plan_patch",
         "parameters": [
           {
@@ -11811,6 +11929,55 @@
         "summary": "Get Run",
         "tags": [
           "runs"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/shortlist/suggest": {
+      "post": {
+        "description": "Open a shortlist walk that fills the open places (Suggest more; task 055).\n\nThe access check runs in its own short transaction, then the opener takes\nthe dispatch lock and the task row itself (the order ``create_run``\nuses). Refused with 409 ``run_active``, ``capacity``, ``plan_stale`` or\n``nothing_to_propose``, and 404 when the task has no longlist.",
+        "operationId": "post_suggest_more_api_v1_tasks__task_id__shortlist_suggest_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LatestRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Post Suggest More",
+        "tags": [
+          "longlist"
         ]
       }
     },

@@ -813,7 +813,7 @@ def _seeds(conn: Connection, *, task_id: uuid.UUID) -> list[_Seed]:
     merged (its name is a :func:`_merged_names` entry instead).
     """
     # Imported here: ``constrain`` imports this module.
-    from policy_atlas.options_scoping.constrain.constrain import user_holds_state
+    from policy_atlas.options_scoping.constrain.constrain import merge_protected
 
     rows = conn.execute(
         select(
@@ -823,6 +823,7 @@ def _seeds(conn: Connection, *, task_id: uuid.UUID) -> list[_Seed]:
             option.c.design,
             option.c.origin,
             option.c.exclusion,
+            option.c.shortlist_state,
             option.c.created_at,
         )
         .where(option.c.task_id == task_id)
@@ -860,7 +861,8 @@ def _seeds(conn: Connection, *, task_id: uuid.UUID) -> list[_Seed]:
                 description=description,
                 design_features=features,
                 origin=row.origin,
-                user_held=user_holds_state(row.exclusion),
+                # A user's shortlist place is never folded either (O1).
+                user_held=merge_protected(row),
                 name=row.name,
                 outcomes=outcomes,
             )

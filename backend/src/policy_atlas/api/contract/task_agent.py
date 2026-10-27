@@ -699,8 +699,10 @@ class PlanOut(BaseModel):
             infer it from which field is null.
         version: Plan row version.
         status: Plan status (e.g. `draft`, `approved`).
-        opened_run: The longlist walk `POST .../plan/confirm-baseline` opened,
-            on that route's response. Absent on every other plan read.
+        opened_run: The walk a plan write opened: the longlist walk
+            `POST .../plan/confirm-baseline` opened, or the shortlist walk a
+            `PATCH .../plan` that changed the risk appetite opened (task 055).
+            Null on every other plan read, and when the opener was refused.
     """
 
     plan: PlanDraft | None = None

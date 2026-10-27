@@ -191,7 +191,7 @@ export function ShortlistView({
         <span className="font-semibold text-navy">{placed.length} places</span>
         <span aria-hidden="true">·</span>
         <label className="flex items-center gap-2">
-          <span>Appetite: {RISK_APPETITE_LABELS[appetite]}</span>
+          <span>Appetite</span>
           <RiskAppetiteSelect
             value={appetite}
             disabled={walkActive || patchPlan.isPending}
@@ -215,7 +215,7 @@ export function ShortlistView({
 
       {proposalFailed && (
         <p role="alert" className="mb-4 text-body text-red">
-          Policy Atlas could not propose; your places are unchanged.
+          Policy Atlas could not propose. Your places are unchanged.
         </p>
       )}
 
@@ -251,7 +251,9 @@ export function ShortlistView({
         )}
       </div>
 
-      {shortlist.stale && <p className="mb-4 text-body text-grey">Press Suggest more to re-propose</p>}
+      {shortlist.stale && !walkActive && (
+        <p className="mb-4 text-body text-grey">Press Suggest more to re-propose</p>
+      )}
 
       {shortlist.note != null && shortlist.note !== "" && (
         <section className="mb-6">

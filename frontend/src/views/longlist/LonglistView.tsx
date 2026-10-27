@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import type { components } from "../../api/gen/types";
 import { useAddOption } from "../../api/mutations";
@@ -90,7 +90,11 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
   const plan = usePlan(taskId);
   const addOption = useAddOption(taskId);
 
-  const [mode, setMode] = useState<Mode>("list");
+  // A finished shortlist walk links here with ?mode=shortlist (task 055).
+  const [searchParams] = useSearchParams();
+  const [mode, setMode] = useState<Mode>(
+    searchParams.get("mode") === "shortlist" ? "shortlist" : "list",
+  );
   const [groupBy, setGroupBy] = useState<GroupBy>("theme");
   const [showExcludedInGrid, setShowExcludedInGrid] = useState(false);
   const [addText, setAddText] = useState("");

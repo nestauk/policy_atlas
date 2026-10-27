@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { beatSentence } from "./runProgress";
+import { beatSentence, FINISHED_NOTICE, runningCardCopy, walkKind } from "./runProgress";
 
 describe("beatSentence", () => {
   it("suggest: counts suggestions, appends the from-report clause when positive", () => {
@@ -84,5 +84,15 @@ describe("beatSentence", () => {
 
   it("never returns a beat for an unknown stage", () => {
     expect(beatSentence("some_future_stage", { total: 5 })).toBeNull();
+  });
+});
+
+describe("walkKind — the shortlist walk (task 055)", () => {
+  it("names a shortlist walk by its purpose and by its stage", () => {
+    expect(walkKind("options_scoping", [], "shortlist")).toBe("shortlist");
+    expect(walkKind("options_scoping", [{ stage: "shortlist" } as never], null)).toBe("longlist");
+    expect(runningCardCopy("running", "shortlist").title).toBe("Proposing a shortlist…");
+    expect(runningCardCopy("succeeded", "shortlist").title).toBe("The shortlist is proposed");
+    expect(FINISHED_NOTICE.shortlist.before).toContain("proposed a shortlist");
   });
 });

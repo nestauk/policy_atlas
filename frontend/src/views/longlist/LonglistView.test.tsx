@@ -383,7 +383,7 @@ describe("LonglistView — Shortlist mode (task 055)", () => {
   it("renders the header, the fixed baseline line, both groups and the rows", async () => {
     await openShortlist();
     expect(screen.getByText("2 places")).toBeInTheDocument();
-    expect(screen.getByText(/Appetite: Mostly tried, one or two new/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Risk appetite")).toHaveValue("mostly_tried");
     expect(screen.getByRole("combobox", { name: "Risk appetite" })).toHaveValue("mostly_tried");
     expect(screen.getByText(/^The situation today:/)).toHaveTextContent("The situation today: Baseline");
     expect(screen.getByRole("link", { name: "Baseline" })).toHaveAttribute(
@@ -525,7 +525,7 @@ describe("LonglistView — Shortlist mode (task 055)", () => {
 
   it("shows the could-not-propose notice only when the newest walk is a failed shortlist walk", async () => {
     await openShortlist({}, undefined, [{ capability_run_id: "r1", purpose: "shortlist", status: "degraded" }]);
-    expect(screen.getByText("Policy Atlas could not propose; your places are unchanged.")).toBeInTheDocument();
+    expect(screen.getByText("Policy Atlas could not propose. Your places are unchanged.")).toBeInTheDocument();
   });
 
   it("shows no notice for an unrelated degraded walk or a succeeded shortlist walk", async () => {

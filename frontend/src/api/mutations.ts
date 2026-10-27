@@ -320,22 +320,12 @@ export function useOptionVerb(taskId: string, verb: "exclude" | "include") {
   });
 }
 
-/** The slice of the API client the shortlist routes need. Task 055's three
- *  routes are not in the generated types yet (`make openapi-sync` brings
- *  them); until then the calls go through this narrow, path-as-string shape. */
-type LooseClient = {
-  POST(
-    path: string,
-    init: { params: { path: Record<string, string> }; body?: unknown },
-  ): Promise<{ data?: unknown; error?: unknown; response: Response }>;
-};
-
 /** `POST .../options/{option_id}/shortlist` or `.../unshortlist` (no body):
  *  puts an option on the shortlist as added by you, or takes it off (a
  *  Policy Atlas pick becomes set aside). Returns the option's card, written
  *  straight into its query, like exclude and include. */
 export function useShortlistVerb(taskId: string, verb: "shortlist" | "unshortlist") {
-  const client = useApiClient() as unknown as LooseClient;
+  const client = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: { optionId: string }) => {
@@ -343,7 +333,7 @@ export function useShortlistVerb(taskId: string, verb: "shortlist" | "unshortlis
         params: { path: { task_id: taskId, option_id: input.optionId } },
       });
       if (data === undefined) raise(error, response.status);
-      return data as components["schemas"]["OptionOut"];
+      return data;
     },
     onSuccess: (data, input) => {
       queryClient.setQueryData([...queryKeys.taskRoot(taskId), "options", input.optionId], data);
@@ -356,7 +346,7 @@ export function useShortlistVerb(taskId: string, verb: "shortlist" | "unshortlis
  *  fills the open places. Refused with 409 `run_active`,
  *  `nothing_to_propose` or `no_longlist`. */
 export function useSuggestMore(taskId: string) {
-  const client = useApiClient() as unknown as LooseClient;
+  const client = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
@@ -364,7 +354,7 @@ export function useSuggestMore(taskId: string) {
         params: { path: { task_id: taskId } },
       });
       if (data === undefined) raise(error, response.status);
-      return data as components["schemas"]["LatestRun"];
+      return data;
     },
     onSuccess: () => {
       invalidateLonglist(queryClient, taskId);
