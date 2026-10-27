@@ -44,7 +44,7 @@ TEST_RULES = """
 Judge the step itself, not the policy. Read <the_test>: a document answers
 worked_elsewhere when it changes or compares the step's source (or a close,
 named proxy for it) and measures the step's target (or a close proxy), in any
-setting and for any reason. The policy in <policy> does not need to appear.
+setting and for any reason. The policy does not need to appear.
 For example, for "children consume less excess energy, so fewer children live
 with obesity", a trial that cut sugary drinks and measured overweight answers
 worked_elsewhere, though it is not about advertising.
@@ -79,7 +79,7 @@ them to decide the stances.
 def system(v):
     if v == "V0": return BASE
     if v == "V1": return BASE
-    if v == "V2": return BASE + TEST_RULES + HERE_RULES
+    if v in ("V2", "V4"): return BASE + TEST_RULES + HERE_RULES
     if v == "V3": return BASE + TEST_RULES + HERE_RULES + V3_FIELDS_NOTE
 
 class Reading(BaseModel):
@@ -113,8 +113,8 @@ def messages(v, l, policy, chain, doc):
             title=doc["title"], year=doc["year"], text=doc["abstract"], modelling=modelling, neighbours=l.neighbours)
     msgs = JP.build_judge_messages(item_text=clean(l.item_text), population=l.population, place=l.place, document_id="d",
         title=doc["title"], year=doc["year"], text=doc["abstract"], modelling=modelling, neighbours=l.neighbours)
-    extra = f"<policy>\n{policy}\n</policy>\n<whole_theory>\n{chain}\n</whole_theory>\n"
-    if v in ("V2", "V3"):
+    extra = "" if v == "V4" else f"<policy>\n{policy}\n</policy>\n<whole_theory>\n{chain}\n</whole_theory>\n"
+    if v in ("V2", "V3", "V4"):
         extra += f"<the_test>\n{the_test(l)}\n</the_test>\n"
     msgs[0] = {"role": "system", "content": system(v)}
     msgs[1] = {"role": "user", "content": extra + msgs[1]["content"]}
