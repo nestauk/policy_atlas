@@ -244,6 +244,15 @@ security lane on the public read API and the server setting.
 
 ## Increment 2 — Editing and changes
 
+**Added by the owner, 2026-10-27 (after the third live run), to build with the edits:**
+- **Run control:** a Stop button and endpoint (today the only stop is a server restart, which
+  marks the walk interrupted), Pause, and Restart of an interrupted check from where it stopped.
+  Also: a server restart from a code reload kills a running check.
+- **Planner clarifications:** the user can add a clarification to the plan while a check runs or
+  after, and the next check uses it.
+- **Progress in the Task Agent window:** one line per stage with counts ("Searching for 11
+  links", "Judging: 12 of 20 links"), not a bare "checking".
+
 2.1 **Prompts — `lead`.** `task_agent_toc_v2` (`graph_edits`, S9), `toc_same_meaning_v1`. Pin.
 Commit.
 
