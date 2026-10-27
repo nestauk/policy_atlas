@@ -1442,6 +1442,16 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## LLM screen + classify (task 014 seams)
 
+- **A "Narrative review" evidence type** (owner, 2026-10-27, task 054 iteration). The shared
+  classifier's types have no narrative review, so a peer-reviewed review that summarises a field
+  without a systematic search lands in "Expert Opinion and Commentary" (score 1), e.g. *Challenges
+  in obesity epidemiology* (Obesity Reviews, 2007) on a theory-of-change link. Proposal: add
+  "Narrative review" at score 2 (beside policy syntheses; below observational studies, as CEBM and
+  GRADE rank it), and show "Narrative review" in evidence lists instead of "Expert opinion and
+  commentary". Shared by Evidence search, Options scoping and theory of change, so it needs its own
+  decision: a new `EVIDENCE_TYPES` member, the `DEFAULT_RUBRIC` row (the domain test forces it), the
+  classify prompt, a migration widening the stored-type check, and a re-classify note for existing
+  rows.
 - **Classify-consensus voting** (contract rev 1.3) — screen got 3-rep consensus (decision
   10); classify runs single-call. Whether classify needs the same treatment is eval-gated:
   measure single-call error structure first.
