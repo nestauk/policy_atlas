@@ -93,6 +93,31 @@ profile = "openai_text_embedding_3_small_v1"
 backend = "openai"
 
 # ---------------------------------------------------------------------------
+[routes.openai-6x]
+# OpenAI's 6.x models (owner, 2026-10-27): about half the 5.6 price. Used for
+# local theory-of-change runs while the task 054 eval tests them; staging and
+# prod stay on openai-direct until the eval says otherwise.
+openai_base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+
+[routes.openai-6x.text]
+fast = "gpt-6-luna"
+standard = "gpt-6.1-terra"
+frontier = "gpt-6.1-sol"
+
+[routes.openai-6x.knobs.reasoning_effort]
+# The same setting openai-direct gives Terra (function tools need "none").
+"gpt-6.1-terra" = "none"
+
+[routes.openai-6x.embeddings]
+backend = "openai"
+model = "text-embedding-3-small"
+profile = "openai_text_embedding_3_small_v1"
+
+[routes.openai-6x.search_queries]
+backend = "openai"
+
+# ---------------------------------------------------------------------------
 [routes.bedrock-local]
 # Every call goes to Amazon Bedrock's London endpoint. OpenAI models are reached
 # through Bedrock's global routing (the only way from London); embeddings use

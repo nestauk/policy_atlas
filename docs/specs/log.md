@@ -1,5 +1,15 @@
 # Spec update log
 
+## 2026-10-27 (task 054, judge v4)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
+  judge prompt is `toc_judge_v4`. It names the step's source and target as "the test", counts a
+  study that changes a close proxy of the source and measures the target, treats a document with
+  no data of its own as not about the step, and decides first whether the step depends on place
+  before it answers "holds here". In a 34-document labelled experiment (3 repeats) it was right on
+  97 of 102 judgements against 92 for v3, and more consistent. Adding the whole theory and the
+  policy to the call made results worse, so it is not sent. A local `openai-6x` model route
+  (gpt-6-luna, gpt-6.1-terra, gpt-6.1-sol) is added; staging and prod are unchanged.
+
 ## 2026-10-27 (task 054, arm B)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): each
   item search's record cap goes from 20 to 40, and the check walk's screen judges documents against

@@ -102,7 +102,7 @@ class TocBackend(Protocol):
         ...
 
     def judge(self, **kwargs: Any) -> UsageResult[JudgeResponse]:
-        """Judge one link against one document (``toc_judge_v3``).
+        """Judge one link against one document (``toc_judge_v4``).
 
         Keyword arguments are those of
         :func:`~policy_atlas.theory_of_change.evidence.judge_prompt.build_judge_messages`.
