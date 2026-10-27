@@ -90,7 +90,8 @@ must point at something the user can open.
    `select` as the plan gate wrote (PG3): the shared `select` blurb is a
    ranking claim, and the registry guard tests assume one key per
    component. One more value in the public stage enum; the owner adjudicates
-   at the 055 review (verification.md § Diff summary, item 2). Update-in-place
+   at the 055 review (verification.md § Diff summary, item 2; kept, owner
+   2026-10-27). Update-in-place
    of the longlist stays deferred; Rebuild stays. (S10, S17, S25.)
 
 6. **Potential impact is a ninth "What it would take" line and a reason to
@@ -102,7 +103,12 @@ must point at something the user can open.
    of the prize" are never used. Direction of effect stays with assessment.
    The trust rule is amended: a labelled conditional magnitude may inform
    the pick; an unconditional magnitude, a probability, a number or a
-   forecast may not. (S19–S22, S24; spec changes 4, 4b.)
+   forecast may not. (S19–S22, S24; spec changes 4, 4b.) **Amended at the
+   055 review (owner, 2026-10-27):** the line carries a lower · middle ·
+   higher mark like the six marked lines, written after the sentence by
+   comparing the options of the list on the size of the difference they could
+   make if they work (never on likelihood or evidence), and the grid gains a
+   Potential impact column; A23 withdrawn.
 
 7. **The maturity rung is computed by code, never by a model.** Proposal
    only · Described · Evaluated · Reviewed, from document roles and the

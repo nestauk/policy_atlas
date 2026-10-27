@@ -1713,6 +1713,15 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   "tests"]`, so `scripts/ops_remove_scoping_tasks.py` (destructive, `--apply`-guarded) and the
   rename tooling are tested but never typechecked. Add `scripts/` to the mypy files or move
   long-lived scripts under `backend/src/policy_atlas/ops` (044 review stack, two lanes).
+- **`test_option_search.py::test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent`
+  hangs intermittently** (seen 2026-10-27 twice in CI: on `dev` eedf9ef9 at 10:29 and on the 055
+  branch at 13:30, each time right after `…interrupts_its_children[raise]` passed, each time until
+  the `verify` job's 40-minute limit; `dev` passed on re-run). Locally the three tests around it
+  took 81 s once and over 150 s another time, with no Postgres query active, so the wait is in
+  Python: the test's `_stuck_until` child waits on a `threading.Event` with a 30-second deadline and
+  the helpers' deadlines are 10–30 s, which together bound the slow case but not the hang. The
+  stack dump that would name the wait (`pytest -o faulthandler_timeout=110`) was not captured before
+  the 055 review closed. Root-cause it next time it shows: it costs a 40-minute CI run each time.
 
 ## Steering surface (task 024 seams)
 
@@ -3258,6 +3267,14 @@ Recorded by the task 055 contract, plan and build (`docs/tasks/055-scoping-short
   added, the user sees the breach on the row (O1) but the card text sent to the shortlist call omits
   the exclusion block (contract card-text matrix: exclusion block out). One breach line for kept,
   excluded places would let the note say so.
+- **Add on a pick from the screen.** The route turns Policy Atlas's pick into "Added by you" (the user
+  has now chosen it, so a re-proposal keeps it) and is tested; the Shortlist view offers only Remove on
+  a pick. A small "Keep" control on pick rows would expose it. Left for the owner's design call (055
+  review, step 9: no ruling made).
+- **"In the documents we found".** The contract's disciplines say the rung should carry this qualifier
+  where it would otherwise read as a fact about the world; the owner's rung words ("Evaluated",
+  "Implemented, not yet evaluated", …) do not. The card's "No document names this option yet" line and
+  the design mix carry the qualification nearby. Reopen if a reader takes the rung as a world fact.
 - **Appetite changes are an unmetered model-cost lever.** Each `PATCH /plan` that flips the appetite
   opens a full shortlist walk (about USD 0.15 at 25–43 options). Bounded by `run_active`
   serialisation and executor capacity only, the same posture as Rebuild; a per-task cap belongs with

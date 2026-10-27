@@ -27,6 +27,7 @@ Branch head at open: `e3e60392` (ADR 0041 committed at step 4). `make verify` on
 |---|---:|---|
 | `make verify` (step-6 exit, full) | pass | on the gated snapshot `055bd662` = commit `7a8d0563`'s tree: okf-validate 174 concepts 0 violations · backend 3742 passed (14 min 51 s) · eval-check · infra test · audit-paths 202 files 0 violations · prompt-guard 36 unchanged · font-guard · drift-check OK · frontend typecheck, lint, 929 vitest passed, build |
 | `make verify` (review exit, full, 2026-10-27) | pass | on the working tree after the review's fixes R1–R21 (committed as the two commits after `1bd434e5`): okf-validate 178 concepts 0 violations · backend 3755 passed (19 min 13 s) · mypy 430 files clean · ruff clean · eval-check 93 passed · infra test · audit-paths 202 files 0 violations · prompt-guard 36 unchanged (one comment-only re-pin, R20) · font-guard · drift-check OK · frontend typecheck, lint, 936 vitest passed (88 files), build |
+| `make verify` (step-9 amendment gate, the Potential impact mark, 2026-10-27) | pass, in two parts | backend part of the full gate: okf-validate 178 / 0 · 3755 passed (32 min 31 s under a load average above 200: the machine was at 24.2 GB of 24.5 GB swap after eight days up) · mypy clean · ruff clean · eval-check · audit-paths 202 / 0 · prompt-guard 36 unchanged (`option_profile_v4` re-pinned for the mark block) · drift-check OK. The frontend part timed out 7, then 21, then 17 tests at the 5-second limit in files the change never touched (one vitest worker failed to start), so it was re-run as `pnpm typecheck && pnpm lint && pnpm exec vitest run --maxWorkers=1 --testTimeout=30000 && pnpm build`: typecheck clean · lint 0 errors (1 pre-existing warning) · 938 passed (88 files) · build OK. The standard-parallel frontend gate runs again in CI on the push. |
 | `make test` | pass | inside the above |
 | `make typecheck` | pass | mypy 430 source files, no issues |
 | `make lint` | pass | ruff, all checks passed |
@@ -259,7 +260,7 @@ branch base `e3e60392`:
 
 | File | Version | Hash before → after |
 |---|---|---|
-| `options_scoping/option_profile/option_profile_prompt.py` | `option_profile_v4` | `d02c7843…` → `f2b7e24f…` (three rounds: words; length headroom; ceiling moved to code, then the hard bound) |
+| `options_scoping/option_profile/option_profile_prompt.py` | `option_profile_v4` | `d02c7843…` → `75123c8a…` (three rounds: words; length headroom; ceiling moved to code, then the hard bound; at the review a comment-only re-pin, then the mark block of deviation 18) |
 | `options_scoping/shortlist/shortlist_prompt.py` (new) | `shortlist_v1` | — → `29e2268a…` (two rounds: the names-not-ids note rule; then the stance and rung words of `9e9c6a00`) |
 | `runtime/task_agent_scoping_prompt.py` | `task_agent_scoping_v6` | `c08fdab0…` → `2b1806a1…` (the stance words of `9e9c6a00`) |
 
@@ -416,6 +417,23 @@ here, not silent)._
     more to re-propose" (PG1) sat over a route that kept the picks and filled gaps, and a button that
     was disabled at five places. Fixed in the review: when the stored proposal's appetite differs from
     the plan's, the Suggest more opener runs the walk as a re-proposal and the view enables the button.
+18. **The Potential impact line carries a mark** (owner, 2026-10-27, step-9 ruling: "I think we should
+    give the lower/middle/higher mark and grid column for this"; contract S22/A23 amended on those
+    words). `line_is_marked("potential_impact")` is true; `PotentialImpactWire` gains `stands_out`
+    (less · no · more) written after the sentence; the system prompt gains a mark block that compares
+    the options of the list on one thing only — the size of the difference they could make to the
+    plan's outcomes if they work, reach included — never on likelihood or evidence, and requires the
+    mark to agree with the sentence; the read model serves the mark; the card text and the frontend
+    show Lower · Middle · Higher; the grid gains Potential impact as its last column. The sentence rule
+    "compare nothing" stays for the sentence; only the mark compares. `option_profile_v4` re-pinned
+    (not shipped). **Mark read (lead, live, one round):** the refugees check task, 23 options, one
+    attempt, 9,808 / 3,053 tokens, 53 s, longest 383 characters; marks 4 less · 13 none · 6 more;
+    every `less` sentence opens "Small … even if it works", every `more` opens "Large … if it works",
+    and the two "Large for employment if it works" sentences carry no mark (large on one outcome of
+    three) — no mark disagrees with its sentence. Saved in `evidence/potential-impact/refugees.json`
+    (the round-3 files without marks kept in `evidence/potential-impact-round3/`). The other six stored
+    tasks keep their unmarked lines until their next profile step; the card shows "Middle" for a null
+    mark on a marked line, as it does for the six.
 
 ## Review findings
 
@@ -511,6 +529,23 @@ changes as a cost lever (security INFO).
 9. **Rollback note** (verifier m6): after a downgrade, shortlist-purpose scopes read as purpose-less
    under the previous image (per contract A1/A15); harmless for finished runs.
 
+### The owner's step-9 rulings (2026-10-27)
+
+"I'll take your recommendations on these. Except 7, I think we should give the lower/middle/higher
+mark and grid column for this." Applied as:
+
+| # | Ruling | Applied |
+|---|---|---|
+| 1 | Keep the 400 target / 600 hard bound; amend the contract's number | contract item 6 amended with the owner's words |
+| 2 | Keep the `shortlist` stage key | contract PG3 annotated |
+| 3 | No recommendation was given; the lead's reading: no Add control on a pick for now | `docs/deferred.md` seam |
+| 4 | Keep `potential_impact` as a consideration aspect | no change |
+| 5 | No recommendation was given; the lead's reading: accept the measures under the word-swap precedent (the 9e9c6a00 diff is words only) | recorded under § Measures |
+| 6 | No recommendation was given; the lead's reading: the rung words stay as the owner chose them | `docs/deferred.md` seam |
+| 7 | **Overruled:** the Potential impact line gets a lower/middle/higher mark and a grid column | deviation 18 below; contract item 6 and the Terms table amended, A23 withdrawn. The other parts of 7 follow the lead's view (counts stay on the longlist, the rung on the shortlist and card; the 409 sentences kept; the generic 404 stands) |
+| 8 | Spec changes 1–9, 4b, 4c | still not applied: the ruling accepted recommendations, and none was made for these; each still needs the owner's accepting words |
+| 9 | Rollback note | for awareness; no change |
+
 ### Live-trace lane
 
 The build's one anomaly "for the review" was the live run's profile-step failure (stage 2, point 3):
@@ -541,7 +576,7 @@ Filled by the review conversation 2026-10-27 (the contract verifier's evidence, 
 | 3 The component | holds | shuffled once, not per attempt (ADR corrected); R16–R18 tighten the checks |
 | 4 The walks | holds, one owner item | the stage key is `shortlist`, not `select` (deviation 2) |
 | 5 Suggest more | holds | after R8 (a stale appetite re-proposes) |
-| 6 Potential impact | holds, one owner item | the ceiling is 400 target / 600 hard bound (deviation 15); "size of the prize" appears only as the prohibition in the prompt |
+| 6 Potential impact | holds as amended by the owner | the ceiling is 400 target / 600 hard bound (deviation 15, accepted); the line carries a mark and a grid column since the step-9 ruling (deviation 18; the rubric's "plain line" wording is superseded); "size of the prize" appears only as the prohibition in the prompt |
 | 7 Maturity rung | holds | R13 for the words after a Where change |
 | 8 The shortlist view | holds as amended | the owner's own-tab amendment (deviation 11) replaces the contract's third mode |
 | 9 Chat and plan surfaces | holds | |
@@ -572,8 +607,14 @@ Filled by the review conversation 2026-10-27 (the contract verifier's evidence, 
 
 ## Known unverified items
 
-- The `verify` workflow's conclusion on the branch head (rubric 15) is read after the push, which is
-  the owner's step; the local full gate is recorded above.
+- The `verify` workflow's conclusion on the branch head (rubric 15): the first run on the pushed
+  branch (head `4e1a745f`, https://github.com/nestauk/policy_atlas/actions/runs/40510624991) was
+  cancelled by the job's 40-minute limit, hung in
+  `tests/runtime/test_option_search.py::test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent`
+  at 83 % after 14 minutes; `dev` (`eedf9ef9`) hung at the same test the same morning
+  (https://github.com/nestauk/policy_atlas/actions/runs/40487488309) and passed on re-run, so the
+  flake predates this branch (`docs/deferred.md` § Codebase health). The run on the final head is
+  recorded under § Commands run when it ends.
 - Cost per proposal was read from Langfuse by run id for all 24 proposals; the live task's walks were
   not costed.
 - Proposal quality beyond the measures (whether the five picks are the five a policy analyst would

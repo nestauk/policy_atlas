@@ -112,7 +112,7 @@ A PR into `dev` that lands items 1–14:
 | **mix** | How many of the proposed places have evaluating documents behind them and how many have none (the table in S4). |
 | **maturity rung** | A code-computed word per option from coverage roles and evidence types: *Proposal only* (no document describes an implementation or evaluates it) · *Described* (an implementation is described; none evaluated) · *Evaluated* (at least one evaluating document) · *Reviewed* (at least one evaluating document whose evidence type is a review). With the design mix as text ("1 RCT, 2 observational") and two modifiers. Research report 2 § 8.4. |
 | **modifiers** | Two facts beside the rung: *none in your setting* (no evaluating document in the plan's Where country) and *most recent evaluation before YEAR* (the newest evaluating document is older than `MATURITY_RECENT_YEARS`). |
-| **Potential impact** | The ninth "What it would take" line: one conditional sentence on how big a difference the option could make to the user's outcomes if it works, reasoned from the mechanism, the reach and the baseline (S19–S22). A plain line (no less/more mark). Key `potential_impact`. |
+| **Potential impact** | The ninth "What it would take" line: one conditional sentence on how big a difference the option could make to the user's outcomes if it works, reasoned from the mechanism, the reach and the baseline (S19–S22). A marked line since the review (lower · middle · higher, shown as the grid's last column; owner, 2026-10-27, at the step-9 decisions: "I think we should give the lower/middle/higher mark and grid column for this"; this replaces A23 and the plain-line words below). Key `potential_impact`. |
 | **reach** | Who the option would apply to in the user's setting (read from the specified design against the plan's target unit) against who it has been tried on (the record units already on the card's document lines and place sentences). Not a stored field; the Potential impact sentence names it (S21). |
 | **card text** | The option card serialised to text for the model by one shared builder from the same read model the frontend renders (`OptionOut`), so what Policy Atlas reads is what the user can see (S13). |
 | **the not-covered note** | Two or three sentences from the same call on what the proposed set leaves out (a lever type, an ambition band, an excluded option that would have covered something) and, at a re-proposal, which places changed and why (S15). Replaces the spec's gap messages and warnings. |
@@ -368,9 +368,16 @@ verdict "material change needed". The lead checked the code claims of findings 1
   evaluated countries and role counts. The sentence: a magnitude in plain words bound to a
   condition ("large if it works"; "moderate if scaled"), then the pathway against the
   baseline's drivers, then the reach (would apply to, against tried on), then the evidence
-  footing in one clause ("the records describe proposals only"). Under
-  `POTENTIAL_IMPACT_MAX_CHARS` (400). The line's label on the card is "Potential impact"; the
-  grid does **not** gain a column for it (no mark to show; A23). The magnitude is a labelled
+  footing in one clause ("the records describe proposals only"). The prompt asks for about 300
+  characters and never more than 380; a line over `POTENTIAL_IMPACT_MAX_CHARS` (400) is kept with
+  a warning and only a line over `POTENTIAL_IMPACT_HARD_MAX_CHARS` (600) fails the attempt, because
+  the profile step is a spine step (owner, 2026-10-27, at the step-9 decisions: "I'll take your
+  recommendations"; the review's deviation 15). The line's label on the card is "Potential impact".
+  **Review amendment (owner, 2026-10-27):** the line carries a mark like the six marked lines —
+  `less` · none · `more`, shown as Lower · Middle · Higher — written after the sentence by comparing
+  the options of the list on their conditional potential, and the grid gains a Potential impact
+  column (A23 withdrawn; the owner's words: "I think we should give the lower/middle/higher mark
+  and grid column for this"). The magnitude is a labelled
   conditional, never an unconditional claim, a probability or a number (A8; spec change 4b).
   `OPTION_PROFILE_PROMPT_VERSION` → `option_profile_v4`.
 - **The rung** is computed in coverage (`coverage.py`). Coverage gains two keys (A3):
@@ -465,7 +472,7 @@ contract. None changes a ruling.
 |---|---|---|
 | PG1 | `PlanOut.shortlist_pending` (A4) | No flag. `LonglistOut.shortlist.stale: bool`, derived: the latest proposal's appetite differs from the plan's, or a built longlist has no proposal. The view says "Press Suggest more to re-propose" when true. |
 | PG2 | The ceiling cuts document lines only | The baseline text is capped at 20,000 characters for the pick (and 12,000 for the Potential impact call); a cut is counted as `baseline_chars_cut` and named in the note's footer beside the document-line count. The whole request is under the ceiling or the proposal fails with a named error — never a silent truncation. |
-| PG3 | Registry `shortlist` under stage `select` with its shared words | Still under `select` for the stage key; its label and blurb are a per-registry override ("Shortlisting", "Proposing places for close reading.", words at 6b) because the shared blurb "The strongest, most varied set" is a ranking claim. |
+| PG3 | Registry `shortlist` under stage `select` with its shared words | Still under `select` for the stage key; its label and blurb are a per-registry override ("Shortlisting", "Proposing places for close reading.", words at 6b) because the shared blurb "The strongest, most varied set" is a ranking claim. **Built as its own stage key `shortlist`** with those words (verification.md deviation 2); accepted by the owner at the step-9 decisions, 2026-10-27 ("I'll take your recommendations"). |
 | PG4 | "21 proposals" in § Verification evidence | 24 proposals (21 + the three second `mostly_tried` runs of A21). |
 
 ## Scope / Out of scope
