@@ -13,16 +13,22 @@ The rule, once per question (*worked elsewhere*, *holds here*):
 - **Weak**: some documents speak to the link, but neither rule holds.
 - **No evidence found**: no judged document speaks to the link.
 
-Web pages and documents without an appraisal score count toward *weak* and the
-evidence-against flag, never toward *medium* or *strong*. A modelling study the
+Documents without an appraisal score, and web pages from publishers not on the
+trusted list (``trusted_publishers.toml``, C23), count toward *weak* and the
+evidence-against flag, never toward *medium* or *strong*. A web page from a
+trusted publisher counts by its appraisal score, like a paper. A modelling study the
 judge marked robust counts as score 3: it can support *medium*, never *strong*.
 """
 
 from __future__ import annotations
 
+import tomllib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from functools import cache
+from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 Grade = Literal["strong", "medium", "weak", "none"]
 Question = Literal["elsewhere", "here"]
@@ -55,11 +61,32 @@ class DocAppraisal:
             document has none.
         web: Whether the document is a frozen web page.
         modelling: Whether classify marked it a modelling study.
+        trusted: Whether a web page's publisher is on the trusted list (C23).
     """
 
     score: int | None
     web: bool = False
     modelling: bool = False
+    trusted: bool = False
+
+
+@cache
+def _trusted_hosts() -> tuple[str, ...]:
+    path = Path(__file__).with_name("trusted_publishers.toml")
+    return tuple(tomllib.loads(path.read_text())["hosts"])
+
+
+def trusted_publisher(url: str | None) -> bool:
+    """Whether a URL's host is on the trusted publisher list, or under one (C23).
+
+    Args:
+        url: The document's address.
+
+    Returns:
+        True for ``gov.uk`` and ``www.ons.gov.uk`` alike when ``gov.uk`` is listed.
+    """
+    host = (urlparse(url or "").hostname or "").lower().removesuffix(".")
+    return any(host == h or host.endswith("." + h) for h in _trusted_hosts())
 
 
 @dataclass(frozen=True)
@@ -96,7 +123,7 @@ class GradeResult:
 
 def counted_score(judgement: Judgement, appraisal: DocAppraisal | None) -> int:
     """The score a document counts with toward medium and strong; 0 = never."""
-    if appraisal is None or appraisal.web or appraisal.score is None:
+    if appraisal is None or (appraisal.web and not appraisal.trusted) or appraisal.score is None:
         return 0
     if appraisal.modelling and judgement.robust_model:
         return ROBUST_MODEL_SCORE
@@ -169,8 +196,9 @@ def rule_text() -> list[tuple[str, str]]:
         ),
         (
             GRADE_LABELS["weak"],
-            "Some documents speak to the step, but only weaker designs, web pages or "
-            "policy documents support it, or the evidence against outweighs it.",
+            "Some documents speak to the step, but only weaker designs, unscored "
+            "documents or web pages from publishers not on the trusted list support "
+            "it, or the evidence against outweighs it.",
         ),
         (
             GRADE_LABELS["none"],

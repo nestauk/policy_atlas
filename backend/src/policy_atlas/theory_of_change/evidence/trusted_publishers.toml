@@ -1,0 +1,27 @@
+# Trusted web publishers (task 054, contract C23): a web page from one of these
+# hosts counts by its appraisal score, like a paper. Any other web page counts
+# only toward "weak". A host matches itself and every subdomain ("gov.uk" also
+# matches "ons.gov.uk"). Edit this list, not the code.
+hosts = [
+  "gov.uk",                              # GOV.UK, the Evaluation Task Force, ONS, departments
+  "nao.org.uk",                          # National Audit Office
+  "nhs.uk",                              # NHS, NHS England
+  "ofcom.org.uk",
+  "asa.org.uk",                          # Advertising Standards Authority
+  "nice.org.uk",
+  "ac.uk",                               # UK universities
+  "who.int",
+  "oecd.org",
+  # What Works Centres
+  "educationendowmentfoundation.org.uk",
+  "eif.org.uk",
+  "whatworkswellbeing.org",
+  "college.police.uk",
+  "whatworksgrowth.org",
+  "foundations.org.uk",
+  "youthendowmentfund.org.uk",
+  "homelessnessimpact.org",
+  "ageing-better.org.uk",
+  "tasoevaluation.org",
+  "youthfuturesfoundation.org",
+]

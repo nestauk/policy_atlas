@@ -66,13 +66,26 @@ def _run(rows: Any, appraisals: Any, question: Any = "elsewhere") -> Any:
         ([("a", S, None)], {"a": DocAppraisal(2)}, "weak", 0),
         # only challenge: weak with the flag
         ([("a", C, None)], {"a": DocAppraisal(5)}, "weak", 1),
-        # web pages never raise above weak
+        # web pages from untrusted publishers never raise above weak
         (
             [("a", S, None), ("b", S, None)],
             {"a": DocAppraisal(5, web=True), "b": DocAppraisal(5, web=True)},
             "weak",
             0,
         ),
+        # web pages from trusted publishers count by their score, like papers (C23)
+        (
+            [("a", S, None), ("b", S, None)],
+            {
+                "a": DocAppraisal(5, web=True, trusted=True),
+                "b": DocAppraisal(4, web=True, trusted=True),
+            },
+            "strong",
+            0,
+        ),
+        ([("a", S, None)], {"a": DocAppraisal(3, web=True, trusted=True)}, "medium", 0),
+        # a trusted web page with no score still counts toward weak only
+        ([("a", S, None)], {"a": DocAppraisal(None, web=True, trusted=True)}, "weak", 0),
         # unscored documents (policy documents) count toward weak only
         ([("a", S, None)], {"a": DocAppraisal(None)}, "weak", 0),
         # a document with no appraisal row counts toward weak only
@@ -110,3 +123,18 @@ def test_lower_and_rule_text() -> None:
     assert lower("strong", "weak") == "weak"
     assert lower("none", "medium") == "none"
     assert [label for label, _ in rule_text()] == ["Strong", "Medium", "Weak", "No evidence found"]
+
+
+def test_trusted_publisher_matches_listed_hosts_and_their_subdomains() -> None:
+    from policy_atlas.theory_of_change.evidence.grade import trusted_publisher
+
+    assert trusted_publisher("https://www.gov.uk/government/organisations/evaluation-task-force")
+    assert trusted_publisher("https://www.ons.gov.uk/peoplepopulationandcommunity")
+    assert trusted_publisher("https://www.england.nhs.uk/publication/x")
+    assert trusted_publisher("https://www.ofcom.org.uk/research")
+    assert trusted_publisher("https://www.asa.org.uk/news.html")
+    assert trusted_publisher("https://educationendowmentfoundation.org.uk/x")
+    assert not trusted_publisher("https://notgov.uk/page")
+    assert not trusted_publisher("https://gov.uk.example.com/page")
+    assert not trusted_publisher("https://www.example.com/report")
+    assert not trusted_publisher(None)
