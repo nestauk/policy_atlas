@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -199,20 +200,23 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
-def trim_conditions(conditions_per_link: list[list[str]]) -> list[list[str]]:
+def trim_conditions(
+    conditions_per_link: list[list[str]], *, existing: Iterable[str] = ()
+) -> list[list[str]]:
     """Apply the conditions rule to links in order (code, not the prompt).
 
     Drops blank conditions and any condition whose normalised text already
-    appeared, on an earlier link or earlier on the same one, then keeps the
-    first :data:`MAX_CONDITIONS_PER_LINK` of each link.
+    appeared, in ``existing``, on an earlier link or earlier on the same one,
+    then keeps the first :data:`MAX_CONDITIONS_PER_LINK` of each link.
 
     Args:
         conditions_per_link: Each link's conditions, links in draft order.
+        existing: Conditions already in the theory (discovered links).
 
     Returns:
         The trimmed lists, same order and length.
     """
-    seen: set[str] = set()
+    seen = {_norm(c) for c in existing}
     trimmed: list[list[str]] = []
     for conditions in conditions_per_link:
         kept: list[str] = []

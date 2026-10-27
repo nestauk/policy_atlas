@@ -73,6 +73,7 @@ from policy_atlas.theory_of_change.evidence.grade import (
     grade,
 )
 from policy_atlas.theory_of_change.graph import (
+    MAX_CONDITIONS_PER_LINK,
     MAX_FAILURE_PATHWAYS,
     MAX_SUCCESS_PATHWAYS,
     Graph,
@@ -80,6 +81,7 @@ from policy_atlas.theory_of_change.graph import (
     item_hash,
     item_text,
     link_problem,
+    trim_conditions,
 )
 
 log = structlog.get_logger()
@@ -501,6 +503,8 @@ def toc_discover_scope(
     link_of_pair = {
         (short[link.source], short[link.target]): key for key, link in graph.links.items()
     }
+    # Conditions already in the theory: a discovered link never repeats one.
+    taken = [c for link in graph.links.values() for c in link.conditions]
     log_ = store.ChangeLog()
     changes: list[store.Change] = []
     accepted = rejected = failed_batches = 0
@@ -548,6 +552,8 @@ def toc_discover_scope(
                     link_ids.append(uuid.UUID(link_of_pair[(source, target)]))
                     continue
                 wire = new_links[(source, target)]
+                [conditions] = trim_conditions([list(wire.conditions)], existing=taken)
+                taken.extend(conditions)
                 link_id = uuid.uuid4()
                 store.insert(
                     conn,
@@ -563,7 +569,7 @@ def toc_discover_scope(
                         "for_text": wire.for_text,
                         "then_text": wire.then_text,
                         "because_text": wire.because_text,
-                        "conditions": [c for c in wire.conditions if c.strip()],
+                        "conditions": conditions,
                         "origin": "found_in_evidence",
                     },
                 )
@@ -1228,10 +1234,13 @@ def toc_choose_scope(
                     }
                 )
 
-    conditions_added = 0
+    conditions_added = conditions_skipped = 0
+    # The conditions rule: at most two per link, none on two links.
+    taken = {_norm(c) for other in graph.links.values() for c in other.conditions}
     for key, condition in added:
         link = graph.links[key]
-        if _norm(condition) in {_norm(c) for c in link.conditions}:
+        if len(link.conditions) >= MAX_CONDITIONS_PER_LINK or _norm(condition) in taken:
+            conditions_skipped += 1
             continue
         row = rows.links[key]
         new_conditions = [*link.conditions, condition]
@@ -1254,6 +1263,7 @@ def toc_choose_scope(
             },
         ):
             link.conditions = new_conditions
+            taken.add(_norm(condition))
             conditions_added += 1
             changes.append(f"Added a condition to “{link.sentence}”: {condition}")
 
@@ -1265,6 +1275,7 @@ def toc_choose_scope(
         "called_model": called,
         "set_aside": set_aside,
         "conditions_added": conditions_added,
+        "conditions_skipped": conditions_skipped,
         "critical_changed": critical_changed,
         "backend_mode": backend.mode,
         "usage_totals": usage.payload(),

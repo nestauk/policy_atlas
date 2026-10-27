@@ -238,6 +238,8 @@ def test_each_link_reads_at_most_k_documents_of_its_own_search(
 class _Discovers(StubTocBackend):
     """Proposes one success route through a new outcome box, quoting the first document."""
 
+    conditions: tuple[str, ...] = ("It holds",)
+
     def discover(self, *, plan: Any, theory: Any, documents: Any) -> Any:
         self._next("discover", {})
         if self.calls["discover"] > 1:  # one proposal, from the first batch only
@@ -251,7 +253,7 @@ class _Discovers(StubTocBackend):
             "for_text": "for",
             "then_text": "then",
             "because_text": "because",
-            "conditions": ["It holds"],
+            "conditions": list(self.conditions),
         }
         proposal = ProposalWire(
             kind="success",
@@ -327,6 +329,62 @@ class _Conditions(StubTocBackend):
             for item in kwargs["recorded_conditions"]
         ]
         return response.model_copy(update={"added_conditions": added}), usage
+
+
+class _DiscoversRepeats(_Discovers):
+    # One existing condition (stub draft link l1), two new, one over the cap.
+    conditions = ("Condition for l1 holds", "It holds", "Third", "Fourth")
+
+
+def test_a_discovered_link_never_repeats_a_condition_and_keeps_two(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    task_id = _run(engine, cleanup, _DiscoversRepeats())
+    with engine.connect() as conn:
+        found = (
+            conn.execute(
+                select(toc_link.c.conditions).where(
+                    toc_link.c.task_id == task_id, toc_link.c.origin == "found_in_evidence"
+                )
+            )
+            .scalars()
+            .all()
+        )
+    # The first new link drops l1's condition and keeps two; the second takes
+    # only the one the first left over.
+    assert sorted(found, key=len) == [["Fourth"], ["It holds", "Third"]]
+
+
+class _ConditionsOverTheRule(StubTocBackend):
+    """Choose adds two conditions to one link and repeats one on another."""
+
+    def judge(self, **kwargs: Any) -> Any:
+        response, usage = super().judge(**kwargs)
+        return response.model_copy(update={"condition": "Recorded"}), usage
+
+    def choose(self, **kwargs: Any) -> Any:
+        from policy_atlas.theory_of_change.choose_prompt import AddedConditionWire
+
+        response, usage = super().choose(**kwargs)
+        first, second = (str(item["link"]) for item in kwargs["recorded_conditions"][:2])
+        added = [
+            AddedConditionWire(link=first, condition="Fresh one"),
+            AddedConditionWire(link=first, condition="Fresh two"),  # over the cap of 2
+            AddedConditionWire(link=second, condition="fresh  ONE"),  # already on first
+        ]
+        return response.model_copy(update={"added_conditions": added}), usage
+
+
+def test_choose_keeps_the_conditions_rule_and_counts_what_it_skipped(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    task_id = _run(engine, cleanup, _ConditionsOverTheRule())
+    choose = _summary(engine, task_id, "toc_choose")
+    assert choose["conditions_added"] == 1 and choose["conditions_skipped"] == 2
+    with engine.connect() as conn:
+        out = toc_graph_out(conn, task_id)
+    assert sum("Fresh one" in link.conditions for link in out.links) == 1
+    assert all(len(link.conditions) <= 2 for link in out.links)
 
 
 def test_a_condition_added_by_choose_leaves_the_link_checked(
