@@ -1330,14 +1330,42 @@ def toc_select_scope(
     Returns:
         Screen counts, pick call counts and the pick usage.
     """
+    return _select_links(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=context,
+        backend=backend,
+        embedder=embedder,
+        only=None,
+    )
+
+
+def _select_links(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: ScopeContext,
+    backend: TocBackend,
+    embedder: EmbeddingBackend | None,
+    only: set[str] | None,
+) -> dict[str, Any]:
+    """Pick documents for the walk's links, or for the ``only`` links (C28, C31, C32).
+
+    With ``only``, the other links' picks are kept and merged into the new
+    picks event, and a picked document already screened out is screened in
+    again at the next screen generation.
+    """
     walk_id = walk_of_run(conn, task_id=task_id, run_id=run_id)
     candidates = _link_candidates(conn, task_id=task_id, walk_id=walk_id)
+    targets = set(candidates) if only is None else only & set(candidates)
     if backend.mode == "live":
-        candidates = _fill_abstracts(conn, candidates)
+        candidates.update(_fill_abstracts(conn, {k: candidates[k] for k in targets}))
     plan = walk_toc_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
     graph, _ = store.load_graph(conn, task_id)
     texts: dict[str, str] = {}
-    for key in candidates:
+    for key in targets:
         link = graph.links.get(key)
         if link is not None:
             texts[key] = item_text(
@@ -1351,15 +1379,14 @@ def toc_select_scope(
     walk_pool = list({c.tss_id: c for docs in candidates.values() for c in docs}.values())
     vectors = _document_vectors(conn, [c.tss_id for c in walk_pool]) if texts else {}
     shared = 0
-    for key, own in list(candidates.items()):
-        if key not in texts:
-            continue
+    for key in list(texts):
+        own = candidates[key]
         mine = {c.tss_id for c in own}
         others = [c for c in walk_pool if c.tss_id not in mine]
         extra = nearest(embedder, others, vectors, text=texts[key])
         shared += len(extra)
         candidates[key] = [*own, *extra]
-    called = [k for k, docs in candidates.items() if k in texts and len(docs) > PICK_N]
+    called = [k for k in texts if len(candidates[k]) > PICK_N]
 
     def run_pick(key: str) -> CallOutcome[Any]:
         shown: list[dict[str, object]] = [
@@ -1376,7 +1403,8 @@ def toc_select_scope(
     usage = UsageAccumulator()
     failed = 0
     per_link: dict[str, list[uuid.UUID]] = {}
-    for key, docs in candidates.items():
+    for key in targets:
+        docs = candidates[key]
         response = _outcome_value(outcomes[key], usage) if key in outcomes else None
         if key in outcomes and response is None:
             failed += 1
@@ -1384,14 +1412,21 @@ def toc_select_scope(
             picked_ids(response.ids, docs) if response is not None else select_for_link(docs)
         )
     picked = {tss for chosen in per_link.values() for tss in chosen}
-    events.append(
-        conn,
-        task_id=task_id,
-        run_id=run_id,
-        event_type=PICKED_EVENT,
-        payload={key: [str(tss) for tss in chosen] for key, chosen in per_link.items()},
-    )
-    everything = {c.tss_id for found in candidates.values() for c in found}
+    if only is None or per_link:
+        earlier = (
+            _walk_picks(conn, task_id=task_id, walk_id=walk_id) if only is not None else None
+        ) or {}
+        events.append(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            event_type=PICKED_EVENT,
+            payload={
+                **{key: sorted(str(tss) for tss in chosen) for key, chosen in earlier.items()},
+                **{key: [str(tss) for tss in chosen] for key, chosen in per_link.items()},
+            },
+        )
+    everything = {c.tss_id for key in targets for c in candidates[key]}
     screen = ScreenContext(
         scope_id=context.scope_id, intent=context.intent, context=context.context
     )
@@ -1403,6 +1438,7 @@ def toc_select_scope(
         tss_ids=picked,
         status="relevant",
         reason=SELECTED_REASON,
+        rescreen=only is not None,
     )
     dropped = screen_in(
         conn,
@@ -1420,10 +1456,76 @@ def toc_select_scope(
         "excluded_retracted": kept["excluded_retracted"] + dropped["excluded_retracted"],
         "pick_calls": len(called),
         "failed_pick_calls": failed,
+        "links": len(targets),
         "shared_candidates": shared,
         "backend_mode": backend.mode,
         "usage_totals": usage.payload(),
     }
+
+
+def links_without_search(
+    conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID
+) -> list[str]:
+    """The kept links that have no item search of their own in this walk (C32).
+
+    After merge, these are the links discovery added. Kept-pathway links
+    first, as :func:`links_to_check` orders them.
+
+    Args:
+        conn: Open connection.
+        task_id: The task.
+        walk_id: The check walk.
+
+    Returns:
+        Link ids.
+    """
+    graph, _ = store.load_graph(conn, task_id)
+    searched = set(_child_links(conn, task_id=task_id, walk_id=walk_id).values())
+    keys, _ = links_to_check(graph)
+    return [key for key in keys if key not in searched]
+
+
+def toc_search_new_scope(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: ScopeContext,
+    backend: TocBackend,
+    embedder: EmbeddingBackend | None = None,
+) -> dict[str, Any]:
+    """Pick documents for the links discovery added, after their own searches (C32).
+
+    The runner has already dispatched and joined one item search per kept
+    link with no search of its own (stage ``toc_new_link_searches``). Each such
+    link is then picked for exactly as :func:`toc_select_scope` picks: its own
+    documents plus the 10 nearest from the whole walk, one pick call, the
+    round-robin fallback. A link whose search failed or found nothing has no
+    picks, and the judge falls back to the nearest pool documents.
+
+    Args:
+        conn: Open connection inside the component transaction.
+        task_id: The task.
+        run_id: This run.
+        context: The check walk's intent record.
+        backend: The ToC model seam.
+        embedder: The embedding backend for the shared pool, or ``None``.
+
+    Returns:
+        The same counts as :func:`toc_select_scope`.
+    """
+    walk_id = walk_of_run(conn, task_id=task_id, run_id=run_id)
+    picks = _walk_picks(conn, task_id=task_id, walk_id=walk_id) or {}
+    new = set(_child_links(conn, task_id=task_id, walk_id=walk_id).values()) - set(picks)
+    return _select_links(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=context,
+        backend=backend,
+        embedder=embedder,
+        only=new,
+    )
 
 
 # --- judge ----------------------------------------------------------------------

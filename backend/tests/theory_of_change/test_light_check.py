@@ -384,3 +384,68 @@ def test_crossref_retries_once_after_a_429() -> None:
     client = httpx.Client(transport=httpx.MockTransport(handler))
     assert crossref_abstracts(["10.1/a"], client=client) == {"10.1/a": "Found."}
     assert len(calls) == 2
+
+
+# --- the links discovery adds get their own search (C32) --------------------------
+
+
+def test_a_discovered_link_gets_its_own_search_pick_and_judgement(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    from policy_atlas.core.schema import capability_run, evidence_scope, toc_item_evidence, toc_link
+    from policy_atlas.runtime.option_search import TOC_NEW_LINK_SEARCHES_STAGE
+    from tests.theory_of_change.test_check_steps import _Discovers
+
+    task_id = _run(engine, cleanup, _Discovers())
+    assert _summary(engine, task_id, TOC_NEW_LINK_SEARCHES_STAGE)["total"] == 2
+    new = _summary(engine, task_id, "toc_search_new")
+    assert new["links"] == 2
+    picks = _picks_latest(engine, task_id)
+    with engine.connect() as conn:
+        found = {
+            str(link_id)
+            for link_id in conn.execute(
+                select(toc_link.c.link_id).where(
+                    toc_link.c.task_id == task_id, toc_link.c.origin == "found_in_evidence"
+                )
+            ).scalars()
+        }
+        searched = {
+            str((context or {}).get("link_id"))
+            for context in conn.execute(
+                select(evidence_scope.c.context)
+                .join(
+                    capability_run,
+                    capability_run.c.evidence_scope_id == evidence_scope.c.evidence_scope_id,
+                )
+                .where(capability_run.c.task_id == task_id)
+                .where(capability_run.c.parent_capability_run_id.is_not(None))
+            ).scalars()
+        }
+        judged = conn.execute(
+            select(toc_item_evidence.c.link_id, toc_item_evidence.c.task_source_snapshot_id).where(
+                toc_item_evidence.c.task_id == task_id
+            )
+        ).all()
+    assert len(found) == 2 and found <= searched
+    # The earlier links' picks are kept beside the new ones.
+    assert found < set(picks) and len(picks) > len(found)
+    for link_id in found:
+        assert picks[link_id]
+        # The judge read the discovered link's picks.
+        assert {tss for lid, tss in judged if str(lid) == link_id} == {
+            uuid.UUID(i) for i in picks[link_id]
+        }
+
+
+def _picks_latest(engine: Engine, task_id: uuid.UUID) -> dict[str, list[str]]:
+    with engine.connect() as conn:
+        return dict(
+            conn.execute(
+                select(event_log.c.payload)
+                .where(event_log.c.task_id == task_id)
+                .where(event_log.c.event_type == check.PICKED_EVENT)
+                .order_by(event_log.c.sequence.desc())
+                .limit(1)
+            ).scalar_one()
+        )

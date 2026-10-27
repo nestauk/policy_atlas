@@ -474,6 +474,7 @@ def _scoping_node(name: str) -> Any:
 _TOC_STEPS: dict[str, Callable[..., dict[str, Any]]] = {
     "toc_draft": toc_draft_scope,
     "toc_select": toc_check.toc_select_scope,
+    "toc_search_new": toc_check.toc_search_new_scope,
     "toc_discover": toc_check.toc_discover_scope,
     "toc_merge": toc_check.toc_merge_scope,
     "toc_judge": toc_check.toc_judge_scope,
@@ -486,7 +487,7 @@ def _toc_node(name: str) -> Any:
     def run(state: HarnessState) -> HarnessState:
         step = _TOC_STEPS[name]  # read at run time, so a test can swap a step
         kwargs: dict[str, Any] = {"backend": state["toc_backend"]}
-        if name == "toc_select":
+        if name in ("toc_select", "toc_search_new"):
             # The shared pool: the walk's documents closest to each link (C31).
             kwargs["embedder"] = state["embedding_backend"]
         if name == "toc_judge":

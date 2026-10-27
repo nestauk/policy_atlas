@@ -130,6 +130,7 @@ OPTIONS_SCOPING_STEPS: tuple[str, ...] = (
 TOC_STEPS: tuple[str, ...] = (
     "toc_draft",
     "toc_select",
+    "toc_search_new",
     "toc_discover",
     "toc_merge",
     "toc_judge",

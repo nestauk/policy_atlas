@@ -56,6 +56,7 @@ def test_the_check_walk_classifies_only_after_the_judge() -> None:
         ("toc_select", True),
         ("toc_discover", False),
         ("toc_merge", True),
+        ("toc_search_new", False),
         ("toc_judge", True),
         ("classify", True),
         ("appraise", True),

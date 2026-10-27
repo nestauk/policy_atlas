@@ -10,8 +10,8 @@ A theory of change runs two walks (C3), told apart by the intent record's
 - ``draft``: ``inherit`` (only when the task starts from an option) →
   ``toc_draft``. Pasted text in the existing-theory entry point drafts too: the
   draft prompt keeps the user's words (``toc_import`` is increment 5).
-- ``check``: ``toc_select → toc_discover → toc_merge → toc_judge →
-  classify → appraise → toc_choose → toc_summarise`` (C31). With ``context.links``
+- ``check``: ``toc_select → toc_discover → toc_merge → toc_search_new →
+  toc_judge → classify → appraise → toc_choose → toc_summarise`` (C31, C32). With ``context.links``
   (Search for more) the same chain without discover, merge and choose.
 
 The item searches a check walk dispatches are ``targeted`` walks with
@@ -73,6 +73,8 @@ TOC_CHECK_CHAIN: tuple[tuple[str, bool], ...] = (
     ("toc_select", True),
     ("toc_discover", False),
     ("toc_merge", True),
+    # The links discovery added get their own search and pick (C32).
+    ("toc_search_new", False),
     ("toc_judge", True),
     # Classify and appraise read only what the judge found on topic (C31).
     ("classify", True),
@@ -82,7 +84,7 @@ TOC_CHECK_CHAIN: tuple[tuple[str, bool], ...] = (
 )
 
 #: The steps a named-link check (Search for more) leaves out.
-_NAMED_LINK_SKIPS = frozenset({"toc_discover", "toc_merge", "toc_choose"})
+_NAMED_LINK_SKIPS = frozenset({"toc_discover", "toc_merge", "toc_search_new", "toc_choose"})
 
 EntryPoint = Literal["outcome_first", "intervention_first", "existing_theory"]
 

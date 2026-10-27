@@ -83,6 +83,10 @@ OPTION_SEARCHES_STAGE = "option_searches"
 #: The stage a theory-of-change check walk's item searches run under (task 054, S3).
 TOC_ITEM_SEARCHES_STAGE = "toc_item_searches"
 
+#: The stage of the second fan-out: item searches for the kept links discovery
+#: added, which had no search of their own (task 054, C32).
+TOC_NEW_LINK_SEARCHES_STAGE = "toc_new_link_searches"
+
 #: How long the longlist walk waits for its option searches, counted from the
 #: join (the parent's own broad chain has already run by then). Fifteen
 #: option searches at width 4 are four waves of one small walk each (acquire
@@ -685,6 +689,7 @@ def dispatch_toc_item_searches(
     backends: RunnerBackends,
     session_id: uuid.UUID | None,
     links: list[str] | None = None,
+    stage: str = TOC_ITEM_SEARCHES_STAGE,
 ) -> list[uuid.UUID]:
     """A check walk's fan-out: one acquire-only item search per link (task 054, S3).
 
@@ -700,6 +705,7 @@ def dispatch_toc_item_searches(
         backends: The runner backend bundle, passed to every child.
         session_id: The walk's tracing session, recorded on the stage event.
         links: The links a named-link check covers, or ``None`` for all.
+        stage: The fan-out's stage: the first, or the new links' (C32).
 
     Returns:
         The child walks' ids, in dispatch order.
@@ -710,7 +716,7 @@ def dispatch_toc_item_searches(
 
     with engine.connect() as conn:
         already = dispatched_children(
-            conn, task_id=task_id, parent_id=parent_id, stage=TOC_ITEM_SEARCHES_STAGE
+            conn, task_id=task_id, parent_id=parent_id, stage=stage
         )
         if already is not None:
             return already
@@ -732,7 +738,7 @@ def dispatch_toc_item_searches(
                             ACQUIRE_ONLY_KEY: True,
                         },
                         plan_id=uuid.UUID(str(plan_row["plan_id"])),
-                        stage=TOC_ITEM_SEARCHES_STAGE,
+                        stage=stage,
                         pool=toc_item_pool,
                     ),
                     plan_row=plan_row,
@@ -748,8 +754,8 @@ def dispatch_toc_item_searches(
                 run_id=None,
                 event_type="run.started",
                 payload={
-                    "component": TOC_ITEM_SEARCHES_STAGE,
-                    "registry_component": TOC_ITEM_SEARCHES_STAGE,
+                    "component": stage,
+                    "registry_component": stage,
                     "plan_id": str(plan_row["plan_id"]),
                     "plan_version": int(plan_row["version"]),
                     "session_id": str(session_id) if session_id is not None else None,
@@ -914,7 +920,11 @@ def abandon_children(
     with engine.connect() as conn:
         child_ids = [
             child
-            for stage in (OPTION_SEARCHES_STAGE, TOC_ITEM_SEARCHES_STAGE)
+            for stage in (
+                OPTION_SEARCHES_STAGE,
+                TOC_ITEM_SEARCHES_STAGE,
+                TOC_NEW_LINK_SEARCHES_STAGE,
+            )
             for child in dispatched_children(
                 conn, task_id=task_id, parent_id=parent_id, stage=stage
             )

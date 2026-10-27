@@ -40,6 +40,7 @@ COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     # record and the task's graph.
     "toc_draft": {"requires": ["evidence_scope_id"]},
     "toc_select": {"requires": ["evidence_scope_id"]},
+    "toc_search_new": {"requires": ["evidence_scope_id"]},
     "toc_discover": {"requires": ["evidence_scope_id"]},
     "toc_merge": {"requires": ["evidence_scope_id"]},
     "toc_judge": {"requires": ["evidence_scope_id"]},

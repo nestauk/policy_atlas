@@ -327,6 +327,7 @@ def test_start_drafts_then_checks_and_the_thread_stays_open(
         "toc_select",
         "toc_discover",
         "toc_merge",
+        "toc_search_new",
         "toc_judge",
         "toc_choose",
         "toc_summarise",

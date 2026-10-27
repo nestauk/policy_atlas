@@ -192,6 +192,7 @@ LLM_BEARING_COMPONENTS = frozenset(
         # Task 054: every theory-of-change step makes model calls.
         "toc_draft",
         "toc_select",
+        "toc_search_new",
         "toc_discover",
         "toc_merge",
         "toc_judge",
@@ -980,6 +981,7 @@ def _run_plan_impl(
     )
     toc_children: list[uuid.UUID] | None = None
     toc_joined = False
+    toc_new_joined = False
     # The most-recent ATTEMPTED run id per registry component, INCLUDING failed
     # attempts (FIX 1): un-blinds class 9 (downstream_capability_reduced), which
     # scans the walk's attempted run ids for component.failed/skipped events — a
@@ -1149,6 +1151,59 @@ def _run_plan_impl(
                             "reason": reason,
                         }
                     )
+            # The second fan-out (C32): after merge, the kept links discovery
+            # added get their own item search, dispatched and joined before
+            # ``toc_search_new`` picks their documents.
+            if step.component == "toc_search_new" and not toc_new_joined:
+                toc_new_joined = True
+                from policy_atlas.theory_of_change.check import links_without_search
+
+                with engine.connect() as conn:
+                    new_links = links_without_search(
+                        conn, task_id=task_id, walk_id=capability_run_id
+                    )
+                if new_links:
+                    stage = option_search.TOC_NEW_LINK_SEARCHES_STAGE
+                    new_children = option_search.dispatch_toc_item_searches(
+                        engine,
+                        task_id=task_id,
+                        parent_id=capability_run_id,
+                        plan_row={
+                            "plan_id": steering_state.plan_id,
+                            "version": steering_state.plan_version,
+                            "payload": steering_state.plan.model_dump(mode="json"),
+                        },
+                        backends=backend_bundle,
+                        session_id=session_id,
+                        links=new_links,
+                        stage=stage,
+                    )
+                    joined = option_search.join_children(
+                        engine,
+                        task_id=task_id,
+                        parent_id=capability_run_id,
+                        child_ids=new_children,
+                        stage=stage,
+                        timeout=option_search.toc_join_timeout(len(new_children)),
+                    )
+                    # A failed search leaves its link to the pool fallback.
+                    if joined.failed:
+                        reason = (
+                            f"{joined.failed} of {joined.total} new-link searches did not finish"
+                        )
+                        step_outcomes.append(
+                            RunStepOutcome(
+                                component=stage,
+                                run_id=None,
+                                status="skipped",
+                                wall_clock_s=None,
+                                skipped=True,
+                                reason=reason,
+                            )
+                        )
+                        flagged_events.append(
+                            {"component": stage, "status": "skipped", "reason": reason}
+                        )
         if purpose == LONGLIST_PURPOSE:
             # The fan-out: the first step after ``suggest`` (whether it
             # succeeded or not — the user's own options are entrants either
