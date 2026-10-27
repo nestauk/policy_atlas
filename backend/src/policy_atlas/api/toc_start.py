@@ -40,6 +40,7 @@ from policy_atlas.core.schema import (
     evidence_scope,
     runs,
     task_agent_transcript,
+    toc_pathway,
 )
 from policy_atlas.runtime.capability_registry import (
     THEORY_OF_CHANGE,
@@ -369,7 +370,13 @@ def post_agent_message(engine: Engine, *, task_id: uuid.UUID, text: str) -> None
 
 
 def check_changes(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> list[str]:
-    """The plain-language changes a check walk's steps recorded (J5)."""
+    """The plain-language changes a check walk made, net (J5).
+
+    Pathways the check found in the evidence are listed once, as one line naming
+    those it kept; a found pathway that a later step merged or set aside in the
+    same check is left out. Changes to pathways that existed before the check,
+    and to conditions and the critical connection, are listed as recorded.
+    """
     payloads = conn.execute(
         select(event_log.c.payload)
         .select_from(
@@ -383,7 +390,33 @@ def check_changes(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) -
         .where(event_log.c.event_type == TOC_CHANGED_EVENT)
         .order_by(event_log.c.sequence)
     ).scalars()
-    return [str(line) for payload in payloads for line in (payload or {}).get("changes", [])]
+    found: list[str] = []
+    lines: list[str] = []
+    for payload in payloads:
+        step = (payload or {}).get("step")
+        for item in (payload or {}).get("changes", []):
+            if not isinstance(item, dict):
+                lines.append(str(item))
+            elif step == "toc_discover":
+                found.append(str(item["pathway_id"]))
+            elif str(item.get("pathway_id")) not in found:
+                lines.append(str(item["text"]))
+    if found:
+        labels = {
+            str(row.pathway_id): row.label
+            for row in conn.execute(
+                select(toc_pathway.c.pathway_id, toc_pathway.c.label)
+                .where(toc_pathway.c.task_id == task_id)
+                .where(toc_pathway.c.pathway_id.in_([uuid.UUID(pid) for pid in found]))
+                .where(toc_pathway.c.status == "kept")
+            )
+        }
+        kept = [labels[pid] for pid in found if pid in labels]
+        if kept:
+            names = ", ".join(f"“{label}”" for label in kept)
+            noun = "pathway" if len(kept) == 1 else "pathways"
+            lines.insert(0, f"Added {len(kept)} {noun} found in the evidence: {names}.")
+    return lines
 
 
 def post_check_message(engine: Engine, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> None:

@@ -503,7 +503,7 @@ def toc_discover_scope(
         (short[link.source], short[link.target]): key for key, link in graph.links.items()
     }
     log_ = store.ChangeLog()
-    changes: list[str] = []
+    changes: list[store.Change] = []
     accepted = rejected = failed_batches = 0
     for batch, outcome in zip(batches, outcomes, strict=True):
         response = _outcome_value(outcome, usage)
@@ -571,17 +571,23 @@ def toc_discover_scope(
                 pairs.add((source, target))
                 link_of_pair[(source, target)] = str(link_id)
                 link_ids.append(link_id)
+            pathway_id = uuid.uuid4()
             store.insert_pathway(
                 conn,
                 log_,
                 task_id=task_id,
-                pathway_id=uuid.uuid4(),
+                pathway_id=pathway_id,
                 kind=proposal.kind,
                 label=proposal.label,
                 link_ids=link_ids,
                 origin="found_in_evidence",
             )
-            changes.append(f"Added a {proposal.kind} pathway from the evidence: {proposal.label}.")
+            changes.append(
+                {
+                    "text": f"Added a {proposal.kind} pathway from the evidence: {proposal.label}.",
+                    "pathway_id": str(pathway_id),
+                }
+            )
     store.record(
         conn, task_id=task_id, run_id=run_id, step="toc_discover", log=log_, changes=changes
     )
@@ -681,7 +687,7 @@ def toc_merge_scope(
     kept = {key for key in order if key not in decisions or decisions[key].action == "keep"}
     kept = _keep_one_of_each(order, kinds, kept)
     log_ = store.ChangeLog()
-    changes: list[str] = []
+    changes: list[store.Change] = []
     merged = set_aside = 0
     for key in order:
         if key in kept:
@@ -704,7 +710,7 @@ def toc_merge_scope(
             observed_revision=row.revision,
             values={"status": "set_aside", "reason": reason, **_flag_values(row, reason)},
         ):
-            changes.append(line)
+            changes.append({"text": line, "pathway_id": str(row.pathway_id)})
             if decision.action == "merge":
                 merged += 1
             else:
@@ -1149,7 +1155,7 @@ def toc_choose_scope(
         ]
 
     log_ = store.ChangeLog()
-    changes: list[str] = []
+    changes: list[store.Change] = []
     set_aside = 0
     for kind_paths, limit in ((success, MAX_SUCCESS_PATHWAYS), (failure, MAX_FAILURE_PATHWAYS)):
         if len(kind_paths) <= limit:
@@ -1173,7 +1179,12 @@ def toc_choose_scope(
             ):
                 p.status = "set_aside"
                 set_aside += 1
-                changes.append(f"Set aside pathway “{row.label}”: {reason}")
+                changes.append(
+                    {
+                        "text": f"Set aside pathway “{row.label}”: {reason}",
+                        "pathway_id": str(row.pathway_id),
+                    }
+                )
 
     conditions_added = 0
     for key, condition in added:
@@ -1227,7 +1238,7 @@ def _pick_critical(
     task_id: uuid.UUID,
     graph: Graph,
     grades: dict[str, tuple[GradeResult, GradeResult]],
-    changes: list[str],
+    changes: list[store.Change],
 ) -> bool:
     """Re-pick the critical connection; a user-marked one is kept (C6)."""
     current = {

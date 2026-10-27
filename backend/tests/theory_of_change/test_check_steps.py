@@ -415,6 +415,53 @@ def test_merge_keeps_one_of_each_kind_and_the_thread_lists_its_changes(
     assert replies[-1].endswith(STRESS_TEST_MESSAGE)
 
 
+def _replies(engine: Engine, task_id: uuid.UUID) -> list[str]:
+    with engine.connect() as conn:
+        return list(
+            conn.execute(
+                select(task_agent_transcript.c.reply)
+                .where(task_agent_transcript.c.task_id == task_id)
+                .order_by(task_agent_transcript.c.turn_index)
+            ).scalars()
+        )
+
+
+class _DiscoversThenMerges(_Discovers):
+    """The found route is merged into the first success pathway in the same check."""
+
+    def merge(self, *, plan: Any, pathways: Any) -> Any:
+        from policy_atlas.theory_of_change.merge_prompt import MergeDecisionWire, MergeResponse
+
+        self._next("merge", {})
+        first = next(p for p in pathways if p["kind"] == "success")
+        decisions = [
+            MergeDecisionWire(
+                pathway=str(p["key"]),
+                action="merge" if p["label"] == "Found route" else "keep",
+                into=str(first["key"]) if p["label"] == "Found route" else None,
+                reason="Same mechanism.",
+            )
+            for p in pathways
+        ]
+        return MergeResponse(decisions=decisions), None
+
+
+def test_the_check_message_names_found_pathways_it_kept_once(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    reply = _replies(engine, _run(engine, cleanup, _Discovers()))[-1]
+    assert "Added 1 pathway found in the evidence: “Found route”." in reply
+    assert "from the evidence: Found route" not in reply
+
+
+def test_the_check_message_leaves_out_a_found_pathway_merged_in_the_same_check(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    reply = _replies(engine, _run(engine, cleanup, _DiscoversThenMerges()))[-1]
+    assert "Found route" not in reply
+    assert "Merged pathway" not in reply
+
+
 def test_an_os_longlist_and_a_toc_check_join_side_by_side(
     engine: Engine, cleanup: list[uuid.UUID]
 ) -> None:

@@ -50,6 +50,10 @@ class GraphRows:
     band_items: list[Row[Any]]
 
 
+#: One line of the J5 change list: plain text, or text about one pathway.
+Change = str | dict[str, str]
+
+
 @dataclass
 class ChangeLog:
     """What one step wrote: created row ids, before-states and skipped rows."""
@@ -203,7 +207,7 @@ def record(
     run_id: uuid.UUID | None,
     step: str,
     log: ChangeLog,
-    changes: list[str] | None = None,
+    changes: list[Change] | None = None,
 ) -> None:
     """Write one ``toc.changed`` event for everything a step wrote.
 
@@ -213,7 +217,9 @@ def record(
         run_id: The step's run.
         step: The step name (``toc_draft``, ``toc_merge``, ...).
         log: What the step wrote.
-        changes: Plain-language changes for the Task Agent's list (J5).
+        changes: Plain-language changes for the Task Agent's list (J5). A
+            change about one pathway is ``{"text", "pathway_id"}``, so the list
+            can leave out a pathway the same check added and then set aside.
     """
     events.append(
         conn,

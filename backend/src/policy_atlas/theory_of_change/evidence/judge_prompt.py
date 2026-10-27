@@ -1,4 +1,4 @@
-"""The ``toc_judge_v1`` prompt: one link against one document (task 054, C5).
+"""The ``toc_judge_v2`` prompt: one link against one document (task 054, C5).
 
 Lead-authored and versioned. One call per link and document returns two
 stances, each with its own verbatim quote: *worked elsewhere* (where this step
@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_JUDGE_PROMPT_VERSION = "toc_judge_v1"
+TOC_JUDGE_PROMPT_VERSION = "toc_judge_v2"
 
 TOC_JUDGE_MAX_OUTPUT_TOKENS = 4_000
 
@@ -133,9 +133,22 @@ work here").
 - not_about: the document says nothing about this place, population or the
   step's conditions.
 
+The stated place includes the wider areas it belongs to and the parts inside
+it: for England, a study of the UK, Great Britain or an English region counts
+as the stated place. The place can come from the title when the text does not
+repeat it; the quote still comes from the text.
+
+A study done in the stated place, for this kind of population, that answers
+worked_elsewhere answers holds_here the same way: give both stances, each
+with a quote (the same passage is fine). This includes earlier or narrower
+versions of the intervention in that place: a study of older, weaker UK
+rules that found no change challenges holds_here too.
+
 A document can support one question and be not_about the other. A trial in
-another country usually answers worked_elsewhere only. A UK survey showing a
-condition holds may answer holds_here only.
+another country usually answers worked_elsewhere only, unless it shows one
+of the step's conditions holding or failing in a setting clearly like the
+stated place. A UK survey showing a condition holds may answer holds_here
+only.
 
 ## Quotes
 
