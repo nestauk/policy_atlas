@@ -75,9 +75,9 @@ function numberOf(value: unknown): number | null {
  * The Shortlist: its own Result view beside Baseline and Longlist (task 055,
  * item 8, as amended by the owner after the build). The question as the
  * title; the places in two groups, each with the option's description and,
- * for a pick, Policy Atlas's reason; the appetite control on the picks'
- * heading, since it is what it steers; the not-covered note at the foot of
- * the picks; Suggest more and a way back to the longlist; the disabled
+ * for a pick, Policy Atlas's reason; the not-covered note at the foot of
+ * the picks; the risk appetite beside Suggest more, the two controls that
+ * re-propose; a way back to the longlist; the disabled
  * Assess as the page's end. Adding places happens on the longlist, where
  * every row and card carries Add to shortlist.
  */
@@ -208,22 +208,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
       )}
 
       <section className="mt-8">
-        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-          <h2 className={REPORT_SECTION_HEADING_CLASS}>Policy Atlas's picks</h2>
-          <label className="flex items-center gap-2 text-meta text-grey">
-            <span>Appetite</span>
-            <RiskAppetiteSelect
-              value={appetite}
-              disabled={walkActive || patchPlan.isPending}
-              onChange={(value) => patchPlan.mutate({ scoping: { risk_appetite: value } })}
-            />
-          </label>
-        </div>
-        {patchPlan.isError && (
-          <p role="alert" className="mt-2 text-body text-red">
-            {actionFailedNotice(patchPlan.error, "The appetite couldn't be changed. Try again.")}
-          </p>
-        )}
+        <h2 className={REPORT_SECTION_HEADING_CLASS}>Policy Atlas's picks</h2>
         {picks.length > 0 ? (
           <ul role="list" className="mt-3 divide-y divide-line border-y border-line">
             {picks.map(renderPlaceRow)}
@@ -250,7 +235,15 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
         )}
       </section>
 
-      <div className="print-hide mt-6 flex flex-wrap items-center gap-3">
+      <div className="print-hide mt-6 flex flex-wrap items-center gap-x-4 gap-y-3">
+        <label className="flex items-center gap-2 text-meta text-grey">
+          <span>Risk appetite</span>
+          <RiskAppetiteSelect
+            value={appetite}
+            disabled={walkActive || patchPlan.isPending}
+            onChange={(value) => patchPlan.mutate({ scoping: { risk_appetite: value } })}
+          />
+        </label>
         <Button
           variant="primary"
           size="sm"
@@ -267,6 +260,11 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
           <span className="text-meta text-grey">Press Suggest more to re-propose</span>
         )}
       </div>
+      {patchPlan.isError && (
+        <p role="alert" className="mt-2 text-body text-red">
+          {actionFailedNotice(patchPlan.error, "The appetite couldn't be changed. Try again.")}
+        </p>
+      )}
       {suggest.isError && (
         <p role="alert" className="mt-2 text-body text-red">
           {actionFailedNotice(suggest.error, "Policy Atlas couldn't start. Try again.")}

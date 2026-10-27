@@ -78,10 +78,10 @@ AUTHORITY_LABELS: dict[str, str] = {
 
 #: The maturity rung's words (contract § Terms).
 RUNG_WORDS: dict[str, str] = {
-    "proposal_only": "Proposal only",
-    "described": "Described",
+    "proposal_only": "Proposed, not yet implemented",
+    "described": "Implemented, not yet evaluated",
     "evaluated": "Evaluated",
-    "reviewed": "Reviewed",
+    "reviewed": "Evaluated, including a review",
 }
 
 #: The ids of the three built-in checks; the callout never shows them.

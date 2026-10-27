@@ -339,6 +339,18 @@ here, not silent)._
     column for Potential impact (contract S22, A23 say no mark; a mark turns a labelled conditional
     into a ranking), and whether the rung overlaps the longlist's "N evaluated it · M more describe it"
     (recommendation: longlist rows keep the counts; the rung is the shortlist's and the card's word).
+    **Third round (owner, 2026-10-27): the three appetite answers reworded** after a wording
+    discussion ("tried" blurs implemented with measured; "evidence" is what every option rests
+    on; "evaluated" is the civil servant's word and does not collide because Policy Atlas *assesses*
+    and documents *evaluate*). Contract S2's answers become stances with the mix as the clause:
+    "Cautious: only options that have been evaluated somewhere" · "Balanced: mostly evaluated, plus
+    one or two not yet evaluated" · "Ambitious: the biggest ideas, even those never implemented"
+    (ladder 1: the cautious set stays evaluated-only, S4 unchanged). The control is named "Risk
+    appetite" and sits in the actions row beside Suggest more, the two controls that re-propose. The
+    rung's words become "Proposed, not yet implemented" · "Implemented, not yet evaluated" ·
+    "Evaluated" · "Evaluated, including a review" on the rows, the card and the card text the model
+    reads; the Task Agent's offer and its free-text parser take the stance words;
+    `task_agent_scoping_v6` and `shortlist_v1` re-pinned (neither has shipped).
     Gate: `make frontend-verify` and the full `make verify` on the final snapshot (below).
 12. **A missing longlist answers the generic 404** (`not_found`) on Suggest more, not a `no_longlist`
     code: the app's 404 handler hides whether a task exists (the existing access-control rule), so the

@@ -602,22 +602,26 @@ depth, as a part (id 'appetite') with exactly these three options; the
 middle one is the primary, because it is what the plan takes when the user
 does not choose:
 
-- id 'appetite_tried', label "Only options tried elsewhere", sub "Every
-  place goes to an option that has been evaluated somewhere."
-- id 'appetite_mostly', label "Mostly tried, one or two new", sub "Most
-  places go to evaluated options; one or two to bigger or newer ideas."
-  The primary.
-- id 'appetite_open', label "Include the biggest ideas, even untested",
-  sub "One evaluated anchor; the rest chosen for ambition and spread."
+- id 'appetite_tried', label "Cautious: only options that have been
+  evaluated somewhere", sub "Every place goes to an option that has been
+  evaluated somewhere."
+- id 'appetite_mostly', label "Balanced: mostly evaluated, plus one or two
+  not yet evaluated", sub "Most places go to evaluated options; one or two
+  to bigger or newer ideas." The primary.
+- id 'appetite_open', label "Ambitious: the biggest ideas, even those never
+  implemented", sub "One evaluated anchor; the rest chosen for ambition and
+  spread."
 
 Compile appetite_tried → risk_appetite 'tried_only', appetite_mostly →
 'mostly_tried', appetite_open → 'open_to_untested'. The user may also
-choose in their own words ("only things that have been tried", "I want
-the big ideas too"). Never infer it from the tone of the question: when
-the user does not choose, leave the field empty and say the plan takes
-"Mostly tried, one or two new", which they can change in the plan document
-or later from the longlist. Appetite changes the mix of the shortlist,
-never its order, and never which options reach the longlist.
+choose in their own words ("cautious", "only what has been evaluated",
+"let's be ambitious", "I want the big ideas too"). Never infer it from the
+tone of the question: when the user does not choose, leave the field empty
+and say the plan takes the balanced answer, which they can change in the
+plan document or later from the longlist. Appetite changes the mix of the
+shortlist, never its order, and never which options reach the longlist.
+Documents evaluate options; Policy Atlas assesses them later. Keep the two
+words apart.
 
 ## Check-ins
 

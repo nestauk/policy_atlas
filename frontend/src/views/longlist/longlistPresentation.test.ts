@@ -280,15 +280,15 @@ describe("maturityLine (task 055)", () => {
 
   it("words the four rungs", () => {
     expect(MATURITY_WORDS).toEqual({
-      proposal_only: "Proposal only",
-      described: "Described",
+      proposal_only: "Proposed, not yet implemented",
+      described: "Implemented, not yet evaluated",
       evaluated: "Evaluated",
-      reviewed: "Reviewed",
+      reviewed: "Evaluated, including a review",
     });
-    expect(maturityLine({ ...base, rung: "proposal_only" })).toBe("Proposal only");
-    expect(maturityLine({ ...base, rung: "described" })).toBe("Described");
+    expect(maturityLine({ ...base, rung: "proposal_only" })).toBe("Proposed, not yet implemented");
+    expect(maturityLine({ ...base, rung: "described" })).toBe("Implemented, not yet evaluated");
     expect(maturityLine({ ...base, rung: "evaluated" })).toBe("Evaluated");
-    expect(maturityLine({ ...base, rung: "reviewed" })).toBe("Reviewed");
+    expect(maturityLine({ ...base, rung: "reviewed" })).toBe("Evaluated, including a review");
   });
 
   it("adds the design mix after the rung word", () => {
@@ -307,7 +307,7 @@ describe("maturityLine (task 055)", () => {
     );
     expect(
       maturityLine({ ...base, rung: "reviewed", design_mix: "3 observational", none_in_your_setting: true, stale: true }, now),
-    ).toBe("Reviewed · 3 observational · none in your setting · most recent evaluation before 2021");
+    ).toBe("Evaluated, including a review · 3 observational · none in your setting · most recent evaluation before 2021");
   });
 
   it("renders nothing for a null maturity", () => {

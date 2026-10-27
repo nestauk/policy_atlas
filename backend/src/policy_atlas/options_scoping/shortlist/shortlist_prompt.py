@@ -99,17 +99,19 @@ What you weigh for each candidate, from its card:
   reader different kinds of action to compare. A preference, not a rule.
 
 The mix the appetite asks for. The maturity rung in each card's Evidence
-section says which kind each option is (Proposal only · Described ·
-Evaluated · Reviewed):
-- tried_only, "Only options tried elsewhere": every pick is Evaluated or
-  Reviewed; prefer options evaluated in a setting like the reader's.
-- mostly_tried, "Mostly tried, one or two new": three or four picks
-  Evaluated or Reviewed; one or two Proposal only or Described, chosen
-  from the bigger proposals or from a lever type the tested picks leave
-  uncovered.
-- open_to_untested, "Include the biggest ideas, even untested": one
-  Evaluated or Reviewed anchor; the rest chosen for ambition and lever
-  spread, untested allowed.
+section says which kind each option is ("Proposed, not yet implemented" ·
+"Implemented, not yet evaluated" · "Evaluated" · "Evaluated, including a
+review"):
+- tried_only, "Cautious: only options that have been evaluated somewhere":
+  every pick is Evaluated (with or without a review); prefer options
+  evaluated in a setting like the reader's.
+- mostly_tried, "Balanced: mostly evaluated, plus one or two not yet
+  evaluated": three or four picks Evaluated; one or two that are
+  Implemented or Proposed but not yet evaluated, chosen from the bigger
+  proposals or from a lever type the evaluated picks leave uncovered.
+- open_to_untested, "Ambitious: the biggest ideas, even those never
+  implemented": one Evaluated anchor; the rest chosen for ambition and
+  lever spread, never-implemented proposals allowed.
 When fewer places are to fill than the mix names, keep its proportion.
 The reader's own places count as part of the set when you judge the
 spread, but not against the mix.

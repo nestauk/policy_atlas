@@ -152,9 +152,9 @@ DEFAULT_RISK_APPETITE: RiskAppetite = "mostly_tried"
 #: The three answers in the words the user sees (contract S2). The frontend
 #: holds the same words once in ``planVocabulary.ts`` (A25).
 RISK_APPETITE_LABELS: dict[str, str] = {
-    "tried_only": "Only options tried elsewhere",
-    "mostly_tried": "Mostly tried, one or two new",
-    "open_to_untested": "Include the biggest ideas, even untested",
+    "tried_only": "Cautious: only options that have been evaluated somewhere",
+    "mostly_tried": "Balanced: mostly evaluated, plus one or two not yet evaluated",
+    "open_to_untested": "Ambitious: the biggest ideas, even those never implemented",
 }
 
 #: The scoping steering lattice's point names. Pinned here, not imported from

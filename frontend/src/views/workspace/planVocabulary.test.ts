@@ -286,9 +286,9 @@ describe("options-scoping plan vocabulary (task 044)", () => {
 describe("RISK_APPETITE_LABELS", () => {
   it("holds the three approved answers, one per generated enum value", () => {
     expect(RISK_APPETITE_LABELS).toEqual({
-      tried_only: "Only options tried elsewhere",
-      mostly_tried: "Mostly tried, one or two new",
-      open_to_untested: "Include the biggest ideas, even untested",
+      tried_only: "Cautious: only options that have been evaluated somewhere",
+      mostly_tried: "Balanced: mostly evaluated, plus one or two not yet evaluated",
+      open_to_untested: "Ambitious: the biggest ideas, even those never implemented",
     });
     expect(Object.keys(RISK_APPETITE_LABELS).sort()).toEqual(["mostly_tried", "open_to_untested", "tried_only"]);
   });

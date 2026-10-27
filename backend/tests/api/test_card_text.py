@@ -133,7 +133,7 @@ def test_a_card_with_no_profile_and_no_documents_says_so() -> None:
     card = option_card_text(OptionOut.model_validate(data), today_year=2026)
     assert "### What it would take" not in card.fixed
     assert "No document names this option yet." in card.fixed
-    assert "Maturity: Proposal only" in card.fixed
+    assert "Maturity: Proposed, not yet implemented" in card.fixed
     assert card.document_lines == []
 
 

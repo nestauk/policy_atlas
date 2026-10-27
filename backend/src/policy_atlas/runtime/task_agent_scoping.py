@@ -408,17 +408,17 @@ _STUB_DEPTH_OPTIONS: tuple[tuple[str, str, str], ...] = (
 _STUB_APPETITE_OPTIONS: tuple[tuple[str, str, str], ...] = (
     (
         "appetite_tried",
-        "Only options tried elsewhere",
+        "Cautious: only options that have been evaluated somewhere",
         "Every place goes to an option that has been evaluated somewhere.",
     ),
     (
         "appetite_mostly",
-        "Mostly tried, one or two new",
+        "Balanced: mostly evaluated, plus one or two not yet evaluated",
         "Most places go to evaluated options; one or two to bigger or newer ideas.",
     ),
     (
         "appetite_open",
-        "Include the biggest ideas, even untested",
+        "Ambitious: the biggest ideas, even those never implemented",
         "One evaluated anchor; the rest chosen for ambition and spread.",
     ),
 )
@@ -456,11 +456,18 @@ def _appetite_from(text: str) -> str | None:
     if option_id in APPETITE_OPTION_IDS:
         return APPETITE_OPTION_IDS[option_id]
     lowered = text.lower()
-    if "mostly tried" in lowered or "one or two new" in lowered:
+    if "balanced" in lowered or "mostly evaluated" in lowered or "one or two new" in lowered:
         return "mostly_tried"
-    if "biggest ideas" in lowered or "big ideas" in lowered or "untested" in lowered:
+    if (
+        "ambitious" in lowered
+        or "biggest ideas" in lowered
+        or "big ideas" in lowered
+        or "untested" in lowered
+        or "never implemented" in lowered
+    ):
         return "open_to_untested"
-    if "tried elsewhere" in lowered or ("only" in lowered and "tried" in lowered):
+    only_evaluated = "only" in lowered and ("evaluated" in lowered or "tried" in lowered)
+    if "cautious" in lowered or only_evaluated:
         return "tried_only"
     return None
 

@@ -127,7 +127,7 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     expect(screen.getByText("Policy Atlas's reason")).toBeInTheDocument();
     expect(screen.getAllByText(/Evaluated, including a review/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/4 observational/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Not yet tried anywhere/)).toBeInTheDocument();
+    expect(screen.getByText(/Proposed, not yet implemented/)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Remove from shortlist" })).toHaveLength(2);
   });
 

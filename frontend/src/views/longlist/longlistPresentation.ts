@@ -517,10 +517,10 @@ type MaturityOut = components["schemas"]["MaturityOut"];
 
 /** The maturity rung's word (task 055, item 7). */
 export const MATURITY_WORDS: Record<MaturityOut["rung"], string> = {
-  proposal_only: "Proposal only",
-  described: "Described",
+  proposal_only: "Proposed, not yet implemented",
+  described: "Implemented, not yet evaluated",
   evaluated: "Evaluated",
-  reviewed: "Reviewed",
+  reviewed: "Evaluated, including a review",
 };
 
 /** The rung line: the rung word, then ` · {design mix}` when there is one,
@@ -548,18 +548,17 @@ export function maturityWords(maturity: MaturityOut | null | undefined, now: Dat
 }
 
 /** The shortlist row's evidence footing in plain words (owner, 2026-10-27:
- *  the rung line read as jargon): "Not yet tried anywhere" · "Described,
- *  not evaluated" · "Evaluated" / "Evaluated, including a review", then
- *  ", not in {Where}" and ", last before {year}" as they apply. */
+ *  the rung line read as jargon): the rung's words, then ", not in {Where}"
+ *  and ", last before {year}" as they apply. Policy Atlas assesses;
+ *  documents evaluate — the words keep that line. */
 export function maturityPhrase(
   maturity: MaturityOut | null | undefined,
   where: string | null | undefined,
   now: Date = new Date(),
 ): string | null {
   if (maturity == null) return null;
-  if (maturity.rung === "proposal_only") return "Not yet tried anywhere";
-  if (maturity.rung === "described") return "Described, not evaluated";
-  const parts: string[] = [maturity.rung === "reviewed" ? "Evaluated, including a review" : "Evaluated"];
+  if (maturity.rung === "proposal_only" || maturity.rung === "described") return MATURITY_WORDS[maturity.rung];
+  const parts: string[] = [MATURITY_WORDS[maturity.rung]];
   if (maturity.none_in_your_setting) parts.push(where ? `not in ${where}` : "not in your setting");
   if (maturity.stale) parts.push(`last before ${now.getFullYear() - 5}`);
   return parts.join(", ");

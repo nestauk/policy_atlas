@@ -514,9 +514,9 @@ def test_the_appetite_labels_are_the_three_answers_of_s2() -> None:
     from policy_atlas.runtime.scoping_plan import RISK_APPETITE_LABELS, RiskAppetite
 
     assert RISK_APPETITE_LABELS == {
-        "tried_only": "Only options tried elsewhere",
-        "mostly_tried": "Mostly tried, one or two new",
-        "open_to_untested": "Include the biggest ideas, even untested",
+        "tried_only": "Cautious: only options that have been evaluated somewhere",
+        "mostly_tried": "Balanced: mostly evaluated, plus one or two not yet evaluated",
+        "open_to_untested": "Ambitious: the biggest ideas, even those never implemented",
     }
     assert set(RISK_APPETITE_LABELS) == set(get_args(RiskAppetite))
     assert get_args(contract.ScopingRiskAppetite) == get_args(RiskAppetite)

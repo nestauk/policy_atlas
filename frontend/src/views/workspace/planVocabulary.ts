@@ -294,9 +294,9 @@ export const SCOPING_DEPTH_LABEL: Record<string, string> = {
  *  the generated enum. */
 export type RiskAppetite = NonNullable<components["schemas"]["ScopingPlanPatch"]["risk_appetite"]>;
 export const RISK_APPETITE_LABELS = {
-  tried_only: "Only options tried elsewhere",
-  mostly_tried: "Mostly tried, one or two new",
-  open_to_untested: "Include the biggest ideas, even untested",
+  tried_only: "Cautious: only options that have been evaluated somewhere",
+  mostly_tried: "Balanced: mostly evaluated, plus one or two not yet evaluated",
+  open_to_untested: "Ambitious: the biggest ideas, even those never implemented",
 } satisfies Record<RiskAppetite, string>;
 
 /** Check-ins (steering mode) screen words for a scoping plan — its own
