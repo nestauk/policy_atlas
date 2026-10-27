@@ -110,6 +110,7 @@ from policy_atlas.evidence_search.sourcing.search_live import (
 from policy_atlas.theory_of_change import check, store
 from policy_atlas.theory_of_change.draft import walk_toc_plan
 from policy_atlas.theory_of_change.evidence.grade import (
+    GRADE_ORDER,
     ROBUST_MODEL_SCORE,
     STRONG_SCORE,
     DocAppraisal,
@@ -118,6 +119,11 @@ from policy_atlas.theory_of_change.evidence.grade import (
     counted_score,
     grade,
 )
+from policy_atlas.theory_of_change.evidence.judge_prompt import TOC_JUDGE_PROMPT_VERSION
+from policy_atlas.theory_of_change.evidence.pick_prompt import (
+    PICK_ABSTRACT_CHARS as PRODUCT_PICK_ABSTRACT_CHARS,
+)
+from policy_atlas.theory_of_change.evidence.pick_prompt import PICK_N
 from policy_atlas.theory_of_change.graph import item_hash, item_text
 
 HERE = Path(__file__).resolve().parent
@@ -796,6 +802,8 @@ class Link:
     walk_scope: uuid.UUID
     search_run: uuid.UUID | None
     hash_matches: bool
+    source_text: str = ""
+    target_text: str = ""
 
 
 class Harness:
@@ -898,6 +906,8 @@ class Harness:
             population=plan.target_population,
             place=plan.where or "not stated",
             neighbours=check.neighbour_lines(graph, link_id),
+            source_text=src,
+            target_text=tgt,
             walk_id=walk_id,
             walk_scope=walk_scope,
             search_run=search_run,
@@ -1025,7 +1035,8 @@ class Harness:
                 neighbours=link.neighbours,
             )
             out: dict[str, Any] = {
-                "robust_model": resp.robust_model if modelling else None,
+                # toc_judge_v5: stored as said; the grade counts it only for a modelling study.
+                "robust_model": resp.robust_model,
                 "unverified": 0,
             }
             for name, wire in (
@@ -1048,6 +1059,7 @@ class Harness:
             meter,
             (
                 "judge",
+                TOC_JUDGE_PROMPT_VERSION,
                 self.r.model_for("toc_judge"),
                 link.item_text,
                 link.neighbours,
@@ -1139,13 +1151,20 @@ class Harness:
         dois, log = self.cache.call(meter, ("system", query), run)
         return self.openalex_dois(meter, dois), log
 
-    def web_search(self, meter: Meter, query: str) -> tuple[list[Doc], dict[str, Any]]:
-        """Hosted web search, then fetch and extract each cited page (max 5)."""
+    def web_search(
+        self, meter: Meter, query: str, allowed_domains: list[str] | None = None
+    ) -> tuple[list[Doc], dict[str, Any]]:
+        """Hosted web search, then fetch and extract each cited page (max 5).
+
+        ``allowed_domains`` restricts the hosted search to those sites."""
+        tool: dict[str, Any] = {"type": "web_search"}
+        if allowed_domains:
+            tool["filters"] = {"allowed_domains": allowed_domains}
 
         def run() -> tuple[Any, list[Cost]]:
             resp = self.client.responses.create(
                 model=self.standard,
-                tools=[{"type": "web_search"}],
+                tools=[tool],
                 input=f"Search the web for: {query}\nList the most relevant pages you found, one per line.",
             )
             tool_calls = sum(
@@ -1177,7 +1196,16 @@ class Harness:
             ]
             return urls[:WEB_URLS_PER_CALL], costs
 
-        urls = self.cache.call(meter, ("web", self.standard, query), run)
+        urls = self.cache.call(
+            meter,
+            (
+                "web",
+                self.standard,
+                query,
+                *([allowed_domains] if allowed_domains else []),
+            ),
+            run,
+        )
         docs: list[Doc] = []
         log: dict[str, Any] = {
             "urls": [u for u, _ in urls],
@@ -1868,6 +1896,231 @@ def arm_l(
     )
 
 
+#: Sites the round-2 web search may use (owner, 2026-10-27): government (the Evaluation
+#: Task Force pages included), the two advertising regulators and the What Works Centres.
+R2_WEB_DOMAINS = [
+    "gov.uk",
+    "ofcom.org.uk",
+    "asa.org.uk",
+    "whatworksnetwork.org.uk",
+    "eif.org.uk",
+    "educationendowmentfoundation.org.uk",
+    "youthendowmentfund.org.uk",
+    "whatworkswellbeing.org",
+    "foundations.org.uk",
+    "whatworksgrowth.org",
+]
+
+
+def keyword_pair(
+    h: Harness, meter: Meter, text: str
+) -> tuple[list[list[Doc]], str | None]:
+    """The product's study-design keyword pair (C31): one query-writer call on ``text``,
+    its first query run with the review clause and with the trial clause, 10 each."""
+
+    def run() -> tuple[Any, list[Cost]]:
+        wire, usage = OpenAISearchGenerationBackend().generate_queries(
+            QueriesPayload(intent=text, guidance=None)
+        )
+        return validated_queries(wire)[0], [
+            llm_cost("search_queries", h.r.model_for("search_queries"), usage)
+        ]
+
+    try:
+        queries = h.cache.call(
+            meter, ("search_queries", h.r.model_for("search_queries"), text, None), run
+        )
+    except BudgetExceeded:
+        raise
+    except Exception:  # noqa: BLE001 - the product also goes on without the pair
+        return [], None
+    if not queries:
+        return [], None
+    keyword = queries[0]
+    lists = [
+        [
+            d
+            for r in h.openalex_search(meter, sl._compose_variant(keyword, clause), 10)
+            if (d := from_openalex(r, "openalex_kw"))
+        ]
+        for clause in (sl.SR_CLAUSE, sl.RCT_CLAUSE)
+    ]
+    return lists, keyword
+
+
+def semantic_docs(h: Harness, meter: Meter, text: str, n: int) -> list[Doc]:
+    records = h.cache.call(
+        meter,
+        ("openalex_semantic", text, n),
+        lambda: (
+            h.openalex.search_semantic(text, max_results=n),
+            [Cost("search_openalex_semantic", usd=OPENALEX_USD_PER_CALL)],
+        ),
+    )
+    return [d for r in records if (d := from_openalex(r, "openalex"))]
+
+
+def product_pick(
+    h: Harness, meter: Meter, link: Link, lists: list[list[Doc]], exclude: set[str]
+) -> list[Doc]:
+    """The product's pick (``toc_pick``): one fast-tier call over every candidate when
+    there are more than PICK_N, topped up abstracts-first round-robin (C28)."""
+    ordered = [[d for d in docs if not (d.ids & exclude)] for docs in lists]
+    cands = round_robin(ordered, 10**6)
+    if len(cands) <= PICK_N:
+        return cands
+    ids = {f"d{i + 1}": d for i, d in enumerate(cands)}
+    shown = [
+        {"id": k, "title": d.title, "abstract": d.abstract} for k, d in ids.items()
+    ]
+
+    def run() -> tuple[Any, list[Cost]]:
+        resp, usage = h.toc.pick(item_text=link.item_text, candidates=shown)
+        return resp.ids, [llm_cost("pick", h.r.model_for("toc_pick"), usage)]
+
+    key = [
+        (k, d.key, d.title, d.abstract[:PRODUCT_PICK_ABSTRACT_CHARS])
+        for k, d in ids.items()
+    ]
+    try:
+        chosen = h.cache.call(
+            meter, ("toc_pick", h.r.model_for("toc_pick"), link.item_text, key), run
+        )
+    except BudgetExceeded:
+        raise
+    except Exception as exc:  # noqa: BLE001 - the product falls back to round-robin too
+        meter.add(Cost("pick_failed"))
+        print(
+            f"pick failed for {link.link_id[:8]}: {type(exc).__name__}", file=sys.stderr
+        )
+        chosen = []
+    picked = [ids[i] for i in dict.fromkeys(chosen) if i in ids][:PICK_N]
+    keys = {d.key for d in picked}
+    return (
+        picked
+        + [d for d in pick_rule(ordered, 10**6, "abs") if d.key not in keys][
+            : PICK_N - len(picked)
+        ]
+    )
+
+
+def judge_and_classify(
+    h: Harness, meter: Meter, link: Link, docs: list[Doc]
+) -> dict[str, tuple[Doc, dict]]:
+    """Judge, then classify only what the judge found on topic (the product's order, C31)."""
+    verdicts = h.parallel(lambda d: h.judge(meter, link, d), docs)
+    on_topic = [
+        d
+        for d, v in zip(docs, verdicts, strict=True)
+        if (v["elsewhere"], v["here"]) != ("not_about", "not_about")
+    ]
+    h.parallel(lambda d: h.classify(meter, d), on_topic)
+    return {d.key: (d, v) for d, v in zip(docs, verdicts, strict=True)}
+
+
+def no_evidence(judged: dict[str, tuple[Doc, dict]]) -> bool:
+    return all(
+        v["elsewhere"] == "not_about" and v["here"] == "not_about"
+        for _, v in judged.values()
+    )
+
+
+def arm_r2(h: Harness, link: Link, gold: dict[str, Any]) -> list[dict[str, Any]]:
+    """Round 1 = the product's light link check with the keyword pair; round 2 (broad,
+    and broad plus a trusted-site web search) for links with no evidence, and in the
+    "-weak" variants also for links whose better grade is weak. One row per variant;
+    each round-2 row carries its added cost and wall time."""
+    sentence = link.item_text.splitlines()[0].strip()
+    m1, t1 = Meter(), time.monotonic()
+    kw_lists, keyword = keyword_pair(h, m1, link.item_text)
+    lists = [
+        semantic_docs(h, m1, sentence, 20),
+        semantic_docs(h, m1, sentence + " in the United Kingdom", 10),
+        *kw_lists,
+    ]
+    lists.append(
+        [d for r in h.overton_search(m1, sentence) if (d := from_overton(r, "overton"))]
+    )
+    pool1 = Pool()
+    for docs in lists:
+        pool1.add(docs)
+    picked1 = product_pick(h, m1, link, lists, set())
+    judged1 = judge_and_classify(h, m1, link, picked1)
+    wall1 = round(time.monotonic() - t1, 1)
+    ge, gh = grades(judged1)
+    trig_none = no_evidence(judged1)
+    trig_weak = max(
+        GRADE_ORDER.index(ge.grade), GRADE_ORDER.index(gh.grade)
+    ) <= GRADE_ORDER.index("weak")
+    base = metrics(
+        "R1",
+        link,
+        gold,
+        first20=None,
+        pool=pool1.docs,
+        screened=picked1,
+        judged=judged1,
+        meter=m1,
+        extra={
+            "keyword": keyword,
+            "triggered": False,
+            "added_usd": 0.0,
+            "added_wall_s": 0.0,
+            "arm_wall_s": wall1,
+        },
+    )
+    rows = [base]
+    if not trig_weak:
+        for name in ("R1+R2-broad", "R1+R2-web", "R1+R2-broad-weak", "R1+R2-web-weak"):
+            rows.append({**base, "arm": name})
+        return rows
+    seen = set().union(*(d.ids for d in picked1)) if picked1 else set()
+    variant_rows: dict[str, dict[str, Any]] = {}
+    for web in (False, True):
+        m2, t2 = Meter(), time.monotonic()
+        core = f"{link.source_text.strip()}; {link.target_text.strip()}"
+        kw2, keyword2 = keyword_pair(h, m2, core)
+        lists2 = [semantic_docs(h, m2, core, 20), *kw2]
+        web_log: dict[str, Any] = {}
+        if web:
+            web_docs, web_log = h.web_search(m2, core, allowed_domains=R2_WEB_DOMAINS)
+            lists2.append(web_docs)
+        picked2 = product_pick(h, m2, link, lists2, seen)
+        judged2 = judge_and_classify(h, m2, link, picked2)
+        pool2 = Pool()
+        for docs in [pool1.docs, *lists2]:
+            pool2.add(docs)
+        name = "R1+R2-web" if web else "R1+R2-broad"
+        variant_rows[name] = metrics(
+            name,
+            link,
+            gold,
+            first20=None,
+            pool=pool2.docs,
+            screened=picked1 + picked2,
+            judged={**judged1, **judged2},
+            meter=None,
+            extra={
+                "keyword2": keyword2,
+                "added_usd": round(m2.usd, 4),
+                "added_wall_s": round(time.monotonic() - t2, 1),
+                "added_cost": m2.payload(),
+                "arm_wall_s": wall1 + round(time.monotonic() - t2, 1),
+                "web_log": web_log,
+                "web_rules_round2": dict(
+                    Counter(d.web_rule for d in picked2 if d.source == "web")
+                ),
+                "r1_cost": m1.payload(),
+            },
+        )
+    for name, row in variant_rows.items():
+        rows.append(
+            {**row, "triggered": trig_none} if trig_none else {**base, "arm": name}
+        )
+        rows.append({**row, "arm": name + "-weak", "triggered": True})
+    return rows
+
+
 def arm_c(h: Harness, link: Link, gold: dict[str, Any]) -> dict[str, Any]:
     """Agentic: plan by evidence type, search four sources, chase, at most two rounds."""
     meter = Meter()
@@ -2119,6 +2372,64 @@ def compare_arms(tag: str, arms: list[str]) -> str:
     )
 
 
+def compare_r2(tag: str) -> str:
+    """Round 1 against the round-2 variants: totals and per-link rows."""
+    rows = json.loads((OUT / tag / "results.json").read_text())
+    arms = ["R1", "R1+R2-broad", "R1+R2-web", "R1+R2-broad-weak", "R1+R2-web-weak"]
+    mark = {True: "✓", False: "✗", None: ""}
+    out = [
+        f"# Second round for thin links, run {tag} (task 054)",
+        "",
+        "Round 1 = the product's light link check (3 searches by meaning and Overton, the study-design",
+        "keyword pair, the toc_pick call, judge v5). Round 2 runs for links with no supports or",
+        "challenges (or, in the -weak variants, whose better grade is weak). Added = round 2 only.",
+        "",
+        "| arm | links with round 2 | gold judged | elsewhere in band | here in band | links still none (both) | strong supports (e/h) | round 1 $ | added $ | added wall, slowest link s |",
+        "|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    by = {a: [r for r in rows if r["arm"] == a] for a in arms}
+    r1_usd = sum((r.get("cost") or {}).get("usd", 0) for r in by["R1"])
+    for a in arms:
+        rs = by[a]
+        out.append(
+            f"| {a} | {sum(bool(r.get('triggered')) for r in rs)} | {sum(r['gold_judged'] for r in rs)}/{sum(r['gold_total'] for r in rs)} | "
+            f"{sum(bool(r['in_band_elsewhere']) for r in rs)}/{len(rs)} | {sum(bool(r['in_band_here']) for r in rs)}/{len(rs)} | "
+            f"{sum(r['grade_elsewhere'] == 'none' and r['grade_here'] == 'none' for r in rs)} | "
+            f"{sum(r['supports_4_5']['elsewhere'] for r in rs)}/{sum(r['supports_4_5']['here'] for r in rs)} | "
+            f"{r1_usd:.3f} | {sum(r.get('added_usd', 0) for r in rs if r.get('triggered')):.3f} | "
+            f"{max([r.get('added_wall_s', 0) for r in rs if r.get('triggered')] or [0])} |"
+        )
+    out += [
+        "",
+        "| link | expected (e / h) | " + " | ".join(arms) + " |",
+        "|---|---|" + "---|" * len(arms),
+    ]
+    for link in sorted({r["link"] for r in rows}):
+        cells = []
+        for a in arms:
+            r = next((x for x in by[a] if x["link"] == link), None)
+            if r is None:
+                cells.append("-")
+                continue
+            extra = (
+                f", +${r.get('added_usd', 0):.3f}, +{r.get('added_wall_s', 0)} s"
+                if r.get("triggered")
+                else ""
+            )
+            cells.append(
+                f"{r['gold_judged']}/{r['gold_total']}; {r['grade_elsewhere']}{mark[r['in_band_elsewhere']]} / "
+                f"{r['grade_here']}{mark[r['in_band_here']]}{extra}"
+            )
+        exp = by["R1"][0]["expected"] if by["R1"] else {}
+        exp = next((r["expected"] for r in by["R1"] if r["link"] == link), exp)
+        out.append(
+            f"| {link[:8]} | {exp.get('elsewhere', '-')} / {exp.get('here', '-')} | "
+            + " | ".join(cells)
+            + " |"
+        )
+    return "\n".join(out) + "\n"
+
+
 def compare(tags: list[str]) -> str:
     """Side-by-side table of several runs (for example m56 and m6x), per link and arm."""
     runs = {
@@ -2219,6 +2530,11 @@ def main() -> None:
     )
     ap.add_argument("--workers", type=int, default=1, help="links run at the same time")
     args = ap.parse_args()
+    if args.compare and args.compare_name == "R2":
+        path = OUT / "compare_R2.md"
+        path.write_text(compare_r2(args.compare[0]))
+        print(path.read_text())
+        return
     if args.compare and args.compare_arms:
         path = OUT / f"compare_{args.compare_name}.md"
         path.write_text(compare_arms(args.compare[0], args.compare_arms))
@@ -2254,6 +2570,7 @@ def main() -> None:
         "L-pick": partial(arm_l, rule="pick", name="L-pick"),
         "L-pick15": partial(arm_l, rule="pick", n=15, name="L-pick15"),
         "L-pick50": partial(arm_l, rule="pick", name="L-pick50", q1_n=50),
+        "R2": arm_r2,
     }
     link_wall: dict[str, float] = {}
 
@@ -2268,16 +2585,23 @@ def main() -> None:
             )
         for arm in args.arms:  # the arms of one link run in sequence
             arm_started = time.monotonic()
-            row = arms[arm](h, link, gold_all.get(link_id, {}))
-            row["arm_wall_s"] = round(time.monotonic() - arm_started, 1)
+            out = arms[arm](h, link, gold_all.get(link_id, {}))
+            rows = (
+                out if isinstance(out, list) else [out]
+            )  # arm R2 returns its variants
+            for row in rows:
+                row.setdefault("arm_wall_s", round(time.monotonic() - arm_started, 1))
+            names = {r["arm"] for r in rows}
             h.cache.save()
             with LOCK:
                 existing = [
-                    r for r in existing if (r["link"], r["arm"]) != (link_id, arm)
-                ] + [row]
+                    r
+                    for r in existing
+                    if not (r["link"] == link_id and r["arm"] in names)
+                ] + rows
                 results_path.write_text(json.dumps(existing, indent=1, default=str))
                 print(
-                    f"{link_id[:8]} {arm} done in {row['arm_wall_s']}s; spend this run "
+                    f"{link_id[:8]} {arm} done in {round(time.monotonic() - arm_started, 1)}s; spend this run "
                     f"${h.cache.spent:.3f}, all runs ${h.cache.total:.3f}",
                     file=sys.stderr,
                 )
