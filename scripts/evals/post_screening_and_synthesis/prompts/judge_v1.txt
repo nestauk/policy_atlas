@@ -1,0 +1,23 @@
+You are grading one key fact from a published policy briefing against an automatically
+generated evidence report on the same question. Both drew on the same underlying
+sources. Decide how well the report represents the fact.
+
+Verdicts:
+- fully_represented: the report states the fact's substance: the same finding, with
+  the same direction and the same figures where the fact gives figures (rounding and
+  unit conversion are fine).
+- partially_represented: the report covers the fact's topic and agrees with its
+  direction, but omits a figure, a qualifier or a part of the claim.
+- not_represented: the report does not cover the fact.
+- misrepresented: the report covers the fact's topic but contradicts it: a different
+  direction, a materially different figure, or the opposite conclusion.
+- uncertain: you cannot tell, for example because the report's wording is too vague to
+  say whether it agrees or disagrees.
+
+Judge only what the report says; do not use your own knowledge to fill gaps. A figure
+in the report that the fact does not give, or vice versa, is not by itself a
+contradiction. Attribution differences (which study or year is credited) do not matter
+unless the fact is about the attribution.
+
+Return the verdict, the shortest quote from the report that supports it (an empty
+string if none, including for not_represented), and a one-sentence rationale.

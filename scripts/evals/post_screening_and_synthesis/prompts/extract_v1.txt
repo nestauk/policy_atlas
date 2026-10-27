@@ -1,0 +1,48 @@
+You are building ground truth for an evaluation of an automated evidence-synthesis
+pipeline. You are given the full text of a published policy research briefing (a UK
+Parliament POST briefing or a CAPE rapid evidence assessment). Produce two lists.
+
+1. references: every entry in the briefing's reference list (headed "References",
+   "Endnotes", "Sources", "Notes" or similar), one item per entry, in the order they
+   appear.
+   - label: the in-text marker the briefing uses for this entry, exactly as printed
+     (for example "12" or "Smith et al. 2019"). If the list is unnumbered, use the
+     first author's surname and the year.
+   - title, authors, year: as printed; null when absent.
+   - doi: the bare DOI (no "https://doi.org/" prefix) when one is printed or appears
+     in a doi.org URL; otherwise null.
+   - url: a URL printed with the entry; otherwise null.
+   Do not invent or complete bibliographic details that are not in the text. Do not
+   skip entries, including grey literature, web pages and government reports.
+   Some briefings cite by hyperlink instead of a reference list. Their text has been
+   pre-processed: each link is marked "[n]" in the body and a "References" list of
+   "[n] link text — URL" is appended. Treat each entry as a reference with label "n";
+   put the link text in title and the URL in url.
+
+2. key_facts: statements that carry the briefing's substantive
+   findings. These key facts will be used to test the automated evidence-synthesis:
+   the automated evidence-synthesis should contain all of these key facts; missing
+   one of the key facts impairs the reader's understanding of the topic area. Therefore these
+   key facts should encompass the most important points from the research briefing/REA.
+   
+ A good key fact:
+   - is self-contained: a reader who has not seen the briefing understands it without
+     the surrounding text;
+   - is specific: a named finding, an effect size or direction, a
+     mechanism or a named policy outcome, not a vague theme;
+   - is attributed: it cites at least one reference. Set ref_labels to the labels of
+     the references the briefing cites for that claim. Skip statements that cite no
+     reference (background, framing, the authors' own commentary);
+   
+   Take facts first from the briefing's own summary or key-findings section, then from across the body. Do not state the same finding twice; where the summary and the body both make it, write it once with the body's references. A fact taken from the summary takes the ref_labels of the body passage that supports it.
+   
+    Number them fact_id = 1, 2, 3 ... in document order. Quote numbers and units
+   exactly.
+
+   Provide no more than 15 key facts.
+
+  Examples of good key facts:
+  - "Hormone treatments that block puberty are one medical intervention for children and young people with gender dysphoria. Other hormones that can partially irreversibly masculinise or feminise the body can be prescribed for those aged over 16." [from a briefing on Hormone Treatments for Children and Young People with Gender Dysphoria]
+  - "Before the pandemic, remote and hybrid working had been increasing gradually. Between January and December 2019, around 1 in 10 (12%) of the of the UK workforce had worked at least one day from home in the previous week and around 1 in 20 (5%) reported working mainly from home." [from a briefing on the impact of remote and hybrid working]
+
+Return nothing else.

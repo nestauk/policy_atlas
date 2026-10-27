@@ -157,6 +157,9 @@ eval-check:
 	uv run --project backend python scripts/evals/screening/tests/test_screening.py
 	uv run --project backend ruff check scripts/evals/screening
 	uv run --project backend ruff format --check scripts/evals/screening
+	uv run --project backend python scripts/evals/post_screening_and_synthesis/tests/test_synthesis.py
+	uv run --project backend ruff check scripts/evals/post_screening_and_synthesis
+	uv run --project backend ruff format --check scripts/evals/post_screening_and_synthesis
 
 # Installs frontend dependencies from the committed lockfile (task 025 F.1).
 # A prerequisite for drift-check (and any other frontend gate) in CI, where

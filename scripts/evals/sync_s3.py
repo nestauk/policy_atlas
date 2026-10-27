@@ -97,6 +97,26 @@ AREAS: dict[str, _Area] = {
         ),
         results_prefix="eval/results/search/",
     ),
+    "synthesis": _Area(
+        datasets=(
+            # The test set and hand-downloaded briefings, the human-checked ground
+            # truth, and the resolved reference-text cache. None of it is in git
+            # (the *.csv rule), so S3 is where the ground truth lives.
+            _Folder(
+                ROOT / "post_screening_and_synthesis" / "inputs",
+                "eval/datasets/synthesis/inputs/",
+            ),
+            _Folder(
+                ROOT / "post_screening_and_synthesis" / "ground_truth",
+                "eval/datasets/synthesis/ground_truth/",
+            ),
+            _Folder(
+                ROOT / "post_screening_and_synthesis" / "datasets",
+                "eval/datasets/synthesis/datasets/",
+            ),
+        ),
+        results_prefix="eval/results/synthesis/",
+    ),
 }
 
 
