@@ -11,8 +11,10 @@ re-checks it before editing.
 > change needed"; the lead checked the code claims of PR1, PR3, PR8, PR12, PR13, PR21 and
 > PR22 — they hold. All 27 folded in § Plan-review folds and in the P-decisions below; four
 > change a contract detail and are listed in the contract's § Amendments at the plan gate.
-> **Plan approval (before implementation): ⏳ owner.** ADR 0041 is written at step 4, after
-> plan approval and before any build phase.
+> **Plan approved (before implementation): 2026-10-27 · owner ("Yes").** ADR
+> [0041](../../adr/0041-options-scoping-shortlist.md) written at step 4 the same day.
+> **Design phase closed 2026-10-27; the build runs in a fresh conversation with
+> `task-cycle-build`, phases 0–8.**
 
 Executor marks per AGENTS.md § Agent-side model routing. Owner rulings stand: judgment-bearing
 build phases go to `deep-reasoner`, not `codex` (2026-09-04); anything that must be built

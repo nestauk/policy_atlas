@@ -14,8 +14,11 @@ get quite chunky").
 > **the contract-stage adversarial review ran 2026-10-27** (`codex-rescue`,
 > read-only; 30 findings, "material change needed"); 26 folded (§ Amendments
 > from the review), five put to the owner and **ruled 2026-10-27** (O1–O5,
-> S26). **Contract approved 2026-10-27 · owner ("Yes, approved").** Plan
-> approved: — · ADR: — (due; Tier 4).
+> S26). **Contract approved 2026-10-27 · owner ("Yes, approved").** **Plan
+> approved 2026-10-27 · owner ("Yes")** after the plan-stage review (§ Amendments
+> at the plan gate). **ADR [0041](../../adr/0041-options-scoping-shortlist.md)**
+> — Accepted 2026-10-27. **Design phase closed; the build runs in a fresh
+> conversation with `task-cycle-build`.**
 >
 > **Branching:** `task/055-scoping-shortlist` from `dev` at `eedf9ef9`
 > (after PR #69 merged the longlist). PR target: `dev`, squash, per
