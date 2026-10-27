@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_DRAFT_PROMPT_VERSION = "toc_draft_v2"
+TOC_DRAFT_PROMPT_VERSION = "toc_draft_v3"
 
 #: Reasoning model: the cap covers reasoning and output tokens.
 TOC_DRAFT_MAX_OUTPUT_TOKENS = 32_000
@@ -99,10 +99,16 @@ class DraftLinkWire(BaseModel):
             "adverts trigger requests at the point of sale.'"
         )
     )
-    if_text: str = Field(description="IF: what happens at the source box.")
-    for_text: str = Field(description="FOR: the people or organisations the step acts on.")
-    then_text: str = Field(description="THEN: what follows at the target box.")
-    because_text: str = Field(description="BECAUSE: the mechanism, why the step happens.")
+    if_text: str = Field(
+        description="What happens at the source box, as a clause with no leading 'if'."
+    )
+    for_text: str = Field(description="The people or organisations the step acts on.")
+    then_text: str = Field(
+        description="What follows at the target box, as a clause with no leading 'then'."
+    )
+    because_text: str = Field(
+        description="The mechanism, why the step happens, with no leading 'because'."
+    )
     conditions: list[str] = Field(
         description=(
             "0 to 2 short statements of what must hold for this step to work in the "
@@ -190,7 +196,7 @@ failure pathway may leave the chain at any layer and ends at a
 failure_outcome box.
 
 Every link carries a sentence that names both boxes and the mechanism, the
-IF / FOR / THEN / BECAUSE text, and 0 to 2 conditions. Conditions are where
+if, for, then and because clauses, and 0 to 2 conditions. Conditions are where
 the Magenta Book's assumptions live: what must be true for this step to work
 for this population, in this place, now. Write only the conditions most
 likely to fail here, the ones a reader would want tested; a step that
@@ -262,7 +268,7 @@ TOC_DRAFT_USER_TEMPLATE = """\
 </plan>
 {existing_theory_block}
 Write the draft for this plan: 2 to 4 success pathways and 1 to 3 failure
-pathways, every link with its sentence, IF / FOR / THEN / BECAUSE and 0 to 2
+pathways, every link with its sentence, if, for, then and because clauses and 0 to 2
 conditions (each condition once in the whole theory), every box with its
 result criteria, the context, the supporting activities and the critical link.
 """

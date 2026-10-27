@@ -21,7 +21,7 @@ from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 from policy_atlas.theory_of_change.draft_prompt import BoxLayer
 
-TOC_DISCOVER_PROMPT_VERSION = "toc_discover_v2"
+TOC_DISCOVER_PROMPT_VERSION = "toc_discover_v3"
 
 TOC_DISCOVER_MAX_OUTPUT_TOKENS = 12_000
 
@@ -51,10 +51,16 @@ class NewLinkWire(BaseModel):
     source: str = Field(description="An existing box key or a new key.")
     target: str = Field(description="An existing box key or a new key.")
     sentence: str = Field(description="One plain sentence naming both boxes and the mechanism.")
-    if_text: str
-    for_text: str
-    then_text: str
-    because_text: str
+    if_text: str = Field(
+        description="What happens at the source box, as a clause with no leading 'if'."
+    )
+    for_text: str = Field(description="The people or organisations the step acts on.")
+    then_text: str = Field(
+        description="What follows at the target box, as a clause with no leading 'then'."
+    )
+    because_text: str = Field(
+        description="The mechanism, why the step happens, with no leading 'because'."
+    )
     conditions: list[str] = Field(
         description="0 to 2 short statements of what must hold, none already in the theory."
     )
@@ -124,7 +130,7 @@ keys wherever the route passes through them, and add new boxes only where
 the route needs them. Links go from a box to one in the same or a later
 layer; an input never links straight to an impact. For every pair of
 neighbouring boxes the theory does not already link, add one new link with
-its sentence, IF / FOR / THEN / BECAUSE and 0 to 2 conditions: only those
+its sentence, if, for, then and because clauses and 0 to 2 conditions: only those
 most likely to fail here, and none that the theory already states.
 
 Each proposal cites 1 to 3 documents with an exact passage from each, copied
@@ -204,7 +210,7 @@ def build_discover_messages(
 
 # --- consolidate: one call over every batch's proposals ---------------------------
 
-TOC_CONSOLIDATE_PROMPT_VERSION = "toc_consolidate_v1"
+TOC_CONSOLIDATE_PROMPT_VERSION = "toc_consolidate_v2"
 TOC_CONSOLIDATE_MAX_OUTPUT_TOKENS = 12_000
 
 #: New pathways one check may add, before the 6 + 3 limit on kept pathways.
@@ -269,7 +275,7 @@ Write each route as box keys from an input to an impact (success) or a
 failure_outcome (failure). Links go from a box to one in the same or a later
 layer; an input never links straight to an impact. For every pair of
 neighbouring boxes the theory does not already link, add one new link with
-its sentence, IF / FOR / THEN / BECAUSE and 0 to 2 conditions, none that the
+its sentence, if, for, then and because clauses and 0 to 2 conditions, none that the
 theory already states; reuse the proposals' wording where it is good.
 
 Plain UK English; box text at most 12 words. The theory and proposals are
