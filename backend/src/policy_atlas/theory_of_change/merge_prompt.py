@@ -1,4 +1,4 @@
-"""The ``toc_merge_v2`` prompt: merge and set aside before judging (task 054, C6).
+"""The ``toc_merge_v3`` prompt: merge and set aside before judging (task 054, C6).
 
 Lead-authored and versioned. One frontier call over every pathway, drafted or
 found in the evidence: pathways that share a mechanism merge (the duplicate is
@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_MERGE_PROMPT_VERSION = "toc_merge_v2"
+TOC_MERGE_PROMPT_VERSION = "toc_merge_v3"
 
 TOC_MERGE_MAX_OUTPUT_TOKENS = 16_000
 
@@ -75,8 +75,7 @@ wrote or edited. Decide, for every pathway, one of:
   names a realistic way the theory fails (failure).
 - merge: the route works through the same mechanism as another pathway of
   the same kind, so the two are one route. Name the kept one in "into". Keep
-  the clearer or better-grounded of the two; a route found in the evidence
-  is usually better grounded than a drafted one with the same mechanism.
+  the more general of the two (see below).
 - set_aside: a success route that does not reach the intended change for
   this population in this place, or a failure route that is not realistic
   for this intervention.
@@ -87,11 +86,19 @@ healthy food less often"). Fold only boxes in the same layer; keep the
 clearer wording; never fold a box the user wrote into one they did not. Then
 decide the pathways on the folded boxes.
 
-Two routes are distinct when they work for a different reason (their
-because text differs in substance), not when their wording differs. Routes
-that pass through the same boxes except one, or whose extra box only
-restates a neighbour, are one route: merge them. Fewer, clearer pathways
-are better than many overlapping ones. Judge
+Two routes are one route only when they work through the same change for the
+same reason: they pass through the same boxes except one, and that box only
+restates its neighbour or names one case of it. Routes that work for a
+different reason (their because text differs in substance), or through a
+different actor (children's own purchases, parents' purchases, firms), are
+distinct: keep both, even if they end at the same box.
+
+When you merge, keep the more general route and merge the narrower one into
+it. A route whose box names one case of another route's change ("children
+choose fruit instead of sweets" is one case of "children eat fewer
+advert-prompted snacks") is the narrower one. Where a route came from
+(drafted, found in the evidence) never decides which is kept: you do not see
+the evidence yet. Judge
 relevance against the plan's intended change, population and place; never
 against what the evidence will show, which you do not see.
 
