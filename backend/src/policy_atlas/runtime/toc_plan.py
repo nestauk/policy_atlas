@@ -30,6 +30,7 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from policy_atlas.evidence_search.assess.screen import SCREENING_CRITERION_MAX
 from policy_atlas.runtime.scoping_plan import (
     ACQUIRE_ONLY_KEY,
     TARGETED_PURPOSE,
@@ -64,7 +65,7 @@ TOC_LINKS_KEY = "links"
 TOC_SCREEN_CRITERION_KEY = "screening_criterion"
 
 #: The steps criterion stays under this many characters.
-TOC_SCREEN_CRITERION_MAX_CHARS = 4000
+TOC_SCREEN_CRITERION_MAX_CHARS = SCREENING_CRITERION_MAX
 
 #: Records each item search may acquire per backend (🟡, S3; arm B).
 TOC_ITEM_RECORD_CAP = 40
@@ -231,28 +232,30 @@ def _screening_criterion(plan: TocPlan) -> str:
     )
 
 
-def steps_screening_criterion(sentences: list[str]) -> str | None:
-    """The check walk's screening criterion: evidence on any of these steps (arm B).
+def steps_screening_criterion(changes: list[str]) -> str | None:
+    """The check walk's screening criterion: evidence on any step of the theory (arm B).
 
-    A document passes when it reports evidence on at least one step, in any
-    setting and whatever the intervention. Sentences are kept in order until
-    the criterion would pass :data:`TOC_SCREEN_CRITERION_MAX_CHARS`. The place
-    never excludes a document (spec § Plan slots).
+    A document passes when it reports how one of the theory's changes (its
+    boxes) leads to another, in any setting and whatever the intervention.
+    Boxes are listed, not link sentences, because the screen caps one
+    criterion at :data:`TOC_SCREEN_CRITERION_MAX_CHARS` and twenty sentences
+    do not fit. Boxes are kept in order until the cap. The place never
+    excludes a document (spec § Plan slots).
 
     Args:
-        sentences: The covered links' sentences, most important first.
+        changes: The covered links' box texts, most important first, no repeats.
 
     Returns:
-        The criterion, or ``None`` when no sentence fits.
+        The criterion, or ``None`` when no box fits.
     """
     text = (
         "The document reports evidence (a study, a review, a model, or official "
-        "monitoring or evaluation) on at least one of these steps, in any setting "
-        "and whatever the intervention that caused it:"
+        "monitoring or evaluation) on how one of these changes leads to another, "
+        "in any setting and whatever the intervention that caused it:"
     )
     kept = 0
-    for sentence in sentences:
-        line = f"\n- {sentence.strip()}"
+    for change in changes:
+        line = f"\n- {change.strip()}"
         if len(text) + len(line) > TOC_SCREEN_CRITERION_MAX_CHARS:
             break
         text += line

@@ -85,14 +85,11 @@ def test_the_screen_criterion_names_the_theory_and_never_the_place() -> None:
 
 
 def test_the_check_screen_judges_against_the_steps_when_the_walk_carries_them() -> None:
-    criterion = steps_screening_criterion(
-        ["Ads shown fall, so energy intake falls", "Energy intake falls, so obesity falls"]
-    )
+    criterion = steps_screening_criterion(["Ads shown fall", "Energy intake falls"])
     assert criterion is not None
+    assert "how one of these changes leads to another" in criterion
     assert "in any setting and whatever the intervention" in criterion
-    assert criterion.endswith(
-        "\n- Ads shown fall, so energy intake falls\n- Energy intake falls, so obesity falls"
-    )
+    assert criterion.endswith("\n- Ads shown fall\n- Energy intake falls")
     for context in (
         {"toc_walk": "check", "screening_criterion": criterion},
         {"toc_walk": "check", "links": ["l1"], "screening_criterion": criterion},
@@ -103,12 +100,18 @@ def test_the_check_screen_judges_against_the_steps_when_the_walk_carries_them() 
 
 
 def test_the_steps_criterion_keeps_the_first_links_under_the_cap() -> None:
-    sentences = [f"Step {i} " + "x" * 200 for i in range(40)]
-    criterion = steps_screening_criterion(sentences)
+    changes = [f"Change {i} " + "x" * 80 for i in range(40)]
+    criterion = steps_screening_criterion(changes)
     assert criterion is not None
     assert len(criterion) <= TOC_SCREEN_CRITERION_MAX_CHARS
-    assert "Step 0 " in criterion
-    assert "Step 39 " not in criterion
+    assert "Change 0 " in criterion
+    assert "Change 39 " not in criterion
+    # The screen itself accepts it: a criterion over its cap fails the walk.
+    composed = compose_toc(
+        _plan(), "toc", {"toc_walk": "check", "screening_criterion": criterion}
+    )
+    _stage, criteria, _rescreen = _parse_screen_directive(composed.steps[0].directive_delta)
+    assert criteria == [criterion]
     assert steps_screening_criterion([]) is None
 
 

@@ -17,6 +17,7 @@ from policy_atlas.core.schema import (
     evidence_scope,
     task,
     task_agent_transcript,
+    toc_box,
     toc_item_evidence,
     toc_link,
 )
@@ -298,13 +299,11 @@ def test_start_drafts_then_checks_and_the_thread_stays_open(
     ]
     assert "children aged 4 to 11" in walks[1].intent
     assert "London" not in walks[1].intent
-    # The check screens against the steps it covers (arm B), minted from the graph.
+    # The check screens against the theory's changes (arm B), minted from the graph.
     criterion = walks[1].context["screening_criterion"]
     with engine.connect() as conn:
-        sentences = conn.execute(
-            select(toc_link.c.sentence).where(toc_link.c.task_id == task_id)
-        ).scalars()
-        assert all(f"- {sentence}" in criterion for sentence in sentences)
+        boxes = conn.execute(select(toc_box.c.text).where(toc_box.c.task_id == task_id)).scalars()
+        assert all(f"- {text}" in criterion for text in boxes)
     replies = _replies(engine, task_id)
     assert replies[0] == DRAFT_LANDED_MESSAGE
     assert replies[-1].endswith(STRESS_TEST_MESSAGE)

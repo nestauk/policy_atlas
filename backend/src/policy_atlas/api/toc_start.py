@@ -140,7 +140,13 @@ def check_screening_context(
     """
     graph, _ = store.load_graph(conn, task_id)
     keys, _ = links_to_check(graph, links)
-    criterion = steps_screening_criterion([graph.links[key].sentence for key in keys])
+    changes: list[str] = []
+    for key in keys:
+        for box in (graph.links[key].source, graph.links[key].target):
+            text = graph.boxes[box].text
+            if text not in changes:
+                changes.append(text)
+    criterion = steps_screening_criterion(changes)
     return {TOC_SCREEN_CRITERION_KEY: criterion} if criterion else {}
 
 
