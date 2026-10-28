@@ -133,7 +133,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
     # wired only then (task 053). Not part of TEMPLATES: the namespacing and
     # rendering checks below stay about the shipped staging config.
     BEDROCK_PA_CONFIG = json.loads(json.dumps(PA_CONFIG))
-    BEDROCK_PA_CONFIG["policy_atlas_config"]["backend"]["model_route"] = "bedrock-local"
+    BEDROCK_PA_CONFIG["policy_atlas_config"]["backend"]["model_route"] = "bedrock"
     BEDROCK_APP_STACK = PolicyAtlasStack(
         APP,
         "PaV3AppStackBedrock",

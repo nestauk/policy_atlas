@@ -101,8 +101,8 @@ One setting picks a route from it:
 | `POLICY_ATLAS_MODEL_ROUTE` | where AI calls go | key it reads |
 |---|---|---|
 | unset (`openai-direct`) | OpenAI directly: Luna, Terra, Sol | `OPENAI_API_KEY` |
-| `bedrock-local` | Amazon Bedrock in London: GPT-5.6 models, Cohere embeddings | `AWS_BEARER_TOKEN_BEDROCK` |
-| `bedrock-local-claude` | not in use; kept for testing Claude models later | `AWS_BEARER_TOKEN_BEDROCK` |
+| `bedrock` | Amazon Bedrock in London: GPT-5.6 models, Cohere embeddings | `AWS_BEARER_TOKEN_BEDROCK` |
+| `bedrock-claude` | not in use; kept for testing Claude models later | `AWS_BEARER_TOKEN_BEDROCK` |
 
 To change a model, edit the route file and open a pull request. To try a model
 without a pull request, put your own route in a separate file and name it using an env variable `POLICY_ATLAS_MODEL_ROUTE_FILE`. The old per-step `POLICY_ATLAS_*_MODEL`

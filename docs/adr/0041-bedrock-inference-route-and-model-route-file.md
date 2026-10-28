@@ -105,7 +105,7 @@ agents, `frontier` (Sol) for the two options-scoping judgment calls. So the defa
 route no longer reproduces the pre-053 literals: gpt-5.4-mini and gpt-5.5 are not used
 on any route, and the next deploy of staging and production moves fourteen steps to
 Luna and both agents to Terra. Luna was evaluated in task 051; Terra for the agents has
-run live but is not evaluated on its own. The `bedrock-local-claude` route stays in the
+run live but is not evaluated on its own. The `bedrock-claude` route stays in the
 file marked not in use, for testing Claude models later; decision 4's one-line swap
 still holds for it. Decision 2's "reproduces the pre-053 behaviour exactly" held until
 this date and was shown by the tests; the tests now pin the route file's own values.

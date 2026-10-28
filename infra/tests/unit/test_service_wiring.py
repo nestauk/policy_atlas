@@ -94,7 +94,7 @@ def test_bedrock_route_adds_only_the_bedrock_key_from_the_app_secret():
     """Task 053: a Bedrock route passes AWS_BEARER_TOKEN_BEDROCK; OpenAI direct does not."""
     container = _container(_task_definition("policy-atlas-v3-api", BEDROCK_APP_TEMPLATE))
     environment = {item["Name"]: item["Value"] for item in container["Environment"]}
-    assert environment["POLICY_ATLAS_MODEL_ROUTE"] == "bedrock-local"
+    assert environment["POLICY_ATLAS_MODEL_ROUTE"] == "bedrock"
     secrets = _secret_map(container)
     assert set(secrets) == {"DATABASE_URL", *APP_SECRET_NAMES, "AWS_BEARER_TOKEN_BEDROCK"}
     reference = json.dumps(secrets["AWS_BEARER_TOKEN_BEDROCK"])

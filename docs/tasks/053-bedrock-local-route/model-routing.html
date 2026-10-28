@@ -90,7 +90,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 <header class="masthead wrap">
   <div class="eyebrow">Policy Atlas · task 053</div>
   <h1>How the app chooses its AI models</h1>
-  <p class="lede">Every place where the app calls an AI model now asks one committed file which model to use. One setting picks a "route" in that file, and the route decides the model for every step, where the request is sent, and which key it uses. Leave the setting empty and the app calls OpenAI directly. Set it to <code>bedrock-local</code> and every call goes to Amazon Bedrock in London instead.</p>
+  <p class="lede">Every place where the app calls an AI model now asks one committed file which model to use. One setting picks a "route" in that file, and the route decides the model for every step, where the request is sent, and which key it uses. Leave the setting empty and the app calls OpenAI directly. Set it to <code>bedrock</code> and every call goes to Amazon Bedrock in London instead.</p>
 </header>
 
 <main>
@@ -103,7 +103,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 
 <section class="wrap" id="map">
   <h2>Diagram 1: steps, tiers and models</h2>
-  <p>The file has three layers. First, it lists every step that calls a text model and gives it a <b>tier</b>: a role such as "cheap and fast" or "strong writer", not a specific model. Second, each <b>route</b> says which model fills each tier. Third, a route may make a single step an exception, though none of the shipped routes does. A third route, <code>bedrock-local-claude</code>, is kept in the file for testing Claude models later; it is not in use and nothing selects it. The code only ever asks "which model for the <code>screen</code> step?", and the route answers.</p>
+  <p>The file has three layers. First, it lists every step that calls a text model and gives it a <b>tier</b>: a role such as "cheap and fast" or "strong writer", not a specific model. Second, each <b>route</b> says which model fills each tier. Third, a route may make a single step an exception, though none of the shipped routes does. A third route, <code>bedrock-claude</code>, is kept in the file for testing Claude models later; it is not in use and nothing selects it. The code only ever asks "which model for the <code>screen</code> step?", and the route answers.</p>
   <p>The tier is what makes a route short. Moving all twenty "fast" steps to a new model is one line in the file, not twenty code edits.</p>
 </section>
 
@@ -117,7 +117,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
         <rect x="500" y="12" width="220" height="30" rx="15" fill-opacity=".14" style="fill: var(--c-openai); stroke: var(--c-openai)"/>
         <text x="610" y="32" text-anchor="middle" font-weight="600">openai-direct (default)</text>
         <rect x="740" y="12" width="220" height="30" rx="15" fill-opacity=".14" style="fill: var(--c-bedrock); stroke: var(--c-bedrock)"/>
-        <text x="850" y="32" text-anchor="middle" font-weight="600">bedrock-local</text>
+        <text x="850" y="32" text-anchor="middle" font-weight="600">bedrock</text>
 
         <!-- fast -->
         <rect x="20" y="60" width="310" height="100" rx="6" style="fill: var(--ground); stroke: var(--c-plain)"/>
@@ -222,7 +222,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
         <text x="490" y="225" text-anchor="middle" font-size="11">(Amazon's own request format)</text>
         <rect x="660" y="164" width="300" height="70" rx="6" style="fill: var(--ground); stroke: var(--c-plain)"/>
         <text x="810" y="190" text-anchor="middle" font-weight="600">Search queries on Claude · not in use</text>
-        <text x="810" y="210" text-anchor="middle" font-size="11">only on the bedrock-local-claude test route;</text>
+        <text x="810" y="210" text-anchor="middle" font-size="11">only on the bedrock-claude test route;</text>
         <text x="810" y="225" text-anchor="middle" font-size="11">boto3, structured answers via a tool</text>
 
         <line x1="95" y1="234" x2="95" y2="268" stroke-width="1.5" marker-end="url(#a2)" style="stroke: var(--c-openai)"/>
@@ -259,7 +259,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
         <text x="20" y="404" font-size="11" style="fill: var(--grey)">A failed or malformed Claude answer stops the step with an error; it never falls back to OpenAI without saying so.</text>
       </g>
     </svg>
-    <div class="legend"><span style="--dot: var(--c-openai)">openai-direct</span><span style="--dot: var(--c-bedrock)">bedrock-local</span><span style="--dot: var(--c-claude)">bedrock-local-claude (not in use)</span></div>
+    <div class="legend"><span style="--dot: var(--c-openai)">openai-direct</span><span style="--dot: var(--c-bedrock)">bedrock</span><span style="--dot: var(--c-claude)">bedrock-claude (not in use)</span></div>
     <figcaption><b>Where the data is processed.</b> From London, Bedrock only offers the GPT-5.6 models under a "global" profile, so those requests may be processed in any AWS region. Cohere and Claude have EU-only profiles and use them. The Claude route is kept only for testing.</figcaption>
   </figure>
 </section>
@@ -354,7 +354,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
   <h2>How to</h2>
   <div class="two">
     <div><b class="h">Use Bedrock locally</b>Create a Bedrock API key in the AWS console (Bedrock, then API keys; a short-term key lasts up to 12 hours). In <code>backend/.env</code> set:
-<pre><code>POLICY_ATLAS_MODEL_ROUTE=bedrock-local
+<pre><code>POLICY_ATLAS_MODEL_ROUTE=bedrock
 AWS_BEARER_TOKEN_BEDROCK=&lt;your key&gt;</code></pre>Restart the backend. Remove the route line to go back to OpenAI.</div>
     <div><b class="h">Try a model without a pull request</b>Write a small file with your own <code>[routes.my-test]</code> table (copy one from the route file). Then, in <code>backend/.env</code> like any other setting, point at it by its full path and select it:
 <pre><code>POLICY_ATLAS_MODEL_ROUTE_FILE=/Users/you/my-routes.toml
@@ -379,8 +379,8 @@ POLICY_ATLAS_MODEL_ROUTE=my-test</code></pre>The extra file can add or replace r
     <thead><tr><th>check</th><th>what ran</th><th>result</th></tr></thead>
     <tbody>
       <tr><td>Query writing</td><td>Luna on Bedrock, and Claude Haiku 4.5, Sonnet 5 and Opus 5 through the real code (Claude is not in use; this showed it can be)</td><td>all four returned valid queries</td></tr>
-      <tr><td>Evidence search</td><td>a quick evidence-search run on <code>bedrock-local</code>: search, screening, classification, appraisal, full-text ingest with Cohere, synthesis</td><td>succeeded in 9 min; 206 Cohere embeddings beside the untouched OpenAI ones</td></tr>
-      <tr><td>Options scoping</td><td>"interventions to reduce obesity", end to end on <code>bedrock-local</code></td><td>20 options in 6 themes in about 20 min of run time; about 790 model calls, all on Bedrock; 0 errors</td></tr>
+      <tr><td>Evidence search</td><td>a quick evidence-search run on <code>bedrock</code>: search, screening, classification, appraisal, full-text ingest with Cohere, synthesis</td><td>succeeded in 9 min; 206 Cohere embeddings beside the untouched OpenAI ones</td></tr>
+      <tr><td>Options scoping</td><td>"interventions to reduce obesity", end to end on <code>bedrock</code></td><td>20 options in 6 themes in about 20 min of run time; about 790 model calls, all on Bedrock; 0 errors</td></tr>
     </tbody>
   </table></div>
 </section>
@@ -390,11 +390,11 @@ POLICY_ATLAS_MODEL_ROUTE=my-test</code></pre>The extra file can add or replace r
   <p>Merging this change does not move anything to Bedrock. Each environment's route is set in <code>infra/pa_config.json</code>, and both say <code>openai-direct</code>, so staging and production keep calling OpenAI. What does change on the next deploy is which OpenAI models they use: the three-tier choice in Diagram 1, so fourteen cheap steps move from gpt-5.4-mini to Luna and both agents from gpt-5.5 to Terra. Switching an environment to Bedrock takes three steps:</p>
   <ol class="steps">
     <li><b>Add the key to the app secret.</b> Put a long-term Bedrock API key in <code>policy_atlas_v3/app</code> as a new field, <code>AWS_BEARER_TOKEN_BEDROCK</code>. Do this first: once the route is a Bedrock one, the app asks for this field when it starts, and it cannot start without it.</li>
-    <li><b>Change one word in the config.</b> Set that environment's <code>model_route</code> in <code>infra/pa_config.json</code> to <code>bedrock-local</code>, and merge.</li>
+    <li><b>Change one word in the config.</b> Set that environment's <code>model_route</code> in <code>infra/pa_config.json</code> to <code>bedrock</code>, and merge.</li>
     <li><b>Deploy.</b> The app reads the key and the route when it starts. To go back, set the route to <code>openai-direct</code> and deploy again.</li>
   </ol>
   <div class="note"><b>One side effect.</b> Projects that already exist were embedded with OpenAI. On Bedrock their chat search finds nothing until they are ingested again (Diagram 4). New projects are not affected.</div>
-  <p><b>Models.</b> Luna was evaluated in task 051. Claude is not used; the <code>bedrock-local-claude</code> route stays in the file for testing it later. Terra for the two agents (moved from gpt-5.5 on 22 October 2026) and the Cohere embeddings have run live but have not been evaluated on their own.</p>
+  <p><b>Models.</b> Luna was evaluated in task 051. Claude is not used; the <code>bedrock-claude</code> route stays in the file for testing it later. Terra for the two agents (moved from gpt-5.5 on 22 October 2026) and the Cohere embeddings have run live but have not been evaluated on their own.</p>
   <p>Design record: <a href="../../adr/0041-bedrock-inference-route-and-model-route-file.md">ADR 0041</a>. Scope and evidence: <a href="contract.md">contract</a>, <a href="verification.md">verification</a>.</p>
 </section>
 </main>

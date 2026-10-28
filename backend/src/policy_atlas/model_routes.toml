@@ -83,7 +83,7 @@ profile = "openai_text_embedding_3_small_v1"
 backend = "openai"
 
 # ---------------------------------------------------------------------------
-[routes.bedrock-local]
+[routes.bedrock]
 # Every call goes to Amazon Bedrock's London endpoint. OpenAI models are reached
 # through Bedrock's global routing (the only way from London); embeddings use
 # Cohere through EU-only routing. The same three models as openai-direct, under
@@ -91,45 +91,45 @@ backend = "openai"
 openai_base_url = "https://bedrock-runtime.eu-west-2.amazonaws.com/openai/v1"
 api_key_env = "AWS_BEARER_TOKEN_BEDROCK"       # the Bedrock key; boto3 reads the same variable
 
-[routes.bedrock-local.text]
+[routes.bedrock.text]
 fast = "global.openai.gpt-5.6-luna"
 standard = "global.openai.gpt-5.6-terra"
 frontier = "global.openai.gpt-5.6-sol"
 
-[routes.bedrock-local.knobs.reasoning_effort]
+[routes.bedrock.knobs.reasoning_effort]
 "global.openai.gpt-5.6-terra" = "none"
 
-[routes.bedrock-local.embeddings]
+[routes.bedrock.embeddings]
 backend = "cohere"
 model = "eu.cohere.embed-v4:0"
 profile = "cohere_embed_v4_1536_v1"
 
-[routes.bedrock-local.search_queries]
+[routes.bedrock.search_queries]
 backend = "openai"   # Luna through Bedrock's OpenAI-format address, like every other step
 
 # ---------------------------------------------------------------------------
-[routes.bedrock-local-claude]
+[routes.bedrock-claude]
 # NOT IN USE. Kept for testing Claude models later (owner, 2026-10-22): as
-# bedrock-local, but search query generation runs on Claude via Bedrock. No
+# bedrock, but search query generation runs on Claude via Bedrock. No
 # environment selects it and nothing is planned to. Swap the Claude tier by
 # changing the model below:
 #   eu.anthropic.claude-sonnet-5  /  eu.anthropic.claude-opus-5
 openai_base_url = "https://bedrock-runtime.eu-west-2.amazonaws.com/openai/v1"
 api_key_env = "AWS_BEARER_TOKEN_BEDROCK"
 
-[routes.bedrock-local-claude.text]
+[routes.bedrock-claude.text]
 fast = "global.openai.gpt-5.6-luna"
 standard = "global.openai.gpt-5.6-terra"
 frontier = "global.openai.gpt-5.6-sol"
 
-[routes.bedrock-local-claude.knobs.reasoning_effort]
+[routes.bedrock-claude.knobs.reasoning_effort]
 "global.openai.gpt-5.6-terra" = "none"
 
-[routes.bedrock-local-claude.embeddings]
+[routes.bedrock-claude.embeddings]
 backend = "cohere"
 model = "eu.cohere.embed-v4:0"
 profile = "cohere_embed_v4_1536_v1"
 
-[routes.bedrock-local-claude.search_queries]
+[routes.bedrock-claude.search_queries]
 backend = "claude"
 model = "eu.anthropic.claude-haiku-4-5-20251001-v1:0"

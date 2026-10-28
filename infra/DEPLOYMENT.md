@@ -561,7 +561,7 @@ ignored with a warning; models are chosen in the route file.
    `AWS_BEARER_TOKEN_BEDROCK`. Do this first: the stack asks ECS for the field as
    soon as the route is a Bedrock one, and a task naming a missing field fails to
    start.
-2. Set `backend.model_route` to `bedrock-local` for that environment in
+2. Set `backend.model_route` to `bedrock` for that environment in
    `pa_config.json`, and merge.
 3. Deploy. Existing projects were embedded with OpenAI; their chat search finds
    nothing on Bedrock until they are ingested again.

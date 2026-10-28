@@ -75,8 +75,8 @@ def test_default_route_names_the_owners_model_choice() -> None:
     assert route.reasoning_effort_for("gpt-5.6-sol") is None
 
 
-def test_bedrock_local_names_bedrock_models_and_cohere() -> None:
-    route = load_route(ROUTE_FILE, "bedrock-local", {})
+def test_bedrock_names_bedrock_models_and_cohere() -> None:
+    route = load_route(ROUTE_FILE, "bedrock", {})
     assert route.openai_base_url.startswith("https://bedrock-runtime.eu-west-2.")
     assert route.api_key_env == "AWS_BEARER_TOKEN_BEDROCK"
     assert route.model_for("classify") == "global.openai.gpt-5.6-luna"
@@ -93,9 +93,9 @@ def test_bedrock_local_names_bedrock_models_and_cohere() -> None:
     assert route.reasoning_effort_for("global.openai.gpt-5.6-terra") == "none"
 
 
-def test_bedrock_local_claude_switches_only_query_generation() -> None:
-    plain = load_route(ROUTE_FILE, "bedrock-local", {})
-    claude = load_route(ROUTE_FILE, "bedrock-local-claude", {})
+def test_bedrock_claude_switches_only_query_generation() -> None:
+    plain = load_route(ROUTE_FILE, "bedrock", {})
+    claude = load_route(ROUTE_FILE, "bedrock-claude", {})
     assert claude.search_queries.backend == "claude"
     assert claude.search_queries.model == "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
     for step in DEFAULT_ROUTE_MODELS:
@@ -296,7 +296,7 @@ def test_bedrock_route_reads_its_own_key_variable(monkeypatch: pytest.MonkeyPatc
     """Both keys may be set at once; a Bedrock route reads the Bedrock one, never the OpenAI one."""
     from policy_atlas.core import model_routes, openai_client
 
-    bedrock = load_route(ROUTE_FILE, "bedrock-local", {})
+    bedrock = load_route(ROUTE_FILE, "bedrock", {})
     monkeypatch.setattr(model_routes, "route", lambda: bedrock)
     monkeypatch.setattr(openai_client, "route", lambda: bedrock)
     monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
@@ -314,7 +314,7 @@ def test_live_mode_switch_reads_the_route_key_variable(monkeypatch: pytest.Monke
     from policy_atlas.api import deps
     from policy_atlas.core import model_routes
 
-    bedrock = load_route(ROUTE_FILE, "bedrock-local", {})
+    bedrock = load_route(ROUTE_FILE, "bedrock", {})
     monkeypatch.setattr(model_routes, "route", lambda: bedrock)
     monkeypatch.setattr(deps, "route", lambda: bedrock)
     monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
@@ -403,7 +403,7 @@ def _resolve_in_subprocess(env_extra: dict[str, str]) -> list[str]:
 
 def test_import_time_selection_follows_the_variable() -> None:
     assert _resolve_in_subprocess({}) == ["gpt-5.6-luna", "openai_text_embedding_3_small_v1"]
-    assert _resolve_in_subprocess({"POLICY_ATLAS_MODEL_ROUTE": "bedrock-local"}) == [
+    assert _resolve_in_subprocess({"POLICY_ATLAS_MODEL_ROUTE": "bedrock"}) == [
         "global.openai.gpt-5.6-luna",
         "cohere_embed_v4_1536_v1",
     ]
