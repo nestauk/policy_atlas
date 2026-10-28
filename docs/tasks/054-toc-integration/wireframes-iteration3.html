@@ -1,0 +1,260 @@
+<title>ToC iteration 3 wireframes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root {
+  --blue: #0000ff; --navy: #0f294a; --grey: #646363; --ink: #1c1c1e;
+  --line: #e4e4e7; --line-2: #d3d3d8; --box: #b7bcc6; --ground: #f4f4f5; --paper: #ffffff; --paper-2: #fafafa;
+  --v-conf: #18a48c; --v-mixed: #f0a823; --v-little: #b4b4bb; --v-against: #d93a12;
+  --t-conf: #0d7a67; --t-mixed: #8f6100; --t-little: #646363; --t-against: #b0300e;
+  --font: "Averta", "Manrope", system-ui, sans-serif;
+  color-scheme: light;
+}
+body { background: var(--ground); color: var(--navy); font-family: var(--font); font-size: 16px; line-height: 1.55; margin: 0; padding-block: 0 5rem; padding-inline: 16px; }
+.wrap { max-width: 1180px; margin: 0 auto; }
+h1 { font-size: 28px; font-weight: 800; text-transform: uppercase; margin: 32px 0 4px; }
+.intro { max-width: 46em; color: var(--grey); margin: 0 0 24px; }
+.frame { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 24px; margin: 0 0 28px; box-shadow: 0 1px 2px rgb(0 0 0 / .04); }
+.frame > .tag { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--grey); margin: 0 0 4px; }
+.frame > h2 { font-size: 24px; margin: 0 0 6px; }
+.frame > .note { color: var(--grey); max-width: 52em; margin: 0 0 18px; font-size: 14px; }
+.scroll { overflow-x: auto; }
+/* canvas */
+.cv { min-width: 980px; }
+.cv text { font-family: var(--font); }
+.legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 14px; color: var(--grey); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+/* panels */
+.two { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 24px; }
+@media (max-width: 820px) { .two { grid-template-columns: 1fr; } }
+.panel { border: 1px solid var(--line); border-radius: 14px; padding: 20px; background: var(--paper); }
+.panel .lab { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--grey); margin: 16px 0 4px; }
+.panel .lab:first-child { margin-top: 0; }
+.panel p { margin: 4px 0; }
+.code { font-size: 12px; color: var(--grey); font-weight: 600; }
+.verdict { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.balance { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0 2px; align-items: end; }
+.col { display: flex; flex-direction: column-reverse; gap: 3px; min-height: 64px; border-bottom: 2px solid var(--line-2); padding-bottom: 3px; }
+.blk { border-radius: 3px; }
+.cap { font-size: 13px; color: var(--grey); text-align: center; }
+.fig { border-left: 3px solid var(--line-2); padding: 2px 0 2px 12px; margin: 10px 0; }
+.fig b { font-weight: 700; }
+.fig q { display: block; color: var(--ink); font-style: italic; margin: 2px 0; }
+.cite { font-size: 14px; color: var(--grey); }
+.ev { border-top: 1px solid var(--line); padding: 10px 0; }
+.chips { font-size: 13px; color: var(--grey); }
+/* report: the four report styles only */
+.report { max-width: 50em; }
+.r-part { font-size: 28px; font-weight: 800; text-transform: uppercase; margin: 0 0 10px; }
+.r-sec { font-size: 24px; font-weight: 700; margin: 26px 0 6px; }
+.r-body { font-size: 19px; margin: 6px 0; }
+.r-lab { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--grey); }
+table.r { border-collapse: collapse; width: 100%; font-size: 19px; margin: 8px 0; }
+table.r th { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--grey); text-align: left; border-bottom: 1px solid var(--line-2); padding: 6px 8px 6px 0; }
+table.r td { border-bottom: 1px solid var(--line); padding: 8px 8px 8px 0; vertical-align: top; }
+.tblwrap { overflow-x: auto; }
+.r-meta { color: var(--grey); }
+</style>
+
+<div class="wrap">
+<h1>Iteration 3 wireframes</h1>
+<p class="intro">Draft for the owner's design review (contract C34–C38). Example: the food-advertising theory from live run 7. Four frames: the canvas with Magenta Book layers, short codes, the accountability ceiling and one BEAM verdict per link; the link panel with the evidence balance and size of change; a box panel with figures; and Detailed information as a short narrative report.</p>
+
+<!-- Frame 1: canvas -->
+<section class="frame">
+  <p class="tag">Frame 1 · Canvas</p>
+  <h2>Six layers, codes, ceiling, one verdict per link</h2>
+  <p class="note">Codes are 12px grey in the top-left corner of each box: test whether they are unobtrusive enough to keep (C35). The dashed divider after Outputs is the accountability ceiling. Line style shows the verdict: solid green Confident, two-tone amber Not sure: mixed, grey dashed Not sure: too little evidence, red dotted Not confident: evidence against. Critical links are thicker.</p>
+  <div class="scroll">
+  <svg class="cv" viewBox="0 0 1140 470" width="100%" role="img" aria-label="Canvas with six layers">
+    <defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a909c"/></marker>
+    </defs>
+    <!-- column heads -->
+    <g font-size="12" font-weight="700" fill="#646363" letter-spacing=".06em">
+      <text x="20" y="22">INPUTS AND ACTIVITIES</text><text x="215" y="22">OUTPUTS</text>
+      <text x="420" y="22">SHORT-TERM OUTCOMES</text><text x="640" y="22">LONG-TERM OUTCOMES</text><text x="890" y="22">IMPACT</text>
+    </g>
+    <!-- ceiling -->
+    <line x1="392" y1="34" x2="392" y2="455" stroke="#646363" stroke-dasharray="5 5"/>
+    <text x="384" y="452" font-size="12" fill="#646363" text-anchor="end">Directly influenced</text>
+    <text x="400" y="452" font-size="12" fill="#646363">Contributes to</text>
+    <!-- links -->
+    <g fill="none" stroke-width="2.5" marker-end="url(#ah)">
+      <path d="M180,110 C195,110 195,110 210,110" stroke="#18a48c"/>
+      <path d="M375,110 C395,110 395,110 415,110" stroke="#f0a823" stroke-width="5" />
+      <path d="M375,110 C395,110 395,110 415,110" stroke="#18a48c" stroke-width="2" stroke-dasharray="6 6"/>
+      <path d="M580,100 C600,80 610,70 630,70" stroke="#f0a823"/>
+      <path d="M580,120 C600,170 610,190 630,190" stroke="#18a48c"/>
+      <path d="M795,70 C810,100 815,120 830,120" stroke="#b4b4bb" stroke-dasharray="6 5"/>
+      <path d="M795,190 C810,160 815,140 830,140" stroke="#18a48c"/>
+      <path d="M965,130 C975,130 975,130 985,130" stroke="#f0a823" stroke-width="5"/>
+      <path d="M965,130 C975,130 975,130 985,130" stroke="#18a48c" stroke-width="2" stroke-dasharray="6 6"/>
+      <path d="M375,125 C400,240 400,300 415,330" stroke="#d93a12" stroke-dasharray="2 5"/>
+      <path d="M795,200 C810,270 815,300 830,320" stroke="#b4b4bb" stroke-dasharray="6 5"/>
+    </g>
+    <!-- boxes -->
+    <g font-size="13" fill="#0f294a">
+      <rect x="20" y="70" width="160" height="80" rx="12" fill="#fff" stroke="#b7bcc6"/>
+      <text x="30" y="86" font-size="11" fill="#646363" font-weight="600">A1</text>
+      <text x="30" y="106">Restrict less healthy</text><text x="30" y="122">food adverts: 9pm TV</text><text x="30" y="138">watershed, online ban</text>
+      <rect x="215" y="70" width="160" height="80" rx="12" fill="#fff" stroke="#b7bcc6"/>
+      <text x="225" y="86" font-size="11" fill="#646363" font-weight="600">P1</text>
+      <text x="225" y="106">Fewer covered adverts</text><text x="225" y="122">in restricted slots</text>
+      <rect x="420" y="70" width="160" height="80" rx="12" fill="#fff" stroke="#b7bcc6"/>
+      <text x="430" y="86" font-size="11" fill="#646363" font-weight="600">S1</text>
+      <text x="430" y="106">Children see fewer</text><text x="430" y="122">less healthy food</text><text x="430" y="138">adverts overall</text>
+      <rect x="635" y="40" width="160" height="62" rx="12" fill="#fff" stroke="#b7bcc6"/>
+      <text x="645" y="56" font-size="11" fill="#646363" font-weight="600">S2</text>
+      <text x="645" y="74">Children make fewer</text><text x="645" y="90">requests for them</text>
+      <rect x="635" y="158" width="160" height="62" rx="12" fill="#fff" stroke="#b7bcc6"/>
+      <text x="645" y="174" font-size="11" fill="#646363" font-weight="600">S3</text>
+      <text x="645" y="192">Children eat fewer</text><text x="645" y="208">advert-prompted snacks</text>
+      <rect x="835" y="96" width="130" height="70" rx="12" fill="#fff" stroke="#b7bcc6"/>
+      <text x="845" y="112" font-size="11" fill="#646363" font-weight="600">L1</text>
+      <text x="845" y="130">Children eat less</text><text x="845" y="146">excess energy</text>
+      <rect x="990" y="96" width="130" height="70" rx="12" fill="#ececff" stroke="#0000ff"/>
+      <text x="1000" y="112" font-size="11" fill="#646363" font-weight="600">I1</text>
+      <text x="1000" y="130">Fewer children</text><text x="1000" y="146">with obesity</text>
+      <rect x="420" y="300" width="160" height="80" rx="12" fill="#fff" stroke="#d93a12" stroke-dasharray="4 3"/>
+      <text x="430" y="316" font-size="11" fill="#646363" font-weight="600">F1</text>
+      <text x="430" y="336">Adverts move to</text><text x="430" y="352">unrestricted spaces</text>
+      <rect x="835" y="300" width="160" height="80" rx="12" fill="#fff" stroke="#d93a12" stroke-dasharray="4 3"/>
+      <text x="845" y="316" font-size="11" fill="#646363" font-weight="600">F2</text>
+      <text x="845" y="336">Other foods replace</text><text x="845" y="352">the lost energy</text>
+    </g>
+    <!-- link codes, quiet -->
+    <g font-size="11" fill="#646363"><text x="392" y="100" text-anchor="middle">#2</text><text x="975" y="118" text-anchor="middle">#7</text></g>
+  </svg>
+  </div>
+  <div class="legend">
+    <span><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#18a48c" stroke-width="3"/></svg>Confident</span>
+    <span><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#f0a823" stroke-width="5"/><line x1="0" y1="4" x2="34" y2="4" stroke="#18a48c" stroke-width="2" stroke-dasharray="6 6"/></svg>Not sure: mixed</span>
+    <span><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#b4b4bb" stroke-width="3" stroke-dasharray="6 5"/></svg>Not sure: too little evidence</span>
+    <span><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#d93a12" stroke-width="3" stroke-dasharray="2 5"/></svg>Not confident: evidence against</span>
+    <span><b>Thicker</b> = critical connection</span>
+  </div>
+</section>
+
+<!-- Frame 2: link panel -->
+<section class="frame">
+  <p class="tag">Frame 2 · Link panel</p>
+  <h2>One verdict, the evidence balance, the size of change</h2>
+  <p class="note">Panel scale (16px body, 14px labels). The balance shows each document as a block in its support column, sized by weight (quality × relevance). "Holds here" survives as one sentence. Codes appear only in the panel heading.</p>
+  <div class="two">
+    <div class="panel">
+      <p class="lab">Connection <span class="code">#5 · S3 → L1</span></p>
+      <p><b>Children eat fewer advert-prompted snacks, so they eat less excess energy</b></p>
+      <p class="lab">Evidence verdict</p>
+      <p class="verdict"><span class="dot" style="background:var(--v-conf)"></span><span style="color:var(--t-conf)">Confident</span></p>
+      <p>Two meta-analyses of experiments and a UK trial found children ate more after food adverts and did not make it up later in the day. Holds here: the UK trial is in children aged 9–11.</p>
+      <p class="lab">Evidence balance</p>
+      <div class="balance">
+        <div class="col"></div>
+        <div class="col"><div class="blk" style="height:10px;background:var(--v-mixed)"></div></div>
+        <div class="col"><div class="blk" style="height:12px;background:#7fcfbf"></div></div>
+        <div class="col"><div class="blk" style="height:26px;background:var(--v-conf)"></div><div class="blk" style="height:22px;background:var(--v-conf)"></div><div class="blk" style="height:18px;background:var(--v-conf)"></div></div>
+      </div>
+      <div class="balance"><div class="cap">Refutes</div><div class="cap">Mixed</div><div class="cap">Weakly supports</div><div class="cap">Strongly supports</div></div>
+      <p class="lab">Size of change</p>
+      <div class="fig"><b>Evidence suggests 45 to 60 more calories eaten after seeing food adverts</b> <span class="cite">(2 reviews)</span>
+        <q>“TV food ads raised immediate intake by 60 kcal (95% CI 3.1 to 116.9; 11 studies)”</q>
+        <span class="cite">Russell, Croker and Viner · Obesity Reviews · 2019 · systematic review</span></div>
+      <div class="fig"><b>Children ate 0.25 standard deviations more</b> <span class="cite">(1 review)</span>
+        <q>“intake standardised mean difference 0.25 (95% CI 0.15 to 0.35)”</q>
+        <span class="cite">Boyland et al. · JAMA Pediatrics · 2022 · systematic review</span></div>
+      <p class="lab">Documents (5)</p>
+      <div class="ev"><b>Advertising as a cue to consume</b> · Boyland et al. 2016<br><span class="chips">Strongly supports · quality 3 · relevance 2 · review of experiments, not UK-specific</span></div>
+      <div class="ev"><b>Beyond-brand effect of television food advertisements</b> · Halford et al. 2007<br><span class="chips">Strongly supports · quality 3 · relevance 3 · UK children aged 9–11</span></div>
+    </div>
+    <div class="panel">
+      <p class="lab">Connection <span class="code">#2 · P1 → S1</span> · critical</p>
+      <p><b>Fewer covered adverts in restricted slots mean children see fewer adverts overall</b></p>
+      <p class="lab">Evidence verdict</p>
+      <p class="verdict"><span class="dot" style="background:var(--v-mixed)"></span><span style="color:var(--t-mixed)">Not sure: mixed</span></p>
+      <p>Chile cut children's exposure by 44 to 58%, but after the 2007 UK rules children's share of exposure did not change, because most of their viewing is outside children's programmes. Close to the threshold: one more study could change this verdict.</p>
+      <p class="lab">Evidence balance</p>
+      <div class="balance">
+        <div class="col"><div class="blk" style="height:24px;background:var(--v-against)"></div></div>
+        <div class="col"><div class="blk" style="height:12px;background:var(--v-mixed)"></div></div>
+        <div class="col"><div class="blk" style="height:10px;background:#7fcfbf"></div></div>
+        <div class="col"><div class="blk" style="height:20px;background:var(--v-conf)"></div><div class="blk" style="height:16px;background:var(--v-conf)"></div></div>
+      </div>
+      <div class="balance"><div class="cap">Refutes</div><div class="cap">Mixed</div><div class="cap">Weakly supports</div><div class="cap">Strongly supports</div></div>
+      <p class="lab">Size of change</p>
+      <div class="fig"><b>Evidence suggests exposure fell 44% to 58%</b> <span class="cite">(Chile, 1 study)</span>
+        <q>“exposure to ‘high-in’ food ads fell 44% (preschoolers) and 58% (adolescents)”</q></div>
+      <div class="fig"><b>No change in children's share of exposure</b> <span class="cite">(UK, 1 study)</span>
+        <q>“Exposure of children to HFSS food advertising did not change … odds ratio 1·05 (0·99 to 1·12)”</q></div>
+    </div>
+  </div>
+</section>
+
+<!-- Frame 3: box panel -->
+<section class="frame">
+  <p class="tag">Frame 3 · Box panel</p>
+  <h2>Figures on a box: baseline and indicators</h2>
+  <div class="two">
+    <div class="panel">
+      <p class="lab">Long-term outcome <span class="code">L1</span></p>
+      <p><b>Children eat less excess energy</b></p>
+      <p>Children who eat more than they need for healthy growth gain weight over time; the theory expects fewer snacks and fewer purchases to cut this excess.</p>
+      <p class="lab">Figures</p>
+      <div class="fig"><b>Children eat 140 to 500 more calories a day than they need</b> <span class="cite">(England, baseline)</span>
+        <q>“children overall eat 140–500 excess kcal per day”</q>
+        <span class="cite">Public Health England · 2018 · government evidence review</span></div>
+      <p class="lab">How it could be measured</p>
+      <p>Daily energy intake against need (National Diet and Nutrition Survey).</p>
+    </div>
+    <div class="panel">
+      <p class="lab">Impact <span class="code">I1</span></p>
+      <p><b>Fewer children in England live with obesity</b></p>
+      <p class="lab">Figures</p>
+      <div class="fig"><b>Modelled: 4.6% fewer children with obesity</b> <span class="cite">(UK model)</span>
+        <q>“9.1 kcal per day less … translates to 4.6% fewer UK children aged 5–17 with obesity”</q>
+        <span class="cite">Mytton et al. · PLOS Medicine · 2020 · modelling study</span></div>
+      <p class="lab">How it could be measured</p>
+      <p>Prevalence of obesity in Reception and Year 6 (National Child Measurement Programme).</p>
+    </div>
+  </div>
+</section>
+
+<!-- Frame 4: narrative report -->
+<section class="frame">
+  <p class="tag">Frame 4 · Detailed information</p>
+  <h2>A short narrative report in five sections</h2>
+  <p class="note">Report typography only: 28px part heading, 24px section headings, 19px body, 14px grey labels. About 600 words in full. Codes point at the canvas without crowding the text.</p>
+  <div class="report">
+    <p class="r-part">Detailed information</p>
+
+    <p class="r-sec">Summary</p>
+    <p class="r-body"><b>Goal:</b> fewer children in England living with obesity within five years. <i>If</i> adverts for less healthy food are removed from TV before 9pm and from paid online spaces, <i>then</i> children will see fewer of them, eat fewer advert-prompted snacks and make fewer requests, <i>because</i> food adverts prompt immediate eating and purchase requests.</p>
+    <p class="r-body r-meta">Population: children under 18 in England · Time horizon: five years · Directly influenced: up to outputs.</p>
+    <p class="r-body"><b>Context.</b> Children watch most television outside children's programmes, and food marketing is moving to social media and influencers, which the rules cover only in part.</p>
+    <p class="r-body"><b>Weakest critical links.</b> Whether fewer covered adverts mean children see fewer adverts overall (#2: not sure, mixed), and whether fewer requests change what households buy (#4: too little evidence).</p>
+
+    <p class="r-sec">How change happens</p>
+    <p class="r-body"><b>Fewer adverts, less snacking.</b> Removing covered adverts (A1 → P1) should cut children's exposure (S1). Experiments consistently show children eat more after seeing food adverts, so less exposure should mean fewer advert-prompted snacks (S3) and less excess energy (L1) [1][2].</p>
+    <p class="r-body"><b>Fewer requests, different shopping.</b> …</p>
+    <p class="r-body"><b>How it could fail.</b> Advertising may move to spaces the rules do not cover (F1), and children may replace lost calories with other food (F2) [4].</p>
+
+    <p class="r-sec">Assumptions and evidence</p>
+    <div class="tblwrap"><table class="r">
+      <tr><th>Code</th><th>Assumption</th><th>Kind</th><th>Verdict</th><th>Why</th><th>Sources</th></tr>
+      <tr><td>#2</td><td>Covered placements carry a large share of children's exposure</td><td>Assumption</td><td>Not sure: mixed</td><td>Chile cut exposure; UK 2007 rules did not change children's share</td><td>[3][4]</td></tr>
+      <tr><td>#4</td><td>Households act on children's requests</td><td>Assumption</td><td>Not sure: too little evidence</td><td>Associations only; no UK study</td><td>[5]</td></tr>
+      <tr><td>F1</td><td>Marketing moves to unrestricted spaces</td><td>Risk</td><td>Not sure: mixed</td><td>Seen after UK 2007 rules and in Portugal</td><td>[4][6]</td></tr>
+    </table></div>
+
+    <p class="r-sec">What to test and measure</p>
+    <div class="tblwrap"><table class="r">
+      <tr><th>Weak link</th><th>Question</th><th>Indicator and data</th><th>Test and learn</th></tr>
+      <tr><td>#2</td><td>Do children see fewer less healthy food adverts overall?</td><td>Children's impacts per week (BARB, Nielsen)</td><td>Compare exposure before and after January 2026</td></tr>
+    </table></div>
+
+    <p class="r-sec">Sources and method</p>
+    <p class="r-body">[1] Boyland et al. (2016) Advertising as a cue to consume. American Journal of Clinical Nutrition. · [2] Halford et al. (2007) … · [3] …</p>
+    <p class="r-body r-meta">Generated by Policy Atlas with AI on 28 October 2026 from OpenAlex and Overton searches (three per step); evidence judged by gpt-6.1-terra; not yet reviewed by a person. No evidence found means none in this search, not that none exists.</p>
+  </div>
+</section>
+</div>

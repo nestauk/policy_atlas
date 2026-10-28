@@ -508,9 +508,14 @@ owner's design review; not yet approved.**
   review replacing its own included studies (deduplication) is deferred. ADR 0042 amendment.
 - **C37. Size of change (step 4).** A step after the judge extracts up to 3 figures per document
   that supports or refutes, on the link's cause or effect: value, low, high, unit, what it
-  measures, population, place, year, direction, effect type and the exact quote. It reuses the
-  Evidence search extraction where it fits (survey pending). Code keeps a figure only when its
-  quote is in the text and its number is in the quote. The link panel shows "Size of change":
+  measures, population, place, year, direction, effect type and the exact quote. The Evidence
+  search's IOF extractor (`extract_iof_v7`) cannot be called as is: it extracts every finding,
+  takes no intent, and writes its own tables. So a small ToC prompt, `toc_figures_v1` (fast
+  tier, as `extract`), reads the same title and abstract the judge read and reuses IOF's parts:
+  the `IOFStatisticsWire` shape (effect size and type, CI, n), `_parse_numeric` and the bounds
+  checks in `quote_verify`, and `QuoteMatcher`. Code keeps a figure only when its quote is in the
+  text and its number is in the quote (a new check of a few lines). Figures come from abstracts;
+  the panel says so. The link panel shows "Size of change":
   figures with the same measure and unit grouped as "Evidence suggests A to B <unit> (n
   studies)", never pooled, each with its quote and source line (policy_builder's pattern); box
   panels show baseline and indicator figures.
