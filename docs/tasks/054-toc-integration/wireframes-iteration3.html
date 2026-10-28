@@ -68,7 +68,7 @@ button:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
 
 <div class="wrap">
 <h1>Iteration 3 wireframes</h1>
-<p class="intro">Draft for the owner's design review (contract C34–C38). Example: the food-advertising theory from live run 7. Five frames: the canvas with Magenta Book layers, short codes, the accountability ceiling and one BEAM verdict per link; the link panel with the evidence balance and size of change; a box panel with figures; Detailed information as a short narrative report; and a proposed pathway view of the canvas.</p>
+<p class="intro">Draft for the owner's design review (contract C34–C38). Example: the food-advertising theory from live run 7. Five frames: the canvas with Magenta Book layers, short codes, the accountability ceiling and one BEAM verdict per link; the link panel with the evidence balance and size of change; a box panel with figures; Detailed information as a short narrative report; and a proposed container view of the canvas.</p>
 
 <!-- Frame 1: canvas -->
 <section class="frame">
@@ -268,73 +268,85 @@ button:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
   </div>
 </section>
 
-<!-- Frame 5: pathway view -->
+<!-- Frame 5: container view -->
 <section class="frame">
-  <p class="tag">Frame 5 · Canvas, pathway view</p>
-  <h2>Each pathway as one row; the detail one click away</h2>
-  <p class="note">Proposed default for theories with many boxes. Each kept pathway is one row: its type, a headline, its weakest step, and the chain of boxes with the usual verdict line styles. A box shared by several pathways appears in each row it belongs to. "Show steps" opens the row at full detail, with every box's text; "All boxes" switches to the full canvas (frame 1). Clicking a box or link opens the same panels as frame 2 and 3.</p>
+  <p class="tag">Frame 5 · Canvas, container view</p>
+  <h2>Related boxes grouped into containers, linked to each other</h2>
+  <p class="note">Proposed default for larger theories (pattern P8 in the ground-truth pack). Boxes that share a role are grouped into a container headed by a short causal claim; its box codes are listed underneath. Lines run between containers: the line style shows the weakest verdict among the links it stands for, and the small number says how many links that is. Click a container to open it in place and see its boxes and their own links; click a line to see the links it bundles. Codes keep text and canvas in step. "All boxes" still shows the full canvas (frame 1).</p>
   <div class="pv-toggle" role="tablist" aria-label="Canvas view">
-    <button type="button" class="seg on" aria-selected="true">Pathways</button><button type="button" class="seg" aria-selected="false">All boxes</button>
+    <button type="button" class="seg on" aria-selected="true">Containers</button><button type="button" class="seg" aria-selected="false">All boxes</button>
   </div>
-  <div id="pv" class="pv"></div>
+  <p class="r-lab">Default: all containers closed</p>
+  <div class="scroll">
+  <svg class="cv" viewBox="0 0 1140 400" width="100%" role="img" aria-label="Container view, all closed">
+    <defs><marker id="ah5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a909c"/></marker></defs>
+    <g font-size="12" font-weight="700" fill="#646363" letter-spacing=".06em">
+      <text x="20" y="22">INPUTS AND ACTIVITIES</text><text x="215" y="22">OUTPUTS</text><text x="420" y="22">SHORT-TERM OUTCOMES</text><text x="660" y="22">LONG-TERM OUTCOMES</text><text x="935" y="22">IMPACT</text>
+    </g>
+    <line x1="397" y1="34" x2="397" y2="385" stroke="#646363" stroke-dasharray="5 5"/>
+    <text x="389" y="382" font-size="12" fill="#646363" text-anchor="end">Directly influenced</text><text x="405" y="382" font-size="12" fill="#646363">Contributes to</text>
+    <g fill="none" stroke-width="3">
+      <path d="M180,120 L208,120" stroke="#18a48c" marker-end="url(#ah5)"/>
+      <path d="M375,120 L413,120" stroke="#f0a823" stroke-width="6"/><path d="M375,120 L413,120" stroke="#18a48c" stroke-width="2.5" stroke-dasharray="6 6" marker-end="url(#ah5)"/>
+      <path d="M615,100 C635,95 640,85 653,85" stroke="#b4b4bb" stroke-dasharray="6 5" marker-end="url(#ah5)"/>
+      <path d="M615,140 C635,150 640,170 653,175" stroke="#18a48c" marker-end="url(#ah5)"/>
+      <path d="M865,85 C880,95 885,110 898,115" stroke="#f0a823" stroke-width="6"/><path d="M865,85 C880,95 885,110 898,115" stroke="#18a48c" stroke-width="2.5" stroke-dasharray="6 6" marker-end="url(#ah5)"/>
+      <path d="M865,180 C880,165 885,140 898,135" stroke="#18a48c" marker-end="url(#ah5)"/>
+      <path d="M1050,125 L1078,125" stroke="#f0a823" stroke-width="6"/><path d="M1050,125 L1078,125" stroke="#18a48c" stroke-width="2.5" stroke-dasharray="6 6" marker-end="url(#ah5)"/>
+      <path d="M375,135 C400,250 400,275 413,290" stroke="#d93a12" stroke-dasharray="2 5" marker-end="url(#ah5)"/>
+      <path d="M865,195 C880,250 885,275 898,290" stroke="#b4b4bb" stroke-dasharray="6 5" marker-end="url(#ah5)"/>
+    </g>
+    <g font-size="11" fill="#646363"><text x="395" y="112" text-anchor="middle">1</text><text x="634" y="88" text-anchor="middle">2</text><text x="634" y="168" text-anchor="middle">3</text><text x="882" y="96" text-anchor="middle">2</text><text x="882" y="168" text-anchor="middle">1</text></g>
+    <g fill="#0f294a">
+      <rect x="20" y="85" width="160" height="72" rx="14" fill="#fff" stroke="#b7bcc6"/>
+      <text x="32" y="108" font-size="13" font-weight="700">Restrictions in force</text><text x="32" y="140" font-size="11" fill="#646363">A1</text>
+      <rect x="215" y="85" width="160" height="72" rx="14" fill="#fff" stroke="#b7bcc6"/>
+      <text x="227" y="108" font-size="13" font-weight="700">Covered adverts</text><text x="227" y="124" font-size="13" font-weight="700">come off air</text><text x="227" y="146" font-size="11" fill="#646363">P1</text>
+      <rect x="420" y="70" width="195" height="100" rx="14" fill="#fafafa" stroke="#646363" stroke-width="1.5"/>
+      <text x="432" y="93" font-size="13" font-weight="700">Children see fewer adverts,</text><text x="432" y="109" font-size="13" font-weight="700">so want and snack less</text>
+      <text x="432" y="133" font-size="12">3 boxes</text><text x="432" y="152" font-size="11" fill="#646363">S1 · S2 · S3</text>
+      <rect x="658" y="50" width="207" height="72" rx="14" fill="#fafafa" stroke="#646363" stroke-width="1.5"/>
+      <text x="670" y="73" font-size="13" font-weight="700">Families and children buy</text><text x="670" y="89" font-size="13" font-weight="700">less of it</text><text x="670" y="110" font-size="11" fill="#646363">2 boxes · L2 · L3</text>
+      <rect x="658" y="140" width="207" height="72" rx="14" fill="#fff" stroke="#b7bcc6"/>
+      <text x="670" y="163" font-size="13" font-weight="700">Children eat less</text><text x="670" y="179" font-size="13" font-weight="700">excess energy</text><text x="670" y="200" font-size="11" fill="#646363">L1</text>
+      <rect x="903" y="88" width="147" height="72" rx="14" fill="#ececff" stroke="#0000ff"/>
+      <text x="915" y="111" font-size="13" font-weight="700">Fewer children</text><text x="915" y="127" font-size="13" font-weight="700">with obesity</text><text x="915" y="148" font-size="11" fill="#646363">I1</text>
+      <rect x="420" y="262" width="195" height="72" rx="14" fill="#fff" stroke="#d93a12" stroke-dasharray="4 3"/>
+      <text x="432" y="285" font-size="13" font-weight="700">Adverts move to</text><text x="432" y="301" font-size="13" font-weight="700">unrestricted spaces</text><text x="432" y="322" font-size="11" fill="#646363">F1</text>
+      <rect x="903" y="262" width="147" height="72" rx="14" fill="#fff" stroke="#d93a12" stroke-dasharray="4 3"/>
+      <text x="915" y="285" font-size="13" font-weight="700">Other foods replace</text><text x="915" y="301" font-size="13" font-weight="700">the energy</text><text x="915" y="322" font-size="11" fill="#646363">F2</text>
+    </g>
+  </svg>
+  </div>
+
+  <p class="r-lab" style="margin-top:22px">After clicking the short-term container: it opens in place</p>
+  <div class="scroll">
+  <svg class="cv" viewBox="0 0 1140 330" width="100%" role="img" aria-label="Container view, one container open">
+    <defs><marker id="ah6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a909c"/></marker></defs>
+    <line x1="397" y1="20" x2="397" y2="315" stroke="#646363" stroke-dasharray="5 5"/>
+    <g fill="none" stroke-width="3">
+      <path d="M375,150 L413,150" stroke="#f0a823" stroke-width="6"/><path d="M375,150 L413,150" stroke="#18a48c" stroke-width="2.5" stroke-dasharray="6 6" marker-end="url(#ah6)"/>
+      <path d="M560,130 C575,110 580,90 592,85" stroke="#f0a823" stroke-width="5"/><path d="M560,130 C575,110 580,90 592,85" stroke="#18a48c" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#ah6)"/>
+      <path d="M560,170 C575,190 580,205 592,212" stroke="#18a48c" marker-end="url(#ah6)"/>
+      <path d="M735,85 C755,80 770,70 783,70" stroke="#b4b4bb" stroke-dasharray="6 5" marker-end="url(#ah6)"/>
+      <path d="M735,212 C755,215 770,220 783,222" stroke="#18a48c" marker-end="url(#ah6)"/>
+    </g>
+    <rect x="215" y="115" width="160" height="72" rx="14" fill="#fff" stroke="#b7bcc6"/>
+    <text x="227" y="138" font-size="13" font-weight="700" fill="#0f294a">Covered adverts</text><text x="227" y="154" font-size="13" font-weight="700" fill="#0f294a">come off air</text><text x="227" y="176" font-size="11" fill="#646363">P1</text>
+    <rect x="410" y="30" width="345" height="265" rx="16" fill="#fafafa" stroke="#646363" stroke-width="1.5"/>
+    <text x="424" y="52" font-size="13" font-weight="700" fill="#0f294a">Children see fewer adverts, so want and snack less</text>
+    <text x="740" y="52" font-size="12" fill="#0000ff" text-anchor="end" font-weight="700">Close</text>
+    <g font-size="12" fill="#0f294a">
+      <rect x="420" y="110" width="140" height="80" rx="12" fill="#fff" stroke="#b7bcc6"/><text x="430" y="126" font-size="11" fill="#646363" font-weight="600">S1</text><text x="430" y="146">Children see fewer</text><text x="430" y="161">less healthy food</text><text x="430" y="176">adverts overall</text>
+      <rect x="595" y="55" width="140" height="62" rx="12" fill="#fff" stroke="#b7bcc6"/><text x="605" y="71" font-size="11" fill="#646363" font-weight="600">S2</text><text x="605" y="90">Children make fewer</text><text x="605" y="105">requests for them</text>
+      <rect x="595" y="185" width="140" height="62" rx="12" fill="#fff" stroke="#b7bcc6"/><text x="605" y="201" font-size="11" fill="#646363" font-weight="600">S3</text><text x="605" y="220">Children eat fewer</text><text x="605" y="235">advert-prompted snacks</text>
+    </g>
+    <rect x="788" y="40" width="190" height="62" rx="14" fill="#fafafa" stroke="#646363" stroke-width="1.5"/>
+    <text x="800" y="63" font-size="13" font-weight="700" fill="#0f294a">Families and children</text><text x="800" y="79" font-size="13" font-weight="700" fill="#0f294a">buy less of it</text><text x="800" y="96" font-size="11" fill="#646363">L2 · L3</text>
+    <rect x="788" y="192" width="190" height="62" rx="14" fill="#fff" stroke="#b7bcc6"/>
+    <text x="800" y="215" font-size="13" font-weight="700" fill="#0f294a">Children eat less</text><text x="800" y="231" font-size="13" font-weight="700" fill="#0f294a">excess energy</text><text x="800" y="248" font-size="11" fill="#646363">L1</text>
+  </svg>
+  </div>
+  <p class="note" style="margin-top:12px">How containers would be made (later build): a container groups 2 to 6 boxes in one layer that share their incoming or outgoing links (the pack's rule: use one when 3 or more boxes share a link). The draft names each container with a short causal claim; a box on its own stays a plain box. Evidence stays on the box-to-box links: a container line only summarises them, so nothing is graded at container level.</p>
 </section>
-<script>
-(function () {
-  const C = { confident: "#18a48c", mixed: "#f0a823", little: "#b4b4bb", against: "#d93a12" };
-  const LBL = { confident: "Confident", mixed: "Not sure: mixed", little: "Not sure: too little evidence", against: "Not confident: evidence against" };
-  const ORDER = ["against", "little", "mixed", "confident"];
-  const B = { A1: "Restrict less healthy food adverts", P1: "Fewer covered adverts in restricted slots", S1: "Children see fewer adverts overall", S2: "Children make fewer requests", S3: "Children eat fewer advert-prompted snacks", L2: "Households buy fewer requested foods", L1: "Children eat less excess energy", I1: "Fewer children with obesity", F1: "Adverts move to unrestricted spaces", F2: "Other foods replace the lost energy" };
-  const P = [
-    { kind: "Success", title: "Fewer adverts, less snacking", boxes: ["A1","P1","S1","S3","L1","I1"], v: ["confident","mixed","confident","confident","mixed"], codes: ["#1","#2","#5","#6","#7"] },
-    { kind: "Success", title: "Fewer requests, different shopping", boxes: ["A1","P1","S1","S2","L2","L1","I1"], v: ["confident","mixed","mixed","little","confident","mixed"], codes: ["#1","#2","#3","#4","#8","#7"] },
-    { kind: "Failure", title: "Advertising moves elsewhere", boxes: ["A1","P1","F1"], v: ["confident","mixed"], codes: ["#1","#9"] },
-    { kind: "Failure", title: "Other foods replace the energy", boxes: ["S3","F2"], v: ["little"], codes: ["#10"] }
-  ];
-  function line(x1, x2, y, v) {
-    const base = `<line x1="${x1}" y1="${y}" x2="${x2 - 6}" y2="${y}" stroke-width="2.5" marker-end="url(#pvah)"`;
-    if (v === "mixed") return `<line x1="${x1}" y1="${y}" x2="${x2 - 6}" y2="${y}" stroke="${C.mixed}" stroke-width="5"/><line x1="${x1}" y1="${y}" x2="${x2 - 6}" y2="${y}" stroke="${C.confident}" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#pvah)"/>`;
-    if (v === "little") return base + ` stroke="${C.little}" stroke-dasharray="6 5"/>`;
-    if (v === "against") return base + ` stroke="${C.against}" stroke-dasharray="2 5"/>`;
-    return base + ` stroke="${C.confident}"/>`;
-  }
-  function chain(p, full) {
-    const w = full ? 150 : 92, gap = full ? 40 : 30, h = full ? 66 : 40, n = p.boxes.length;
-    const W = n * w + (n - 1) * gap + 8;
-    let svg = `<svg viewBox="0 0 ${W} ${h + 8}" width="${W}" height="${h + 8}" role="img" aria-label="${p.title}"><defs><marker id="pvah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a909c"/></marker></defs>`;
-    p.boxes.forEach((b, i) => {
-      const x = 4 + i * (w + gap), fail = b[0] === "F", imp = b[0] === "I";
-      svg += `<rect x="${x}" y="4" width="${w}" height="${h}" rx="10" fill="${imp ? "#ececff" : "#fff"}" stroke="${fail ? "#d93a12" : imp ? "#0000ff" : "#b7bcc6"}"${fail ? ' stroke-dasharray="4 3"' : ""}/>`;
-      svg += `<text x="${x + 8}" y="${full ? 19 : 18}" font-size="11" font-weight="600" fill="#646363">${b}</text>`;
-      if (full) {
-        const words = B[b].split(" "), lines = [""];
-        words.forEach(wd => { if ((lines[lines.length - 1] + " " + wd).trim().length > 21) lines.push(wd); else lines[lines.length - 1] = (lines[lines.length - 1] + " " + wd).trim(); });
-        lines.slice(0, 3).forEach((t, j) => svg += `<text x="${x + 8}" y="${35 + j * 14}" font-size="12" fill="#0f294a">${t}</text>`);
-      } else {
-        const t = B[b].length > 13 ? B[b].slice(0, 12) + "…" : B[b];
-        svg += `<text x="${x + 8}" y="${33}" font-size="11" fill="#0f294a">${t}</text>`;
-      }
-      if (i < n - 1) svg += line(x + w, x + w + gap, 4 + h / 2, p.v[i]);
-    });
-    return svg + "</svg>";
-  }
-  const root = document.getElementById("pv");
-  root.innerHTML = P.map((p, i) => {
-    let worst = 0; p.v.forEach((v, j) => { if (ORDER.indexOf(v) < ORDER.indexOf(p.v[worst])) worst = j; });
-    const wv = p.v[worst];
-    return `<div class="pv-row">
-      <div class="pv-head"><span class="r-lab">${p.kind}</span>
-        <b class="pv-title">${p.title}</b>
-        <span class="pv-weak"><span class="dot" style="background:${C[wv]}"></span>Weakest step ${p.codes[worst]}: ${LBL[wv]}</span>
-        <button type="button" class="quiet pv-btn" aria-expanded="${i === 0}" data-i="${i}">${i === 0 ? "Hide steps" : "Show steps"}</button></div>
-      <div class="scroll pv-chain">${chain(p, false)}</div>
-      <div class="scroll pv-full" ${i === 0 ? "" : "hidden"}>${chain(p, true)}</div>
-    </div>`;
-  }).join("");
-  root.addEventListener("click", e => {
-    const b = e.target.closest(".pv-btn"); if (!b) return;
-    const row = b.closest(".pv-row"), full = row.querySelector(".pv-full"), open = full.hidden;
-    full.hidden = !open; b.textContent = open ? "Hide steps" : "Show steps"; b.setAttribute("aria-expanded", String(open));
-  });
-})();
-</script>
 </div>
