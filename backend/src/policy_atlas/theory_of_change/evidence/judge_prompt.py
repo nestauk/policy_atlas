@@ -1,4 +1,4 @@
-"""The ``toc_judge_v6`` prompt: one link against one document (task 054, C5).
+"""The ``toc_judge_v7`` prompt: one link against one document (task 054, C5).
 
 Lead-authored and versioned. One call per link and document returns two
 stances, each with its own verbatim quote: *worked elsewhere* (where this step
@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_JUDGE_PROMPT_VERSION = "toc_judge_v6"
+TOC_JUDGE_PROMPT_VERSION = "toc_judge_v7"
 
 TOC_JUDGE_MAX_OUTPUT_TOKENS = 4_000
 
@@ -125,13 +125,24 @@ for "children consume less excess energy, so fewer children live with
 obesity", a trial that cut sugary drinks and measured overweight tests the
 step, though it is not about advertising.
 
+A study of a similar intervention that works through the same mechanism also
+tests the step, even when it is a different policy, programme or place: for a
+duty on officials to consider environmental principles in policy making,
+studies of environmental impact assessment, strategic environmental
+assessment or other appraisal duties and their effect on policy content
+test the step; for an advertising restriction, a restriction on another
+product's marketing tests the step's mechanism. Judge its support as usual
+and score its relevance by the extra assumptions needed (usually 1, or 2 when
+the intervention is close).
+
 It does not test the step, so the answer is not_about, when it:
 - only asserts the step without data (a commentary, an editorial, an
   introduction);
 - reports only on a neighbouring step (see <neighbouring_steps>): a study of
   whether restrictions cut children's exposure is not about a step whose
   target is what children eat;
-- speaks only to the topic.
+- speaks only to the topic, or describes an intervention without reporting
+  what it changed.
 Stay close to the text: no answer from what the document probably found.
 
 ## Support
@@ -156,7 +167,8 @@ for the stated population, in the stated place, now?
 - 2: a few small ones: a different region, a similar but not identical
   intervention, a somewhat different age group.
 - 1: several small or a few large leaps: a different country and sector,
-  adults instead of children, a laboratory setting for a real-world step.
+  adults instead of children, a laboratory setting for a real-world step, a
+  similar but different intervention.
 - 0: not applicable; only with not_about.
 First decide whether the step depends on place. A step that runs through
 rules, media, markets, services, platforms or firms depends on place:
