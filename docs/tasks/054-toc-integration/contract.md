@@ -536,6 +536,15 @@ kept.
   paragraphs and evaluation questions; the per-link sentences stay. It uses the report's four
   text styles only (`docs/knowledge/report-typography.md`). The PDF prints it.
 
+- **C39. Container view (next build; designed, owner-reviewed 2026-10-28).** Wireframe frame 5.
+  Boxes that share their incoming or outgoing links are grouped, 2 to 6 per container in one
+  layer, under a short causal claim the draft writes; a box on its own stays a plain box. Lines
+  run between containers; a bundled line shows the **strongest** verdict among the links it
+  stands for (owner), with a small count; opening a container shows its boxes and each link's
+  own verdict. Evidence stays on box-to-box links; nothing is graded at container level.
+  **Containers are the default canvas view** (owner); "All boxes" shows the full canvas. Not in
+  this round's build.
+
 ## ADR scope
 
 ADR 0042, "A third task kind: theory of change", records: the task kind and its walks (C3); the
