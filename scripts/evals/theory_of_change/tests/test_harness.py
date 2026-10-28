@@ -1,7 +1,7 @@
 """Self-checks for the agentic search harness: the stop rule and the System client's
 parsing. No network, no database, no model calls.
 
-Run: uv run --project backend pytest scripts/evals/toc_search/tests -q
+Run: uv run --project backend pytest scripts/evals/theory_of_change/tests -q
 """
 
 import sys

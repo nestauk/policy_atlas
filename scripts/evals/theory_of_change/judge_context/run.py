@@ -2,7 +2,7 @@
 import json, re, sys, uuid, time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
-sys.path.insert(0, "scripts/evals/toc_search"); sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, "scripts/evals/theory_of_change"); sys.path.insert(0, sys.argv[1])
 import _route  # noqa
 import harness as H
 from labels import LABELS

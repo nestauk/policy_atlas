@@ -1,5 +1,5 @@
 import sys, json, uuid
-sys.path.insert(0, "scripts/evals/toc_search")
+sys.path.insert(0, "scripts/evals/theory_of_change")
 import _route  # noqa
 import harness as H
 h = H.Harness(0.5, H.OUT / "judge_exp_cache.pkl")

@@ -30,8 +30,8 @@ in US dollars, new calls only) stops the run before it is exceeded. Outputs go t
 Run from the repo root:
 
     uv run --project backend --env-file backend/.env python \\
-        scripts/evals/toc_search/harness.py --link 2018a1e8-af22-4dc5-8056-6d73a01d6f62 \\
-        --gold scripts/evals/toc_search/gold.json --arms A B C
+        scripts/evals/theory_of_change/harness.py --link 2018a1e8-af22-4dc5-8056-6d73a01d6f62 \\
+        --gold scripts/evals/theory_of_change/gold.json --arms A B C
 
 Never calls the Consensus API.
 """
