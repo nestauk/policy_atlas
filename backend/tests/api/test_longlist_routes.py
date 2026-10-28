@@ -71,6 +71,7 @@ from tests.api.org_support import (
 from tests.api.resource_support import (  # noqa: F401 — autouse teardown
     api_client,
     create_task,
+    end_walks,
     remove_committed_tasks_after_walks,
 )
 from tests.api.resource_support import await_walks_ended as _await_walks_ended
@@ -1330,6 +1331,7 @@ def test_the_buttons_are_run_active_while_a_parentless_walk_runs(
             json={"reason": "Not now."},
         )
         assert allowed.status_code == 200, allowed.text
+        end_walks(engine, built.task_id)
 
 
 def test_the_buttons_are_422_on_an_evidence_search_task(engine: Engine, tmp_path: Path) -> None:
