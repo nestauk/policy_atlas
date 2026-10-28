@@ -76,6 +76,15 @@ from policy_atlas.theory_of_change.merge_prompt import (
     MergeResponse,
     build_merge_messages,
 )
+from policy_atlas.theory_of_change.report_prompt import (
+    TOC_REPORT_MAX_OUTPUT_TOKENS,
+    TOC_REPORT_PROMPT_VERSION,
+    AssumptionReasonWire,
+    PathwayParagraphWire,
+    ReportResponse,
+    TestRowWire,
+    build_report_messages,
+)
 from policy_atlas.theory_of_change.summary_prompt import (
     TOC_SUMMARY_MAX_OUTPUT_TOKENS,
     TOC_SUMMARY_PROMPT_VERSION,
@@ -174,6 +183,17 @@ class TocBackend(Protocol):
         self, *, plan: dict[str, object], theory: dict[str, object]
     ) -> UsageResult[SummaryResponse]:
         """Write the header paragraphs and sentences (``toc_summary_v2``)."""
+        ...
+
+    def report(
+        self,
+        *,
+        plan: dict[str, object],
+        theory: dict[str, object],
+        rows: list[dict[str, object]],
+        sources: list[dict[str, object]],
+    ) -> UsageResult[ReportResponse]:
+        """Write the narrative Detailed information (``toc_report_v1``)."""
         ...
 
 
@@ -370,6 +390,23 @@ class OpenAITocBackend:
             prompt_version=TOC_SUMMARY_PROMPT_VERSION,
         )
 
+    def report(
+        self,
+        *,
+        plan: dict[str, object],
+        theory: dict[str, object],
+        rows: list[dict[str, object]],
+        sources: list[dict[str, object]],
+    ) -> UsageResult[ReportResponse]:
+        """See :class:`TocBackend`."""
+        return self._call(
+            build_report_messages(plan=plan, theory=theory, rows=rows, sources=sources),
+            response_format=ReportResponse,
+            step="toc_report",
+            max_output_tokens=TOC_REPORT_MAX_OUTPUT_TOKENS,
+            prompt_version=TOC_REPORT_PROMPT_VERSION,
+        )
+
 
 def _criteria(definition: str, indicator: str | None) -> ResultCriteriaWire:
     return ResultCriteriaWire(definition=definition, indicator=indicator, timing="within 2 years")
@@ -459,6 +496,8 @@ class StubTocBackend:
     - ``figures``: none.
     - ``choose``: keeps every pathway, no new conditions.
     - ``summarise``: plain sentences that cite nothing.
+    - ``report``: a plain report: each pathway's paragraph names its first
+      link and cites that link's first source; a reason for every row.
 
     Calls are counted in :attr:`calls` and their keyword inputs kept in
     :attr:`inputs`, both under a lock (judge runs in a thread pool).
@@ -645,6 +684,61 @@ class StubTocBackend:
                         cites=[],
                     )
                     for box in boxes
+                ],
+            ),
+            None,
+        )
+
+    def report(
+        self,
+        *,
+        plan: dict[str, object],
+        theory: dict[str, object],
+        rows: list[dict[str, object]],
+        sources: list[dict[str, object]],
+    ) -> UsageResult[ReportResponse]:
+        """See :class:`StubTocBackend`."""
+        inputs = {"plan": plan, "theory": theory, "rows": rows, "sources": sources}
+        queued = self._next("report", inputs)
+        if queued is not None:
+            return queued, None
+        pathways = cast(list[dict[str, Any]], theory.get("pathways") or [])
+        cited = {
+            str(code): f" [{source['n']}]"
+            for source in reversed(sources)
+            for code in cast(list[str], source["links"])
+        }
+
+        def paragraph(path: dict[str, Any]) -> PathwayParagraphWire:
+            first = str((path.get("links") or ["?"])[0])
+            return PathwayParagraphWire(
+                pathway=str(path["key"]),
+                title=str(path["label"]),
+                paragraph=f"The route starts at {first}.{cited.get(first, '')}",
+            )
+
+        weakest = cast(list[str], theory.get("weakest_critical_links") or [])
+        return (
+            ReportResponse(
+                if_then_because=f"If {plan.get('intervention') or 'it'} happens, then "
+                f"{plan.get('goal')}, because of the mechanism.",
+                context="The setting matters.",
+                weakest_links=(
+                    f"The weakest link is {weakest[0]}." if weakest else "None stands out."
+                ),
+                pathways=[paragraph(path) for path in pathways],
+                assumption_reasons=[
+                    AssumptionReasonWire(row=str(row["key"]), why="The evidence is thin.")
+                    for row in rows
+                ],
+                tests=[
+                    TestRowWire(
+                        link=code,
+                        question="Does this step happen?",
+                        indicator="A count from routine data",
+                        test_and_learn="Compare before and after",
+                    )
+                    for code in weakest
                 ],
             ),
             None,

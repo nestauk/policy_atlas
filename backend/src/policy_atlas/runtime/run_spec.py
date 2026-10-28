@@ -47,6 +47,7 @@ COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     "toc_figures": {"requires": ["evidence_scope_id"]},
     "toc_choose": {"requires": ["evidence_scope_id"]},
     "toc_summarise": {"requires": ["evidence_scope_id"]},
+    "toc_report": {"requires": ["evidence_scope_id"]},
 }
 VALID_COMPONENTS = set(COMPONENT_REGISTRY.keys())
 

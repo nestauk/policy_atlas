@@ -120,6 +120,81 @@ class TocSummaryOut(BaseModel):
     evaluation_questions: list[str]
 
 
+class TocReportSummaryOut(BaseModel):
+    """The report's Summary (C38)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    goal: str
+    if_then_because: str
+    population: str
+    time_horizon: str | None
+    #: The accountability ceiling: the last layer the programme directly influences.
+    directly_influenced: str
+    context: str
+    weakest_links: str
+
+
+class TocReportPathwayOut(BaseModel):
+    """How change happens along one pathway: a lead-in title and a paragraph."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    paragraph: str
+
+
+class TocReportAssumptionOut(BaseModel):
+    """One row of Assumptions and evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The link's code, or the failure outcome's for a risk.
+    code: str
+    statement: str
+    kind: Literal["assumption", "risk"]
+    #: The verdict's label, e.g. "Not sure: mixed".
+    verdict: str
+    why: str
+    #: Numbers in the report's source list.
+    sources: list[int]
+
+
+class TocReportTestOut(BaseModel):
+    """One row of What to test and measure."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    link: str
+    question: str
+    indicator: str
+    test_and_learn: str
+
+
+class TocReportSourceOut(BaseModel):
+    """One numbered source, in order of first citation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    n: int
+    citation: str
+    url: str | None
+
+
+class TocReportOut(BaseModel):
+    """Detailed information as a short narrative report (C38), written on each check."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    summary: TocReportSummaryOut
+    pathways: list[TocReportPathwayOut]
+    assumptions: list[TocReportAssumptionOut]
+    tests: list[TocReportTestOut]
+    sources: list[TocReportSourceOut]
+    #: How it was made: written by code, with the date and the judge's model.
+    method: str
+
+
 class TocGradeRuleOut(BaseModel):
     """One row of the verdict rule, generated from the verdict constants (C36)."""
 
@@ -145,6 +220,8 @@ class TocGraphOut(BaseModel):
     grade_rules: list[TocGradeRuleOut]
     #: The theory's confidence: the lowest verdict among its critical links; null without one.
     confidence: Verdict | None
+    #: The latest check's narrative report; null until one is written.
+    report: TocReportOut | None
     #: Links the 80-link cap left unchecked in the last check walk.
     links_left_out: int
 

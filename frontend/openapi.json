@@ -9109,6 +9109,16 @@
             "title": "Pathways",
             "type": "array"
           },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocReportOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "summary": {
             "anyOf": [
               {
@@ -9143,6 +9153,7 @@
           "summary",
           "grade_rules",
           "confidence",
+          "report",
           "links_left_out"
         ],
         "title": "TocGraphOut",
@@ -9556,6 +9567,238 @@
           }
         },
         "title": "TocPlanDraft",
+        "type": "object"
+      },
+      "TocReportAssumptionOut": {
+        "additionalProperties": false,
+        "description": "One row of Assumptions and evidence.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "assumption",
+              "risk"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "verdict": {
+            "title": "Verdict",
+            "type": "string"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "statement",
+          "kind",
+          "verdict",
+          "why",
+          "sources"
+        ],
+        "title": "TocReportAssumptionOut",
+        "type": "object"
+      },
+      "TocReportOut": {
+        "additionalProperties": false,
+        "description": "Detailed information as a short narrative report (C38), written on each check.",
+        "properties": {
+          "assumptions": {
+            "items": {
+              "$ref": "#/components/schemas/TocReportAssumptionOut"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "pathways": {
+            "items": {
+              "$ref": "#/components/schemas/TocReportPathwayOut"
+            },
+            "title": "Pathways",
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/TocReportSourceOut"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/TocReportSummaryOut"
+          },
+          "tests": {
+            "items": {
+              "$ref": "#/components/schemas/TocReportTestOut"
+            },
+            "title": "Tests",
+            "type": "array"
+          }
+        },
+        "required": [
+          "summary",
+          "pathways",
+          "assumptions",
+          "tests",
+          "sources",
+          "method"
+        ],
+        "title": "TocReportOut",
+        "type": "object"
+      },
+      "TocReportPathwayOut": {
+        "additionalProperties": false,
+        "description": "How change happens along one pathway: a lead-in title and a paragraph.",
+        "properties": {
+          "paragraph": {
+            "title": "Paragraph",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "paragraph"
+        ],
+        "title": "TocReportPathwayOut",
+        "type": "object"
+      },
+      "TocReportSourceOut": {
+        "additionalProperties": false,
+        "description": "One numbered source, in order of first citation.",
+        "properties": {
+          "citation": {
+            "title": "Citation",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "n",
+          "citation",
+          "url"
+        ],
+        "title": "TocReportSourceOut",
+        "type": "object"
+      },
+      "TocReportSummaryOut": {
+        "additionalProperties": false,
+        "description": "The report's Summary (C38).",
+        "properties": {
+          "context": {
+            "title": "Context",
+            "type": "string"
+          },
+          "directly_influenced": {
+            "title": "Directly Influenced",
+            "type": "string"
+          },
+          "goal": {
+            "title": "Goal",
+            "type": "string"
+          },
+          "if_then_because": {
+            "title": "If Then Because",
+            "type": "string"
+          },
+          "population": {
+            "title": "Population",
+            "type": "string"
+          },
+          "time_horizon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Horizon"
+          },
+          "weakest_links": {
+            "title": "Weakest Links",
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal",
+          "if_then_because",
+          "population",
+          "time_horizon",
+          "directly_influenced",
+          "context",
+          "weakest_links"
+        ],
+        "title": "TocReportSummaryOut",
+        "type": "object"
+      },
+      "TocReportTestOut": {
+        "additionalProperties": false,
+        "description": "One row of What to test and measure.",
+        "properties": {
+          "indicator": {
+            "title": "Indicator",
+            "type": "string"
+          },
+          "link": {
+            "title": "Link",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "test_and_learn": {
+            "title": "Test And Learn",
+            "type": "string"
+          }
+        },
+        "required": [
+          "link",
+          "question",
+          "indicator",
+          "test_and_learn"
+        ],
+        "title": "TocReportTestOut",
         "type": "object"
       },
       "TocResultCriteriaOut": {

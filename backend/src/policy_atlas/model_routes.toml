@@ -66,6 +66,8 @@ toc_figures = "fast"
 # One small call per link picks the documents the judge reads (C28).
 toc_pick = "fast"
 toc_summarise = "standard"
+# One call writes Detailed information as a short narrative report (C38).
+toc_report = "frontier"
 
 # ---------------------------------------------------------------------------
 [routes.openai-direct]

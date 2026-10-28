@@ -137,6 +137,7 @@ TOC_STEPS: tuple[str, ...] = (
     "toc_figures",
     "toc_choose",
     "toc_summarise",
+    "toc_report",
 )
 DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(("select", "extract", "group"))
 DEEP_GROUPING_FACETS: tuple[GroupingFacet, ...] = (

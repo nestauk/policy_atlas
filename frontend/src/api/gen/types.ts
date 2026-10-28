@@ -5603,6 +5603,7 @@ export interface components {
             links_left_out: number;
             /** Pathways */
             pathways: components["schemas"]["TocPathwayOut"][];
+            report: components["schemas"]["TocReportOut"] | null;
             summary: components["schemas"]["TocSummaryOut"] | null;
             /** Supporting Activities */
             supporting_activities: string[];
@@ -5807,6 +5808,100 @@ export interface components {
              * @default null
              */
             where: string | null;
+        };
+        /**
+         * TocReportAssumptionOut
+         * @description One row of Assumptions and evidence.
+         */
+        TocReportAssumptionOut: {
+            /** Code */
+            code: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "assumption" | "risk";
+            /** Sources */
+            sources: number[];
+            /** Statement */
+            statement: string;
+            /** Verdict */
+            verdict: string;
+            /** Why */
+            why: string;
+        };
+        /**
+         * TocReportOut
+         * @description Detailed information as a short narrative report (C38), written on each check.
+         */
+        TocReportOut: {
+            /** Assumptions */
+            assumptions: components["schemas"]["TocReportAssumptionOut"][];
+            /** Method */
+            method: string;
+            /** Pathways */
+            pathways: components["schemas"]["TocReportPathwayOut"][];
+            /** Sources */
+            sources: components["schemas"]["TocReportSourceOut"][];
+            summary: components["schemas"]["TocReportSummaryOut"];
+            /** Tests */
+            tests: components["schemas"]["TocReportTestOut"][];
+        };
+        /**
+         * TocReportPathwayOut
+         * @description How change happens along one pathway: a lead-in title and a paragraph.
+         */
+        TocReportPathwayOut: {
+            /** Paragraph */
+            paragraph: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * TocReportSourceOut
+         * @description One numbered source, in order of first citation.
+         */
+        TocReportSourceOut: {
+            /** Citation */
+            citation: string;
+            /** N */
+            n: number;
+            /** Url */
+            url: string | null;
+        };
+        /**
+         * TocReportSummaryOut
+         * @description The report's Summary (C38).
+         */
+        TocReportSummaryOut: {
+            /** Context */
+            context: string;
+            /** Directly Influenced */
+            directly_influenced: string;
+            /** Goal */
+            goal: string;
+            /** If Then Because */
+            if_then_because: string;
+            /** Population */
+            population: string;
+            /** Time Horizon */
+            time_horizon: string | null;
+            /** Weakest Links */
+            weakest_links: string;
+        };
+        /**
+         * TocReportTestOut
+         * @description One row of What to test and measure.
+         */
+        TocReportTestOut: {
+            /** Indicator */
+            indicator: string;
+            /** Link */
+            link: string;
+            /** Question */
+            question: string;
+            /** Test And Learn */
+            test_and_learn: string;
         };
         /**
          * TocResultCriteriaOut

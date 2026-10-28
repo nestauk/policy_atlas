@@ -63,6 +63,7 @@ def test_the_check_walk_classifies_only_after_the_judge() -> None:
         ("appraise", True),
         ("toc_choose", True),
         ("toc_summarise", False),
+        ("toc_report", False),
     ]
     named = compose_toc(_plan(), "toc", {"toc_walk": "check", "links": ["l1"]})
     assert named.components == [
@@ -72,6 +73,7 @@ def test_the_check_walk_classifies_only_after_the_judge() -> None:
         "classify",
         "appraise",
         "toc_summarise",
+        "toc_report",
     ]
 
 

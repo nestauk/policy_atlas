@@ -332,6 +332,7 @@ def test_start_drafts_then_checks_and_the_thread_stays_open(
         "toc_figures",
         "toc_choose",
         "toc_summarise",
+        "toc_report",
     ]
     with engine.connect() as conn:
         assert (

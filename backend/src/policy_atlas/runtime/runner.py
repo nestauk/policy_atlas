@@ -199,6 +199,7 @@ LLM_BEARING_COMPONENTS = frozenset(
         "toc_figures",
         "toc_choose",
         "toc_summarise",
+        "toc_report",
     }
 )
 SPINE_COMPONENTS = frozenset(SPINE)

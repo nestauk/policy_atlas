@@ -58,6 +58,7 @@ DEFAULT_ROUTE_MODELS = {
     "toc_summarise": "gpt-5.6-terra",
     "toc_pick": "gpt-5.6-luna",
     "toc_figures": "gpt-5.6-luna",
+    "toc_report": "gpt-5.6-sol",
 }
 
 

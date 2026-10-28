@@ -33,6 +33,7 @@ from policy_atlas.api.contract.toc import (
     TocLinkEvidenceOut,
     TocLinkOut,
     TocPathwayOut,
+    TocReportOut,
     TocResultCriteriaOut,
     TocSummaryOut,
     TocWeightsOut,
@@ -135,6 +136,21 @@ def _summary(conn: Connection, task_id: uuid.UUID) -> TocSummaryOut | None:
         evidence_says=str(payload.get("evidence_says") or ""),
         evaluation_questions=[str(q) for q in payload.get("evaluation_questions") or []],
     )
+
+
+def _report(conn: Connection, task_id: uuid.UUID) -> TocReportOut | None:
+    """The latest check walk's narrative report (C38), from its step payload."""
+    payload = conn.execute(
+        select(event_log.c.payload)
+        .where(event_log.c.task_id == task_id)
+        .where(event_log.c.event_type == "component.completed")
+        .where(event_log.c.payload["component"].astext == "toc_report")
+        .order_by(event_log.c.sequence.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if not isinstance(payload, dict) or not isinstance(payload.get("report"), dict):
+        return None
+    return TocReportOut.model_validate(payload["report"])
 
 
 def _links_left_out(conn: Connection, task_id: uuid.UUID) -> int:
@@ -269,6 +285,7 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
         summary=_summary(conn, task_id),
         grade_rules=[TocGradeRuleOut(label=label, rule=rule) for label, rule in rule_text()],
         confidence=lowest(link.verdict for link in links if link.critical),
+        report=_report(conn, task_id),
         links_left_out=_links_left_out(conn, task_id),
     )
 
