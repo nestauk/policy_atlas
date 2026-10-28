@@ -8563,7 +8563,7 @@
       },
       "TocDocumentOut": {
         "additionalProperties": false,
-        "description": "One judged document of one link, listed once even when it answers both.",
+        "description": "One judged document of one link, with what it adds to the verdict (C36).",
         "properties": {
           "appraisal_score": {
             "anyOf": [
@@ -8594,9 +8594,6 @@
             ],
             "title": "Condition"
           },
-          "elsewhere": {
-            "$ref": "#/components/schemas/TocStanceOut"
-          },
           "evidence_id": {
             "format": "uuid",
             "title": "Evidence Id",
@@ -8613,12 +8610,39 @@
             ],
             "title": "Evidence Type"
           },
-          "here": {
-            "$ref": "#/components/schemas/TocStanceOut"
-          },
           "previous_wording": {
             "title": "Previous Wording",
             "type": "boolean"
+          },
+          "quality": {
+            "title": "Quality",
+            "type": "integer"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "relevance": {
+            "title": "Relevance",
+            "type": "integer"
+          },
+          "relevance_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance Reason"
           },
           "source_type": {
             "enum": [
@@ -8627,6 +8651,17 @@
               "web"
             ],
             "title": "Source Type",
+            "type": "string"
+          },
+          "support": {
+            "enum": [
+              "strong",
+              "weak",
+              "mixed",
+              "refutes",
+              "not_about"
+            ],
+            "title": "Support",
             "type": "string"
           },
           "task_source_snapshot_id": {
@@ -8648,6 +8683,10 @@
               }
             ],
             "title": "Url"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "number"
           },
           "year": {
             "anyOf": [
@@ -8671,8 +8710,12 @@
           "source_type",
           "evidence_type",
           "appraisal_score",
-          "elsewhere",
-          "here",
+          "support",
+          "quote",
+          "relevance",
+          "relevance_reason",
+          "quality",
+          "weight",
           "condition",
           "previous_wording"
         ],
@@ -8705,40 +8748,9 @@
         "title": "TocEvidenceOut",
         "type": "object"
       },
-      "TocGradeOut": {
-        "additionalProperties": false,
-        "description": "One question's grade (C4).",
-        "properties": {
-          "against": {
-            "title": "Against",
-            "type": "integer"
-          },
-          "grade": {
-            "enum": [
-              "strong",
-              "medium",
-              "weak",
-              "none"
-            ],
-            "title": "Grade",
-            "type": "string"
-          },
-          "supports": {
-            "title": "Supports",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "grade",
-          "against",
-          "supports"
-        ],
-        "title": "TocGradeOut",
-        "type": "object"
-      },
       "TocGradeRuleOut": {
         "additionalProperties": false,
-        "description": "One row of the grade rule, generated from the grade constants (C4).",
+        "description": "One row of the verdict rule, generated from the verdict constants (C36).",
         "properties": {
           "label": {
             "title": "Label",
@@ -8777,6 +8789,23 @@
             ],
             "title": "Check Status",
             "type": "string"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confident",
+                  "not_sure_mixed",
+                  "not_sure_insufficient",
+                  "not_confident"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
           },
           "context": {
             "items": {
@@ -8843,6 +8872,7 @@
           "supporting_activities",
           "summary",
           "grade_rules",
+          "confidence",
           "links_left_out"
         ],
         "title": "TocGraphOut",
@@ -8874,7 +8904,7 @@
       },
       "TocLinkOut": {
         "additionalProperties": false,
-        "description": "One causal step, with both grades and its state.",
+        "description": "One causal step, with its evidence verdict and its state.",
         "properties": {
           "assumption_type": {
             "title": "Assumption Type",
@@ -8906,10 +8936,7 @@
             "title": "Critical",
             "type": "boolean"
           },
-          "elsewhere": {
-            "$ref": "#/components/schemas/TocGradeOut"
-          },
-          "elsewhere_sentence": {
+          "evidence_sentence": {
             "anyOf": [
               {
                 "type": "string"
@@ -8918,25 +8945,11 @@
                 "type": "null"
               }
             ],
-            "title": "Elsewhere Sentence"
+            "title": "Evidence Sentence"
           },
           "for_text": {
             "title": "For Text",
             "type": "string"
-          },
-          "here": {
-            "$ref": "#/components/schemas/TocGradeOut"
-          },
-          "here_sentence": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Here Sentence"
           },
           "if_text": {
             "title": "If Text",
@@ -8947,18 +8960,8 @@
             "title": "Link Id",
             "type": "string"
           },
-          "lower_grade": {
-            "enum": [
-              "strong",
-              "medium",
-              "weak",
-              "none"
-            ],
-            "title": "Lower Grade",
-            "type": "string"
-          },
-          "merged": {
-            "title": "Merged",
+          "near_threshold": {
+            "title": "Near Threshold",
             "type": "boolean"
           },
           "origin": {
@@ -9005,6 +9008,19 @@
           "then_text": {
             "title": "Then Text",
             "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "confident",
+              "not_sure_mixed",
+              "not_sure_insufficient",
+              "not_confident"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          },
+          "weights": {
+            "$ref": "#/components/schemas/TocWeightsOut"
           }
         },
         "required": [
@@ -9023,12 +9039,10 @@
           "origin",
           "revision",
           "state",
-          "elsewhere",
-          "here",
-          "lower_grade",
-          "elsewhere_sentence",
-          "here_sentence",
-          "merged"
+          "verdict",
+          "near_threshold",
+          "weights",
+          "evidence_sentence"
         ],
         "title": "TocLinkOut",
         "type": "object"
@@ -9307,38 +9321,6 @@
         "title": "TocResultCriteriaOut",
         "type": "object"
       },
-      "TocStanceOut": {
-        "additionalProperties": false,
-        "description": "One question's stance on one document.",
-        "properties": {
-          "quote": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quote"
-          },
-          "stance": {
-            "enum": [
-              "supports",
-              "challenges",
-              "not_about"
-            ],
-            "title": "Stance",
-            "type": "string"
-          }
-        },
-        "required": [
-          "stance",
-          "quote"
-        ],
-        "title": "TocStanceOut",
-        "type": "object"
-      },
       "TocSummaryOut": {
         "additionalProperties": false,
         "description": "The header paragraphs and the questions for an evaluation (C20).",
@@ -9365,6 +9347,36 @@
           "evaluation_questions"
         ],
         "title": "TocSummaryOut",
+        "type": "object"
+      },
+      "TocWeightsOut": {
+        "additionalProperties": false,
+        "description": "The numbers behind a link's verdict (C36).",
+        "properties": {
+          "mean_support": {
+            "title": "Mean Support",
+            "type": "number"
+          },
+          "n_documents": {
+            "title": "N Documents",
+            "type": "integer"
+          },
+          "refute_share": {
+            "title": "Refute Share",
+            "type": "number"
+          },
+          "total_weight": {
+            "title": "Total Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "total_weight",
+          "mean_support",
+          "refute_share",
+          "n_documents"
+        ],
+        "title": "TocWeightsOut",
         "type": "object"
       },
       "TurnActionOut": {
@@ -12924,7 +12936,7 @@
     },
     "/api/v1/tasks/{task_id}/toc": {
       "get": {
-        "description": "Return the theory: boxes, links with both grades and states, pathways, summary.",
+        "description": "Return the theory: boxes, links with their verdicts and states, pathways, summary.",
         "operationId": "get_toc_api_v1_tasks__task_id__toc_get",
         "parameters": [
           {
@@ -13022,7 +13034,7 @@
     },
     "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context": {
       "get": {
-        "description": "Return one judgement's quote highlighted in its passage.\n\n``question`` (``elsewhere`` or ``here``) picks the stance. It is checked\nafter access, so an unreadable task stays the same 404 with or without it.",
+        "description": "Return one judgement's quote highlighted in its passage.",
         "operationId": "get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get",
         "parameters": [
           {
@@ -13043,26 +13055,6 @@
               "format": "uuid",
               "title": "Evidence Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "question",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "elsewhere",
-                    "here"
-                  ],
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Question"
             }
           }
         ],

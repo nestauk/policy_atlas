@@ -363,14 +363,15 @@ class _JudgesHalfOffTopic(StubTocBackend):
     """Not about the step for documents whose id ends in an even hex digit."""
 
     def judge(self, **kwargs: Any) -> Any:
-        from policy_atlas.theory_of_change.evidence.judge_prompt import JudgeResponse, StanceWire
+        from policy_atlas.theory_of_change.evidence.judge_prompt import JudgeResponse
 
         if int(str(kwargs["document_id"])[-1], 16) % 2 == 0:
             self._next("judge", kwargs)
-            off = StanceWire(stance="not_about", quote=None)
             return JudgeResponse(
-                worked_elsewhere=off,
-                holds_here=off,
+                support="not_about",
+                quote=None,
+                relevance=0,
+                relevance_reason=None,
                 condition=None,
                 case_study=None,
                 indicator=None,
@@ -392,7 +393,7 @@ def test_classify_reads_only_what_the_judge_found_on_topic(
             conn.execute(
                 select(toc_item_evidence.c.task_source_snapshot_id)
                 .where(toc_item_evidence.c.task_id == task_id)
-                .where(toc_item_evidence.c.stance_elsewhere == "supports")
+                .where(toc_item_evidence.c.support != "not_about")
             ).scalars()
         )
         classified = set(

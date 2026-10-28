@@ -351,7 +351,7 @@ def test_start_drafts_then_checks_and_the_thread_stays_open(
         assert judged
         links = conn.execute(select(toc_link).where(toc_link.c.task_id == task_id)).all()
         assert all(link.counted_hash is not None for link in links)
-        assert all(link.elsewhere_sentence for link in links)
+        assert all(link.evidence_sentence for link in links)
 
     # A second Start on a task with a graph checks it again in full: no redraft.
     _start(engine, task_id, plan_row, RunnerBackends(search_backends=[Records()], toc=backend))

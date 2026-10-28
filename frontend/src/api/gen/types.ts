@@ -1117,7 +1117,7 @@ export interface paths {
         };
         /**
          * Get Toc
-         * @description Return the theory: boxes, links with both grades and states, pathways, summary.
+         * @description Return the theory: boxes, links with their verdicts and states, pathways, summary.
          */
         get: operations["get_toc_api_v1_tasks__task_id__toc_get"];
         put?: never;
@@ -1158,9 +1158,6 @@ export interface paths {
         /**
          * Get Toc Evidence Context
          * @description Return one judgement's quote highlighted in its passage.
-         *
-         *     ``question`` (``elsewhere`` or ``here``) picks the stance. It is checked
-         *     after access, so an unreadable task stays the same 404 with or without it.
          */
         get: operations["get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get"];
         put?: never;
@@ -5439,7 +5436,7 @@ export interface components {
         };
         /**
          * TocDocumentOut
-         * @description One judged document of one link, listed once even when it answers both.
+         * @description One judged document of one link, with what it adds to the verdict (C36).
          */
         TocDocumentOut: {
             /** Appraisal Score */
@@ -5448,7 +5445,6 @@ export interface components {
             authors: string[];
             /** Condition */
             condition: string | null;
-            elsewhere: components["schemas"]["TocStanceOut"];
             /**
              * Evidence Id
              * Format: uuid
@@ -5456,14 +5452,26 @@ export interface components {
             evidence_id: string;
             /** Evidence Type */
             evidence_type: string | null;
-            here: components["schemas"]["TocStanceOut"];
             /** Previous Wording */
             previous_wording: boolean;
+            /** Quality */
+            quality: number;
+            /** Quote */
+            quote: string | null;
+            /** Relevance */
+            relevance: number;
+            /** Relevance Reason */
+            relevance_reason: string | null;
             /**
              * Source Type
              * @enum {string}
              */
             source_type: "academic" | "policy" | "web";
+            /**
+             * Support
+             * @enum {string}
+             */
+            support: "strong" | "weak" | "mixed" | "refutes" | "not_about";
             /**
              * Task Source Snapshot Id
              * Format: uuid
@@ -5473,6 +5481,8 @@ export interface components {
             title: string;
             /** Url */
             url: string | null;
+            /** Weight */
+            weight: number;
             /** Year */
             year: number | null;
         };
@@ -5487,23 +5497,8 @@ export interface components {
             links: components["schemas"]["TocLinkEvidenceOut"][];
         };
         /**
-         * TocGradeOut
-         * @description One question's grade (C4).
-         */
-        TocGradeOut: {
-            /** Against */
-            against: number;
-            /**
-             * Grade
-             * @enum {string}
-             */
-            grade: "strong" | "medium" | "weak" | "none";
-            /** Supports */
-            supports: number;
-        };
-        /**
          * TocGradeRuleOut
-         * @description One row of the grade rule, generated from the grade constants (C4).
+         * @description One row of the verdict rule, generated from the verdict constants (C36).
          */
         TocGradeRuleOut: {
             /** Label */
@@ -5523,6 +5518,8 @@ export interface components {
              * @enum {string}
              */
             check_status: "none" | "drafting" | "checking" | "checked" | "failed";
+            /** Confidence */
+            confidence: ("confident" | "not_sure_mixed" | "not_sure_insufficient" | "not_confident") | null;
             /** Context */
             context: string[];
             /** Grade Rules */
@@ -5557,7 +5554,7 @@ export interface components {
         };
         /**
          * TocLinkOut
-         * @description One causal step, with both grades and its state.
+         * @description One causal step, with its evidence verdict and its state.
          */
         TocLinkOut: {
             /** Assumption Type */
@@ -5570,14 +5567,10 @@ export interface components {
             conditions: string[];
             /** Critical */
             critical: boolean;
-            elsewhere: components["schemas"]["TocGradeOut"];
-            /** Elsewhere Sentence */
-            elsewhere_sentence: string | null;
+            /** Evidence Sentence */
+            evidence_sentence: string | null;
             /** For Text */
             for_text: string;
-            here: components["schemas"]["TocGradeOut"];
-            /** Here Sentence */
-            here_sentence: string | null;
             /** If Text */
             if_text: string;
             /**
@@ -5585,13 +5578,8 @@ export interface components {
              * Format: uuid
              */
             link_id: string;
-            /**
-             * Lower Grade
-             * @enum {string}
-             */
-            lower_grade: "strong" | "medium" | "weak" | "none";
-            /** Merged */
-            merged: boolean;
+            /** Near Threshold */
+            near_threshold: boolean;
             /**
              * Origin
              * @enum {string}
@@ -5618,6 +5606,12 @@ export interface components {
             target_box_id: string;
             /** Then Text */
             then_text: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "confident" | "not_sure_mixed" | "not_sure_insufficient" | "not_confident";
+            weights: components["schemas"]["TocWeightsOut"];
         };
         /**
          * TocPathwayOut
@@ -5752,19 +5746,6 @@ export interface components {
             timing?: string | null;
         };
         /**
-         * TocStanceOut
-         * @description One question's stance on one document.
-         */
-        TocStanceOut: {
-            /** Quote */
-            quote: string | null;
-            /**
-             * Stance
-             * @enum {string}
-             */
-            stance: "supports" | "challenges" | "not_about";
-        };
-        /**
          * TocSummaryOut
          * @description The header paragraphs and the questions for an evaluation (C20).
          */
@@ -5775,6 +5756,20 @@ export interface components {
             evaluation_questions: string[];
             /** Evidence Says */
             evidence_says: string;
+        };
+        /**
+         * TocWeightsOut
+         * @description The numbers behind a link's verdict (C36).
+         */
+        TocWeightsOut: {
+            /** Mean Support */
+            mean_support: number;
+            /** N Documents */
+            n_documents: number;
+            /** Refute Share */
+            refute_share: number;
+            /** Total Weight */
+            total_weight: number;
         };
         /**
          * TurnActionOut
@@ -7602,9 +7597,7 @@ export interface operations {
     };
     get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get: {
         parameters: {
-            query?: {
-                question?: ("elsewhere" | "here") | null;
-            };
+            query?: never;
             header?: never;
             path: {
                 task_id: string;

@@ -46,8 +46,8 @@ from policy_atlas.theory_of_change.discover_prompt import (
     ProposalWire,
 )
 from policy_atlas.theory_of_change.draft_prompt import DraftPathwayWire
-from policy_atlas.theory_of_change.evidence.grade import Grade, GradeResult
-from policy_atlas.theory_of_change.evidence.judge_prompt import JudgeResponse, StanceWire
+from policy_atlas.theory_of_change.evidence.grade import LinkVerdict, Verdict
+from policy_atlas.theory_of_change.evidence.judge_prompt import JudgeResponse
 from policy_atlas.theory_of_change.evidence.pick_prompt import PICK_N
 from policy_atlas.theory_of_change.graph import Box, Graph, Link, Pathway
 from policy_atlas.theory_of_change.summary_prompt import LinkSentencesWire
@@ -161,17 +161,21 @@ def test_case_studies_are_deduplicated_ranked_and_capped() -> None:
     assert kept[3:] == ["x0", "x1"]
 
 
-def _grades(pairs: dict[str, tuple[Grade, Grade]]) -> dict[str, tuple[GradeResult, GradeResult]]:
+def _verdicts(pairs: dict[str, Verdict]) -> dict[str, LinkVerdict]:
     return {
-        key: (
-            GradeResult(grade=a, against=0, supports=0),
-            GradeResult(grade=b, against=0, supports=0),
+        key: LinkVerdict(
+            verdict=verdict,
+            near_threshold=False,
+            total_weight=1.0,
+            mean_support=0.0,
+            refute_share=0.0,
+            n_documents=1,
         )
-        for key, (a, b) in pairs.items()
+        for key, verdict in pairs.items()
     }
 
 
-def test_the_critical_connection_follows_the_c6_rule() -> None:
+def test_the_critical_connection_is_the_weakest_important_success_step() -> None:
     boxes = {k: Box(key=k, layer="outcome_short", text=k) for k in ("a", "b", "c", "d")}
     links = {
         "l1": Link(key="l1", source="a", target="b"),
@@ -184,16 +188,20 @@ def test_the_critical_connection_follows_the_c6_rule() -> None:
         Pathway(key="p3", kind="failure", links=["l3"]),
     ]
     graph = Graph(boxes=boxes, links=links, pathways=pathways)
-    # Worked elsewhere, weak here: l1 and l2 qualify; l2 is on more pathways.
-    grades = _grades({"l1": ("strong", "weak"), "l2": ("medium", "none"), "l3": ("weak", "none")})
-    assert critical_link(graph, grades) == "l2"
-    # Tie on pathway count: the earlier one in pathway order.
+    # The lowest verdict wins, though l2 is on more pathways.
+    verdicts = _verdicts({"l1": "not_confident", "l2": "not_sure_mixed", "l3": "confident"})
+    assert critical_link(graph, verdicts) == "l1"
+    # Equal verdicts: the link on the most kept pathways.
+    verdicts = _verdicts({"l1": "not_sure_mixed", "l2": "not_sure_mixed", "l3": "not_sure_mixed"})
+    assert critical_link(graph, verdicts) == "l2"
+    # Equal again: the earlier one in pathway order; a link with no verdict counts as
+    # too little evidence, below mixed.
     graph.pathways = [Pathway(key="p1", kind="success", links=["l1", "l3"])]
-    grades = _grades({"l1": ("strong", "weak"), "l3": ("medium", "none")})
-    assert critical_link(graph, grades) == "l1"
-    # None qualifies: the lowest holds-here grade.
-    grades = _grades({"l1": ("weak", "medium"), "l3": ("none", "weak")})
-    assert critical_link(graph, grades) == "l3"
+    assert critical_link(graph, _verdicts({"l1": "confident", "l3": "confident"})) == "l1"
+    assert critical_link(graph, _verdicts({"l1": "not_sure_mixed"})) == "l3"
+    # Only failure pathways are never critical.
+    graph.pathways = [Pathway(key="p3", kind="failure", links=["l3"])]
+    assert critical_link(graph, _verdicts({})) is None
 
 
 # --- the walk -------------------------------------------------------------------
@@ -204,16 +212,37 @@ class _Unverifiable(StubTocBackend):
 
     def judge(self, **kwargs: Any) -> Any:
         self._next("judge", kwargs)
-        stance = StanceWire(stance="supports", quote="words that appear in no abstract at all")
         response = JudgeResponse(
-            worked_elsewhere=stance,
-            holds_here=StanceWire(stance="not_about", quote=None),
+            support="strong",
+            quote="words that appear in no abstract at all",
+            relevance=3,
+            relevance_reason="UK children.",
             condition=None,
             case_study=None,
             indicator=None,
             robust_model=None,
         )
         return response, None
+
+
+def test_the_judge_stores_support_quote_and_relevance(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    task_id = _run(engine, cleanup, StubTocBackend())
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(toc_item_evidence).where(toc_item_evidence.c.task_id == task_id)
+        ).all()
+        out = toc_graph_out(conn, task_id)
+    assert rows
+    for row in rows:
+        # The stub weakly supports at relevance 2, quoting the text's first words.
+        assert (row.support, row.relevance) == ("weak", 2)
+        assert row.quote and row.relevance_reason == "A similar population elsewhere."
+        assert row.stance_elsewhere is None and row.stance_here is None
+    # Unscored documents (Q 1) at relevance 2 weigh 2/9 each: the verdicts follow the rule.
+    critical = [link for link in out.links if link.critical]
+    assert len(critical) == 1 and out.confidence == critical[0].verdict
 
 
 def test_an_unverified_quote_is_dropped_and_counted(
@@ -224,17 +253,16 @@ def test_an_unverified_quote_is_dropped_and_counted(
     judge = _summary(engine, task_id, "toc_judge")
     assert judge["unverified_dropped"] == judge["calls"] == backend.calls["judge"] > 0
     with engine.connect() as conn:
-        stances = (
-            conn.execute(
-                select(toc_item_evidence.c.stance_elsewhere).where(
-                    toc_item_evidence.c.task_id == task_id
-                )
-            )
-            .scalars()
-            .all()
-        )
-    # Still stored: the row shows the document was read.
-    assert stances and set(stances) == {"not_about"}
+        stored = conn.execute(
+            select(
+                toc_item_evidence.c.support,
+                toc_item_evidence.c.quote,
+                toc_item_evidence.c.relevance,
+                toc_item_evidence.c.relevance_reason,
+            ).where(toc_item_evidence.c.task_id == task_id)
+        ).all()
+    # Still stored, as not about the step: the row shows the document was read.
+    assert stored and set(stored) == {("not_about", None, 0, None)}
 
 
 def test_each_link_reads_at_most_k_documents_of_its_own_search(
@@ -574,10 +602,8 @@ class _BadCitation(StubTocBackend):
         links = [
             LinkSentencesWire(
                 link=str(link["key"]),
-                elsewhere_sentence="A study showed it.",
-                elsewhere_cites=[str(uuid.uuid4())],
-                here_sentence=None,
-                here_cites=[],
+                sentence="A study showed it.",
+                cites=[str(uuid.uuid4())],
             )
             for link in theory["links"]
         ]
@@ -590,14 +616,19 @@ def test_the_citation_check_replaces_a_bad_sentence(
     task_id = _run(engine, cleanup, _BadCitation())
     assert _summary(engine, task_id, "toc_summarise")["replaced"] > 0
     with engine.connect() as conn:
-        sentences = conn.execute(
+        sentences = set(
+            conn.execute(
+                select(toc_link.c.evidence_sentence).where(toc_link.c.task_id == task_id)
+            ).scalars()
+        )
+        # The old two-sentence columns are no longer written.
+        old = conn.execute(
             select(toc_link.c.elsewhere_sentence, toc_link.c.here_sentence).where(
                 toc_link.c.task_id == task_id
             )
         ).all()
-    assert {e for e, _ in sentences} == {UNSETTLED_SENTENCE}
-    # No document spoke to "holds here": the fixed sentence, without the model.
-    assert {h for _, h in sentences} == {"No evidence was found in the documents read."}
+    assert sentences == {UNSETTLED_SENTENCE}
+    assert set(old) == {(None, None)}
 
 
 def _two_success_draft() -> Any:

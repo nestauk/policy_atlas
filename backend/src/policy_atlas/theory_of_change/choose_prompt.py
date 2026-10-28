@@ -4,7 +4,7 @@ Lead-authored and versioned. Called only when there is something to choose:
 more kept pathways than the limits (6 success, 3 failure), or conditions that
 supporting documents recorded and a link does not yet name. The model keeps the
 pathways that are most plausible within what the intervention can influence and
-best evidenced, read from the grade counts it is given, never a score; and it
+best evidenced, read from the step verdicts it is given, never a score; and it
 says which recorded conditions are new for their link. Code enforces the
 limits, re-picks the critical connection by rule, and flags changes to user
 work (T1).
@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_CHOOSE_PROMPT_VERSION = "toc_choose_v1"
+TOC_CHOOSE_PROMPT_VERSION = "toc_choose_v2"
 
 TOC_CHOOSE_MAX_OUTPUT_TOKENS = 12_000
 
@@ -68,10 +68,11 @@ things.
 1. Choose pathways. When there are more than {max_success} success or
    {max_failure} failure pathways, keep at most that many of each. Keep the
    routes that are most plausible within what the intervention can
-   influence, and whose steps have the stronger evidence grades. Read the
-   grade counts you are given as counts: a route with two strong steps and a
-   weak one is better evidenced than one with three steps with no evidence
-   found; never invent a score. When there are not more than the limits,
+   influence, and whose steps have the better evidence verdicts. The
+   verdicts, from best to worst: Confident; Not sure: mixed; Not sure: too
+   little evidence; Not confident: evidence against. A route with two
+   Confident steps and one Not sure is better evidenced than one whose steps
+   have too little evidence; never invent a score. When there are not more than the limits,
    keep every pathway. Every pathway gets one line of reason naming the
    criterion (promising, evidence). Do not set aside a pathway the user
    wrote or edited unless the limits force it; say why when you do.
@@ -116,7 +117,7 @@ def build_choose_messages(
         plan: The plan fields as data.
         pathways: One entry per kept pathway: ``key``, ``kind``, ``label``,
             ``user_edited`` and ``steps`` (each step's ``link`` key, sentence,
-            and both grades).
+            and its evidence verdict).
         recorded_conditions: ``{link, current_conditions, recorded}`` per link
             with recorded conditions.
         max_success: The success-pathway limit.

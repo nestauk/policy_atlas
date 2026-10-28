@@ -1736,6 +1736,7 @@ chat_turn = Table(
 
 _TOC_ORIGINS_SQL = "'drafted', 'found_in_evidence', 'imported', 'user', 'options_scoping'"
 _TOC_STANCES_SQL = "'supports', 'challenges', 'not_about'"
+_TOC_SUPPORTS_SQL = "'strong', 'weak', 'mixed', 'refutes', 'not_about'"
 
 
 def _toc_common() -> list[Column[Any]]:
@@ -1801,6 +1802,9 @@ toc_link = Table(
     # What must hold for the link to work here: the Magenta Book's assumptions (W14).
     Column("conditions", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("sentence", Text, nullable=True),
+    # What the documents found and whether it holds here, one sentence (C36).
+    Column("evidence_sentence", Text, nullable=True),
+    # The two sentences before C36; kept for old rows, no longer written.
     Column("elsewhere_sentence", Text, nullable=True),
     Column("here_sentence", Text, nullable=True),
     Column("critical", Boolean, nullable=False, server_default=text("false")),
@@ -1902,9 +1906,15 @@ toc_item_evidence = Table(
     Column("case_box_id", UUID(as_uuid=True), nullable=True),
     Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=False),
     Column("capability_run_id", UUID(as_uuid=True), nullable=False),
-    Column("stance_elsewhere", Text, nullable=False),
+    # One verdict per link (C36): the judge's support, its quote and relevance R 0-3.
+    Column("support", Text, nullable=False),
+    Column("quote", Text, nullable=True),
+    Column("relevance", SmallInteger, nullable=False),
+    Column("relevance_reason", Text, nullable=True),
+    # The two questions before C36; kept for old rows, no longer written.
+    Column("stance_elsewhere", Text, nullable=True),
     Column("quote_elsewhere", Text, nullable=True),
-    Column("stance_here", Text, nullable=False),
+    Column("stance_here", Text, nullable=True),
     Column("quote_here", Text, nullable=True),
     Column("condition", Text, nullable=True),
     Column("case_study", JSONB, nullable=True),
@@ -1947,5 +1957,10 @@ toc_item_evidence = Table(
         "(stance_elsewhere = 'not_about' OR quote_elsewhere IS NOT NULL) "
         "AND (stance_here = 'not_about' OR quote_here IS NOT NULL)",
         name="ck_toc_evidence_quotes",
+    ),
+    CheckConstraint(f"support IN ({_TOC_SUPPORTS_SQL})", name="ck_toc_evidence_support"),
+    CheckConstraint("relevance BETWEEN 0 AND 3", name="ck_toc_evidence_relevance"),
+    CheckConstraint(
+        "support = 'not_about' OR quote IS NOT NULL", name="ck_toc_evidence_support_quote"
     ),
 )

@@ -11,7 +11,7 @@ order (W16):
   aside those that miss the intended change.
 - ``toc_judge``: per link, its own search's documents (or, for a link with
   none, the *K* pool documents closest by meaning) read with one call each;
-  both stances with verified quotes. Insert-only, keyed by item hash.
+  its support, verified quote and relevance (C36). Insert-only, keyed by item hash.
 - ``toc_choose``: within the 6 / 3 limits, conditions supports recorded,
   and the critical connection by the C6 rule.
 - ``toc_summarise``: the header paragraphs and every sentence, each citation
@@ -89,12 +89,13 @@ from policy_atlas.theory_of_change.discover_prompt import (
 )
 from policy_atlas.theory_of_change.draft import plan_data, walk_toc_plan
 from policy_atlas.theory_of_change.evidence.grade import (
-    GRADE_ORDER,
+    VERDICT_LABELS,
+    VERDICT_ORDER,
     DocAppraisal,
-    GradeResult,
     Judgement,
-    counted_score,
-    grade,
+    LinkVerdict,
+    link_verdict,
+    quality,
     trusted_publisher,
 )
 from policy_atlas.theory_of_change.evidence.pick_prompt import PICK_N
@@ -318,23 +319,19 @@ def counted_judgements(conn: Connection, *, task_id: uuid.UUID) -> dict[str, lis
     return out
 
 
-def link_grades(
-    rows: list[Row[Any]], appraisals: dict[str, DocAppraisal]
-) -> tuple[GradeResult, GradeResult]:
-    """Both grades of one link from its counted judgements (C4)."""
-    judgements = [
-        Judgement(
-            document_id=str(row.task_source_snapshot_id),
-            stance_elsewhere=row.stance_elsewhere,
-            stance_here=row.stance_here,
-            robust_model=row.robust_model,
-        )
-        for row in rows
-    ]
-    return (
-        grade(judgements, appraisals, "elsewhere"),
-        grade(judgements, appraisals, "here"),
+def row_judgement(row: Row[Any]) -> Judgement:
+    """A ``toc_item_evidence`` row as the verdict reads it."""
+    return Judgement(
+        document_id=str(row.task_source_snapshot_id),
+        support=row.support,
+        relevance=row.relevance,
+        robust_model=row.robust_model,
     )
+
+
+def link_verdict_of(rows: list[Row[Any]], appraisals: dict[str, DocAppraisal]) -> LinkVerdict:
+    """One link's verdict from its counted judgements (C36)."""
+    return link_verdict([row_judgement(row) for row in rows], appraisals)
 
 
 def _current_hash(graph: Graph, key: str) -> str:
@@ -1871,15 +1868,12 @@ def toc_judge_scope(
             failed += 1
             continue
         text = job.document.text
-        stances: dict[str, tuple[str, str | None]] = {}
-        for name, wire in (("elsewhere", response.worked_elsewhere), ("here", response.holds_here)):
-            if wire.stance != "not_about" and not quote_found(text, wire.quote):
-                unverified += 1
-                stances[name] = ("not_about", None)
-            elif wire.stance == "not_about":
-                stances[name] = ("not_about", None)
-            else:
-                stances[name] = (wire.stance, wire.quote)
+        support, quote = response.support, response.quote
+        # A quote not in the text drops the answer to not_about (counted).
+        if support != "not_about" and not quote_found(text, quote):
+            unverified += 1
+            support = "not_about"
+        about = support != "not_about"
         case = response.case_study
         if case is not None and not quote_found(text, case.quote):
             case = None
@@ -1889,7 +1883,7 @@ def toc_judge_scope(
         if case is not None and indicator is not None and indicator.box != case.box:
             indicator = None
         box_end = case.box if case is not None else (indicator.box if indicator else None)
-        supports = any(stance == "supports" for stance, _ in stances.values())
+        supports = support in ("strong", "weak")
         store.insert(
             conn,
             store.ChangeLog(),
@@ -1905,10 +1899,10 @@ def toc_judge_scope(
                 ),
                 "task_source_snapshot_id": job.document.tss_id,
                 "capability_run_id": walk_id,
-                "stance_elsewhere": stances["elsewhere"][0],
-                "quote_elsewhere": stances["elsewhere"][1],
-                "stance_here": stances["here"][0],
-                "quote_here": stances["here"][1],
+                "support": support,
+                "quote": quote if about else None,
+                "relevance": response.relevance if about else 0,
+                "relevance_reason": response.relevance_reason if about else None,
                 "condition": response.condition if supports else None,
                 "case_study": (
                     {
@@ -1949,10 +1943,7 @@ def toc_judge_scope(
             select(toc_item_evidence.c.task_source_snapshot_id)
             .where(toc_item_evidence.c.task_id == task_id)
             .where(toc_item_evidence.c.task_source_snapshot_id.in_(list(pool_by_id)))
-            .where(
-                toc_item_evidence.c.stance_elsewhere.in_(("supports", "challenges"))
-                | toc_item_evidence.c.stance_here.in_(("supports", "challenges"))
-            )
+            .where(toc_item_evidence.c.support != "not_about")
         ).scalars()
     )
     off_topic = set(pool_by_id) - on_topic
@@ -1991,18 +1982,17 @@ def _norm(text: str) -> str:
     return " ".join(text.split()).casefold()
 
 
-def critical_link(graph: Graph, grades: dict[str, tuple[GradeResult, GradeResult]]) -> str | None:
-    """The critical connection by the C6 rule.
+def critical_link(graph: Graph, verdicts: Mapping[str, LinkVerdict]) -> str | None:
+    """The critical connection by the C6 rule, on verdicts (C36).
 
-    Among links on kept success pathways whose *worked elsewhere* grade is
-    medium or strong and whose *holds here* grade is weak or none: the one on
-    the most kept pathways (ties: the earlier one in pathway order). If none
-    qualifies: the link with the lowest *holds here* grade on the most kept
-    pathways.
+    The weakest important step on a success pathway: among links on kept
+    success pathways, the one with the lowest verdict; ties go to the link on
+    the most kept pathways, then the earlier one in pathway order.
 
     Args:
         graph: The theory, with current pathway statuses.
-        grades: Link key → (elsewhere, here).
+        verdicts: Link key → its verdict; a link without one counts as too
+            little evidence.
 
     Returns:
         The link key, or ``None`` when no kept success pathway has a link.
@@ -2016,20 +2006,12 @@ def critical_link(graph: Graph, grades: dict[str, tuple[GradeResult, GradeResult
     if not order:
         return None
     on = {key: sum(1 for p in kept if key in p.links) for key in order}
-    none = GradeResult(grade="none", against=0, supports=0)
 
-    def here(key: str) -> int:
-        return GRADE_ORDER.index(grades.get(key, (none, none))[1].grade)
+    def rank(key: str) -> int:
+        found = verdicts.get(key)
+        return VERDICT_ORDER.index(found.verdict if found else "not_sure_insufficient")
 
-    def elsewhere(key: str) -> int:
-        return GRADE_ORDER.index(grades.get(key, (none, none))[0].grade)
-
-    qualifying = [
-        key for key in order if elsewhere(key) >= GRADE_ORDER.index("medium") and here(key) <= 1
-    ]
-    if qualifying:
-        return max(qualifying, key=lambda key: (on[key], -order.index(key)))
-    return min(order, key=lambda key: (here(key), -on[key], order.index(key)))
+    return min(order, key=lambda key: (rank(key), -on[key], order.index(key)))
 
 
 def toc_choose_scope(
@@ -2062,7 +2044,7 @@ def toc_choose_scope(
     appraisals = appraisals_for(
         conn, task_id=task_id, evidence_rows=[row for group in counted.values() for row in group]
     )
-    grades = {key: link_grades(counted.get(key, []), appraisals) for key in graph.links}
+    verdicts = {key: link_verdict_of(counted.get(key, []), appraisals) for key in graph.links}
     not_models = {
         str(row.task_source_snapshot_id)
         for group in counted.values()
@@ -2111,8 +2093,7 @@ def toc_choose_scope(
                     {
                         "link": short[key],
                         "sentence": graph.links[key].sentence,
-                        "worked_elsewhere": grades[key][0].grade,
-                        "holds_here": grades[key][1].grade,
+                        "verdict": VERDICT_LABELS[verdicts[key].verdict],
                     }
                     for key in p.links
                     if key in graph.links
@@ -2215,7 +2196,7 @@ def toc_choose_scope(
             changes.append(f"Added a condition to “{link.sentence}”: {condition}")
 
     critical_changed = _pick_critical(
-        conn, log_, task_id=task_id, graph=graph, grades=grades, changes=changes
+        conn, log_, task_id=task_id, graph=graph, verdicts=verdicts, changes=changes
     )
     store.record(conn, task_id=task_id, run_id=run_id, step="toc_choose", log=log_, changes=changes)
     summary = {
@@ -2237,7 +2218,7 @@ def _pick_critical(
     *,
     task_id: uuid.UUID,
     graph: Graph,
-    grades: dict[str, tuple[GradeResult, GradeResult]],
+    verdicts: Mapping[str, LinkVerdict],
     changes: list[store.Change],
 ) -> bool:
     """Re-pick the critical connection; a user-marked one is kept (C6)."""
@@ -2248,7 +2229,7 @@ def _pick_critical(
     marked = [row for row in current.values() if row.critical]
     if any(row.user_edited for row in marked):
         return False
-    choice = critical_link(graph, grades)
+    choice = critical_link(graph, verdicts)
     if choice is None or (marked and str(marked[0].link_id) == choice):
         return False
     # Unmark first: at most one critical link per task (W10).
@@ -2276,14 +2257,6 @@ def _pick_critical(
 def check_citations(cites: Iterable[str], allowed: set[str]) -> bool:
     """Whether every cited document is one the item may cite (C20)."""
     return set(cites) <= allowed
-
-
-def is_merged(rows: list[Row[Any]]) -> bool:
-    """Every judged document that spoke to the link answers both questions the same way."""
-    spoke = [
-        row for row in rows if row.stance_elsewhere != "not_about" or row.stance_here != "not_about"
-    ]
-    return bool(spoke) and all(row.stance_elsewhere == row.stance_here for row in spoke)
 
 
 def toc_summarise_scope(
@@ -2333,42 +2306,38 @@ def toc_summarise_scope(
     if response is None:
         raise RuntimeError("toc_summarise: the summary call failed")
 
-    allowed: dict[str, dict[str, set[str]]] = {}
-    for key in graph.links:
-        group = counted.get(key, [])
-        allowed[key] = {
-            "elsewhere": {
-                str(r.task_source_snapshot_id) for r in group if r.stance_elsewhere != "not_about"
-            },
-            "here": {str(r.task_source_snapshot_id) for r in group if r.stance_here != "not_about"},
+    allowed = {
+        key: {
+            str(r.task_source_snapshot_id)
+            for r in counted.get(key, [])
+            if r.support != "not_about"
         }
+        for key in graph.links
+    }
     answered = {back.get(item.link): item for item in response.links}
     replaced = 0
     log_ = store.ChangeLog()
     for key, row in rows.links.items():
         item = answered.get(key)
-        sentences: dict[str, str] = {}
-        for question in ("elsewhere", "here"):
-            if not allowed[key][question]:
-                sentences[question] = NO_EVIDENCE_SENTENCE
-                continue
-            sentence = getattr(item, f"{question}_sentence", None) if item else None
-            cites = getattr(item, f"{question}_cites", []) if item else []
-            if sentence and sentence.strip() and check_citations(cites, allowed[key][question]):
-                sentences[question] = sentence.strip()
-            else:
-                replaced += 1
-                sentences[question] = UNSETTLED_SENTENCE
+        if not allowed[key]:
+            sentence = NO_EVIDENCE_SENTENCE
+        elif (
+            item is not None
+            and item.sentence
+            and item.sentence.strip()
+            and check_citations(item.cites, allowed[key])
+        ):
+            sentence = item.sentence.strip()
+        else:
+            replaced += 1
+            sentence = UNSETTLED_SENTENCE
         store.update(
             conn,
             log_,
             toc_link,
             row.link_id,
             observed_revision=row.revision,
-            values={
-                "elsewhere_sentence": sentences["elsewhere"],
-                "here_sentence": sentences["here"],
-            },
+            values={"evidence_sentence": sentence},
         )
     case_docs: dict[str, set[str]] = {}
     for row in every:
@@ -2416,13 +2385,12 @@ def top_case_studies[T](
 ) -> list[T]:
     """One box's case studies to show, best first (read time).
 
-    Ranks by the document's appraisal score (a robust model counts as 3, C4),
-    then supporting documents before others, then the given order; keeps
-    the first of each programme and place (case and spacing ignored) and at
-    most :data:`CASE_STUDIES_PER_BOX`.
+    Ranks by the document's quality Q (C36), then supporting documents before
+    others, then the given order; keeps the first of each programme and place
+    (case and spacing ignored) and at most :data:`CASE_STUDIES_PER_BOX`.
 
     Args:
-        candidates: ``(item, programme, place, score, supports)`` per case
+        candidates: ``(item, programme, place, quality, supports)`` per case
             study, in their existing order.
 
     Returns:
@@ -2443,15 +2411,8 @@ def top_case_studies[T](
 
 
 def row_case_score(row: Row[Any], appraisal: DocAppraisal | None) -> tuple[int, bool]:
-    """A judgement row's ``(score, supports)`` for :func:`top_case_studies`."""
-    judgement = Judgement(
-        document_id=str(row.task_source_snapshot_id),
-        stance_elsewhere=row.stance_elsewhere,
-        stance_here=row.stance_here,
-        robust_model=row.robust_model,
-    )
-    supports = "supports" in (row.stance_elsewhere, row.stance_here)
-    return counted_score(judgement, appraisal), supports
+    """A judgement row's ``(quality, supports)`` for :func:`top_case_studies`."""
+    return quality(appraisal, row.robust_model), row.support in ("strong", "weak")
 
 
 def _titles(
@@ -2505,7 +2466,6 @@ def _theory_for_summary(
     links = []
     for key, link in graph.links.items():
         group = counted.get(key, [])
-        elsewhere, here = link_grades(group, appraisals)
         links.append(
             {
                 "key": short[key],
@@ -2514,23 +2474,20 @@ def _theory_for_summary(
                 "sentence": link.sentence,
                 "conditions": link.conditions,
                 "critical": bool(rows.links[key].critical),
-                "worked_elsewhere": elsewhere.grade,
-                "holds_here": here.grade,
-                "merged": is_merged(group),
+                "verdict": VERDICT_LABELS[link_verdict_of(group, appraisals).verdict],
                 "documents": [
                     {
                         "id": str(row.task_source_snapshot_id),
                         "title": titles.get(str(row.task_source_snapshot_id), ("", None))[0],
                         "year": titles.get(str(row.task_source_snapshot_id), ("", None))[1],
-                        "worked_elsewhere": {
-                            "stance": row.stance_elsewhere,
-                            "quote": row.quote_elsewhere,
-                        },
-                        "holds_here": {"stance": row.stance_here, "quote": row.quote_here},
+                        "support": row.support,
+                        "quote": row.quote,
+                        "relevance": row.relevance,
+                        "relevance_note": row.relevance_reason,
                         "condition": row.condition,
                     }
                     for row in group
-                    if row.stance_elsewhere != "not_about" or row.stance_here != "not_about"
+                    if row.support != "not_about"
                 ],
             }
         )

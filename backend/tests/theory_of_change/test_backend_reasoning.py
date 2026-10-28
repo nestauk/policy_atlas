@@ -5,16 +5,17 @@ from typing import Any
 
 from policy_atlas.core.model_routes import route
 from policy_atlas.theory_of_change.backend import OpenAITocBackend
-from policy_atlas.theory_of_change.evidence.judge_prompt import JudgeResponse, StanceWire
+from policy_atlas.theory_of_change.evidence.judge_prompt import JudgeResponse
 
 
 class _Client:
     def __init__(self) -> None:
         self.kwargs: dict[str, Any] = {}
-        not_about = StanceWire(stance="not_about", quote=None)
         parsed = JudgeResponse(
-            worked_elsewhere=not_about,
-            holds_here=not_about,
+            support="not_about",
+            quote=None,
+            relevance=0,
+            relevance_reason=None,
             condition=None,
             case_study=None,
             indicator=None,

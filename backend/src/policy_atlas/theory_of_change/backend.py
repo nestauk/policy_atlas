@@ -54,7 +54,6 @@ from policy_atlas.theory_of_change.evidence.judge_prompt import (
     TOC_JUDGE_MAX_OUTPUT_TOKENS,
     TOC_JUDGE_PROMPT_VERSION,
     JudgeResponse,
-    StanceWire,
     build_judge_messages,
 )
 from policy_atlas.theory_of_change.evidence.pick_prompt import (
@@ -154,13 +153,13 @@ class TocBackend(Protocol):
         max_success: int,
         max_failure: int,
     ) -> UsageResult[ChooseResponse]:
-        """Choose pathways and name new conditions (``toc_choose_v1``)."""
+        """Choose pathways and name new conditions (``toc_choose_v2``)."""
         ...
 
     def summarise(
         self, *, plan: dict[str, object], theory: dict[str, object]
     ) -> UsageResult[SummaryResponse]:
-        """Write the header paragraphs and sentences (``toc_summary_v1``)."""
+        """Write the header paragraphs and sentences (``toc_summary_v2``)."""
         ...
 
 
@@ -430,9 +429,9 @@ class StubTocBackend:
     - ``consolidate``: each proposal as it came.
     - ``merge``: folds no boxes and keeps every pathway.
     - ``pick``: the first :data:`PICK_N` candidates, in order.
-    - ``judge``: *worked elsewhere* supports, quoting the first eight words of
-      the document text (so the quote check passes); *holds here* not about;
-      not about both when the text is empty.
+    - ``judge``: weakly supports at relevance 2, quoting the first eight words
+      of the document text (so the quote check passes); not about when the
+      text is empty.
     - ``choose``: keeps every pathway, no new conditions.
     - ``summarise``: plain sentences that cite nothing.
 
@@ -548,12 +547,12 @@ class StubTocBackend:
         if queued is not None:
             return queued, None
         words = str(kwargs.get("text") or "").split()
-        not_about = StanceWire(stance="not_about", quote=None)
-        elsewhere = StanceWire(stance="supports", quote=" ".join(words[:8])) if words else not_about
         return (
             JudgeResponse(
-                worked_elsewhere=elsewhere,
-                holds_here=not_about,
+                support="weak" if words else "not_about",
+                quote=" ".join(words[:8]) if words else None,
+                relevance=2 if words else 0,
+                relevance_reason="A similar population elsewhere." if words else None,
                 condition=None,
                 case_study=None,
                 indicator=None,
@@ -601,10 +600,8 @@ class StubTocBackend:
                 links=[
                     LinkSentencesWire(
                         link=str(link["key"]),
-                        elsewhere_sentence="Documents were judged for this step.",
-                        elsewhere_cites=[],
-                        here_sentence=None,
-                        here_cites=[],
+                        sentence="Documents were judged for this step.",
+                        cites=[],
                     )
                     for link in links
                 ],

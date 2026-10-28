@@ -1,13 +1,13 @@
-"""The ``toc_summary_v1`` prompt: header paragraphs and evidence sentences (task 054, C20).
+"""The ``toc_summary_v2`` prompt: header paragraphs and evidence sentences (task 054, C20).
 
 Lead-authored and versioned. One call over the checked theory writes the two
 header paragraphs (*About this theory*, *What the evidence says*), the questions
-for an evaluation, two evidence sentences per link (*worked elsewhere*, *holds
-here*) and a two-sentence description per box. Every sentence lists the
+for an evaluation, one evidence sentence per link (what the documents found,
+and whether it applies here) and a two-sentence description per box. Every sentence lists the
 document ids it cites; code checks each citation against the link's own judged
 documents (or the box's case studies) and replaces a sentence that fails with
-a fixed one. Grades are given to the model and never restated by it: the
-product shows the grade before the sentence.
+a fixed one. Verdicts are given to the model and never restated by it: the
+product shows the verdict before the sentence.
 """
 
 from __future__ import annotations
@@ -19,33 +19,26 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_SUMMARY_PROMPT_VERSION = "toc_summary_v1"
+TOC_SUMMARY_PROMPT_VERSION = "toc_summary_v2"
 
 TOC_SUMMARY_MAX_OUTPUT_TOKENS = 24_000
 
 
 class LinkSentencesWire(BaseModel):
-    """The two evidence sentences of one link."""
+    """The evidence sentence of one link."""
 
     model_config = ConfigDict(extra="forbid")
 
     link: str = Field(description="The link key, copied exactly.")
-    elsewhere_sentence: str | None = Field(
+    sentence: str | None = Field(
         description=(
-            "Worked elsewhere: one or two sentences, at most 45 words, naming the key "
-            "sources by place or author and year. Null when the step has no "
-            "worked-elsewhere documents."
+            "One or two sentences, at most 50 words: what the documents found, naming "
+            "the key sources by place or author and year, then whether it applies to "
+            "this population and place. Null when the step has no documents that "
+            "support or refute it."
         )
     )
-    elsewhere_cites: list[str] = Field(description="The document ids the sentence relies on.")
-    here_sentence: str | None = Field(
-        description=(
-            "Holds here: one or two sentences, at most 45 words, about this "
-            "population and place and the step's conditions. Null when the step has "
-            "no holds-here documents, or when merged is true."
-        )
-    )
-    here_cites: list[str]
+    cites: list[str] = Field(description="The document ids the sentence relies on.")
 
 
 class BoxDescriptionWire(BaseModel):
@@ -96,35 +89,31 @@ class SummaryResponse(BaseModel):
 
 TOC_SUMMARY_SYSTEM_PROMPT = """\
 You write the reading text of a checked theory of change for Policy Atlas,
-a tool for UK policy makers. The theory, the grade of each step and the
+a tool for UK policy makers. The theory, the verdict of each step and the
 documents judged for each step are given. You write plain prose for a
 policy reader; you do not judge the evidence again.
 
 ## Evidence sentences
 
-Each step (link) has two questions: worked elsewhere (did the change follow
-where it was tried) and holds here (will it work for this population, in
-this place, now, given the step's conditions). For each, write one or two
-sentences, at most 45 words, that say what the documents found, naming the
-key sources by place or author and year, for example "Exposure fell by
-about half under Chile's rules (2020) and almost to none on London transport
-(2022)".
+Each step (link) has one verdict, computed from its documents: how strongly
+each supports or refutes the step, weighted by its quality and its relevance
+to this population and place. For each step, write one or two sentences, at
+most 50 words: what the documents found, naming the key sources by place or
+author and year, then whether it applies here. For example: "Chile's rules
+cut children's exposure by about half (2020), but after the 2007 UK rules
+children's share of exposure did not change (2012), so it may not hold here."
 
-- Cite only that step's own documents for that question, and list the ids
-  you rely on. Code checks every id and replaces a sentence that cites
-  anything else.
-- Never state a grade or a strength word (strong, robust, convincing): the
-  product shows the grade before your sentence.
+- Cite only that step's own documents, and list the ids you rely on. Code
+  checks every id and replaces a sentence that cites anything else.
+- Never state the verdict or a strength word (strong, robust, convincing):
+  the product shows the verdict before your sentence.
 - Say what was found, including evidence against, in the documents' own
   terms. No numbers the quotes do not give.
-- The holds-here sentence never repeats a finding the worked-elsewhere
-  sentence gave. When a study answers both, name it and say why it also
-  counts here ("The London study was in England, so it counts here too").
-- When merged is true for a step, every document answers both questions the
-  same way: write one sentence in elsewhere_sentence that covers both, and
-  set here_sentence to null.
-- Write null for a question with no documents; the product writes a fixed
-  sentence for it.
+- Use each document's relevance note to say whether the finding applies
+  here: name UK evidence as such, and say when the evidence comes only from
+  other countries or settings.
+- Write null for a step with no documents that support or refute it; the
+  product writes a fixed sentence for it.
 
 ## Box descriptions
 
@@ -140,8 +129,9 @@ about: what the theory is: the intervention, the population, the place,
 the time horizon, the context, and where it came from (drafted by Policy
 Atlas, the user's own theory, or an option). evidence_says: the
 best-supported steps, the weakest, and the critical connection by name.
-Both 2 to 4 sentences, at most 90 words, no grades as words beyond
-"strong", "medium", "weak" or "no evidence found" as given.
+Both 2 to 4 sentences, at most 90 words, naming verdicts only as given
+("Confident", "Not sure: mixed", "Not sure: too little evidence", "Not
+confident: evidence against").
 
 ## Questions for an evaluation
 
@@ -175,9 +165,10 @@ def build_summary_messages(
         plan: The plan fields as data.
         theory: The checked graph as data: ``boxes`` (key, layer, text, result
             criteria, case studies with document ids), ``links`` (key, source,
-            target, sentence, conditions, critical, both grades, ``merged`` and
-            the judged ``documents`` with id, title, year, both stances and
-            quotes, condition) and ``pathways`` (kind, label, link keys).
+            target, sentence, conditions, critical, its verdict and
+            the judged ``documents`` with id, title, year, support, quote,
+            relevance and its note, condition) and ``pathways`` (kind, label,
+            link keys).
 
     Returns:
         Chat messages ready for a schema-constrained completion.

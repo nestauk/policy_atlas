@@ -1,9 +1,9 @@
 """Theory-of-change read contract (task 054, plan S14).
 
-Two public reads under ``/api/v1/tasks/{task_id}/toc``: the graph with both
-grades, link states and the summary (``GET ""``), and every judged document
-and case study (``GET /evidence``). Grades and link states are computed on
-read (C4, C19); nothing here is stored as shown.
+Two public reads under ``/api/v1/tasks/{task_id}/toc``: the graph with one
+evidence verdict per link, link states and the summary (``GET ""``), and every
+judged document and case study (``GET /evidence``). Verdicts and link states
+are computed on read (C36, C19); nothing here is stored as shown.
 """
 
 from __future__ import annotations
@@ -13,11 +13,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-Grade = Literal["strong", "medium", "weak", "none"]
+#: One evidence verdict per link (C36, simplified BEAM).
+Verdict = Literal["confident", "not_sure_mixed", "not_sure_insufficient", "not_confident"]
+Support = Literal["strong", "weak", "mixed", "refutes", "not_about"]
 LinkState = Literal["unchecked", "checking", "checked", "pending", "kept", "no_change"]
 Origin = Literal["drafted", "found_in_evidence", "imported", "user", "options_scoping"]
 CheckStatus = Literal["none", "drafting", "checking", "checked", "failed"]
-Stance = Literal["supports", "challenges", "not_about"]
 
 
 class TocResultCriteriaOut(BaseModel):
@@ -49,18 +50,23 @@ class TocBoxOut(BaseModel):
     revision: int
 
 
-class TocGradeOut(BaseModel):
-    """One question's grade (C4)."""
+class TocWeightsOut(BaseModel):
+    """The numbers behind a link's verdict (C36)."""
 
     model_config = ConfigDict(extra="forbid")
 
-    grade: Grade
-    against: int
-    supports: int
+    #: W: the sum of the documents' weights; 1 is one strong, fully relevant study.
+    total_weight: float
+    #: S̄: the weight-averaged support, from -2 (refutes) to +2 (strongly supports).
+    mean_support: float
+    #: R%: the share of the weight that refutes, 0 to 1.
+    refute_share: float
+    #: Documents that support or refute the link in any way.
+    n_documents: int
 
 
 class TocLinkOut(BaseModel):
-    """One causal step, with both grades and its state."""
+    """One causal step, with its evidence verdict and its state."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -80,13 +86,12 @@ class TocLinkOut(BaseModel):
     origin: Origin
     revision: int
     state: LinkState
-    elsewhere: TocGradeOut
-    here: TocGradeOut
-    lower_grade: Grade
-    elsewhere_sentence: str | None
-    here_sentence: str | None
-    #: Every judged document answers both questions the same way: one paragraph.
-    merged: bool
+    verdict: Verdict
+    #: One more document could change the verdict.
+    near_threshold: bool
+    weights: TocWeightsOut
+    #: What the documents found and whether it holds here (C36).
+    evidence_sentence: str | None
 
 
 class TocPathwayOut(BaseModel):
@@ -116,7 +121,7 @@ class TocSummaryOut(BaseModel):
 
 
 class TocGradeRuleOut(BaseModel):
-    """One row of the grade rule, generated from the grade constants (C4)."""
+    """One row of the verdict rule, generated from the verdict constants (C36)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -138,21 +143,14 @@ class TocGraphOut(BaseModel):
     supporting_activities: list[str]
     summary: TocSummaryOut | None
     grade_rules: list[TocGradeRuleOut]
+    #: The theory's confidence: the lowest verdict among its critical links; null without one.
+    confidence: Verdict | None
     #: Links the 80-link cap left unchecked in the last check walk.
     links_left_out: int
 
 
-class TocStanceOut(BaseModel):
-    """One question's stance on one document."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    stance: Stance
-    quote: str | None
-
-
 class TocDocumentOut(BaseModel):
-    """One judged document of one link, listed once even when it answers both."""
+    """One judged document of one link, with what it adds to the verdict (C36)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -167,8 +165,15 @@ class TocDocumentOut(BaseModel):
     source_type: Literal["academic", "policy", "web"]
     evidence_type: str | None
     appraisal_score: int | None
-    elsewhere: TocStanceOut
-    here: TocStanceOut
+    support: Support
+    quote: str | None
+    #: R, 0 to 3: how well the finding carries over to this population and place.
+    relevance: int
+    relevance_reason: str | None
+    #: Q, 1 to 3, from the appraisal score (web pages and models capped).
+    quality: int
+    #: Q × R ÷ 9; ignored in the verdict when support is not_about.
+    weight: float
     condition: str | None
     #: True when the judgement was made for an earlier wording of the link.
     previous_wording: bool

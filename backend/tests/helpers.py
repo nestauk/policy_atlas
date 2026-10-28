@@ -1040,7 +1040,7 @@ class ScriptedGenerationBackend:
         return self._pop_wire(self._suggestions, SearchSuggestWire(papers=[])), None
 
 
-def seed_toc_task(conn: Connection) -> dict[str, uuid.UUID]:
+def seed_toc_task(conn: Connection, *, judgement: bool = True) -> dict[str, uuid.UUID]:
     """Insert a theory-of-change task with a small graph, a walk and one judgement.
 
     Two boxes joined by one link, a third box named as a case study, one kept
@@ -1144,6 +1144,8 @@ def seed_toc_task(conn: Connection) -> dict[str, uuid.UUID]:
             "provider_fields": {"authorships": [{"author_name": "Ada Lovelace"}]},
         },
     )
+    if not judgement:  # e.g. below a revision that changed the judgement row
+        return ids
     conn.execute(
         toc_item_evidence.insert().values(
             evidence_id=ids["evidence"],
@@ -1152,9 +1154,9 @@ def seed_toc_task(conn: Connection) -> dict[str, uuid.UUID]:
             case_box_id=ids["case_box"],
             task_source_snapshot_id=ids["tss"],
             capability_run_id=ids["walk"],
-            stance_elsewhere="supports",
-            quote_elsewhere="It worked.",
-            stance_here="not_about",
+            support="weak",
+            quote="It worked.",
+            relevance=2,
             item_hash="h1",
             **stamp,
         )

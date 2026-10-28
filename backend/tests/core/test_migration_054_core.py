@@ -149,6 +149,8 @@ def _judgement(ids: dict[str, uuid.UUID], **values: object) -> dict[str, object]
         "capability_run_id": ids["walk"],
         "stance_elsewhere": "not_about",
         "stance_here": "not_about",
+        "support": "not_about",
+        "relevance": 0,
         "item_hash": "h2",
         "created_at": now(),
         "updated_at": now(),

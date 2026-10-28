@@ -25,8 +25,7 @@ ROUTES = ["/api/v1/tasks/{task_id}/toc", "/api/v1/tasks/{task_id}/toc/evidence",
 
 
 def _url(route: str, task_id: uuid.UUID | str, evidence_id: uuid.UUID) -> str:
-    url = route.format(task_id=task_id, evidence_id=evidence_id)
-    return f"{url}?question=elsewhere" if route == CONTEXT else url
+    return route.format(task_id=task_id, evidence_id=evidence_id)
 
 
 def test_the_reads_are_mounted_and_in_the_openapi_document() -> None:
@@ -103,7 +102,15 @@ def test_the_reads_serve_the_contract_shapes(engine: Engine, tmp_path: Path) -> 
         [link] = body["links"]
         # The seeded judgement was made for another wording: it does not count.
         assert link["state"] == "unchecked"
-        assert link["elsewhere"] == {"grade": "none", "against": 0, "supports": 0}
+        assert link["verdict"] == "not_sure_insufficient" and link["near_threshold"] is False
+        assert link["weights"] == {
+            "total_weight": 0.0,
+            "mean_support": 0.0,
+            "refute_share": 0.0,
+            "n_documents": 0,
+        }
+        assert link["evidence_sentence"] is None
+        assert body["confidence"] is None  # the seeded link is not critical
         assert link["assumption_type"] == "delivery"
         [pathway] = body["pathways"]
         assert pathway["link_ids"] == [str(ids["link"])] and pathway["broken"] is False
@@ -112,7 +119,9 @@ def test_the_reads_serve_the_contract_shapes(engine: Engine, tmp_path: Path) -> 
         evidence = client.get(f"/api/v1/tasks/{ids['task_id']}/toc/evidence").json()
         [doc] = evidence["links"][0]["documents"]
         assert doc["previous_wording"] is True
-        assert doc["elsewhere"] == {"stance": "supports", "quote": "It worked."}
+        assert (doc["support"], doc["quote"], doc["relevance"]) == ("weak", "It worked.", 2)
+        # Unscored, so quality 1; weight 1 x 2 / 9.
+        assert (doc["quality"], doc["weight"]) == (1, 0.222)
         assert doc["evidence_id"] == str(ids["evidence"])
         assert doc["authors"] == ["Ada Lovelace"]
 
@@ -130,13 +139,10 @@ def test_the_context_read_highlights_the_quote_in_its_passage(
                 .values(is_public=True)
             )
         url = CONTEXT.format(task_id=ids["task_id"], evidence_id=ids["evidence"])
-        body = client.get(f"{url}?question=elsewhere").json()
+        body = client.get(url).json()
         assert body["context"][body["span_start"] : body["span_end"]] == "It worked."
         assert "Schools in Leeds" in body["context"]
         assert body["authorships"] == [{"name": "Ada Lovelace", "institutions": []}]
-        # No quote for holds here; the question is required.
-        assert client.get(f"{url}?question=here").status_code == 404
-        assert client.get(url).status_code == 422
         # Another task's judgement is not found under this task.
         foreign = CONTEXT.format(task_id=ids["task_id"], evidence_id=other["evidence"])
-        assert client.get(f"{foreign}?question=elsewhere").status_code == 404
+        assert client.get(foreign).status_code == 404
