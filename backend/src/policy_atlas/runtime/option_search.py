@@ -679,7 +679,12 @@ def _interrupt_children(
     for child in child_ids:
         with _handles_lock:
             future = _futures.get(child)
-            if future is not None and not future.cancel():
+        # Cancel outside the lock: a successful cancel runs the done callback
+        # (``_forget``, which takes the lock) in this thread, and the lock is
+        # not re-entrant. Adding to ``_abandoned`` before ``_end_child`` keeps
+        # the child's own check (``end_if_abandoned``) correct.
+        if future is not None and not future.cancel():
+            with _handles_lock:
                 _abandoned.add(child)
         if _end_child(engine, task_id=task_id, child_id=child, status="interrupted"):
             interrupted.append(child)

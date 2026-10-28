@@ -985,6 +985,30 @@ def test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent(
         _cleanup(engine, task_id)
 
 
+def test_interrupting_a_still_queued_child_does_not_deadlock(engine: Engine) -> None:
+    """A queued child's cancel runs its done callback (``_forget``) in the
+    calling thread; with the handles lock held there, the thread waited on
+    itself forever (the intermittent CI hang)."""
+    from concurrent.futures import Future
+
+    child = uuid.uuid4()
+    queued: Future[None] = Future()
+    with option_search._handles_lock:
+        option_search._futures[child] = queued
+    queued.add_done_callback(lambda _done: option_search._forget(child))
+    worker = threading.Thread(
+        target=option_search._interrupt_children,
+        args=(engine,),
+        kwargs={"task_id": uuid.uuid4(), "child_ids": [child]},
+        daemon=True,
+    )
+    worker.start()
+    worker.join(timeout=10)
+    assert not worker.is_alive(), "interrupting a queued child deadlocked"
+    assert queued.cancelled()
+    assert child not in option_search._futures
+
+
 def test_a_child_abandoned_before_its_row_ends_interrupted_on_opening(engine: Engine) -> None:
     """A11: the join abandoned the child before its row existed; the child
     ends ``interrupted`` as soon as it opens the row and runs no step."""

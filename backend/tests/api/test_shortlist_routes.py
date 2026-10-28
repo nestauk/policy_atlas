@@ -36,6 +36,7 @@ from tests.api.org_support import tenancy_client
 from tests.api.resource_support import (  # noqa: F401 — autouse teardown
     api_client,
     create_task,
+    end_walks,
     remove_committed_tasks_after_walks,
 )
 from tests.api.test_longlist_routes import _build, _Built, _org_build
@@ -255,6 +256,7 @@ def test_the_buttons_are_run_active_while_a_parentless_walk_runs(
             assert response.status_code == 409, response.text
             assert response.json()["error"]["code"] == "run_active"
         assert executor.submitted == []
+        end_walks(engine, built.task_id)
 
 
 def test_suggest_more_opens_a_shortlist_walk_and_a_second_press_is_run_active(
@@ -290,6 +292,7 @@ def test_suggest_more_opens_a_shortlist_walk_and_a_second_press_is_run_active(
         )
         assert again.status_code == 409, again.text
         assert again.json()["error"]["code"] == "run_active"
+        end_walks(engine, built.task_id)
 
 
 def test_suggest_more_with_nothing_left_is_refused(engine: Engine, tmp_path: Path) -> None:

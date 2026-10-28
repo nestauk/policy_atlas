@@ -190,6 +190,19 @@ def await_walks_ended(engine: Engine, task_ids: list[uuid.UUID]) -> None:
         time.sleep(0.1)
 
 
+def end_walks(engine: Engine, task_id: uuid.UUID) -> None:
+    """End a test's walks that no thread runs (set ``running`` by hand, or
+    opened by a recording executor), so :func:`await_walks_ended` does not
+    wait out its 60 seconds for them."""
+    with engine.begin() as conn:
+        conn.execute(
+            capability_run.update()
+            .where(capability_run.c.task_id == task_id)
+            .where(capability_run.c.status.in_(("running", "paused")))
+            .values(status="interrupted", ended_at=now())
+        )
+
+
 @pytest.fixture(autouse=True)
 def remove_committed_tasks(engine: Engine) -> Iterator[None]:
     """Hard-delete every task the test commits. Autouse wherever it is imported.
