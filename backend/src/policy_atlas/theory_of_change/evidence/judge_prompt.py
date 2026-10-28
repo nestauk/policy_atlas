@@ -1,4 +1,4 @@
-"""The ``toc_judge_v5`` prompt: one link against one document (task 054, C5).
+"""The ``toc_judge_v6`` prompt: one link against one document (task 054, C5).
 
 Lead-authored and versioned. One call per link and document returns two
 stances, each with its own verbatim quote: *worked elsewhere* (where this step

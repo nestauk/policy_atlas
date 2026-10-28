@@ -1,4 +1,4 @@
-"""The ``toc_choose_v1`` prompt: choose after grading (task 054, C6).
+"""The ``toc_choose_v2`` prompt: choose after grading (task 054, C6).
 
 Lead-authored and versioned. Called only when there is something to choose:
 more kept pathways than the limits (6 success, 3 failure), or conditions that
