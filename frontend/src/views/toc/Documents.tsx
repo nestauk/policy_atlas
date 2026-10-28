@@ -4,8 +4,8 @@ import { useTocDocumentContext } from "../../api/queries";
 import { scrub } from "../../lib/scrub";
 import { CitationProvenanceBlock, ProvenanceSheet } from "../ArtefactView";
 import { referenceAuthorsLine } from "../artefactPresentation";
-import { evidenceBalance, SUPPORT_LABEL, VERDICT_LABEL, VERDICT_VAR } from "./tocModel";
-import type { SourceType, Support, TocDocument, Verdict } from "./types";
+import { evidenceBalance, figureGroups, figureHeadline, SUPPORT_LABEL, VERDICT_LABEL, VERDICT_VAR } from "./tocModel";
+import type { SourceType, Support, TocDocument, TocFigure, Verdict } from "./types";
 
 const SOURCE_LABEL: Record<SourceType, string> = { academic: "Academic", policy: "Policy document", web: "Web page" };
 
@@ -100,6 +100,49 @@ export function DocumentItem({
       {chips !== undefined && <p className="mt-0.5 text-grey">{scrub(chips)}</p>}
       {quote !== null && quote !== "" && <q className="mt-1 block text-navy">{scrub(quote)}</q>}
     </li>
+  );
+}
+
+/** Groups shown before "Show all N figures". */
+const FIGURE_GROUPS_SHOWN = 3;
+
+/** "Russell, Croker and Viner · Obesity Reviews · 2019 · systematic review". */
+function figureSource(figure: TocFigure): string {
+  const authors = figure.source_type === "web" ? null : referenceAuthorsLine(figure.source_authors.map((name) => ({ name })));
+  return [authors ?? SOURCE_LABEL[figure.source_type], figure.source_venue, figure.source_year, figure.evidence_type]
+    .filter((part) => part != null && part !== "")
+    .join(" · ");
+}
+
+/**
+ * Figures as the panels show them (C37): one bold line per group of figures
+ * that measure the same thing (a range across studies, never an average),
+ * each figure's quote in italics and its source line under it.
+ */
+export function FigureList({ figures }: { figures: TocFigure[] }) {
+  const [all, setAll] = useState(false);
+  const groups = figureGroups(figures);
+  const shown = all ? groups : groups.slice(0, FIGURE_GROUPS_SHOWN);
+  return (
+    <div className="mt-1">
+      {shown.map((group) => (
+        <div key={group.key} data-testid="figure-group" className="my-2.5 border-l-[3px] border-line-2 py-0.5 pl-3">
+          <p className="text-body font-bold text-navy">{scrub(figureHeadline(group))}</p>
+          {group.figures.map((figure) => (
+            <div key={figure.figure_id}>
+              <q className="mt-0.5 block text-body italic">{scrub(figure.quote)}</q>
+              <p className="text-meta text-grey">{scrub(figureSource(figure))}</p>
+            </div>
+          ))}
+        </div>
+      ))}
+      {!all && groups.length > FIGURE_GROUPS_SHOWN && (
+        <button type="button" onClick={() => setAll(true)} className="cursor-pointer text-meta font-bold text-blue hover:underline">
+          Show all {figures.length} figures
+        </button>
+      )}
+      <p className="mt-1 text-meta text-grey">Figures come from the documents' abstracts.</p>
+    </div>
   );
 }
 

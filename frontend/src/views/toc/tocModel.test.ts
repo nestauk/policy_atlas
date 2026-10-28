@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { boxId, linkId, tocGraphFixture } from "./fixture";
-import { BOX_H, BOX_W, COL_GAP, ROW_GAP, evidenceBalance, groupAssumptions, layoutToc, linkTip, routeEdge, tocTitle } from "./tocModel";
+import { boxId, linkId, tocEvidenceFixture, tocGraphFixture } from "./fixture";
+import { BOX_H, BOX_W, COL_GAP, ROW_GAP, evidenceBalance, figureGroups, figureHeadline, groupAssumptions, layoutToc, linkTip, routeEdge, tocTitle } from "./tocModel";
 
 const COL_STEP = BOX_W + COL_GAP;
 
@@ -85,6 +85,24 @@ describe("wording and grouping", () => {
       { support: "weak", weights: [0.6, 0.2] },
       { support: "strong", weights: [] },
     ]);
+  });
+
+  it("groups figures by measure, unit and type, and words a range across studies, never an average", () => {
+    const figures = tocEvidenceFixture().links[0]?.figures ?? [];
+    const groups = figureGroups(figures);
+    // The first two differ only in case and punctuation: one group.
+    expect(groups.map((group) => group.figures.length)).toEqual([2, 1]);
+    expect(figureHeadline(groups[0]!)).toBe("Evidence suggests 44 to 58% fewer adverts for less healthy food seen by children (2 studies)");
+    // A single number keeps its reported text and range.
+    expect(figureHeadline(groups[1]!)).toBe("1·05 odds of children's exposure, no change (range 0·99 to 1·12)");
+  });
+
+  it("says one study when two figures come from the same document, and one value when they agree", () => {
+    const [first] = tocEvidenceFixture().links[0]?.figures ?? [];
+    const same = { ...first!, figure_id: "x", value: 44, value_text: "44" };
+    expect(figureHeadline({ key: "k", figures: [first!, same] })).toBe(
+      "Evidence suggests 44% fewer adverts for less healthy food seen by children (1 study)",
+    );
   });
 
   it("gives the verdict on a link's hover text", () => {

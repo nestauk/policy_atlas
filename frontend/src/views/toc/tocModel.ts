@@ -1,4 +1,4 @@
-import type { BoxLayer, Origin, Support, TocBox, TocDocument, TocGraph, TocLink, TocPathway, Verdict } from "./types";
+import type { BoxLayer, Origin, Support, TocBox, TocDocument, TocFigure, TocGraph, TocLink, TocPathway, Verdict } from "./types";
 
 /*
  * Pure helpers for the theory-of-change Result page (task 054): wording,
@@ -53,6 +53,52 @@ export function evidenceBalance(documents: Pick<TocDocument, "support" | "weight
       .map((doc) => doc.weight)
       .sort((a, b) => b - a),
   }));
+}
+
+/** Figures that say the same thing, shown as one line (C37). */
+export interface FigureGroup {
+  key: string;
+  figures: TocFigure[];
+}
+
+const plain = (text: string | null) => (text ?? "").toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
+
+/**
+ * Figures grouped by what they measure, their unit and effect type, in the
+ * order they first appear. Never averaged or pooled.
+ */
+export function figureGroups(figures: TocFigure[]): FigureGroup[] {
+  // ponytail: exact match on a normalised measure, so two wordings of one measure stay apart; group by meaning (embeddings or a model call) if that splits too often.
+  const groups = new Map<string, TocFigure[]>();
+  for (const figure of figures) {
+    const key = [plain(figure.measure), plain(figure.unit), figure.effect_size_type].join("|");
+    groups.set(key, [...(groups.get(key) ?? []), figure]);
+  }
+  return [...groups].map(([key, items]) => ({ key, figures: items }));
+}
+
+function withUnit(value: string, unit: string | null): string {
+  if (unit === null || unit === "") return value;
+  return unit === "%" ? `${value}%` : `${value} ${unit}`;
+}
+
+/**
+ * A group's bold line. Two or more numbers: "Evidence suggests A to B <unit>
+ * <measure> (n studies)", from the lowest and highest value. One: "<value>
+ * <unit> <measure>", with its range when the document gives one.
+ */
+export function figureHeadline(group: FigureGroup): string {
+  const [first] = group.figures;
+  if (first === undefined) return "";
+  const values = group.figures.map((figure) => figure.value).filter((value): value is number => value !== null);
+  if (values.length >= 2) {
+    const [low, high] = [Math.min(...values), Math.max(...values)];
+    const span = low === high ? String(low) : `${low} to ${high}`;
+    const studies = new Set(group.figures.map((figure) => figure.task_source_snapshot_id)).size;
+    return `Evidence suggests ${withUnit(span, first.unit)} ${first.measure} (${studies} ${studies === 1 ? "study" : "studies"})`;
+  }
+  const range = first.ci_lower_text !== null && first.ci_upper_text !== null ? ` (range ${first.ci_lower_text} to ${first.ci_upper_text})` : "";
+  return `${withUnit(first.value_text, first.unit)} ${first.measure}${range}`;
 }
 
 export const ORIGIN_LABEL: Record<Origin, string> = {

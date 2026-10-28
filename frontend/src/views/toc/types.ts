@@ -14,6 +14,7 @@ export type TocGradeRule = Schemas["TocGradeRuleOut"];
 export type TocGraph = Schemas["TocGraphOut"];
 export type TocDocument = Schemas["TocDocumentOut"];
 export type TocLinkEvidence = Schemas["TocLinkEvidenceOut"];
+export type TocFigure = Schemas["TocFigureOut"];
 export type TocCaseStudy = Schemas["TocCaseStudyOut"];
 export type TocBoxEvidence = Schemas["TocBoxEvidenceOut"];
 export type TocEvidence = Schemas["TocEvidenceOut"];

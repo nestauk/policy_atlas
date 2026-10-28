@@ -4,6 +4,7 @@ import type {
   TocBoxEvidence,
   TocDocument,
   TocEvidence,
+  TocFigure,
   TocGraph,
   TocLink,
   TocPathway,
@@ -182,6 +183,37 @@ function doc(n: number, title: string, support: TocDocument["support"], quote: s
   };
 }
 
+function figure(n: number, doc: number, measure: string, value: number, extra: Partial<TocFigure> = {}): TocFigure {
+  return {
+    figure_id: `00000000-0000-4000-8000-0000000f${String(n).padStart(4, "0")}`,
+    box: "link",
+    measure,
+    value_text: String(value),
+    value,
+    ci_lower_text: null,
+    ci_lower: null,
+    ci_upper_text: null,
+    ci_upper: null,
+    unit: "%",
+    effect_size_type: "relative_change",
+    population: "children",
+    place: null,
+    year: null,
+    n: null,
+    k: null,
+    quote: `Exposure fell ${value}% after the rules.`,
+    task_source_snapshot_id: docId(doc),
+    source_title: `Study ${doc}`,
+    source_authors: ["Smith", "Jones"],
+    source_year: 2020,
+    source_venue: "Obesity Reviews",
+    source_type: "academic",
+    evidence_type: "quasi-experiment",
+    url: null,
+    ...extra,
+  };
+}
+
 /** The heaviest document on #3: the London study, in England. */
 export const SHARED_DOC_TITLE = "Household purchases after the Transport for London advertising restriction";
 
@@ -203,6 +235,18 @@ export function tocEvidenceFixture(): TocEvidence {
         },
       ],
       indicators: ["Calories bought per household per week"],
+      figures: [
+        figure(4, 9, "excess calories a day eaten by children", 140, {
+          box: "target",
+          unit: "kcal",
+          effect_size_type: "level",
+          quote: "children overall eat 140 excess kcal per day",
+          source_authors: [],
+          source_type: "policy",
+          source_venue: "Public Health England",
+          evidence_type: "government evidence review",
+        }),
+      ],
     },
   ];
   return {
@@ -214,8 +258,24 @@ export function tocEvidenceFixture(): TocEvidence {
           doc(2, SHARED_DOC_TITLE, "strong", "Ads fell to almost none.", 2, 3, "London, so it applies in England"),
           doc(3, "Food brand advertising after Chile's restrictions", "refutes", "Companies moved to brand-only advertising.", 2, 2, "Chile, similar advertisers"),
         ],
+        figures: [
+          // Two studies, the same measure: one line with the range.
+          figure(1, 1, "fewer adverts for less healthy food seen by children", 44),
+          figure(2, 2, "Fewer adverts for less healthy food seen by children.", 58),
+          // One number with its range.
+          figure(3, 2, "odds of children's exposure, no change", 1.05, {
+            value_text: "1·05",
+            unit: null,
+            effect_size_type: "ratio",
+            ci_lower_text: "0·99",
+            ci_lower: 0.99,
+            ci_upper_text: "1·12",
+            ci_upper: 1.12,
+            quote: "odds ratio 1·05 (0·99 to 1·12)",
+          }),
+        ],
       },
-      { link_id: linkId(1), documents: [doc(4, "Ofcom review of TV rules", "weak", "Broadcasters blocked most ads.", 3, 3, "UK television")] },
+      { link_id: linkId(1), documents: [doc(4, "Ofcom review of TV rules", "weak", "Broadcasters blocked most ads.", 3, 3, "UK television")], figures: [] },
     ],
     boxes,
   };

@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as queries from "../../api/queries";
+import { FigureList } from "./Documents";
 import { boxId, linkId, SHARED_DOC_TITLE, TASK_ID, tocEvidenceFixture, tocGraphFixture } from "./fixture";
 import { TocResult } from "./TocResult";
 import type { TocGraph } from "./types";
@@ -122,6 +123,13 @@ describe("detail panel", () => {
     expect(titles[0]).toBe(SHARED_DOC_TITLE);
     expect(within(panel).getByText("Strongly supports · quality 2 · relevance 3 · London, so it applies in England")).toBeInTheDocument();
     expect(within(panel).queryByText(/Worked elsewhere|Holds here/)).toBeNull();
+    // Size of change: the grouped range, each quote and its source line, and the note.
+    expect(within(panel).getByText("Size of change")).toBeInTheDocument();
+    expect(within(panel).getAllByTestId("figure-group")).toHaveLength(2);
+    expect(within(panel).getByText("Evidence suggests 44 to 58% fewer adverts for less healthy food seen by children (2 studies)")).toBeInTheDocument();
+    expect(within(panel).getByText("odds ratio 1·05 (0·99 to 1·12)")).toBeInTheDocument();
+    expect(within(panel).getAllByText("Smith, Jones · Obesity Reviews · 2020 · quasi-experiment").length).toBe(3);
+    expect(within(panel).getByText("Figures come from the documents' abstracts.")).toBeInTheDocument();
   });
 
   it("opens for a box", () => {
@@ -131,6 +139,11 @@ describe("detail panel", () => {
     expect(within(panel).getByText("Definition of: Households buy fewer calories from less healthy food")).toBeInTheDocument();
     expect(within(panel).getByText(/Case studies \(1\)/)).toBeInTheDocument();
     expect(within(panel).getByText((_, el) => el?.tagName === "P" && el.textContent === "Long-term outcome L1")).toBeInTheDocument();
+    // Figures: a level of this box, reported by one of its links' documents.
+    expect(within(panel).getByText("Figures")).toBeInTheDocument();
+    expect(within(panel).getByText("140 kcal excess calories a day eaten by children")).toBeInTheDocument();
+    expect(within(panel).getByText("children overall eat 140 excess kcal per day")).toBeInTheDocument();
+    expect(within(panel).getByText(/Public Health England · 2020 · government evidence review/)).toBeInTheDocument();
   });
 });
 
@@ -205,5 +218,18 @@ describe("header", () => {
     renderResult();
     expect(screen.getByText("About this theory")).toBeInTheDocument();
     expect(screen.getByText("What the evidence says")).toBeInTheDocument();
+  });
+});
+
+describe("figures", () => {
+  it("shows three groups, then offers all the figures", async () => {
+    const user = userEvent.setup();
+    const [base] = tocEvidenceFixture().links[0]?.figures ?? [];
+    const figures = ["a", "b", "c", "d"].map((measure, i) => ({ ...base!, figure_id: `f${i}`, measure }));
+    render(<FigureList figures={figures} />);
+    expect(screen.getAllByTestId("figure-group")).toHaveLength(3);
+    await user.click(screen.getByRole("button", { name: "Show all 4 figures" }));
+    expect(screen.getAllByTestId("figure-group")).toHaveLength(4);
+    expect(screen.queryByRole("button", { name: /Show all/ })).toBeNull();
   });
 });

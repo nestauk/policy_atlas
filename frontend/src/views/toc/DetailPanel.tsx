@@ -1,5 +1,5 @@
 import { scrub } from "../../lib/scrub";
-import { DocumentItem, EvidenceBalance, LinkDocuments, VerdictDot, VerdictWords } from "./Documents";
+import { DocumentItem, EvidenceBalance, FigureList, LinkDocuments, VerdictDot, VerdictWords } from "./Documents";
 import { LAYER_LABEL, NEAR_THRESHOLD, ORIGIN_LABEL } from "./tocModel";
 import type { TocBox, TocEvidence, TocGraph, TocLink } from "./types";
 
@@ -67,6 +67,12 @@ function BoxDetail({ box, evidence }: { box: TocBox; evidence: TocEvidence | nul
         </>
       )}
       {box.description !== null && <p className="mt-3 text-meta">{scrub(box.description)}</p>}
+      {found !== undefined && found.figures.length > 0 && (
+        <>
+          <p className={HEAD}>Figures</p>
+          <FigureList figures={found.figures} />
+        </>
+      )}
       {found !== undefined && found.case_studies.length > 0 && (
         <>
           <p className={HEAD}>Case studies ({found.case_studies.length})</p>
@@ -99,7 +105,9 @@ function BoxDetail({ box, evidence }: { box: TocBox; evidence: TocEvidence | nul
 }
 
 function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: TocLink; graph: TocGraph; evidence: TocEvidence | null | undefined }) {
-  const documents = evidence?.links.find((entry) => entry.link_id === link.link_id)?.documents ?? [];
+  const linkEvidence = evidence?.links.find((entry) => entry.link_id === link.link_id);
+  const documents = linkEvidence?.documents ?? [];
+  const figures = linkEvidence?.figures ?? [];
   const pending = link.state === "checking" || link.state === "unchecked";
   const codeOf = (boxId: string) => graph.boxes.find((box) => box.box_id === boxId)?.code ?? null;
   const [source, target] = [codeOf(link.source_box_id), codeOf(link.target_box_id)];
@@ -126,6 +134,12 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
           {link.near_threshold && <p className="mt-1 text-body">{NEAR_THRESHOLD}</p>}
           <p className={HEAD}>Evidence balance</p>
           <EvidenceBalance documents={documents} />
+          {figures.length > 0 && (
+            <>
+              <p className={HEAD}>Size of change</p>
+              <FigureList figures={figures} />
+            </>
+          )}
         </>
       )}
       <p className={HEAD}>How this step works</p>
