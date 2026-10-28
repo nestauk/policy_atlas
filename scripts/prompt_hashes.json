@@ -44,5 +44,6 @@
   "backend/src/policy_atlas/theory_of_change/evidence/judge_prompt.py": "f584283c187e57a7b6eb2a475a3e5be563366dced5847dc797e3ad57d2aa0972",
   "backend/src/policy_atlas/theory_of_change/evidence/pick_prompt.py": "2b51059430164a8379aedaf65f4271154a39d505c27388938b0b5b547b2e4704",
   "backend/src/policy_atlas/theory_of_change/merge_prompt.py": "4fc376d292f9a4e11427dacac1a887549b2e506ed4fdfdc877f8189f6498d5c5",
+  "backend/src/policy_atlas/theory_of_change/report_prompt.py": "08684fd6ee1d57d7cf82327b110847e4ba3f8dabacbd9c11a4f13ed1eecb77a8",
   "backend/src/policy_atlas/theory_of_change/summary_prompt.py": "41b7ac3669b20df53ae228c5d9c239eeb9a1715d0c34f7ab03461156c1f1ef39"
 }
