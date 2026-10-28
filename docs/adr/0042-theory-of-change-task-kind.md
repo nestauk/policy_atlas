@@ -89,6 +89,39 @@ the Evaluation Task Force, regulators, statistics and audit bodies, What Works C
 universities, journals) counts by its appraisal score; any other page keeps the old cap. Task 054
 contract C23.
 
+## Amendment, 2026-10-28: one evidence verdict per link (simplified BEAM)
+
+Decisions 2 and 3 change. A link no longer answers two questions with two grades (*worked
+elsewhere*, *holds here*); it has **one evidence verdict**, computed by code on read (owner: "let's
+have one verdict"). Task 054 contract C36; the scheme is the ground-truth pack's simplified BEAM
+(`03_beam_evidence_scheme.md` §3).
+
+- **What the judge says.** Per document, its *support* for the step (strong, weak, mixed,
+  refutes, or not about it), one verified quote, and its *relevance* R, 0 to 3: how many extra
+  assumptions it takes to carry the finding to this population and place. "Will it hold here"
+  now lives in relevance and in the link's one evidence sentence, not in a second grade.
+- **How code weighs it.** Quality Q, 1 to 3, comes from the appraisal score (5 or 4 → 3, 3 → 2,
+  lower or unscored → 1); a web page off the trusted list counts 1, a robust model 2, any other
+  model 1. Weight = Q × R ÷ 9. Support counts +2, +1, 0, −2.
+- **The verdict.** From the total weight W, the weight-averaged support S̄ and the share of the
+  weight that refutes: *Not sure: too little evidence* when W < 1; *Confident* when S̄ ≥ 1 and
+  under 15% refutes; *Not confident: evidence against* when S̄ ≤ −0.5; otherwise *Not sure:
+  mixed*. A link within 0.2 of a support threshold, or 0.25 of W = 1, is flagged as close to the
+  threshold. The thresholds are named constants in `evidence/grade.py`, to calibrate from the
+  evals. The theory's confidence is the lowest verdict among its critical links.
+- **The critical connection (C6)** keeps its intent, the weakest important step: the lowest
+  verdict on a kept success pathway, ties to the link on most pathways.
+- **The canvas** shows the verdict by line style only (solid, two-tone, dashed, dotted red);
+  critical links are thicker.
+
+Why: two grades per link were hard to read ("medium elsewhere, weak here" did not tell a user
+what to do), and the banding ignored how relevant each study was. BEAM's weighting by quality and
+relevance, with four verdicts that say what to do next, is the scheme the ground-truth pack
+measures against. Old judgements were mapped once in migration `7fbb8bf487f2` (supports → weak,
+challenges → refutes; relevance 3 where *holds here* supported, else 1); the old columns are kept,
+no longer written. A systematic review replacing its own included studies (deduplication) is
+deferred.
+
 ## Consequences
 
 - Positive: a policy team gets a Magenta Book theory of change whose every step shows, in

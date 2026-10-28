@@ -1,5 +1,13 @@
 # Spec update log
 
+## 2026-10-28 (task 054, one evidence verdict per link)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): each
+  link now has one evidence verdict (Confident, Not sure: mixed, Not sure: too little evidence,
+  Not confident: evidence against) instead of two grades, computed from each document's support,
+  quality and relevance to this population and place (a simplified BEAM). The judge, choose and
+  summary steps follow; the canvas shows the verdict by line style, and the link panel shows the
+  evidence balance. Task 054 contract C36; ADR 0042 amendment.
+
 ## 2026-10-28 (task 054, Magenta Book layers and short codes)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
   outcome layer splits into short-term and long-term outcomes, with fixed allowed steps (only
