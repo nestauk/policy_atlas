@@ -466,7 +466,12 @@ Owner, 2026-10-28: five builds on the light link check, in this order, designed 
 straight through with no full verify between steps; the ground-truth eval runs after step 1
 (baseline) and after step 5. Source material: `scripts/evals/theory_of_change/datasets/
 ground_truth_v1/` (ground-truth pack, evaluation protocol, simplified BEAM). **Draft for the
-owner's design review; not yet approved.**
+owner's design review.** **Approved 2026-10-28** (owner: "the design concepts are good … the
+evidence balance looks very good … the narrative summary is PERFECT"), with two conditions: the
+canvas keeps its established look (arrows, curves, boxes), and only the line style carries the
+verdict; and the wireframe's narrative (`wireframes-iteration3.html`, frame 4) is the target for
+brevity and tone, used as the worked example in `toc_report_v1`. Short codes in box corners are
+kept.
 
 - **C33. Ground-truth eval (step 1).** A script drives the real app through the API: creates a
   task from a case's brief (verbatim), runs draft and check, exports the theory to the pack's
