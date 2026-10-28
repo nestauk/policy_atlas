@@ -89,7 +89,14 @@ route, `AWS_BEARER_TOKEN_BEDROCK` on a Bedrock route); `PA_BACKEND_MODE=live|stu
 makes the posture explicit (see `backend/.env.example`).
 
 **Choosing AI models.** Every model name lives in one committed file,
-`backend/src/policy_atlas/model_routes.toml`. One setting picks a route from it:
+`backend/src/policy_atlas/model_routes.toml`. The file has two parts:
+
+- `[steps]` gives each AI step (for example `longlist_judgment`) a tier: `fast`,
+  `standard` or `frontier`.
+- `[routes.<name>]` says which model each tier uses on that route, plus the
+  embedding model and provider settings.
+
+One setting picks a route from it:
 
 | `POLICY_ATLAS_MODEL_ROUTE` | where AI calls go | key it reads |
 |---|---|---|
@@ -99,7 +106,9 @@ makes the posture explicit (see `backend/.env.example`).
 
 To change a model, edit the route file and open a pull request. To try a model
 without a pull request, put your own route in a separate file and name it using an env variable `POLICY_ATLAS_MODEL_ROUTE_FILE`. The old per-step `POLICY_ATLAS_*_MODEL`
-settings are ignored. Diagrams and details:
+settings are ignored. Staging and production pick their route in
+`infra/pa_config.json` (`backend.model_route`, `openai-direct` in both today).
+Diagrams and details:
 [`docs/tasks/053-bedrock-local-route/model-routing.html`](docs/tasks/053-bedrock-local-route/model-routing.html)
 (open it in a browser).
 
