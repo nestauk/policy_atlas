@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as queries from "../../api/queries";
+import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 import { FigureList } from "./Documents";
 import { boxId, linkId, SHARED_DOC_TITLE, TASK_ID, tocEvidenceFixture, tocGraphFixture } from "./fixture";
 import { TocResult } from "./TocResult";
@@ -148,62 +149,88 @@ describe("detail panel", () => {
 });
 
 describe("detailed information", () => {
-  it("expands a pathway, gives each link its verdict and sentence, and opens documents from +", async () => {
+  const SECTIONS = ["Summary", "How change happens", "Assumptions and evidence", "What to test and measure", "Sources and method"];
+
+  it("is the five-section report, in the report's four text styles only", () => {
+    renderResult();
+    const info = screen.getByLabelText("Detailed information");
+    expect(within(info).getByRole("heading", { level: 2 }).className).toBe(REPORT_PART_HEADING_CLASS);
+    const sections = within(info).getAllByRole("heading", { level: 3 });
+    expect(sections.map((h) => h.textContent)).toEqual(SECTIONS);
+    for (const heading of sections) expect(heading.className).toContain(REPORT_SECTION_HEADING_CLASS);
+    // Every text element uses one of the four styles (body, label, part or section heading);
+    // metadata lines (the scope, the method) are the body style in grey.
+    const greyBody = REPORT_BODY_CLASS.replace("text-ink", "text-grey");
+    const styles = [REPORT_BODY_CLASS, greyBody, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS];
+    for (const el of info.querySelectorAll("p, ul, table, th, h2, h3")) {
+      const own = el.className;
+      const inherited = (el.closest("table") as HTMLElement | null)?.className ?? "";
+      expect(styles.some((style) => own.includes(style) || inherited.includes(style))).toBe(true);
+    }
+    expect(within(info).getByText("Goal:")).toBeInTheDocument();
+    expect([...info.querySelectorAll("i")].map((el) => el.textContent)).toEqual(["If", "then", "because"]);
+    expect(within(info).getByText(/Population: children under 18 in England · Time horizon: five years · Directly influenced: up to outputs/)).toBeInTheDocument();
+    expect(within(info).getByText("Weakest critical links.")).toBeInTheDocument();
+    expect(within(info).getByText("Fewer adverts, less snacking.")).toBeInTheDocument();
+    // Tables scroll sideways on a narrow screen.
+    expect(info.querySelectorAll(".overflow-x-auto table")).toHaveLength(2);
+    expect(within(info).getByText(/'Too little evidence' means none was found/)).toBeInTheDocument();
+  });
+
+  it("selects a link or box on the canvas from a code in the text", async () => {
     const user = userEvent.setup();
     renderResult();
     const info = screen.getByLabelText("Detailed information");
-    // Pathway 1 starts open; pathway 2 starts closed.
-    expect(within(info).getByText("Link 3 says the step works.")).toBeInTheDocument();
-    expect(within(info).queryByText("Link 6 says the step works.")).toBeNull();
-    await user.click(within(info).getByRole("button", { name: /Pathway 2/ }));
-    expect(within(info).getByText("Link 6 says the step works.")).toBeInTheDocument();
-    expect(within(info).getByText(/Evidence sentence for link 6\./)).toBeInTheDocument();
-    expect(within(info).queryByText(/worked elsewhere|holds here/i)).toBeNull();
-    // The "+" after the critical link's sentence lists its documents.
-    expect(within(info).queryByText("Exposure fell by about half.")).toBeNull();
-    await user.click(within(info).getAllByRole("button", { name: /Show the 3 documents/ })[0] as HTMLElement);
-    expect(within(info).getByText("Exposure fell by about half.")).toBeInTheDocument();
-    expect(within(info).getAllByText("Critical connection · test this first").length).toBeGreaterThan(0);
+    await user.click(within(info).getAllByRole("button", { name: "Show #3 on the canvas" })[0] as HTMLElement);
+    const panel = screen.getByRole("complementary", { name: "Details" });
+    expect(within(panel).getByText(/Critical connection/)).toBeInTheDocument();
+    await user.click(within(info).getAllByRole("button", { name: "Show S1 on the canvas" })[0] as HTMLElement);
+    expect(within(screen.getByRole("complementary", { name: "Details" })).getByText("Children see fewer ads for less healthy food")).toBeInTheDocument();
   });
 
+  it("links each [n] to its source in the list", () => {
+    renderResult();
+    const info = screen.getByLabelText("Detailed information");
+    const [marker] = within(info).getAllByRole("link", { name: "[3]" });
+    expect(marker).toHaveAttribute("href", "#toc-source-3");
+    expect(info.querySelector("#toc-source-3")?.textContent).toContain("Food brand advertising after Chile's restrictions");
+  });
+
+  it("lists the set-aside pathways in one line each, at the end of How change happens", () => {
+    renderResult();
+    const info = screen.getByLabelText("Detailed information");
+    const label = within(info).getByText("Considered and set aside");
+    expect(label.className).toBe(`mt-4 ${REPORT_LABEL_CLASS}`);
+    expect(within(info).getByText(/Merged into pathway 1/)).toBeInTheDocument();
+  });
+
+  it("prints whole: nothing is collapsed, and the button prints", async () => {
+    const user = userEvent.setup();
+    const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
+    renderResult();
+    const info = screen.getByLabelText("Detailed information");
+    expect(info.querySelectorAll('details, [aria-expanded="false"]')).toHaveLength(0);
+    await user.click(within(info).getByRole("button", { name: "Download as PDF" }));
+    expect(print).toHaveBeenCalled();
+  });
+
+  it("says when the report is not written yet", () => {
+    renderResult(tocGraphFixture({ report: null }));
+    expect(screen.getByText("The report is written when the evidence check finishes.")).toBeInTheDocument();
+  });
+});
+
+describe("detail panel documents", () => {
   it("shows authors and opens the quote in context from a document title", async () => {
     const user = userEvent.setup();
     renderResult();
-    const info = screen.getByLabelText("Detailed information");
-    await user.click(within(info).getAllByRole("button", { name: /Show the 3 documents/ })[0] as HTMLElement);
-    expect(within(info).getAllByText(/Smith, Jones · 20\d\d · quasi-experiment/).length).toBeGreaterThan(0);
-    await user.click(within(info).getByRole("button", { name: "Children's exposure after Chile's Law 20.606" }));
+    fireEvent.click((edge(3) as Element).querySelector("path") as Element);
+    const panel = screen.getByRole("complementary", { name: "Details" });
+    expect(within(panel).getAllByText(/Smith, Jones · 20\d\d · quasi-experiment/).length).toBeGreaterThan(0);
+    await user.click(within(panel).getByRole("button", { name: "Children's exposure after Chile's Law 20.606" }));
     expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, expect.stringContaining("0000e"));
     expect(screen.getByText("Where this comes from")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open the source" })).toHaveAttribute("href", expect.stringContaining("example.org"));
-  });
-
-  it("lists every condition under Assumptions in its type group", async () => {
-    const user = userEvent.setup();
-    renderResult();
-    const info = screen.getByLabelText("Detailed information");
-    await user.click(within(info).getByRole("button", { name: /Assumptions/ }));
-    const labels = ["Delivery", "Take-up", "Behaviour change", "Benefits and side effects", "If it goes wrong"];
-    for (const label of labels) expect(within(info).getByText(label)).toBeInTheDocument();
-    for (let n = 1; n <= 9; n += 1) {
-      if (n === 3 || n === 4) continue; // these two carry their own wording
-      expect(within(info).getByText(`Condition for link ${n}`)).toBeInTheDocument();
-    }
-    expect(within(info).getByText("Brands do not move their spend to brand-only ads, sponsorship and influencers")).toBeInTheDocument();
-    // Take-up holds link 3 (critical) and link 6.
-    const takeUp = within(info).getByText("Take-up").parentElement as HTMLElement;
-    expect(within(takeUp).getByText("Condition for link 6")).toBeInTheDocument();
-    expect(within(takeUp).getByText(/Critical connection · test this first/)).toBeInTheDocument();
-  });
-
-  it("lists the set-aside pathways and the evaluation questions", async () => {
-    const user = userEvent.setup();
-    renderResult();
-    const info = screen.getByLabelText("Detailed information");
-    await user.click(within(info).getByRole("button", { name: /Considered and set aside/ }));
-    expect(within(info).getByText(/Merged into pathway 1/)).toBeInTheDocument();
-    await user.click(within(info).getByRole("button", { name: /Questions for an evaluation/ }));
-    expect(within(info).getByText("Are the calories cut made up from other food?")).toBeInTheDocument();
   });
 });
 
@@ -211,13 +238,12 @@ describe("header", () => {
   it("says the check is running while it runs", () => {
     renderResult(tocGraphFixture({ check_status: "checking" }));
     expect(screen.getByText(/checking each step against the evidence/)).toBeInTheDocument();
-    expect(screen.queryByText("About this theory")).toBeNull();
   });
 
-  it("shows both summary paragraphs once checked", () => {
+  it("leaves the summary paragraphs to the report", () => {
     renderResult();
-    expect(screen.getByText("About this theory")).toBeInTheDocument();
-    expect(screen.getByText("What the evidence says")).toBeInTheDocument();
+    expect(screen.queryByText("About this theory")).toBeNull();
+    expect(screen.queryByText("What the evidence says")).toBeNull();
   });
 });
 

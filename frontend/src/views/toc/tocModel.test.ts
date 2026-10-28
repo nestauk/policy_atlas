@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { boxId, linkId, tocEvidenceFixture, tocGraphFixture } from "./fixture";
-import { BOX_H, BOX_W, COL_GAP, ROW_GAP, evidenceBalance, figureGroups, figureHeadline, groupAssumptions, layoutToc, linkTip, routeEdge, tocTitle } from "./tocModel";
+import { BOX_H, BOX_W, COL_GAP, ROW_GAP, evidenceBalance, figureGroups, figureHeadline, layoutToc, linkTip, routeEdge, tocTitle } from "./tocModel";
 
 const COL_STEP = BOX_W + COL_GAP;
 
@@ -108,12 +108,6 @@ describe("wording and grouping", () => {
   it("gives the verdict on a link's hover text", () => {
     const link = tocGraphFixture().links.find((l) => l.link_id === linkId(4));
     expect(link && linkTip(link)).toBe("Confident");
-  });
-
-  it("groups every condition of every kept link by type, in order", () => {
-    const groups = groupAssumptions(tocGraphFixture());
-    expect(groups.map((g) => g.key)).toEqual(["delivery", "take-up", "behaviour change", "benefits and side effects", "if it goes wrong"]);
-    expect(groups.flatMap((g) => g.items)).toHaveLength(9);
   });
 
   it("titles the page from the first input and the impact", () => {

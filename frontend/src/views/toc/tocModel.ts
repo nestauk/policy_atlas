@@ -377,40 +377,6 @@ export function routeEdge(sourceX: number, sourceY: number, targetX: number, tar
   return { path: roundedPath(points, radius), labelX: (beforeTarget + targetX) / 2, labelY: targetY };
 }
 
-/** Assumption types in the order the Assumptions section lists them. */
-export const ASSUMPTION_TYPES: readonly { key: string; label: string }[] = [
-  { key: "delivery", label: "Delivery" },
-  { key: "take-up", label: "Take-up" },
-  { key: "behaviour change", label: "Behaviour change" },
-  { key: "benefits and side effects", label: "Benefits and side effects" },
-  { key: "if it goes wrong", label: "If it goes wrong" },
-];
-
-export interface AssumptionGroup {
-  key: string;
-  label: string;
-  items: { condition: string; link: TocLink }[];
-}
-
-/** Every condition of every kept link, grouped by assumption type. */
-export function groupAssumptions(graph: Pick<TocGraph, "links" | "pathways">): AssumptionGroup[] {
-  const keptIds = visibleLinkIds(graph, "all");
-  const groups = new Map<string, AssumptionGroup>(
-    ASSUMPTION_TYPES.map((t) => [t.key, { key: t.key, label: t.label, items: [] }]),
-  );
-  for (const link of graph.links) {
-    if (!keptIds.has(link.link_id)) continue;
-    let group = groups.get(link.assumption_type);
-    if (group === undefined) {
-      const label = link.assumption_type.charAt(0).toUpperCase() + link.assumption_type.slice(1);
-      group = { key: link.assumption_type, label, items: [] };
-      groups.set(link.assumption_type, group);
-    }
-    for (const condition of link.conditions) group.items.push({ condition, link });
-  }
-  return [...groups.values()].filter((group) => group.items.length > 0);
-}
-
 /** "Intervention → intended change", from the first input and the last impact. */
 export function tocTitle(graph: Pick<TocGraph, "boxes" | "links" | "pathways">, fallback?: string): string {
   const layout = layoutToc(graph);

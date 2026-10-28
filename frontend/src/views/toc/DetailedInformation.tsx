@@ -1,203 +1,194 @@
-import { useState } from "react";
-
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
-import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS } from "../artefactPresentation";
-import { SectionDisclosure } from "../ArtefactOutline";
-import { LinkDocuments, VerdictWords } from "./Documents";
-import { groupAssumptions, keptPathways, LAYER_LABEL, pathwayTitles, VERDICT_VAR } from "./tocModel";
-import type { TocBox, TocDocument, TocEvidence, TocGraph, TocLink, TocPathway } from "./types";
+import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
+import type { Selection } from "./DetailPanel";
+import type { TocGraph } from "./types";
 
-const CRITICAL = "Critical connection · test this first";
-const P = `mt-1 max-w-[44em] ${REPORT_BODY_CLASS}`;
+type Report = NonNullable<TocGraph["report"]>;
 
-/** The small "+" after a sentence: shows or hides the link's documents. */
-function WithDocuments({ taskId, documents, children }: { taskId: string; documents: TocDocument[]; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const count = documents.filter((doc) => doc.support !== "not_about").length;
-  return (
-    <>
-      <p className={P}>
-        {children}
-        {count > 0 && (
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-label={`${open ? "Hide" : "Show"} the ${count} documents`}
-            onClick={() => setOpen((value) => !value)}
-            className="print-hide ml-1 inline-grid h-[18px] w-[18px] cursor-pointer place-items-center rounded-full border border-line-2 bg-paper text-meta font-bold leading-none text-grey hover:border-navy hover:text-navy"
-          >
-            +
-          </button>
-        )}
-      </p>
-      {open && (
-        <div className="ml-4 max-w-[44em]">
-          <LinkDocuments taskId={taskId} documents={documents} />
-        </div>
-      )}
-    </>
-  );
-}
-
-function BoxRow({ box }: { box: TocBox }) {
-  return (
-    <div className="py-3">
-      <p className={REPORT_LABEL_CLASS}>
-        {LAYER_LABEL[box.layer]}
-        {box.code !== null && ` · ${box.code}`}
-      </p>
-      <p className={`${REPORT_BODY_CLASS} font-bold text-navy`}>{scrub(box.text)}</p>
-      {box.description !== null && <p className={P}>{scrub(box.description)}</p>}
-    </div>
-  );
-}
-
-function LinkRow({ taskId, link, documents }: { taskId: string; link: TocLink; documents: TocDocument[] }) {
-  const pending = link.state === "checking" || link.state === "unchecked";
-  const verdict = link.verdict;
-  const dashed = verdict === "not_sure_insufficient" || verdict === "not_confident";
-  return (
-    <div
-      className="my-1 ml-3 border-l-2 py-2 pl-5"
-      style={{ borderLeftColor: pending ? "var(--color-line-2)" : VERDICT_VAR[verdict], borderLeftStyle: dashed ? "dashed" : "solid" }}
-    >
-      {link.critical && <p className={REPORT_LABEL_CLASS}>{CRITICAL}</p>}
-      <p className={P}>{scrub(link.sentence)}</p>
-      {/* Step 5 turns this into the narrative report (C38); for now, the verdict and its sentence. */}
-      <WithDocuments taskId={taskId} documents={documents}>
-        <VerdictWords verdict={verdict} />.
-        {link.evidence_sentence !== null && <> {scrub(link.evidence_sentence)}</>}
-      </WithDocuments>
-    </div>
-  );
-}
-
-/** One pathway, as boxes and the connections between them, in order. */
-function PathwayBody({ taskId, pathway, graph, evidence }: { taskId: string; pathway: TocPathway; graph: TocGraph; evidence: TocEvidence | null | undefined }) {
-  const linkById = new Map(graph.links.map((link) => [link.link_id, link]));
-  const boxById = new Map(graph.boxes.map((box) => [box.box_id, box]));
-  const shown = new Set<string>();
-  const rows: React.ReactNode[] = [];
-  const addBox = (boxId: string) => {
-    const box = boxById.get(boxId);
-    if (box === undefined || shown.has(boxId)) return;
-    shown.add(boxId);
-    rows.push(<BoxRow key={`box-${boxId}`} box={box} />);
-  };
-  for (const linkId of pathway.link_ids) {
-    const link = linkById.get(linkId);
-    if (link === undefined) continue;
-    addBox(link.source_box_id);
-    const documents = evidence?.links.find((entry) => entry.link_id === linkId)?.documents ?? [];
-    rows.push(<LinkRow taskId={taskId} key={`link-${linkId}`} link={link} documents={documents} />);
-    addBox(link.target_box_id);
-  }
-  return <>{rows}</>;
-}
-
-function Assumptions({ graph }: { graph: TocGraph }) {
-  const groups = groupAssumptions(graph);
-  const boxText = new Map(graph.boxes.map((box) => [box.box_id, box.text]));
-  if (groups.length === 0) return <p className={P}>No assumptions recorded.</p>;
-  // Report typography only: a label per type, then body text. One entry per
-  // link: the step it belongs to, its conditions, then its evidence once.
-  return (
-    <>
-      {groups.map((group) => {
-        const links = [...new Map(group.items.map(({ link }) => [link.link_id, link])).values()];
-        return (
-          <div key={group.key} className="mt-5">
-            <p className={REPORT_LABEL_CLASS}>{group.label}</p>
-            {links.map((link) => (
-              <div key={link.link_id} className={`mt-2 max-w-[44em] ${REPORT_BODY_CLASS}`}>
-                <p>
-                  On the step from {scrub(boxText.get(link.source_box_id) ?? "")} to {scrub(boxText.get(link.target_box_id) ?? "")}:
-                </p>
-                <ul className="mt-1 list-disc pl-6">
-                  {link.conditions.map((condition) => (
-                    <li key={condition}>{scrub(condition)}</li>
-                  ))}
-                </ul>
-                <p className="mt-1">
-                  <VerdictWords verdict={link.verdict} />.
-                  {link.evidence_sentence !== null && <> {scrub(link.evidence_sentence)}</>}
-                  {link.critical && <strong className="text-navy"> {CRITICAL}.</strong>}
-                </p>
-              </div>
-            ))}
-          </div>
-        );
-      })}
-    </>
-  );
-}
-
-const section = (title: string, summary?: string) => ({
-  title,
-  role: "standard" as const,
-  summary: summary ?? null,
-  summary_status: summary === undefined ? null : ("verified" as const),
-});
+const P = `mt-2 max-w-[44em] ${REPORT_BODY_CLASS}`;
+/** Metadata lines (the scope, the method): body size, grey. */
+const GREY = P.replace("text-ink", "text-grey");
+const H3 = `mt-8 ${REPORT_SECTION_HEADING_CLASS}`;
+const TOKEN = /(#\d+|\b[APSLIF]\d+\b|\[\d+\])/;
 
 /**
- * Detailed information: the written form of the canvas, and the PDF report.
- * One section per kept pathway, then Assumptions, the set-aside pathways and
- * the questions for an evaluation. Uses the report's expand/collapse
- * sections, which open on their own when the browser prints.
+ * Report text with its codes and source numbers made live: a box or link code
+ * ("#2", "S3") selects it on the canvas and opens its panel; "[n]" jumps to
+ * the source list. Both look like the text around them.
  */
-export function DetailedInformation({ taskId, graph, evidence }: { taskId: string; graph: TocGraph; evidence: TocEvidence | null | undefined }) {
-  const titles = pathwayTitles(graph);
-  const kept = keptPathways(graph);
-  const setAside = graph.pathways.filter((pathway) => pathway.status === "set_aside");
-  const questions = graph.summary?.evaluation_questions ?? [];
+function Rich({ text, codes, onSelect }: { text: string; codes: Map<string, Selection>; onSelect: (selection: Selection) => void }) {
   return (
-    <section aria-label="Detailed information" className="mt-10">
+    <>
+      {scrub(text)
+        .split(TOKEN)
+        .map((part, index) => {
+          const cite = /^\[(\d+)\]$/.exec(part);
+          if (cite !== null) {
+            return (
+              <a key={index} href={`#toc-source-${cite[1]}`} className="hover:underline">
+                {part}
+              </a>
+            );
+          }
+          const target = codes.get(part);
+          if (target === undefined) return part;
+          return (
+            <button key={index} type="button" onClick={() => onSelect(target)} className="cursor-pointer hover:underline" aria-label={`Show ${part} on the canvas`}>
+              {part}
+            </button>
+          );
+        })}
+    </>
+  );
+}
+
+/** The canvas selection each box and link code stands for. */
+function codeTargets(graph: TocGraph): Map<string, Selection> {
+  const codes = new Map<string, Selection>();
+  for (const box of graph.boxes) if (box.code !== null) codes.set(box.code, { kind: "box", id: box.box_id });
+  for (const link of graph.links) if (link.code !== null) codes.set(link.code, { kind: "link", id: link.link_id });
+  return codes;
+}
+
+function Table({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
+  return (
+    <div className="mt-2 overflow-x-auto">
+      <table className={`w-full border-collapse ${REPORT_BODY_CLASS}`}>
+        <thead>
+          <tr>
+            {head.map((cell) => (
+              <th key={cell} className={`border-b border-line-2 py-1.5 pr-2 text-left ${REPORT_LABEL_CLASS}`}>
+                {cell}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={index}>
+              {row.map((cell, column) => (
+                <td key={column} className="border-b border-line py-2 pr-2 align-top">
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ReportBody({ report, graph, onSelect }: { report: Report; graph: TocGraph; onSelect: (selection: Selection) => void }) {
+  const codes = codeTargets(graph);
+  const rich = (text: string) => <Rich text={text} codes={codes} onSelect={onSelect} />;
+  const { summary } = report;
+  const goal = summary.goal.replace(/\.?$/, ".");
+  const scope = [`Population: ${summary.population}`, summary.time_horizon !== null ? `Time horizon: ${summary.time_horizon}` : null, `Directly influenced: up to ${summary.directly_influenced}`]
+    .filter(Boolean)
+    .join(" · ");
+  const setAside = graph.pathways.filter((pathway) => pathway.status === "set_aside");
+  return (
+    <>
+      <h3 className={H3}>Summary</h3>
+      <p className={P}>
+        <b>Goal:</b> {scrub(goal)}{" "}
+        {summary.if_then_because.split(/\b(If|then|because)\b/).map((part, index) =>
+          index % 2 === 1 ? <i key={index}>{part}</i> : <Rich key={index} text={part} codes={codes} onSelect={onSelect} />,
+        )}
+      </p>
+      <p className={GREY}>{scrub(scope)}.</p>
+      {summary.context !== "" && (
+        <p className={P}>
+          <b>Context.</b> {rich(summary.context)}
+        </p>
+      )}
+      {summary.weakest_links !== "" && (
+        <p className={P}>
+          <b>Weakest critical links.</b> {rich(summary.weakest_links)}
+        </p>
+      )}
+
+      <h3 className={H3}>How change happens</h3>
+      {report.pathways.map((pathway, index) => (
+        <p key={index} className={P}>
+          <b>{scrub(pathway.title.replace(/\.?$/, "."))}</b> {rich(pathway.paragraph)}
+        </p>
+      ))}
+      {setAside.length > 0 && (
+        <>
+          <p className={`mt-4 ${REPORT_LABEL_CLASS}`}>Considered and set aside</p>
+          <ul className={`mt-1 max-w-[44em] ${REPORT_BODY_CLASS}`}>
+            {setAside.map((pathway) => (
+              <li key={pathway.pathway_id}>
+                <b>{scrub(pathway.label)}.</b>
+                {pathway.reason !== null && <> {scrub(pathway.reason)}</>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <h3 className={H3}>Assumptions and evidence</h3>
+      <Table
+        head={["Code", "Assumption", "Kind", "Verdict", "Why", "Sources"]}
+        rows={report.assumptions.map((row) => [
+          rich(row.code),
+          scrub(row.statement),
+          row.kind === "risk" ? "Risk" : "Assumption",
+          row.verdict,
+          rich(row.why),
+          rich(row.sources.map((n) => `[${n}]`).join("")),
+        ])}
+      />
+
+      <h3 className={H3}>What to test and measure</h3>
+      <Table
+        head={["Weak link", "Question", "Indicator and data", "Test and learn"]}
+        rows={report.tests.map((row) => [rich(row.link), rich(row.question), rich(row.indicator), rich(row.test_and_learn)])}
+      />
+
+      <h3 className={H3}>Sources and method</h3>
+      {report.sources.length > 0 && (
+        <p className={P}>
+          {report.sources.map((source, index) => (
+            <span key={source.n} id={`toc-source-${source.n}`}>
+              {index > 0 && " · "}[{source.n}]{" "}
+              {source.url !== null ? (
+                <a href={source.url} target="_blank" rel="noreferrer" className="hover:underline">
+                  {scrub(source.citation)}
+                </a>
+              ) : (
+                scrub(source.citation)
+              )}
+            </span>
+          ))}
+        </p>
+      )}
+      <p className={GREY}>{scrub(report.method)}</p>
+    </>
+  );
+}
+
+/**
+ * Detailed information: a short narrative report beside the canvas (C38),
+ * and the PDF. Five sections, the report's four text styles only; nothing
+ * collapses, so the print view shows it whole.
+ */
+export function DetailedInformation({ graph, onSelect }: { graph: TocGraph; onSelect: (selection: Selection) => void }) {
+  return (
+    <section aria-label="Detailed information" className="mt-10 border-t border-line pt-6">
       <div className="flex items-center justify-between gap-4 pb-2">
         <h2 className={REPORT_PART_HEADING_CLASS}>Detailed information</h2>
         <Button variant="secondary" size="sm" className="print-hide border border-navy" onClick={() => window.print()}>
           Download as PDF
         </Button>
       </div>
-      {kept.map((pathway, index) => (
-        <div key={pathway.pathway_id} className="border-t border-line pt-4">
-          <SectionDisclosure id={`toc-pathway-${pathway.pathway_id}`} section={section(titles.get(pathway.pathway_id) ?? pathway.label)} defaultOpen={index === 0} collapsible>
-            <PathwayBody taskId={taskId} pathway={pathway} graph={graph} evidence={evidence} />
-          </SectionDisclosure>
-        </div>
-      ))}
-      <div className="border-t border-line pt-4">
-        <SectionDisclosure
-          id="toc-assumptions"
-          section={section("Assumptions", "Every condition the theory relies on, grouped by type, with the evidence verdict on its step.")}
-          defaultOpen={false}
-          collapsible
-        >
-          <Assumptions graph={graph} />
-        </SectionDisclosure>
-      </div>
-      {setAside.length > 0 && (
-        <div className="border-t border-line pt-4">
-          <SectionDisclosure id="toc-set-aside" section={section("Considered and set aside")} defaultOpen={false} collapsible>
-            {setAside.map((pathway) => (
-              <div key={pathway.pathway_id} className="py-1">
-                <p className={`${REPORT_BODY_CLASS} font-bold text-navy`}>{scrub(pathway.label)}</p>
-                {pathway.reason !== null && <p className={P}>{scrub(pathway.reason)}</p>}
-              </div>
-            ))}
-          </SectionDisclosure>
-        </div>
-      )}
-      {questions.length > 0 && (
-        <div className="border-t border-line pt-4">
-          <SectionDisclosure id="toc-questions" section={section("Questions for an evaluation")} defaultOpen={false} collapsible>
-            <ol className={`list-decimal space-y-1 pl-5 ${REPORT_BODY_CLASS}`}>
-              {questions.map((question) => (
-                <li key={question}>{scrub(question)}</li>
-              ))}
-            </ol>
-          </SectionDisclosure>
-        </div>
+      {graph.report === null || graph.report === undefined ? (
+        <p className={P}>The report is written when the evidence check finishes.</p>
+      ) : (
+        <ReportBody report={graph.report} graph={graph} onSelect={onSelect} />
       )}
     </section>
   );
