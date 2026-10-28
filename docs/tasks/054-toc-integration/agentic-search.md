@@ -166,7 +166,7 @@ Full notes, sources and numbers: [agentic-search-research.md](agentic-search-res
 ## Judge context experiment (2026-10-27, lead)
 
 **Question (owner):** is the judge given enough context? Scripts and lead labels:
-`scripts/evals/toc_search/judge_context/` (`run.py <dir> <variants> <model> <repeats>`, then
+`scripts/evals/theory_of_change/judge_context/` (`run.py <dir> <variants> <model> <repeats>`, then
 `score.py <dir>`). 34 documents on 3 links (energy to obesity, ads to snacks, ads absent to
 exposure), each judged 3 times. Labels list the acceptable stances per question.
 

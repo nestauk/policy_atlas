@@ -460,6 +460,72 @@ decisions below. The decisions fix what the spec leaves to the build.
   any other. A link whose search fails or finds nothing keeps the nearest-pool fallback.
   Named-link checks (Search for more) are unchanged.
 
+### Iteration 3: ground truth, shape, BEAM, numbers, narrative (draft, 2026-10-28)
+
+Owner, 2026-10-28: five builds on the light link check, in this order, designed once, then built
+straight through with no full verify between steps; the ground-truth eval runs after step 1
+(baseline) and after step 5. Source material: `scripts/evals/theory_of_change/datasets/
+ground_truth_v1/` (ground-truth pack, evaluation protocol, simplified BEAM). **Draft for the
+owner's design review; not yet approved.**
+
+- **C33. Ground-truth eval (step 1).** A script drives the real app through the API: creates a
+  task from a case's brief (verbatim), runs draft and check, exports the theory to the pack's
+  schema (§8), and scores it. Version 1 scope: the 4 cases with link-level ground truth (EPPS,
+  Changing Futures individual, service, system), intervention-first brief, 1 repeat, about $2
+  a round. **Headline result is qualitative** (owner: some published theories list what a
+  programme did and then evaluate it, so overlap is a direction, not a pass mark): per case, an
+  LLM drafts a side-by-side read on five questions (main routes covered; layers sensible; major
+  mechanism or failure mode missed; weak links plausibly the right ones; anything spurious), the
+  lead reviews it, and gives a verdict of right direction / partly / off. Supporting numbers,
+  read with care: box recall by layer (outcomes and impact matter most; activities are handed to
+  us in the intervention-first brief), soft link recall, shape score, weak-link recall and the
+  confidence gradient, using the protocol's judge prompt verbatim.
+- **C34. Magenta Book layers (step 2).** Layers become *inputs and activities* (one layer:
+  owner, "inputs = activities"), outputs, short-term outcomes, long-term outcomes, impact, and
+  failure outcomes. The draft aims for 15 to 25 boxes and 1 to 2 impacts. Draft, discover,
+  consolidate and merge prompts follow; stored `outcome` boxes migrate to short-term outcomes.
+  Containers, a simplified view, multi-level maps and a vision box are later increments.
+- **C35. Short IDs and the accountability ceiling (step 2).** Every box and link gets a short,
+  stable code assigned by code when it is written and never reused (boxes by layer: `A1` inputs
+  and activities, `P1` outputs, `S1` short-term, `L1` long-term, `I1` impact, `F1` failure;
+  links `#1`). The canvas shows a box's code small and grey in its corner, only if the
+  wireframe shows it unobtrusive; the narrative uses codes to point at the canvas. The
+  accountability ceiling is a dashed divider after the outputs layer, labelled "Directly
+  influenced" and "Contributes to"; moving it is an increment 2 edit. Context is described in
+  the narrative's Summary, not shown as chips (owner).
+- **C36. One evidence verdict per link: simplified BEAM (step 3).** Replaces the two grades
+  (*worked elsewhere*, *holds here*; C4) with one verdict per link, computed by code (owner:
+  "let's have one verdict"). Per judged document: the judge gives *support* (`strong` /
+  `weak` / `mixed` / `refutes` / `not_about`, with its quote) and *relevance* R 0–3 with BEAM's
+  anchors (3: same kind of intervention, population and a UK-comparable setting; 2: a few small
+  extra assumptions; 1: several small or a few large leaps; 0: not applicable), so "does it
+  hold here" lives in relevance and in one panel sentence. Quality Q 0–3 comes from appraise
+  (score 5–4 → 3, 3 → 2, 2–1 → 1, unscored → 1; untrusted web → 1). Weight = Q × R ÷ 9; the
+  verdict follows the pack's rules (`03_beam_evidence_scheme.md` §3.2, thresholds to calibrate):
+  *Confident*, *Not sure: mixed*, *Not sure: too little evidence*, *Not confident: evidence
+  against*, with a near-threshold flag. Canvas line: solid, two-tone, dashed, dotted in a warning
+  colour. The theory's confidence is the lowest verdict among critical links. A systematic
+  review replacing its own included studies (deduplication) is deferred. ADR 0042 amendment.
+- **C37. Size of change (step 4).** A step after the judge extracts up to 3 figures per document
+  that supports or refutes, on the link's cause or effect: value, low, high, unit, what it
+  measures, population, place, year, direction, effect type and the exact quote. It reuses the
+  Evidence search extraction where it fits (survey pending). Code keeps a figure only when its
+  quote is in the text and its number is in the quote. The link panel shows "Size of change":
+  figures with the same measure and unit grouped as "Evidence suggests A to B <unit> (n
+  studies)", never pooled, each with its quote and source line (policy_builder's pattern); box
+  panels show baseline and indicator figures.
+- **C38. Detailed information becomes a short narrative report (step 5).** It replaces the
+  canvas-repeating content with the pack's five sections (§2.2), 400 to 800 words plus two
+  tables: Summary (goal, one If–then–because sentence, scope, context, the 2–3 weakest critical
+  links); How change happens (a paragraph per pathway, pointing at box and link codes);
+  Assumptions and evidence (table: code, statement, link, kind, verdict, why, sources); What to
+  test and measure (table: weak link, question, indicator and data, test-and-learn idea);
+  Sources and method (numbered sources; AI use, search scope, models, date). One frontier call,
+  `toc_report_v1`, writes the prose and the one-line reasons; code builds the tables and the
+  sources list, and checks every code and citation. It takes over the summary's header
+  paragraphs and evaluation questions; the per-link sentences stay. It uses the report's four
+  text styles only (`docs/knowledge/report-typography.md`). The PDF prints it.
+
 ## ADR scope
 
 ADR 0042, "A third task kind: theory of change", records: the task kind and its walks (C3); the
