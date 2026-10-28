@@ -27,6 +27,7 @@ from policy_atlas.api.contract.toc import (
     TocCaseStudyOut,
     TocDocumentOut,
     TocEvidenceOut,
+    TocFigureOut,
     TocGradeRuleOut,
     TocGraphOut,
     TocLinkEvidenceOut,
@@ -37,7 +38,12 @@ from policy_atlas.api.contract.toc import (
     TocWeightsOut,
 )
 from policy_atlas.api.deps import get_conn, get_optional_user
-from policy_atlas.api.readmodels.repository import _authorships, _clamped_quote_window, _url
+from policy_atlas.api.readmodels.repository import (
+    _authorships,
+    _clamped_quote_window,
+    _url,
+    _venue,
+)
 from policy_atlas.api.routers._access import readable_or_public_task
 from policy_atlas.core.schema import (
     capability_run,
@@ -47,6 +53,7 @@ from policy_atlas.core.schema import (
     source_classification_result,
     source_snapshot,
     task_source_snapshot,
+    toc_figure,
     toc_item_evidence,
     toc_pathway_link,
 )
@@ -339,6 +346,8 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
         key: [] for key in rows.boxes
     }
     indicators: dict[str, list[str]] = {key: [] for key in rows.boxes}
+    # Each judged document's short citation, for its figures (C37).
+    cites: dict[uuid.UUID, dict[str, Any]] = {}
     for row in evidence:
         key = str(row.link_id)
         link_row = rows.links.get(key)
@@ -350,6 +359,16 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
         year = int(year_value) if isinstance(year_value, int) else None
         url = _url(metadata, row.source_locator)
         source_type = _source_type(metadata)
+        cites[row.task_source_snapshot_id] = {
+            "task_source_snapshot_id": row.task_source_snapshot_id,
+            "source_title": title,
+            "source_authors": [author.name for author in _authorships(metadata)],
+            "source_year": year,
+            "source_venue": _venue(metadata),
+            "source_type": source_type,
+            "evidence_type": row.primary_evidence_type,
+            "url": url,
+        }
         previous = row.item_hash != link_row.counted_hash
         appraisal = appraisals.get(str(row.task_source_snapshot_id))
         existing = documents[key].get(row.task_source_snapshot_id)
@@ -393,9 +412,39 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
             )
         if box in indicators and row.indicator and row.indicator not in indicators[box]:
             indicators[box].append(row.indicator)
+    link_figures: dict[str, list[TocFigureOut]] = {key: [] for key in rows.links}
+    box_figures: dict[str, list[TocFigureOut]] = {key: [] for key in rows.boxes}
+    for figure in conn.execute(
+        select(toc_figure)
+        .where(toc_figure.c.task_id == task_id)
+        .order_by(toc_figure.c.created_at, toc_figure.c.figure_id)
+    ):
+        key = str(figure.link_id)
+        link_row = rows.links.get(key)
+        cite = cites.get(figure.task_source_snapshot_id)
+        # Only the link's current wording counts, as for its judgements (C19).
+        if link_row is None or cite is None or figure.item_hash != link_row.counted_hash:
+            continue
+        shown = TocFigureOut(
+            **{
+                name: getattr(figure, name)
+                for name in TocFigureOut.model_fields
+                if name not in cite and name in figure._mapping
+            },
+            **cite,
+        )
+        if figure.box == "link":
+            link_figures[key].append(shown)
+        else:
+            # A level of the link's source or target belongs to that box.
+            end = str(link_row.source_box_id if figure.box == "source" else link_row.target_box_id)
+            if end in box_figures:
+                box_figures[end].append(shown)
     return TocEvidenceOut(
         links=[
-            TocLinkEvidenceOut(link_id=uuid.UUID(key), documents=list(docs.values()))
+            TocLinkEvidenceOut(
+                link_id=uuid.UUID(key), documents=list(docs.values()), figures=link_figures[key]
+            )
             for key, docs in documents.items()
         ],
         boxes=[
@@ -403,6 +452,7 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
                 box_id=uuid.UUID(key),
                 case_studies=top_case_studies(case_studies[key]),
                 indicators=indicators[key],
+                figures=box_figures[key],
             )
             for key in rows.boxes
         ],

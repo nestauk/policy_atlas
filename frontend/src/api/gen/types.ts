@@ -5359,7 +5359,7 @@ export interface components {
         };
         /**
          * TocBoxEvidenceOut
-         * @description A box's case studies and the indicators its documents used.
+         * @description A box's case studies, the indicators its documents used, and its figures.
          */
         TocBoxEvidenceOut: {
             /**
@@ -5369,6 +5369,8 @@ export interface components {
             box_id: string;
             /** Case Studies */
             case_studies: components["schemas"]["TocCaseStudyOut"][];
+            /** Figures */
+            figures: components["schemas"]["TocFigureOut"][];
             /** Indicators */
             indicators: string[];
         };
@@ -5497,6 +5499,77 @@ export interface components {
             links: components["schemas"]["TocLinkEvidenceOut"][];
         };
         /**
+         * TocFigureOut
+         * @description One number a document reports about a link's cause or effect (C37), with its source.
+         */
+        TocFigureOut: {
+            /**
+             * Box
+             * @enum {string}
+             */
+            box: "source" | "target" | "link";
+            /** Ci Lower */
+            ci_lower: number | null;
+            /** Ci Lower Text */
+            ci_lower_text: string | null;
+            /** Ci Upper */
+            ci_upper: number | null;
+            /** Ci Upper Text */
+            ci_upper_text: string | null;
+            /**
+             * Effect Size Type
+             * @enum {string}
+             */
+            effect_size_type: "absolute_change" | "relative_change" | "standardised" | "ratio" | "level";
+            /** Evidence Type */
+            evidence_type: string | null;
+            /**
+             * Figure Id
+             * Format: uuid
+             */
+            figure_id: string;
+            /** K */
+            k: number | null;
+            /** Measure */
+            measure: string;
+            /** N */
+            n: number | null;
+            /** Place */
+            place: string | null;
+            /** Population */
+            population: string | null;
+            /** Quote */
+            quote: string;
+            /** Source Authors */
+            source_authors: string[];
+            /** Source Title */
+            source_title: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "academic" | "policy" | "web";
+            /** Source Venue */
+            source_venue: string | null;
+            /** Source Year */
+            source_year: number | null;
+            /**
+             * Task Source Snapshot Id
+             * Format: uuid
+             */
+            task_source_snapshot_id: string;
+            /** Unit */
+            unit: string | null;
+            /** Url */
+            url: string | null;
+            /** Value */
+            value: number | null;
+            /** Value Text */
+            value_text: string;
+            /** Year */
+            year: string | null;
+        };
+        /**
          * TocGradeRuleOut
          * @description One row of the verdict rule, generated from the verdict constants (C36).
          */
@@ -5541,11 +5614,13 @@ export interface components {
         };
         /**
          * TocLinkEvidenceOut
-         * @description Every document judged for one link.
+         * @description Every document judged for one link, and the figures they give.
          */
         TocLinkEvidenceOut: {
             /** Documents */
             documents: components["schemas"]["TocDocumentOut"][];
+            /** Figures */
+            figures: components["schemas"]["TocFigureOut"][];
             /**
              * Link Id
              * Format: uuid

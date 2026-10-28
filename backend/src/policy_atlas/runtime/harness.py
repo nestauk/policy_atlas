@@ -121,6 +121,7 @@ from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Config
 from policy_atlas.runtime.scoping_plan import ScopingPlan
 from policy_atlas.theory_of_change import check as toc_check
+from policy_atlas.theory_of_change import figures as toc_figures
 from policy_atlas.theory_of_change.backend import StubTocBackend, TocBackend
 from policy_atlas.theory_of_change.draft import toc_draft_scope
 
@@ -478,6 +479,7 @@ _TOC_STEPS: dict[str, Callable[..., dict[str, Any]]] = {
     "toc_discover": toc_check.toc_discover_scope,
     "toc_merge": toc_check.toc_merge_scope,
     "toc_judge": toc_check.toc_judge_scope,
+    "toc_figures": toc_figures.toc_figures_scope,
     "toc_choose": toc_check.toc_choose_scope,
     "toc_summarise": toc_check.toc_summarise_scope,
 }

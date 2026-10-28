@@ -44,6 +44,7 @@ COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     "toc_discover": {"requires": ["evidence_scope_id"]},
     "toc_merge": {"requires": ["evidence_scope_id"]},
     "toc_judge": {"requires": ["evidence_scope_id"]},
+    "toc_figures": {"requires": ["evidence_scope_id"]},
     "toc_choose": {"requires": ["evidence_scope_id"]},
     "toc_summarise": {"requires": ["evidence_scope_id"]},
 }

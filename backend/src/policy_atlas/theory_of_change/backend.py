@@ -50,6 +50,12 @@ from policy_atlas.theory_of_change.draft_prompt import (
     ResultCriteriaWire,
     build_draft_messages,
 )
+from policy_atlas.theory_of_change.evidence.figures_prompt import (
+    TOC_FIGURES_MAX_OUTPUT_TOKENS,
+    TOC_FIGURES_PROMPT_VERSION,
+    FiguresResponse,
+    build_figures_messages,
+)
 from policy_atlas.theory_of_change.evidence.judge_prompt import (
     TOC_JUDGE_MAX_OUTPUT_TOKENS,
     TOC_JUDGE_PROMPT_VERSION,
@@ -141,6 +147,14 @@ class TocBackend(Protocol):
 
         Keyword arguments are those of
         :func:`~policy_atlas.theory_of_change.evidence.judge_prompt.build_judge_messages`.
+        """
+        ...
+
+    def figures(self, **kwargs: Any) -> UsageResult[FiguresResponse]:
+        """Find the size of change behind one link in one document (``toc_figures_v1``).
+
+        Keyword arguments are those of
+        :func:`~policy_atlas.theory_of_change.evidence.figures_prompt.build_figures_messages`.
         """
         ...
 
@@ -310,6 +324,16 @@ class OpenAITocBackend:
             prompt_version=TOC_JUDGE_PROMPT_VERSION,
         )
 
+    def figures(self, **kwargs: Any) -> UsageResult[FiguresResponse]:
+        """See :class:`TocBackend`."""
+        return self._call(
+            build_figures_messages(**kwargs),
+            response_format=FiguresResponse,
+            step="toc_figures",
+            max_output_tokens=TOC_FIGURES_MAX_OUTPUT_TOKENS,
+            prompt_version=TOC_FIGURES_PROMPT_VERSION,
+        )
+
     def choose(
         self,
         *,
@@ -432,6 +456,7 @@ class StubTocBackend:
     - ``judge``: weakly supports at relevance 2, quoting the first eight words
       of the document text (so the quote check passes); not about when the
       text is empty.
+    - ``figures``: none.
     - ``choose``: keeps every pathway, no new conditions.
     - ``summarise``: plain sentences that cite nothing.
 
@@ -560,6 +585,11 @@ class StubTocBackend:
             ),
             None,
         )
+
+    def figures(self, **kwargs: Any) -> UsageResult[FiguresResponse]:
+        """See :class:`StubTocBackend`."""
+        queued = self._next("figures", kwargs)
+        return (queued or FiguresResponse(figures=[])), None
 
     def choose(
         self,

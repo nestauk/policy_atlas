@@ -61,6 +61,8 @@ toc_merge = "frontier"
 toc_choose = "frontier"
 toc_discover = "standard"
 toc_judge = "standard"
+# One small call per judged document finds the size of change behind a link (C37).
+toc_figures = "fast"
 # One small call per link picks the documents the judge reads (C28).
 toc_pick = "fast"
 toc_summarise = "standard"

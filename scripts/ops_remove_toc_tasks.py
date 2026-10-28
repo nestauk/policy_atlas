@@ -11,7 +11,7 @@ What it is for
 What it deletes
     Each theory-of-change task (``task.capability = 'theory_of_change'``) and every
     row that belongs to it, in one transaction (all or nothing): the theory itself
-    (boxes, links, pathways, band items, judgements), its walks (runs), intent
+    (boxes, links, pathways, band items, judgements, figures), its walks (runs), intent
     records (scopes), events, document membership rows, plans, Task Agent
     transcripts and conversations. The documents themselves (``source_snapshot``)
     are shared between tasks and are kept. Uploaded files are not touched yet
@@ -51,6 +51,7 @@ log = structlog.get_logger()
 #: The theory-of-change tables, child first. They go before the shared order in
 #: ``ops_remove_scoping_tasks._apply``: judgements name documents and walks.
 TOC_TABLES: tuple[str, ...] = (
+    "toc_figure",
     "toc_item_evidence",
     "toc_pathway_link",
     "toc_pathway",

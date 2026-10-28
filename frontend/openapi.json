@@ -8358,7 +8358,7 @@
       },
       "TocBoxEvidenceOut": {
         "additionalProperties": false,
-        "description": "A box's case studies and the indicators its documents used.",
+        "description": "A box's case studies, the indicators its documents used, and its figures.",
         "properties": {
           "box_id": {
             "format": "uuid",
@@ -8372,6 +8372,13 @@
             "title": "Case Studies",
             "type": "array"
           },
+          "figures": {
+            "items": {
+              "$ref": "#/components/schemas/TocFigureOut"
+            },
+            "title": "Figures",
+            "type": "array"
+          },
           "indicators": {
             "items": {
               "type": "string"
@@ -8383,7 +8390,8 @@
         "required": [
           "box_id",
           "case_studies",
-          "indicators"
+          "indicators",
+          "figures"
         ],
         "title": "TocBoxEvidenceOut",
         "type": "object"
@@ -8748,6 +8756,268 @@
         "title": "TocEvidenceOut",
         "type": "object"
       },
+      "TocFigureOut": {
+        "additionalProperties": false,
+        "description": "One number a document reports about a link's cause or effect (C37), with its source.",
+        "properties": {
+          "box": {
+            "enum": [
+              "source",
+              "target",
+              "link"
+            ],
+            "title": "Box",
+            "type": "string"
+          },
+          "ci_lower": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Lower"
+          },
+          "ci_lower_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Lower Text"
+          },
+          "ci_upper": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Upper"
+          },
+          "ci_upper_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Upper Text"
+          },
+          "effect_size_type": {
+            "enum": [
+              "absolute_change",
+              "relative_change",
+              "standardised",
+              "ratio",
+              "level"
+            ],
+            "title": "Effect Size Type",
+            "type": "string"
+          },
+          "evidence_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Type"
+          },
+          "figure_id": {
+            "format": "uuid",
+            "title": "Figure Id",
+            "type": "string"
+          },
+          "k": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "K"
+          },
+          "measure": {
+            "title": "Measure",
+            "type": "string"
+          },
+          "n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place"
+          },
+          "population": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Population"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "source_authors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Authors",
+            "type": "array"
+          },
+          "source_title": {
+            "title": "Source Title",
+            "type": "string"
+          },
+          "source_type": {
+            "enum": [
+              "academic",
+              "policy",
+              "web"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "source_venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Venue"
+          },
+          "source_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Year"
+          },
+          "task_source_snapshot_id": {
+            "format": "uuid",
+            "title": "Task Source Snapshot Id",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "value_text": {
+            "title": "Value Text",
+            "type": "string"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "figure_id",
+          "box",
+          "measure",
+          "value_text",
+          "value",
+          "ci_lower_text",
+          "ci_lower",
+          "ci_upper_text",
+          "ci_upper",
+          "unit",
+          "effect_size_type",
+          "population",
+          "place",
+          "year",
+          "n",
+          "k",
+          "quote",
+          "task_source_snapshot_id",
+          "source_title",
+          "source_authors",
+          "source_year",
+          "source_venue",
+          "source_type",
+          "evidence_type",
+          "url"
+        ],
+        "title": "TocFigureOut",
+        "type": "object"
+      },
       "TocGradeRuleOut": {
         "additionalProperties": false,
         "description": "One row of the verdict rule, generated from the verdict constants (C36).",
@@ -8880,13 +9150,20 @@
       },
       "TocLinkEvidenceOut": {
         "additionalProperties": false,
-        "description": "Every document judged for one link.",
+        "description": "Every document judged for one link, and the figures they give.",
         "properties": {
           "documents": {
             "items": {
               "$ref": "#/components/schemas/TocDocumentOut"
             },
             "title": "Documents",
+            "type": "array"
+          },
+          "figures": {
+            "items": {
+              "$ref": "#/components/schemas/TocFigureOut"
+            },
+            "title": "Figures",
             "type": "array"
           },
           "link_id": {
@@ -8897,7 +9174,8 @@
         },
         "required": [
           "link_id",
-          "documents"
+          "documents",
+          "figures"
         ],
         "title": "TocLinkEvidenceOut",
         "type": "object"

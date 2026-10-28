@@ -58,6 +58,7 @@ def test_the_check_walk_classifies_only_after_the_judge() -> None:
         ("toc_merge", True),
         ("toc_search_new", False),
         ("toc_judge", True),
+        ("toc_figures", False),
         ("classify", True),
         ("appraise", True),
         ("toc_choose", True),
@@ -67,6 +68,7 @@ def test_the_check_walk_classifies_only_after_the_judge() -> None:
     assert named.components == [
         "toc_select",
         "toc_judge",
+        "toc_figures",
         "classify",
         "appraise",
         "toc_summarise",

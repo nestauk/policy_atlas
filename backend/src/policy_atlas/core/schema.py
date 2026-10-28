@@ -1921,6 +1921,8 @@ toc_item_evidence = Table(
     Column("indicator", Text, nullable=True),
     Column("robust_model", Boolean, nullable=True),
     Column("item_hash", Text, nullable=False),
+    # When the figures call for this judgement succeeded (C37): not asked again.
+    Column("figures_checked_at", DateTime(timezone=True), nullable=True),
     *_toc_common(),
     ForeignKeyConstraint(
         ["link_id", "task_id"],
@@ -1963,4 +1965,52 @@ toc_item_evidence = Table(
     CheckConstraint(
         "support = 'not_about' OR quote IS NOT NULL", name="ck_toc_evidence_support_quote"
     ),
+)
+
+#: One number a judged document reports about a link's cause or effect (C37).
+toc_figure = Table(
+    "toc_figure",
+    metadata,
+    Column("figure_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("link_id", UUID(as_uuid=True), nullable=False),
+    Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column("item_hash", Text, nullable=False),
+    # source / target: a level of that box; link: the link's effect.
+    Column("box", Text, nullable=False),
+    Column("measure", Text, nullable=False),
+    # As reported, and parsed where it can be (null when not a plain number).
+    Column("value_text", Text, nullable=False),
+    Column("value", Float, nullable=True),
+    Column("ci_lower_text", Text, nullable=True),
+    Column("ci_lower", Float, nullable=True),
+    Column("ci_upper_text", Text, nullable=True),
+    Column("ci_upper", Float, nullable=True),
+    Column("unit", Text, nullable=True),
+    Column("effect_size_type", Text, nullable=False),
+    Column("population", Text, nullable=True),
+    Column("place", Text, nullable=True),
+    Column("year", Text, nullable=True),
+    Column("n", Integer, nullable=True),
+    Column("k", Integer, nullable=True),
+    Column("quote", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    ForeignKeyConstraint(
+        ["link_id", "task_id"],
+        ["toc_link.link_id", "toc_link.task_id"],
+        name="fk_toc_figure_link",
+        ondelete="CASCADE",
+    ),
+    ForeignKeyConstraint(
+        ["task_source_snapshot_id", "task_id"],
+        ["task_source_snapshot.task_source_snapshot_id", "task_source_snapshot.task_id"],
+        name="fk_toc_figure_tss",
+    ),
+    CheckConstraint("box IN ('source', 'target', 'link')", name="ck_toc_figure_box"),
+    CheckConstraint(
+        "effect_size_type IN ('absolute_change', 'relative_change', 'standardised', 'ratio',"
+        " 'level')",
+        name="ck_toc_figure_effect_type",
+    ),
+    Index("ix_toc_figure_task_link", "task_id", "link_id"),
 )

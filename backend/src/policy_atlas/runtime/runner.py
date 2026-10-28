@@ -196,6 +196,7 @@ LLM_BEARING_COMPONENTS = frozenset(
         "toc_discover",
         "toc_merge",
         "toc_judge",
+        "toc_figures",
         "toc_choose",
         "toc_summarise",
     }

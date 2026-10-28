@@ -179,13 +179,54 @@ class TocDocumentOut(BaseModel):
     previous_wording: bool
 
 
+class TocFigureOut(BaseModel):
+    """One number a document reports about a link's cause or effect (C37), with its source."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    figure_id: uuid.UUID
+    #: source / target: a level of that box; link: the link's effect.
+    box: Literal["source", "target", "link"]
+    measure: str
+    #: As reported, and parsed (null when not a plain number). Never pooled.
+    value_text: str
+    value: float | None
+    ci_lower_text: str | None
+    ci_lower: float | None
+    ci_upper_text: str | None
+    ci_upper: float | None
+    unit: str | None
+    effect_size_type: Literal[
+        "absolute_change", "relative_change", "standardised", "ratio", "level"
+    ]
+    population: str | None
+    place: str | None
+    #: When the data were collected, as reported.
+    year: str | None
+    n: int | None
+    k: int | None
+    quote: str
+    # The source document's short citation, as the documents carry it.
+    task_source_snapshot_id: uuid.UUID
+    source_title: str
+    source_authors: list[str]
+    source_year: int | None
+    #: The journal or publisher, when known.
+    source_venue: str | None
+    source_type: Literal["academic", "policy", "web"]
+    evidence_type: str | None
+    url: str | None
+
+
 class TocLinkEvidenceOut(BaseModel):
-    """Every document judged for one link."""
+    """Every document judged for one link, and the figures they give."""
 
     model_config = ConfigDict(extra="forbid")
 
     link_id: uuid.UUID
     documents: list[TocDocumentOut]
+    #: The size of change (C37), for the link's current wording.
+    figures: list[TocFigureOut]
 
 
 class TocCaseStudyOut(BaseModel):
@@ -205,13 +246,15 @@ class TocCaseStudyOut(BaseModel):
 
 
 class TocBoxEvidenceOut(BaseModel):
-    """A box's case studies and the indicators its documents used."""
+    """A box's case studies, the indicators its documents used, and its figures."""
 
     model_config = ConfigDict(extra="forbid")
 
     box_id: uuid.UUID
     case_studies: list[TocCaseStudyOut]
     indicators: list[str]
+    #: Levels of this box (a baseline, a prevalence) its links' documents report (C37).
+    figures: list[TocFigureOut]
 
 
 class TocEvidenceOut(BaseModel):
