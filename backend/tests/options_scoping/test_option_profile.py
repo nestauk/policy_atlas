@@ -21,7 +21,10 @@ from sqlalchemy.engine import Connection, Engine
 from policy_atlas.core.schema import option
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPE_KEYS, TAXONOMY_VERSION
-from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
+from policy_atlas.options_scoping.longlist.longlist_backend import (
+    STUB_POTENTIAL_IMPACT,
+    StubLonglistBackend,
+)
 from policy_atlas.options_scoping.option_profile.folding_prompt import FoldingResponse, FoldWire
 from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
     build_lever_typing_messages,
@@ -32,10 +35,14 @@ from policy_atlas.options_scoping.option_profile.option_profile import (
     option_profile_scope,
 )
 from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
+    POTENTIAL_IMPACT_HARD_MAX_CHARS,
+    POTENTIAL_IMPACT_MAX_CHARS,
     AmbitionResponse,
     AmbitionWire,
     MarkedLineResponse,
     MarkedLineWire,
+    PotentialImpactResponse,
+    PotentialImpactWire,
     SettingResponse,
     SettingWire,
     StandsOut,
@@ -55,6 +62,9 @@ from tests.runtime.test_baseline_gate import (
     scoping_plan,
 )
 from tests.runtime.test_runner import _cleanup
+
+#: The lines that go through ``profile_line``; ``potential_impact`` has its own call.
+_PLAIN_CALL_LINES = tuple(key for key in PROFILE_LINE_KEYS if key != "potential_impact")
 
 
 def _profile(walk: _Walk, backend: Any) -> tuple[uuid.UUID, dict[str, Any]]:
@@ -347,10 +357,10 @@ def test_the_profile_merges_into_the_row_and_types_every_option_not_merged(
         "run_id": str(profile_run),
         "backend_mode": "stub",
         "usage_totals": after.provenance["option_profile"]["usage_totals"],
-        "prompt_version": "option_profile_v3",
+        "prompt_version": "option_profile_v4",
         "model": "stub",
         "records_max": 5,
-        "calls": 10,
+        "calls": 11,
         "retries": 0,
         "marks": dict.fromkeys(PROFILE_LINE_KEYS, no_marks),
         "ambition_marks": no_marks,
@@ -436,7 +446,12 @@ def test_each_line_is_written_for_every_option_not_merged(conn: Connection) -> N
         # JSONB keeps no key order: the reader orders by PROFILE_LINE_KEYS.
         assert set(lines) == set(PROFILE_LINE_KEYS)
         for line_key, line in lines.items():
-            assert line == {"sentence": f"Stub {line_key} sentence.", "mark": None}
+            expected = (
+                STUB_POTENTIAL_IMPACT
+                if line_key == "potential_impact"
+                else f"Stub {line_key} sentence."
+            )
+            assert line == {"sentence": expected, "mark": None}
         assert entry["1"]["setting"] == {"main": "stub setting", "second": None}
     result = walk.result(run_id)
     assert summary["profiled"] == result.counts["profiled"] == 2
@@ -534,9 +549,10 @@ def test_where_reaches_the_who_decides_call_and_no_other(conn: Connection) -> No
     backend = _Scripted(profiler=profiler)
     _profile(walk, backend)
 
-    assert sorted(profiler.line_calls) == sorted(PROFILE_LINE_KEYS)
+    assert sorted(profiler.line_calls) == sorted(_PLAIN_CALL_LINES)
+    assert profiler.calls["potential_impact"] == 1
     assert {i["line_key"]: i["where"] for i in profiler.inputs["line"]} == {
-        line_key: (where if line_key == "who_decides" else None) for line_key in PROFILE_LINE_KEYS
+        line_key: (where if line_key == "who_decides" else None) for line_key in _PLAIN_CALL_LINES
     }
     # The built messages: Where is in the who_decides call and in no other.
     by_line = {
@@ -585,7 +601,7 @@ def test_the_who_can_act_texts_reach_the_who_decides_call_and_no_other(conn: Con
     _profile(walk, _Scripted(profiler=profiler))
 
     assert {i["line_key"]: i["considerations"] for i in profiler.inputs["line"]} == {
-        line_key: (texts if line_key == "who_decides" else None) for line_key in PROFILE_LINE_KEYS
+        line_key: (texts if line_key == "who_decides" else None) for line_key in _PLAIN_CALL_LINES
     }
     who_decides = next(i for i in profiler.inputs["line"] if i["line_key"] == "who_decides")
     user = str(
@@ -762,7 +778,7 @@ def test_a_call_malformed_once_then_right_succeeds_with_the_retry_counted(
     )
     _profile(walk, backend)
     assert backend.line_calls["cost"] == 2
-    assert all(backend.line_calls[k] == 1 for k in PROFILE_LINE_KEYS if k != "cost")
+    assert all(backend.line_calls[k] == 1 for k in _PLAIN_CALL_LINES if k != "cost")
     assert walk.result(run_id).provenance["option_profile"]["retries"] == 1
     assert _column(walk, run_id)[str(ids["o1"])]["1"]["lines"]["cost"]["mark"] == "less"
 
@@ -1475,3 +1491,80 @@ def test_a_place_left_out_an_unknown_id_a_long_and_an_untraced_sentence(
         "reason": None,
     }
 
+
+
+# --- task 055, item 6: the Potential impact call ------------------------------------------
+
+
+def test_the_potential_impact_call_runs_with_its_own_payload_and_the_row_holds_nine_lines(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn, plan=scoping_plan(where={"text": "Powys", "origin": "your_call"}))
+    walk.option("Youth guarantee")
+    walk.option("Wage subsidy")
+    run_id, _ = walk.build(_Scripted())
+    profiler = StubLonglistBackend()
+    _profile(walk, _Scripted(profiler=profiler))
+
+    assert profiler.calls["potential_impact"] == 1
+    assert "potential_impact" not in profiler.line_calls
+    (call,) = profiler.inputs["potential_impact"]
+    assert call["plan"]["where"] == "Powys"
+    assert {"outcomes", "target_unit"} <= set(call["plan"])
+    assert len(call["options"]) == 2
+    for entry in call["options"]:
+        assert {"tried_on", "evaluated_countries", "role"} <= set(entry)
+    for key, entry in _column(walk, run_id).items():
+        if key == "folds":
+            continue
+        lines = entry["1"]["lines"]
+        assert set(lines) == set(PROFILE_LINE_KEYS) and len(lines) == 9
+        assert lines["potential_impact"] == {"sentence": STUB_POTENTIAL_IMPACT, "mark": None}
+
+
+def test_a_potential_impact_answer_over_the_ceiling_fails_the_attempt_and_retries(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee")
+    walk.build(_Scripted())
+    too_long = PotentialImpactResponse(
+        options=[
+            PotentialImpactWire(
+                option_id="o1", answer="x" * (POTENTIAL_IMPACT_HARD_MAX_CHARS + 1), stands_out="no"
+            )
+        ]
+    )
+    right = PotentialImpactResponse(
+        options=[
+            PotentialImpactWire(option_id="o1", answer="Large if it works.", stands_out="more")
+        ]
+    )
+    # No max_length on the wire (the constrained decoder would cut mid-word);
+    # the ceiling is a code check that fails the attempt.
+    assert PotentialImpactWire.model_fields["answer"].metadata == []
+    backend = StubLonglistBackend(potential_impact_responses=[too_long, right])
+    _profile(walk, backend)
+    assert backend.calls["potential_impact"] == 2
+
+
+def test_a_potential_impact_answer_over_the_target_but_under_the_hard_bound_is_kept(
+    conn: Connection,
+) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee")
+    run_id, _ = walk.build(_Scripted())
+    long_but_kept = "y" * (POTENTIAL_IMPACT_MAX_CHARS + 20)
+    profiler = StubLonglistBackend(
+        potential_impact_responses=[
+            PotentialImpactResponse(
+                options=[PotentialImpactWire(option_id="o1", answer=long_but_kept, stands_out="no")]
+            )
+        ]
+    )
+    _profile(walk, _Scripted(profiler=profiler))
+    assert profiler.calls["potential_impact"] == 1
+    for key, entry in _column(walk, run_id).items():
+        if key == "folds":
+            continue
+        assert entry["1"]["lines"]["potential_impact"]["sentence"] == long_but_kept

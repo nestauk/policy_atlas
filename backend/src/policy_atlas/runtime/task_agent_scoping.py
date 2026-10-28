@@ -59,6 +59,7 @@ from policy_atlas.runtime.task_agent_prompt import (
     PartProposalWire,
 )
 from policy_atlas.runtime.task_agent_scoping_prompt import (
+    APPETITE_OPTION_IDS,
     DEPTH_OPTION_IDS,
     SCOPING_MAX_OUTPUT_TOKENS,
     TASK_AGENT_SCOPING_PROMPT_VERSION,
@@ -403,6 +404,23 @@ _STUB_DEPTH_OPTIONS: tuple[tuple[str, str, str], ...] = (
         "A broader reading set for each option when you assess. The fuller path.",
     ),
 )
+_STUB_APPETITE_OPTIONS: tuple[tuple[str, str, str], ...] = (
+    (
+        "appetite_tried",
+        "Cautious: only options that have been evaluated somewhere",
+        "Every place goes to an option that has been evaluated somewhere.",
+    ),
+    (
+        "appetite_mostly",
+        "Balanced: mostly evaluated, plus one or two not yet evaluated",
+        "Most places go to evaluated options; one or two to bigger or newer ideas.",
+    ),
+    (
+        "appetite_open",
+        "Ambitious: the biggest ideas, even those never implemented",
+        "One evaluated anchor; the rest chosen for ambition and spread.",
+    ),
+)
 _STUB_OECD_GROUP = "OECD members"
 
 
@@ -428,6 +446,28 @@ def _depth_from(text: str) -> str | None:
         return "standard"
     if "rapid" in lowered or "quick" in lowered:
         return "rapid"
+    return None
+
+
+def _appetite_from(text: str) -> str | None:
+    """Resolve a risk-appetite choice from a user turn, by marker or in their words."""
+    option_id = _confirmed_option(text, "appetite")
+    if option_id in APPETITE_OPTION_IDS:
+        return APPETITE_OPTION_IDS[option_id]
+    lowered = text.lower()
+    if "balanced" in lowered or "mostly evaluated" in lowered or "one or two new" in lowered:
+        return "mostly_tried"
+    if (
+        "ambitious" in lowered
+        or "biggest ideas" in lowered
+        or "big ideas" in lowered
+        or "untested" in lowered
+        or "never implemented" in lowered
+    ):
+        return "open_to_untested"
+    only_evaluated = "only" in lowered and ("evaluated" in lowered or "tried" in lowered)
+    if "cautious" in lowered or only_evaluated:
+        return "tried_only"
     return None
 
 
@@ -493,6 +533,22 @@ def _stub_turn(turns: list[dict[str, str]]) -> ScopingTurnWire:
     depth = next((d for text in user_turns if (d := _depth_from(text))), None)
     if depth is not None:
         draft.depth = depth
+
+    # The appetite is offered once, on the turn after depth is chosen. Only the
+    # turns from the depth choice onward can answer it, so words in the
+    # question itself ("untested") are not mistaken for a choice. A user who
+    # moves on without choosing leaves it unset (the plan reads mostly_tried).
+    depth_index = next(
+        (i for i, text in enumerate(user_turns) if _depth_from(text)), None
+    )
+    appetite = None
+    if depth_index is not None:
+        appetite = next(
+            (a for text in user_turns[depth_index:] if (a := _appetite_from(text))),
+            None,
+        )
+    if appetite is not None:
+        draft.risk_appetite = appetite
 
     if len(user_turns) <= 1:
         return ScopingTurnWire(
@@ -566,6 +622,27 @@ def _stub_turn(turns: list[dict[str, str]]) -> ScopingTurnWire:
             ready=False,
         )
 
+    if appetite is None and depth_index == len(user_turns) - 1:
+        return ScopingTurnWire(
+            reply="Deterministic stub Task Agent: how far may the shortlist reach?",
+            plan_draft=draft,
+            part=_part(
+                "appetite",
+                "Plan · risk appetite",
+                "How far may the shortlist reach beyond tried options?",
+                [
+                    PartOptionWire(
+                        id=option_id,
+                        label=label,
+                        sub=sub,
+                        primary=option_id == "appetite_mostly",
+                    )
+                    for option_id, label, sub in _STUB_APPETITE_OPTIONS
+                ],
+            ),
+            ready=False,
+        )
+
     return ScopingTurnWire(
         reply=(
             "Deterministic stub Task Agent: check the plan; nothing runs "
@@ -592,12 +669,26 @@ def _build_messages(
 
 
 def _build_plan(draft: ScopingPlanDraftWire, inputs: ScopingInputs, turn_index: int) -> ScopingPlan:
-    return build_scoping_plan(
+    plan = build_scoping_plan(
         draft,
         linked_task_ids=inputs.linked_task_ids,
         source_turn_index=turn_index,
         previous=inputs.previous,
     )
+    # The appetite rides here rather than inside build_scoping_plan: the wire's
+    # value when it is one of the three, otherwise the previous version's (so a
+    # later version from the conversation keeps a chosen appetite), otherwise
+    # the plan's own default.
+    if draft.risk_appetite in APPETITE_OPTION_IDS.values():
+        plan = plan.model_copy(update={"risk_appetite": draft.risk_appetite})
+    elif inputs.previous is not None:
+        plan = plan.model_copy(update={"risk_appetite": inputs.previous.risk_appetite})
+    return plan
+
+
+def _seed_draft(plan: ScopingPlan) -> dict[str, Any]:
+    """Seed a successor conversation: the executed plan's draft plus its appetite."""
+    return {**wire_draft_from_plan(plan), "risk_appetite": plan.risk_appetite}
 
 
 OPTIONS_SCOPING_TASK_AGENT = TaskAgentProfile(
@@ -616,11 +707,13 @@ OPTIONS_SCOPING_TASK_AGENT = TaskAgentProfile(
     draft_from_wire=lambda draft, ready, inputs: scoping_draft_from_wire(
         draft, ready=ready, previous=inputs.previous
     ),
-    seed_draft=lambda plan: wire_draft_from_plan(expect_scoping_plan(plan)),
+    seed_draft=lambda plan: _seed_draft(expect_scoping_plan(plan)),
     stub_turn=_stub_turn,
     # Closed per capability: a scoping card keyed 'thoroughness' would render
     # an Evidence search control on a plan that has no such dial.
-    part_ids=frozenset({"question", "settings", "constraints", "depth"}),
+    part_ids=frozenset(
+        {"question", "settings", "constraints", "depth", "appetite"}
+    ),
     # OS ruling 25: neither depth is a recommendation.
     no_primary_parts=frozenset({"depth"}),
     after_approve=_after_approve,

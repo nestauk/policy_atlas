@@ -169,6 +169,7 @@ describe("the longlist and the scoping readers (task 045)", () => {
     expect(resultView("baseline")).toBe("baseline");
     // A view the switch cannot open falls back.
     expect(resultView("report")).toBe("longlist");
+    expect(resultView("shortlist")).toBe("shortlist");
   });
 
   it("a running child shows as activity but never opens or locks a tab", () => {

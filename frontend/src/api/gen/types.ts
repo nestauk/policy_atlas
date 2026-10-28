@@ -895,6 +895,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/options/{option_id}/shortlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Shortlist
+         * @description Put an included option on the shortlist as the user's own place (task 055).
+         *
+         *     Repeating it on a place the user already holds is a no-op. Refused with
+         *     409 ``not_included`` for an excluded or merged option and 409
+         *     ``run_active`` while a walk runs.
+         */
+        post: operations["post_shortlist_api_v1_tasks__task_id__options__option_id__shortlist_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/options/{option_id}/unshortlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Unshortlist
+         * @description Take an option off the shortlist (task 055).
+         *
+         *     A Policy Atlas pick becomes set aside; the user's own place clears. No
+         *     walk opens and nothing refills the place. An option with no place is a
+         *     no-op. Refused with 409 ``run_active`` while a walk runs.
+         */
+        post: operations["post_unshortlist_api_v1_tasks__task_id__options__option_id__unshortlist_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}/plan": {
         parameters: {
             query?: never;
@@ -918,6 +966,11 @@ export interface paths {
         /**
          * Patch Plan
          * @description Apply typed edits to the current plan and persist a new approved version.
+         *
+         *     On an options-scoping task whose risk appetite changed, once the new
+         *     version has committed the route opens a shortlist walk that proposes the
+         *     places again (task 055, P10; :func:`_open_shortlist_after_patch`) and
+         *     names it in ``opened_run``.
          */
         patch: operations["patch_plan_api_v1_tasks__task_id__plan_patch"];
         trace?: never;
@@ -1006,6 +1059,31 @@ export interface paths {
         get: operations["get_run_api_v1_tasks__task_id__runs__run_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/shortlist/suggest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Suggest More
+         * @description Open a shortlist walk that fills the open places (Suggest more; task 055).
+         *
+         *     The access check runs in its own short transaction, then the opener takes
+         *     the dispatch lock and the task row itself (the order ``create_run``
+         *     uses). Refused with 409 ``run_active``, ``capacity``, ``plan_stale`` or
+         *     ``nothing_to_propose``, and 404 when the task has no longlist.
+         */
+        post: operations["post_suggest_more_api_v1_tasks__task_id__shortlist_suggest_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2873,6 +2951,11 @@ export interface components {
          *             earlier version can show that version's wording (task 046).
          *         taxonomy_version: The lever-type list version.
          *         depth_label: The depth label every longlist surface carries.
+         *         shortlist: The latest shortlist proposal (task 055).
+         *         plan_inputs_changed: The current approved plan differs from the plan
+         *             the longlist was built from in a field the longlist reads, so a
+         *             rebuild would give a different longlist. A change to the risk
+         *             appetite alone leaves it false (task 055, A6).
          */
         LonglistOut: {
             /** Capability Run Id */
@@ -2894,6 +2977,11 @@ export interface components {
             lever_types?: string[];
             /** Options */
             options?: components["schemas"]["OptionSummaryOut"][];
+            /**
+             * Plan Inputs Changed
+             * @default false
+             */
+            plan_inputs_changed: boolean;
             /** Plan Version */
             plan_version: number;
             /**
@@ -2901,6 +2989,7 @@ export interface components {
              * Format: uuid
              */
             run_id: string;
+            shortlist: components["schemas"]["ShortlistOut"];
             /** Taxonomy Version */
             taxonomy_version?: string | null;
             /** Themes */
@@ -2930,6 +3019,45 @@ export interface components {
              * Format: uuid
              */
             theme_id: string;
+        };
+        /**
+         * MaturityOut
+         * @description How well tried an option is, read from its coverage (task 055, item 7).
+         *
+         *     Args:
+         *         rung: `proposal_only` (no document names it) · `described` (documents
+         *             describe or recommend it) · `evaluated` (a document measured an
+         *             effect) · `reviewed` (a systematic review or meta-analysis did).
+         *         design_mix: The evaluating documents' evidence types as text, most
+         *             frequent first; empty when none evaluated it.
+         *         none_in_your_setting: It was evaluated, but not in the plan's Where
+         *             country.
+         *         latest_evaluation_year: The newest evaluating document's year.
+         *         stale: The newest evaluation is more than five years old.
+         */
+        MaturityOut: {
+            /**
+             * Design Mix
+             * @default
+             */
+            design_mix: string;
+            /** Latest Evaluation Year */
+            latest_evaluation_year?: number | null;
+            /**
+             * None In Your Setting
+             * @default false
+             */
+            none_in_your_setting: boolean;
+            /**
+             * Rung
+             * @enum {string}
+             */
+            rung: "proposal_only" | "described" | "evaluated" | "reviewed";
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
         };
         /**
          * MeOut
@@ -3172,6 +3300,7 @@ export interface components {
             lever_none_fits_reason?: string | null;
             /** Lever Reason */
             lever_reason?: string | null;
+            maturity?: components["schemas"]["MaturityOut"] | null;
             /** Name */
             name: string;
             /**
@@ -3219,6 +3348,7 @@ export interface components {
             search_pending: boolean;
             /** Secondary Lever Types */
             secondary_lever_types?: string[];
+            shortlist?: components["schemas"]["ShortlistStateOut"] | null;
             /**
              * State
              * @enum {string}
@@ -3366,6 +3496,10 @@ export interface components {
          *             document measured (R76).
          *         outcomes_total: The outcome count of the plan the longlist was built
          *             from (R76).
+         *         shortlist: Its place on the shortlist (task 055); `null` when it
+         *             holds none.
+         *         maturity: Its maturity rung (task 055); `null` for a longlist
+         *             written before the rung existed.
          */
         OptionSummaryOut: {
             /** Also Found As */
@@ -3396,6 +3530,7 @@ export interface components {
             lever_none_fits_reason?: string | null;
             /** Lever Reason */
             lever_reason?: string | null;
+            maturity?: components["schemas"]["MaturityOut"] | null;
             /** Name */
             name: string;
             /**
@@ -3437,6 +3572,7 @@ export interface components {
             search_pending: boolean;
             /** Secondary Lever Types */
             secondary_lever_types?: string[];
+            shortlist?: components["schemas"]["ShortlistStateOut"] | null;
             /**
              * State
              * @enum {string}
@@ -3804,8 +3940,10 @@ export interface components {
          *             infer it from which field is null.
          *         version: Plan row version.
          *         status: Plan status (e.g. `draft`, `approved`).
-         *         opened_run: The longlist walk `POST .../plan/confirm-baseline` opened,
-         *             on that route's response. Absent on every other plan read.
+         *         opened_run: The walk a plan write opened: the longlist walk
+         *             `POST .../plan/confirm-baseline` opened, or the shortlist walk a
+         *             `PATCH .../plan` that changed the risk appetite opened (task 055).
+         *             Null on every other plan read, and when the opener was refused.
          */
         PlanOut: {
             /**
@@ -3886,7 +4024,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
         };
         /**
          * PlanUpdatedFrame
@@ -3929,7 +4067,7 @@ export interface components {
              * Key
              * @enum {string}
              */
-            key: "cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity";
+            key: "cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity" | "potential_impact";
             /** Mark */
             mark?: ("less" | "more") | null;
             /** Sentence */
@@ -4282,7 +4420,7 @@ export interface components {
              * Aspect
              * @default null
              */
-            aspect: ("cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity" | "transferability") | null;
+            aspect: ("cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity" | "potential_impact" | "transferability") | null;
             /**
              * Checked At
              * @enum {string}
@@ -4361,6 +4499,8 @@ export interface components {
          *         steps: The three display steps, in order.
          *         time_band: The coarse compute band for the baseline.
          *         baseline_confirmed: The confirm-baseline record, once written.
+         *         risk_appetite: How far the shortlist may reach beyond options tried
+         *             elsewhere (task 055); set on every approved plan.
          *         ready: Whether the draft has validated into an executable plan.
          */
         ScopingPlanDraft: {
@@ -4408,6 +4548,11 @@ export interface components {
              * @default false
              */
             ready: boolean;
+            /**
+             * Risk Appetite
+             * @default null
+             */
+            risk_appetite: ("tried_only" | "mostly_tried" | "open_to_untested") | null;
             /**
              * Steer Point Defaults
              * @default null
@@ -4465,6 +4610,9 @@ export interface components {
          *         steering_mode: Replacement check-in cadence.
          *         steer_point_defaults: Replacement standing instructions.
          *         assumptions: Replacement assumptions.
+         *         risk_appetite: Replacement risk appetite (task 055). The longlist
+         *             does not read it, so a patch carrying only this field never makes
+         *             the longlist out of date.
          */
         ScopingPlanPatch: {
             /** Assumptions */
@@ -4476,6 +4624,8 @@ export interface components {
             intended_change?: components["schemas"]["TaggedOut"] | null;
             /** Outcomes */
             outcomes?: components["schemas"]["TaggedOut"][] | null;
+            /** Risk Appetite */
+            risk_appetite?: ("tried_only" | "mostly_tried" | "open_to_untested") | null;
             /** Steer Point Defaults */
             steer_point_defaults?: components["schemas"]["ScopingSteerPointDefaultOut"][] | null;
             /** Steering Mode */
@@ -4539,6 +4689,53 @@ export interface components {
             summary_status?: ("pending" | "verified" | "failed") | null;
             /** Title */
             title: string;
+        };
+        /**
+         * ShortlistOut
+         * @description The latest shortlist proposal on a longlist (task 055).
+         *
+         *     Args:
+         *         note: The proposal's short "what this leaves out" note; `null` before
+         *             the first proposal.
+         *         provenance: How the proposal was made (prompt version, model,
+         *             appetite, plan version, …); empty before the first proposal.
+         *         places_target: How many places a proposal fills to.
+         *         stale: The proposal does not match the plan's current risk appetite,
+         *             or a built longlist has no proposal yet. The view then asks the
+         *             user to press Suggest more to re-propose.
+         */
+        ShortlistOut: {
+            /** Note */
+            note?: string | null;
+            /**
+             * Places Target
+             * @default 5
+             */
+            places_target: number;
+            /** Provenance */
+            provenance?: {
+                [key: string]: unknown;
+            };
+            /** Stale */
+            stale: boolean;
+        };
+        /**
+         * ShortlistStateOut
+         * @description An option's place on the shortlist (task 055).
+         *
+         *     Args:
+         *         state: `proposed` (Policy Atlas's pick), `added_by_you`, or
+         *             `set_aside` (a pick the user removed).
+         *         reason: The one-line reason for a Policy Atlas pick; `null` otherwise.
+         */
+        ShortlistStateOut: {
+            /** Reason */
+            reason?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "proposed" | "added_by_you" | "set_aside";
         };
         /**
          * SourceDossierOut
@@ -4678,7 +4875,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
             /** Summary */
             summary?: {
                 [key: string]: number | string;
@@ -4716,7 +4913,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4748,7 +4945,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5278,7 +5475,7 @@ export interface components {
              * Stage
              * @default null
              */
-            stage: ("acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme") | null;
+            stage: ("acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist") | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -6709,6 +6906,70 @@ export interface operations {
             };
         };
     };
+    post_shortlist_api_v1_tasks__task_id__options__option_id__shortlist_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_unshortlist_api_v1_tasks__task_id__options__option_id__unshortlist_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_plan_api_v1_tasks__task_id__plan_get: {
         parameters: {
             query?: never;
@@ -6899,6 +7160,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_suggest_more_api_v1_tasks__task_id__shortlist_suggest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LatestRun"];
                 };
             };
             /** @description Validation Error */

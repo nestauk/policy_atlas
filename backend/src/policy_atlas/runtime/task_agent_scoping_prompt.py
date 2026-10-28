@@ -55,7 +55,7 @@ from policy_atlas.runtime.task_agent_prompt import (
     PartProposalWire,
 )
 
-TASK_AGENT_SCOPING_PROMPT_VERSION = "task_agent_scoping_v5"
+TASK_AGENT_SCOPING_PROMPT_VERSION = "task_agent_scoping_v6"
 
 # Reasoning model: the cap covers reasoning and output tokens.
 SCOPING_MAX_OUTPUT_TOKENS = 16_384
@@ -68,6 +68,15 @@ LINKED_CONTEXT_MAX = 60_000
 # Depth labels the user sees. Ids are stable option ids, never shown; the
 # labels and subs are the screen words (A8: never the internal keys).
 DEPTH_OPTION_IDS: dict[str, str] = {"rapid_pass": "rapid", "standard_pass": "standard"}
+
+# Risk appetite option ids → plan values (task 055, contract S2, S26, A14).
+# The same pattern as depth: stable ids, never shown; the labels are the
+# screen words.
+APPETITE_OPTION_IDS: dict[str, str] = {
+    "appetite_tried": "tried_only",
+    "appetite_mostly": "mostly_tried",
+    "appetite_open": "open_to_untested",
+}
 
 
 class TaggedText(BaseModel):
@@ -210,6 +219,16 @@ class ScopingPlanDraftWire(BaseModel):
             "words). Never pre-filled."
         ),
     )
+    risk_appetite: str | None = Field(
+        default=None,
+        description=(
+            "'tried_only', 'mostly_tried' or 'open_to_untested', set ONLY "
+            "after the user chose one of the three appetite options you "
+            "offered (or asked for one in their own words). Never "
+            "pre-filled; when the user does not choose, the plan takes "
+            "'mostly_tried'."
+        ),
+    )
     constraints: list[ScopingConstraintWire] | None = None
     your_context: list[YourContextWire] | None = None
     your_options: list[YourOptionWire] | None = Field(
@@ -303,7 +322,7 @@ what the evidence will show.
 
 The plan is shown beside this conversation as a document with these
 sections: Starts from · Question and intended change · Settings (who or what
-should change · where · outcomes · depth) · Constraints and preferences ·
+should change · where · outcomes · depth · risk appetite) · Constraints and preferences ·
 Options you already have in mind · Your context · Steps and check-ins.
 Every section has its own Edit action, and the document's start button
 runs the plan. Once confirmed, the run builds the BASELINE first — a
@@ -313,7 +332,11 @@ question it and confirm the plan. When they confirm, the run builds the
 LONGLIST: it suggests options, searches for each of them and for the
 user's own, reads every abstract for the interventions it covers, clusters
 them into options, and applies the constraints. Nothing is assessed at
-that stage.
+that stage. When the longlist is built, Policy Atlas proposes a SHORTLIST:
+about five places for close reading, each with one plain reason, mixed
+according to the user's risk appetite; the user adds and removes places
+and asks for more. Assessment of the shortlisted options is not yet
+available in this release.
 
 ## What you fill, and how you tag it
 
@@ -571,6 +594,35 @@ writes a shorter profile; standard reads more and writes the full profile.
 Never quote minutes or document counts — timing is shown by the plan
 document, not by you.
 
+## Risk appetite — offered once, after depth
+
+Risk appetite says how the shortlist mixes options that have been
+evaluated somewhere with options that have not. Offer it once, after
+depth, as a part (id 'appetite') with exactly these three options; the
+middle one is the primary, because it is what the plan takes when the user
+does not choose:
+
+- id 'appetite_tried', label "Cautious: only options that have been
+  evaluated somewhere", sub "Every place goes to an option that has been
+  evaluated somewhere."
+- id 'appetite_mostly', label "Balanced: mostly evaluated, plus one or two
+  not yet evaluated", sub "Most places go to evaluated options; one or two
+  to bigger or newer ideas." The primary.
+- id 'appetite_open', label "Ambitious: the biggest ideas, even those never
+  implemented", sub "One evaluated anchor; the rest chosen for ambition and
+  spread."
+
+Compile appetite_tried → risk_appetite 'tried_only', appetite_mostly →
+'mostly_tried', appetite_open → 'open_to_untested'. The user may also
+choose in their own words ("cautious", "only what has been evaluated",
+"let's be ambitious", "I want the big ideas too"). Never infer it from the
+tone of the question: when the user does not choose, leave the field empty
+and say the plan takes the balanced answer, which they can change in the
+plan document or later from the longlist. Appetite changes the mix of the
+shortlist, never its order, and never which options reach the longlist.
+Documents evaluate options; Policy Atlas assesses them later. Keep the two
+words apart.
+
 ## Check-ins
 
 Never ask about check-ins. Set steering_mode 'moderate' on the first turn
@@ -597,8 +649,8 @@ act" above says to ask: exactly two options — id 'local_only', label
 already has in mind: exactly two options — id 'none_yet', label "None yet
 — build the longlist from the literature", the primary; id 'i_have_some',
 label "I have some" — after which the user names them in their own
-words), 'depth'. Options per part: 2-4 buttons with exactly one primary,
-except 'depth' which has none.
+words), 'depth', 'appetite'. Options per part: 2-4 buttons with exactly
+one primary, except 'depth' which has none.
 
 Binding mechanics:
 

@@ -235,7 +235,7 @@ def child_run_plan(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[Any], 
 def test_a_stub_longlist_walk_fans_out_after_suggest_and_joins_before_the_screen(
     engine: Engine,
 ) -> None:
-    """inherit → suggest → [fan-out] → acquire → [join] → screen_abstract … theme.
+    """inherit → suggest → [fan-out] → acquire → [join] → screen_abstract … shortlist.
 
     Every entrant (the user's two, the stub's one suggestion) gets one child
     walk under its own targeted record naming the option, with the design's
@@ -264,6 +264,7 @@ def test_a_stub_longlist_walk_fans_out_after_suggest_and_joins_before_the_screen
             "option_profile",
             "constrain",
             "theme",
+            "shortlist",
         ]
 
         children = _children(engine, task_id, parent)

@@ -216,16 +216,17 @@ describe("ArtefactView — the Result's view switch (task 045, deliverable 9)", 
     ).toBeInTheDocument();
   });
 
-  it("once a longlist exists: Baseline · Longlist · Report, opening on the longlist, Report not yet available", () => {
+  it("once a longlist exists: Baseline · Longlist · Shortlist · Report, opening on the longlist, Report not yet available", () => {
     renderBaseline({ hasLonglist: true });
     const tabs = within(screen.getByRole("tablist", { name: "Result view" })).getAllByRole("tab");
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       "Baseline",
       "Longlist",
+      "Shortlist",
       "Report· available after assessment",
     ]);
     expect(tabs[1]).toHaveAttribute("aria-selected", "true");
-    expect(tabs[2]).toBeDisabled();
+    expect(tabs[3]).toBeDisabled();
     expect(screen.getByText(`Longlist view for ${TASK_ID} from run-longlist`)).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Do nothing: current policy and trajectory" }),

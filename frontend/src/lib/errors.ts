@@ -16,7 +16,9 @@ type ConflictCode =
   | "visibility_conflict"
   | "link_project_mismatch"
   | "link_source_unfinished"
-  | "link_source_capability";
+  | "link_source_capability"
+  | "nothing_to_propose"
+  | "not_included";
 
 /** Human-readable, trigger-local conflict copy — the one place this
  *  copy lives; call sites wire it in rather than inlining their own. */
@@ -39,6 +41,9 @@ export const conflictSentences: Record<ConflictCode, string> = {
   link_project_mismatch: `That Evidence search is in a different ${PROJECT.one}. Put both in the same ${PROJECT.one} first.`,
   link_source_unfinished: "That Evidence search has not finished a run yet. Wait for it, then try again.",
   link_source_capability: "A task can only start from an Evidence search task.",
+  // Task 055: the shortlist's refusals.
+  nothing_to_propose: "Every included option already has a place or was set aside. There is nothing left to propose.",
+  not_included: "Only an included option can be on the shortlist.",
 };
 
 /**
@@ -54,11 +59,23 @@ export function isConflictCode(code: string | undefined | null): code is Conflic
   return code !== undefined && code !== null && code in conflictSentences;
 }
 
-/** A failed action's notice: the API's conflict sentence when the thrown
+/** Suggest more's own words for a shared code: there, `plan_stale` means
+ *  the longlist predates a changed plan input (task 055). */
+export const suggestConflictSentences: Partial<Record<ConflictCode, string>> = {
+  plan_stale: "The plan has changed since the longlist was built. Rebuild the longlist first.",
+};
+
+/** A failed action's notice: the action's own sentence for the code when
+ *  `overrides` has one, else the API's conflict sentence when the thrown
  *  error names one, else the action's own fallback. */
-export function actionFailedNotice(error: unknown, fallback: string): string {
+export function actionFailedNotice(
+  error: unknown,
+  fallback: string,
+  overrides: Partial<Record<ConflictCode, string>> = {},
+): string {
   const code = (error as { code?: string } | null | undefined)?.code;
-  return isConflictCode(code) ? conflictSentences[code] : fallback;
+  if (!isConflictCode(code)) return fallback;
+  return overrides[code] ?? conflictSentences[code];
 }
 
 /**

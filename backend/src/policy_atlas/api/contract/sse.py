@@ -40,6 +40,7 @@ StageKey = Literal[
     "option_profile",
     "constrain",
     "theme",
+    "shortlist",
 ]
 
 #: `StageKey`'s members as a plain tuple, for runtime membership checks.
@@ -61,6 +62,7 @@ STAGE_KEYS: tuple[StageKey, ...] = (
     "option_profile",
     "constrain",
     "theme",
+    "shortlist",
 )
 
 #: Who decided a resolved check-in. Mirrors `steering_events.DecidedBy`.

@@ -1,13 +1,15 @@
-"""The user's three direct actions on the longlist (task 045, S11, S12; D13).
+"""The user's direct actions on the longlist (task 045, S11, S12; D13; task 055, P9).
 
 *Add an option*, *exclude* and *include again* are one set of apply
 functions with two callers: the buttons (``api/routers/longlist.py``) and the
 Task Agent's longlist verbs (Phase 7), which confirm a verb in the thread and
-then call the same function. Each writes the option's state **and one History
-event as the user's turn** (contract deliverable 9, ruling 1): an
-``event_log`` row with ``run_id = None`` and the actor in the payload, which
-``GET /decisions`` renders with ``decided_by = "user"`` beside the lifecycle
-events (the precedent is the rename and share audit events).
+then call the same function. Task 055 adds the two shortlist buttons, *add
+to shortlist* and *remove from shortlist*, on the same pattern. Each writes
+the option's state **and one History event as the user's turn** (contract
+deliverable 9, ruling 1): an ``event_log`` row with ``run_id = None`` and
+the actor in the payload, which ``GET /decisions`` renders with
+``decided_by = "user"`` beside the lifecycle events (the precedent is the
+rename and share audit events).
 
 **User state always wins** (5.3's rule, ``options_scoping.constrain.constrain.
 user_holds_state``): both *exclude* and *include again* write an
@@ -41,6 +43,8 @@ from policy_atlas.api.readmodels.repository import (
     OPTION_ADDED,
     OPTION_EXCLUDED,
     OPTION_INCLUDED,
+    OPTION_SHORTLISTED,
+    OPTION_UNSHORTLISTED,
     clean_text,
 )
 from policy_atlas.api.routers._common import active_parentless_walk
@@ -99,14 +103,18 @@ def admit_longlist_action(conn: Connection, *, task_id: uuid.UUID) -> None:
         )
 
 
-def _locked_option(conn: Connection, *, task_id: uuid.UUID, option_id: uuid.UUID) -> Any:
-    row = conn.execute(
-        select(option)
-        .where(option.c.task_id == task_id, option.c.option_id == option_id)
+def _locked_option(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    option_id: uuid.UUID,
+    with_merged: bool = False,
+) -> Any:
+    query = select(option).where(option.c.task_id == task_id, option.c.option_id == option_id)
+    if not with_merged:
         # A merged duplicate has left the longlist: no verb reaches it (045 review P1).
-        .where(option.c.merged_into_option_id.is_(None))
-        .with_for_update()
-    ).one_or_none()
+        query = query.where(option.c.merged_into_option_id.is_(None))
+    row = conn.execute(query.with_for_update()).one_or_none()
     if row is None:
         raise OptionNotFound(f"unknown option: {option_id}")
     return row
@@ -151,7 +159,11 @@ def exclude_option(
 
     Writes ``state = "excluded"`` and ``exclusion = {constraint: "your
     decision", reason, by: "user"}`` — reversible by :func:`include_option`,
-    and never overridden by a rebuild's ``constrain``.
+    and never overridden by a rebuild's ``constrain``. An excluded option holds
+    no shortlist place, so a place (``proposed`` or ``added_by_you``) is
+    cleared too (task 055, PR10); including it again does not restore the
+    place. A set-aside stays set aside, so including the option again never
+    makes it a candidate again (S9).
 
     Args:
         conn: The caller's open transaction, holding the task row lock.
@@ -169,6 +181,11 @@ def exclude_option(
     # A reason is optional on the button and the verb alike (owner, 2026-09-24):
     # a blank one is recorded empty, never invented.
     text = clean_text(reason)
+    place: dict[str, Any] = (
+        {}
+        if row.shortlist_state == "set_aside"
+        else {"shortlist_state": None, "shortlist_reason": None}
+    )
     conn.execute(
         option.update()
         .where(option.c.task_id == task_id, option.c.option_id == option_id)
@@ -176,6 +193,7 @@ def exclude_option(
             state="excluded",
             exclusion={"constraint": USER_DECISION, "reason": text or "", "by": "user"},
             updated_at=datetime.now(UTC),
+            **place,
         )
     )
     _event(
@@ -238,6 +256,110 @@ def include_option(
         reason=text,
     )
     log.info("option.included", task_id=str(task_id), option_id=str(option_id))
+
+
+def shortlist_option(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    option_id: uuid.UUID,
+    actor: str,
+) -> None:
+    """Put an option on the shortlist as the user's own place, and log it.
+
+    Writes ``shortlist_state = "added_by_you"``. A Policy Atlas pick on the
+    same option becomes the user's place, and its reason is cleared: the user
+    has now chosen it. Repeating the action on a place the user already holds
+    changes nothing and writes no event.
+
+    Args:
+        conn: The caller's open transaction, holding the task row lock.
+        task_id: The options-scoping task.
+        option_id: The option.
+        actor: The user (token subject) the History event names.
+
+    Raises:
+        LonglistRefused: ``not_scoping``, ``run_active``, or ``not_included``
+            for an excluded or merged option.
+        OptionNotFound: If the task holds no such option.
+    """
+    admit_longlist_action(conn, task_id=task_id)
+    row = _locked_option(conn, task_id=task_id, option_id=option_id, with_merged=True)
+    if row.state != "included" or row.merged_into_option_id is not None:
+        raise LonglistRefused(
+            "not_included", "only an included option can be put on the shortlist"
+        )
+    if row.shortlist_state == "added_by_you":
+        return
+    conn.execute(
+        option.update()
+        .where(option.c.task_id == task_id, option.c.option_id == option_id)
+        .values(
+            shortlist_state="added_by_you", shortlist_reason=None, updated_at=datetime.now(UTC)
+        )
+    )
+    _event(
+        conn,
+        task_id=task_id,
+        event_type=OPTION_SHORTLISTED,
+        actor=actor,
+        row=row,
+        verb="shortlist",
+        reason=None,
+        extra={"previous_state": row.shortlist_state},
+    )
+    log.info("option.shortlisted", task_id=str(task_id), option_id=str(option_id))
+
+
+def unshortlist_option(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    option_id: uuid.UUID,
+    actor: str,
+) -> None:
+    """Take an option off the shortlist, and log it.
+
+    A Policy Atlas pick becomes ``set_aside`` (so Suggest more does not offer
+    it again); the user's own place clears to no state. Nothing refills the
+    place and no walk opens (S7). An option with no place, or one already set
+    aside, is left as it is with no event.
+
+    Args:
+        conn: The caller's open transaction, holding the task row lock.
+        task_id: The options-scoping task.
+        option_id: The option.
+        actor: The user (token subject) the History event names.
+
+    Raises:
+        LonglistRefused: ``not_scoping`` or ``run_active``.
+        OptionNotFound: If the task holds no such option.
+    """
+    admit_longlist_action(conn, task_id=task_id)
+    row = _locked_option(conn, task_id=task_id, option_id=option_id)
+    after = {"proposed": "set_aside", "added_by_you": None}
+    if row.shortlist_state not in after:
+        return
+    conn.execute(
+        option.update()
+        .where(option.c.task_id == task_id, option.c.option_id == option_id)
+        .values(
+            shortlist_state=after[row.shortlist_state],
+            shortlist_reason=None,
+            updated_at=datetime.now(UTC),
+        )
+    )
+    _event(
+        conn,
+        task_id=task_id,
+        event_type=OPTION_UNSHORTLISTED,
+        actor=actor,
+        row=row,
+        verb="unshortlist",
+        reason=None,
+        extra={"previous_state": row.shortlist_state},
+    )
+    log.info("option.unshortlisted", task_id=str(task_id), option_id=str(option_id))
 
 
 def current_plan_row(conn: Connection, *, task_id: uuid.UUID) -> dict[str, Any]:

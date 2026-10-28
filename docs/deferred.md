@@ -1762,6 +1762,15 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   "tests"]`, so `scripts/ops_remove_scoping_tasks.py` (destructive, `--apply`-guarded) and the
   rename tooling are tested but never typechecked. Add `scripts/` to the mypy files or move
   long-lived scripts under `backend/src/policy_atlas/ops` (044 review stack, two lanes).
+- **`test_option_search.py::test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent`
+  hangs intermittently** (seen 2026-10-27 twice in CI: on `dev` eedf9ef9 at 10:29 and on the 055
+  branch at 13:30, each time right after `…interrupts_its_children[raise]` passed, each time until
+  the `verify` job's 40-minute limit; `dev` passed on re-run). Locally the three tests around it
+  took 81 s once and over 150 s another time, with no Postgres query active, so the wait is in
+  Python: the test's `_stuck_until` child waits on a `threading.Event` with a 30-second deadline and
+  the helpers' deadlines are 10–30 s, which together bound the slow case but not the hang. The
+  stack dump that would name the wait (`pytest -o faulthandler_timeout=110`) was not captured before
+  the 055 review closed. Root-cause it next time it shows: it costs a 40-minute CI run each time.
 
 ## Steering surface (task 024 seams)
 
@@ -3251,3 +3260,71 @@ sent; found in task 049), now `sort=relevance` on every search, protected.
   publisher-typed plan can admit a landmark outside its range, as D8 is written. Seam:
   apply the plan's Overton filters locally to landmarks, counted on the `fetch_by_id`
   event like the country check.
+
+## Options scoping shortlist (task 055 seams)
+
+Recorded by the task 055 contract, plan and build (`docs/tasks/055-scoping-shortlist/`;
+[ADR 0041](adr/0041-options-scoping-shortlist.md)). The owner's rulings are quoted in the contract
+(S1–S26); the items below stay open on purpose.
+
+- **Update-in-place of the longlist (S10; 045 open question 7).** Still deferred. 055 keeps Rebuild:
+  an appetite change bypasses it (a shortlist walk re-proposes at once) and the user's places survive
+  a Rebuild by option id. Owner, 2026-10-27: "What does that even mean to rebuild in place? Do we
+  really need to worry about this?" → no.
+- **Shortlist verbs by chat.** Add to shortlist, Remove and Suggest more are buttons only; the
+  `longlist_turns` verbs stay add · exclude · include again. A chat verb needs the same opener and
+  refusals as the routes.
+- **Shortlist recall as the eval measure.** Research report 3 § 4: the right measure of a shortlist
+  is whether the option an assessment later finds best was on it. Needs assessment to exist. No AI
+  eval in 055; proposal quality was read by hand (verification.md, M1–M6).
+- **A comparability rule for settings.** The `tried_only` mix says "a comparable setting preferred"
+  and the maturity rung's modifier says "none in your setting" by country only. What makes a
+  setting comparable (income level, health system, federal structure) is not defined.
+- **Inferring the appetite.** Never inferred from the plan's wording (S2). A later slice could
+  propose one from the question's words and show it as a guess for the user to confirm.
+- **Direction of effect from abstracts (046 R42).** Stays with assessment; a reason may say an
+  option "bears on" an outcome, never that it moves it.
+- **The shortlist stage key.** Built as its own key (the pattern of every other scoping component),
+  not as `select` with an override (contract PG3). If the owner wants the override, it is a lookup by
+  registry name at four call sites in `routers/sse.py` and `checkin_read`.
+- **A failed proposal can cost up to four model calls.** The component re-asks once; the runner then
+  retries a failed model-calling step once, so a walk that ends `degraded` may have made four calls.
+  `theme` behaves the same way today. A per-step "no runner retry" flag would halve it.
+- **The note's footer needs `document_lines_total`.** Served since Phase 4; the frontend shows "Policy
+  Atlas read N of M document lines" only when both counts exist.
+- **The baseline check-in card does not show the appetite.** Its settings summary comes from the
+  backend's check-in bundle (Who · Where · Outcomes · Depth); adding "Risk appetite" is one bundle
+  key and one label in `checkInPresentation.ts`. The plan document beside the card shows it.
+- **Potential impact length.** The ceiling is a code check (a `max_length` on the wire made the
+  constrained decoder cut sentences mid-word at the limit): the prompt states a target (about 300,
+  never more than 380), a line over 400 is kept with a warning, and only a line over the hard bound
+  (600) fails the attempt, because `option_profile` is a spine step. If the judgment model keeps
+  writing over 400 characters on verbose lists, the target in the prompt goes down before either
+  number goes up. The contract says "under 400"; the owner rules on the number at the 055 review.
+- **One card build per option before the shortlist call.** `option_cards()` calls
+  `repository.option_out` once per included option, and each call re-reads the task-wide data (the
+  newest longlist row, every option name, all relations, the plan version). A 40-option list makes
+  several hundred queries before one model call, on every appetite change and Suggest more; measured
+  at 9–27 s wall per proposal in the staged check, so not a user-visible problem yet. A batch reader
+  belongs to a system-level cost and latency task (owner ruling 2026-09-28: Evidence search
+  components are not edited for cost inside a capability slice).
+- **The "could not propose" notice stays until the next walk.** The shortlist view derives it from
+  the task's newest parentless run; it says "Your places are unchanged" even after the user has since
+  added or removed places by hand. Clearing it on the first user action after the failed walk needs
+  the walk id on the view's state.
+- **The model does not see a breach on a kept place.** When constrain excludes an option the user
+  added, the user sees the breach on the row (O1) but the card text sent to the shortlist call omits
+  the exclusion block (contract card-text matrix: exclusion block out). One breach line for kept,
+  excluded places would let the note say so.
+- **Add on a pick from the screen.** The route turns Policy Atlas's pick into "Added by you" (the user
+  has now chosen it, so a re-proposal keeps it) and is tested; the Shortlist view offers only Remove on
+  a pick. A small "Keep" control on pick rows would expose it. Left for the owner's design call (055
+  review, step 9: no ruling made).
+- **"In the documents we found".** The contract's disciplines say the rung should carry this qualifier
+  where it would otherwise read as a fact about the world; the owner's rung words ("Evaluated",
+  "Implemented, not yet evaluated", …) do not. The card's "No document names this option yet" line and
+  the design mix carry the qualification nearby. Reopen if a reader takes the rung as a world fact.
+- **Appetite changes are an unmetered model-cost lever.** Each `PATCH /plan` that flips the appetite
+  opens a full shortlist walk (about USD 0.15 at 25–43 options). Bounded by `run_active`
+  serialisation and executor capacity only, the same posture as Rebuild; a per-task cap belongs with
+  the price envelope (open question 2).

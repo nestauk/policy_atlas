@@ -433,7 +433,7 @@ evidence_scope = Table(
     # Composite unique target for source_screening_result FK
     UniqueConstraint("evidence_scope_id", "task_id", name="uq_evidence_scope_id_task"),
     CheckConstraint(
-        "purpose IN ('baseline', 'longlist', 'variant', 'targeted')",
+        "purpose IN ('baseline', 'longlist', 'variant', 'targeted', 'shortlist')",
         name="ck_scope_purpose",
     ),
     # MATCH SIMPLE, per the ``plan.evidence_scope_id`` precedent above it: a
@@ -1529,11 +1529,16 @@ OPTION_STATES: tuple[str, ...] = ("included", "excluded")
 OPTION_UNIT_KINDS: tuple[str, ...] = ("interventions", "iof", "icf")
 #: The relations between options. ``variant_of`` is reserved for task 3.
 OPTION_RELATION_KINDS: tuple[str, ...] = ("part_of", "variant_of")
+#: An option's place on the shortlist (task 055, contract S6–S10): a Policy
+#: Atlas pick, a place the user added, or a pick the user removed. NULL on the
+#: row means the option holds no place.
+OPTION_SHORTLIST_STATES: tuple[str, ...] = ("proposed", "added_by_you", "set_aside")
 
 _OPTION_ORIGINS_SQL = ", ".join(f"'{o}'" for o in OPTION_ORIGINS)
 _OPTION_STATES_SQL = ", ".join(f"'{s}'" for s in OPTION_STATES)
 _OPTION_UNIT_KINDS_SQL = ", ".join(f"'{k}'" for k in OPTION_UNIT_KINDS)
 _OPTION_RELATION_KINDS_SQL = ", ".join(f"'{k}'" for k in OPTION_RELATION_KINDS)
+_OPTION_SHORTLIST_STATES_SQL = ", ".join(f"'{s}'" for s in OPTION_SHORTLIST_STATES)
 
 option = Table(
     "option",
@@ -1565,6 +1570,11 @@ option = Table(
     # The kept option a duplicate was folded into (constrain's *distinct*
     # merge): its documents moved there and it leaves the list. NULL otherwise.
     Column("merged_into_option_id", UUID(as_uuid=True), nullable=True),
+    # The option's place on the shortlist (task 055): one of
+    # ``OPTION_SHORTLIST_STATES``, or NULL for no place. ``shortlist_reason``
+    # is the one-line reason for a Policy Atlas pick.
+    Column("shortlist_state", Text, nullable=True),
+    Column("shortlist_reason", Text, nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     ForeignKeyConstraint(
@@ -1584,6 +1594,10 @@ option = Table(
     UniqueConstraint("option_id", "task_id", name="uq_option_id_task"),
     CheckConstraint(f"origin IN ({_OPTION_ORIGINS_SQL})", name="ck_option_origin"),
     CheckConstraint(f"state IN ({_OPTION_STATES_SQL})", name="ck_option_state"),
+    CheckConstraint(
+        f"shortlist_state IN ({_OPTION_SHORTLIST_STATES_SQL})",
+        name="ck_option_shortlist_state",
+    ),
     CheckConstraint("design_version >= 1", name="ck_option_design_version"),
     CheckConstraint("jsonb_typeof(outcomes) = 'array'", name="ck_option_outcomes_array"),
     CheckConstraint(
@@ -1680,6 +1694,10 @@ longlist_result = Table(
     # Keyed ``[option_id][design_version]``: the eight lines (sentence, mark)
     # and the setting (task 046, R45).
     Column("option_profile", JSONB, nullable=False),
+    # The latest shortlist proposal: ``{note, provenance}`` (task 055). The
+    # server default stays: the longlist writer's insert does not name this
+    # column, and a row with no proposal yet reads ``{}``.
+    Column("shortlist", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     Column("counts", JSONB, nullable=False),
     Column("provenance", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),

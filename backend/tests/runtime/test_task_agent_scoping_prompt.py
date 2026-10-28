@@ -1,4 +1,4 @@
-"""Pins for the ``task_agent_scoping_v5`` prompt surface (task 044, deliverable 6; task 046)."""
+"""Pins for the ``task_agent_scoping_v6`` prompt surface (task 044, deliverable 6; task 046)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from policy_atlas.runtime.task_agent_scoping_prompt import (
 
 
 def test_version_pinned() -> None:
-    assert TASK_AGENT_SCOPING_PROMPT_VERSION == "task_agent_scoping_v5"
+    assert TASK_AGENT_SCOPING_PROMPT_VERSION == "task_agent_scoping_v6"
 
 
 def test_depth_is_offered_as_two_screen_labels_never_the_keys() -> None:
@@ -31,6 +31,16 @@ def test_depth_is_offered_as_two_screen_labels_never_the_keys() -> None:
     assert DEPTH_OPTION_IDS == {"rapid_pass": "rapid", "standard_pass": "standard"}
     # The reply vocabulary rule bans the keys on screen.
     assert "rapid / standard / moderate" in prompt
+
+
+def test_appetite_option_ids_match_the_plan_values() -> None:
+    from typing import get_args
+
+    from policy_atlas.runtime.scoping_plan import RiskAppetite
+    from policy_atlas.runtime.task_agent_scoping_prompt import APPETITE_OPTION_IDS
+
+    assert set(APPETITE_OPTION_IDS.values()) == set(get_args(RiskAppetite))
+    assert "Risk appetite" in TASK_AGENT_SCOPING_SYSTEM_PROMPT
 
 
 def test_prompt_carries_the_ruled_behaviours() -> None:

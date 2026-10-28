@@ -38,7 +38,7 @@ export const SEE_PLAN_CTA_CLASS =
  *  scoping task's baseline walk, its longlist walk, or an added option's own
  *  search. The words on the card and the finished notice follow it — "the
  *  evidence base is ready" is wrong for a longlist. */
-export type WalkKind = "evidence_search" | "baseline" | "longlist" | "option_search";
+export type WalkKind = "evidence_search" | "baseline" | "longlist" | "option_search" | "shortlist";
 
 const LONGLIST_STAGES = new Set([
   "inherit",
@@ -61,8 +61,11 @@ export function walkKind(
 ): WalkKind {
   if (!isScoping({ capability })) return "evidence_search";
   if (purpose === "targeted") return "option_search";
-  if (purpose === "longlist" || purpose === "baseline") return purpose;
-  return stages.some((entry) => LONGLIST_STAGES.has(entry.stage)) ? "longlist" : "baseline";
+  if (purpose === "longlist" || purpose === "baseline" || purpose === "shortlist") return purpose;
+  // The longlist walk ends in a shortlist step; a walk with only that step
+  // is the standalone shortlist walk.
+  if (stages.some((entry) => LONGLIST_STAGES.has(entry.stage))) return "longlist";
+  return stages.some((entry) => entry.stage === "shortlist") ? "shortlist" : "baseline";
 }
 
 const DONE_TITLE: Record<WalkKind, string> = {
@@ -70,6 +73,7 @@ const DONE_TITLE: Record<WalkKind, string> = {
   baseline: "The baseline is ready",
   longlist: "The longlist is ready",
   option_search: "The option's search is done",
+  shortlist: "The shortlist is proposed",
 };
 
 const RESULTS_LABEL: Record<WalkKind, string> = {
@@ -77,6 +81,7 @@ const RESULTS_LABEL: Record<WalkKind, string> = {
   baseline: "Read the baseline",
   longlist: "Read the longlist",
   option_search: "Read the longlist",
+  shortlist: "Read the shortlist",
 };
 
 /** The finished notice, split around the Result-tab link it carries. */
@@ -85,10 +90,24 @@ export const FINISHED_NOTICE: Record<WalkKind, { before: string; after: string }
   baseline: { before: "The baseline is written. Read it in the", after: "tab." },
   longlist: { before: "The longlist is built. Open it in the", after: "tab." },
   option_search: { before: "The option's search is done. See it in the", after: "tab." },
+  shortlist: { before: "Policy Atlas has proposed a shortlist. Open it in the", after: "tab." },
 };
+
+/** The finished notice for this walk and status: a degraded shortlist walk
+ *  means the proposal failed (its one step is non-spine), so it says so. */
+export function finishedNotice(kind: WalkKind, status: RunStatus | undefined): { before: string; after: string } {
+  if (kind === "shortlist" && status === "degraded") {
+    return {
+      before: "Policy Atlas could not propose a shortlist. Your places are unchanged. Open the",
+      after: "tab.",
+    };
+  }
+  return FINISHED_NOTICE[kind];
+}
 
 function resultHref(taskId: string, kind: WalkKind): string {
   if (kind === "longlist" || kind === "option_search") return `/tasks/${taskId}/result?view=longlist`;
+  if (kind === "shortlist") return `/tasks/${taskId}/result?view=shortlist`;
   if (kind === "baseline") return `/tasks/${taskId}/result?view=baseline`;
   return `/tasks/${taskId}/result`;
 }
@@ -105,6 +124,9 @@ export function runningCardCopy(
   if (status === "paused") {
     return { tone: "paused", eyebrow: "PAUSED", title: "Paused — waiting on you" };
   }
+  if (kind === "shortlist" && status === "degraded") {
+    return { tone: "stopped", eyebrow: "STOPPED", title: "Policy Atlas could not propose" };
+  }
   if (status === "succeeded" || status === "degraded") {
     return { tone: "done", eyebrow: "DONE", title: DONE_TITLE[kind] };
   }
@@ -113,6 +135,9 @@ export function runningCardCopy(
   }
   if (kind === "option_search") {
     return { tone: "running", eyebrow: "RUNNING", title: "Searching for the option's evidence" };
+  }
+  if (kind === "shortlist") {
+    return { tone: "running", eyebrow: "RUNNING", title: "Proposing a shortlist…" };
   }
   return { tone: "running", eyebrow: "RUNNING", title: "Analysis running…" };
 }
@@ -425,7 +450,7 @@ export function runFinishedSignpost(
   kind: WalkKind = "evidence_search",
 ): StageSignpost | null {
   if (status === "succeeded" || status === "degraded") {
-    const notice = FINISHED_NOTICE[kind];
+    const notice = finishedNotice(kind, status);
     return {
       href: resultHref(taskId, kind),
       label: LIFECYCLE_LABELS.result,
@@ -460,7 +485,7 @@ export function resultsSignpost(
   kind: WalkKind = "evidence_search",
 ): StageSignpost | null {
   if (status === "succeeded" || status === "degraded") {
-    const notice = FINISHED_NOTICE[kind];
+    const notice = finishedNotice(kind, status);
     return {
       href: resultHref(taskId, kind),
       label: RESULTS_LABEL[kind],

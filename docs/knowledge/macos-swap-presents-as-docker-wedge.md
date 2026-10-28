@@ -36,3 +36,9 @@ Second wedge family (026 E): the VM's *network* path can wedge independently —
 API responsive, every pull hangs indefinitely, gvisor tx errors in the VM log,
 memory fine. App-level quit doesn't recycle the VM; a full process kill +
 relaunch does (~1.5h burned before that order was tried).
+
+Third family (055 build, 2026-10-27): after six days up, the engine simply stopped answering
+— every `docker` call (and so `make verify`) hung with no error and no load. `docker desktop
+restart` from the shell recovered it without the GUI; a scripted quit-and-reopen of the app
+was refused by the permission mode. Probe with a timeout first (`perl -e 'alarm 10; exec
+@ARGV' docker info`; macOS has no `timeout`).

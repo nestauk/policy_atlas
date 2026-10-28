@@ -23,7 +23,8 @@ are done (spec-prep 2026-06-22; refreshed 2026-07-03); `[ ]` items are open gate
 - [x] Task-contract map for first implementation slices — superseded by the running task sequence
   (`docs/tasks/001`–`052` merged to `dev`, 044–046 the options scoping capability landing
   with PR #69 on 2026-10-15, 051 the single-pass search of ADR 0038; 053 the local Bedrock
-  route of ADR 0041 landing with its PR on 2026-10-21 — system live at
+  route of ADR 0041 landing with its PR on 2026-10-21; 055 (the shortlist) reviewed on
+  `task/055-scoping-shortlist` as of 2026-10-27 — system live at
   `v3.policyatlas.uk`; the next slice is the newest `docs/tasks/NNN-*/contract.md` and
   its `task/NNN-slug` branch).
 - [x] Verification plan for first implementation slices — per-task `verification.md` from
