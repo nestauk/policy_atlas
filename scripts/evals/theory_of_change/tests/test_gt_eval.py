@@ -70,7 +70,11 @@ def _pa(edges: list[tuple[str, str, str]]) -> dict:
             {
                 "source": s,
                 "target": t,
-                "evidence": {"lower_grade": gr, "weak": gr in ("weak", "none")},
+                "evidence": {
+                    "lower_grade": gr,
+                    "weak": gr in ("weak", "none"),
+                    "strength": g.STRENGTH[gr],
+                },
             }
             for s, t, gr in edges
         ],
@@ -134,3 +138,87 @@ def test_shape_score() -> None:
     assert (
         g.longest_chain(["a", "b"], [("a", "b"), ("b", "a")]) == 2
     )  # a cycle is not followed twice
+
+
+def test_route_recall_moves_forwards_only() -> None:
+    matches = _m({"a": "A", "m1": None, "m2": "O", "z": "I"})
+    ms = g.match_sets(GT, matches)
+    # a→G reached in three links A→X→O... and G→z via O→I; a backwards link is not taken.
+    pa = _pa([("A", "X", "strong"), ("X", "O", "weak"), ("O", "I", "none")])
+    assert g.route_recall(GT, pa, ms, weighted=False) == 1.0
+    back = _pa(
+        [("O", "A", "strong"), ("A", "I", "strong")]
+    )  # O reaches I only backwards
+    assert g.route_recall(GT, back, ms, weighted=True) == 0.0
+
+
+def test_container_recall() -> None:
+    gt = {
+        **GT,
+        "nodes": GT["nodes"]
+        + [{"id": "m3", "layer": "outcome_short", "group": "G", "label": ""}],
+    }
+    two_narrower = {
+        "a": {"match_type": "exact"},
+        "m1": {"match_type": "narrower"},
+        "m2": {"match_type": "narrower"},
+        "m3": {"match_type": "none"},
+        "z": {"match_type": "none"},
+    }
+    c = g.container_recall(gt, two_narrower)
+    assert c["recall"] == 1.0 and c["mean_share"] == 2 / 3
+    one_narrower = {**two_narrower, "m2": {"match_type": "none"}}
+    assert g.container_recall(gt, one_narrower)["recall"] == 0.0
+    assert g.container_recall({**gt, "groups": []}, one_narrower) is None
+
+
+def _toc(link: dict, layers: tuple[str, str], codes: tuple) -> dict:
+    boxes = [
+        {"box_id": f"b{i}", "layer": la, "text": la, "code": c}
+        for i, (la, c) in enumerate(zip(layers, codes))
+    ]
+    base = {
+        "link_id": "l1",
+        "source_box_id": "b0",
+        "target_box_id": "b1",
+        "sentence": "",
+        "critical": True,
+        "code": codes[0] and "#1",
+    }
+    return {"boxes": boxes, "links": [{**base, **link}], "pathways": []}
+
+
+def test_convert_reads_both_builds() -> None:
+    new = g.convert(
+        _toc({"verdict": "not_sure_mixed"}, ("input", "outcome_long"), ("A1", "L1"))
+    )
+    assert [n["id"] for n in new["nodes"]] == ["A1", "L1"] and new["edges"][0][
+        "id"
+    ] == "#1"
+    assert new["nodes"][1]["layer"] == "outcome_long"
+    assert new["edges"][0]["evidence"] == {
+        "verdict": "not_sure_mixed",
+        "weak": True,
+        "strength": 2,
+    }
+    old = g.convert(
+        _toc(
+            {
+                "lower_grade": "medium",
+                "elsewhere": {"grade": "strong"},
+                "here": {"grade": "medium"},
+            },
+            ("input", "outcome"),
+            (None, None),
+        )
+    )
+    assert [n["id"] for n in old["nodes"]] == ["B1", "B2"] and old["edges"][0][
+        "id"
+    ] == "L1"
+    assert (
+        old["edges"][0]["evidence"]["weak"] is False
+        and old["edges"][0]["evidence"]["strength"] == 2
+    )
+    assert g.layers_agree("outcome_long", "outcome") and not g.layers_agree(
+        "outcome_long", "outcome_short"
+    )

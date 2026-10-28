@@ -10,28 +10,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import harness as h  # noqa: E402
-from policy_atlas.theory_of_change.evidence.grade import DocAppraisal, Judgement  # noqa: E402
-
-
-def _j(
-    elsewhere: str, here: str = "not_about", robust: bool | None = None
-) -> Judgement:
-    return Judgement("d", elsewhere, here, robust)
-
-
-def test_is_decisive() -> None:
-    trial = DocAppraisal(score=4)
-    assert h.is_decisive(_j("supports"), trial, "elsewhere")
-    assert h.is_decisive(_j("challenges"), DocAppraisal(score=5), "elsewhere")
-    assert not h.is_decisive(_j("supports"), trial, "here")  # other question
-    assert not h.is_decisive(_j("supports"), DocAppraisal(score=3), "elsewhere")
-    assert not h.is_decisive(
-        _j("supports"), DocAppraisal(score=4, web=True), "elsewhere"
-    )  # capped web
-    model = DocAppraisal(score=2, modelling=True)
-    assert h.is_decisive(_j("supports", robust=True), model, "elsewhere")
-    assert not h.is_decisive(_j("supports", robust=False), model, "elsewhere")
-    assert not h.is_decisive(_j("supports"), None, "elsewhere")
 
 
 def test_stop_reason() -> None:

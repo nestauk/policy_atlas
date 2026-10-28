@@ -123,14 +123,33 @@ def gt_weak_edges(gt: dict[str, Any]) -> list[int]:
 # --- 2. the layers ------------------------------------------------------------------
 
 #: Our layers mapped to the protocol's canonical layers (failure outcomes are left out).
+#: The step-1 build had one ``outcome`` layer; C34 split it into short and long term.
 PA_LAYER = {
     "input": "input/activity",
     "output": "output",
     "outcome": "outcome",
+    "outcome_short": "outcome_short",
+    "outcome_long": "outcome_long",
     "impact": "impact",
 }
-#: Depth along the chain, for the confidence gradient.
-DEPTH = {"input/activity": 0, "output": 1, "outcome": 2, "impact": 3}
+#: Depth along the chain: the confidence gradient and the forwards-only route rule.
+DEPTH = {
+    "input/activity": 0,
+    "output": 1,
+    "outcome": 2,
+    "outcome_short": 2,
+    "outcome_long": 3,
+    "impact": 4,
+}
+LAYER_ORDER = [
+    "input",
+    "output",
+    "outcome",
+    "outcome_short",
+    "outcome_long",
+    "impact",
+    "failure_outcome",
+]
 
 
 def gt_layer(layer: str) -> str:
@@ -139,7 +158,7 @@ def gt_layer(layer: str) -> str:
 
 
 def layers_agree(gt: str, pa: str) -> bool:
-    """Same canonical layer; our single ``outcome`` layer matches either outcome layer."""
+    """Same canonical layer; the step-1 single ``outcome`` layer matches either outcome layer."""
     gt = gt_layer(gt)
     if pa == "outcome":
         return gt in ("outcome_short", "outcome_long")
@@ -148,18 +167,48 @@ def layers_agree(gt: str, pa: str) -> bool:
 
 # --- 3. our theory, in the pack's schema ----------------------------------------------
 
+#: Step-1 build: two grades per link; the lower one counts.
 WEAK_GRADES = ("weak", "none")
 STRENGTH = {"strong": 3, "medium": 2, "weak": 1, "none": 0}
+#: Current build (C36): one verdict per link. Weak mirrors the published "Some" and
+#: "Limited" ratings (lead decision, 2026-10-28).
+WEAK_VERDICTS = ("not_sure_mixed", "not_sure_insufficient", "not_confident")
+VERDICT_STRENGTH = {
+    "confident": 3,
+    "not_sure_mixed": 2,
+    "not_sure_insufficient": 1,
+    "not_confident": 0,
+}
+
+
+def link_evidence(lk: dict[str, Any]) -> dict[str, Any]:
+    """A link's evidence in either build's format: what it says, weak or not, strength 0-3."""
+    if "verdict" in lk:
+        v = lk["verdict"]
+        return {
+            "verdict": v,
+            "weak": v in WEAK_VERDICTS,
+            "strength": VERDICT_STRENGTH[v],
+        }
+    g = lk["lower_grade"]
+    return {
+        "lower_grade": g,
+        "elsewhere": lk["elsewhere"]["grade"],
+        "here": lk["here"]["grade"],
+        "weak": g in WEAK_GRADES,
+        "strength": STRENGTH[g],
+    }
 
 
 def convert(toc: dict[str, Any]) -> dict[str, Any]:
-    """Our ``GET /toc`` reply in the pack's schema (§8), with short box ids ``B1``...
+    """Our ``GET /toc`` reply in the pack's schema (§8).
 
-    Failure-outcome boxes and their links are kept apart under ``failure``.
+    Reads both the step-1 build (one outcome layer, two grades, no codes; ids ``B1``,
+    ``L1``...) and the current one (six layers, one verdict, box and link codes used
+    as ids). Failure-outcome boxes and their links are kept apart under ``failure``.
     """
-    order = ["input", "output", "outcome", "impact", "failure_outcome"]
-    boxes = sorted(toc["boxes"], key=lambda b: order.index(b["layer"]))
-    short = {b["box_id"]: f"B{i}" for i, b in enumerate(boxes, 1)}
+    boxes = sorted(toc["boxes"], key=lambda b: LAYER_ORDER.index(b["layer"]))
+    short = {b["box_id"]: b.get("code") or f"B{i}" for i, b in enumerate(boxes, 1)}
     nodes, failure = [], []
     for b in boxes:
         row = {
@@ -172,19 +221,14 @@ def convert(toc: dict[str, Any]) -> dict[str, Any]:
     edges, failure_edges = [], []
     link_short = {}
     for i, lk in enumerate(toc["links"], 1):
-        link_short[lk["link_id"]] = f"L{i}"
+        link_short[lk["link_id"]] = lk.get("code") or f"L{i}"
         row = {
-            "id": f"L{i}",
+            "id": link_short[lk["link_id"]],
             "source": short[lk["source_box_id"]],
             "target": short[lk["target_box_id"]],
             "sentence": lk["sentence"],
             "critical": lk["critical"],
-            "evidence": {
-                "lower_grade": lk["lower_grade"],
-                "elsewhere": lk["elsewhere"]["grade"],
-                "here": lk["here"]["grade"],
-                "weak": lk["lower_grade"] in WEAK_GRADES,
-            },
+            "evidence": link_evidence(lk),
         }
         hits_failure = row["source"] in fail_ids or row["target"] in fail_ids
         (failure_edges if hits_failure else edges).append(row)
@@ -303,12 +347,85 @@ def edge_recall(
     return hit / total if total else 0.0
 
 
+def route_recall(
+    gt: dict[str, Any], pa: dict[str, Any], ms: dict[str, set[str]], *, weighted: bool
+) -> float:
+    """Share of ground-truth links we reach by a path of any length, moving only forwards.
+
+    A path may take a link only when its target is in the same layer or a later one
+    than its source (our theories are finer-grained, so one published arrow may be
+    several of ours). Two-way links match either direction.
+    """
+    layer = {n["id"]: n["layer"] for n in pa["nodes"]}
+    adj: dict[str, set[str]] = defaultdict(set)
+    for e in pa["edges"]:
+        if DEPTH[layer[e["target"]]] >= DEPTH[layer[e["source"]]]:
+            adj[e["source"]].add(e["target"])
+
+    def reaches(s: str, t: str) -> bool:
+        seen, todo = {s}, [s]
+        while todo:
+            for m in adj[todo.pop()] - seen:
+                if m == t:
+                    return True
+                seen.add(m)
+                todo.append(m)
+        return False
+
+    hit = total = 0.0
+    for e in gt["edges"]:
+        w = CONF_W[e["confidence"]] if weighted else 1.0
+        total += w
+        pairs = [
+            (s, t) for s in ms.get(e["source"], ()) for t in ms.get(e["target"], ())
+        ]
+        if e.get("bidirectional"):
+            pairs += [(t, s) for s, t in pairs]
+        if any(s != t and reaches(s, t) for s, t in pairs):
+            hit += w
+    return hit / total if total else 0.0
+
+
+def container_recall(
+    gt: dict[str, Any], matches: dict[str, dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Per published container: the share of its members we matched, and whether it counts.
+
+    A container is a hit when one member matches exactly or broader, or two or more
+    match narrower. Returns the mean hit rate and mean share, or ``None`` with no containers.
+    """
+    rows = {}
+    for g in gt.get("groups") or []:
+        types = [
+            matches[n["id"]]["match_type"]
+            for n in gt["nodes"]
+            if n.get("group") == g["id"]
+        ]
+        if not types:
+            continue
+        hit = (
+            any(x in ("exact", "broader") for x in types)
+            or types.count("narrower") >= 2
+        )
+        rows[g["id"]] = {
+            "share": sum(x != "none" for x in types) / len(types),
+            "hit": hit,
+        }
+    if not rows:
+        return None
+    return {
+        "recall": statistics.fmean(r["hit"] for r in rows.values()),
+        "mean_share": statistics.fmean(r["share"] for r in rows.values()),
+        "rows": rows,
+    }
+
+
 def weak_recall(
     gt: dict[str, Any], pa: dict[str, Any], ms: dict[str, set[str]]
 ) -> dict[str, Any]:
     """Of the ground-truth weak links, how many we draw (directly or in two steps) and mark weak.
 
-    A drawn route counts as flagged when any of its links has a lower grade of weak or none.
+    A drawn route counts as flagged when any of its links is weak (see :func:`link_evidence`).
     """
     weak = {(e["source"], e["target"]) for e in pa["edges"] if e["evidence"]["weak"]}
     adj = _adj(pa)
@@ -350,13 +467,13 @@ def weak_recall(
 
 
 def gradient(pa: dict[str, Any]) -> float | None:
-    """Spearman correlation of a link's depth (its target's layer) with its lower grade.
+    """Spearman correlation of a link's depth (its target's layer) with its evidence strength.
 
     Negative means confidence falls towards impact, as in the published theories.
     """
     layer = {n["id"]: n["layer"] for n in pa["nodes"]}
     xs = [DEPTH[layer[e["target"]]] for e in pa["edges"]]
-    ys = [STRENGTH[e["evidence"]["lower_grade"]] for e in pa["edges"]]
+    ys = [e["evidence"]["strength"] for e in pa["edges"]]
     try:
         return statistics.correlation(xs, ys, method="ranked")
     except statistics.StatisticsError:  # fewer than 2 links, or a constant column
@@ -397,7 +514,7 @@ def shape(gt: dict[str, Any], pa: dict[str, Any]) -> dict[str, Any]:
             g_layers[merged] += n
     p_layers: dict[str, int] = defaultdict(int)
     for n in pa["nodes"]:
-        p_layers[n["layer"]] += 1
+        p_layers["outcome" if n["layer"].startswith("outcome") else n["layer"]] += 1
     per_layer = {
         k: (p_layers[k], v, _within(p_layers[k], v)) for k, v in g_layers.items()
     }
@@ -434,6 +551,9 @@ def score(
         "edge_soft": edge_recall(gt, pa, ms, soft=True, weighted=False),
         "edge_strict_w": edge_recall(gt, pa, ms, soft=False, weighted=True),
         "edge_soft_w": edge_recall(gt, pa, ms, soft=True, weighted=True),
+        "edge_route": route_recall(gt, pa, ms, weighted=False),
+        "edge_route_w": route_recall(gt, pa, ms, weighted=True),
+        "containers": container_recall(gt, matches),
         "shape": shape(gt, pa),
         "weak": weak_recall(gt, pa, ms),
         "gradient": gradient(pa),
@@ -761,8 +881,9 @@ class Models:
         user = (
             "PUBLISHED THEORY (the dataset, with its notes on how it was built):\n\n"
             + gt["notes"]
-            + "\n\nGENERATED THEORY (JSON; lower_grade is the lower of the two evidence grades: "
-            "strong, medium, weak or none):\n\n"
+            + "\n\nGENERATED THEORY (JSON; each link's evidence is its verdict: confident, "
+            "not_sure_mixed, not_sure_insufficient or not_confident; or, on older builds, "
+            "lower_grade, the lower of two grades: strong, medium, weak or none):\n\n"
             + json.dumps(generated, indent=1, ensure_ascii=False)
         )
         r = self.ask(
@@ -786,10 +907,76 @@ def _f(x: float | None, pct: bool = False) -> str:
     return f"{x:.0%}" if pct else f"{x:.2f}"
 
 
-def report(label: str, rows: list[dict[str, Any]], facts: dict[str, Any]) -> str:
-    """The markdown report: per case, then a summary table, then run facts."""
+def _oc(s: dict[str, Any]) -> float | None:
+    """Mean box recall over the outcome and impact layers."""
+    oc = [
+        v
+        for k, v in s["recall_by_layer"].items()
+        if k.startswith("outcome") or k == "impact"
+    ]
+    return statistics.fmean(oc) if oc else None
+
+
+def _cont(s: dict[str, Any]) -> float | None:
+    return (s.get("containers") or {}).get("recall")
+
+
+#: The side-by-side rows: label, how to read the number from a scored case.
+COMPARE_ROWS: list[tuple[str, Any]] = [
+    ("Verdict (draft)", lambda r: r["review"]["verdict"]),
+    ("Box recall", lambda r: _f(r["score"]["recall"])),
+    ("Outcome + impact recall", lambda r: _f(_oc(r["score"]))),
+    ("Layer agreement", lambda r: _f(r["score"]["layer_agreement"], True)),
+    (
+        "Link recall strict / soft / route",
+        lambda r: " / ".join(
+            _f(r["score"].get(k)) for k in ("edge_strict", "edge_soft", "edge_route")
+        ),
+    ),
+    ("Route recall, weighted", lambda r: _f(r["score"].get("edge_route_w"))),
+    ("Container recall", lambda r: _f(_cont(r["score"]))),
+    ("Shape score", lambda r: _f(r["score"]["shape"]["score"])),
+    ("Weak-link recall", lambda r: _f(r["score"]["weak"]["recall"])),
+    ("Gradient ρ", lambda r: _f(r["score"]["gradient"])),
+    (
+        "Boxes (scored + failure)",
+        lambda r: (
+            f"{r['score']['shape']['values']['boxes'][0]} + "
+            f"{r['score']['n_failure_boxes']}"
+        ),
+    ),
+    ("App cost USD", lambda r: _f(r.get("app_usd"))),
+]
+
+
+def compare_table(
+    label: str, other: str, rows: list[dict[str, Any]], old: list[dict[str, Any]]
+) -> list[str]:
+    """Per case, this run's numbers next to another run's (scored with today's code)."""
+    out = [
+        f"## Compared with {other}\n",
+        f"Both runs scored with this script's current metrics; `{other}` read from its saved files.\n",
+    ]
+    by_case = {r["case"]: r for r in old}
+    for r in rows:
+        o = by_case.get(r["case"])
+        out.append(f"**{r['case']}**\n\n| Measure | {other} | {label} |\n|---|---|---|")
+        for name, get in COMPARE_ROWS:
+            cell = [get(x) if x and "score" in x else "n/a" for x in (o, r)]
+            out.append(f"| {name} | {cell[0]} | {cell[1]} |")
+        out.append("")
+    return out
+
+
+def report(
+    label: str,
+    rows: list[dict[str, Any]],
+    facts: dict[str, Any],
+    compare: tuple[str, list[dict[str, Any]]] | None = None,
+) -> str:
+    """The markdown report: per case, then a summary table, a comparison, run facts."""
     head = (
-        "| Case | Entry | Run | Node recall | Layer agr. | Edge recall (strict / soft) | Shape score "
+        "| Case | Entry | Run | Node recall | Layer agr. | Edge recall (strict / soft / route) | Shape score "
         "| Assump. recall | Weak-link recall | Gradient ρ | Checklist /10 | Notes |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|\n"
     )
@@ -821,7 +1008,9 @@ def report(label: str, rows: list[dict[str, Any]], facts: dict[str, Any]) -> str
             out.append(f"- **{q}:** {rv['answers'][k]}")
         w = s["weak"]
         notes = (
-            f"weighted edge {_f(s['edge_strict_w'])} / {_f(s['edge_soft_w'])}; "
+            f"weighted edge {_f(s['edge_strict_w'])} / {_f(s['edge_soft_w'])} / "
+            f"{_f(s.get('edge_route_w'))}; container recall {_f(_cont(s))} "
+            f"(mean share matched {_f((s.get('containers') or {}).get('mean_share'))}); "
             f"weak drawn {w['n_drawn']}/{w['n_gt_weak']}, flagged {w['n_flagged']}"
             + (
                 f"; every not_leading flagged: {w['not_leading_all_flagged']}"
@@ -835,7 +1024,8 @@ def report(label: str, rows: list[dict[str, Any]], facts: dict[str, Any]) -> str
             + head
             + (
                 f"| {case} | intervention | 1 | {_f(s['recall'])} | {_f(s['layer_agreement'], True)} "
-                f"| {_f(s['edge_strict'])} / {_f(s['edge_soft'])} | {_f(s['shape']['score'])} | n/a "
+                f"| {_f(s['edge_strict'])} / {_f(s['edge_soft'])} / {_f(s.get('edge_route'))} "
+                f"| {_f(s['shape']['score'])} | n/a "
                 f"| {_f(w['recall'])} | {_f(s['gradient'])} | n/a | {notes} |\n"
             )
         )
@@ -857,25 +1047,45 @@ def report(label: str, rows: list[dict[str, Any]], facts: dict[str, Any]) -> str
             f"plan {r['t_plan_s']} s, run {r['t_run_s']} s; app cost {_f(r.get('app_usd'))} USD; "
             f"scoring {_f(r.get('score_usd'))} USD. Task `{r['task_id']}`.\n"
         )
-        oc = [
-            v
-            for k, v in s["recall_by_layer"].items()
-            if k.startswith("outcome") or k == "impact"
-        ]
         summary.append(
-            f"| {case} | {rv['verdict']} | {_f(s['recall'])} | {_f(statistics.fmean(oc) if oc else None)} "
-            f"| {_f(s['edge_soft'])} | {_f(s['shape']['score'])} | {_f(w['recall'])} | {_f(s['gradient'])} "
+            f"| {case} | {rv['verdict']} | {_f(s['recall'])} | {_f(_oc(s))} "
+            f"| {_f(s['edge_soft'])} | {_f(s.get('edge_route_w'))} | {_f(_cont(s))} "
+            f"| {_f(s['shape']['score'])} | {_f(w['recall'])} | {_f(s['gradient'])} "
             f"| {r.get('t_total_s', '')} | {_f(r.get('app_usd'))} + {_f(r.get('score_usd'))} |"
         )
     out.append("## Summary\n")
     out.append(
-        "| Case | Verdict (draft) | Node recall | Outcome + impact recall | Edge soft | Shape | Weak recall | ρ | Time (s) | Cost USD (app + scoring) |\n"
-        "|---|---|---|---|---|---|---|---|---|---|"
+        "| Case | Verdict (draft) | Node recall | Outcome + impact recall | Edge soft | Route (weighted) "
+        "| Container | Shape | Weak recall | ρ | Time (s) | Cost USD (app + scoring) |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|"
     )
     out += summary
+    if compare:
+        out.append("")
+        out += compare_table(label, compare[0], rows, compare[1])
     out.append("\n## Run facts\n")
     out += [f"- {k}: {v}" for k, v in facts.items()]
     return "\n".join(out) + "\n"
+
+
+def load_scored(d: Path, gt: dict[str, Any]) -> dict[str, Any] | None:
+    """A case's saved run, scored from its saved files (no calls); ``None`` when not run."""
+    if not (d / "run.json").exists():
+        return None
+    rec = load(d / "run.json")
+    rec["app_usd"] = walk_usd(rec)
+    if (
+        rec.get("failure")
+        or not (d / "matches.json").exists()
+        or not (d / "review.json").exists()
+    ):
+        return rec
+    pa = convert(load(d / "toc.json"))
+    save(d / "theory.json", pa)
+    rec["score"] = score(gt, pa, load(d / "matches.json"))
+    rec["review"] = load(d / "review.json")
+    save(d / "score.json", rec["score"])
+    return rec
 
 
 # --- 8. main --------------------------------------------------------------------------
@@ -890,6 +1100,9 @@ def main() -> None:
         default=["epps", "cf_individual", "cf_service", "cf_system"],
     )
     ap.add_argument("--port", type=int, default=8001)
+    ap.add_argument(
+        "--compare", help="another run label to show side by side (read from its files)"
+    )
     ap.add_argument(
         "--note", action="append", default=[], help="a line for the report's run facts"
     )
@@ -934,9 +1147,7 @@ def main() -> None:
                     save(d / "review.json", models.review(gt, pa, toc))
                 rec["score_usd"] = rec.get("score_usd") or models.usd - before
                 save(rec_path, rec)
-                rec["score"] = score(gt, pa, load(d / "matches.json"))
-                rec["review"] = load(d / "review.json")
-                save(d / "score.json", rec["score"])
+                rec = load_scored(d, gt) or rec
             rows.append(rec)
             print(
                 f"{case}: scored; scoring spend so far {models.usd:.3f} USD", flush=True
@@ -961,7 +1172,11 @@ def main() -> None:
         "failures": [f"{r['case']}: {r['failure']}" for r in rows if r.get("failure")]
         or "none",
     }
-    (root / "report.md").write_text(report(args.label, rows, facts))
+    compare = None
+    if args.compare:
+        old = [load_scored(OUT / args.compare / c, load_case(c)) for c in args.cases]
+        compare = (args.compare, [r for r in old if r])
+    (root / "report.md").write_text(report(args.label, rows, facts, compare))
     print(root / "report.md")
 
 
