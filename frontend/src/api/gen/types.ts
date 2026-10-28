@@ -5385,6 +5385,8 @@ export interface components {
              * Format: uuid
              */
             box_id: string;
+            /** Code */
+            code: string | null;
             /** Description */
             description: string | null;
             /** Dosage */
@@ -5393,7 +5395,7 @@ export interface components {
              * Layer
              * @enum {string}
              */
-            layer: "input" | "output" | "outcome" | "impact" | "failure_outcome";
+            layer: "input" | "output" | "outcome_short" | "outcome_long" | "impact" | "failure_outcome";
             /**
              * Origin
              * @enum {string}
@@ -5562,6 +5564,8 @@ export interface components {
             assumption_type: string;
             /** Because Text */
             because_text: string;
+            /** Code */
+            code: string | null;
             /** Conditions */
             conditions: string[];
             /** Critical */

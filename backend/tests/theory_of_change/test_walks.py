@@ -185,7 +185,7 @@ def test_the_draft_walk_writes_a_graph_that_passes_the_structure_checks(
     with engine.connect() as conn:
         graph, rows = store.load_graph(conn, task_id)
         assert check_graph(graph) == []
-        assert len(graph.boxes) == 5 and len(graph.links) == 4 and len(graph.pathways) == 2
+        assert len(graph.boxes) == 6 and len(graph.links) == 5 and len(graph.pathways) == 2
         assert sum(1 for row in rows.links.values() if row.critical) == 1
         assert {row.band for row in rows.band_items} == {"context", "supporting"}
         changed = (
@@ -197,7 +197,7 @@ def test_the_draft_walk_writes_a_graph_that_passes_the_structure_checks(
             .scalars()
             .one()
         )
-        assert changed["step"] == "toc_draft" and len(changed["created"]) == 5 + 4 + 2 + 2
+        assert changed["step"] == "toc_draft" and len(changed["created"]) == 6 + 5 + 2 + 2
 
 
 def test_a_draft_failing_its_checks_is_retried_once_then_fails_the_walk(

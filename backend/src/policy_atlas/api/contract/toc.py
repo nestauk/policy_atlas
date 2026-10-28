@@ -36,7 +36,11 @@ class TocBoxOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     box_id: uuid.UUID
-    layer: Literal["input", "output", "outcome", "impact", "failure_outcome"]
+    layer: Literal[
+        "input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"
+    ]
+    #: Short stable label, e.g. ``S3`` (C35); null only on rows written before codes.
+    code: str | None
     text: str
     dosage: str | None
     result_criteria: TocResultCriteriaOut
@@ -61,6 +65,8 @@ class TocLinkOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     link_id: uuid.UUID
+    #: Short stable label, e.g. ``#5`` (C35); null only on rows written before codes.
+    code: str | None
     source_box_id: uuid.UUID
     target_box_id: uuid.UUID
     sentence: str

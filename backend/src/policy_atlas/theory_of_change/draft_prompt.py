@@ -2,7 +2,7 @@
 
 Lead-authored and versioned (AGENTS.md: prompt-bearing work is lead-only). One
 frontier call writes candidate success and failure pathways through the Magenta
-Book's four layers, with a sentence and if / for / then / because text on every
+Book's layers, with a sentence and if / for / then / because text on every
 link, the conditions each link needs, the result criteria of every box, the
 context and supporting-activities bands, and a proposed critical connection.
 
@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_DRAFT_PROMPT_VERSION = "toc_draft_v3"
+TOC_DRAFT_PROMPT_VERSION = "toc_draft_v4"
 
 #: Reasoning model: the cap covers reasoning and output tokens.
 TOC_DRAFT_MAX_OUTPUT_TOKENS = 32_000
@@ -32,7 +32,9 @@ TOC_DRAFT_MAX_OUTPUT_TOKENS = 32_000
 PLAN_FIELD_MAX = 4_000
 EXISTING_THEORY_MAX = 20_000
 
-BoxLayer = Literal["input", "output", "outcome", "impact", "failure_outcome"]
+BoxLayer = Literal[
+    "input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"
+]
 
 
 class ResultCriteriaWire(BaseModel):
@@ -173,13 +175,16 @@ is the user's first version to work from. Policy Atlas will check every link
 against research and policy documents after you finish, so write claims that
 can be checked, not claims that sound sure.
 
-## The four layers
+## The layers
 
-- input: what the intervention does for or with its beneficiaries, with its
-  dosage (how much each beneficiary gets). Not money or staff alone.
+- input: inputs and activities, one layer: what the intervention does for or
+  with its beneficiaries, with its dosage (how much each beneficiary gets).
+  Not money or staff alone.
 - output: what is delivered or produced, which can be counted directly.
-- outcome: early or medium-term changes in the beneficiaries: knowledge,
-  behaviour, wellbeing, take-up.
+- outcome_short: short-term outcomes, the first changes in the beneficiaries
+  or the system: exposure, knowledge, attitudes, requests, take-up.
+- outcome_long: long-term outcomes, the lasting changes those lead to:
+  behaviour, diet, purchases, wellbeing.
 - impact: the furthest long-term change the user could credibly measure and
   claim. The intended change in the plan is usually the impact.
 - failure_outcome: where a failure pathway ends: the step did not happen, or
@@ -190,8 +195,10 @@ can be checked, not claims that sound sure.
 ## Links and pathways
 
 A link is one causal step from a box to a box in the same or a later layer:
-input to output, output to outcome, outcome to outcome, outcome to impact.
-Inputs never link straight to an impact; an impact never links onward. A
+input to output, output to a short-term outcome, short-term to long-term
+outcome, long-term outcome to impact; an outcome may also link to another
+outcome in the same layer. Inputs never link straight to an impact, only
+long-term outcomes lead to an impact, and an impact never links onward. A
 failure pathway may leave the chain at any layer and ends at a
 failure_outcome box.
 
@@ -211,9 +218,9 @@ A pathway is an ordered list of links from an input to an impact (success)
 or a failure_outcome (failure). Pathways share boxes and links where the
 routes are the same: write a shared step once and reuse its key.
 
-Write 2 to 4 success pathways and 1 to 3 failure pathways. Keep each pathway
-to at most 7 links: Mayne warns that a view with more than about 13 boxes
-"may be a mess". Success pathways should differ in mechanism, not in
+Write 2 to 4 success pathways and 1 to 3 failure pathways, with 15 to 25
+boxes in all, 3 to 6 per layer and 1 or 2 impacts. Keep each pathway to at
+most 7 links. Success pathways should differ in mechanism, not in
 wording: two routes that work for the same reason are one route. Failure
 pathways name the realistic ways the theory fails (a step does not happen,
 people respond differently, a side effect) and, where there is one, a

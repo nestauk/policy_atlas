@@ -183,6 +183,7 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
         links.append(
             TocLinkOut(
                 link_id=row.link_id,
+                code=row.code,
                 source_box_id=row.source_box_id,
                 target_box_id=row.target_box_id,
                 sentence=row.sentence or "",
@@ -239,6 +240,7 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
             TocBoxOut(
                 box_id=row.box_id,
                 layer=row.layer,
+                code=row.code,
                 text=row.text,
                 dosage=row.dosage,
                 result_criteria=TocResultCriteriaOut(

@@ -98,7 +98,7 @@ def test_a_toc_walk_never_pauses() -> None:
 
 
 def test_the_80_link_cap_takes_kept_pathway_links_first() -> None:
-    boxes = {f"b{i}": Box(key=f"b{i}", layer="outcome", text=f"box {i}") for i in range(100)}
+    boxes = {f"b{i}": Box(key=f"b{i}", layer="outcome_short", text=f"box {i}") for i in range(100)}
     links = {
         f"l{i}": Link(key=f"l{i}", source=f"b{i}", target=f"b{i + 1}", conditions=["c"])
         for i in range(90)
@@ -123,7 +123,7 @@ def test_the_80_link_cap_takes_kept_pathway_links_first() -> None:
 
 
 def test_neighbour_lines_name_the_steps_before_and_after() -> None:
-    boxes = {k: Box(key=k, layer="outcome", text=k) for k in ("a", "b", "c", "d")}
+    boxes = {k: Box(key=k, layer="outcome_short", text=k) for k in ("a", "b", "c", "d")}
     links = {
         "ab": Link(key="ab", source="a", target="b", sentence="A leads to B."),
         "bc": Link(key="bc", source="b", target="c", sentence="B leads to C."),
@@ -142,7 +142,7 @@ def test_each_judge_call_carries_its_neighbouring_steps(
     backend = StubTocBackend()
     _run(engine, cleanup, backend)
     sent = {call["neighbours"] for call in backend.inputs["judge"]}
-    # Stub draft: l1 b1->b2, l2 b2->b3, l3 b3->b4, l4 b2->b5.
+    # Stub draft: l1 b1->b2, l2 b2->b3, l3 b3->b6, l4 b2->b5, l5 b6->b4.
     assert "Before: Step l1 leads on.\nAfter: Step l3 leads on." in sent  # l2
     assert "After: Step l2 leads on.\nAfter: Step l4 leads on." in sent  # l1
 
@@ -172,7 +172,7 @@ def _grades(pairs: dict[str, tuple[Grade, Grade]]) -> dict[str, tuple[GradeResul
 
 
 def test_the_critical_connection_follows_the_c6_rule() -> None:
-    boxes = {k: Box(key=k, layer="outcome", text=k) for k in ("a", "b", "c", "d")}
+    boxes = {k: Box(key=k, layer="outcome_short", text=k) for k in ("a", "b", "c", "d")}
     links = {
         "l1": Link(key="l1", source="a", target="b"),
         "l2": Link(key="l2", source="b", target="c"),
@@ -254,11 +254,11 @@ def test_each_link_reads_at_most_k_documents_of_its_own_search(
     # Each link read only documents its own search found.
     assert len({tss for _, tss in per_link}) == len(per_link)
     stage = _summary(engine, task_id, "toc_item_searches")
-    assert stage["total"] == 4 and stage["failed"] == 0
+    assert stage["total"] == 5 and stage["failed"] == 0
     # toc_select (C27): 10 picked per link screened in, the rest screened out, no model.
     picked = _summary(engine, task_id, "toc_select")
-    assert picked["relevant"] == 4 * PICK_N
-    assert picked["not_relevant"] == picked["screened"] - 4 * PICK_N > 0
+    assert picked["relevant"] == 5 * PICK_N
+    assert picked["not_relevant"] == picked["screened"] - 5 * PICK_N > 0
     with engine.connect() as conn:
         flags = {
             (payload["status"], payload["aggregation_flags"][0])
@@ -297,11 +297,11 @@ class _Discovers(StubTocBackend):
         proposal = ProposalWire(
             kind="success",
             label="Found route",
-            route=[keys["input"], "n1", keys["impact"]],
-            new_boxes=[NewBoxWire(key="n1", layer="outcome", text="Families cook at home")],
+            route=[keys["input"], keys["output"], "n1", keys["outcome_long"], keys["impact"]],
+            new_boxes=[NewBoxWire(key="n1", layer="outcome_short", text="Families cook at home")],
             new_links=[
-                NewLinkWire(source=keys["input"], target="n1", **link),
-                NewLinkWire(source="n1", target=keys["impact"], **link),
+                NewLinkWire(source=keys["output"], target="n1", **link),
+                NewLinkWire(source="n1", target=keys["outcome_long"], **link),
             ],
             evidence=[EvidenceWire(document_id=str(doc["id"]), quote=quote)],
         )
@@ -369,16 +369,16 @@ def _joined(paths: int, *, from_proposals: list[str]) -> Any:
         route = list(first["route"])
         link = {k: v for k, v in first["new_links"][0].items() if k not in ("source", "target")}
         return ConsolidateResponse(
-            new_boxes=[NewBoxWire(key="n1", layer="outcome", text="Families cook at home")],
+            new_boxes=[NewBoxWire(key="n1", layer="outcome_short", text="Families cook at home")],
             pathways=[
                 ConsolidatedPathwayWire(
                     kind="success",
                     label=f"Joined route {i}",
                     from_proposals=from_proposals,
-                    route=[route[0], "n1", route[-1]],
+                    route=[*route[:2], "n1", *route[-2:]],
                     new_links=[
-                        NewLinkWire(source=route[0], target="n1", **link),
-                        NewLinkWire(source="n1", target=route[-1], **link),
+                        NewLinkWire(source=route[1], target="n1", **link),
+                        NewLinkWire(source="n1", target=route[-2], **link),
                     ],
                 )
                 for i in range(paths)
@@ -421,7 +421,7 @@ def test_repeated_proposals_are_joined_into_one_pathway_and_one_box(
     # Consolidate saw both proposals, each with its own key for the same box.
     [call] = backend.inputs["consolidate"]
     assert [p["id"] for p in call["proposals"]] == ["q1", "q2"]
-    assert {p["route"][1] for p in call["proposals"]} == {"q1n1", "q2n1"}
+    assert {p["route"][2] for p in call["proposals"]} == {"q1n1", "q2n1"}
     assert _found(engine, task_id) == (["Families cook at home"], ["Joined route 0"])
 
 
@@ -540,7 +540,9 @@ def test_a_condition_added_by_choose_leaves_the_link_checked(
 def _many_pathways() -> Any:
     draft = stub_draft({})
     success = [
-        DraftPathwayWire(key=f"s{i}", kind="success", label=f"Route {i}", links=["l1", "l2", "l3"])
+        DraftPathwayWire(
+            key=f"s{i}", kind="success", label=f"Route {i}", links=["l1", "l2", "l3", "l5"]
+        )
         for i in range(8)
     ]
     failure = [
@@ -605,7 +607,7 @@ def _two_success_draft() -> Any:
             "pathways": [
                 *draft.pathways,
                 DraftPathwayWire(
-                    key="p3", kind="success", label="Second route", links=["l1", "l2", "l3"]
+                    key="p3", kind="success", label="Second route", links=["l1", "l2", "l3", "l5"]
                 ),
             ]
         }

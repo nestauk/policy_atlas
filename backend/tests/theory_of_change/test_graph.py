@@ -9,6 +9,7 @@ from policy_atlas.theory_of_change.graph import (
     check_graph,
     item_hash,
     item_text,
+    link_problem,
     link_state,
     trim_conditions,
 )
@@ -18,17 +19,22 @@ def _graph() -> Graph:
     boxes = {
         "b1": Box("b1", "input", "Ban adverts before 9pm"),
         "b2": Box("b2", "output", "Fewer adverts seen"),
-        "b3": Box("b3", "outcome", "Fewer requests for snacks"),
+        "b3": Box("b3", "outcome_short", "Fewer requests for snacks"),
         "b4": Box("b4", "impact", "Fewer children with obesity"),
         "b5": Box("b5", "failure_outcome", "Spend moves online"),
+        "b7": Box("b7", "outcome_long", "Children eat less sugar"),
     }
     links = {
         "l1": Link("l1", "b1", "b2", conditions=["Rules are enforced"]),
         "l2": Link("l2", "b2", "b3", conditions=["Adverts drive requests"]),
-        "l3": Link("l3", "b3", "b4", conditions=["Parents act on fewer requests"]),
+        "l3": Link("l3", "b3", "b7", conditions=["Parents act on fewer requests"]),
         "l4": Link("l4", "b1", "b5", conditions=["Online is not covered"]),
+        "l6": Link("l6", "b7", "b4", conditions=["Less sugar slows weight gain"]),
     }
-    pathways = [Pathway("p1", "success", ["l1", "l2", "l3"]), Pathway("p2", "failure", ["l4"])]
+    pathways = [
+        Pathway("p1", "success", ["l1", "l2", "l3", "l6"]),
+        Pathway("p2", "failure", ["l4"]),
+    ]
     return Graph(boxes, links, pathways)
 
 
@@ -41,7 +47,7 @@ def test_structure_problems_are_named() -> None:
     graph.links["l2"].conditions = []  # no conditions is allowed
     graph.links["l3"].conditions = ["a", "b", "c"]
     graph.links["l4"].conditions = ["rules  are ENFORCED"]  # l1's, reworded only in case
-    graph.boxes["b6"] = Box("b6", "outcome", "Orphan")
+    graph.boxes["b6"] = Box("b6", "outcome_short", "Orphan")
     graph.links["l5"] = Link("l5", "b1", "b4", conditions=["x"])
     graph.pathways[0].links = ["l1", "l3"]
     graph.pathways[1].status = "set_aside"
@@ -68,15 +74,33 @@ def test_backwards_and_same_layer_steps() -> None:
     graph.links["l9"] = Link("l9", "b3", "b2", conditions=["x"])
     graph.links["l8"] = Link("l8", "b2", "b2", conditions=["x"])
     problems = check_graph(graph)
-    assert any("goes backwards" in p for p in problems)
-    assert any("inside the output layer" in p for p in problems)
+    assert "step l9: a step cannot lead from outcome short to output" in problems
+    assert "step l8: a step cannot lead from output to output" in problems
+
+
+def test_only_the_c34_steps_are_allowed() -> None:
+    allowed = {
+        ("input", "output"),
+        ("output", "outcome_short"),
+        ("outcome_short", "outcome_short"),
+        ("outcome_short", "outcome_long"),
+        ("outcome_long", "outcome_long"),
+        ("outcome_long", "impact"),
+    }
+    layers = ["input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"]
+    for source in layers:
+        for target in layers:
+            ok = link_problem(source, target) is None
+            ends = source in ("impact", "failure_outcome")
+            assert ok == ((source, target) in allowed or (target == "failure_outcome" and not ends))
 
 
 def test_assumption_types() -> None:
     assert assumption_type("input", "output") == "delivery"
-    assert assumption_type("output", "outcome") == "take-up"
-    assert assumption_type("outcome", "outcome") == "behaviour change"
-    assert assumption_type("outcome", "impact") == "benefits and side effects"
+    assert assumption_type("output", "outcome_short") == "take-up"
+    assert assumption_type("outcome_short", "outcome_long") == "behaviour change"
+    assert assumption_type("outcome_long", "outcome_long") == "behaviour change"
+    assert assumption_type("outcome_long", "impact") == "benefits and side effects"
     assert assumption_type("output", "failure_outcome") == "if it goes wrong"
 
 

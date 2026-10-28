@@ -57,8 +57,8 @@ def test_each_link_with_more_than_ten_documents_gets_one_pick_call(
     backend = StubTocBackend()
     task_id = _run(engine, cleanup, backend, per_call=12)
     summary = _summary(engine, task_id, "toc_select")
-    assert summary["pick_calls"] == 4 and summary["failed_pick_calls"] == 0
-    assert summary["relevant"] == 4 * PICK_N
+    assert summary["pick_calls"] == 5 and summary["failed_pick_calls"] == 0
+    assert summary["relevant"] == 5 * PICK_N
     shown = backend.inputs["pick"][0]["candidates"]
     assert [c["id"] for c in shown[:3]] == ["d1", "d2", "d3"]
     assert "usage_totals" in summary
@@ -67,24 +67,24 @@ def test_each_link_with_more_than_ten_documents_gets_one_pick_call(
 def test_a_failed_pick_call_falls_back_to_round_robin(
     engine: Engine, cleanup: list[uuid.UUID]
 ) -> None:
-    backend = StubTocBackend({"pick": [RuntimeError("down")] * 8})
+    backend = StubTocBackend({"pick": [RuntimeError("down")] * 10})
     task_id = _run(engine, cleanup, backend, per_call=12)
     summary = _summary(engine, task_id, "toc_select")
-    assert summary["failed_pick_calls"] == 4
+    assert summary["failed_pick_calls"] == 5
     # Round-robin picks 10 per link; with the shared pool two links may pick one document.
     assert all(len(ids) == PICK_N for ids in _picks(engine, task_id).values())
-    assert summary["relevant"] <= 4 * PICK_N
+    assert summary["relevant"] <= 5 * PICK_N
 
 
 # --- box folds (C29) --------------------------------------------------------------
 
 
-def _fold_draft(*, user_wrote_b6: bool = False, self_loop: bool = False) -> Any:
-    """The stub draft plus b6, a second outcome box that repeats b3 ("Behaviour changes")."""
+def _fold_draft(*, user_wrote_b7: bool = False, self_loop: bool = False) -> Any:
+    """The stub draft plus b7, a short-term outcome box repeating b3 ("Behaviour changes")."""
     draft = stub_draft({})
     b3 = next(box for box in draft.boxes if box.key == "b3")
-    b6 = b3.model_copy(
-        update={"key": "b6", "text": "Behaviour shifts", "from_user_theory": user_wrote_b6}
+    b7 = b3.model_copy(
+        update={"key": "b7", "text": "Behaviour shifts", "from_user_theory": user_wrote_b7}
     )
     l2 = next(link for link in draft.links if link.key == "l2")
 
@@ -93,12 +93,12 @@ def _fold_draft(*, user_wrote_b6: bool = False, self_loop: bool = False) -> Any:
             update={"key": key, "source": source, "target": target, "sentence": f"Step {key}."}
         )
 
-    links = [*draft.links, link("l5", "b2", "b6"), link("l6", "b6", "b4")]
+    links = [*draft.links, link("l6", "b2", "b7"), link("l7", "b7", "b6")]
     if self_loop:
-        links.append(link("l7", "b6", "b3"))
+        links.append(link("l8", "b7", "b3"))
     return draft.model_copy(
         update={
-            "boxes": [*draft.boxes, b6],
+            "boxes": [*draft.boxes, b7],
             "links": links,
             "pathways": [
                 *draft.pathways,
@@ -106,7 +106,7 @@ def _fold_draft(*, user_wrote_b6: bool = False, self_loop: bool = False) -> Any:
                     key="p3",
                     kind="success",
                     label="Second route",
-                    links=["l1", "l5", "l7", "l3"] if self_loop else ["l1", "l5", "l6"],
+                    links=["l1", "l6", "l8", "l3", "l5"] if self_loop else ["l1", "l6", "l7", "l5"],
                 ),
             ],
         }
@@ -129,7 +129,7 @@ def test_a_fold_repoints_links_and_joins_a_doubled_link(
     task_id, ids = _graph(engine, cleanup, _fold_draft(self_loop=True))
     with engine.begin() as conn:
         log_ = store.ChangeLog()
-        assert fold_box(conn, log_, task_id=task_id, box=str(ids["b6"]), into=str(ids["b3"]))
+        assert fold_box(conn, log_, task_id=task_id, box=str(ids["b7"]), into=str(ids["b3"]))
         boxes = set(
             conn.execute(select(toc_box.c.box_id).where(toc_box.c.task_id == task_id)).scalars()
         )
@@ -142,18 +142,51 @@ def test_a_fold_repoints_links_and_joins_a_doubled_link(
             .where(toc_pathway_link.c.task_id == task_id)
             .order_by(toc_pathway_link.c.pathway_id, toc_pathway_link.c.position)
         ).all()
-    assert ids["b6"] not in boxes
-    assert all(ids["b6"] not in pair for pair in links.values())
-    # b2→b6 became b2→b3, which l2 already was: the older link, l2, is kept.
-    assert ids["l5"] not in links and links[ids["l2"]] == (ids["b2"], ids["b3"])
-    # b6→b3 became b3→b3: dropped from its pathway and deleted.
-    assert ids["l7"] not in links
+    assert ids["b7"] not in boxes
+    assert all(ids["b7"] not in pair for pair in links.values())
+    # b2→b7 became b2→b3, which l2 already was: the older link, l2, is kept.
+    assert ids["l6"] not in links and links[ids["l2"]] == (ids["b2"], ids["b3"])
+    # b7→b3 became b3→b3: dropped from its pathway and deleted.
+    assert ids["l8"] not in links
     # One link per pair; every pathway step points at a link that exists.
     assert len(set(links.values())) == len(links)
     assert all(link_id in links for _, link_id in steps)
     p3 = [link_id for pid, link_id in steps if pid == ids["p3"]]
-    assert p3 == [ids["l1"], ids["l2"], ids["l3"]]
+    assert p3 == [ids["l1"], ids["l2"], ids["l3"], ids["l5"]]
     assert any(entry.get("deleted") for entry in log_.before)
+
+
+def test_codes_follow_the_layer_and_a_deleted_code_is_never_reused(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    task_id, ids = _graph(engine, cleanup, _fold_draft())
+    with engine.begin() as conn:
+        codes = {
+            row.box_id: row.code
+            for row in conn.execute(select(toc_box).where(toc_box.c.task_id == task_id))
+        }
+        assert {key: codes[ids[key]] for key in ("b1", "b2", "b3", "b4", "b5", "b6", "b7")} == {
+            "b1": "A1", "b2": "P1", "b3": "S1", "b4": "I1", "b5": "F1", "b6": "L1", "b7": "S2"
+        }
+        link_codes = conn.execute(
+            select(toc_link.c.code).where(toc_link.c.task_id == task_id)
+        ).scalars()
+        assert sorted(link_codes) == sorted(f"#{n}" for n in range(1, 8))
+        # Fold away S2 (the highest S) and record the step: a new box gets S3, not S2.
+        log_ = store.ChangeLog()
+        assert fold_box(conn, log_, task_id=task_id, box=str(ids["b7"]), into=str(ids["b3"]))
+        store.record(conn, task_id=task_id, run_id=None, step="toc_merge", log=log_)
+        new_box = uuid.uuid4()
+        store.insert(
+            conn,
+            store.ChangeLog(),
+            toc_box,
+            {"box_id": new_box, "task_id": task_id, "layer": "outcome_short", "text": "New",
+             "result_criteria": {}, "origin": "user"},
+        )
+        assert conn.execute(
+            select(toc_box.c.code).where(toc_box.c.box_id == new_box)
+        ).scalar_one() == "S3"
 
 
 def test_a_fold_keeps_the_user_edited_copy_of_a_doubled_link(
@@ -162,46 +195,46 @@ def test_a_fold_keeps_the_user_edited_copy_of_a_doubled_link(
     task_id, ids = _graph(engine, cleanup, _fold_draft())
     with engine.begin() as conn:
         conn.execute(
-            toc_link.update().where(toc_link.c.link_id == ids["l6"]).values(user_edited=True)
+            toc_link.update().where(toc_link.c.link_id == ids["l7"]).values(user_edited=True)
         )
         assert fold_box(
-            conn, store.ChangeLog(), task_id=task_id, box=str(ids["b6"]), into=str(ids["b3"])
+            conn, store.ChangeLog(), task_id=task_id, box=str(ids["b7"]), into=str(ids["b3"])
         )
         links = {
             row.link_id: (row.source_box_id, row.target_box_id)
             for row in conn.execute(select(toc_link).where(toc_link.c.task_id == task_id))
         }
-    # b6→b4 became b3→b4, as l3 is: the user-edited l6 is kept, though newer.
-    assert ids["l3"] not in links and links[ids["l6"]] == (ids["b3"], ids["b4"])
+    # b7→b6 became b3→b6, as l3 is: the user-edited l7 is kept, though newer.
+    assert ids["l3"] not in links and links[ids["l7"]] == (ids["b3"], ids["b6"])
 
 
 def test_a_fold_across_layers_or_from_a_user_box_is_refused(
     engine: Engine, cleanup: list[uuid.UUID]
 ) -> None:
-    task_id, ids = _graph(engine, cleanup, _fold_draft(user_wrote_b6=True))
+    task_id, ids = _graph(engine, cleanup, _fold_draft(user_wrote_b7=True))
     with engine.begin() as conn:
         _, rows = store.load_graph(conn, task_id)
-        b = {key: str(ids[key]) for key in ("b1", "b3", "b4", "b6")}
+        b = {key: str(ids[key]) for key in ("b1", "b3", "b4", "b7")}
         assert fold_problem(rows, b["b3"], b["b4"]) == "the boxes are in different layers"
         assert fold_problem(rows, b["b3"], b["b3"]) == "it is the same box"
-        assert fold_problem(rows, b["b6"], b["b3"]) is not None  # user box into a drafted one
-        assert fold_problem(rows, b["b3"], b["b6"]) is None  # the other way is fine
-        assert not fold_box(conn, store.ChangeLog(), task_id=task_id, box=b["b6"], into=b["b3"])
+        assert fold_problem(rows, b["b7"], b["b3"]) is not None  # user box into a drafted one
+        assert fold_problem(rows, b["b3"], b["b7"]) is None  # the other way is fine
+        assert not fold_box(conn, store.ChangeLog(), task_id=task_id, box=b["b7"], into=b["b3"])
         assert not fold_box(conn, store.ChangeLog(), task_id=task_id, box=b["b1"], into=b["b4"])
         remaining = set(
             conn.execute(select(toc_box.c.box_id).where(toc_box.c.task_id == task_id)).scalars()
         )
-    assert ids["b6"] in remaining and ids["b1"] in remaining
+    assert ids["b7"] in remaining and ids["b1"] in remaining
 
 
 def test_merge_folds_boxes_first_and_the_thread_lists_it(
     engine: Engine, cleanup: list[uuid.UUID]
 ) -> None:
-    merge = MergeResponse(box_merges=[BoxMergeWire(box="b6", into="b3")], decisions=[])
+    merge = MergeResponse(box_merges=[BoxMergeWire(box="b7", into="b3")], decisions=[])
     backend = StubTocBackend({"draft": [_fold_draft()], "merge": [merge]})
     task_id = _run(engine, cleanup, backend)
     sent = backend.inputs["merge"][0]["boxes"]
-    assert {box["key"] for box in sent} >= {"b3", "b6"}
+    assert {box["key"] for box in sent} >= {"b3", "b7"}
     assert _summary(engine, task_id, "toc_merge")["box_folds"] == 1
     assert "Merged box “Behaviour shifts” into “Behaviour changes”" in _replies(engine, task_id)[-1]
 
@@ -306,7 +339,7 @@ def test_a_link_can_pick_and_judge_a_study_another_link_found(
     from policy_atlas.core.schema import toc_item_evidence
 
     task_id = _run(engine, cleanup, _PicksTheShared(), per_call=12)
-    assert _summary(engine, task_id, "toc_select")["shared_candidates"] == 4 * PICK_N
+    assert _summary(engine, task_id, "toc_select")["shared_candidates"] == 5 * PICK_N
     picks = _picks(engine, task_id)
     with engine.connect() as conn:
         walk_id = conn.execute(

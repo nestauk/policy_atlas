@@ -17,16 +17,18 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Literal
 
-Layer = Literal["input", "output", "outcome", "impact", "failure_outcome"]
+Layer = Literal[
+    "input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"
+]
 LinkState = Literal["unchecked", "checking", "checked", "pending", "kept", "no_change"]
 
-#: Layer order for the "layers in order" check. A failure outcome ends a route.
-LAYER_RANK: dict[str, int] = {
-    "input": 0,
-    "output": 1,
-    "outcome": 2,
-    "impact": 3,
-    "failure_outcome": 4,
+#: The layers a step may lead to from each layer (C34). Any of these may also
+#: lead to a failure outcome; nothing leads on from an impact or a failure outcome.
+NEXT_LAYERS: dict[str, frozenset[str]] = {
+    "input": frozenset({"output"}),
+    "output": frozenset({"outcome_short"}),
+    "outcome_short": frozenset({"outcome_short", "outcome_long"}),
+    "outcome_long": frozenset({"outcome_long", "impact"}),
 }
 
 #: The limits on kept pathways (C6).
@@ -83,24 +85,23 @@ class Graph:
 def link_problem(source_layer: str, target_layer: str) -> str | None:
     """Return why a step between two layers is not allowed, or ``None``.
 
-    A step goes to the same or a later layer: input to output, output to
-    outcome, outcome to outcome, outcome to impact. Same-layer steps are
-    allowed between outcomes only; an input never leads straight to an impact;
-    nothing leads on from an impact or a failure outcome.
+    Allowed (C34): input to output; output to short-term outcome; short-term
+    to short-term or long-term outcome; long-term to long-term outcome or
+    impact; and any of these to a failure outcome. So an input never leads
+    straight to an impact, and nothing leads on from an impact or a failure
+    outcome.
     """
-    if source_layer in ("impact", "failure_outcome"):
+    allowed = NEXT_LAYERS.get(source_layer)
+    if allowed is None:
         return f"a step cannot start at {source_layer.replace('_', ' ')}"
-    if target_layer == "input":
-        return "a step cannot lead to an input"
-    if target_layer == "failure_outcome":
+    if target_layer == "failure_outcome" or target_layer in allowed:
         return None
-    if LAYER_RANK[target_layer] < LAYER_RANK[source_layer]:
-        return f"a step goes backwards, {source_layer} to {target_layer}"
-    if source_layer == target_layer and source_layer != "outcome":
-        return f"a step stays inside the {source_layer} layer"
     if source_layer == "input" and target_layer == "impact":
         return "an input cannot lead straight to an impact"
-    return None
+    return (
+        f"a step cannot lead from {source_layer.replace('_', ' ')}"
+        f" to {target_layer.replace('_', ' ')}"
+    )
 
 
 def pathway_problem(graph: Graph, pathway: Pathway) -> str | None:
@@ -191,7 +192,7 @@ def assumption_type(source_layer: str, target_layer: str) -> str:
         return "delivery"
     if target_layer == "impact":
         return "benefits and side effects"
-    if source_layer == "outcome":
+    if source_layer in ("outcome_short", "outcome_long"):
         return "behaviour change"
     return "take-up"
 

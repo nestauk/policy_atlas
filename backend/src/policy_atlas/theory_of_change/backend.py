@@ -366,11 +366,18 @@ def stub_draft(plan: dict[str, object]) -> DraftResponse:
     boxes = [
         ("b1", "input", f"Deliver {intervention}"[:120]),
         ("b2", "output", "The intervention reaches its population"),
-        ("b3", "outcome", "Behaviour changes"),
+        ("b3", "outcome_short", "Behaviour changes"),
         ("b4", "impact", change[:120]),
         ("b5", "failure_outcome", "Take-up stays low"),
+        ("b6", "outcome_long", "The new behaviour lasts"),
     ]
-    links = [("l1", "b1", "b2"), ("l2", "b2", "b3"), ("l3", "b3", "b4"), ("l4", "b2", "b5")]
+    links = [
+        ("l1", "b1", "b2"),
+        ("l2", "b2", "b3"),
+        ("l3", "b3", "b6"),
+        ("l4", "b2", "b5"),
+        ("l5", "b6", "b4"),
+    ]
     return DraftResponse(
         boxes=[
             DraftBoxWire(
@@ -402,7 +409,7 @@ def stub_draft(plan: dict[str, object]) -> DraftResponse:
         ],
         pathways=[
             DraftPathwayWire(
-                key="p1", kind="success", label="Main route", links=["l1", "l2", "l3"]
+                key="p1", kind="success", label="Main route", links=["l1", "l2", "l3", "l5"]
             ),
             DraftPathwayWire(key="p2", kind="failure", label="Low take-up", links=["l1", "l4"]),
         ],

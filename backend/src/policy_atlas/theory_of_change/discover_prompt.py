@@ -21,7 +21,7 @@ from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 from policy_atlas.theory_of_change.draft_prompt import BoxLayer
 
-TOC_DISCOVER_PROMPT_VERSION = "toc_discover_v3"
+TOC_DISCOVER_PROMPT_VERSION = "toc_discover_v4"
 
 TOC_DISCOVER_MAX_OUTPUT_TOKENS = 12_000
 
@@ -111,7 +111,8 @@ class DiscoverResponse(BaseModel):
 TOC_DISCOVER_SYSTEM_PROMPT = """\
 You read research and policy documents for Policy Atlas, a tool for UK
 policy makers, to find what a draft theory of change is missing. The theory
-is a causal chain through four layers (input, output, outcome, impact), with
+is a causal chain through the Magenta Book layers (input: inputs and activities;
+output; outcome_short; outcome_long; impact), with
 failure pathways that end at a failure_outcome.
 
 Look for routes the documents describe that the theory does not have:
@@ -210,7 +211,7 @@ def build_discover_messages(
 
 # --- consolidate: one call over every batch's proposals ---------------------------
 
-TOC_CONSOLIDATE_PROMPT_VERSION = "toc_consolidate_v2"
+TOC_CONSOLIDATE_PROMPT_VERSION = "toc_consolidate_v3"
 TOC_CONSOLIDATE_MAX_OUTPUT_TOKENS = 12_000
 
 #: New pathways one check may add, before the 6 + 3 limit on kept pathways.

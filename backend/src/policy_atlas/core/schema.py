@@ -1763,6 +1763,8 @@ toc_box = Table(
     Column("box_id", UUID(as_uuid=True), primary_key=True),
     Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("layer", Text, nullable=False),
+    # Short stable label, e.g. ``S3`` (C35); set by ``theory_of_change.store.insert``.
+    Column("code", Text, nullable=True),
     Column("text", Text, nullable=False),
     Column("dosage", Text, nullable=True),
     Column("result_criteria", JSONB, nullable=False),
@@ -1775,7 +1777,8 @@ toc_box = Table(
     *_toc_common(),
     UniqueConstraint("box_id", "task_id", name="uq_toc_box_id_task"),
     CheckConstraint(
-        "layer IN ('input', 'output', 'outcome', 'impact', 'failure_outcome')",
+        "layer IN ('input', 'output', 'outcome_short', 'outcome_long', 'impact',"
+        " 'failure_outcome')",
         name="ck_toc_box_layer",
     ),
     CheckConstraint(f"origin IN ({_TOC_ORIGINS_SQL})", name="ck_toc_box_origin"),
@@ -1789,6 +1792,8 @@ toc_link = Table(
     Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("source_box_id", UUID(as_uuid=True), nullable=False),
     Column("target_box_id", UUID(as_uuid=True), nullable=False),
+    # Short stable label, e.g. ``#5`` (C35); set by ``theory_of_change.store.insert``.
+    Column("code", Text, nullable=True),
     Column("if_text", Text, nullable=False),
     Column("for_text", Text, nullable=False),
     Column("then_text", Text, nullable=False),

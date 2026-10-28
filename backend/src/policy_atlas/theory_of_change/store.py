@@ -20,6 +20,7 @@ from sqlalchemy.engine import Connection, Row
 
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
+    event_log,
     toc_band_item,
     toc_box,
     toc_link,
@@ -146,8 +147,64 @@ def link_from_row(row: Row[Any]) -> Link:
     )
 
 
+#: The letter that starts a box's code, by layer (C35). Links use ``#``.
+CODE_PREFIX: dict[str, str] = {
+    "input": "A",
+    "output": "P",
+    "outcome_short": "S",
+    "outcome_long": "L",
+    "impact": "I",
+    "failure_outcome": "F",
+}
+
+
+def next_code(
+    conn: Connection, log: ChangeLog, table: Table, task_id: uuid.UUID, prefix: str
+) -> str:
+    """The next unused code for a prefix in one task, e.g. ``S4`` or ``#12`` (C35).
+
+    A code is never reused, even after its row is deleted (an Undo may bring
+    the row back). So the number is one more than the highest ever used: on
+    live rows, on rows deleted by earlier steps (their before-states sit in
+    ``toc.changed`` events) and on rows this step has deleted so far.
+
+    Args:
+        conn: Open connection.
+        log: The current step's change log.
+        table: ``toc_box`` or ``toc_link``.
+        task_id: The task.
+        prefix: A :data:`CODE_PREFIX` letter, or ``#`` for links.
+
+    Returns:
+        The code.
+    """
+    used = list(conn.execute(select(table.c.code).where(table.c.task_id == task_id)).scalars())
+    befores = [
+        entry
+        for payload in conn.execute(
+            select(event_log.c.payload).where(
+                event_log.c.task_id == task_id, event_log.c.event_type == TOC_CHANGED_EVENT
+            )
+        ).scalars()
+        for entry in payload.get("before", [])
+    ]
+    used += [
+        entry["row"].get("code")
+        for entry in [*befores, *log.before]
+        if entry.get("table") == table.name and entry.get("deleted")
+    ]
+    numbers = [
+        int(code[len(prefix) :])
+        for code in used
+        if code and code.startswith(prefix) and code[len(prefix) :].isdigit()
+    ]
+    return f"{prefix}{max(numbers, default=0) + 1}"
+
+
 def insert(conn: Connection, log: ChangeLog, table: Table, values: dict[str, Any]) -> None:
     """Insert one graph row, stamped, and note it in the log.
+
+    A box or link without a ``code`` gets the next one (:func:`next_code`).
 
     Args:
         conn: Open connection.
@@ -155,6 +212,9 @@ def insert(conn: Connection, log: ChangeLog, table: Table, values: dict[str, Any
         table: A ``toc_*`` table.
         values: The row's values without timestamps.
     """
+    if table.name in ("toc_box", "toc_link") and values.get("code") is None:
+        prefix = CODE_PREFIX[values["layer"]] if table.name == "toc_box" else "#"
+        values = {**values, "code": next_code(conn, log, table, values["task_id"], prefix)}
     now = datetime.now(UTC)
     conn.execute(table.insert().values(**values, created_at=now, updated_at=now))
     key = _PRIMARY_KEY.get(table.name)

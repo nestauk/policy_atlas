@@ -1074,7 +1074,7 @@ def seed_toc_task(conn: Connection) -> dict[str, uuid.UUID]:
             **stamp,
         )
     )
-    for key, layer in (("source", "input"), ("target", "output"), ("case_box", "outcome")):
+    for key, layer in (("source", "input"), ("target", "output"), ("case_box", "outcome_short")):
         conn.execute(
             toc_box.insert().values(
                 box_id=ids[key],

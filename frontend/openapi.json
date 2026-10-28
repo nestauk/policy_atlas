@@ -8397,6 +8397,17 @@
             "title": "Box Id",
             "type": "string"
           },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
           "description": {
             "anyOf": [
               {
@@ -8423,7 +8434,8 @@
             "enum": [
               "input",
               "output",
-              "outcome",
+              "outcome_short",
+              "outcome_long",
               "impact",
               "failure_outcome"
             ],
@@ -8456,6 +8468,7 @@
         "required": [
           "box_id",
           "layer",
+          "code",
           "text",
           "dosage",
           "result_criteria",
@@ -8871,6 +8884,17 @@
             "title": "Because Text",
             "type": "string"
           },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
           "conditions": {
             "items": {
               "type": "string"
@@ -8985,6 +9009,7 @@
         },
         "required": [
           "link_id",
+          "code",
           "source_box_id",
           "target_box_id",
           "sentence",
