@@ -80,6 +80,32 @@ class PolicyAtlasStack(Stack):
             self, "AppSecret", secret_name=be_config["secret_name"]
         )
 
+        # Which AI models the backend uses: a route name from the backend's
+        # committed file backend/src/policy_atlas/model_routes.toml (task 053).
+        # "openai-direct" calls OpenAI with OPENAI_API_KEY; a "bedrock-*" route
+        # calls Amazon Bedrock with AWS_BEARER_TOKEN_BEDROCK. The Bedrock key is
+        # only passed when a Bedrock route is chosen, because ECS refuses to start
+        # a task whose secret names a field the secret does not have: add the
+        # field to the app secret first, then switch the route in pa_config.json.
+        model_route = be_config.get("model_route", "openai-direct")
+        app_secrets = {
+            "DATABASE_URL": ecs.Secret.from_secrets_manager(db_secret, field="db_connection_string"),
+            "OPENAI_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OPENAI_API_KEY"),
+            "OPENALEX_EMAIL": ecs.Secret.from_secrets_manager(app_secret, field="OPENALEX_EMAIL"),
+            "OPENALEX_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OPENALEX_API_KEY"),
+            "OVERTON_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OVERTON_API_KEY"),
+            "LANGFUSE_PUBLIC_KEY": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_PUBLIC_KEY"),
+            "LANGFUSE_SECRET_KEY": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_SECRET_KEY"),
+            # LANGFUSE_HOST, not LANGFUSE_BASE_URL: tracing.py accepts both;
+            # the provisioned secret carries v2's key name (E.1 deviation,
+            # verification.md) — adapting here beats patching a live secret.
+            "LANGFUSE_HOST": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_HOST"),
+        }
+        if model_route.startswith("bedrock"):
+            app_secrets["AWS_BEARER_TOKEN_BEDROCK"] = ecs.Secret.from_secrets_manager(
+                app_secret, field="AWS_BEARER_TOKEN_BEDROCK"
+            )
+
         shared_log_group = logs.LogGroup(self, "PolicyAtlasLogGroup",
             log_group_name="/policy_atlas_v3/application",
             retention=logs.RetentionDays.ONE_MONTH,
@@ -144,20 +170,9 @@ class PolicyAtlasStack(Stack):
                 # Tags deployed traces so they filter apart from local-dev
                 # runs inside the shared dev Langfuse project.
                 "LANGFUSE_TRACING_ENVIRONMENT": env_name,
+                "POLICY_ATLAS_MODEL_ROUTE": model_route,
             },
-            secrets={
-                "DATABASE_URL": ecs.Secret.from_secrets_manager(db_secret, field="db_connection_string"),
-                "OPENAI_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OPENAI_API_KEY"),
-                "OPENALEX_EMAIL": ecs.Secret.from_secrets_manager(app_secret, field="OPENALEX_EMAIL"),
-                "OPENALEX_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OPENALEX_API_KEY"),
-                "OVERTON_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OVERTON_API_KEY"),
-                "LANGFUSE_PUBLIC_KEY": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_PUBLIC_KEY"),
-                "LANGFUSE_SECRET_KEY": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_SECRET_KEY"),
-                # LANGFUSE_HOST, not LANGFUSE_BASE_URL: tracing.py accepts both;
-                # the provisioned secret carries v2's key name (E.1 deviation,
-                # verification.md) — adapting here beats patching a live secret.
-                "LANGFUSE_HOST": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_HOST"),
-            },
+            secrets=app_secrets,
             port_mappings=[ecs.PortMapping(
                 container_port=be_config["internal_port"],
                 protocol=ecs.Protocol.TCP

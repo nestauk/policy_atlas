@@ -11,7 +11,6 @@ deterministic stub turn.
 
 from __future__ import annotations
 
-import os
 import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -23,6 +22,7 @@ from sqlalchemy.engine import Connection, Engine, RowMapping
 
 from policy_atlas.api.contract import PlanStep, ScopingPlanDraft
 from policy_atlas.api.routers._common import ACTIVE_WALK_STATUSES, parentless_walk
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.schema import (
     artefact,
     capability_run,
@@ -77,10 +77,9 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger()
 
-#: The scoping Task Agent's model — its own tier, apart from the Evidence
-#: search Task Agent's (owner, 2026-10-14: gpt-5.5 → gpt-5.6-sol for the new
-#: options scoping parts). Env-overridable, the `SYNTHESIS_MODEL` pattern.
-TASK_AGENT_SCOPING_MODEL = os.environ.get("POLICY_ATLAS_TASK_AGENT_SCOPING_MODEL", "gpt-5.6-sol")
+#: The scoping Task Agent's model — the strongest tier ("frontier"), apart from the
+#: Evidence search Task Agent's. Model from the route file (task 053).
+TASK_AGENT_SCOPING_MODEL = route().model_for("task_agent_scoping")
 
 #: The code-authored line the prompt reads as data when nothing has run yet.
 NO_BASELINE_STATE = "no baseline built yet"

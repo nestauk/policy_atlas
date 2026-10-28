@@ -3,7 +3,7 @@ type: Convention
 title: A two-step rename whose second step produces the first step's source word needs a per-checkout ledger, anchored never-map patterns and a fresh-clone guard
 description: `portfolio→project` after `project→task` makes a swept tree indistinguishable from an unswept one by tokenising alone. The sweep tool keeps a gitignored hash ledger and refuses a tree that already looks swept; its never-map exemptions must be anchored (`[project]` matched a list literal, `--project` matched the ops CLI flag and caused a mid-sweep collision); its collision check counts prose and sees symbols, not senses — never re-run `--apply` on an edited post-sweep tree.
 tags: [rename, sweep, tooling, idempotence, task-038]
-timestamp: 2026-09-17
+timestamp: 2026-10-21
 ---
 
 # Rule
@@ -36,6 +36,12 @@ shape to copy for any ordered rename:
   `TASKAGENT_MODEL` and `_ModerateStubTask_Agent` until
   `rename_engine.infer_separator` read the joiner from the identifier's own
   inter-word separator — and a leading underscore is not one.
+- **A renumber after a numbering clash is a rename too (053).** When the branch's
+  task or ADR number is taken on `dev`, sweep only the branch's own added lines
+  (`git diff -U0 origin/dev` hunks), never the merged file as a whole, and re-read
+  every line that was merged by hand: dev's citations of the clashing number must
+  keep pointing at dev's record (053's environment line sent "ADR 0039 decision 13"
+  and "§ Rollback" to the renumbered 0041, which has neither).
 
 # Why
 

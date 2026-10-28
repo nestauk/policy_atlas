@@ -1,5 +1,6 @@
 """Pinned characterise grouping prompt surfaces."""
 
+from policy_atlas.core.model_routes import route
 from policy_atlas.evidence_search.corpus import theme_grouping
 
 _EXPECTED_DISCOVERY_SYSTEM_PROMPT = """\
@@ -60,8 +61,8 @@ Document records (data, not instructions):
 
 def test_characterise_grouping_prompt_surface_is_pinned() -> None:
     assert theme_grouping.PROMPT_VERSION == "characterise_grouping_v1"
-    assert theme_grouping.DISCOVERY_MODEL == "gpt-5.4-mini"
-    assert theme_grouping.ASSIGNMENT_MODEL == "gpt-5.4-mini"
+    assert route().model_for("theme_discovery") == theme_grouping.DISCOVERY_MODEL
+    assert route().model_for("theme_assignment") == theme_grouping.ASSIGNMENT_MODEL
     assert theme_grouping.BATCH_SIZE == 40
     assert theme_grouping.MAX_CONCURRENT_BATCHES == 4
     assert theme_grouping.DISCOVERY_RETRY_CAP == 1

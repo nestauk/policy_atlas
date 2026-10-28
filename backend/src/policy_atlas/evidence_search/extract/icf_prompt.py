@@ -23,6 +23,7 @@ import json
 
 from openai.types.chat import ChatCompletionMessageParam
 
+from policy_atlas.core.model_routes import route
 from policy_atlas.evidence_search.extract.icf_records import (
     ICFExtractionResponse,
     ICFRecordWire,
@@ -35,7 +36,7 @@ ICF_PROMPT_VERSION = "extract_icf_v2"
 
 # The contracted model floor (same rule as IOF: a step-up is a recorded
 # option, never a silent switch).
-ICF_EXTRACTION_MODEL = "gpt-5.4-mini"
+ICF_EXTRACTION_MODEL = route().model_for("icf_extract")
 # Reasoning + output together (the IOF 32K lesson: gpt-5.4-mini is a reasoning
 # model and max_completion_tokens covers both). A fingerprint component.
 ICF_EXTRACT_MAX_OUTPUT_TOKENS = 32_768

@@ -213,6 +213,9 @@ session. Once gate B passes, GitHub Actions owns steady-state `deploy-update` ru
    - `OPENALEX_API_KEY`
    - `OPENALEX_EMAIL`
    - `OVERTON_API_KEY`
+   - `AWS_BEARER_TOKEN_BEDROCK`: needed only once an environment's
+     `backend.model_route` in `pa_config.json` is a Bedrock route (§ 5, Switching
+     to Bedrock); ECS refuses to start a task that names a missing field.
 
 5. **`CDK_DEFAULT_ACCOUNT` exported** in the operator's shell:
 
@@ -507,8 +510,10 @@ Generated from `settings.py`'s required/optional calls plus the direct
 `os.environ` readers (`api/deps.py`, `core/tracing.py`,
 `evidence_search/sourcing/search_live.py`). `LANGFUSE_HOST` is what the provisioned
 secret carries (v2's key name); tracing accepts it natively, so deployment injects it
-instead. `POLICY_ATLAS_*` tuning and the fixture corpus are intentionally
-omitted from the deployed task.
+instead. Which AI models the backend uses is not set here: it comes from the
+committed file `backend/src/policy_atlas/model_routes.toml`, and the deployment
+passes only the route name (task 053). Other `POLICY_ATLAS_*` tuning and the
+fixture corpus are intentionally omitted from the deployed task.
 
 | Var | Source | Consumer file |
 | --- | --- | --- |
@@ -526,19 +531,15 @@ omitted from the deployed task.
 | `OIDC_JWKS_CACHE_TTL_SECONDS` | omitted (application default: 300) | `api/settings.py` |
 | `OIDC_JWKS_PATH` | omitted (development issuer only; mutually exclusive with JWKS URL) | `api/settings.py` |
 | `OIDC_JWKS_URL` | config value: Cognito JWKS URL | `api/settings.py` |
-| `OPENAI_API_KEY` | Secrets Manager field: `policy_atlas_v3/app` `OPENAI_API_KEY` | `api/deps.py`, `core/openai_client.py`, `runtime/agent.py` |
+| `AWS_BEARER_TOKEN_BEDROCK` | Secrets Manager field: `policy_atlas_v3/app` `AWS_BEARER_TOKEN_BEDROCK`, passed only on a Bedrock route | `core/model_routes.py` (via the route's key variable), `boto3` |
+| `OPENAI_API_KEY` | Secrets Manager field: `policy_atlas_v3/app` `OPENAI_API_KEY` | `core/model_routes.py` (read on `openai-direct`), `core/openai_client.py` |
 | `OPENALEX_API_KEY` | Secrets Manager field: `policy_atlas_v3/app` `OPENALEX_API_KEY` | `api/deps.py`, `evidence_search/sourcing/search_live.py` |
 | `OPENALEX_EMAIL` | Secrets Manager field: `policy_atlas_v3/app` `OPENALEX_EMAIL` | `evidence_search/sourcing/search_live.py` |
 | `OVERTON_API_KEY` | Secrets Manager field: `policy_atlas_v3/app` `OVERTON_API_KEY` | `api/deps.py`, `evidence_search/sourcing/search_live.py` |
 | `PA_BACKEND_MODE` | config value: `live` | `api/deps.py` |
-| `POLICY_ATLAS_CHAT_MODEL` | omitted (development tuning; application default `gpt-5.6-terra`) | `runtime/chat_prompt.py` |
+| `POLICY_ATLAS_MODEL_ROUTE` | config value: `backend.model_route` (`bedrock` on staging, `openai-direct` on production) | `core/model_routes.py` |
 | `POLICY_ATLAS_FIXTURE_CORPUS` | omitted (development/test fixture override) | `evidence_search/sourcing/ingest_full_text.py` |
-| `POLICY_ATLAS_AGENT_MODEL` | omitted (development tuning; application default) | `runtime/agent_backend.py` |
-| `POLICY_ATLAS_AGENT_TRIAGE_MODEL` | omitted (development tuning; application default) | `runtime/agent_backend.py` |
-| `POLICY_ATLAS_TASK_AGENT_MODEL` | omitted (development tuning; application default) | `runtime/task_agent.py` |
-| `POLICY_ATLAS_RELEVANCE_MODEL` | omitted (development tuning; application default) | `evidence_search/extract/relevance_annotator.py` |
 | `POLICY_ATLAS_SEARCH_CACHE_TTL_S` | omitted (development tuning; application default) | `evidence_search/sourcing/search_live.py` |
-| `POLICY_ATLAS_SYNTHESIS_MODEL` | omitted (development tuning; application default `gpt-5.6-terra`) | `evidence_search/synthesis/synthesis_backend.py` |
 | `RUN_EXECUTOR_MAX` | config value: `backend.run_executor_max` | `api/settings.py` |
 | `SSE_HEARTBEAT_SECONDS` | omitted (application default: 15) | `api/settings.py` |
 | `SSE_POLL_INTERVAL_SECONDS` | omitted (application default: 0.4) | `api/settings.py` |
@@ -548,6 +549,26 @@ omitted from the deployed task.
 the application default is unchanged, so a deployment that still sets only the
 old name behaves exactly as before — the variable is simply ignored and the
 built-in default applies.
+
+**Retired in task 053:** the per-step model settings (`POLICY_ATLAS_CHAT_MODEL`,
+`POLICY_ATLAS_SYNTHESIS_MODEL`, `POLICY_ATLAS_AGENT_MODEL` and the rest) are
+ignored with a warning; models are chosen in the route file.
+
+**Switching to Bedrock** (task 053; diagrams in
+`docs/tasks/053-bedrock-local-route/model-routing.html`):
+
+1. Add a long-term Bedrock API key to `policy_atlas_v3/app` as the field
+   `AWS_BEARER_TOKEN_BEDROCK`. Do this first: the stack asks ECS for the field as
+   soon as the route is a Bedrock one, and a task naming a missing field fails to
+   start.
+2. Set `backend.model_route` to `bedrock` for that environment in
+   `pa_config.json`, and merge.
+3. Deploy. Existing projects were embedded with OpenAI; their chat search finds
+   nothing on Bedrock until they are ingested again.
+
+To switch back, set the route to `openai-direct` and deploy; the Bedrock field can
+stay in the secret. Rotating the Bedrock key is a secret edit plus a forced new
+deployment, like any other secret.
 
 **Capacity values** (sized together for a 10-concurrent-run ceiling):
 `RUN_EXECUTOR_MAX=10`, `DB_POOL_SIZE=15`, `DB_MAX_OVERFLOW=10`, task 2 vCPU /

@@ -7,7 +7,8 @@ capability-runner with steering check-ins. Sub-agents never address the user;
 the agent relays deterministic runner check-ins and steering pauses
 through a small, injectable console seam.
 
-Live switch mirrors ``skeleton.py``: a configured ``OPENAI_API_KEY`` selects the
+Live switch mirrors ``skeleton.py``: a configured key (the variable the route
+names, see ``core.model_routes``) selects the
 live task_agent + live backend set (with Langfuse tracing); its absence selects the
 deterministic stubs and an egress-free fixture corpus, so the demo/dev path
 never leaves the machine.
@@ -16,7 +17,6 @@ never leaves the machine.
 from __future__ import annotations
 
 import json
-import os
 import sys
 import unicodedata
 import uuid
@@ -32,9 +32,10 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core import events, tracing
 from policy_atlas.core.db import get_engine
-from policy_atlas.core.embeddings import EmbeddingBackend, OpenAIEmbeddingBackend
+from policy_atlas.core.embeddings import EmbeddingBackend, live_embedding_backend
 from policy_atlas.core.fixtures import get_source
 from policy_atlas.core.logging import configure_logging
+from policy_atlas.core.model_routes import live_api_key, route
 from policy_atlas.core.schema import artefact, evidence_scope, task, task_plan
 from policy_atlas.evidence_search.assess.classification_backend import OpenAIClassificationBackend
 from policy_atlas.evidence_search.assess.screening_backend import OpenAIScreeningBackend
@@ -805,7 +806,7 @@ def live_task_agent_and_backends(
     Returns:
         The live task_agent backend and the live runner backend bundle.
     """
-    embedding: EmbeddingBackend = OpenAIEmbeddingBackend()
+    embedding: EmbeddingBackend = live_embedding_backend()
     theme_grouping: ThemeGroupingBackend = OpenAIThemeGroupingBackend()
     if langfuse_client is not None:
         embedding = tracing.TracedEmbeddingBackend(embedding, langfuse_client)
@@ -831,8 +832,10 @@ def live_task_agent_and_backends(
         synthesis=OpenAISynthesisBackend(langfuse_client=langfuse_client),
         grounding_judge=OpenAIGroundingJudgeBackend(langfuse_client=langfuse_client),
         search_backends=cast(list[SearchBackend], search_live.live_search_backends()),
-        search_generation=search_generation.OpenAISearchGenerationBackend(
-            langfuse_client=langfuse_client
+        search_generation=(
+            search_generation.ClaudeSearchGenerationBackend(langfuse_client=langfuse_client)
+            if route().search_queries.backend == "claude"
+            else search_generation.OpenAISearchGenerationBackend(langfuse_client=langfuse_client)
         ),
         document_fetcher=fetcher,
         langfuse_client=langfuse_client,
@@ -1140,7 +1143,7 @@ def main(
     console = console if console is not None else StdConsole()
     engine = engine if engine is not None else get_engine()
 
-    live = bool(os.environ.get("OPENAI_API_KEY"))
+    live = bool(live_api_key())
     langfuse_client = tracing.get_langfuse() if live else None
     default_agent: AgentBackend
     if live:

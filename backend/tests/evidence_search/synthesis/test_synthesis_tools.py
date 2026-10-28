@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 from sqlalchemy import select
@@ -72,9 +72,13 @@ class FakeEmbedder:
     def __init__(self, vectors: dict[str, list[float]] | None = None) -> None:
         self.vectors = vectors or {}
         self.calls: list[list[str]] = []
+        self.kinds: list[str] = []
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
         self.calls.append(texts)
+        self.kinds.append(kind)
         return [self.vectors.get(text, _vector(1.0)) for text in texts]
 
 
@@ -348,6 +352,7 @@ def test_run_section_loop_batches_a_turns_uncached_query_embeddings() -> None:
 
     assert len(embedder.calls) == 1
     assert sorted(embedder.calls[0]) == ["alpha", "beta"]
+    assert embedder.kinds == ["query"]  # Cohere embeds queries and documents differently
     # Retrieval stays correct/deterministic per query vector after batching.
     exchanges = result["transcript"]
     alpha_chunks = {

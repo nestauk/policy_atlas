@@ -51,7 +51,6 @@ deterministic and makes no call.
 
 from __future__ import annotations
 
-import os
 import re
 import threading
 import uuid
@@ -63,6 +62,7 @@ from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import resolve_openai_client, traced_parse
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.options_scoping.constrain.constrain_prompt import (
@@ -153,11 +153,9 @@ from policy_atlas.runtime.agent_backend import _as_queue, _next
 
 #: The judgment model (discovery, themes, typing, the profile) and the small
 #: model (assignment, folding, place sentences) — contract § Model route.
-#: Env-overridable, the `SYNTHESIS_MODEL` pattern (owner, 2026-10-14: the
-#: options scoping tiers moved from gpt-5.5 / gpt-5.4-mini to gpt-5.6-sol /
-#: gpt-5.6-luna).
-LONGLIST_JUDGMENT_MODEL = os.environ.get("POLICY_ATLAS_LONGLIST_JUDGMENT_MODEL", "gpt-5.6-sol")
-LONGLIST_ASSIGNMENT_MODEL = os.environ.get("POLICY_ATLAS_LONGLIST_ASSIGNMENT_MODEL", "gpt-5.6-luna")
+#: Both from the route file (task 053); see core/model_routes.py.
+LONGLIST_JUDGMENT_MODEL = route().model_for("longlist_judgment")
+LONGLIST_ASSIGNMENT_MODEL = route().model_for("longlist_assignment")
 #: The output ceiling of one folding call (one short entry per distinct word).
 FOLDING_MAX_OUTPUT_TOKENS = 16_000
 
@@ -456,7 +454,7 @@ class OpenAILonglistBackend:
     """Live OpenAI implementation of the longlist seam.
 
     Args:
-        api_key: Optional OpenAI API key; ``OPENAI_API_KEY`` otherwise.
+        api_key: Optional OpenAI API key; the route's key variable otherwise.
         langfuse_client: Optional Langfuse client; tracing is a no-op without one.
         session_id: Optional Langfuse session id.
 

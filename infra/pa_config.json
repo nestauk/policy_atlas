@@ -10,6 +10,7 @@
                 "memory_limit_mib": 8192,
                 "internal_port": 8000,
                 "secret_name": "policy_atlas_v3/app",
+                "model_route": "bedrock",
                 "run_executor_max": 10,
                 "db_pool_size": 15,
                 "db_max_overflow": 10
@@ -28,6 +29,7 @@
                 "memory_limit_mib": 8192,
                 "internal_port": 8000,
                 "secret_name": "policy_atlas_v3/app",
+                "model_route": "openai-direct",
                 "run_executor_max": 10,
                 "db_pool_size": 15,
                 "db_max_overflow": 10

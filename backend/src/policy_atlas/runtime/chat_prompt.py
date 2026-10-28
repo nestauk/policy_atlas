@@ -15,15 +15,14 @@ posture, inherited verbatim.
 
 from __future__ import annotations
 
-import os
-
 from pydantic import BaseModel, ConfigDict, Field
 
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.runtime.agent_prompt import _SHARED_PREAMBLE
 
 CHAT_PROMPT_VERSION = "chat_v1"
-CHAT_MODEL = os.environ.get("POLICY_ATLAS_CHAT_MODEL", "gpt-5.6-terra")
+CHAT_MODEL = route().model_for("chat")
 
 # Input-side caps at prompt assembly (M10 discipline: a bound, not a filter).
 CHAT_MESSAGE_MAX = 10_000          # contract §1: user_message cap

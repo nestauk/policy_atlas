@@ -32,6 +32,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import splice_guidance
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
@@ -47,7 +48,7 @@ GROUP_CLUSTERING_PROMPT_VERSION = "group_cluster_v1"
 
 # The contracted model floor (the 009 nano lesson is binding); clustering
 # quality on real reference sets is eval territory, not asserted by the build.
-GROUP_CLUSTERING_MODEL = "gpt-5.4-mini"
+GROUP_CLUSTERING_MODEL = route().model_for("group_clustering")
 
 # The residual sentinel the group component counts as its honest ungrouped
 # bucket. The assignment prompt asks for the plain word "ungroupable"; the
@@ -310,7 +311,7 @@ class OpenAIGroupClusteringBackendFactory:
     """Live OpenAI implementation of the group clustering factory seam.
 
     Args:
-        api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is
+        api_key: Optional OpenAI API key. If omitted, the route's key variable is
             read from the environment.
         langfuse_client: Optional Langfuse client. When omitted, tracing is a
             no-op and no Langfuse object is created.

@@ -51,6 +51,7 @@ from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import resolve_openai_client, traced_parse
 from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.options_scoping.suggest.suggest_prompt import (
@@ -101,20 +102,17 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger()
 
-# Model routing by moment (contract decision 3 — cost tiering, not agent identity).
-# route/decide are judgment-class (the task_agent's default judgment model); triage is
-# mini-class. Both env-overridable so ops can pin a different model without a code
-# change (the SYNTHESIS_MODEL/TASK_AGENT_MODEL pattern). Triage used to borrow the
-# stage-1 screening model; task 051 moved screening to gpt-5.6-luna and left triage
-# where it was, so the default is a literal here.
-AGENT_MODEL = os.environ.get("POLICY_ATLAS_AGENT_MODEL", "gpt-5.5")
-AGENT_TRIAGE_MODEL = os.environ.get("POLICY_ATLAS_AGENT_TRIAGE_MODEL", "gpt-5.4-mini")
+# Model from the route file (task 053); see core/model_routes.py. route/decide are
+# judgment-class, triage is mini-class (contract decision 3 of task 024).
+AGENT_MODEL = route().model_for("agent")
+AGENT_TRIAGE_MODEL = route().model_for("agent_triage")
 
 
 def _warn_stale_agent_env(environ: Mapping[str, str]) -> list[str]:
     """Name any pre-038 ``POLICY_ATLAS_ORCHESTRATOR_*`` override still set.
 
-    Task 038 renamed the overrides to ``POLICY_ATLAS_AGENT_*``; an old name is
+    Task 038 renamed the overrides to ``POLICY_ATLAS_AGENT_*`` and task 053 retired
+    those too: the route file is the only way to choose a model. An old name is
     ignored, so it is logged rather than silently falling back to the default.
 
     Args:
@@ -125,7 +123,7 @@ def _warn_stale_agent_env(environ: Mapping[str, str]) -> list[str]:
     """
     stale = sorted(key for key in environ if key.startswith("POLICY_ATLAS_ORCHESTRATOR_"))
     if stale:
-        log.warning("agent_env_override_stale", keys=stale, renamed_to="POLICY_ATLAS_AGENT_*")
+        log.warning("agent_env_override_stale", keys=stale, use_instead="model_routes.toml")
     return stale
 
 
@@ -382,7 +380,7 @@ class OpenAIAgentBackend:
     """Live OpenAI implementation of the agent seam.
 
     Args:
-        api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is read
+        api_key: Optional OpenAI API key. If omitted, the route's key variable is read
             from the environment; keys are never read from persistent config.
         langfuse_client: Optional Langfuse client. When omitted, tracing is a
             no-op and no Langfuse object is created.

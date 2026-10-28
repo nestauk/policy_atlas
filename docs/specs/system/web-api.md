@@ -748,8 +748,10 @@ no instance-ownership lease, so deploys must fully stop the old process
 booting the new one; overlapping instances would interrupt each other's
 live walks. The lease belongs to the cross-instance seam (infra slice).
 
-**Backend mode:** `PA_BACKEND_MODE=live|stub|auto` (default `auto` =
-`OPENAI_API_KEY` presence). `live` without the core key fails boot loudly;
+**Backend mode:** `PA_BACKEND_MODE=live|stub|auto` (default `auto` = presence of the
+model route's key variable, `OPENAI_API_KEY` on `openai-direct` and
+`AWS_BEARER_TOKEN_BEDROCK` on a Bedrock route, task 053). `live` without that key fails
+boot loudly;
 missing search keys in live mode are warned at startup (coverage degrades
 honestly, never silently).
 

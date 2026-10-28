@@ -187,6 +187,9 @@ wheels = [
 ]
 
 [package.optional-dependencies]
+bedrock-runtime = [
+    { name = "mypy-boto3-bedrock-runtime" },
+]
 cognito-idp = [
     { name = "mypy-boto3-cognito-idp" },
 ]
@@ -1326,6 +1329,15 @@ wheels = [
 ]
 
 [[package]]
+name = "mypy-boto3-bedrock-runtime"
+version = "1.43.62"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/26/78/542f5804cf0f9e3c1ccbf30917eaa3b4b6002b91965de02d065d7441fc93/mypy_boto3_bedrock_runtime-1.43.62.tar.gz", hash = "sha256:beb70b08ef72cdfd5036bcd3270f2fbac0a2ce5e40f70dfc1d87c4f139d4d7ff", size = 31492 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/b2/e3bff20acd290b909f1c28856d6d8d7984f7f7d5bda299d5957f64e97bb3/mypy_boto3_bedrock_runtime-1.43.62-py3-none-any.whl", hash = "sha256:603d9df54da5029fc0d0e3c09b6db33733af53182bee030c0c7af99e88ed3b39", size = 37865 },
+]
+
+[[package]]
 name = "mypy-boto3-cognito-idp"
 version = "1.43.56"
 source = { registry = "https://pypi.org/simple" }
@@ -1774,6 +1786,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "boto3" },
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpcore" },
@@ -1805,13 +1818,13 @@ dev = [
     { name = "types-psycopg2" },
 ]
 ops = [
-    { name = "boto3" },
-    { name = "boto3-stubs", extra = ["cognito-idp"] },
+    { name = "boto3-stubs", extra = ["bedrock-runtime", "cognito-idp"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
+    { name = "boto3", specifier = ">=1.43,<2" },
     { name = "cryptography", specifier = ">=50,<51" },
     { name = "fastapi", specifier = ">=0.121,<1" },
     { name = "httpcore", specifier = ">=1,<2" },
@@ -1842,10 +1855,7 @@ dev = [
     { name = "ruff", specifier = ">=0.4" },
     { name = "types-psycopg2" },
 ]
-ops = [
-    { name = "boto3", specifier = ">=1.43,<2" },
-    { name = "boto3-stubs", extras = ["cognito-idp"], specifier = ">=1.43,<2" },
-]
+ops = [{ name = "boto3-stubs", extras = ["cognito-idp", "bedrock-runtime"], specifier = ">=1.43,<2" }]
 
 [[package]]
 name = "prompt-toolkit"

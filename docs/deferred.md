@@ -847,14 +847,63 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Dual-view coverage** — corpus-view vs evidence-view distributions need the
   source/evidence policy object (contract decision 9); v3.0 ships single-view with the
   explicit `base` ladder and **no absence claims** (test-asserted).
-- **Bedrock routes** — both seams (`EmbeddingBackend`, `ThemeGroupingBackend`) swap
-  implementations; first pass OpenAI → target Bedrock is the documented v3.0 posture.
-  **Infra ready on the DevOps side (user, 2026-07-10)** — the migration is now a pull
-  decision, deliberately sequenced **after the eval slice**: it is a model-family swap
-  (Bedrock does not serve the OpenAI models), which re-opens every empirically-settled
-  model-routing choice, so the eval harness is the regression net that licenses it.
-  Standing constraint until then (018 contract): nothing new couples to
-  OpenAI-specific API surface (e.g. no Responses-API server-side conversation state).
+- **Bedrock routes — SUPERSEDED by task 053 (2026-10-14, ADR 0041; renumbered from 045/0039
+  at the dev merge of 2026-10-21).** The earlier entry
+  said the move must wait for the eval slice because it was a model-family swap. That
+  premise changed: Bedrock now serves the GPT-5.6 family through an OpenAI-compatible
+  endpoint, so the text route moved with the same model family and no forced
+  re-tuning. Task 053 built the local route: every model is named in
+  `backend/src/policy_atlas/model_routes.toml`, selected by `POLICY_ATLAS_MODEL_ROUTE`
+  (unset = pre-053 behaviour); embeddings moved to Cohere Embed v4 on Bedrock (EU
+  profile) under profile `cohere_embed_v4_1536_v1`; search query generation gained a
+  Claude backend (tool-use JSON, fresh prompt per prompting rule 12). The standing
+  constraint from 018 stays: nothing new couples to a provider-specific API surface.
+  What remains deferred, and to which slice:
+  - **Staging and production:** the wiring landed in 053 on 2026-10-21 (owner decision,
+    contract note 9): `backend.model_route` in `infra/pa_config.json` (staging switched to
+    `bedrock` on 2026-10-28; production still `openai-direct`), the stack maps `AWS_BEARER_TOKEN_BEDROCK` only on a Bedrock route,
+    and `infra/DEPLOYMENT.md` § 5 has the switch procedure. The history below is kept
+    for the reasoning. The owner's plan changed on 2026-10-21:
+    the container does **not** mint its own key from the task role. Both keys live in
+    the app secret for good (`OPENAI_API_KEY` for OpenAI, a new `AWS_BEARER_TOKEN_BEDROCK`
+    field holding a long-term Bedrock API key owned by an IAM user with Bedrock invoke
+    permissions, with an owner and a rotation date), and `POLICY_ATLAS_MODEL_ROUTE` is a
+    plain environment variable set per environment from `infra/pa_config.json`. Switching
+    route is a config commit and a deploy; rotating a key is a secret edit and a forced
+    new deployment (ECS reads secrets only at task start; the route file is read once at
+    import). The prerequisite landed in 053 on 2026-10-21: each route names the variable
+    that holds its key (`api_key_env`), so both keys coexist in one secret. Still on
+    the list:
+    Marketplace model access per account, the organisation's region policy allowing
+    `aws:RequestedRegion = unspecified` for Bedrock's global profiles, quota checks,
+    Langfuse pricing for the Bedrock model ids, the Anthropic use-case form if any
+    Claude path needs it, and AWS's note that long-term keys are meant for exploration,
+    to be recorded in that slice's ADR. Whether to re-embed older projects under the
+    Cohere profile or simply not offer chat retrieval on them is a cost decision for
+    that slice (owner, 2026-09-25); the old vectors stay in the database under their
+    old profile. Two notes from the 053 review (2026-10-14): `infra/DEPLOYMENT.md`
+    § tuning knobs listed the retired `POLICY_ATLAS_*_MODEL` variables and named
+    `OPENAI_API_KEY` alone (rewritten in 053 with the infra wiring, 2026-10-21); and the `boto3` region for Cohere and
+    Claude comes from `AWS_REGION` alone (default `eu-west-2`, contract D5) while the
+    OpenAI address is written in the route, so a shell with `AWS_REGION` set for other
+    AWS work sends the EU profiles to the wrong region. Reading the region from the
+    route file beside `openai_base_url` is the one-line fix; it waits for the deploy
+    slice, which sets the container's region anyway.
+  - **Model quality (evaluation slice):** since 2026-10-22 every route runs Luna, Terra
+    and Sol (contract note 10). Luna was evaluated in task 051; Terra in place of gpt-5.5
+    for the two agents, Cohere vectors for grouping and retrieval, and the inactive
+    Claude route for query generation are unmeasured. Compare by writing an overlay route file per
+    experiment (`POLICY_ATLAS_MODEL_ROUTE_FILE`); the committed file changes only when a
+    choice is made. Whether reformulation and suggestion also move to Claude.
+  - **Retired variables:** the twelve `POLICY_ATLAS_*_MODEL` overrides are ignored with a
+    start-up warning (`POLICY_ATLAS_PLANNER_MODEL` silently, see ADR 0041 decision 2);
+    anyone finding one in an old `.env` should delete it.
+  - **Overlay routes are limited to the two committed key variables** (`API_KEY_ENVS`):
+    an evaluation overlay cannot name a third provider's key (Codex, 053 delta review
+    2026-10-21). Widen the list, or validate any non-empty name, when an experiment
+    needs a third provider; today every overlay reaches OpenAI or Bedrock.
+  - **Later, if a third seam moves to Claude:** pull the shared Converse plumbing into
+    `core/`; one Claude backend is not enough to justify it.
 - **Upload audit-event seam** — when the web-app slice gives uploads a real surface they
   get their own audit event + observable processing (incl. embed counts, currently a
   structured log line `ingest_upload.embed_counts`) — an app-boundary event, not a run

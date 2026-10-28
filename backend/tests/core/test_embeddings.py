@@ -1,22 +1,32 @@
 """Tests for the embeddings module — schema, unit derivation, embed pass, stubs."""
 
+import io
+import json
 import random
 import uuid
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, Literal, cast
 
+import boto3
 import pytest
 import sqlalchemy as sa
+from botocore.exceptions import ClientError
+from botocore.response import StreamingBody
+from botocore.stub import ANY, Stubber
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
+from policy_atlas.api import deps
 from policy_atlas.core import embeddings as embeddings_module
 from policy_atlas.core.embeddings import (
+    API_BATCH_SIZE,
     EMBEDDING_DIMENSIONS,
     EMBEDDING_PROFILE,
+    EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS,
     UNIT_CHAR_BUDGET,
     UNIT_POLICY,
+    CohereEmbeddingBackend,
     OpenAIEmbeddingBackend,
     StubEmbeddingBackend,
     derive_units,
@@ -173,9 +183,7 @@ def test_derive_units_empty_and_whitespace_yield_no_units() -> None:
 
 
 def test_derive_units_oversized_multi_sentence_splits_with_overlap() -> None:
-    sentence = (
-        "This is a sentence about policy analysis and evidence review of housing programs. "
-    )
+    sentence = "This is a sentence about policy analysis and evidence review of housing programs. "
     content = sentence * 40
     assert len(content) > UNIT_CHAR_BUDGET
 
@@ -188,7 +196,7 @@ def test_derive_units_oversized_multi_sentence_splits_with_overlap() -> None:
 
     for index, unit in enumerate(units):
         assert unit["unit_index"] == index
-        assert unit["text"] == content[unit["start"]:unit["end"]]
+        assert unit["text"] == content[unit["start"] : unit["end"]]
 
     for prev_unit, cur_unit in zip(units, units[1:], strict=False):
         overlap = prev_unit["end"] - cur_unit["start"]
@@ -204,13 +212,9 @@ def test_derive_units_oversized_multi_sentence_splits_with_overlap() -> None:
 def test_embed_pending_chunks_idempotent_and_stamps_every_row(conn: Connection) -> None:
     pid, rid = seed_task_and_run(conn)
     snap_id, _tss_id = seed_source(conn, pid)
-    chunk_ids = [
-        _insert_chunk(conn, snap_id, i, f"Chunk body number {i}.") for i in range(1, 4)
-    ]
+    chunk_ids = [_insert_chunk(conn, snap_id, i, f"Chunk body number {i}.") for i in range(1, 4)]
 
-    first = embed_pending_chunks(
-        conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid
-    )
+    first = embed_pending_chunks(conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid)
     assert first["embedded"] == 3
     assert first["already_embedded"] == 0
     assert first["failed"] == 0
@@ -230,9 +234,7 @@ def test_embed_pending_chunks_idempotent_and_stamps_every_row(conn: Connection) 
         ).scalar_one()
         assert stored == f"Chunk body number {i}."
 
-    second = embed_pending_chunks(
-        conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid
-    )
+    second = embed_pending_chunks(conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid)
     assert second["embedded"] == 0
     assert second["already_embedded"] == 3
 
@@ -243,7 +245,9 @@ def test_embed_pending_chunks_idempotent_and_stamps_every_row(conn: Connection) 
 class _RaisingEmbedder:
     mode = "stub"
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
         raise RuntimeError("embedder always fails")
 
 
@@ -263,9 +267,7 @@ def test_embed_pending_chunks_failure_isolation_and_retry(conn: Connection) -> N
     ).scalar_one()
     assert rows == 0
 
-    retry = embed_pending_chunks(
-        conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid
-    )
+    retry = embed_pending_chunks(conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid)
     assert retry["embedded"] == 1
     assert retry["failed"] == 0
 
@@ -277,7 +279,9 @@ class _PoisoningEmbedder:
         self._poison = poison
         self.call_sizes: list[int] = []
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
         self.call_sizes.append(len(texts))
         if any(self._poison in text for text in texts):
             raise RuntimeError("poisoned unit")
@@ -311,7 +315,9 @@ def test_embed_unit_split_isolates_one_poisoned_unit_in_128() -> None:
 class _RaisingIfCalledEmbedder:
     mode = "stub"
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
         raise AssertionError("the embedder must never be called once the budget is exceeded")
 
 
@@ -341,7 +347,9 @@ class _CountingEmbedder:
     def __init__(self) -> None:
         self.seen_texts: list[str] = []
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
         self.seen_texts.extend(texts)
         return StubEmbeddingBackend().embed_texts(texts)
 
@@ -405,9 +413,7 @@ def test_eager_uniform_upload_and_acquire_embed_every_chunk(conn: Connection) ->
     chunk_ids = {
         row.chunk_id
         for row in conn.execute(
-            select(chunk_table.c.chunk_id).where(
-                chunk_table.c.source_snapshot_id.in_(snapshot_ids)
-            )
+            select(chunk_table.c.chunk_id).where(chunk_table.c.source_snapshot_id.in_(snapshot_ids))
         )
     }
     assert chunk_ids, "the upload and fixture acquire backends must have produced chunks"
@@ -415,9 +421,7 @@ def test_eager_uniform_upload_and_acquire_embed_every_chunk(conn: Connection) ->
     embedded_chunk_ids = {
         row.chunk_id
         for row in conn.execute(
-            select(chunk_embedding.c.chunk_id).where(
-                chunk_embedding.c.chunk_id.in_(chunk_ids)
-            )
+            select(chunk_embedding.c.chunk_id).where(chunk_embedding.c.chunk_id.in_(chunk_ids))
         )
     }
     assert embedded_chunk_ids == chunk_ids
@@ -457,8 +461,7 @@ class _FakeEmbeddingClient:
 def _embedding_response(*vectors: list[float]) -> Any:
     return SimpleNamespace(
         data=[
-            SimpleNamespace(index=index, embedding=vector)
-            for index, vector in enumerate(vectors)
+            SimpleNamespace(index=index, embedding=vector) for index, vector in enumerate(vectors)
         ]
     )
 
@@ -498,6 +501,264 @@ def test_openai_embedding_backend_rate_limit_exhaustion_fails_loudly(
 
     assert sleeps == [2.0, 4.0, 8.0]
     assert len(fake_client.embeddings.calls) == 4
+
+
+# --- Cohere Bedrock embedding backend ---
+
+
+def _bedrock_client() -> tuple[Any, Stubber, list[dict[str, Any]]]:
+    client = boto3.client(
+        "bedrock-runtime",
+        region_name="eu-west-2",
+        aws_access_key_id="test",
+        aws_secret_access_key="test",
+    )
+    captured: list[dict[str, Any]] = []
+    client.meta.events.register(
+        "before-parameter-build.bedrock-runtime.InvokeModel",
+        lambda params, **_kwargs: captured.append(dict(params)),
+    )
+    stubber = Stubber(client)
+    stubber.activate()
+    return client, stubber, captured
+
+
+def _bedrock_response(
+    vectors: list[list[float]], *, tokens: str | None = "7", body: bytes | None = None
+) -> dict[str, Any]:
+    data = body if body is not None else json.dumps({"embeddings": {"float": vectors}}).encode()
+    response: dict[str, Any] = {
+        "body": StreamingBody(io.BytesIO(data), len(data)),
+        "contentType": "application/json",
+    }
+    if tokens is not None:
+        response["ResponseMetadata"] = {"HTTPHeaders": {"x-amzn-bedrock-input-token-count": tokens}}
+    return response
+
+
+def _expected_bedrock_params() -> dict[str, Any]:
+    return {
+        "modelId": embeddings_module.EMBEDDING_MODEL,
+        "contentType": "application/json",
+        "accept": "application/json",
+        "body": ANY,
+    }
+
+
+@pytest.mark.parametrize(
+    ("kind", "input_type"), [("document", "search_document"), ("query", "search_query")]
+)
+def test_cohere_embedding_backend_sends_complete_request(kind: str, input_type: str) -> None:
+    client, stubber, captured = _bedrock_client()
+    try:
+        stubber.add_response(
+            "invoke_model",
+            _bedrock_response([[0.0] * EMBEDDING_DIMENSIONS]),
+            _expected_bedrock_params(),
+        )
+        vectors = CohereEmbeddingBackend(client=client).embed_texts(
+            ["policy"], kind=cast(Any, kind)
+        )
+
+        assert vectors == [[0.0] * EMBEDDING_DIMENSIONS]
+        assert len(captured) == 1
+        request = captured[0]
+        assert request["modelId"] == embeddings_module.EMBEDDING_MODEL
+        assert request["contentType"] == "application/json"
+        assert request["accept"] == "application/json"
+        assert json.loads(request["body"]) == {
+            "texts": ["policy"],
+            "input_type": input_type,
+            "embedding_types": ["float"],
+            "output_dimension": EMBEDDING_DIMENSIONS,
+            "truncate": "NONE",
+        }
+    finally:
+        stubber.deactivate()
+
+
+def test_cohere_embedding_backend_batches_100_texts_in_order() -> None:
+    client, stubber, _captured = _bedrock_client()
+    texts = [f"text {index}" for index in range(100)]
+    first = [[float(index)] * EMBEDDING_DIMENSIONS for index in range(API_BATCH_SIZE)]
+    second = [[float(index)] * EMBEDDING_DIMENSIONS for index in range(API_BATCH_SIZE, 100)]
+    try:
+        stubber.add_response(
+            "invoke_model", _bedrock_response(first, tokens="3"), _expected_bedrock_params()
+        )
+        stubber.add_response(
+            "invoke_model", _bedrock_response(second, tokens="4"), _expected_bedrock_params()
+        )
+        assert CohereEmbeddingBackend(client=client).embed_texts(texts) == first + second
+        assert embeddings_module.take_last_prompt_tokens() == 7
+    finally:
+        stubber.deactivate()
+
+
+@pytest.mark.parametrize(
+    ("response", "message"),
+    [
+        (_bedrock_response([], tokens=None), "length"),
+        (_bedrock_response([[0.0] * (EMBEDDING_DIMENSIONS - 1)], tokens=None), "dimension"),
+        (_bedrock_response([], tokens=None, body=b"not json"), "body"),
+    ],
+)
+def test_cohere_embedding_backend_rejects_invalid_responses(
+    response: dict[str, Any], message: str
+) -> None:
+    client, stubber, _captured = _bedrock_client()
+    try:
+        stubber.add_response("invoke_model", response, _expected_bedrock_params())
+        with pytest.raises(RuntimeError, match=message):
+            CohereEmbeddingBackend(client=client).embed_texts(["policy"])
+    finally:
+        stubber.deactivate()
+
+
+def test_cohere_embedding_backend_does_not_retry_validation_error() -> None:
+    client, stubber, _captured = _bedrock_client()
+    try:
+        stubber.add_client_error(
+            "invoke_model",
+            service_error_code="ValidationException",
+            expected_params=_expected_bedrock_params(),
+        )
+        with pytest.raises(ClientError, match="ValidationException"):
+            CohereEmbeddingBackend(client=client).embed_texts(["too long"])
+    finally:
+        stubber.deactivate()
+
+
+def test_cohere_embedding_backend_retries_throttling_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, stubber, _captured = _bedrock_client()
+    sleeps: list[float] = []
+    monkeypatch.setattr(embeddings_module, "_sleep", sleeps.append)
+    monkeypatch.setattr(random, "uniform", lambda _lo, _hi: 0.0)
+    try:
+        stubber.add_client_error(
+            "invoke_model",
+            service_error_code="ThrottlingException",
+            expected_params=_expected_bedrock_params(),
+        )
+        stubber.add_response(
+            "invoke_model",
+            _bedrock_response([[0.0] * EMBEDDING_DIMENSIONS]),
+            _expected_bedrock_params(),
+        )
+        assert CohereEmbeddingBackend(client=client).embed_texts(["policy"]) == [
+            [0.0] * EMBEDDING_DIMENSIONS
+        ]
+        assert sleeps == [2.0]
+    finally:
+        stubber.deactivate()
+
+
+def test_cohere_embedding_backend_stops_after_repeated_throttling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, stubber, _captured = _bedrock_client()
+    monkeypatch.setattr(embeddings_module, "_sleep", lambda _delay: None)
+    try:
+        for _ in range(EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS):
+            stubber.add_client_error(
+                "invoke_model",
+                service_error_code="ThrottlingException",
+                expected_params=_expected_bedrock_params(),
+            )
+        with pytest.raises(ClientError, match="ThrottlingException"):
+            CohereEmbeddingBackend(client=client).embed_texts(["policy"])
+    finally:
+        stubber.deactivate()
+
+
+def test_cohere_embedding_backend_parks_bedrock_token_count() -> None:
+    client, stubber, _captured = _bedrock_client()
+    try:
+        stubber.add_response(
+            "invoke_model",
+            _bedrock_response([[0.0] * EMBEDDING_DIMENSIONS], tokens="11"),
+            _expected_bedrock_params(),
+        )
+        CohereEmbeddingBackend(client=client).embed_texts(["policy"])
+        assert embeddings_module.take_last_prompt_tokens() == 11
+    finally:
+        stubber.deactivate()
+
+
+def test_live_embedding_backend_selects_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        embeddings_module,
+        "route",
+        lambda: SimpleNamespace(embeddings=SimpleNamespace(backend="cohere")),
+    )
+    assert isinstance(embeddings_module.live_embedding_backend(), CohereEmbeddingBackend)
+
+    monkeypatch.setattr(
+        embeddings_module,
+        "route",
+        lambda: SimpleNamespace(embeddings=SimpleNamespace(backend="openai")),
+    )
+    monkeypatch.setattr(
+        embeddings_module, "resolve_openai_client", lambda *_args, **_kwargs: object()
+    )
+    assert isinstance(embeddings_module.live_embedding_backend(), OpenAIEmbeddingBackend)
+
+
+def test_chat_embedding_backend_selects_cohere_in_live_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(deps, "_live", lambda: True)
+    monkeypatch.setattr(
+        embeddings_module,
+        "route",
+        lambda: SimpleNamespace(embeddings=SimpleNamespace(backend="cohere")),
+    )
+
+    assert isinstance(deps.get_chat_embedding_backend(), CohereEmbeddingBackend)
+
+
+def test_chat_embedding_backend_selects_openai_in_live_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(deps, "_live", lambda: True)
+    monkeypatch.setattr(
+        embeddings_module,
+        "route",
+        lambda: SimpleNamespace(embeddings=SimpleNamespace(backend="openai")),
+    )
+    monkeypatch.setattr(
+        embeddings_module, "resolve_openai_client", lambda *_args, **_kwargs: object()
+    )
+
+    assert isinstance(deps.get_chat_embedding_backend(), OpenAIEmbeddingBackend)
+
+
+def test_pending_chunks_with_old_profile_are_pending_for_cohere(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pid, _rid = seed_task_and_run(conn)
+    snap_id, _tss_id = seed_source(conn, pid)
+    chunk_id = _insert_chunk(conn, snap_id, 1, "Old profile vector.")
+    conn.execute(
+        chunk_embedding.insert().values(
+            chunk_embedding_id=uuid.uuid4(),
+            chunk_id=chunk_id,
+            embedding_profile="openai_text_embedding_3_small_v1",
+            unit_policy=UNIT_POLICY,
+            unit_index=0,
+            unit_locator={"start": 0, "end": 19},
+            vector=[0.0] * EMBEDDING_DIMENSIONS,
+            created_at=now(),
+        )
+    )
+    monkeypatch.setattr(embeddings_module, "EMBEDDING_PROFILE", "cohere_embed_v4_1536_v1")
+
+    _eligible, pending, chunks = embeddings_module._pending_chunks(conn, pid, max_hydrated=10)
+
+    assert pending == 1
+    assert [chunk.chunk_id for chunk in chunks] == [chunk_id]
 
 
 # --- delete_task_data ---
@@ -582,12 +843,11 @@ def test_judgment_one_vector_per_unit_no_mean_pooling_path(conn: Connection) -> 
 
     stub = StubEmbeddingBackend()
     for row in rows:
-        unit_text = chunk_content[row.unit_locator["start"]:row.unit_locator["end"]]
+        unit_text = chunk_content[row.unit_locator["start"] : row.unit_locator["end"]]
         assert row.vector == stub.embed_texts([unit_text])[0]
 
     assert not any(
-        "mean" in name.casefold() or "pool" in name.casefold()
-        for name in dir(embeddings_module)
+        "mean" in name.casefold() or "pool" in name.casefold() for name in dir(embeddings_module)
     )
 
 
@@ -601,7 +861,7 @@ def test_derive_units_drops_whitespace_only_units_and_renumbers() -> None:
     assert all(unit["text"].strip() for unit in units)
     assert [unit["unit_index"] for unit in units] == list(range(len(units)))
     for unit in units:
-        assert content[unit["start"]:unit["end"]] == unit["text"]
+        assert content[unit["start"] : unit["end"]] == unit["text"]
 
 
 def test_embed_pending_chunks_whitespace_chunk_skipped_not_failed(conn: Connection) -> None:
@@ -610,17 +870,13 @@ def test_embed_pending_chunks_whitespace_chunk_skipped_not_failed(conn: Connecti
     _insert_chunk(conn, snap_id, 1, "\n\n\t  \n")
     _insert_chunk(conn, snap_id, 2, "A real chunk body.")
 
-    result = embed_pending_chunks(
-        conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid
-    )
+    result = embed_pending_chunks(conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid)
     assert result["embedded"] == 1
     assert result["failed"] == 0
     assert result["skipped_no_units"] == 1
 
     # The unitless chunk stays pending and stays out of the failed count on re-runs.
-    second = embed_pending_chunks(
-        conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid
-    )
+    second = embed_pending_chunks(conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid)
     assert second["embedded"] == 0
     assert second["failed"] == 0
     assert second["skipped_no_units"] == 1
@@ -635,8 +891,6 @@ def test_embed_pending_chunks_budget_path_returns_uniform_shape(conn: Connection
         conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid, max_chunks=0
     )
     assert result["budget_exceeded"] == 1
-    ok = embed_pending_chunks(
-        conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid
-    )
+    ok = embed_pending_chunks(conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid)
     assert ok["budget_exceeded"] == 0
     assert set(result) == set(ok)
