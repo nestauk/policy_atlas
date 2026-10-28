@@ -1,0 +1,119 @@
+import { describe, expect, it } from "vitest";
+
+import { beatSentence, FINISHED_NOTICE, finishedNotice, runFinishedSignpost, runningCardCopy, walkKind } from "./runProgress";
+
+describe("beatSentence", () => {
+  it("suggest: counts suggestions, appends the from-report clause when positive", () => {
+    expect(beatSentence("suggest", { suggested: 1, from_report: 0 })).toBe("Suggested 1 option");
+    expect(beatSentence("suggest", { suggested: 4, from_report: 2 })).toBe(
+      "Suggested 4 options · 2 from your evidence search",
+    );
+    expect(beatSentence("suggest", { from_report: 2 })).toBeNull();
+  });
+
+  it("option_searches: null on missing total, a dedicated zero line, else a ratio", () => {
+    expect(beatSentence("option_searches", {})).toBeNull();
+    expect(beatSentence("option_searches", { total: 0 })).toBe("No option searches to run");
+    expect(beatSentence("option_searches", { total: 3, finished: 3, failed: 0 })).toBe(
+      "Searched for 3 of 3 options",
+    );
+    expect(beatSentence("option_searches", { total: 1, finished: 1, failed: 0 })).toBe(
+      "Searched for 1 of 1 option",
+    );
+    expect(beatSentence("option_searches", { total: 3, finished: 2, failed: 1 })).toBe(
+      "Searched for 2 of 3 options · 1 failed",
+    );
+  });
+
+  it("inherit: null on missing documents, pluralises documents and linked tasks", () => {
+    expect(beatSentence("inherit", { links: 1, failed_links: 0 })).toBeNull();
+    expect(beatSentence("inherit", { documents: 1, links: 1, failed_links: 0 })).toBe(
+      "1 document from 1 linked task",
+    );
+    expect(beatSentence("inherit", { documents: 5, links: 2, failed_links: 0 })).toBe(
+      "5 documents from 2 linked tasks",
+    );
+    expect(beatSentence("inherit", { documents: 5, links: 2, failed_links: 1 })).toBe(
+      "5 documents from 2 linked tasks · 1 could not be read",
+    );
+  });
+
+  it("extract_interventions: null when both counts absent, omits a null part", () => {
+    expect(beatSentence("extract_interventions", {})).toBeNull();
+    expect(beatSentence("extract_interventions", { documents: 10, records: 3 })).toBe(
+      "Read 10 abstracts · 3 interventions covered",
+    );
+    expect(beatSentence("extract_interventions", { documents: 1 })).toBe("Read 1 abstract");
+    expect(beatSentence("extract_interventions", { records: 1 })).toBe("1 intervention covered");
+  });
+
+  it("longlist: null on missing options, omits each null part, never reads a theme count", () => {
+    // Task 046: theme moved to its own step, so a `themes` count in the
+    // longlist summary (an older frame) is ignored here.
+    expect(beatSentence("longlist", {})).toBeNull();
+    expect(
+      beatSentence("longlist", { options: 6, themes: 2, unclustered: 4, not_an_option: 1 }),
+    ).toBe("6 options · 4 records unclustered · 1 not an option");
+    expect(beatSentence("longlist", { options: 1 })).toBe("1 option");
+    expect(beatSentence("longlist", { options: 3 })).toBe("3 options");
+  });
+
+  it("option_profile: no beat, whatever its summary counts", () => {
+    expect(beatSentence("option_profile", {})).toBeNull();
+    expect(beatSentence("option_profile", { options: 6, typed: 5, kept: 1, invalid: 1 })).toBeNull();
+  });
+
+  it("theme: null on missing themes, else the theme count", () => {
+    expect(beatSentence("theme", {})).toBeNull();
+    expect(beatSentence("theme", { themes: 2, no_theme: 1 })).toBe("2 themes");
+    expect(beatSentence("theme", { themes: 1 })).toBe("1 theme");
+  });
+
+  it("constrain: null when both counts absent, omits a null part", () => {
+    expect(beatSentence("constrain", {})).toBeNull();
+    expect(beatSentence("constrain", { excluded: 2, no_in_scope: 1 })).toBe(
+      "2 excluded · 1 with no in-scope evidence",
+    );
+    expect(beatSentence("constrain", { excluded: 2 })).toBe("2 excluded");
+    expect(beatSentence("constrain", { no_in_scope: 1 })).toBe("1 with no in-scope evidence");
+  });
+
+  it("never returns a beat for an Evidence search stage", () => {
+    expect(beatSentence("acquire", { found: 40, relevant: 12 })).toBeNull();
+  });
+
+  it("never returns a beat for an unknown stage", () => {
+    expect(beatSentence("some_future_stage", { total: 5 })).toBeNull();
+  });
+});
+
+describe("walkKind — the shortlist walk (task 055)", () => {
+  it("names a shortlist walk by its purpose and by its stage", () => {
+    expect(walkKind("options_scoping", [], "shortlist")).toBe("shortlist");
+    expect(walkKind("options_scoping", [{ stage: "shortlist" } as never], null)).toBe("shortlist");
+    // The longlist walk ends in a shortlist step: still a longlist walk.
+    expect(walkKind("options_scoping", [{ stage: "theme" }, { stage: "shortlist" }] as never, null)).toBe("longlist");
+    expect(runningCardCopy("running", "shortlist").title).toBe("Proposing a shortlist…");
+    expect(runningCardCopy("succeeded", "shortlist").title).toBe("The shortlist is proposed");
+    expect(FINISHED_NOTICE.shortlist.before).toContain("proposed a shortlist");
+  });
+
+  it("says the proposal failed when a shortlist walk ends degraded", () => {
+    expect(runningCardCopy("degraded", "shortlist")).toEqual({
+      tone: "stopped",
+      eyebrow: "STOPPED",
+      title: "Policy Atlas could not propose",
+    });
+    expect(finishedNotice("shortlist", "degraded")).toEqual({
+      before: "Policy Atlas could not propose a shortlist. Your places are unchanged. Open the",
+      after: "tab.",
+    });
+    expect(runFinishedSignpost("t1", "degraded", "shortlist")?.message).toMatch(
+      /^Policy Atlas could not propose a shortlist\. Your places are unchanged\. Open the .+ tab\.$/,
+    );
+    expect(runFinishedSignpost("t1", "degraded", "shortlist")?.href).toBe("/tasks/t1/result?view=shortlist");
+    // A degraded longlist walk keeps its done words.
+    expect(runningCardCopy("degraded", "longlist").tone).toBe("done");
+    expect(finishedNotice("shortlist", "succeeded")).toBe(FINISHED_NOTICE.shortlist);
+  });
+});

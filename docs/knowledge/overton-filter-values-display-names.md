@@ -8,7 +8,7 @@ timestamp: 2026-07-11
 
 # Rule
 
-Overton's `source_country` filter (the wire target of the planner's
+Overton's `source_country` filter (the wire target of the Task Agent's
 `publisher_country` scope filter) matches **Overton display names** — `UK`, `USA`,
 `Canada` verified live at 20/20 result agreement — and **silently returns zero
 results** for ISO codes (`GB`) and full official names (`United Kingdom`). No error,
@@ -34,7 +34,7 @@ given) and misdiagnosable as thin coverage.
 
 # Watch out
 
-- The planner prompt's capability line states the display-name vocabulary explicitly;
+- The Task Agent prompt's capability line states the display-name vocabulary explicitly;
   if the filter grammar grows values, re-probe.
 - Any new search-backend filter inherits this: key verification (schema/400 behaviour)
   and value verification (does a *correct-looking but wrong* value fail loud or silent?)
@@ -54,5 +54,5 @@ given) and misdiagnosable as thin coverage.
 
 - [018 verification.md § B2](../tasks/018-dress-rehearsal/verification.md) (A6 live
   probes; 017 open item closed)
-- `publisher_country` capability line in `src/policy_atlas/planner_prompt.py`;
+- `publisher_country` capability line in `src/policy_atlas/task_agent_prompt.py`;
   `filters["overton"]` mapping in `src/policy_atlas/search_loop.py`

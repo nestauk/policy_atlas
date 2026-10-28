@@ -1,9 +1,9 @@
 """Agent backend seam (task 024, decision 3) — router + watch moments.
 
-Mirrors :mod:`policy_atlas.runtime.planner`: a live OpenAI structured-output
+Mirrors :mod:`policy_atlas.runtime.task_agent`: a live OpenAI structured-output
 backend with tracing inside the backend, and a deterministic zero-egress stub for
-tests and the CLI. One backend, three moments (contract decision 3): the planning
-moment lives in the planner seam; this module owns the two mid-run moments —
+tests and the CLI. One backend, three moments (contract decision 3): the task_agent
+moment lives in the task_agent seam; this module owns the two mid-run moments —
 
 - **route**: compiles a user's free-text steering prose at a pause into a fan-out
   plan of bounded directive deltas (Task 15 wires its APPLY path; Task 14 only
@@ -12,7 +12,22 @@ moment lives in the planner seam; this module owns the two mid-run moments —
   boundary (push-only, no tools);
 - **decide**: the judgment-class in-loco-user decision at a delegated decision
   point, and — with ``framing="authoring"`` — the authored-options composition
-  that rides an attended pause alongside the canonical floor.
+  that rides an attended pause alongside the canonical floor;
+- **sort_gate_turn**: the mini-class question · decision · unsure sort of a Task
+  Agent turn taken while an options-scoping walk is paused on its baseline gate
+  (task 044, A4). It applies nothing; the caller dispatches the verdict.
+- **sort_longlist_turn**: the mini-class ``longlist_verbs_v1`` sort of a Task
+  Agent turn taken while a longlist exists and no walk is active (task 045,
+  D13): question · add · exclude · include again · other. It applies nothing;
+  the caller proposes a verb back and applies it only on a confirming turn.
+- **propose_option_design**: the judgment-class ``option_design_v1`` call that
+  proposes a specified design back from an option the user named in their own
+  words (task 045, D19). It applies nothing; the caller stores the design.
+- **suggest_options**: the judgment-class ``longlist_suggest_v1`` call — the
+  longlist walk's ``suggest`` step (task 045, D7, A15). It applies nothing;
+  the ``suggest`` component mints the option rows. Typed at the harness as the
+  narrow :class:`~policy_atlas.options_scoping.suggest.suggest.SuggestBackend`
+  seam, which both backends here satisfy.
 
 This module also owns the **structurally-gated invocation** classifier, the
 **single-shot decide + bounded fallback deliberation loop** (contract decision 3's
@@ -36,10 +51,18 @@ from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
-from policy_atlas.core import tracing
-from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
+from policy_atlas.core.openai_client import resolve_openai_client, traced_parse
 from policy_atlas.core.prompt_fields import scrub_nul
-from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
+from policy_atlas.options_scoping.suggest.suggest_prompt import (
+    SUGGEST_BOUND,
+    SUGGEST_MAX_OUTPUT_TOKENS,
+    SUGGEST_PROMPT_VERSION,
+    LinkedReportContext,
+    SuggestedOptionWire,
+    SuggestPlanContext,
+    SuggestResponse,
+    build_suggest_messages,
+)
 from policy_atlas.runtime.agent_prompt import (
     ROUTER_MAX_OUTPUT_TOKENS,
     ROUTER_PROMPT_VERSION,
@@ -54,6 +77,24 @@ from policy_atlas.runtime.agent_prompt import (
     build_router_messages,
     build_watch_messages,
 )
+from policy_atlas.runtime.gate_sort_prompt import (
+    GATE_SORT_MAX_OUTPUT_TOKENS,
+    GATE_SORT_PROMPT_VERSION,
+    GateSortWire,
+    build_gate_sort_messages,
+)
+from policy_atlas.runtime.longlist_verbs_prompt import (
+    LONGLIST_VERBS_MAX_OUTPUT_TOKENS,
+    LONGLIST_VERBS_PROMPT_VERSION,
+    LonglistVerbWire,
+    build_longlist_verbs_messages,
+)
+from policy_atlas.runtime.option_design_prompt import (
+    OPTION_DESIGN_MAX_OUTPUT_TOKENS,
+    OPTION_DESIGN_PROMPT_VERSION,
+    OptionDesignWire,
+    build_option_design_messages,
+)
 
 if TYPE_CHECKING:
     from policy_atlas.runtime.runner import _DiscretionContext, _DiscretionOutcome
@@ -61,9 +102,9 @@ if TYPE_CHECKING:
 log = structlog.get_logger()
 
 # Model routing by moment (contract decision 3 — cost tiering, not agent identity).
-# route/decide are judgment-class (the planner's default judgment model); triage is
+# route/decide are judgment-class (the task_agent's default judgment model); triage is
 # mini-class. Both env-overridable so ops can pin a different model without a code
-# change (the SYNTHESIS_MODEL/PLANNER_MODEL pattern). Triage used to borrow the
+# change (the SYNTHESIS_MODEL/TASK_AGENT_MODEL pattern). Triage used to borrow the
 # stage-1 screening model; task 051 moved screening to gpt-5.6-luna and left triage
 # where it was, so the default is a literal here.
 AGENT_MODEL = os.environ.get("POLICY_ATLAS_AGENT_MODEL", "gpt-5.5")
@@ -100,7 +141,7 @@ WATCH_FALLBACK_TOOL_CALLS = 2
 WATCH_READ_TOOLS: tuple[str, ...] = ("lookup", "query_findings")
 
 # The wire models ARE the moment shapes, code-side and model-side — no separate
-# dataclass to keep in sync (the planner pattern).
+# dataclass to keep in sync (the task_agent pattern).
 RouterCompile = RouterCompileWire
 WatchTriage = WatchTriageWire
 WatchDecision = WatchDecisionWire
@@ -201,6 +242,91 @@ class AgentBackend(Protocol):
         """
         ...
 
+    def sort_gate_turn(
+        self,
+        utterance: str,
+        offered_options: list[dict[str, str]],
+        *,
+        session_id: uuid.UUID | None = None,
+    ) -> GateSortWire:
+        """Sort one Task Agent turn taken at a paused gate (task 044, A4).
+
+        The mini-class third moment: while an options-scoping walk is paused
+        on its baseline gate the user's turn is either a question about the
+        baseline or one of the offered decisions, and only the caller may act
+        on the verdict — this call applies nothing.
+
+        Args:
+            utterance: The user's verbatim turn text.
+            offered_options: The check-in card's options as ``{"id", "label"}``
+                dicts, in card order.
+            session_id: Optional Langfuse session id shared by the task.
+
+        Returns:
+            One parsed sort verdict.
+
+        Raises:
+            RuntimeError: If the backend cannot produce a usable verdict.
+        """
+        ...
+
+    def sort_longlist_turn(
+        self,
+        utterance: str,
+        options: list[dict[str, str]],
+        *,
+        pending: dict[str, str] | None = None,
+        session_id: uuid.UUID | None = None,
+    ) -> LonglistVerbWire:
+        """Sort one Task Agent turn taken while a longlist exists (task 045, D13).
+
+        The mini-class ``longlist_verbs_v1`` call. It applies nothing: the
+        caller proposes a verb back and applies it only on a confirming turn.
+
+        Args:
+            utterance: The user's verbatim turn text.
+            options: The longlist's options as ``{"id", "name", "state"}`` dicts.
+            pending: The action awaiting confirmation as ``{"verb", "label"}``,
+                or ``None``.
+            session_id: Optional Langfuse session id shared by the task.
+
+        Returns:
+            One parsed sort verdict.
+
+        Raises:
+            RuntimeError: If the backend cannot produce a usable verdict.
+        """
+        ...
+
+    def propose_option_design(
+        self,
+        words: str,
+        *,
+        question: str,
+        target_unit: str,
+        outcomes: list[str],
+        session_id: uuid.UUID | None = None,
+    ) -> OptionDesignWire:
+        """Propose a specified design back from the user's words (task 045, D19).
+
+        The judgment-class ``option_design_v1`` call. The user's words are
+        never edited; the design is Policy Atlas's reading of them.
+
+        Args:
+            words: The user's option, verbatim.
+            question: The plan's question.
+            target_unit: The plan's target unit.
+            outcomes: The plan's outcomes, in order.
+            session_id: Optional Langfuse session id shared by the task.
+
+        Returns:
+            One parsed design proposal.
+
+        Raises:
+            RuntimeError: If the backend cannot produce a usable design.
+        """
+        ...
+
 
 # --- Live OpenAI implementation --------------------------------------------
 
@@ -226,6 +352,16 @@ def _scrub_router(compile_result: RouterCompileWire) -> RouterCompileWire:
 
 def _scrub_triage(triage: WatchTriageWire) -> WatchTriageWire:
     return triage.model_copy(update={"reason": scrub_nul(triage.reason)})
+
+
+def scrub_model[M: BaseModel](model: M) -> M:
+    """Return a copy of a flat wire model with NUL bytes scrubbed from its text fields."""
+    updates = {
+        name: scrub_nul(value)
+        for name in type(model).model_fields
+        if isinstance(value := getattr(model, name), str)
+    }
+    return model.model_copy(update=updates)
 
 
 def _scrub_decision(decision: WatchDecisionWire) -> WatchDecisionWire:
@@ -344,6 +480,104 @@ class OpenAIAgentBackend:
         )
         return _scrub_decision(parsed.to_wire())
 
+    def sort_gate_turn(
+        self,
+        utterance: str,
+        offered_options: list[dict[str, str]],
+        *,
+        session_id: uuid.UUID | None = None,
+    ) -> GateSortWire:
+        """Sort a gate turn through structured OpenAI output (mini-class)."""
+        messages = build_gate_sort_messages(utterance, offered_options)
+        parsed = self._parse(
+            messages,
+            response_format=GateSortWire,
+            model=AGENT_TRIAGE_MODEL,
+            max_output_tokens=GATE_SORT_MAX_OUTPUT_TOKENS,
+            usage_event="agent.gate_sort.usage",
+            label="agent-gate-sort",
+            prompt_version=GATE_SORT_PROMPT_VERSION,
+            name="agent:gate_sort",
+            session_id=session_id,
+        )
+        return scrub_model(parsed)
+
+    def sort_longlist_turn(
+        self,
+        utterance: str,
+        options: list[dict[str, str]],
+        *,
+        pending: dict[str, str] | None = None,
+        session_id: uuid.UUID | None = None,
+    ) -> LonglistVerbWire:
+        """Sort a longlist turn through structured OpenAI output (mini-class)."""
+        messages = build_longlist_verbs_messages(utterance, options, pending=pending)
+        parsed = self._parse(
+            messages,
+            response_format=LonglistVerbWire,
+            model=AGENT_TRIAGE_MODEL,
+            max_output_tokens=LONGLIST_VERBS_MAX_OUTPUT_TOKENS,
+            usage_event="agent.longlist_sort.usage",
+            label="agent-longlist-sort",
+            prompt_version=LONGLIST_VERBS_PROMPT_VERSION,
+            name="agent:longlist_sort",
+            session_id=session_id,
+        )
+        return scrub_model(parsed)
+
+    def propose_option_design(
+        self,
+        words: str,
+        *,
+        question: str,
+        target_unit: str,
+        outcomes: list[str],
+        session_id: uuid.UUID | None = None,
+    ) -> OptionDesignWire:
+        """Propose a design through structured OpenAI output (judgment-class)."""
+        messages = build_option_design_messages(
+            words=words, question=question, target_unit=target_unit, outcomes=outcomes
+        )
+        return self._parse(
+            messages,
+            response_format=OptionDesignWire,
+            model=AGENT_MODEL,
+            max_output_tokens=OPTION_DESIGN_MAX_OUTPUT_TOKENS,
+            usage_event="agent.option_design.usage",
+            label="agent-option-design",
+            prompt_version=OPTION_DESIGN_PROMPT_VERSION,
+            name="agent:option_design",
+            session_id=session_id,
+        )
+
+    def suggest_options(
+        self,
+        *,
+        plan: SuggestPlanContext,
+        baseline_sections: list[tuple[str, str]],
+        linked_reports: list[LinkedReportContext],
+        bound: int = SUGGEST_BOUND,
+        session_id: uuid.UUID | None = None,
+    ) -> SuggestResponse:
+        """Suggest options through structured OpenAI output (judgment-class)."""
+        messages = build_suggest_messages(
+            plan=plan,
+            baseline_sections=baseline_sections,
+            linked_reports=linked_reports,
+            bound=bound,
+        )
+        return self._parse(
+            messages,
+            response_format=SuggestResponse,
+            model=AGENT_MODEL,
+            max_output_tokens=SUGGEST_MAX_OUTPUT_TOKENS,
+            usage_event="agent.suggest.usage",
+            label="agent-suggest",
+            prompt_version=SUGGEST_PROMPT_VERSION,
+            name="agent:suggest",
+            session_id=session_id,
+        )
+
     def _parse[T: BaseModel](
         self,
         messages: list[ChatCompletionMessageParam],
@@ -358,38 +592,19 @@ class OpenAIAgentBackend:
         session_id: uuid.UUID | None,
         metadata: dict[str, Any] | None = None,
     ) -> T:
-        def _call() -> UsageResult[T]:
-            return parse_structured(
-                self._client,
-                messages=messages,
-                response_format=response_format,
-                usage_event=usage_event,
-                label=label,
-                model=model,
-                max_completion_tokens=max_output_tokens,
-            )
-
-        def _update(span: Any, result: UsageResult[T]) -> None:
-            parsed, usage = result
-            span.update(
-                usage_details=usage_details(usage),
-                input={"messages": messages},
-                output=parsed.model_dump(),
-                model=model,
-                metadata={
-                    "prompt_version": prompt_version,
-                    **(metadata or {}),
-                    **usage_metadata(usage),
-                },
-            )
-
-        parsed, _usage = tracing.traced_call(
+        parsed, _usage = traced_parse(
+            self._client,
             self._langfuse_client,
+            messages=messages,
+            response_format=response_format,
+            model=model,
+            max_output_tokens=max_output_tokens,
+            usage_event=usage_event,
+            label=label,
             name=name,
-            as_type="generation",
-            call=_call,
+            prompt_version=prompt_version,
             session_id=session_id,
-            update=_update,
+            metadata=metadata,
         )
         return parsed
 
@@ -423,6 +638,78 @@ def _proceed() -> WatchDecisionWire:
     )
 
 
+def _unsorted() -> GateSortWire:
+    """The stub default: unsure, so the product asks back and applies nothing."""
+    return GateSortWire(kind="unsure", reason="Deterministic stub gate sort: unsure.")
+
+
+def _longlist_other() -> LonglistVerbWire:
+    """The stub default: other, so the product says what it can do and applies nothing."""
+    return LonglistVerbWire(kind="other", sort_reason="Deterministic stub longlist sort: other.")
+
+
+def _design_from_words(words: str, outcomes: list[str]) -> OptionDesignWire:
+    """The stub default: a design read straight from the user's words.
+
+    Deterministic and honest: the words are the one stated feature, nothing
+    is supplied, so nothing is marked assumed.
+    """
+    text = " ".join(words.split()) or "An option"
+    return OptionDesignWire(
+        name=text[:80],
+        description=text[:240],
+        design_features=[text[:240]],
+        outcomes_served=list(outcomes),
+        assumed=[],
+    )
+
+
+def _first_heading(markdown: str) -> str | None:
+    for line in markdown.splitlines():
+        if line.startswith("## ") and line[3:].strip():
+            return line[3:].strip()
+    return None
+
+
+def _suggest_from_plan(
+    plan: SuggestPlanContext, linked_reports: list[LinkedReportContext], bound: int
+) -> SuggestResponse:
+    """The stub default: one suggestion from the plan, one per linked report.
+
+    Deterministic and labelled like the live output, so a stub walk mints
+    both kinds of entrant: a ``model`` option named from the plan's intended
+    change, and a ``linked_report`` option per report, drawn from its first
+    section heading.
+    """
+    outcomes = list(plan.outcomes[:1])
+    change = " ".join(plan.intended_change.split()) or "the intended change"
+    options = [
+        SuggestedOptionWire(
+            name=f"Stub suggestion: {change}"[:80],
+            description=f"A deterministic stub option aimed at {change}."[:240],
+            design_features=[f"Aimed at {plan.target_unit}"[:240]],
+            outcomes_served=outcomes,
+            source="model",
+            report_section=None,
+        )
+    ]
+    for index, report in enumerate(linked_reports, start=1):
+        heading = _first_heading(report.report_markdown)
+        if heading is None:
+            continue
+        options.append(
+            SuggestedOptionWire(
+                name=f"Stub report option {index}: {heading}"[:80],
+                description=f"A deterministic stub option drawn from {heading}."[:240],
+                design_features=[f"As described under {heading}"[:240]],
+                outcomes_served=outcomes,
+                source="linked_report",
+                report_section=heading,
+            )
+        )
+    return SuggestResponse(options=options[:bound])
+
+
 class StubAgentBackend:
     """Deterministic, zero-egress, scriptable agent backend for tests/CLI.
 
@@ -437,6 +724,14 @@ class StubAgentBackend:
         route_responses: Canned :class:`RouterCompileWire` value(s), or ``None``.
         triage_responses: Canned :class:`WatchTriageWire` value(s), or ``None``.
         decide_responses: Canned :class:`WatchDecisionWire` value(s), or ``None``.
+        gate_sort_responses: Canned :class:`GateSortWire` value(s), or ``None``.
+        longlist_sort_responses: Canned :class:`LonglistVerbWire` value(s), or
+            ``None`` (the default sorts every turn as ``other``).
+        option_design_responses: Canned :class:`OptionDesignWire` value(s), or
+            ``None`` (the default reads the design from the words).
+        suggest_responses: Canned :class:`SuggestResponse` value(s), or
+            ``None`` (the default suggests one option from the plan and one
+            per linked report).
     """
 
     def __init__(
@@ -445,13 +740,28 @@ class StubAgentBackend:
         route_responses: RouterCompileWire | list[RouterCompileWire] | None = None,
         triage_responses: WatchTriageWire | list[WatchTriageWire] | None = None,
         decide_responses: WatchDecisionWire | list[WatchDecisionWire] | None = None,
+        gate_sort_responses: GateSortWire | list[GateSortWire] | None = None,
+        longlist_sort_responses: LonglistVerbWire | list[LonglistVerbWire] | None = None,
+        option_design_responses: OptionDesignWire | list[OptionDesignWire] | None = None,
+        suggest_responses: SuggestResponse | list[SuggestResponse] | None = None,
     ) -> None:
         self._route_queue = _as_queue(route_responses)
         self._triage_queue = _as_queue(triage_responses)
         self._decide_queue = _as_queue(decide_responses)
+        self._gate_sort_queue = _as_queue(gate_sort_responses)
+        self._longlist_sort_queue = _as_queue(longlist_sort_responses)
+        self._option_design_queue = _as_queue(option_design_responses)
+        self._suggest_queue = _as_queue(suggest_responses)
         self.route_calls = 0
         self.triage_calls = 0
         self.decide_calls = 0
+        self.gate_sort_calls = 0
+        self.longlist_sort_calls = 0
+        self.longlist_sort_inputs: list[dict[str, Any]] = []
+        self.option_design_calls = 0
+        self.option_design_words: list[str] = []
+        self.suggest_calls = 0
+        self.suggest_inputs: list[dict[str, Any]] = []
 
     def route(
         self,
@@ -490,6 +800,69 @@ class StubAgentBackend:
         del request, header, payload, digest, framing, session_id
         self.decide_calls += 1
         return _next(self._decide_queue, _proceed)
+
+    def sort_gate_turn(
+        self,
+        utterance: str,
+        offered_options: list[dict[str, str]],
+        *,
+        session_id: uuid.UUID | None = None,
+    ) -> GateSortWire:
+        del utterance, offered_options, session_id
+        self.gate_sort_calls += 1
+        return _next(self._gate_sort_queue, _unsorted)
+
+    def sort_longlist_turn(
+        self,
+        utterance: str,
+        options: list[dict[str, str]],
+        *,
+        pending: dict[str, str] | None = None,
+        session_id: uuid.UUID | None = None,
+    ) -> LonglistVerbWire:
+        del session_id
+        self.longlist_sort_calls += 1
+        self.longlist_sort_inputs.append(
+            {"utterance": utterance, "options": list(options), "pending": pending}
+        )
+        return _next(self._longlist_sort_queue, _longlist_other)
+
+    def propose_option_design(
+        self,
+        words: str,
+        *,
+        question: str,
+        target_unit: str,
+        outcomes: list[str],
+        session_id: uuid.UUID | None = None,
+    ) -> OptionDesignWire:
+        del question, target_unit, session_id
+        self.option_design_calls += 1
+        self.option_design_words.append(words)
+        return _next(self._option_design_queue, lambda: _design_from_words(words, outcomes))
+
+    def suggest_options(
+        self,
+        *,
+        plan: SuggestPlanContext,
+        baseline_sections: list[tuple[str, str]],
+        linked_reports: list[LinkedReportContext],
+        bound: int = SUGGEST_BOUND,
+        session_id: uuid.UUID | None = None,
+    ) -> SuggestResponse:
+        del session_id
+        self.suggest_calls += 1
+        self.suggest_inputs.append(
+            {
+                "plan": plan,
+                "baseline_sections": list(baseline_sections),
+                "linked_reports": list(linked_reports),
+                "bound": bound,
+            }
+        )
+        return _next(
+            self._suggest_queue, lambda: _suggest_from_plan(plan, linked_reports, bound)
+        )
 
 
 def _as_queue[T](value: T | list[T] | None) -> list[T]:

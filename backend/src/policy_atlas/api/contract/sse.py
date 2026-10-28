@@ -17,8 +17,8 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field
 
 from .check_ins import CheckInOut
-from .planning import PlanDraft
 from .runs import RunStatus
+from .task_agent import PlanDraft, ScopingPlanDraft
 from .tasks import TaskStatus
 
 #: The pinned stable component-vocabulary stage keys (spec § SSE).
@@ -32,6 +32,15 @@ StageKey = Literal[
     "extract",
     "group",
     "synthesise",
+    "inherit",
+    "suggest",
+    "option_searches",
+    "extract_interventions",
+    "longlist",
+    "option_profile",
+    "constrain",
+    "theme",
+    "shortlist",
 ]
 
 #: `StageKey`'s members as a plain tuple, for runtime membership checks.
@@ -45,6 +54,15 @@ STAGE_KEYS: tuple[StageKey, ...] = (
     "extract",
     "group",
     "synthesise",
+    "inherit",
+    "suggest",
+    "option_searches",
+    "extract_interventions",
+    "longlist",
+    "option_profile",
+    "constrain",
+    "theme",
+    "shortlist",
 )
 
 #: Who decided a resolved check-in. Mirrors `steering_events.DecidedBy`.
@@ -71,7 +89,19 @@ class RunStatusFrame(_PersistedFrameBase):
     status: RunStatus
 
 
-class StageStartedFrame(_PersistedFrameBase):
+class _StageFrameBase(_PersistedFrameBase):
+    """Common fields for the three stage frames.
+
+    Args:
+        capability_run_id: The walk the component run belongs to (task 045,
+            A3), so a reader can keep an option search's stages off its
+            parent's timeline; `null` when the event names no component run.
+    """
+
+    capability_run_id: uuid.UUID | None = None
+
+
+class StageStartedFrame(_StageFrameBase):
     """A component run started."""
 
     type: Literal["stage.started"]
@@ -80,7 +110,7 @@ class StageStartedFrame(_PersistedFrameBase):
     blurb: str
 
 
-class StageCompletedFrame(_PersistedFrameBase):
+class StageCompletedFrame(_StageFrameBase):
     """A component reached its terminal (successful) outcome."""
 
     type: Literal["stage.completed"]
@@ -90,7 +120,7 @@ class StageCompletedFrame(_PersistedFrameBase):
     seconds: float | None = None
 
 
-class StageFailedFrame(_PersistedFrameBase):
+class StageFailedFrame(_StageFrameBase):
     """A component failed or was skipped."""
 
     type: Literal["stage.failed"]
@@ -151,7 +181,8 @@ class PlanUpdatedFrame(_PersistedFrameBase):
     """A plan row supersession (new draft turn, or approval)."""
 
     type: Literal["plan.updated"]
-    plan: PlanDraft
+    plan: PlanDraft | None = None
+    scoping: ScopingPlanDraft | None = None
     version: int
 
 

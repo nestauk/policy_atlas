@@ -3,7 +3,7 @@ type: Convention
 title: A code-word sweep inverts prose, identifiers and message strings already written in the screen sense
 description: When the code word and the screen word for one entity differ (ADR 0031 era: code `project` = screen Task), comments, docstrings, a few identifiers and — worst — user-facing message strings are written in the screen sense; a code-word sweep turns "a Task inside a Project" into "a Task inside a Task". Pair removed/added lines that name both entities, and grep message strings for doubled words, before the gate.
 tags: [rename, vocabulary, sweep, review, task-038]
-timestamp: 2026-09-05
+timestamp: 2026-09-17
 ---
 
 # Rule
@@ -22,6 +22,13 @@ Before a vocabulary sweep closes, run three inversion checks on its diff:
   `out of the task`, `tasks in one`). 038's two 409 messages —
   "leave the task out of the task" — shipped past the build gate because the
   test asserting them was swept in lockstep; three review lanes found them.
+
+- **Stored literals (044):** a table-driven identifier sweep renames a stored
+  enum value as happily as a code name. `planner-proposed` (a
+  `country_group.authorship` value inside plan payloads) went through the 044
+  sweep and surfaced only as an enum change in the OpenAPI diff. Before the
+  gate, read every changed quoted literal in the sweep diff against the
+  migration's rewrite list; a literal not on that list is a bug.
 
 # Why
 

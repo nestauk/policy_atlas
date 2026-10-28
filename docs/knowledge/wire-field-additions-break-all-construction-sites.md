@@ -3,7 +3,7 @@ type: Convention
 title: Wire-model field additions break every construction site at import — stage nulls first
 description: Extraction wire models are all-fields-required (OpenAI strict structured output forbids defaults), so ANY field addition breaks every construction site — including the few-shot example, whose import-time pre-flight fails the whole module. The keep-green pattern is mechanical nulls at the schema phase, real values authored at the prompt phase (task 020 phases A/B).
 tags: [wire-models, structured-output, pydantic, extraction, build-sequencing]
-timestamp: 2026-07-12
+timestamp: 2026-09-24
 ---
 
 # Rule
@@ -39,6 +39,11 @@ different commits (and different executors) without a red intermediate state.
   tells the model to omit makes honest outputs unserialisable — 028's
   endorsements needed `component`/`delta` nullable-on-endorsement with the
   requiredness moved into consumer-side validation (`watch_authoring_v2`).
+- **The API contract has the same shape on the frontend** (045): openapi-typescript makes
+  a *defaulted* response field required, so an additive boolean with a default breaks every
+  hand-written mock fixture of that type; and full-object test expectations of a read model
+  (`PlanOut`) fail on each new optional field (`opened_run: None`). Grep fixtures and
+  full-object asserts for the model when adding a field.
 - The import-time pre-flight is the guard doing its job: do not weaken it to
   make a partial addition pass.
 - Same family: [structured-output-prompts-pin-key-vocabulary](structured-output-prompts-pin-key-vocabulary.md)

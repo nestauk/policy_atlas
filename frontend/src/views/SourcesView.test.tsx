@@ -16,6 +16,7 @@ vi.mock("../api/queries", () => ({
   useEvidence: vi.fn(),
   useFindings: vi.fn(),
   useSourceDossier: vi.fn(),
+  useSourceRecords: vi.fn(),
   useFunnel: vi.fn(),
 }));
 
@@ -74,6 +75,9 @@ beforeEach(() => {
   );
   vi.mocked(queries.useSourceDossier).mockReturnValue(
     { data: undefined, isPending: false, isError: false } as unknown as ReturnType<typeof queries.useSourceDossier>,
+  );
+  vi.mocked(queries.useSourceRecords).mockReturnValue(
+    { data: undefined, isPending: false } as unknown as ReturnType<typeof queries.useSourceRecords>,
   );
   vi.mocked(queries.useFunnel).mockReturnValue(
     { data: mockFunnel } as unknown as ReturnType<typeof queries.useFunnel>,
@@ -379,5 +383,127 @@ describe("SourcesView — Download CSV", () => {
     expect((click.mock.instances[0] as HTMLAnchorElement).download).toBe("Tower Hamlets task - sources.csv");
     click.mockRestore();
     vi.unstubAllGlobals();
+  });
+});
+
+// Task 046, amendment 3 (R67): on an options-scoping task the dossier's
+// findings slot shows the document's intervention profile records.
+describe("SourcesView — the dossier's records on a scoping task", () => {
+  const dossier = mockSourceDossiers[mockEvidence[2].source_id];
+  const SOURCE_ID = dossier.source_id;
+  const OPTION_A = "a0000000-0000-4000-8000-00000000000a";
+  const OPTION_B = "a0000000-0000-4000-8000-00000000000b";
+  const record = (optionId: string, optionName: string, intervention: string) => ({
+    option_id: optionId,
+    option_name: optionName,
+    record_id: `${optionId}-record`,
+    intervention,
+    setting: "Jobcentres",
+    unit: "16 to 24 year olds",
+    outcome: "employment",
+    study_geography: "England",
+    role: "evaluated" as const,
+  });
+  const finding = {
+    finding_id: "f-1",
+    source_id: SOURCE_ID,
+    profile: "iof",
+    statement: "A finding statement from this source.",
+  };
+
+  function withTask(capability: "options_scoping" | "evidence_search") {
+    vi.mocked(queries.useTask).mockReturnValue(
+      { data: { name: "Tower Hamlets task", capability } } as unknown as ReturnType<typeof queries.useTask>,
+    );
+    vi.mocked(queries.useSourceDossier).mockReturnValue(
+      { data: dossier, isPending: false, isError: false } as unknown as ReturnType<typeof queries.useSourceDossier>,
+    );
+    vi.mocked(queries.useFindings).mockReturnValue(
+      { data: { data: [finding] }, isPending: false } as unknown as ReturnType<typeof queries.useFindings>,
+    );
+  }
+
+  function withRecords(records: ReturnType<typeof record>[]) {
+    vi.mocked(queries.useSourceRecords).mockReturnValue({
+      data: { task_source_snapshot_id: SOURCE_ID, records },
+      isPending: false,
+    } as unknown as ReturnType<typeof queries.useSourceRecords>);
+  }
+
+  function renderAt(search: string) {
+    return render(
+      <TooltipProvider>
+        <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/sources${search}`]}>
+          <Routes>
+            <Route path="/tasks/:taskId/sources" element={<SourcesView />} />
+          </Routes>
+        </MemoryRouter>
+      </TooltipProvider>,
+    );
+  }
+
+  it("from an option card: \"In this option\", the record in its own words", () => {
+    withTask("options_scoping");
+    withRecords([record(OPTION_A, "Youth guarantee", "youth guarantee")]);
+    renderAt(`?source=${SOURCE_ID}&option=${OPTION_A}`);
+    expect(vi.mocked(queries.useSourceRecords)).toHaveBeenLastCalledWith(
+      TASK_ID, SOURCE_ID, OPTION_A, { enabled: true },
+    );
+    expect(screen.getByText("In this option")).toBeInTheDocument();
+    expect(screen.queryByText("Findings from this source")).toBeNull();
+    for (const [label, value] of [
+      ["Intervention", "youth guarantee"],
+      ["Setting", "Jobcentres"],
+      ["Tried on", "16 to 24 year olds"],
+      ["Outcomes measured", "employment"],
+      ["Where", "England"],
+      ["Role", "evaluated"],
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(screen.getByText(value)).toBeInTheDocument();
+    }
+    // The option is the card's own: its name is not repeated.
+    expect(screen.queryByText("Youth guarantee")).toBeNull();
+    expect(screen.queryByText(finding.statement)).toBeNull();
+  });
+
+  it("from the Sources tab: \"Records\", one per option with the option's name", () => {
+    withTask("options_scoping");
+    withRecords([
+      record(OPTION_B, "Guarantee package", "guarantee package"),
+      record(OPTION_A, "Youth guarantee", "youth guarantee"),
+    ]);
+    renderAt(`?source=${SOURCE_ID}`);
+    expect(vi.mocked(queries.useSourceRecords)).toHaveBeenLastCalledWith(
+      TASK_ID, SOURCE_ID, null, { enabled: true },
+    );
+    expect(screen.getByText("Records")).toBeInTheDocument();
+    expect(screen.getByText("Guarantee package")).toBeInTheDocument();
+    expect(screen.getByText("Youth guarantee")).toBeInTheDocument();
+    expect(screen.getByText("guarantee package")).toBeInTheDocument();
+    expect(screen.getByText("youth guarantee")).toBeInTheDocument();
+    expect(screen.queryByText("In this option")).toBeNull();
+  });
+
+  it("a document with no record under the option shows its findings", () => {
+    withTask("options_scoping");
+    withRecords([]);
+    renderAt(`?source=${SOURCE_ID}&option=${OPTION_A}`);
+    expect(screen.getByText("Findings from this source")).toBeInTheDocument();
+    expect(screen.getByText(finding.statement)).toBeInTheDocument();
+    expect(screen.queryByText("In this option")).toBeNull();
+  });
+
+  it("an Evidence search task is unchanged: no records read, the findings shown", () => {
+    withTask("evidence_search");
+    withRecords([record(OPTION_A, "Youth guarantee", "youth guarantee")]);
+    renderAt(`?source=${SOURCE_ID}`);
+    expect(vi.mocked(queries.useSourceRecords)).toHaveBeenLastCalledWith(
+      TASK_ID, SOURCE_ID, null, { enabled: false },
+    );
+    expect(screen.getByText("Findings from this source")).toBeInTheDocument();
+    expect(screen.getByText(finding.statement)).toBeInTheDocument();
+    expect(screen.queryByText("Records")).toBeNull();
+    expect(screen.queryByText("youth guarantee")).toBeNull();
   });
 });

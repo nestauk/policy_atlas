@@ -67,7 +67,7 @@ function sampleFrames(): SseFrame[] {
       sequence: 1,
     },
     {
-      type: "stage.started",
+      type: "stage.started", capability_run_id: null,
       stage: "acquire",
       label: "Acquiring sources",
       blurb: "Searching academic and grey-lit backends.",
@@ -75,7 +75,7 @@ function sampleFrames(): SseFrame[] {
       sequence: 2,
     },
     {
-      type: "stage.completed",
+      type: "stage.completed", capability_run_id: null,
       stage: "acquire",
       label: "Acquiring sources",
       summary: { found: 42 },
@@ -99,6 +99,7 @@ function sampleFrames(): SseFrame[] {
     },
     {
       type: "plan.updated",
+      scoping: null,
       plan: planDraft(),
       version: 2,
       occurred_at: "2026-07-21T10:00:21Z",
@@ -164,6 +165,7 @@ describe("reduceRunStreamFrame — equal-sequence distinct-type frames", () => {
       },
       {
         type: "plan.updated",
+      scoping: null,
         plan: planDraft(),
         version: 2,
         occurred_at: "2026-07-21T10:00:20Z",
@@ -205,7 +207,7 @@ describe("reduceRunStreamFrame — new-run reset", () => {
       sequence: 1,
     });
     state = reduceRunStreamFrame(state, {
-      type: "stage.started",
+      type: "stage.started", capability_run_id: null,
       stage: "acquire",
       label: "Acquiring sources",
       blurb: "Searching.",
@@ -261,7 +263,7 @@ describe("reduceRunStreamFrame — new-run reset", () => {
         sequence: 1,
       },
       {
-        type: "stage.started",
+        type: "stage.started", capability_run_id: null,
         stage: "acquire",
         label: "Acquiring sources",
         blurb: "Searching.",
@@ -283,7 +285,7 @@ describe("reduceRunStreamFrame — new-run reset", () => {
         sequence: 4,
       },
       {
-        type: "stage.started",
+        type: "stage.started", capability_run_id: null,
         stage: "acquire",
         label: "Acquiring sources",
         blurb: "Searching again.",
@@ -361,6 +363,55 @@ describe("reduceRunStreamFrame — live artefact sections", () => {
       state: "filled",
       prose: "The available evidence supports the intervention.",
     });
+  });
+
+  // Task 044 (X8): an options-scoping baseline streams no "Key findings"
+  // section. The reducer must render exactly the titles the server sent, in
+  // the order it sent them — it inserts nothing of its own, and a section
+  // turns into its prose as its own `section_completed` arrives.
+  it("renders exactly the skeleton the server sent, in order, for a baseline walk", () => {
+    const titles = [
+      "What is in place",
+      "Trend if nothing changes",
+      "Who is affected",
+      "What is already changing",
+      "What is contested",
+      "How the transition is tracked",
+      "Cost of inaction",
+      "Key assumption",
+      "Sources",
+    ];
+    const skeleton = fold(createInitialRunStreamState(), [
+      liveFrames()[0],
+      {
+        type: "artefact.skeleton",
+        sections: titles.map((title, index) => ({ index, title, focus: `${title} focus.` })),
+        occurred_at: "2026-07-28T10:01:00Z",
+        sequence: 2,
+      },
+    ]);
+    const ordered = Object.values(skeleton.liveSections).sort((a, b) => a.index - b.index);
+    expect(ordered.map((section) => section.title)).toEqual(titles);
+    expect(ordered.every((section) => section.state === "planned")).toBe(true);
+
+    // The fourth section finishes before the others: only that slot fills.
+    const filled = fold(skeleton, [
+      {
+        type: "artefact.section_completed",
+        index: 3,
+        title: "What is already changing",
+        prose: "A devolved adult-skills settlement takes effect next year.",
+        occurred_at: "2026-07-28T10:02:00Z",
+        sequence: 3,
+      },
+    ]);
+    expect(filled.liveSections[3].state).toBe("filled");
+    expect(filled.liveSections[4].state).toBe("planned");
+    expect(
+      Object.values(filled.liveSections)
+        .sort((a, b) => a.index - b.index)
+        .map((section) => section.title),
+    ).toEqual(titles);
   });
 
   it("drops a completed empty-prose slot instead of inventing section content", () => {
@@ -525,7 +576,7 @@ describe("reduceRunStreamFrame — tick transience", () => {
 describe("reduceRunStreamFrame — stage lifecycle", () => {
   it("stage.completed updates the matching started entry in place rather than appending", () => {
     const started = reduceRunStreamFrame(createInitialRunStreamState(), {
-      type: "stage.started",
+      type: "stage.started", capability_run_id: null,
       stage: "screen",
       label: "Screening",
       blurb: "Applying inclusion criteria.",
@@ -533,7 +584,7 @@ describe("reduceRunStreamFrame — stage lifecycle", () => {
       sequence: 1,
     });
     const completed = reduceRunStreamFrame(started, {
-      type: "stage.completed",
+      type: "stage.completed", capability_run_id: null,
       stage: "screen",
       label: "Screening",
       summary: { included: 10 },
@@ -554,7 +605,7 @@ describe("reduceRunStreamFrame — stage lifecycle", () => {
 
   it("stage.failed with skipped=true records status skipped and carries the reason", () => {
     const started = reduceRunStreamFrame(createInitialRunStreamState(), {
-      type: "stage.started",
+      type: "stage.started", capability_run_id: null,
       stage: "group",
       label: "Grouping",
       blurb: "Clustering findings.",
@@ -562,7 +613,7 @@ describe("reduceRunStreamFrame — stage lifecycle", () => {
       sequence: 1,
     });
     const skipped = reduceRunStreamFrame(started, {
-      type: "stage.failed",
+      type: "stage.failed", capability_run_id: null,
       stage: "group",
       label: "Grouping",
       reason: "insufficient findings to cluster",
@@ -602,5 +653,90 @@ describe("reduceRunStreamFrame — task.updated partial merge", () => {
       question: "Original question",
       status: "active",
     });
+  });
+});
+
+// Task 045 (S12): a longlist walk's option searches publish on the same task
+// stream; they never become the live run.
+describe("reduceRunStreamFrame — child walks", () => {
+  it("records a child's status without switching the live run or its stages", () => {
+    const CHILD_ID = "44444444-4444-4444-4444-444444444444";
+    let state = createInitialRunStreamState();
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: TASK_RUN_ID,
+      status: "running",
+      occurred_at: "2026-09-22T10:00:00Z",
+      sequence: 1,
+    });
+    state = reduceRunStreamFrame(state, {
+      type: "stage.started", capability_run_id: null,
+      stage: "suggest",
+      label: "Suggesting options",
+      blurb: "",
+      occurred_at: "2026-09-22T10:00:01Z",
+      sequence: 2,
+    });
+    for (const [status, sequence] of [["running", 3], ["succeeded", 4]] as const) {
+      state = reduceRunStreamFrame(state, {
+        type: "run.status",
+        capability_run_id: CHILD_ID,
+        status,
+        occurred_at: "2026-09-22T10:00:02Z",
+        sequence,
+      });
+    }
+    expect(state.run?.id).toBe(TASK_RUN_ID);
+    expect(state.run?.status).toBe("running");
+    expect(state.stages).toHaveLength(1);
+    expect(state.runs[CHILD_ID]).toBe("succeeded");
+  });
+
+  // A3: a child's stage frames name the child; they stay off the walk's timeline.
+  it("drops a stage frame that names a different run than the tracked one", () => {
+    const CHILD_ID = "44444444-4444-4444-4444-444444444444";
+    let state = reduceRunStreamFrame(createInitialRunStreamState(), {
+      type: "run.status",
+      capability_run_id: TASK_RUN_ID,
+      status: "running",
+      occurred_at: "2026-09-22T10:00:00Z",
+      sequence: 1,
+    });
+    state = reduceRunStreamFrame(state, {
+      type: "stage.started",
+      capability_run_id: CHILD_ID,
+      stage: "acquire",
+      label: "Searching",
+      blurb: "",
+      occurred_at: "2026-09-22T10:00:01Z",
+      sequence: 2,
+    });
+    state = reduceRunStreamFrame(state, {
+      type: "stage.started",
+      capability_run_id: TASK_RUN_ID,
+      stage: "suggest",
+      label: "Suggesting options",
+      blurb: "",
+      occurred_at: "2026-09-22T10:00:02Z",
+      sequence: 3,
+    });
+    expect(state.stages.map((entry) => entry.stage)).toEqual(["suggest"]);
+    expect(state.lastSequence).toBe(3);
+  });
+
+  // A9: a child's late terminal frame, after the walk has finished, must not
+  // replace the walk as the tracked run.
+  it("keeps the finished walk when a child's run.finished arrives late", () => {
+    const CHILD_ID = "44444444-4444-4444-4444-444444444444";
+    const frames: SseFrame[] = [
+      { type: "run.status", capability_run_id: TASK_RUN_ID, status: "running", occurred_at: "2026-09-22T10:00:00Z", sequence: 1 },
+      { type: "run.status", capability_run_id: CHILD_ID, status: "running", occurred_at: "2026-09-22T10:00:01Z", sequence: 2 },
+      { type: "run.status", capability_run_id: TASK_RUN_ID, status: "succeeded", occurred_at: "2026-09-22T10:05:00Z", sequence: 3 },
+      { type: "run.status", capability_run_id: CHILD_ID, status: "interrupted", occurred_at: "2026-09-22T10:05:01Z", sequence: 4 },
+    ];
+    const state = frames.reduce(reduceRunStreamFrame, createInitialRunStreamState());
+    expect(state.run?.id).toBe(TASK_RUN_ID);
+    expect(state.run?.status).toBe("succeeded");
+    expect(state.runs[CHILD_ID]).toBe("interrupted");
   });
 });

@@ -2,6 +2,7 @@ import type { components } from "../../api/gen/types";
 
 type PlanDraft = components["schemas"]["PlanDraft"];
 type ScopeConstraints = NonNullable<PlanDraft["scope_constraints"]>;
+type ScopingConstraint = components["schemas"]["ScopingConstraintOut"];
 
 /**
  * The locked plan vocabulary (RETRO §2; contract strand 2). Labels render
@@ -115,7 +116,7 @@ export const STEERING_MODE_LABEL: Record<string, string> = {
 /**
  * Display bands seeded from the runtime `TIME_BANDS` table — search effort
  * × analysis depth. Kept here so the plan panel can update the estimate
- * without a planner round-trip.
+ * without a task_agent round-trip.
  */
 const TIME_BANDS: Record<string, Record<string, string>> = {
   rapid: {
@@ -203,7 +204,7 @@ export function timeBandFor(effort: string, depth: string): string | null {
   return TIME_BANDS[effort]?.[depth] ?? null;
 }
 
-/** Run-block status labels for the planning thread's run divider ("Analysis
+/** Run-block status labels for the task_agent thread's run divider ("Analysis
  *  run — running/paused/completed/…"). Unknown status → the caller omits. */
 export const RUN_BLOCK_STATUS: Record<string, string> = {
   running: "running",
@@ -263,4 +264,142 @@ export function scopeChips(constraints?: ScopeConstraints | null): string[] {
           ].join(", ");
   if (geography) chips.push(`Geography: ${geography}`);
   return chips;
+}
+
+// --- Options-scoping plan vocabulary (task 044, D5/D6/A8/C18) -------------
+//
+// The scoping plan document mirrors the ES document's shape (§ Plan
+// document, contract deliverable 5) but every one of these words is new —
+// there is no ES precedent to reuse, so they are pinned here rather than
+// left to drift between the fixture, the tests and the component.
+
+/** Screen words for a plan field's origin tag — every scoping field carries
+ *  one (contract § Terms, "origin tag"). Unknown origin → omitted, the same
+ *  fail-soft rule `vocabLabel` uses elsewhere on this page. */
+export const TAG_ORIGIN_LABEL: Record<string, string> = {
+  from_your_question: "from your question",
+  assumed: "assumed, please check",
+  your_call: "your choice",
+};
+
+/** Depth screen labels — never the internal `rapid | standard` key (A8). */
+export const SCOPING_DEPTH_LABEL: Record<string, string> = {
+  rapid: "Rapid scoping",
+  standard: "Standard scoping",
+};
+
+/** The shortlist's risk appetite (task 055, A25): how far it may reach beyond
+ *  options already tried elsewhere. The backend holds the same three answers
+ *  (`RISK_APPETITE_LABELS` in `scoping_plan.py`); a test pins the key set to
+ *  the generated enum. */
+export type RiskAppetite = NonNullable<components["schemas"]["ScopingPlanPatch"]["risk_appetite"]>;
+export const RISK_APPETITE_LABELS = {
+  tried_only: "Cautious: only options that have been evaluated somewhere",
+  mostly_tried: "Balanced: mostly evaluated, plus one or two not yet evaluated",
+  open_to_untested: "Ambitious: the biggest ideas, even those never implemented",
+} satisfies Record<RiskAppetite, string>;
+
+/** Check-ins (steering mode) screen words for a scoping plan — its own
+ *  wording, distinct from the ES's `STEERING_MODE_LABEL` above. */
+export const SCOPING_STEERING_MODE_LABEL: Record<string, string> = {
+  frequent: "Walk me through it",
+  moderate: "At the key decisions",
+  minimal: "Only when something needs my judgment",
+  unattended: "Run through without asking",
+};
+
+/** "Your context" entry-type screen words. */
+export const YOUR_CONTEXT_TYPE_LABEL: Record<string, string> = {
+  present_fact: "present fact",
+  commitment: "commitment",
+};
+
+/** Checked-at screen words for the constraints table's third column. */
+export const CONSTRAINT_CHECKED_AT_LABEL: Record<string, string> = {
+  longlist: "Longlist",
+  assessment: "Assessment",
+  retrieval: "Retrieval",
+};
+
+/** The fixed "What happens" sentence per constraint kind (contract § Terms,
+ *  "constraint kind"). One sentence per kind, never composed from parts, so
+ *  it reads the same on every plan. */
+const CONSTRAINT_KIND_EFFECT: Record<ScopingConstraint["kind"], string> = {
+  boundary: "Options that conflict are excluded, with the reason shown. You can include them again.",
+  consideration: "Kept with the plan for the shortlist and the assessment. It excludes nothing.",
+  preference:
+    "Checked after assessment where costs or effects are comparable. Until then, a labelled guess that sorts and never excludes.",
+  evidence_restriction:
+    'Other documents are set aside and counted. Known options stay, marked "no in-scope evidence" if none of their evidence is in scope.',
+};
+
+/** The consideration sentences that replace the generic one for two profile
+ *  lines (R34). */
+const CONSIDERATION_ASPECT_EFFECT: Record<string, string> = {
+  who_decides: "Each option on the longlist is labelled by who can adopt it. It excludes nothing.",
+  transferability: "Kept for the assessment. It excludes nothing.",
+};
+
+/** The profile lines' screen names (R36): the nine on the card, Potential
+ *  impact last (task 055), then transferability. Reused by later phases. */
+export const PROFILE_LINE_LABELS: Record<string, string> = {
+  cost: "Cost",
+  time_to_set_up: "Time to set up",
+  time_to_effect: "Time to effect",
+  workforce: "Workforce requirements",
+  who_decides: "Who decides",
+  dependencies: "Dependencies",
+  coordination: "Coordination requirements",
+  delivery_complexity: "Delivery complexity",
+  potential_impact: "Potential impact",
+  transferability: "Transferability",
+};
+
+export const STATED_LIMIT_LABEL = "Stated limit";
+
+/** The small lines shown under a consideration's text: "Consideration" with
+ *  the profile line's name, and "Stated limit" when hard. The other kinds
+ *  show none: their "What happens" sentence says what they are. */
+export function constraintKindLines(constraint: ScopingConstraint): string[] {
+  if (constraint.kind !== "consideration") return [];
+  const line = constraint.aspect != null ? (PROFILE_LINE_LABELS[constraint.aspect] ?? constraint.aspect) : null;
+  const first = line != null ? `Consideration · ${line}` : "Consideration";
+  return constraint.hard ? [first, STATED_LIMIT_LABEL] : [first];
+}
+
+/** The "What happens" sentence for a code-minted default constraint (task
+ *  045, D22), replacing its kind's sentence: the transferability preference
+ *  gets no reasoned guess before assessment, so the preference sentence
+ *  ("a labelled guess") would be wrong for it. */
+const DEFAULT_CONSTRAINT_EFFECT: Record<string, string> = {
+  transferability:
+    "Read at assessment for whether each option's evidence carries to your Where. No guess before then.",
+};
+
+/** The rider shown beside a default constraint's text (task 045, D22). */
+export const DEFAULT_CONSTRAINT_RIDER: Record<string, string> = {
+  transferability: "checked at assessment · assumed",
+};
+
+/** "Options you already have in mind" (task 045, D19). */
+export const YOUR_OPTIONS_TITLE = "Options you already have in mind";
+export const YOUR_OPTIONS_NONE = "None";
+export const YOUR_OPTIONS_DESIGN_LABEL = "Proposed design";
+export const YOUR_OPTIONS_DESIGN_PENDING = "No design yet";
+export const YOUR_OPTIONS_ASSUMED_TAG = "assumed";
+
+/** One constraint row's "What happens" text, plus the not-yet-applied
+ *  language rider when the constraint names languages (C8). */
+export function constraintEffectLines(constraint: ScopingConstraint): string[] {
+  const defaultEffect =
+    constraint.default != null ? DEFAULT_CONSTRAINT_EFFECT[constraint.default] : undefined;
+  const considerationEffect =
+    constraint.kind === "consideration" && constraint.aspect != null
+      ? CONSIDERATION_ASPECT_EFFECT[constraint.aspect]
+      : undefined;
+  const lines = [defaultEffect ?? considerationEffect ?? CONSTRAINT_KIND_EFFECT[constraint.kind]];
+  if (constraint.languages != null && constraint.languages.length > 0) {
+    lines.push("Language: not yet applied at retrieval");
+  }
+  return lines;
 }

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../auth";
 import { createAuthedApiClient } from "./client";
 import type { components } from "./gen/types";
+import { isRunActive } from "../views/scopingActivity";
 
 /**
  * Query-key roots, shared with `src/store/useRunStream.tsx` so SSE-driven
@@ -31,14 +32,16 @@ export const queryKeys = {
     ["tasks", taskId, "findings", query?.page, query?.page_size, query?.profile, query?.facet, query?.group, query?.group_id, query?.source_id] as const,
   decisions: (taskId: string, page?: number, pageSize?: number) =>
     ["tasks", taskId, "decisions", page, pageSize] as const,
-  planningTurns: (taskId: string, page?: number, pageSize?: number) =>
-    ["tasks", taskId, "planning-turns", page, pageSize] as const,
+  taskAgentTurns: (taskId: string, page?: number, pageSize?: number) =>
+    ["tasks", taskId, "task-agent-turns", page, pageSize] as const,
   plan: (taskId: string) => ["tasks", taskId, "plan"] as const,
-  runs: (taskId: string, page?: number, pageSize?: number) =>
-    ["tasks", taskId, "runs", page, pageSize] as const,
+  runs: (taskId: string, page?: number, pageSize?: number, parentless?: boolean) =>
+    ["tasks", taskId, "runs", page, pageSize, parentless] as const,
   artefact: (taskId: string) => ["tasks", taskId, "artefact"] as const,
   sourceDossier: (taskId: string, sourceId: string) =>
     ["tasks", taskId, "source-dossier", sourceId] as const,
+  sourceRecords: (taskId: string, sourceId: string, optionId?: string | null) =>
+    ["tasks", taskId, "source-records", sourceId, optionId ?? null] as const,
   /** Prefix shared by every filtered variant below — invalidate with this,
    *  not the filtered key, so a mutation clears every consumer's cache
    *  regardless of which `kind`/`status` it queried with (partial match
@@ -118,7 +121,7 @@ interface FindingsQuery extends PageQuery {
 
 /** Filters for the task conversation library. */
 interface ConversationQuery {
-  kind?: "planning" | "chat";
+  kind?: "task_agent" | "chat";
   status?: "active" | "closed" | "archived";
 }
 
@@ -153,29 +156,26 @@ export function useMe() {
   });
 }
 
-const ACTIVE_RUN_STATUSES = new Set(["running", "paused"]);
-
 /** `GET /api/v1/tasks` — paginated, owner-scoped. Live landing statuses
  *  (contract strand 14): while any listed task's `latest_run.status` is
  *  non-terminal, the list refetches on a modest interval so a card never
  *  keeps showing "Analysing"/"Paused" after the run has actually moved on.
  *  `refetchIntervalInBackground` defaults to `false`, so this only polls
  *  while the tab is visible. */
-export function useTasks(query?: TasksQuery) {
+export function useTasks(query?: TasksQuery, options?: { enabled?: boolean }) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.tasks(query),
+    enabled: options?.enabled,
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/tasks", { params: { query } });
       if (error) throw error;
       return data;
     },
     refetchInterval: (activeQuery) => {
-      const hasActiveRun = activeQuery.state.data?.data.some((task) =>
-        task.latest_run !== null &&
-        task.latest_run !== undefined &&
-        ACTIVE_RUN_STATUSES.has(task.latest_run.status),
-      );
+      // A scoping task can be busy while its `latest_run` is finished (an
+      // option search runs under `active_run` only — task 045, S15).
+      const hasActiveRun = activeQuery.state.data?.data.some(isRunActive);
       return hasActiveRun ? 15_000 : false;
     },
   });
@@ -242,8 +242,7 @@ export function useTask(taskId: string, options?: { pollWhileRunning?: boolean }
     },
     refetchInterval: (activeQuery) => {
       if (options?.pollWhileRunning !== true) return false;
-      const status = activeQuery.state.data?.latest_run?.status;
-      return status !== undefined && ACTIVE_RUN_STATUSES.has(status) ? 15_000 : false;
+      return isRunActive(activeQuery.state.data) ? 15_000 : false;
     },
   });
 }
@@ -355,6 +354,37 @@ export function useFindings(taskId: string, query?: FindingsQuery) {
   });
 }
 
+/** `GET /api/v1/tasks/{task_id}/sources/{source_id}/records` — on an
+ *  options-scoping task, the document's intervention profile records under
+ *  the options, one per (option, record); one option's only with `optionId`
+ *  (task 046, amendment 3, R67). Enable it only on a scoping task. */
+export function useSourceRecords(
+  taskId: string,
+  sourceId: string | null,
+  optionId?: string | null,
+  options?: { enabled?: boolean },
+) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.sourceRecords(taskId, sourceId ?? "", optionId),
+    queryFn: async () => {
+      if (!sourceId) return undefined;
+      const { data, error } = await client.GET(
+        "/api/v1/tasks/{task_id}/sources/{source_id}/records",
+        {
+          params: {
+            path: { task_id: taskId, source_id: sourceId },
+            query: optionId ? { option_id: optionId } : undefined,
+          },
+        },
+      );
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(taskId && sourceId) && (options?.enabled ?? true),
+  });
+}
+
 /** `GET /api/v1/tasks/{task_id}/sources/{source_id}` — one source's
  * provenance, latest citations and dossier detail. */
 export function useSourceDossier(taskId: string, sourceId: string | null) {
@@ -391,14 +421,14 @@ export function useDecisions(taskId: string, query?: PageQuery) {
   });
 }
 
-/** `GET /api/v1/tasks/{task_id}/planning-turns` — the durable,
- * paginated planning transcript in ascending `turn_index` order. */
-export function usePlanningTurns(taskId: string, query?: PageQuery) {
+/** `GET /api/v1/tasks/{task_id}/task-agent-turns` — the durable,
+ * paginated task_agent transcript in ascending `turn_index` order. */
+export function useTaskAgentTurns(taskId: string, query?: PageQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.planningTurns(taskId, query?.page, query?.page_size),
+    queryKey: queryKeys.taskAgentTurns(taskId, query?.page, query?.page_size),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/planning-turns", {
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/task-agent-turns", {
         params: { path: { task_id: taskId }, query },
       });
       if (error) throw error;
@@ -409,7 +439,7 @@ export function usePlanningTurns(taskId: string, query?: PageQuery) {
 }
 
 /** `GET /api/v1/tasks/{task_id}/conversations` — the task chat and
- * planning-conversation library. `options.enabled` lets the public task view
+ * task_agent-conversation library. `options.enabled` lets the public task view
  * (task 037) keep the hook mounted without issuing the non-public request. */
 export function useConversations(
   taskId: string,
@@ -502,11 +532,17 @@ export function usePlan(taskId: string) {
 }
 
 /** `GET /api/v1/tasks/{task_id}/runs` — paginated run blocks for the
- * planning-thread composition model. */
-export function useRuns(taskId: string, query?: PageQuery) {
+ * task_agent-thread composition model. */
+/** `parentless` (task 045, A13) keeps only the task's own walks — no
+ *  option searches, no child walks. */
+interface RunsQuery extends PageQuery {
+  parentless?: boolean;
+}
+
+export function useRuns(taskId: string, query?: RunsQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.runs(taskId, query?.page, query?.page_size),
+    queryKey: queryKeys.runs(taskId, query?.page, query?.page_size, query?.parentless),
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/tasks/{task_id}/runs", {
         params: { path: { task_id: taskId }, query },
@@ -572,6 +608,48 @@ export function useGroups(taskId: string) {
       });
       if (error) throw error;
       return data;
+    },
+    enabled: Boolean(taskId),
+  });
+}
+
+// --- Longlist (task 045 phase 6.2) --------------------------------------
+
+/** `GET /api/v1/tasks/{task_id}/options/{option_id}` — one option's card,
+ *  assembled (D15). A 404 is treated as absence, not an error. */
+export function useOption(taskId: string, optionId: string) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: [...queryKeys.taskRoot(taskId), "options", optionId] as const,
+    queryFn: async () => {
+      const { data, error, response } = await client.GET(
+        "/api/v1/tasks/{task_id}/options/{option_id}",
+        { params: { path: { task_id: taskId, option_id: optionId } } },
+      );
+      if (response.status === 404) return null;
+      if (error) throw error;
+      return data ?? null;
+    },
+    enabled: Boolean(taskId) && Boolean(optionId),
+  });
+}
+
+/** `GET /api/v1/tasks/{task_id}/longlist` — an options-scoping task's
+ *  longlist (task 045), or `null` while none exists. The `useArtefact`
+ *  shape: a 404 is the normal pre-longlist state, not an error. Keyed under
+ *  the task root so the run stream's invalidation refreshes it. */
+export function useLonglist(taskId: string) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: [...queryKeys.taskRoot(taskId), "longlist"] as const,
+    queryFn: async () => {
+      const { data, error, response } = await client.GET(
+        "/api/v1/tasks/{task_id}/longlist",
+        { params: { path: { task_id: taskId } } },
+      );
+      if (response.status === 404) return null;
+      if (error) throw error;
+      return data ?? null;
     },
     enabled: Boolean(taskId),
   });

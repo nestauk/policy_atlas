@@ -17,7 +17,7 @@ import { WorkspaceView } from "./WorkspaceView";
  * the Task's conversations with one Task Agent pinned first, and the main
  * column shows whichever the `?chat=` param names.
  *
- * `PlanningPane`, `PlanDocument` and `ChatPane` are mocked to prop echoes —
+ * `TaskAgentPane`, `PlanDocument` and `ChatPane` are mocked to prop echoes —
  * each is covered thoroughly in its own file — so this proves the wiring:
  * which pane is mounted, and what ownership it is handed.
  */
@@ -30,12 +30,12 @@ const state = vi.hoisted(() => ({
 }));
 
 const iso = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
-// One open planning lineage, one closed, one chat — the shape invariant I8
+// One open task_agent lineage, one closed, one chat — the shape invariant I8
 // needs: exactly one Task Agent, the older lineage an "Earlier plan".
 const activeRows = [
   { id: "c1", kind: "chat", status: "active", closed_at: null, title: "Cost barriers", created_at: iso(1), entry_artefact_id: null, latest_turn_preview: null },
-  { id: "p1", kind: "planning", status: "active", closed_at: null, title: "Plan for Task Alpha", created_at: iso(2), entry_artefact_id: null, latest_turn_preview: null },
-  { id: "p0", kind: "planning", status: "active", closed_at: iso(3), title: "Plan round 1", created_at: iso(3), entry_artefact_id: null, latest_turn_preview: null },
+  { id: "p1", kind: "task_agent", status: "active", closed_at: null, title: "Plan for Task Alpha", created_at: iso(2), entry_artefact_id: null, latest_turn_preview: null },
+  { id: "p0", kind: "task_agent", status: "active", closed_at: iso(3), title: "Plan round 1", created_at: iso(3), entry_artefact_id: null, latest_turn_preview: null },
 ];
 
 vi.mock("../api/queries", () => ({
@@ -74,10 +74,10 @@ vi.mock("./workspace/chat/conversationState", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./workspace/chat/conversationState")>()),
   useConversationMutations: () => state,
 }));
-vi.mock("./workspace/PlanningPane", () => ({
-  PlanningPane: ({ isOwner, onReviewPlan }: { isOwner: boolean; onReviewPlan?: () => void }) => (
+vi.mock("./workspace/TaskAgentPane", () => ({
+  TaskAgentPane: ({ isOwner, onReviewPlan }: { isOwner: boolean; onReviewPlan?: () => void }) => (
     <div>
-      <span data-testid="planning-pane-is-owner">{String(isOwner)}</span>
+      <span data-testid="task_agent-pane-is-owner">{String(isOwner)}</span>
       <button type="button" onClick={onReviewPlan}>
         Open plan (test)
       </button>
@@ -130,7 +130,7 @@ describe("WorkspaceView — the URL leg (task 033 phase 10c, contract § 11 / ru
   it("owner: reaches the Agent route with the mutation surface live, no redirect", () => {
     taskState.isOwner = true;
     renderAtAgentTab();
-    expect(screen.getByTestId("planning-pane-is-owner")).toHaveTextContent("true");
+    expect(screen.getByTestId("task_agent-pane-is-owner")).toHaveTextContent("true");
   });
 
   it("non-owner: reaches the SAME route by address (not redirected) with the read-only variant", async () => {
@@ -140,7 +140,7 @@ describe("WorkspaceView — the URL leg (task 033 phase 10c, contract § 11 / ru
     // Reachable, not bounced to an error page or elsewhere — `LifecycleRoute`
     // never wraps this route, so a redirect here would have to come from
     // WorkspaceView itself, and it doesn't.
-    expect(screen.getByTestId("planning-pane-is-owner")).toHaveTextContent("false");
+    expect(screen.getByTestId("task_agent-pane-is-owner")).toHaveTextContent("false");
 
     // The plan document opened from here (PlanCard's "Review the plan",
     // read action) must render its already-tested read-only variant too.
@@ -205,9 +205,9 @@ describe("WorkspaceView — the Agent tab is two columns (038 V8, owner ruling 2
     expect(within(sidebar()).getByRole("button", { name: "Cost barriers" })).toBeInTheDocument();
   });
 
-  it("shows the planning pane in the main column by default — no ?chat= is the Task Agent", () => {
+  it("shows the task_agent pane in the main column by default — no ?chat= is the Task Agent", () => {
     renderAtAgentTab();
-    expect(screen.getByTestId("planning-pane-is-owner")).toBeInTheDocument();
+    expect(screen.getByTestId("task_agent-pane-is-owner")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
   });
 
@@ -220,7 +220,7 @@ describe("WorkspaceView — the Agent tab is two columns (038 V8, owner ruling 2
 
     await user.click(within(sidebar()).getByRole("button", { name: "Cost barriers" }));
     expect(screen.getByTestId("chat-pane")).toHaveTextContent("c1");
-    expect(screen.queryByTestId("planning-pane-is-owner")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("task_agent-pane-is-owner")).not.toBeInTheDocument();
     // The rail belongs to the plan, not to a chat.
     expect(screen.queryByTestId("plan-document-read-only")).not.toBeInTheDocument();
     expect(screen.getByTestId("search")).toHaveTextContent("?chat=c1");
@@ -229,23 +229,23 @@ describe("WorkspaceView — the Agent tab is two columns (038 V8, owner ruling 2
   it("opens the chat a ?chat= deep link names, the same param the other tabs' overlay uses", () => {
     renderAtAgentTab("?chat=c1");
     expect(screen.getByTestId("chat-pane")).toHaveTextContent("c1");
-    expect(screen.queryByTestId("planning-pane-is-owner")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("task_agent-pane-is-owner")).not.toBeInTheDocument();
   });
 
-  it("restores the planning pane and clears ?chat= when the Task Agent is chosen", async () => {
+  it("restores the task_agent pane and clears ?chat= when the Task Agent is chosen", async () => {
     const user = userEvent.setup();
     renderAtAgentTab("?chat=c1");
     await user.click(within(sidebar()).getByRole("button", { name: "Show chats" }));
     await user.click(within(sidebar()).getByRole("button", { name: "Task Agent" }));
-    expect(screen.getByTestId("planning-pane-is-owner")).toBeInTheDocument();
+    expect(screen.getByTestId("task_agent-pane-is-owner")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
     expect(screen.getByTestId("search")).toHaveTextContent("");
     expect(screen.getByTestId("search").textContent).not.toContain("chat=");
   });
 
-  it("reads a planning id in the param as the Task Agent, never as a second thread", () => {
+  it("reads a task_agent id in the param as the Task Agent, never as a second thread", () => {
     renderAtAgentTab("?chat=p0");
-    expect(screen.getByTestId("planning-pane-is-owner")).toBeInTheDocument();
+    expect(screen.getByTestId("task_agent-pane-is-owner")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
   });
 
@@ -287,7 +287,7 @@ describe("WorkspaceView — the Agent tab is two columns (038 V8, owner ruling 2
       .map((button) => button.textContent)
       .filter((text): text is string => text !== null && names.includes(text));
     expect(rendered).toEqual(["Task Agent", "Cost barriers", "Earlier plan"]);
-    expect(screen.getByTestId("planning-pane-is-owner")).toHaveTextContent("false");
+    expect(screen.getByTestId("task_agent-pane-is-owner")).toHaveTextContent("false");
     await user.click(screen.getByRole("button", { name: "Open plan (test)" }));
     expect(screen.getByTestId("plan-document-read-only")).toHaveTextContent("true");
   });

@@ -112,7 +112,7 @@ Every non-2xx: `{"error": {"code": <machine string>, "message": <human>,
 Mapping: 400 `malformed` · 401 `unauthenticated` · **403 `forbidden`**
 (visible but not writable — task 033) · 404 `not_found` ·
 409 `run_active` | `already_answered` | `capacity` |
-`planning_turn_in_progress` | `chat_turn_in_progress` | `stale_turn` |
+`task_agent_turn_in_progress` | `chat_turn_in_progress` | `stale_turn` |
 `no_completed_run` | `plan_stale` | **`visibility_conflict`** (setting a
 task's visibility while it is in a project — change the project's
 visibility, or leave the task out of it) | **`already_registered`**
@@ -163,6 +163,41 @@ Splash-page **Request access** intake. Public — no bearer token.
   the creator's `org_id` (NULL for an unenrolled creator) and
   `visibility='private'` (the column default — new work is unshared until
   its owner shares it; owner amendment 2026-08-26).
+  Task 044: the body also takes `capability` (`evidence_search` default |
+  `options_scoping`, written once and never changed), `project_ids[]` and
+  `from_task_ids[]`, applied in **one transaction** (C10): the same-project
+  rule is checked when a link is written (409 `link_project_mismatch`), the
+  pinned source walk must be `succeeded | degraded` (409
+  `link_source_unfinished`), the source must be an Evidence search task (409
+  `link_source_capability`; review stack 2026-09-17), at most ten
+  `from_task_ids` per create (422; an accident guard, owner 2026-09-18), and a failed request leaves no task row.
+  A link never widens what the reader can see: `source_task_name` is `null`
+  for a source the reader cannot open (ADR 0037 decision 2).
+  `TaskOut` carries `capability` and `links[]` (`source_task_id`,
+  `source_task_name`, `source_capability_run_id`, `flagged` — true when the
+  two tasks no longer share a project; a link is never deleted).
+- `POST /api/v1/tasks/{id}/plan/confirm-baseline` `{artefact_id,
+  plan_version}` → `PlanOut` (task 044; Options scoping only, 422 on an
+  Evidence search task). Writes `baseline_confirmed {artefact_id,
+  plan_version}` into the scoping plan as a new approved version through
+  the ordinary plan-edit path; idempotent on the same pair (200, no new
+  version); 409 `run_active` while any walk is running or paused; 404 if the
+  artefact is not a baseline of this task. The plan-scoped record "Confirm
+  plan and build longlist" writes after a plan change without a rebuild (a
+  steering event needs a walk); task 2 replaces it with the longlist walk's
+  opening decision. *([task 045 contract](../tasks/045-scoping-longlist/contract.md), D1, D14, A23.)* The route now also **opens
+  the longlist walk** on the confirmed version — a new `capability_run`
+  under its own `purpose = longlist` intent record — taking the run
+  dispatch lock and pre-insert reservation `POST /runs` holds, and returns
+  the opened walk in an **optional** field of `PlanOut`. After a plan
+  change the plan document's **Rebuild longlist** posts here on the new
+  version; the rebuild is seeded with the existing options, so option ids,
+  exclusions and additions survive (owner: "build it now, ids kept").
+  `TaskOut` gains `active_run` (any running or paused walk, children
+  included) and `has_longlist` (a `longlist_result` row exists): a scoping
+  task's readers key on what exists and what is active, never on a single
+  latest run; `latest_run` stays as it is for the Evidence search (owner,
+  plan review P4: "scoping readers see what exists and what is active").
 - `GET /api/v1/tasks/{id}` → task (read grade, or the public leg —
   § Auth boundary). A public-leg read returns the **redacted shape**:
   `access = "public"`, `is_owner = false`, `owner_display = null`,
@@ -268,12 +303,12 @@ unreadable one are the same indistinguishable 404. There is no project
 archive route and no `archived_at` on the row; both land together if archiving
 is wanted (`docs/deferred.md` § Task lifecycle IA).
 
-### Planning turns
+### Task Agent turns
 
-- `POST /api/v1/tasks/{id}/planning-turns`
+- `POST /api/v1/tasks/{id}/task-agent-turns`
   `{message, client_turn_id}` → `{reply, plan, suggestions[]}` — one real
   planner turn. Every turn is durable in the per-task
-  `planning_transcript`: its monotonic `turn_index`, assigned when the user
+  `task_agent_transcript`: its monotonic `turn_index`, assigned when the user
   message is received, is the conversation ordering coordinate;
   `created_at` is display metadata only. `message` caps at 10 000 characters
   (turns are durable and rehydrated into every later planner call). The short
@@ -282,7 +317,7 @@ is wanted (`docs/deferred.md` § Task lifecycle IA).
   transaction (I2); a second transaction writes its reply, raw planner-state
   snapshot, projected response and suggestions as `completed`. When the turn
   approves a plan, that second transaction re-checks the run fence under the
-  task row lock (a run that started during the planner call fails the turn
+  task row lock (a run that started during the Task Agent call fails the turn
   with 409 `run_active` — no plan lands under a live walk) and then persists
   the plan, atomically. Planner failure marks the row `failed`; a process
   crash between phases leaves an honest `pending` row.
@@ -292,19 +327,53 @@ is wanted (`docs/deferred.md` § Task lifecycle IA).
   it re-runs in place with the same index. A reused id with a different
   message, or a non-latest unfinished retry, → 409 `stale_turn`. A new id
   while a `pending` row is younger than ten minutes → 409
-  `planning_turn_in_progress`; reading after ten minutes terminally marks the
+  `task_agent_turn_in_progress`; reading after ten minutes terminally marks the
   pending row `failed`. The process-local per-task turn lock remains a
   belt-and-braces concurrency guard under the one-instance posture.
-  A turn while the task's walk is running or parked → 409 `run_active`:
-  steering is the sanctioned mid-run plan channel, and the fence guarantees
-  the latest-approved plan is always the active walk's own lineage
-  (review adjudication, 2026-07-21).
+  A turn while the task's walk is **running** → 409 `run_active`. While the
+  walk is **paused**, an Evidence search task still refuses the turn (409
+  `run_active`: steering is its sanctioned mid-run plan channel), but an
+  **Options scoping** task admits it *(owner ruling 2026-09-09, task 044
+  decision D9: the gate is answered in the Task Agent chat; "routing hangs
+  on the turn, not on the conversation kind")*: the turn is sorted by the
+  gate sort (`gate_sort_v1`) into **question** — answered read-only from the
+  paused walk's pinned scope through the shared answer core and rendered
+  with citations (`kind: "answer"`, `answer: {...}`); the walk stays paused
+  — or **decision** — one of the pending check-in's offered options,
+  recorded through the same check-in response transaction as the card
+  (`kind: "decision"`, bound to the `capability_run_id`, the `check_in_id`
+  and the plan version; the second of a chat and a card answer is 409
+  `already_answered`); an instruction is the decision "Change the plan"
+  carrying the user's text, which ends the walk `aborted`, keeps the plan
+  `approved`, and continues the same transcript row as an ordinary planning
+  turn minting a new plan version (one row, two commits). An unsortable
+  turn is asked back (`kind: "reply"`); a decision is never inferred from a
+  question. The **approving branch** of a turn and `PATCH /plan` stay 409
+  `run_active` while a walk is running **or paused**: no plan version lands
+  under a live walk, so the fence still guarantees the latest-approved plan
+  is the active walk's own lineage (review adjudication, 2026-07-21).
+  **Longlist verbs** *([task 045 contract](../tasks/045-scoping-longlist/contract.md), D13; owner: "chat verbs in task 2,
+  buttons as the second way")*: while a longlist exists and no walk is
+  active, a Task Agent turn on a scoping task is sorted
+  (`longlist_verbs_v1`) into **question · add an option · exclude · include
+  again · other**. A question goes to the answer core over the union of the
+  longlist scope and the option searches' scopes; a verb is confirmed in
+  the thread before it is applied, never inferred; *add* mints the option
+  *added by you* with a design proposed back (`option_design_v1`) and starts
+  its option search (a child walk with no parent); *exclude* takes the
+  user's reason. Each applied verb writes the same state the buttons write
+  and a History event as the user's turn.
+  `TaskAgentTurnOut` / `TaskAgentTranscriptTurnOut` carry the optional
+  additive fields `kind` (`reply | answer | decision`), `answer` (the chat's
+  citation payload) and `decision` (`option_id`, `label`, `check_in_id`,
+  `capability_run_id`, `plan_version`); older rows carry none and read as
+  `reply`.
   The draft `plan` mirrors `TaskPlan` field-by-field with every
   field optional while drafting + `steps[]` + `ready`. Planner context
   rehydrates from completed rows in `turn_index` order (each contributes the
-  user message then planner reply); the raw `planner_state` from the latest
+  user message then planner reply); the raw `task_agent_state` from the latest
   completed row becomes `previous_draft`. Stored HTTP projections are never
-  fed back to the planner. A fresh tracing session id per request is correct:
+  fed back to the Task Agent. A fresh tracing session id per request is correct:
   conversation quality depends solely on that durable composition.
 - `GET /api/v1/tasks/{id}/plan` → the current plan (draft or approved,
   with `version`/`status`), whole-object. It returns the approved plan when
@@ -318,11 +387,14 @@ is wanted (`docs/deferred.md` § Task lifecycle IA).
   string clears that constraint. The merged result is re-validated as an
   executable `TaskPlan` and persisted as a new approved version
   (the previous approved row is superseded), with `source_turn_index` set to
-  the latest completed planning turn so `POST /runs` is not `plan_stale`.
+  the latest completed Task Agent turn so `POST /runs` is not `plan_stale`.
   409 `run_active` while a walk is running or paused; 404 when there is no
   plan to edit; 422 when the merged plan is not executable. This is the
-  document-edit path — it does not go through the planner.
-- `GET /api/v1/tasks/{id}/planning-turns` → the owner-scoped durable
+  document-edit path — it does not go through the Task Agent. On a scoping
+  task the plan read and patch bodies also carry `your_options` (*Options
+  you already have in mind*, D19) and the default preference "Transferable
+  to *Where*" (D22) — task 045.
+- `GET /api/v1/tasks/{id}/task-agent-turns` → the owner-scoped durable
   transcript in ascending `turn_index`, paginated in the standard
   `{data, pagination}` envelope. Each row exposes `turn_index`,
   `client_turn_id` (the caller's own idempotency key, returned so a
@@ -333,9 +405,9 @@ is wanted (`docs/deferred.md` § Task lifecycle IA).
 
 ### Conversations
 
-A **conversation** is `kind ∈ planning | chat`. A task holds **one active
-planning conversation** at a time (created with the task or on its first
-planning turn; the existing `/planning-turns` and `/plan` endpoints below
+A **conversation** is `kind ∈ task_agent | chat`. A task holds **one active
+Task Agent conversation** at a time (created with the task or on its first
+Task Agent turn; the existing `/task-agent-turns` and `/plan` endpoints below
 operate on it and additively expose `conversation_id` — paths and semantics
 are unchanged) plus **many chats** (Claude-Projects-style follow-up threads,
 user-created, task-scoped, answering across every artefact in the
@@ -366,7 +438,7 @@ archived conversations are the same 404.
   conversations *they* created, plus legacy NULL rows if they own the
   task), both kinds, newest first, standard `{data, pagination}`
   envelope; each row carries a `latest_turn_preview` (bounded snippet of
-  its most recent chat or planning turn, from whichever turn table its
+  its most recent chat or Task Agent turn, from whichever turn table its
   `kind` reads). Default listing excludes archived rows; `status=archived`
   is the one filter that lists the caller's own archived chats (planning
   conversations are never archived).
@@ -377,14 +449,14 @@ archived conversations are the same 404.
   unarchiving is the one call that resolves it back into reach.
 - `POST /tasks/{id}/conversations` `{entry_artefact_id?}` → 201 chat
   conversation with `created_by = sub`, titled `"New chat"` until its first
-  turn (kind is always `chat` — planning conversations are
+  turn (kind is always `chat` — Task Agent conversations are
   lifecycle-created, never minted by hand; the request model has no `kind`
   field, so asking for one is 422 by construction). Granted to owner and
   same-org colleague alike on a readable task; takes no lock on the
   task row. `entry_artefact_id` must name an artefact belonging to the
   same task, else 404.
 - `PATCH /conversations/{cid}` `{title?, entry_artefact_id?}` — chats only
-  (422 on a planning conversation); partial, an explicit `null`
+  (422 on a Task Agent conversation); partial, an explicit `null`
   `entry_artefact_id` clears the entry-context chip; a replacement artefact
   is task-guarded the same as at creation.
 - `POST /conversations/{cid}/archive` / `.../unarchive` — chats only (422 on
@@ -460,6 +532,11 @@ archived conversations are the same 404.
   standard `{data, pagination}` envelope — runs accumulate);
   `GET .../runs/{run_id}` → one. Status ∈ `running | paused | succeeded |
   degraded | failed | aborted | interrupted`.
+- **Child walks** *([task 045 contract](../tasks/045-scoping-longlist/contract.md), D6 and finding A1)*: an option search
+  is a `capability_run` whose `parent_capability_run_id` names the longlist
+  walk that asked for it; the parent waits for its children, and a child's
+  failure degrades the parent. The longlist walk's and its children's
+  progress arrive on the existing run stream (§ SSE).
 
 ### Check-ins (steering)
 
@@ -491,6 +568,22 @@ archived conversations are the same 404.
     in the same transaction, so SSE/replay see the terminal transition.
   A confirm token lost to restart/eviction → 409 `confirm_expired`
   (recompile to proceed).
+  Check-in kind `baseline_confirm` (task 044; Options scoping only — the
+  gate after the baseline, on the scoping lattice only): the render quotes
+  the baseline's key assumption and the plan's Settings; `options[]` are
+  `confirm_plan` ("Confirm plan and build longlist" → the walk finishes
+  `succeeded`; the decision payload records `plan_version` and the baseline
+  `artefact_id`; since task 045 (D1) the decision also opens the **longlist
+  walk** on the confirmed version under the dispatch lock and reservation,
+  and a chat decision carries the opened walk on the decision; the card
+  route stays `204` and the thread learns of the walk from the run stream —
+  owner, plan review P16a: "card route stays 204") and `change_plan` ("Change the plan" → response `abort`
+  with `action: "change_plan"`: the walk ends `aborted`, the plan stays
+  `approved` and editable). In unattended mode the point does not pause:
+  the runner records `decided_by: standing_default` and flags it for the
+  end-of-run review, and opens the longlist walk the same way (task 045,
+  finding A2). A decision may also arrive as a Task Agent turn
+  (§ Task Agent turns); both land in the same transaction.
   The answer and its `continuation.requested` event commit in one
   transaction; the parked run's **boundary continuation walk** dispatches
   after commit (answers are always accepted; execution may queue at the
@@ -538,6 +631,14 @@ render honest absence: missing stages are `null`/absent, never faked.
   their resolved member `sources` (`source_id`, `title`) when member identities
   are available. Stale or unresolvable references and member sources are
   omitted, and an empty theme resolution is `null`.
+
+**Longlist routes** *([task 045 contract](../tasks/045-scoping-longlist/contract.md), deliverable 11; Options scoping only)*:
+`GET /api/v1/tasks/{id}/longlist` (themes, options, counts, states, the run it
+came from) · `GET /api/v1/tasks/{id}/options/{option_id}` (the option card) ·
+`POST /api/v1/tasks/{id}/options` (add by hand — the button's path, the same
+handler as the chat verb) · `POST .../options/{option_id}/exclude` and
+`.../include` (with the user's reason). Each write is logged as the user's
+turn in History (OS ruling 1). All additive.
 
 The C.1 additions enrich these records additively: coverage exposes public
 backend names and post-run query detail; evidence exposes effective-screen

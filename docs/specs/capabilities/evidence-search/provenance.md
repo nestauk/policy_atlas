@@ -1,30 +1,30 @@
 ---
 type: Capability spec
 title: Evidence search — derived-claim provenance
-description: EB's instance of the trust contract — making it structurally impossible for a pipeline artefact to masquerade as a corpus fact.
+description: ES's instance of the trust contract — making it structurally impossible for a pipeline artefact to masquerade as a corpus fact.
 tags: [capability, evidence-search, provenance, honest-absence]
 timestamp: 2026-06-22
 ---
 
 # Evidence Base — derived-claim provenance (the central trust rule)
 
-EB's most consequential claim is an **absence** ("little evidence exists on X"), so the design
+ES's most consequential claim is an **absence** ("little evidence exists on X"), so the design
 must make it **structurally impossible for a pipeline artefact to masquerade as a corpus fact.**
-This file is EB's instance of the system trust contract
+This file is ES's instance of the system trust contract
 ([../../system/provenance-grounding.md](../../system/provenance-grounding.md)); the framework
 rule (gap coverage base, pattern grades) is owned there, and the coverage-state set by
-[../../system/data-model.md](../../system/data-model.md). The gap rule below is EB's application of
+[../../system/data-model.md](../../system/data-model.md). The gap rule below is ES's application of
 that framework rule, not its definition. Distilled from
 [backend-evidence-base-build-spec.md](../../sources/backend/backend-evidence-base-build-spec.md) §2
 *(Derived-claim provenance)*.
 
-## Why this is acute for EB
+## Why this is acute for ES
 
 The `select → extract` gating is what makes it sharp: extraction is gated to the **selected
 subset**, so the extracted finding set is a **strict subset** of the relevant corpus. Any absence
-read off extracted findings is relative to *what EB chose to extract*, **not** to the corpus.
+read off extracted findings is relative to *what ES chose to extract*, **not** to the corpus.
 
-## The gap rule (framework-level, applied by EB)
+## The gap rule (framework-level, applied by ES)
 
 - **Every gap / absence claim carries its coverage base** as a required field — the pipeline
   ladder **attempted-search → acquired → screened → selected → extracted.** Each rung narrows;
@@ -67,7 +67,7 @@ The same discipline applies to *patterns*, not only gaps. Each grade carries dif
    deterministic fact. *Softest grade* (facet grouping at `group` also inherits the extraction
    dependency).
 
-## How EB surfaces this
+## How ES surfaces this
 
 - The **dual-view coverage** at characterise (overall vs policy-filtered "well-evidenced") is the
   honest way to show where the base thins under the user's citable bar **without manufacturing a

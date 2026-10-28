@@ -48,6 +48,11 @@ _CONDITIONALLY_PUBLIC_GETS = frozenset(
         "/api/v1/tasks/{task_id}/coverage",
         "/api/v1/tasks/{task_id}/citations/{citation_key}/context",
         "/api/v1/tasks/{task_id}/chunks/{chunk_id}/context",
+        # Task 045 (S12): the longlist and the option card, public like the artefact.
+        "/api/v1/tasks/{task_id}/longlist",
+        "/api/v1/tasks/{task_id}/options/{option_id}",
+        # Task 046, amendment 3 (R67): the dossier's records, public like the dossier.
+        "/api/v1/tasks/{task_id}/sources/{source_id}/records",
     }
 )
 
@@ -61,6 +66,8 @@ _PUBLIC_STRUCTURAL_GETS = _CONDITIONALLY_PUBLIC_GETS - frozenset(
         "/api/v1/tasks/{task_id}/coverage",
         "/api/v1/tasks/{task_id}/citations/{citation_key}/context",
         "/api/v1/tasks/{task_id}/chunks/{chunk_id}/context",
+        "/api/v1/tasks/{task_id}/longlist",
+        "/api/v1/tasks/{task_id}/options/{option_id}",
     }
 )
 
@@ -353,6 +360,18 @@ _SEGMENT_RE = re.compile(r"^[a-z0-9_-]+$")
 _PROPERTY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _LEAKED_NAMES = ("policy_atlas", "runner", "agent", "harness")
 
+# `Task Agent` is product vocabulary from task 044 (the `/task-agent-turns`
+# route and the `TaskAgent*` contract models), not the internal runtime agent
+# this invariant guards, so it is removed before the `agent` check runs.
+_PRODUCT_TOKENS = ("task-agent", "task_agent", "taskagent")
+
+
+def _without_product_tokens(name: str) -> str:
+    lowered = name.lower()
+    for token in _PRODUCT_TOKENS:
+        lowered = lowered.replace(token, "")
+    return lowered
+
 
 def _built_openapi_schema(tmp_path: Path) -> dict[str, Any]:
     """Build the app in-process and return its generated OpenAPI document."""
@@ -398,8 +417,8 @@ def test_no_internal_module_names_leak_into_paths_or_schema_names(tmp_path: Path
     paths = list(schema["paths"])
     schema_names = list(schema.get("components", {}).get("schemas", {}))
     for leaked in _LEAKED_NAMES:
-        assert not any(leaked in path.lower() for path in paths), leaked
-        assert not any(leaked in name.lower() for name in schema_names), leaked
+        assert not any(leaked in _without_product_tokens(path) for path in paths), leaked
+        assert not any(leaked in _without_product_tokens(name) for name in schema_names), leaked
 
 
 # --- response_model whitelist spot check -------------------------------------

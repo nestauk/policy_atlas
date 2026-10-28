@@ -36,6 +36,32 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Options scoping: "Assess all kept options"** (owner, 2026-09-07): a whole-longlist
   assessment action beside "Assess these N". Deferred on inference cost; revisit after live
   runs show what a standard run costs (concept ruling 19).
+- **Options scoping, seams left by task 044 (owner rulings 2026-09-09, contract
+  `docs/tasks/044-scoping-shell-baseline/contract.md`):**
+  - **Deep depth for scoping** — not shown anywhere until it exists (D6).
+  - **"Search further" at the baseline gate** — an additive re-acquire that rewrites the sections
+    that gained sources; build once for the longlist too (D10). A request in words is refused as
+    not yet available.
+  - **Inherited document rows and longlist suggestions** — task 2 creates them when the longlist
+    scope re-screens the linked task's documents (D4). Task 1 pins the source runs and seeds the
+    Task Agent only.
+  - **`task_link.option_id`** — added in task 2 with the option table it references (D13).
+  - **Per-field turn provenance on the plan** — resolved, not deferred: the owner revised
+    plan-as-object § Plan vs config to version grain (2026-09-09); reopen only if a reader asks.
+  - **Baseline latency levers not taken in task 1** — show sections as they finish; start the
+    longlist's retrieval while the user reads the baseline (task 2; wastes some egress when the
+    plan changes at the gate); a faster model tier for the baseline sections when Bedrock lands,
+    quality-tested first, fresh minimal prompt per the doctrine (D7); parallel section writing in
+    the product, only by an owner revision of the durability contract after the task 044
+    feasibility check (C6); rebuilding only the baseline sections a plan change touched (open
+    question 7 — task 044 offers a full rebuild or going on with the existing baseline).
+  - **The Task Agent as the Evidence search's control surface** — owner: the Evidence search's
+    card-based steering "is maybe not optimal, because ideally … the user could control the task
+    through the task agent chat". Task 044 builds routed turns at a pause for scoping only, hung on
+    the turn rather than the conversation kind; a later Evidence search slice adopts them (D9).
+  - **Any chat carrying Task Agent turns** — owner direction: "any chat would be able to create
+    plans, edit artefacts, produce cited responses". The `task_agent` conversation kind then
+    becomes a "pinned first" flag; a one-value migration.
 - **Question-shape → future-capability mapping (user posture, 2026-07-10, recorded at the
   018 gate).** Two real-user question shapes from the V2 taxonomy have their ideal homes in
   capabilities that don't exist yet: **opinions / stakeholder mapping** (a proposed
@@ -1547,6 +1573,19 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Execution / collaboration / ops
 
+- **Langfuse costs ignore prompt-cache hits (found 2026-09-18 reading the 044 scoping
+  turns).** `costDetails.input` charges every prompt token at the full input rate: the NEET
+  scoping turns 5, 7 and 11 each carried 8,960 cached tokens of about 10,700 (OpenAI's
+  automatic prefix cache, reported in the observation metadata as `cached_tokens` by
+  `core/usage.py`) and Langfuse still priced them at about 5.8 cents each, the same as the
+  uncached turns 1 and 3. Every per-run and per-turn cost read from Langfuse (including the
+  time-window method in `docs/knowledge/langfuse-cost-by-time-window.md` and the 044 phase-8
+  "about $2.5") overstates the real spend wherever a prefix repeats — Task Agent turns, the
+  gate sort, the answer core, and the synthesise section writer's shared preamble. Fix
+  options: send `input_cached_tokens` as a separate usage type so Langfuse's model pricing
+  applies the cached rate (Langfuse supports per-usage-type prices), or compute cost in
+  `core/usage.py` from the provider's own totals. Until then treat Langfuse `totalCost` as an
+  upper bound.
 - **Per-lane test-DB partition (018 B2/C)** — concurrent `make verify` runs against the
   one shared test DB flake (migration round-trip + steering tests, psycopg INERROR);
   seen from worker lanes (B2/B4) and from a review-lane agent (step 7). Convention today:
@@ -1670,6 +1709,19 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   relevance per backend. Fix is in acquire: stamp acquired sources with the surfacing
   query/queries (a set — multi-query dedupe means one source can arrive via several).
   Pays off for search-loop tuning and for the demo/web-app search cards.
+- **Repo-root `scripts/*.py` are outside mypy** — `backend/pyproject.toml` `files = ["src",
+  "tests"]`, so `scripts/ops_remove_scoping_tasks.py` (destructive, `--apply`-guarded) and the
+  rename tooling are tested but never typechecked. Add `scripts/` to the mypy files or move
+  long-lived scripts under `backend/src/policy_atlas/ops` (044 review stack, two lanes).
+- **`test_option_search.py::test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent`
+  hangs intermittently** (seen 2026-10-27 twice in CI: on `dev` eedf9ef9 at 10:29 and on the 055
+  branch at 13:30, each time right after `…interrupts_its_children[raise]` passed, each time until
+  the `verify` job's 40-minute limit; `dev` passed on re-run). Locally the three tests around it
+  took 81 s once and over 150 s another time, with no Postgres query active, so the wait is in
+  Python: the test's `_stuck_until` child waits on a `threading.Event` with a 30-second deadline and
+  the helpers' deadlines are 10–30 s, which together bound the slow case but not the hang. The
+  stack dump that would name the wait (`pytest -o faulthandler_timeout=110`) was not captured before
+  the 055 review closed. Root-cause it next time it shows: it costs a 40-minute CI run each time.
 
 ## Steering surface (task 024 seams)
 
@@ -2189,10 +2241,10 @@ omissions.
   lever**, and it carries two consequences whoever offboards a real user must know:
   **(1) it does not stop them signing in** — the Cognito account survives, so an
   offboarded person still authenticates and still sees their own work; disabling or
-  deleting the account is a Cognito operation done outside this tooling; **(2) erasure is
-  two-part** — de-enrolment clears `org_id`, `email` and `is_admin` from
-  the application database (`display_name` is NOT NULL and stays), but the address in
-  Cognito is untouched, so a genuine erasure
+  deleting the account is a Cognito operation done outside this tooling;   **(2) erasure is
+  two-part** — de-enrolment clears `org_id` and `is_admin` from the application
+  database and keeps `email` and `display_name` so the person stays findable.
+  The address in Cognito is untouched either way, so a genuine erasure
   request needs the Cognito side handled separately.
 - **Three standing discrepancies in the published privacy notice** (escalated by 033,
   2026-08-24; the owner ruled that the slice does not edit legal copy, so these are open
@@ -2480,6 +2532,576 @@ deliberately left, each with its reason:
   dossier. Add them to references only if readers ask — the list is dense
   already.
 
+## Document identity across snapshots (deferred 2026-09-09; owner ruling on OS decision-sheet row A8)
+
+Tracked as issue #75.
+
+One document fetched from two backends, or in two versions, is two content-addressed snapshots and
+counts twice in coverage, selection and inherited counts (the options-scoping feasibility checks
+found one Cochrane review as five snapshots; run 6 spent cap places on copies). A corpus-level
+**document identity** — DOI-only as the first rule; dedup at acquire or ingest; whether it should
+precede the chunk index to improve retrieval diversity — is its own Evidence search slice after the
+options-scoping build. Interim: options scoping's task 2 groups by DOI where present at the point
+of counting, no schema or ingestion change. Source: `docs/tasks/035-options-scoping/checks/`
+(check 2 C2-5 and its *After review* section).
+
+## Frontend design consistency (impeccable document audit, 2026-09-09)
+
+Found while writing the local `DESIGN.md` from the built frontend. The frontend was
+AI-coded; these read as drift, not decisions (owner agreed 2026-09-09). One low-tier
+sweep, well under a day; after it lands, re-run `/impeccable document`. The Zosia
+Display usage question (page titles in Averta, error headings in Zosia) is **not**
+deferred here — the owner ruled the font is fine for now.
+
+- **Button sizes and the green tone live outside the Button component.** "New task"
+  (`views/listPageChrome.ts` `listNewButtonClass`), the New Task submit and "Start
+  search" (`views/workspace/planStart.ts` `START_SEARCH_CLASS`) each hand-build a larger
+  size (Body text, 24px × 14px) as class strings, and Start search overrides the colour the
+  same way. Hover colours are hard-coded hexes in three places (`#0000d6`, `#147a6c`,
+  `#f0f0f3`). Seam: a `size="lg"` variant and a green `tone` on `ui/brand/Button.tsx`;
+  delete the three class strings.
+- **Eyebrow labels drift.** `PaneHeading` is Extrabold; plan and check-in eyebrows
+  (`PartCard`, `CheckInBundle`, `CheckInCard`) are Bold; the conversation list uses
+  Caption size. Six files hard-code `tracking-[0.06em]` although the `--tracking-label`
+  token (`tracking-label`) exists for it. Seam: one Label component or class.
+- **The report sheet carries the only neutral shadow.** `ArtefactView` uses Tailwind
+  `shadow-sm` (grey) plus `ring-1 ring-line`; every other surface uses the navy-tinted
+  card shadow. Swap to the Card shadow or drop the shadow and keep the ring.
+- **Check-in cards use two colours for one state.** `CheckInCard` has a 2px Orange left
+  rule, a Yellow "Waiting on your input" chip and the Yellow glow; Orange means *paused*
+  on `StatusDot`. If "waiting on you" is one state it should be one colour — owner call
+  on which.
+
+## Options scoping shell and baseline (task 044 seams)
+
+- **Per-field turn provenance** — resolved by owner ruling (C16, 2026-09-09):
+  provenance is at **version grain** (`source_turn_index` per plan version;
+  `your_context[].turn_index` because the trust rules use it); per-field
+  turn references are not built. plan-as-object § Plan vs config revised.
+- **"Search further" at the gate** (D10) — the gate offers Confirm and Change
+  the plan; a request in words is refused honestly as not yet available.
+  Task 2 or later.
+- **Inherited document rows** (D4, task 2) — the linked task's screened
+  documents and its report's interventions enter with the longlist; in this
+  slice inherit gives the Task Agent the linked plan, report body and
+  coverage statement only.
+- **`task_link.option_id`** (D13) — lands with the option table in task 2.
+- **Scoping deep depth** (D6) — not shown anywhere until scoping deep
+  exists; the plan model admits `rapid | standard` only.
+- **Baseline latency levers not taken** (D7): starting the longlist's
+  retrieval while the user reads the baseline (task 2); a faster model tier
+  for the baseline sections when Bedrock lands, quality-tested first; a
+  parallel writing mode only by owner revision of the durability contract
+  ("never fan out the conclusion") — check 7's reading is in
+  `docs/tasks/044-scoping-shell-baseline/verification.md`; showing sections
+  as they finish is **taken** (the skeleton streams the actual list).
+- **The Task Agent as the Evidence search's control surface** (D9) — the ES
+  keeps card-based steering in this slice; the owner's direction is that
+  the Task Agent chat should be the surface a task is controlled from, and
+  that any chat should eventually plan, edit artefacts and answer with
+  citations (routing hangs on the turn, not the conversation kind).
+- **Rebuild only the touched baseline sections** (open question 7, deltas
+  not restarts) — "Rebuild baseline" is a supersede-by-rerun of the whole
+  walk in this slice.
+- **Language evidence restriction** (C8) — the ES `ScopeConstraints` model
+  has no language filter; a language restriction is stored on the scoping
+  plan and shown as "not yet applied at retrieval". An ES gap.
+- **ES Task Agent prompt default steering mode** — the ES prompt's own
+  default is unattended ("check-ins are requested, not offered") while the
+  execution contract names moderate; recorded, not fixed here (contract
+  second-round amendment 2).
+- **Prompt-hash guard is name-based** — `scripts/prompt_hash_guard.py` pins
+  `*prompt*` modules; the inline prompts in `synthesis_backend.py` and
+  `finding_vetter.py` are outside it. Add an explicit include list.
+- **`?chat=planning` URL token** — renamed to `task_agent` with no alias
+  (038 rule); a pre-deploy open tab shows a dead chat until the user clicks
+  the Task Agent.
+- **`agent_prompt.py` docstring** still cites `planner_prompt.py` /
+  `planner_v5` — hash-pinned; reword at the next `agent_v` edit.
+- **Review-stack seams (2026-09-17, task 044 step 7).** Recorded, not fixed in the slice:
+  - *Per-run fan-out has no cross-run bound* — classify runs 12 provider threads and ingest 4 to
+    8 parse workers per walk; the only gate across walks is `RUN_EXECUTOR_MAX` (default 2), so a
+    2-vCPU staging task can carry 24 classify calls and 16 parse processes at once. A shared
+    provider 429 storm or memory pressure is the failure. Owner-tunable; size a cross-run
+    semaphore when a second concurrent walk is routine (security lane S5). **Closed by task 045**
+    (plan review P5; owner: "add the semaphore"): classify's and ingest's fan-outs now take shared
+    per-component semaphores across every walk in the process, so option searches running four
+    at once share one bound.
+  - *A 422 on a plan patch echoes the pydantic error* — `detail=str(exc)` on a `ValidationError`
+    carries the caller's own values, the model names and the pydantic docs URL. The ES patch has
+    done this since 029; the scoping branch copies it. Replace with the contract's plain
+    `validation_error` shape when the patch routes are next touched (security lane S7).
+  - *One baseline intent record per plan version* — every approved scoping plan version writes
+    an `evidence_scope` row with `purpose = baseline` (C3), including versions that only add a
+    preference or record `baseline_confirmed`; the NEET task carries seven for two walks. By
+    design (one answer per version to "which plan was this built from"), but the unrun rows are
+    orphans a retention rule will have to know about (trace lane T3).
+  - *"A mixed turn answers first" is prompt-borne* — the gate sort has kinds question · decision
+    · unsure and no "mixed" flag; a turn that asks and decides at once is folded into `question`
+    by instruction, and the code offers the two decisions after every answer. Deterministic in
+    the code (a decision only commits when the sort names an offered option), not in the model.
+    The eval slice reads mixed utterances against the sort (Codex X12; verifier).
+  - *The reasoning label is pinned at claim grain* — "What is contested" carries its tier-4
+    reasoning as labelled claims, not as a visible "Reasoning:" sentence the way "Key
+    assumption" does; the writer's choice of sentence is prompt-borne. The slice flags a
+    reasoning section that carries no reasoning claim (`reasoning_label_missing`); whether the
+    label should also be visible in the prose is a template question for the eval slice (trace
+    lane T1; Codex X8).
+  - *Linked context is capped at ten sources per create* (`TaskCreate.from_task_ids`
+    `max_length=10`, Codex X11; three at the review stack, raised to ten on the owner's ruling
+    2026-09-18 as an accident guard, not a design limit) — each linked report may add up to 60,000 characters to every
+    Task Agent turn; raise the cap when a real need appears, with the prompt size measured.
+    **Owner reading 2026-09-18:** the models in use have very large context windows, so the
+    token count is not the concern at today's sizes; and the live traces show OpenAI's
+    automatic prompt cache serving the fixed prefix (system prompt + linked block) from the
+    third turn on — 8,960 of about 10,700 prompt tokens cached on turns 5, 7 and 11 of the
+    NEET scoping task (turns 1 and 3 paid in full). The cap guards cold turns and accidents,
+    not every turn.
+  - **Inheriting many linked searches: inline block vs retrieval (owner question 2026-09-18).**
+    Today `inherit` puts each linked task's whole plan, report body and coverage statement
+    inline, fenced, on every Task Agent turn (owner ruling 2026-09-09: no size cap — best
+    comprehension at planning time; turn 1 of the NEET task proposed Where and the outcomes
+    from the linked plan). The owner expects few links per task for now but wants the larger
+    case considered so the architecture does not corner itself. Options, none built:
+    1. *Inline, as now* — full comprehension; cost grows linearly with links, paid on cold
+       turns; the scoping Task Agent has no tool loop, so a turn stays one call.
+    2. *Hybrid digest + tool read* — inline the linked plan, coverage statement and the
+       report's key findings; give the Task Agent a `read_linked_report(task, section)` /
+       `search_linked_reports(query)` tool for detail. Scales to many links; adds a read turn
+       (the planner turns are 5 to 19 s today); the model sees what it asks for, so a
+       comprehension trade-off — it can miss context it did not think to read.
+    3. *Retrieval over the linked tasks' evidence* — the linked tasks' chunks and report
+       blocks already exist as rows (`chunk`, `block`); the answer core's `search_chunks` tool
+       set already scopes by task, so pointing it at a linked task's scope is cheap. This is
+       the shape task 2 needs for inherited documents (D4: screened documents and
+       interventions enter with the longlist — many rows, never inline) and the shape a
+       future meta-analysis capability needs natively (reading across many reports).
+    The seam is one function: `runtime/inherit.py::linked_context` returns
+    `LinkedTaskContext` objects and the prompt module renders them. Nothing downstream
+    depends on the block being inline, so moving to 2 or 3 changes the context assembly and
+    the prompt's tool section, not the link records or the plan. Recommendation recorded:
+    keep 1 for task 1 (small N, one-call turns, best comprehension), build 3 for documents
+    in task 2, and revisit 2 for reports when meta-analysis is contracted or when a real task
+    links more than a handful of searches. Quality reading needed before any switch.
+  - *Acquisition target wording* — `search.record_cap` applies **per backend** (20 · 10 per
+    backend = about 40 · 20 documents over Overton + OpenAlex); the contract § Baseline, the OS
+    capability spec § Output structure and the spec log of 2026-09-17 read as totals. **Resolved
+    2026-09-18** (owner: "Add per backend to the docs") — the four documents now say per backend;
+    the code is unchanged.
+
+## Options scoping longlist (task 045 seams)
+
+Recorded by the task 045 contract, plan and build (`docs/tasks/045-scoping-longlist/`).
+
+- **On-demand written option summary** (D15) — the option card is assembled from the passes'
+  outputs; a written summary at first open (about 10 to 20 s once per card) is a seam. Per-run
+  written summaries are not built before assessment.
+- **Starting retrieval during the baseline pause** (D18) — stays deferred; the longlist walk
+  starts when the user confirms the plan.
+- **Open question 4 — CLOSED by task 046 (R1).** The longlist has a target size of 20 and a hard
+  ceiling of 25, seeds included; the unclustered records get one residual pass and are then a
+  number the user sees. The formula `clamp(ceil(N/4), 8, 40)` is removed.
+- **Open question 7 — update the longlist in place instead of rebuilding it (task 3; owner ruling
+  2026-09-24).** 045 ships "Rebuild longlist": after a plan change it re-runs the whole chain,
+  seeded with the existing options so ids, exclusions and additions survive. Owner: "I think a
+  full rebuild feels unnecessary. Why would the tool need to rerun all the original searches?
+  That feels like a waste of effort. The idea of a rebuild would also be quite confusing to
+  users" — to change in task 3 ("Record it, change it in task 3"). The shape proposed at review:
+  no Rebuild action; confirming a changed plan re-runs `constrain` only (a requirement, the
+  outcomes or the target unit change only the judgements) and an option search for any new
+  option the plan names; no new broad searches, no regrouping.
+- **Cross-task profile memo** (A22) — the intervention profile's memo is keyed by task, so a
+  document inherited from a linked task is profiled again in the scoping task. No cost today (no
+  Evidence search task runs the profile); a cross-task memo would reuse the linked task's records.
+- **The option search's `guidance` argument** (D26) — the option search takes the specified design
+  only. Tested on the NEET option searches during the build: the queries did not miss what the
+  designs meant, so the argument was **not built**. It would use the search directive's existing
+  steering channel and needs no prompt change.
+- **Instance-of relation / a two-level longlist** (decision-sheet row A9) — not built. The card's
+  *What it is* shows the stated design features from the records; a split between a class of
+  option and its implementations waits for evidence from live use.
+- **`task_link` is unique per task pair** (A21) — noted for task 5 (the full run).
+- **An option added after the build is not clustered on arrival, by owner decision** — it reads
+  its own option search's records; seeded assignment on add (plan S11) is not built and is not
+  wanted. Owner (2026-09-24): "I don't think we necessarily need the sort step since the longlist
+  is not meant to be exhaustive … the longlist is meant to show what options are out there, not
+  necessarily how much evidence there is for each of them." An added option sits in *No theme*
+  (owner: "Stay in 'No theme'"); a rebuild, while it exists, clusters its records.
+- **Component failure events land on an aborted transaction** — the harness's generic component
+  handler appends the failure event on the component's own transaction, so any database error
+  reads in the event log as an aborted transaction rather than the original error.
+- **One event-log sequence per task under child walks** — every child walk appends to the task's
+  one event-log sequence, so four walks at once contend for it; the retry cap was raised from 5
+  to 32. A per-walk sequence would remove the contention.
+- **History lists every child walk's stage events** beside the user's actions — a presentation
+  filter is wanted so the user's own actions stay readable.
+- ~~**The plan document finds the baseline walk in the first 200 runs**~~ — closed at the 045
+  review: `GET /runs?parentless=true`.
+- **Option-search queries carry the designs' institution words** (045 review F4, owner: "Accept,
+  record it") — of 210 generated option-search queries on the three NEET tasks none names a
+  country and none carries a geographic filter, but 27 (13 %) use UK institution words from the
+  designs ("local authority", "council", "NHS", "DWP", "Jobcentre Plus"), which tilts results
+  toward UK sources. Look again if option searches read too UK-heavy.
+- **Rebuild matching by `(origin, name)`** (045 deviation 14) — an own option that first entered
+  on its words and later gains a proposed design under another name would mint a second row
+  (only after a failed design proposal). Goes with the rebuild in task 3.
+- **Inherited rows carry no provider `source_tag`** (045 deviation 15) — classify's priors are
+  missing on an inherited document it does classify.
+- **Linked uploads reach the scoping task's readers** (045 review S1, owner: "Recheck access
+  only") — inherit re-checks at every build that the owner can still read the source, but an
+  uploaded document of a readable source is still inherited, so a public scoping task shows it.
+- **The reservation set is per process** (045 review B10, B11) — `_dispatching_tasks` and
+  `_dispatch_lock` live in one API process and a request's `finally` can clear a reservation a
+  newer request holds (pre-existing pattern, tiny window). Deployment constraint: one backend
+  worker process per environment until the reservation is a database row or a token.
+- **`archive_task_route` takes the dispatch lock and the task row in the reverse order** to the
+  openers (045 deviation 39) — a latent deadlock, pre-existing.
+- **`api/continuation._with_plan` omits `parked_boundary` / `parked_component`** (found in 045
+  Phase 1) — `ContinuationState` requires them since 027, so the fan-out path with plan
+  adjustments would raise `TypeError`. Pre-existing, unfixed.
+- **A snapshot shared by a linked task and the scoping task needs custom teardown** (045
+  deviation 41) — `delete_task_data` deletes snapshots the other task still references, so
+  `test_longlist_routes` builds its add fixture without the link.
+
+## Options scoping longlist refinement (task 046 seams)
+
+Recorded by the task 046 contract, plan and build (`docs/tasks/046-longlist-refinement/`).
+
+- **Full text for shortlisted options (task 3; R13).** No longlist or targeted chain fetches full
+  text; the chat answers from abstract chunks, and its citations say *abstract only*. Task 3
+  fetches full text for the shortlisted options. In the seven pre-contract runs about half of
+  the fetches failed (obesity: 52 of 74 attempts), so task 3 must plan for a missing full text.
+- **No themes between `longlist` and `theme` (R28).** The list shows its options with no themes
+  from the end of `longlist` to the end of `theme` (20 to 45 s in the replays). Holding the
+  Result on the baseline until `theme` ends changes the rule for "a longlist exists"; for task 3.
+  Themes also go out of date after a user's own exclusion; `theme` can run alone, so task 3's
+  update in place can run it again.
+- **User-visible loop budgets (R11).** The target size, the ceiling, the residual pass count and
+  the records-per-document cap are constants; the user does not see or set them.
+- **The not-stated flag at reader grain (R23).** The flag is on 76 to 96 percent of memberships
+  in the replays. Its future is the owner's decision (round record 5.2).
+- **The records-per-document cap of 8** removes 15 to 116 records per run where a review names
+  many interventions. The thinning counts are served; a review-aware rule is a seam.
+- **A setting that names a place moves or drops as a whole** ("primary schools in England" is
+  not kept as "primary schools"); on the read side only.
+- **A late child search can add documents after the screen (PA21).** A child that the join
+  timeout cut off can still acquire; its documents have no screen row in the longlist scope
+  until the next build.
+- **The profile memo key holds the prompt version, not the prompt text.** A text change without
+  a version change would reuse old records in the product. The slice changes the version once.
+- **`suggest` writes its token use to a log line only**, not to its summary (found by the
+  replay tool).
+- **Known limits recorded and not fixed (R22):** provider-written abstracts (32 to 52 percent
+  of "abstracts" are machine summaries); duplicate documents without a DOI (6 to 27 duplicate
+  titles per run; issue #75); the reasoned-guess path has no live test (no plan of the seven had
+  a preference); the option-search pool is shared by every task in the process; OpenAlex
+  returned nothing for 27 to 47 of 50 to 60 generated option-search queries.
+
+### Amendment 2 (2026-09-30)
+
+Recorded by the task 046 amendment 2 build (`amendment-2-final.md` § 4 and § 2.10).
+
+- **A "burden" line** on "What it would take" — only after a test across a range of domains
+  (R39; owner: "Maybe burden could be a good substitute but I feel like we would have to test a
+  range of domains to decide if it's right to include").
+- **A grounded legal-change line.** Out of the first version: a line that says whether a new
+  law is needed rests on the model's knowledge; a form grounded in the baseline or a document is
+  later work (R38, R39).
+- **The direction of reported outcomes, and the outcome-count limits, for task 3.** The
+  longlist shows counts only (R42). A record carries one plan outcome, so a record that reports
+  on two counts for one; a document counts for each outcome it has an evaluating record on.
+  The direction of an effect belongs to the shortlist assessment.
+- **Building an added option in place (task 3).** "Add an option" does not change: the added
+  option has no lever type, no ambition, no lines and no setting until the next rebuild of the
+  list, and the card hides "What it would take" for it (R51 withdrawn).
+- **"Studied in" on each document.** The record keeps its setting words in the database; no
+  read-model field and no place on the screen (B4).
+- **The list shows no lever type, no ambition and no lines from the end of `longlist` to the
+  end of `option_profile`** (44 to 77 s in the replays), as it shows no themes until `theme`
+  ends.
+- **The marks of a merged pair.** The lines were written with the duplicate on the list; the
+  kept option keeps its own lines (final § 2.8).
+- **Marks on a list split in two kinds of action.** On the obesity list about two thirds of
+  the options carry a cost mark, because rules and programmes stand out against each other. A
+  rule that caps the count would be a quota; the owner reads the built screen (loop 12L).
+- **The authority label reads the user's powers from the line "who decides".** Two doubts in
+  the loop read: NHS commissioning and school food enforcement, where a council has a part but
+  not the whole (loop 13L).
+
+### Amendment 3 (2026-10-01)
+
+Recorded by the task 046 amendment 3 build (`amendment-3-final.md` § 7.3; the round records
+`16R-record-prompt-loop.md`, `18P-place-rule-loop.md`, `20L-folding-loop.md`).
+
+- ~~**The place list's deletion is an owner decision.**~~ **Closed 2026-10-12.** With the rule
+  in words in every prompt the replays still showed one clear place-based screen rejection in
+  175 documents on the hardest list (refugees) after three rounds (R74). The owner accepted
+  that residual at the review ("We can delete the strip"): `strip_place` and the
+  `place_removed` provenance are gone; the name tables and `names_place` stay as amendment
+  4's place resolver and setting pass (R87). A later round on a stronger screen model is
+  the lever if a place-based rejection shows live.
+- **The folding calls' tail.** On the mini model, "the same word for the same kind" holds for
+  the large kinds and fails in the tail (obesity's "BMI measures" beside the plan outcome;
+  NEET's three employment kinds); a list with more than ~120 distinct unit words can collapse
+  into one catch-all kind under the schema cap of 12 (cohesion's Tried on). Follow-ups: a code
+  guard (a kind holding more than half the words → one retry with the count named), and the
+  judgment model for the folding calls on long lists, both costed in the system-level cost and
+  latency task.
+- **`programme_name` and `study_country` on the mini model** (rubric boxes 57 and 69, not met
+  at "all"): 13–32 per cent of programme names are the name of the study, provider, fund or
+  parent scheme; "not stated" hides a stated place on 4 to 34 records per list. A stronger
+  record model, or a second pass over the named records only, is later work.
+- **The replay tool's stage order.** Running `suggest --fresh` before `longlist --fresh` on a
+  clone makes the clone's earlier options count as seeds, so the longlist fills its ceiling
+  with seeds. A clone reset per round (18P.0 does it for the screen) for the option stages too.
+- **Stored run history keeps the old facet key.** The data migration rewrites every place a
+  reader resolves (plans, groups, counts, flags, provenance, annotations, synthesis blocks);
+  `synthesis_result.synthesis_provenance`, `counts.groups_unsectioned_by_facet` and
+  `event_log` payloads keep `population` as history (R52).
+- **The screen's `not_relevant_naming_place` flag is a keyword.** It over-matches (OECD
+  country notes); reading whether place was the reason stays a hand read. A structured reason
+  code from the screen would make M4 a count.
+- **`OptionOut.where_label`** left the option read model; `LonglistOut.depth_label` stays for
+  the longlist header (R61 takes the chip off the card only).
+- **The constrain reason on the "Who decides" row** is served and not shown (22b: the row
+  keeps the line's own sentence; "just enough text"); the owner may want it back.
+- **The old revision `c7e2a9f4b1d8` and the new one both freeze / import the union view's SQL**:
+  the next revision that changes `finding_reference_union` must freeze a copy in
+  `f1b6d3a8c2e5` as `c7e2a9f4b1d8` now does.
+
+### Amendment 4 (2026-10-12)
+
+Built 2026-10-09 to 2026-10-12 (`docs/tasks/046-longlist-refinement/verification.md`
+§ Amendment 4). The owner accepted the three loops' unmet stop measures as
+reported (2026-10-12: "Okay fine let's accept"); the first three items below
+are the levers left for each. Seams left open:
+
+- **The record prompt's residual on places (R87; M16 not met).** After four
+  rounds on the mini model, a hospital's, a committee's or an organisation's
+  own name still reaches `study_geography` where the abstract gives no town
+  (61 records on the tuning set, from 223): the next lever is the model
+  tier for `extract_interventions`, not the wording. A geography that is a
+  body's name shows as the level below on the document line and as a
+  sub-place in a place sentence's input.
+- **The folds' quality (R86; M17 not met).** At most one wrong fold in 30
+  per facet per list was not reached on any of four rounds; the folds vary
+  more between runs of one text than between rounds. Two code guards stand
+  (a slash-joined kind is cut; a catch-all of more than half the words is
+  retried once). A catch-all of a third of the words (NEET's check-set run)
+  passes the one-half share; a kind of twenty words (the "at most six
+  words" rule ignored) reaches the sentences. Candidates: the judgment
+  model for the folding calls on long lists; a share threshold tied to the
+  target unit's own share; a word-count guard on a kind.
+- **The place sentences (R80; M15 not met).** 4 of 56 tuning-set sentences
+  fall back to the template at round 4; a programme name of twenty words
+  the model will not cut and two upstream faults. A `max_length` on the
+  wire would bind the model but fails the whole call (PA4-9); a per-place
+  second call on an over-length sentence would cost one more call per such
+  place.
+- **The template's length.** Template sentences are not length-checked; a
+  twenty-word fold kind or programme name puts one over the ceiling (238
+  and 334 characters seen). A ceiling on the template's clauses is a small
+  code change.
+- **Phase 29F's measure on the tuning set.** The replay cannot re-mint an
+  existing option's design (the clone keeps the stored task's options as
+  seeds), so the feature rule was read on the 14 options the replay minted
+  under it and on the live runs; a from-scratch replay (a clone with its
+  option rows dropped) would read it on the whole tuning set.
+- **A theme heading's summary at 390 px** overflows when a list has no
+  themes and every option sits under "No theme" (the clones; a live list's
+  summaries are short). Pre-existing markup; one `min-w-0`/wrap away.
+- **`names_place` over the full ISO-3166 table** — closed by the review
+  (2026-10-12): the six country names that are common nouns or given names
+  (`AMBIGUOUS_COUNTRY_NAMES`: chad, guinea, jersey, jordan, niger, turkey)
+  match only when capitalised; the resolver still knows them. "Georgia" with
+  no context stays the country (a place either way).
+
+### Review stack seams (2026-10-12)
+
+Found by the step-7 lanes (`verification.md` § Review findings) and deferred
+by the lead with a reason; none blocks the merge.
+
+- **A failed typing keeps a typing made for an earlier design version**
+  (Codex X1). The keep-previous rule (box 3, S12) keys the lever columns by
+  option id only; after a design edit whose typing batch fails, the card
+  shows the old design's lever until a batch succeeds. The profile lines
+  are keyed by `(option_id, design_version)`; typing and ambition need the
+  same key (a stored version beside the lever columns), which is a shape
+  change. Not seen live (`typing_invalid` 0 on every live run).
+- **The read models take the newest `longlist_result` whatever the walk's
+  status** (Codex X4). A walk whose `longlist` step wrote its row and whose
+  `option_profile` step then failed serves that row's coverage with an
+  empty profile beside the task-wide option columns of the last good walk.
+  The fail-closed step is by design; a "last completed walk" selector (or a
+  snapshot per completed walk, Codex's approach) is the seam.
+- **At the ceiling, a suggested seed cannot fold into a newly discovered
+  broader option** (Codex X5; the build's D7). With no room under 25 the
+  new option is dropped before the folds are read, so a fold that would
+  leave the list at 25 is rejected as `unknown_target`. Apply accepted folds
+  before computing the room.
+- **A duplicate reported in a chain (A → B, B → C) is dropped and A reads
+  "no other option is the same kind of action"** (code review C4). Follow
+  the chain to its end (with a visited set for a cycle) or give A
+  `cannot_check`. No live list has reported a duplicate yet.
+- **Security hardening, all Low** (security lane S1–S3): the trace check is
+  lexical, so a lower-case injected clause in a place sentence passes
+  (plain-text render bounds it; a token-containment or URL-scheme reject is
+  the fix); model-written folding kinds widen the trace check's allowlist and
+  have no item length cap; most stored free-text wire fields
+  (`MarkedLineWire.answer`, `AmbitionWire.reason`, `SettingWire.*`,
+  `LeverTypingWire.lever_reason`, `ConstraintJudgementWire.reason`,
+  `AuthorityWire.*`, `FoldingResponse.kinds[]`) have no `max_length` and no
+  control-character strip before storage (the display strips them). One
+  pass over the wires with ceilings is the fix.
+- **`_constraint_lists` and `_checks` build one ordered list by undoing
+  each other** (code review C7): the default screens are appended, filtered
+  out and re-inserted around `distinct`; a user requirement whose id ever
+  collides with a screen id is dropped silently. Build the user list once.
+- **`theme.py` imports private names from `longlist.py`** (`_engine_stats`,
+  `_forbidden_label`, `_key`; build handoff item 3). Make them public or
+  move them to a shared module.
+- **`test_option_search.py` stalls at 0 % CPU under load** (a thread-join
+  timing test; four times in the amendment 3 build, never on a quiet
+  machine). A timeout on that join.
+- **The template sentence says "studies"** ("3 moderate observational
+  studies"): a study-design word, exempt under R90/C15 as an evidence type,
+  but the one place the card's own copy uses the word. For the owner.
+
+### Overton metadata faults seen by the amendment 4 survey (deferred 2026-10-09; owner: out of amendment 4)
+
+Recorded by the task 046 amendment 4 design survey (`research/amendment-4-design/README.md`).
+Both faults sit in the Evidence search ingest path shared by every capability, so the owner kept
+them out of a longlist amendment; they need a small fix of their own or an issue for the
+Evidence search owner.
+
+- **Overton's `published_on` becomes the document year.** On the obesity longlist 84 of 196
+  documents show 2026; across the dev DB 3,546 Overton snapshots carry `year` 2026 (154 OpenAlex
+  rows do too). For grey literature `published_on` is often Overton's own indexing date (a 2024/25
+  Slovenian annual report, a 2023 Spanish consultation, both dated 2026-02). The card's document
+  meta line and the Sources tab print it as the publication year. Fix belongs in the Overton
+  adapter: prefer a date from the document's own fields, and show no year rather than a wrong one.
+- **"[THIS TITLE IS BROKEN AND HAS BEEN REMOVED]" is Overton's placeholder title**, on 114
+  snapshots; one caregiving option lists it four times. Ingest should drop or flag such records
+  rather than let them reach the option card as documents.
+
+## System-level cost and latency (deferred by task 046, R16; owner 2026-09-28)
+
+Cost changes that edit an Evidence search component are not made inside a capability slice.
+Owner: "If cost optimisations require changes to the underlying evidence search components,
+then maybe they don't fit into this task and should be considered later at a system level cost
+and latency optimisation task."
+
+- **Query variants and a fallback ladder** (046 item 21) — the option searches keep three query
+  forms; the review and trial variants nearly always return nothing, and Overton receives the
+  whole design paragraph as its query.
+- **The baseline writer's tool list** (046 item 24) — the writer asks for tools the scoping
+  chain never fills (4 to 7 `characterisation_summary` errors per baseline).
+- **A screen memo across scopes** — the add walk's screen loads the task's whole pool and
+  judges it against the option's design (AM1 kept it as built).
+- **The option-search loop (L1)** and **allocation by corpus size (L3)** — bounded loops that
+  need a stop condition in the search loop.
+
+## Synthesis optimisation (deferred 2026-09-17; owner intends a task after options scoping lands)
+
+**Second case (task 046, R7):** the rapid baselines of the seven pre-contract runs cited 2 to
+15 sources, and their screens kept few documents (heat pumps 2 of 11, refugees 4 of 11, energy 6
+of 20). The baseline target stays at 10. Owner: "I think the low number of citations is more
+likely to be an issue with the RAG implementation and associated parts of synthesis, as I've
+noticed it in evidence search syntheses as well." The baseline is now the reference for
+discovery, typing and constrain, so a thin baseline weakens those judgements too.
+
+Cost, latency and quality together. Measured on the task 044 NEET baseline
+(Langfuse trace `run:synthesise:3baa5bc1`, 9 sections, 180 s wall clock, 170 s
+in model calls): write turns 110 s, grounding judge 30 s, read turns 22 s,
+proposal and two repairs 7 s. Every section used two turns (one batched read
+turn of 3 to 6 tool calls, one write turn); the write turn is set by output
+tokens, and only about 30% of the emitted output is prose. The rest is the
+claims structure: each claim repeats its sentence verbatim as `text`, and each
+chunk citation carries a verbatim quote of about 250 characters (first section:
+2,250 prose characters against 7,100 of structure).
+
+- **Slim the emit payload** — claims anchored by prose position instead of a
+  repeated sentence; chunk citations by record id plus a short anchor the code
+  verifies against the frozen chunk. Halves the write turn (110 s → about 50 s
+  on the run above). Changes the grounding contract the Evidence search report
+  shares (ADR 0015 §4 span binding; the judge's verbatim-quote check). Owner:
+  "seems like something that would make a material difference".
+- **Judge and repair share** — per call the gpt-5.4-mini judge takes 4 to
+  12 s on 5–13k prompt tokens and a repair 3 to 24 s (phase 8 log timelines);
+  judge plus repair was 19 % of the Sept 9 live write and 37 % of a five-section
+  rapid write. The second bucket after the write turns. A smaller judge
+  envelope (chunks the claim cites, not the section's whole read set) and the
+  concurrency below are the levers; fewer failing claims at first write cuts
+  the repairs.
+- **Judge concurrent with the next section** — the mini judge runs after each
+  section in sequence (3 s each); judging section N while N+1 reads saves about
+  25 s per baseline without a user-visible stage change. Repairs land when the
+  judge returns.
+- **Citation quote length bound** (about 120 characters) — about a fifth of
+  output, roughly 20 s, if the payload stays as is.
+- **Reasoning on the writer** — `reasoning_effort="none"` is a provider
+  constraint on tool-bearing chat-completions calls to gpt-5.6-terra (029 H3
+  knowledge note), so today neither the ES report nor the baseline reasons
+  before writing; the design leans on read-then-write plus the judge. Untested:
+  whether the Responses endpoint lifts it. Reasoning tokens are output tokens,
+  so this trades latency for quality and needs its own measurement.
+- **Ruled out for the scoping latency slice** (owner, 2026-09-17): parallel or
+  wave section writing (coherence), a writer model change (terra is the mid
+  tier), fewer screen reps (stays 3), turn cap 4 → 3 and a smaller read window
+  (quality), stage overlap (discrete steps are clearer to the user). Taken
+  instead in task 044 phase 8: classify 12 wide, ingest parse workers by core
+  count, acquisition targets 20 · 10 by depth, no proposed sections at rapid
+  (a five-section rapid merge was measured — no shorter write — and reverted).
+- **Unsupported claims after the one repair pass stay in the prose** (owner
+  concern, 2026-09-17: "keeping unvalidated claims in the output isn't the best
+  for user trust"). Today, after judge → one repair → re-judge, a claim the
+  judge still marks `unsupported_mis_cited` is kept in the section and flagged
+  (ADR 0015 §5/§6 flag-not-drop; artefact flag `unsupported_claims_present`;
+  chat enrichment ranks it lowest), and a repaired claim that fails the
+  validators keeps its prose without a citation. `REPAIR_ROUND_CAP` is 1.
+  Options to weigh in the synthesis optimisation task: a second bounded repair
+  round for still-failing claims; hedge-or-delete as the default for a claim the
+  re-judge fails (the repair wire already supports both); a visible marker in
+  the rendered prose rather than a flag only in the annotation layer. Each is a
+  grounding-contract change shared with the ES report (ADR 0015, 013
+  invariants) and needs a quality read against a set of judged sections.
+- **Source coverage: reports cite a small share of the relevant documents**
+  (investigated 2026-09-17 from the dev database and Langfuse; owner asked
+  why). Measured funnel on the task 1e03e719 report run of 2026-09-08 (eight
+  sections, landscape depth): 100 candidates → 59 screened relevant → 53
+  appraised → 17 documents ever returned to the writer in any section → 12
+  cited. The other nine stored runs cite 7 to 12 documents whatever the corpus
+  (36 to 81 relevant), so the ceiling is structural. The writer cited 12 of the
+  17 it saw; the loss is upstream of the writer. Three caps in
+  `synthesis_tools.py` bind together:
+  1. `search_chunks` returns the top 8 chunks by fused score with no
+     per-document spread — one document filled 5 or 6 of a section's 11 slots.
+  2. `SYNTH_CHUNK_CHAR_BUDGET` (24,000 per section) is spent on the first read
+     turn: every section's read turn returned 10 to 13 chunks totalling 22,600
+     to 23,900 characters from 5 to 8 documents; later matches come back
+     `skipped_over_budget` (up to 13 in one section) and are not citable.
+  3. The writer takes one read turn (2 to 4 `search_chunks` plus two lookups)
+     and then emits — `force_emit: false` on all 16 `synthesise:section_turn`
+     generations, so it chose to stop at 2 of its 6 turns. The prompt says
+     "stop when saturated", and the budget makes it saturated at once.
+  Sections retrieve overlapping documents, so the run-wide union stays near 17.
+  Select (the shortlist) is NOT the cause: it runs only at analysis depth
+  standard/deep (`ANALYSIS_DEPTH_TABLE`, budgets 15/25), never at landscape or
+  in the scoping baseline chain, and none of the ten measured runs had it. Where
+  it did run (five standard-depth reports, July–Aug 2026) the 2.0 prior steered
+  7 to 13 of 8 to 21 cited documents into the shortlist without lowering the
+  total; it is a score multiplier, not a filter. Also: no stored run had
+  extraction, so every citation is a chunk claim and finding claims are zero.
+  Levers to weigh, none a bug fix (the caps are plan-pinned and working as
+  designed): a per-document cap or diversity rule in `search()`; a larger or
+  per-turn character budget; a prompt change that asks the writer to read again
+  after the first turn; surfacing `skipped_over_budget` counts to the user as a
+  coverage signal. Each trades against the write-turn latency above and needs
+  a quality read. Query recipe: `synthesis_result.blocks[].block_id → block →
+  annotation → citation → chunk → task_source_snapshot` (join on
+  `source_snapshot_id` OR `full_text_snapshot_id`); Langfuse v3 REST
+  `/api/public/observations` by run window (the CLI refuses both the legacy and
+  v2 endpoints on this project).
 ## Search recall baselines (task 046 seams)
 
 Context: `scripts/evals/search/measure/baseline_recall.py` and `results/history.md` (rows dated
@@ -2589,3 +3211,71 @@ sent; found in task 049), now `sort=relevance` on every search, protected.
   publisher-typed plan can admit a landmark outside its range, as D8 is written. Seam:
   apply the plan's Overton filters locally to landmarks, counted on the `fetch_by_id`
   event like the country check.
+
+## Options scoping shortlist (task 055 seams)
+
+Recorded by the task 055 contract, plan and build (`docs/tasks/055-scoping-shortlist/`;
+[ADR 0041](adr/0041-options-scoping-shortlist.md)). The owner's rulings are quoted in the contract
+(S1–S26); the items below stay open on purpose.
+
+- **Update-in-place of the longlist (S10; 045 open question 7).** Still deferred. 055 keeps Rebuild:
+  an appetite change bypasses it (a shortlist walk re-proposes at once) and the user's places survive
+  a Rebuild by option id. Owner, 2026-10-27: "What does that even mean to rebuild in place? Do we
+  really need to worry about this?" → no.
+- **Shortlist verbs by chat.** Add to shortlist, Remove and Suggest more are buttons only; the
+  `longlist_turns` verbs stay add · exclude · include again. A chat verb needs the same opener and
+  refusals as the routes.
+- **Shortlist recall as the eval measure.** Research report 3 § 4: the right measure of a shortlist
+  is whether the option an assessment later finds best was on it. Needs assessment to exist. No AI
+  eval in 055; proposal quality was read by hand (verification.md, M1–M6).
+- **A comparability rule for settings.** The `tried_only` mix says "a comparable setting preferred"
+  and the maturity rung's modifier says "none in your setting" by country only. What makes a
+  setting comparable (income level, health system, federal structure) is not defined.
+- **Inferring the appetite.** Never inferred from the plan's wording (S2). A later slice could
+  propose one from the question's words and show it as a guess for the user to confirm.
+- **Direction of effect from abstracts (046 R42).** Stays with assessment; a reason may say an
+  option "bears on" an outcome, never that it moves it.
+- **The shortlist stage key.** Built as its own key (the pattern of every other scoping component),
+  not as `select` with an override (contract PG3). If the owner wants the override, it is a lookup by
+  registry name at four call sites in `routers/sse.py` and `checkin_read`.
+- **A failed proposal can cost up to four model calls.** The component re-asks once; the runner then
+  retries a failed model-calling step once, so a walk that ends `degraded` may have made four calls.
+  `theme` behaves the same way today. A per-step "no runner retry" flag would halve it.
+- **The note's footer needs `document_lines_total`.** Served since Phase 4; the frontend shows "Policy
+  Atlas read N of M document lines" only when both counts exist.
+- **The baseline check-in card does not show the appetite.** Its settings summary comes from the
+  backend's check-in bundle (Who · Where · Outcomes · Depth); adding "Risk appetite" is one bundle
+  key and one label in `checkInPresentation.ts`. The plan document beside the card shows it.
+- **Potential impact length.** The ceiling is a code check (a `max_length` on the wire made the
+  constrained decoder cut sentences mid-word at the limit): the prompt states a target (about 300,
+  never more than 380), a line over 400 is kept with a warning, and only a line over the hard bound
+  (600) fails the attempt, because `option_profile` is a spine step. If the judgment model keeps
+  writing over 400 characters on verbose lists, the target in the prompt goes down before either
+  number goes up. The contract says "under 400"; the owner rules on the number at the 055 review.
+- **One card build per option before the shortlist call.** `option_cards()` calls
+  `repository.option_out` once per included option, and each call re-reads the task-wide data (the
+  newest longlist row, every option name, all relations, the plan version). A 40-option list makes
+  several hundred queries before one model call, on every appetite change and Suggest more; measured
+  at 9–27 s wall per proposal in the staged check, so not a user-visible problem yet. A batch reader
+  belongs to a system-level cost and latency task (owner ruling 2026-09-28: Evidence search
+  components are not edited for cost inside a capability slice).
+- **The "could not propose" notice stays until the next walk.** The shortlist view derives it from
+  the task's newest parentless run; it says "Your places are unchanged" even after the user has since
+  added or removed places by hand. Clearing it on the first user action after the failed walk needs
+  the walk id on the view's state.
+- **The model does not see a breach on a kept place.** When constrain excludes an option the user
+  added, the user sees the breach on the row (O1) but the card text sent to the shortlist call omits
+  the exclusion block (contract card-text matrix: exclusion block out). One breach line for kept,
+  excluded places would let the note say so.
+- **Add on a pick from the screen.** The route turns Policy Atlas's pick into "Added by you" (the user
+  has now chosen it, so a re-proposal keeps it) and is tested; the Shortlist view offers only Remove on
+  a pick. A small "Keep" control on pick rows would expose it. Left for the owner's design call (055
+  review, step 9: no ruling made).
+- **"In the documents we found".** The contract's disciplines say the rung should carry this qualifier
+  where it would otherwise read as a fact about the world; the owner's rung words ("Evaluated",
+  "Implemented, not yet evaluated", …) do not. The card's "No document names this option yet" line and
+  the design mix carry the qualification nearby. Reopen if a reader takes the rung as a world fact.
+- **Appetite changes are an unmetered model-cost lever.** Each `PATCH /plan` that flips the appetite
+  opens a full shortlist walk (about USD 0.15 at 25–43 options). Bounded by `run_active`
+  serialisation and executor capacity only, the same posture as Rebuild; a per-task cap belongs with
+  the price envelope (open question 2).

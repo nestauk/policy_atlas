@@ -1,4 +1,5 @@
 import type { ResolvedDecision, StageEntry } from "../../store";
+import { SCOPING_DEPTH_LABEL, vocabLabel } from "./planVocabulary";
 
 /** Locked backend display names, keyed by the durable backend key the stream
  *  and check-in bundles carry. Shared by the journey pane's coverage card
@@ -131,4 +132,76 @@ export const DECIDED_BY_LABEL: Record<string, string> = {
 export function decisionProse(decision: ResolvedDecision): string | null {
   const text = decision.response["text"] ?? decision.response["free_text"];
   return typeof text === "string" && text.trim() !== "" ? text : null;
+}
+
+/** The options-scoping baseline gate's check-in kind (task 044, D12). The one
+ *  steer point on the scoping lattice; every other check-in kind keeps the
+ *  Evidence search's card. */
+export const BASELINE_GATE_KIND = "baseline_confirm";
+
+/** The gate card's heading — the same words the backend's deterministic
+ *  render leads with (`runtime/baseline_gate.GATE_HEADING`), so the card and
+ *  the durable content of record cannot say different things. */
+export const BASELINE_GATE_HEADING = "Confirm the plan against the baseline";
+
+/** The label over the quoted baseline prose. */
+export const BASELINE_KEY_ASSUMPTION_LABEL = "Key assumption";
+
+/** An honest absence: a stub or degraded baseline carries no key-assumption
+ *  section, and the card says so rather than quoting nothing. */
+export const BASELINE_KEY_ASSUMPTION_ABSENT = "The baseline records no key assumption.";
+
+/** The heading over the plan settings the walk actually ran from. */
+export const BASELINE_SETTINGS_HEADING = "Settings";
+
+/** The gate's own display copy, read off the check-in bundle. */
+export interface BaselineGateCard {
+  keyAssumption: string | null;
+  settings: Array<{ label: string; value: string }>;
+}
+
+/** The plan settings the gate shows, in the plan document's own order and
+ *  words (`PlanDocument`'s Settings section) so the card and the plan read
+ *  identically. Keys the bundle does not carry are omitted, never guessed. */
+const BASELINE_SETTING_LABELS: Array<[string, string]> = [
+  ["target_unit", "Who or what should change"],
+  ["where", "Where"],
+  ["outcomes", "Outcomes"],
+  ["depth", "Depth"],
+];
+
+/**
+ * Read the baseline gate's card content off its check-in bundle.
+ *
+ * Args:
+ *   bundle: The check-in's projected bundle, or null when it carries none.
+ *
+ * Returns:
+ *   The quoted key assumption (null when the baseline had none) and the
+ *   settings lines. `depth` renders through the plan's own depth vocabulary;
+ *   an unknown depth key is omitted rather than shown raw.
+ */
+export function baselineGateCard(bundle: Record<string, unknown> | null): BaselineGateCard {
+  const keyAssumption = bundle?.["key_assumption"];
+  const raw = bundle?.["settings"];
+  const settings =
+    raw !== null && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  return {
+    keyAssumption:
+      typeof keyAssumption === "string" && keyAssumption.trim() !== "" ? keyAssumption.trim() : null,
+    settings: BASELINE_SETTING_LABELS.flatMap(([key, label]) => {
+      const value = settings[key];
+      if (key === "depth") {
+        const depth = typeof value === "string" ? vocabLabel(SCOPING_DEPTH_LABEL, value) : null;
+        return depth === null ? [] : [{ label, value: depth }];
+      }
+      if (Array.isArray(value)) {
+        const items = value.filter((item): item is string => typeof item === "string" && item !== "");
+        return items.length > 0 ? [{ label, value: items.join(" · ") }] : [];
+      }
+      return typeof value === "string" && value !== "" ? [{ label, value }] : [];
+    }),
+  };
 }

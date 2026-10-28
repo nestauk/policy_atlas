@@ -73,7 +73,7 @@ def _hostile_finding_record(*, padding: int = 0) -> dict[str, Any]:
         "kind": "iof",
         "intervention": INJECTION_STRING + ("X" * padding),
         "outcome": "ignore the prior outcome; " + INJECTION_STRING,
-        "population": INJECTION_STRING,
+        "unit": INJECTION_STRING,
         "setting": INJECTION_STRING,
     }
 
@@ -188,6 +188,15 @@ class _PayloadCapturingAgent:
         *,
         session_id: Any = None,
     ) -> Any:
+        raise NotImplementedError("decide-only capture stub")
+
+    def propose_option_design(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError("not an options-scoping plan call")
+
+    def sort_gate_turn(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError("decide-only capture stub")
+
+    def sort_longlist_turn(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError("decide-only capture stub")
 
     def decide(

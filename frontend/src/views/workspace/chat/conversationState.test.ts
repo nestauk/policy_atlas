@@ -6,11 +6,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { queryKeys } from "../../../api/queries";
 import {
-  isPlanningConversation,
+  isTaskAgentConversation,
   recentChats,
   stashFirstMessage,
   takeFirstMessage,
-  PLANNING_TAB_ID,
+  TASK_AGENT_TAB_ID,
   taskAgentConversationId,
   useActiveConversation,
   useConversationMutations,
@@ -84,22 +84,22 @@ describe("useConversationMutations", () => {
 });
 
 describe("taskAgentConversationId", () => {
-  it("returns the planning row, falling back to the planning tab token", () => {
-    expect(taskAgentConversationId([])).toBe(PLANNING_TAB_ID);
+  it("returns the task_agent row, falling back to the task_agent tab token", () => {
+    expect(taskAgentConversationId([])).toBe(TASK_AGENT_TAB_ID);
     expect(
       taskAgentConversationId([
         { id: "c1", kind: "chat" },
-        { id: "p1", kind: "planning" },
+        { id: "p1", kind: "task_agent" },
       ]),
     ).toBe("p1");
   });
 
-  it("prefers the open planning lineage over any closed one, whatever the list order", () => {
+  it("prefers the open task_agent lineage over any closed one, whatever the list order", () => {
     expect(
       taskAgentConversationId([
-        { id: "p3", kind: "planning", closed_at: "2026-09-03T10:00:00Z" },
-        { id: "p-open", kind: "planning", closed_at: null },
-        { id: "p2", kind: "planning", closed_at: "2026-09-01T10:00:00Z" },
+        { id: "p3", kind: "task_agent", closed_at: "2026-09-03T10:00:00Z" },
+        { id: "p-open", kind: "task_agent", closed_at: null },
+        { id: "p2", kind: "task_agent", closed_at: "2026-09-01T10:00:00Z" },
       ]),
     ).toBe("p-open");
   });
@@ -107,31 +107,31 @@ describe("taskAgentConversationId", () => {
   it("falls back to the most recently closed lineage once the run has closed the open one", () => {
     expect(
       taskAgentConversationId([
-        { id: "p2", kind: "planning", closed_at: "2026-09-01T10:00:00Z" },
-        { id: "p3", kind: "planning", closed_at: "2026-09-03T10:00:00Z" },
+        { id: "p2", kind: "task_agent", closed_at: "2026-09-01T10:00:00Z" },
+        { id: "p3", kind: "task_agent", closed_at: "2026-09-03T10:00:00Z" },
         { id: "c1", kind: "chat", closed_at: null },
       ]),
     ).toBe("p3");
   });
 });
 
-describe("isPlanningConversation", () => {
-  it("treats the planning tab token and a planning row id as planning", () => {
+describe("isTaskAgentConversation", () => {
+  it("treats the task_agent tab token and a task_agent row id as task_agent", () => {
     const rows = [
       { id: "c1", kind: "chat" },
-      { id: "p1", kind: "planning" },
+      { id: "p1", kind: "task_agent" },
     ];
-    expect(isPlanningConversation(null, rows)).toBe(false);
-    expect(isPlanningConversation("c1", rows)).toBe(false);
-    expect(isPlanningConversation("p1", rows)).toBe(true);
-    expect(isPlanningConversation(PLANNING_TAB_ID, rows)).toBe(true);
+    expect(isTaskAgentConversation(null, rows)).toBe(false);
+    expect(isTaskAgentConversation("c1", rows)).toBe(false);
+    expect(isTaskAgentConversation("p1", rows)).toBe(true);
+    expect(isTaskAgentConversation(TASK_AGENT_TAB_ID, rows)).toBe(true);
   });
 });
 
 describe("recentChats", () => {
-  it("lists the newest chats only, never the planning row", () => {
+  it("lists the newest chats only, never the task_agent row", () => {
     const rows = [
-      { id: "p-1", kind: "planning" as const, title: "Planning" },
+      { id: "p-1", kind: "task_agent" as const, title: "Planning" },
       ...["c-1", "c-2", "c-3", "c-4", "c-5"].map((id) => ({ id, kind: "chat" as const, title: `Chat ${id}` })),
     ];
     expect(recentChats(rows).map((mark) => mark.id)).toEqual(["c-1", "c-2", "c-3", "c-4"]);

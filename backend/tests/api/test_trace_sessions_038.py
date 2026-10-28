@@ -1,10 +1,10 @@
 """Task 038 V9: one Langfuse session per Task, not per conversation.
 
-Covers invariant I9 across the three call sites the slice touches (planning
+Covers invariant I9 across the three call sites the slice touches (task_agent
 turn, chat turn, run start) plus the steering-continuation path the runner
 already threaded ``session_id`` through unmodified: with a stub Langfuse
 client, every trace groups under ``session_id == str(task_id)``, and the chat
-(and planning) turn's metadata still carries its ``conversation_id``.
+(and task_agent) turn's metadata still carries its ``conversation_id``.
 """
 
 from __future__ import annotations
@@ -20,9 +20,9 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.core import tracing
 from policy_atlas.runtime.continuation_state import ResumeDecision, build
-from policy_atlas.runtime.planner import OpenAIPlannerBackend
-from policy_atlas.runtime.planner_prompt import PlanDraftWire, PlannerTurnWire
 from policy_atlas.runtime.runner import NullIO, RunnerBackends, run_plan
+from policy_atlas.runtime.task_agent import OpenAITaskAgentBackend
+from policy_atlas.runtime.task_agent_prompt import PlanDraftWire, PlannerTurnWire
 from tests.helpers import fake_parse_client
 from tests.runtime.test_continuation_parity import _ParkOnceIO
 from tests.runtime.test_runner import _base_plan, _seed_task
@@ -75,7 +75,7 @@ def _patch_propagate_attributes(
     ``core.tracing._session_scope`` always converts to ``str`` before calling
     ``propagate_attributes`` (the installed Langfuse SDK has no
     ``update_current_trace``); patching it here is the same seam
-    ``tests/runtime/test_planner.py`` uses for the planner alone.
+    ``tests/runtime/test_task_agent.py`` uses for the task_agent alone.
     """
 
     @contextmanager
@@ -86,10 +86,10 @@ def _patch_propagate_attributes(
     monkeypatch.setattr(tracing, "propagate_attributes", fake_propagate_attributes)
 
 
-def test_planning_turn_session_is_task_id_and_metadata_carries_conversation_id(
+def test_task_agent_turn_session_is_task_id_and_metadata_carries_conversation_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The planning-turn generation span groups by task id, not conversation id."""
+    """The task_agent-turn generation span groups by task id, not conversation id."""
     task_id = uuid.uuid4()
     conversation_id = uuid.uuid4()
     session_events: list[str] = []
@@ -105,7 +105,7 @@ def test_planning_turn_session_is_task_id_and_metadata_carries_conversation_id(
         suggested_answers=None,
         ready=False,
     )
-    backend: OpenAIPlannerBackend = object.__new__(OpenAIPlannerBackend)
+    backend: OpenAITaskAgentBackend = object.__new__(OpenAITaskAgentBackend)
     cast("Any", backend)._client = fake_parse_client(parsed=parsed)
     cast("Any", backend)._langfuse_client = fake_langfuse
 

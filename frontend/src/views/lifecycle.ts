@@ -32,7 +32,33 @@ const TAB_PATHS: Record<LifecycleTab, string> = {
  * That is the flag-don't-drop discipline, not a special case. Results stays
  * locked after a failed run — a partial write-up is still on Plan.
  */
-function openTabs(status: RunStatus | null | undefined): readonly LifecycleTab[] {
+function openTabs(
+  status: RunStatus | null | undefined,
+  options?: TabOptions,
+): readonly LifecycleTab[] {
+  const open = baseTabs(status);
+  // Task 044 (A17): an options-scoping task's Result is its baseline, and the
+  // baseline outlives the walk that wrote it — a walk aborted at the gate
+  // ("Change the plan") still leaves a readable profile behind. So Result
+  // opens as soon as a baseline exists, whatever the walk's ending. Task 045
+  // (A7): a longlist opens it the same way — the Result then opens on the
+  // longlist.
+  const hasScopingResult = options?.hasBaseline === true || options?.hasLonglist === true;
+  if (hasScopingResult && !open.includes("result")) {
+    return LIFECYCLE_TABS.filter((tab) => tab === "result" || open.includes(tab));
+  }
+  return open;
+}
+
+/** Availability that run state alone cannot decide. */
+export interface TabOptions {
+  /** An options-scoping task with a baseline artefact written (task 044). */
+  hasBaseline?: boolean;
+  /** An options-scoping task with a longlist (task 045, `TaskOut.has_longlist`). */
+  hasLonglist?: boolean;
+}
+
+function baseTabs(status: RunStatus | null | undefined): readonly LifecycleTab[] {
   if (status === null || status === undefined) return ["agent", "share"];
   switch (status) {
     case "running":
@@ -55,13 +81,21 @@ export function hasResult(status: RunStatus | null | undefined): boolean {
 }
 
 /** Whether one lifecycle tab can be opened at this run state. */
-export function isTabOpen(tab: LifecycleTab, status: RunStatus | null | undefined): boolean {
-  return openTabs(status).includes(tab);
+export function isTabOpen(
+  tab: LifecycleTab,
+  status: RunStatus | null | undefined,
+  options?: TabOptions,
+): boolean {
+  return openTabs(status, options).includes(tab);
 }
 
 /** The five tabs with their label, path and availability at this run state. */
-export function lifecycleTabs(base: string, status: RunStatus | null | undefined) {
-  const open = openTabs(status);
+export function lifecycleTabs(
+  base: string,
+  status: RunStatus | null | undefined,
+  options?: TabOptions,
+) {
+  const open = openTabs(status, options);
   return LIFECYCLE_TABS.map((tab) => ({
     tab,
     label: LIFECYCLE_LABELS[tab],
@@ -113,7 +147,30 @@ export function publicLifecycleTabs(base: string) {
  * opens what the reader came for, and everything else opens the plan, which
  * is the only stage guaranteed to have something in it.
  */
-export function taskDestination(taskId: string, status: RunStatus | null | undefined): string {
+export function taskDestination(
+  taskId: string,
+  status: RunStatus | null | undefined,
+  options?: { hasLonglist?: boolean },
+): string {
   const base = `/tasks/${taskId}`;
-  return status === "succeeded" ? `${base}/result` : base;
+  // Task 045: a scoping task with a longlist opens on it, whatever its
+  // latest walk is doing.
+  return status === "succeeded" || options?.hasLonglist === true ? `${base}/result` : base;
+}
+
+/** The Result's view switch once a scoping task has a longlist (task 045,
+ *  deliverable 9; task 055 adds Shortlist): **Baseline · Longlist · Shortlist · Report**,
+ *  Report shown but not openable until assessment. */
+export const RESULT_VIEWS: readonly { key: string; label: string; note?: string }[] = [
+  { key: "baseline", label: "Baseline" },
+  { key: "longlist", label: "Longlist" },
+  { key: "shortlist", label: "Shortlist" },
+  { key: "report", label: "Report", note: "available after assessment" },
+];
+
+/** Which view the Result opens on: the longlist unless the baseline is asked
+ *  for (ruling 50; task 045, A7). */
+export function resultView(requested: string | null): "baseline" | "longlist" | "shortlist" {
+  if (requested === "baseline" || requested === "shortlist") return requested;
+  return "longlist";
 }

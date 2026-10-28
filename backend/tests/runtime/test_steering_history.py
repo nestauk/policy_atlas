@@ -28,7 +28,7 @@ def _drive_walk_a(engine: Engine, *, task_id: uuid.UUID, scope_id: uuid.UUID) ->
     plan = _base_plan()  # moderate steering mode, deep chain (default)
     plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
     io = ScriptedIO(
-        [Adjust(directive_deltas={"group": {"grouping": {"facets": ["population"]}}})]
+        [Adjust(directive_deltas={"group": {"grouping": {"facets": ["unit"]}}})]
     )
 
     outcome = run_plan(

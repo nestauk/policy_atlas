@@ -11,11 +11,11 @@ from sqlalchemy import Text
 from policy_atlas.core.schema import implementation_context_finding, intervention_outcome_finding
 from policy_atlas.evidence_search.extract.finding_references import (
     INTERVENTION_DESC,
-    POPULATION_DESC,
     REFERENCE_REQUIREDNESS,
     SHARED_REFERENCE_FIELDS,
     STUDY_DESIGN_DESC,
     STUDY_GEOGRAPHY_DESC,
+    UNIT_DESC,
 )
 from policy_atlas.evidence_search.extract.icf_records import ICFRecord, ICFRecordWire
 from policy_atlas.evidence_search.extract.iof_records import (
@@ -34,11 +34,11 @@ from policy_atlas.evidence_search.extract.quote_verify import (
 from tests.helpers import make_icf_wire_record
 
 
-def _iof_wire_with_population(population: str | None) -> IOFRecordWire:
+def _iof_wire_with_unit(unit: str | None) -> IOFRecordWire:
     return IOFRecordWire(
         intervention="home visiting",
         outcome="hospital admissions",
-        population=population,
+        unit=unit,
         setting=None,
         comparator="usual care",
         effect_direction="decrease",
@@ -70,7 +70,7 @@ def _iof_values(**overrides: Any) -> dict[str, Any]:
     values: dict[str, Any] = {
         "intervention": "home visiting",
         "outcome": "hospital admissions",
-        "population": "families",
+        "unit": "families",
         "setting": "primary care",
         "comparator": None,
         "effect_direction": "decrease",
@@ -96,7 +96,7 @@ def _icf_values(**overrides: Any) -> dict[str, Any]:
         "context_label": None,
         "intervention": "home visiting",
         "outcome": "referral uptake",
-        "population": "families",
+        "unit": "families",
         "setting": "primary care",
         "study_geography": "England",
         "study_design": "process evaluation",
@@ -115,7 +115,7 @@ def _icf_values(**overrides: Any) -> dict[str, Any]:
     ("field_name", "constant"),
     [
         ("intervention", INTERVENTION_DESC),
-        ("population", POPULATION_DESC),
+        ("unit", UNIT_DESC),
         ("study_geography", STUDY_GEOGRAPHY_DESC),
         ("study_design", STUDY_DESIGN_DESC),
     ],
@@ -160,17 +160,17 @@ def test_stored_model_reference_nullability_matches_tables(field_name: str) -> N
 
 @pytest.mark.parametrize("token", sorted(NULL_LIKE_STRINGS))
 def test_reference_null_like_coercion_uses_shared_rules(token: str) -> None:
-    iof = validate_record(_iof_wire_with_population(token))
-    icf = validate_icf_record(make_icf_wire_record(population=token))
+    iof = validate_record(_iof_wire_with_unit(token))
+    icf = validate_icf_record(make_icf_wire_record(unit=token))
 
     assert iof.record is not None
     assert icf.record is not None
-    assert iof.record.population is None
-    assert icf.record.population is None
-    assert iof.field_coverage["population"] == "not_extracted"
-    assert icf.field_coverage["population"] == "not_extracted"
-    assert iof.coerced_null_fields == ["population"]
-    assert icf.coerced_null_fields == ["population"]
+    assert iof.record.unit is None
+    assert icf.record.unit is None
+    assert iof.field_coverage["unit"] == "not_extracted"
+    assert icf.field_coverage["unit"] == "not_extracted"
+    assert iof.coerced_null_fields == ["unit"]
+    assert icf.coerced_null_fields == ["unit"]
 
 
 @pytest.mark.parametrize(
@@ -178,7 +178,7 @@ def test_reference_null_like_coercion_uses_shared_rules(token: str) -> None:
     [
         "context_label",
         "outcome",
-        "population",
+        "unit",
         "setting",
         "study_geography",
         "study_design",

@@ -16,6 +16,8 @@ vi.mock("../api/queries", async (importOriginal) => {
     useEvidence: vi.fn(),
     useFindings: vi.fn(),
     useSourceDossier: vi.fn(),
+    useSourceRecords: vi.fn(),
+    useTask: vi.fn(),
   };
 });
 
@@ -41,6 +43,13 @@ function mockQueries({
     isPending: true,
     data: undefined,
   } as unknown as ReturnType<typeof queries.useFindings>);
+  vi.mocked(queries.useTask).mockReturnValue({
+    data: { capability: "evidence_search" },
+  } as unknown as ReturnType<typeof queries.useTask>);
+  vi.mocked(queries.useSourceRecords).mockReturnValue({
+    isPending: false,
+    data: undefined,
+  } as unknown as ReturnType<typeof queries.useSourceRecords>);
 }
 
 function renderDossier(sourceRef: string) {
@@ -72,5 +81,57 @@ describe("SourceDossier loading states", () => {
     expect(
       screen.queryByText("This source isn't in the evidence list yet."),
     ).not.toBeInTheDocument();
+  });
+});
+
+// Task 046, amendment 3 (R67): the exported dossier takes the option id the
+// card's document link carries, and on a scoping task its slot reads
+// "In this option".
+describe("SourceDossier on an options-scoping task", () => {
+  const OPTION_ID = "a0000000-0000-4000-8000-00000000000a";
+
+  it("reads the option's records under \"In this option\"", () => {
+    mockQueries({ evidencePending: false, dossierFetching: false });
+    vi.mocked(queries.useSourceDossier).mockReturnValue({
+      isPending: false,
+      isLoading: false,
+      isError: false,
+      data: { source_id: SOURCE_ID, title: "A document", origin: "OpenAlex", tags: [] },
+    } as unknown as ReturnType<typeof queries.useSourceDossier>);
+    vi.mocked(queries.useTask).mockReturnValue({
+      data: { capability: "options_scoping" },
+    } as unknown as ReturnType<typeof queries.useTask>);
+    vi.mocked(queries.useSourceRecords).mockReturnValue({
+      isPending: false,
+      data: {
+        task_source_snapshot_id: SOURCE_ID,
+        records: [
+          {
+            option_id: OPTION_ID,
+            option_name: "Youth guarantee",
+            record_id: "r-1",
+            intervention: "youth guarantee",
+            setting: null,
+            unit: null,
+            outcome: null,
+            study_geography: "England",
+            role: "evaluated",
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof queries.useSourceRecords>);
+    render(
+      <TooltipProvider>
+        <SourceDossier taskId={TASK_ID} sourceRef={SOURCE_ID} optionId={OPTION_ID} onClose={() => {}} />
+      </TooltipProvider>,
+    );
+    expect(vi.mocked(queries.useSourceRecords)).toHaveBeenLastCalledWith(
+      TASK_ID, SOURCE_ID, OPTION_ID, { enabled: true },
+    );
+    expect(screen.getByText("In this option")).toBeInTheDocument();
+    expect(screen.getByText("youth guarantee")).toBeInTheDocument();
+    expect(screen.getByText("England")).toBeInTheDocument();
+    expect(screen.queryByText("Setting")).not.toBeInTheDocument();
+    expect(screen.queryByText("Findings from this source")).not.toBeInTheDocument();
   });
 });

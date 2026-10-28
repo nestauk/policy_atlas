@@ -75,7 +75,7 @@ _POOLED_ONLY_FIELDS = ("k", "i_squared", "tau2")
 
 # Nullable fields whose absence is completed to "not_extracted" in step 5.
 _OTHER_NULLABLE_FIELDS = (
-    "population",
+    "unit",
     "setting",
     "comparator",
     "estimate_level",
@@ -613,7 +613,7 @@ def validate_record(wire: IOFRecordWire) -> ValidatedRecord:
     # Step 1 — null-like coercion of nullable free-text fields.
     intervention = _coerce_text("intervention", wire.intervention, coverage, coerced)
     outcome = _coerce_text("outcome", wire.outcome, coverage, coerced)
-    population = _coerce_text("population", wire.population, coverage, coerced)
+    unit = _coerce_text("unit", wire.unit, coverage, coerced)
     setting = _coerce_text("setting", wire.setting, coverage, coerced)
     comparator = _coerce_text("comparator", wire.comparator, coverage, coerced)
     study_design = _coerce_text("study_design", wire.study_design, coverage, coerced)
@@ -643,7 +643,7 @@ def validate_record(wire: IOFRecordWire) -> ValidatedRecord:
 
     # Step 5 — coverage completion for remaining absent nullable fields.
     other_values: dict[str, object | None] = {
-        "population": population,
+        "unit": unit,
         "setting": setting,
         "comparator": comparator,
         "estimate_level": wire.estimate_level,
@@ -698,7 +698,7 @@ def validate_record(wire: IOFRecordWire) -> ValidatedRecord:
     record = IOFRecord(
         intervention=intervention.strip(),
         outcome=outcome.strip(),
-        population=population,
+        unit=unit,
         setting=setting,
         comparator=comparator,
         effect_direction=wire.effect_direction,
@@ -733,7 +733,7 @@ _ICF_FREE_TEXT_FIELDS = (
     "context_label",
     "intervention",
     "outcome",
-    "population",
+    "unit",
     "setting",
     "study_geography",
     "study_design",
@@ -800,7 +800,7 @@ def validate_icf_record(wire: ICFRecordWire) -> ValidatedICFRecord:
         context_label=text_values["context_label"],
         intervention=intervention.strip(),
         outcome=text_values["outcome"],
-        population=text_values["population"],
+        unit=text_values["unit"],
         setting=text_values["setting"],
         study_geography=text_values["study_geography"],
         study_design=text_values["study_design"],

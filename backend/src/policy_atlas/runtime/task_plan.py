@@ -1,12 +1,13 @@
 """Coordination-plan model and deterministic chain composer.
 
 The task plan is the approved user-facing run proposal. This module
-keeps it fail-closed and compiles it into the fixed EB chain shape without
+keeps it fail-closed and compiles it into the fixed ES chain shape without
 executing any component or widening any existing runtime directive grammar.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date
 from typing import Any, Literal, Self, TypedDict
 
@@ -45,7 +46,7 @@ DiscretionaryComponent = Literal[
 GroupingFacet = Literal[
     "intervention",
     "outcome",
-    "population",
+    "unit",
     "barrier_theme",
     "enabler_theme",
     "mechanism_theme",
@@ -112,6 +113,20 @@ DISCRETIONARY_COMPONENTS: tuple[DiscretionaryComponent, ...] = (
     "group",
 )
 ALL_STEPS: tuple[str, ...] = SPINE + DISCRETIONARY_COMPONENTS
+#: The steps only an options-scoping chain composes (task 045, ADR 0039). Each
+#: is its own registry component (``registry_component_for`` is the identity
+#: for them); :func:`_validate_registry` checks them with the rest so a chain
+#: can never name a component the harness does not dispatch.
+OPTIONS_SCOPING_STEPS: tuple[str, ...] = (
+    "inherit",
+    "suggest",
+    "extract_interventions",
+    "longlist",
+    "option_profile",
+    "constrain",
+    "theme",
+    "shortlist",
+)
 DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(("select", "extract", "group"))
 DEEP_GROUPING_FACETS: tuple[GroupingFacet, ...] = (
     "intervention",
@@ -218,7 +233,7 @@ TIME_BANDS: dict[tuple[SearchEffort, AnalysisDepth], str] = {
     ("rapid", "standard"): "~30-45 min",
     # Re-seeded from the 019 Phase E measured run (2026-07-12, heat-pump
     # question, standard x standard WITH select-at-standard, 58 docs acquired,
-    # 20 full-text screened): 805 s ≈ 13.4 min end to end incl. the planner
+    # 20 full-text screened): 805 s ≈ 13.4 min end to end incl. the task_agent
     # turn — acquire 12s + screen_abstract 14s + classify 58s + appraise 0.1s
     # + ingest 76s + screen_full 6s + characterise 8s + select 5s +
     # synthesise 602s. Displayed-band-is-measured; synthesise dominates, so
@@ -321,7 +336,10 @@ def _enabled_components(depth: AnalysisDepth) -> set[DiscretionaryComponent]:
 
 
 def _validate_registry() -> None:
-    missing = sorted({registry_component_for(step) for step in ALL_STEPS} - set(COMPONENT_REGISTRY))
+    missing = sorted(
+        {registry_component_for(step) for step in (*ALL_STEPS, *OPTIONS_SCOPING_STEPS)}
+        - set(COMPONENT_REGISTRY)
+    )
     if missing:
         raise ValueError(f"coordination references unknown registry component(s): {missing}")
 
@@ -340,7 +358,7 @@ class CountryGroup(BaseModel):
     """Named country group compiled into backend-specific search filters.
 
     Args:
-        label: Pinned Tier-1 label, or a user/planner label for an explicit
+        label: Pinned Tier-1 label, or a user/Task Agent label for an explicit
             Tier-2 country list.
         countries: Explicit ISO-3166 alpha-2 country list for Tier-2 groups.
             Must be ``None`` for pinned Tier-1 labels.
@@ -690,7 +708,7 @@ class SteerPointDefault(BaseModel):
 
 
 class TaskPlan(BaseModel):
-    """Approved coordination proposal compiled into an EB component chain.
+    """Approved coordination proposal compiled into an ES component chain.
 
     Args:
         title: Short user-visible title for the run.
@@ -713,8 +731,8 @@ class TaskPlan(BaseModel):
         assumptions: Visible assumptions and open guesses.
         time_band: Deterministic wall-clock band derived from the two axes.
         section_budget: Optional future synthesis cap for ordinary sections.
-        source_turn_index: Planning turn that approved this payload, when it
-            was created through the planning API.
+        source_turn_index: Task Agent turn that approved this payload, when it
+            was created through the Task Agent API.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -980,6 +998,13 @@ class ComponentStep(BaseModel):
         component: Coordination component step name.
         directive_delta: Context directive delta for the component.
         reference_rule: Optional reference-threading rule for the runner.
+        spine: Whether a failure of this step fails the walk (task 045, ADR
+            0039 decision 2). ``None`` defers to the Evidence search's global
+            spine set (:data:`SPINE`), so every Evidence search chain — which
+            never sets it — is unchanged. A chain that declares its own spine
+            (the options-scoping longlist and targeted chains) sets it on
+            every step. The chain is recomposed from the plan on resume, so
+            the flag survives a park without being persisted.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -987,6 +1012,19 @@ class ComponentStep(BaseModel):
     component: str
     directive_delta: dict[str, Any] = Field(default_factory=dict)
     reference_rule: str | None = None
+    spine: bool | None = None
+
+    @property
+    def is_spine(self) -> bool:
+        """Return whether this step's failure ends the walk ``failed``.
+
+        Returns:
+            ``spine`` when the chain declared it, else membership of the
+            Evidence search spine set.
+        """
+        if self.spine is not None:
+            return self.spine
+        return self.component in SPINE
 
 
 class ComposedChain(BaseModel):
@@ -1072,11 +1110,20 @@ def _directive_delta(component: str, plan: TaskPlan) -> dict[str, Any]:
     return {}
 
 
-def compose(plan: TaskPlan) -> ComposedChain:
-    """Compose an approved task plan into a fixed EB chain.
+def compose(
+    plan: TaskPlan,
+    purpose: str | None = None,
+    context: Mapping[str, Any] | None = None,
+) -> ComposedChain:
+    """Compose an approved task plan into a fixed ES chain.
 
     Args:
         plan: Validated task plan.
+        purpose: The intent record's purpose. Accepted for the registry's
+            compose-by-purpose signature (task 045) and ignored: an Evidence
+            search has one chain, and its intent records carry no purpose.
+        context: The intent record's context. Accepted for the registry's
+            signature (task 046) and ignored, like ``purpose``.
 
     Returns:
         A composed chain whose mandatory spine is present in order and whose
@@ -1086,6 +1133,7 @@ def compose(plan: TaskPlan) -> ComposedChain:
         ValueError: If the component registry no longer contains a referenced
             underlying component.
     """
+    del purpose, context
     _validate_registry()
     selected = set(plan.components)
     ordered_components: list[str] = [

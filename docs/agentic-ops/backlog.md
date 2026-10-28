@@ -232,7 +232,7 @@ were the harness's own triggers firing without follow-through. Changes:
   OKF-formatted — that conflated the manual's `knowledge/` editorial policy with OKF's actual minimal
   requirements.)*
 
-- **Specs are living, not golden** (2026-06-24) — the architecture + EB specs (and their `sources/`)
+- **Specs are living, not golden** (2026-06-24) — the architecture + ES specs (and their `sources/`)
   were reasoned deliberately but fast, before the tool was real. Agents must treat them as current
   best *intent*, refinable as implementation lands: neither blindly obey a doubted spec nor silently
   deviate in code — **flag → human decision → update spec + status + ADR → log**. Recorded in

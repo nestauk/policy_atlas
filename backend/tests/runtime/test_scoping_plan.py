@@ -1,0 +1,621 @@
+"""The options-scoping plan model: what it refuses, and what it fills in.
+
+Contract § Acceptance checks "scoping plan validation" (task 044). The theme
+throughout: a scoping plan is mostly *claims about a problem*, and the only
+protection against a claim that reads as fact but was a guess is that the model
+refuses to store one untagged, unpinned or unpaired.
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import get_args
+
+import pytest
+from pydantic import ValidationError
+
+from policy_atlas.api import contract
+from policy_atlas.runtime.capability_registry import (
+    EVIDENCE_SEARCH,
+    OPTIONS_SCOPING,
+    UnknownCapability,
+    spec_for,
+    validate_plan,
+)
+from policy_atlas.runtime.scoping_plan import (
+    BASELINE_CONFIRM,
+    BASELINE_TIME_BAND,
+    CHECKED_AT_BY_KIND,
+    PROFILE_LINE_KEYS,
+    SCOPING_STEPS,
+    CheckedAt,
+    ConsiderationAspect,
+    ConstraintKind,
+    DefaultPreference,
+    Origin,
+    ScopingConstraint,
+    ScopingPlan,
+    build_scoping_plan,
+    wire_draft_from_plan,
+)
+from policy_atlas.runtime.task_agent_scoping_prompt import (
+    ScopingConstraintWire,
+    ScopingPlanDraftWire,
+    ScopingSteerPointDefaultDraft,
+    TaggedText,
+    YourContextWire,
+)
+
+
+def _ready_draft(**overrides: object) -> ScopingPlanDraftWire:
+    values: dict[str, object] = {
+        "title": "Youth employment options",
+        "question": "What could reduce the number of young people not in work?",
+        "intended_change": TaggedText(
+            text="Reduce the number of 16 to 24 year olds not in education, "
+            "employment or training",
+            origin="from_your_question",
+        ),
+        "target_unit": TaggedText(text="16 to 24 year olds", origin="your_call"),
+        "outcomes": [TaggedText(text="the NEET rate", origin="assumed")],
+        "depth": "standard",
+    }
+    values.update(overrides)
+    return ScopingPlanDraftWire.model_validate(values)
+
+
+# --- readiness --------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        # Depth is the one field the user must choose (OS ruling 25).
+        {"depth": None},
+        {"target_unit": None},
+        {"outcomes": []},
+        # Two settings, not three (D6). 'deep' is Evidence search vocabulary.
+        {"depth": "deep"},
+    ],
+)
+def test_a_draft_that_is_not_ready_is_not_a_plan(missing: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        build_scoping_plan(_ready_draft(**missing))
+
+
+def test_an_invented_origin_tag_is_refused() -> None:
+    """A tag outside the three is a claim with no provenance the user can read."""
+    with pytest.raises(ValueError, match="origin"):
+        build_scoping_plan(
+            _ready_draft(
+                target_unit=TaggedText(text="16 to 24 year olds", origin="obviously")
+            )
+        )
+
+
+# --- what code fills in -----------------------------------------------------
+
+
+def test_where_defaults_to_the_united_kingdom_tagged_assumed() -> None:
+    plan = build_scoping_plan(_ready_draft())
+    assert plan.where.text == "United Kingdom"
+    assert plan.where.origin == "assumed"
+
+
+def test_the_steps_and_the_band_are_code_supplied() -> None:
+    plan = build_scoping_plan(_ready_draft())
+    assert [step.label for step in plan.steps] == [step.label for step in SCOPING_STEPS]
+    assert plan.time_band == BASELINE_TIME_BAND
+
+
+def test_the_plan_version_records_the_turn_that_produced_it() -> None:
+    """Turn provenance is at version grain, not field grain (C16)."""
+    plan = build_scoping_plan(_ready_draft(), source_turn_index=3)
+    assert plan.source_turn_index == 3
+
+
+def test_linked_task_ids_come_from_the_links_not_the_model() -> None:
+    source = uuid.uuid4()
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[source])
+    assert plan.linked_task_ids == [source]
+
+
+# --- constraints ------------------------------------------------------------
+
+
+def test_a_constraint_kind_pins_when_it_is_checked() -> None:
+    with pytest.raises(ValidationError, match="checked at"):
+        build_scoping_plan(
+            _ready_draft(
+                constraints=[
+                    ScopingConstraintWire(
+                        text="no benefit cuts",
+                        kind="boundary",
+                        origin="from_your_question",
+                        checked_at="retrieval",
+                    )
+                ]
+            )
+        )
+
+
+def test_an_unknown_constraint_kind_is_refused() -> None:
+    with pytest.raises(ValueError, match=r"kind\s+Input should be"):
+        build_scoping_plan(
+            _ready_draft(
+                constraints=[
+                    ScopingConstraintWire(
+                        text="cheap",
+                        kind="nice_to_have",
+                        origin="assumed",
+                        checked_at="assessment",
+                    )
+                ]
+            )
+        )
+
+
+def test_a_boundary_may_not_carry_retrieval_fields() -> None:
+    """A design boundary that claimed to filter retrieval would not filter it."""
+    with pytest.raises(ValidationError, match="evidence_restriction"):
+        build_scoping_plan(
+            _ready_draft(
+                constraints=[
+                    ScopingConstraintWire(
+                        text="delivered through schools",
+                        kind="boundary",
+                        origin="from_your_question",
+                        checked_at="longlist",
+                        published_after="2015-01-01",
+                    )
+                ]
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("kind", "checked_at", "extra"),
+    [
+        ("boundary", "longlist", {}),
+        ("consideration", "assessment", {"aspect": "cost"}),
+        ("preference", "assessment", {}),
+        ("evidence_restriction", "retrieval", {}),
+    ],
+)
+def test_the_four_kinds_and_where_each_is_checked(
+    kind: str, checked_at: str, extra: dict[str, object]
+) -> None:
+    """Task 046, R34, B3: four kinds; a consideration is checked at assessment."""
+    assert CHECKED_AT_BY_KIND[kind] == checked_at  # type: ignore[index]
+    constraint = ScopingConstraint.model_validate(
+        {"text": "x", "kind": kind, "origin": "your_call", "checked_at": checked_at, **extra}
+    )
+    assert constraint.checked_at == checked_at
+
+
+def test_the_api_contract_mirrors_the_plan_vocabularies() -> None:
+    """The API package imports no runtime module; its copies must not drift."""
+    assert get_args(contract.ConstraintKind) == get_args(ConstraintKind)
+    assert get_args(contract.CheckedAt) == get_args(CheckedAt)
+    assert get_args(contract.ConsiderationAspect) == get_args(ConsiderationAspect)
+    assert get_args(contract.ProfileLineKey) == PROFILE_LINE_KEYS
+    assert get_args(contract.Origin) == get_args(Origin)
+    assert get_args(contract.DefaultPreference) == get_args(DefaultPreference)
+    out_fields = set(contract.ScopingConstraintOut.model_fields)
+    assert out_fields == set(ScopingConstraint.model_fields)
+
+
+@pytest.mark.parametrize(
+    ("fields", "match"),
+    [
+        (
+            {"kind": "consideration", "checked_at": "assessment"},
+            "aspect",
+        ),
+        (
+            {"kind": "boundary", "checked_at": "longlist", "aspect": "cost"},
+            "only a consideration may carry an aspect",
+        ),
+        (
+            {"kind": "preference", "checked_at": "assessment", "hard": True},
+            "only a consideration may be hard",
+        ),
+        (
+            {
+                "kind": "consideration",
+                "checked_at": "assessment",
+                "aspect": "who_decides",
+                "setting": True,
+            },
+            "only a boundary may name a setting",
+        ),
+    ],
+)
+def test_a_constraint_whose_fields_do_not_fit_its_kind_is_refused(
+    fields: dict[str, object], match: str
+) -> None:
+    with pytest.raises(ValidationError, match=match):
+        ScopingConstraint.model_validate({"text": "x", "origin": "your_call", **fields})
+
+
+def test_the_wire_keeps_a_considerations_aspect_and_hard() -> None:
+    wire = ScopingConstraintWire(
+        text="A budget of at most £2m a year",
+        kind="consideration",
+        origin="from_your_question",
+        checked_at="assessment",
+        aspect="cost",
+        hard=True,
+    )
+    plan = build_scoping_plan(_ready_draft(constraints=[wire]))
+    [consideration] = [c for c in plan.constraints if c.kind == "consideration"]
+    assert (consideration.aspect, consideration.hard) == ("cost", True)
+    # ... and back onto the wire draft the successor conversation is seeded from.
+    [drafted] = [
+        c for c in wire_draft_from_plan(plan)["constraints"] if c["kind"] == "consideration"
+    ]
+    assert (drafted["aspect"], drafted["hard"]) == ("cost", True)
+    assert ScopingConstraintWire.model_validate(drafted) == wire
+
+
+def test_an_unknown_aspect_is_refused() -> None:
+    with pytest.raises(ValueError, match=r"aspect\s+Input should be"):
+        build_scoping_plan(
+            _ready_draft(
+                constraints=[
+                    ScopingConstraintWire(
+                        text="Needs the mayor",
+                        kind="consideration",
+                        origin="your_call",
+                        checked_at="assessment",
+                        aspect="politics",
+                    )
+                ]
+            )
+        )
+
+
+def test_a_language_restriction_is_stored_whole(  # C8
+) -> None:
+    """The search grammar has no language filter, so the plan keeps the ask."""
+    plan = build_scoping_plan(
+        _ready_draft(
+            constraints=[
+                ScopingConstraintWire(
+                    text="English-language only",
+                    kind="evidence_restriction",
+                    origin="from_your_question",
+                    checked_at="retrieval",
+                    languages=["English"],
+                )
+            ]
+        )
+    )
+    assert plan.constraints[0].languages == ["English"]
+    assert plan.constraints[0].checked_at == "retrieval"
+
+
+# --- your context -----------------------------------------------------------
+
+
+def test_your_context_keeps_the_users_words_and_its_turn() -> None:
+    plan = build_scoping_plan(
+        _ready_draft(
+            your_context=[
+                YourContextWire(
+                    text="  we already run a youth offer in every Jobcentre  ",
+                    type="present_fact",
+                )
+            ]
+        ),
+        source_turn_index=2,
+    )
+    entry = plan.your_context[0]
+    assert entry.text == "  we already run a youth offer in every Jobcentre  "
+    assert entry.turn_index == 2
+    assert entry.test_as_condition is False
+
+
+# --- steering ---------------------------------------------------------------
+
+
+def test_the_default_steering_mode_is_moderate() -> None:
+    assert build_scoping_plan(_ready_draft()).steering_mode == "moderate"
+
+
+def test_unattended_must_write_the_baseline_default_down() -> None:
+    with pytest.raises(ValidationError, match="undeclared default"):
+        build_scoping_plan(_ready_draft(steering_mode="unattended"))
+
+
+def test_unattended_with_the_default_is_a_plan() -> None:
+    plan = build_scoping_plan(
+        _ready_draft(
+            steering_mode="unattended",
+            steer_point_defaults=[
+                ScopingSteerPointDefaultDraft(
+                    steer_point=BASELINE_CONFIRM, action="proceed_flag"
+                )
+            ],
+        )
+    )
+    assert plan.steer_point_defaults[0].steer_point == BASELINE_CONFIRM
+
+
+def test_an_attended_plan_refuses_the_baseline_default() -> None:
+    """In attended modes the gate pauses; a standing rule there never fires."""
+    with pytest.raises(ValidationError, match="only valid under"):
+        build_scoping_plan(
+            _ready_draft(
+                steering_mode="moderate",
+                steer_point_defaults=[
+                    ScopingSteerPointDefaultDraft(
+                        steer_point=BASELINE_CONFIRM, action="proceed_flag"
+                    )
+                ],
+            )
+        )
+
+
+def test_an_unattended_plan_cannot_declare_a_hard_stop_at_the_gate() -> None:
+    """D11/A9: unattended never pauses at the gate — it records, flags, CONTINUES.
+
+    ``stop`` is an Evidence search action; letting a scoping plan declare it
+    would make an unattended scoping run abort at the gate, which the contract
+    says it never does.
+    """
+    with pytest.raises(ValidationError, match="proceed_flag"):
+        build_scoping_plan(
+            _ready_draft(
+                steering_mode="unattended",
+                steer_point_defaults=[
+                    ScopingSteerPointDefaultDraft(steer_point=BASELINE_CONFIRM, action="stop")
+                ],
+            )
+        )
+
+
+def test_an_evidence_search_steer_point_is_not_a_scoping_one() -> None:
+    with pytest.raises(ValidationError):
+        build_scoping_plan(
+            _ready_draft(
+                steering_mode="unattended",
+                steer_point_defaults=[
+                    ScopingSteerPointDefaultDraft(
+                        steer_point="synthesis_shape", action="proceed_flag"
+                    )
+                ],
+            )
+        )
+
+
+# --- the registry seam ------------------------------------------------------
+
+
+def test_the_scoping_lattice_holds_only_the_gate() -> None:
+    lattice = spec_for(OPTIONS_SCOPING).lattice
+    assert set(lattice) == {BASELINE_CONFIRM}
+    assert lattice[BASELINE_CONFIRM].component == "synthesise"
+    assert lattice[BASELINE_CONFIRM].boundary == "after_component"
+
+
+def test_the_gate_is_absent_from_the_evidence_search_lattice() -> None:
+    """A2: a flat table would fire the scoping pause on an ES walk."""
+    assert BASELINE_CONFIRM not in spec_for(EVIDENCE_SEARCH).lattice
+
+
+def test_an_evidence_search_plan_rejects_a_baseline_confirm_default() -> None:
+    """A18d, through the standing-default validator the ES plan already has."""
+    with pytest.raises(ValidationError):
+        validate_plan(
+            EVIDENCE_SEARCH,
+            {
+                "title": "t",
+                "question": "q",
+                "backend_scope": "both",
+                "search_effort": "standard",
+                "analysis_depth": "landscape",
+                "steering_mode": "unattended",
+                "steer_point_defaults": [
+                    {"steer_point": BASELINE_CONFIRM, "action": "proceed_flag"}
+                ],
+            },
+        )
+
+
+def test_a_scoping_payload_is_not_an_evidence_search_plan() -> None:
+    payload = build_scoping_plan(_ready_draft()).model_dump(mode="json")
+    with pytest.raises(ValidationError):
+        validate_plan(EVIDENCE_SEARCH, payload)
+
+
+def test_an_evidence_search_payload_is_not_a_scoping_plan() -> None:
+    payload = {
+        "title": "t",
+        "question": "q",
+        "backend_scope": "both",
+        "search_effort": "standard",
+        "analysis_depth": "landscape",
+        "steering_mode": "moderate",
+    }
+    with pytest.raises(ValidationError):
+        validate_plan(OPTIONS_SCOPING, payload)
+
+
+def test_a_scoping_payload_round_trips_through_the_registry() -> None:
+    plan = build_scoping_plan(_ready_draft())
+    revalidated = validate_plan(OPTIONS_SCOPING, plan.model_dump(mode="json"))
+    assert isinstance(revalidated, ScopingPlan)
+    assert revalidated == plan
+
+
+def test_an_unknown_capability_is_still_a_typed_error() -> None:
+    with pytest.raises(UnknownCapability):
+        validate_plan("options_appraisal", {})
+
+
+def test_a_linked_plan_round_trips_through_its_stored_json_payload() -> None:
+    """044 live check: the stored payload carries UUIDs as strings; a strict
+    item type made every linked scoping plan unreadable (500 on ``GET /plan``)."""
+    from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
+
+    source = uuid.uuid4()
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[source])
+    back = validate_plan(OPTIONS_SCOPING, plan.model_dump(mode="json"))
+    assert isinstance(back, ScopingPlan)
+    assert back.linked_task_ids == [source]
+
+
+def test_baseline_inputs_changed_names_only_the_inputs_that_moved() -> None:
+    """S4: the seven baseline inputs are compared deterministically; a preference
+    is not one of them, Where is."""
+    from policy_atlas.runtime.scoping_plan import (
+        baseline_inputs_changed,
+        baseline_inputs_sentence,
+    )
+
+    base = build_scoping_plan(_ready_draft(), linked_task_ids=[])
+    same = base.model_copy(deep=True)
+    assert baseline_inputs_changed(base, same) == []
+    moved = base.model_copy(
+        deep=True, update={"where": base.where.model_copy(update={"text": "Scotland"})}
+    )
+    assert baseline_inputs_changed(base, moved) == ["Where"]
+    # Phase 8: depth shapes the baseline, so a depth change is an input change.
+    other_depth = base.model_copy(
+        deep=True, update={"depth": "rapid" if base.depth == "standard" else "standard"}
+    )
+    assert baseline_inputs_changed(base, other_depth) == ["the depth"]
+    assert "touches what the baseline (built from plan version 2)" in baseline_inputs_sentence(
+        ["Where"], 2
+    )
+    assert "does not touch" in baseline_inputs_sentence([], 2)
+
+
+def test_wire_draft_from_plan_round_trips_into_a_ready_build() -> None:
+    """After a finished walk the successor conversation is seeded from the
+    executed plan; the seed must be a wire draft the builder accepts again."""
+    from policy_atlas.runtime.scoping_plan import wire_draft_from_plan
+    from policy_atlas.runtime.task_agent_scoping_prompt import ScopingPlanDraftWire
+
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[])
+    wire = ScopingPlanDraftWire.model_validate(wire_draft_from_plan(plan))
+    again = build_scoping_plan(wire, linked_task_ids=[])
+    assert again.where == plan.where
+    assert again.depth == plan.depth
+    assert [c.text for c in again.constraints] == [c.text for c in plan.constraints]
+
+
+# --- task 055: the risk appetite and the longlist inputs --------------------
+
+
+def test_the_appetite_labels_are_the_three_answers_of_s2() -> None:
+    """Contract S2: three answers in words; the keys are the Literal's values."""
+    from policy_atlas.runtime.scoping_plan import RISK_APPETITE_LABELS, RiskAppetite
+
+    assert RISK_APPETITE_LABELS == {
+        "tried_only": "Cautious: only options that have been evaluated somewhere",
+        "mostly_tried": "Balanced: mostly evaluated, plus one or two not yet evaluated",
+        "open_to_untested": "Ambitious: the biggest ideas, even those never implemented",
+    }
+    assert set(RISK_APPETITE_LABELS) == set(get_args(RiskAppetite))
+    assert get_args(contract.ScopingRiskAppetite) == get_args(RiskAppetite)
+
+
+def test_a_stored_plan_without_an_appetite_reads_as_mostly_tried() -> None:
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[])
+    payload = plan.model_dump(mode="json")
+    payload.pop("risk_appetite")
+    stored = ScopingPlan.model_validate(payload)
+    assert stored.risk_appetite == "mostly_tried"
+    via_registry = validate_plan(OPTIONS_SCOPING, payload)
+    assert isinstance(via_registry, ScopingPlan)
+    assert via_registry.risk_appetite == "mostly_tried"
+
+
+def test_an_unknown_appetite_is_refused() -> None:
+    payload = build_scoping_plan(_ready_draft(), linked_task_ids=[]).model_dump(mode="json")
+    payload["risk_appetite"] = "reckless"
+    with pytest.raises(ValidationError):
+        ScopingPlan.model_validate(payload)
+
+
+def test_the_approved_draft_serves_the_appetite() -> None:
+    """``PlanOut.scoping`` is the approved draft projected from the payload."""
+    from policy_atlas.runtime.task_agent_scoping import scoping_draft_from_plan
+
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[]).model_copy(
+        update={"risk_appetite": "open_to_untested"}
+    )
+    assert scoping_draft_from_plan(plan).risk_appetite == "open_to_untested"
+
+
+def test_a_later_version_without_an_appetite_keeps_the_previous_one() -> None:
+    """A wire draft with no appetite carries the previous version's, not the default."""
+    from policy_atlas.runtime.task_agent_scoping import ScopingInputs, _build_plan
+
+    previous = build_scoping_plan(_ready_draft(), linked_task_ids=[]).model_copy(
+        update={"risk_appetite": "open_to_untested"}
+    )
+    draft = _ready_draft()
+    assert draft.risk_appetite is None
+    plan = _build_plan(draft, ScopingInputs([], [], previous=previous), 3)
+    assert plan.risk_appetite == "open_to_untested"
+    first = _build_plan(draft, ScopingInputs([], []), 0)
+    assert first.risk_appetite == ScopingPlan.model_fields["risk_appetite"].default
+
+
+def test_the_longlist_inputs_are_the_eleven_fields_of_a6() -> None:
+    from policy_atlas.runtime.scoping_plan import longlist_inputs
+
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[])
+    assert set(longlist_inputs(plan)) == {
+        "question",
+        "intended_change",
+        "target_unit",
+        "where",
+        "outcomes",
+        "depth",
+        "constraints",
+        "your_options",
+        "your_context",
+        "linked_task_ids",
+        "removed_defaults",
+    }
+
+
+def test_an_older_payload_projects_with_defaults() -> None:
+    """A6: a payload stored before the newer keys existed projects with defaults."""
+    from policy_atlas.runtime.scoping_plan import longlist_inputs
+
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[])
+    payload = plan.model_dump(mode="json")
+    for newer in ("risk_appetite", "removed_defaults", "your_options", "linked_task_ids"):
+        payload.pop(newer)
+    older = ScopingPlan.model_validate(payload)
+    projected = longlist_inputs(older)
+    assert projected["removed_defaults"] == []
+    assert projected["your_options"] == []
+    assert projected["linked_task_ids"] == []
+    assert projected == longlist_inputs(plan)
+
+
+def test_an_appetite_change_leaves_the_longlist_inputs_and_an_outcome_change_does_not() -> None:
+    from policy_atlas.runtime.scoping_plan import Tagged, longlist_inputs
+
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[])
+    appetite = plan.model_copy(update={"risk_appetite": "tried_only"})
+    assert longlist_inputs(appetite) == longlist_inputs(plan)
+    outcome = plan.model_copy(
+        update={"outcomes": [*plan.outcomes, Tagged(text="earnings", origin="your_call")]}
+    )
+    assert longlist_inputs(outcome) != longlist_inputs(plan)
+
+
+def test_a_question_change_changes_the_longlist_inputs() -> None:
+    """Suggest, constrain, theme, the profile and the shortlist read the question."""
+    from policy_atlas.runtime.scoping_plan import longlist_inputs
+
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[])
+    edited = plan.model_copy(update={"question": f"{plan.question} in rural areas"})
+    assert longlist_inputs(edited) != longlist_inputs(plan)

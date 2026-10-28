@@ -12,10 +12,10 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    # Raised from 15 (task 025 F.1): the frontend install + drift-check
-    # (regenerate OpenAPI + TS types, diff against committed artifacts) adds
-    # real wall-clock on top of the existing backend gate.
-    timeout-minutes: 25
+    # Raised from 15 (task 025 F.1) for the frontend install and drift-check,
+    # then from 25 (2026-10-20): the backend suite reached 82% and was still
+    # running when the job was cancelled. The cap is the whole job, setup included.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

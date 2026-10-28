@@ -1,5 +1,6 @@
-import { LIFECYCLE_LABELS } from "../../lib/vocabulary";
+import { LIFECYCLE_LABELS, countOf } from "../../lib/vocabulary";
 import type { PlanDraft, RunStatus, StageEntry, StageStatus } from "../../store";
+import { isScoping } from "../scopingActivity";
 import { timelineSummary } from "./journey/presentation";
 import { stepsForAnalysisDepth, type PlanStepPreview } from "./planVocabulary";
 
@@ -33,12 +34,89 @@ export const RUNNING_CARD_RULE_CLASS = "border-t border-[rgba(23,168,141,0.4)]";
 export const SEE_PLAN_CTA_CLASS =
   "inline-block cursor-pointer border-2 border-blue bg-paper px-6 py-3.5 text-body font-bold text-blue";
 
-/** Chat-thread notice once the run has landed. */
-export const RUN_FINISHED_MESSAGE =
-  `Evidence search is finished. You can read the report in the ${LIFECYCLE_LABELS.result} tab.`;
+/** What kind of walk a run card describes (task 045): an Evidence search, a
+ *  scoping task's baseline walk, its longlist walk, or an added option's own
+ *  search. The words on the card and the finished notice follow it — "the
+ *  evidence base is ready" is wrong for a longlist. */
+export type WalkKind = "evidence_search" | "baseline" | "longlist" | "option_search" | "shortlist";
+
+const LONGLIST_STAGES = new Set([
+  "inherit",
+  "suggest",
+  "option_searches",
+  "extract_interventions",
+  "longlist",
+  "option_profile",
+  "constrain",
+  "theme",
+]);
+
+/** Decide the walk kind from the task's capability and the run's own
+ *  purpose (task 045, A7/A8); the stages decide only when the purpose is not
+ *  known yet. */
+export function walkKind(
+  capability: string | null | undefined,
+  stages: StageEntry[],
+  purpose?: string | null,
+): WalkKind {
+  if (!isScoping({ capability })) return "evidence_search";
+  if (purpose === "targeted") return "option_search";
+  if (purpose === "longlist" || purpose === "baseline" || purpose === "shortlist") return purpose;
+  // The longlist walk ends in a shortlist step; a walk with only that step
+  // is the standalone shortlist walk.
+  if (stages.some((entry) => LONGLIST_STAGES.has(entry.stage))) return "longlist";
+  return stages.some((entry) => entry.stage === "shortlist") ? "shortlist" : "baseline";
+}
+
+const DONE_TITLE: Record<WalkKind, string> = {
+  evidence_search: "The evidence base is ready",
+  baseline: "The baseline is ready",
+  longlist: "The longlist is ready",
+  option_search: "The option's search is done",
+  shortlist: "The shortlist is proposed",
+};
+
+const RESULTS_LABEL: Record<WalkKind, string> = {
+  evidence_search: "Read the report",
+  baseline: "Read the baseline",
+  longlist: "Read the longlist",
+  option_search: "Read the longlist",
+  shortlist: "Read the shortlist",
+};
+
+/** The finished notice, split around the Result-tab link it carries. */
+export const FINISHED_NOTICE: Record<WalkKind, { before: string; after: string }> = {
+  evidence_search: { before: "Evidence search is finished. You can read the report in the", after: "tab." },
+  baseline: { before: "The baseline is written. Read it in the", after: "tab." },
+  longlist: { before: "The longlist is built. Open it in the", after: "tab." },
+  option_search: { before: "The option's search is done. See it in the", after: "tab." },
+  shortlist: { before: "Policy Atlas has proposed a shortlist. Open it in the", after: "tab." },
+};
+
+/** The finished notice for this walk and status: a degraded shortlist walk
+ *  means the proposal failed (its one step is non-spine), so it says so. */
+export function finishedNotice(kind: WalkKind, status: RunStatus | undefined): { before: string; after: string } {
+  if (kind === "shortlist" && status === "degraded") {
+    return {
+      before: "Policy Atlas could not propose a shortlist. Your places are unchanged. Open the",
+      after: "tab.",
+    };
+  }
+  return FINISHED_NOTICE[kind];
+}
+
+function resultHref(taskId: string, kind: WalkKind): string {
+  if (kind === "longlist" || kind === "option_search") return `/tasks/${taskId}/result?view=longlist`;
+  if (kind === "shortlist") return `/tasks/${taskId}/result?view=shortlist`;
+  if (kind === "baseline") return `/tasks/${taskId}/result?view=baseline`;
+  return `/tasks/${taskId}/result`;
+}
 
 /** Eyebrow and title for the in-thread running card. */
-export function runningCardCopy(status: RunStatus | undefined): {
+export function runningCardCopy(
+  status: RunStatus | undefined,
+  kind: WalkKind = "evidence_search",
+): {
   tone: RunningCardTone;
   eyebrow: string;
   title: string;
@@ -46,11 +124,20 @@ export function runningCardCopy(status: RunStatus | undefined): {
   if (status === "paused") {
     return { tone: "paused", eyebrow: "PAUSED", title: "Paused — waiting on you" };
   }
+  if (kind === "shortlist" && status === "degraded") {
+    return { tone: "stopped", eyebrow: "STOPPED", title: "Policy Atlas could not propose" };
+  }
   if (status === "succeeded" || status === "degraded") {
-    return { tone: "done", eyebrow: "DONE", title: "The evidence base is ready" };
+    return { tone: "done", eyebrow: "DONE", title: DONE_TITLE[kind] };
   }
   if (status === "failed" || status === "aborted" || status === "interrupted") {
     return { tone: "stopped", eyebrow: "STOPPED", title: "Analysis stopped" };
+  }
+  if (kind === "option_search") {
+    return { tone: "running", eyebrow: "RUNNING", title: "Searching for the option's evidence" };
+  }
+  if (kind === "shortlist") {
+    return { tone: "running", eyebrow: "RUNNING", title: "Proposing a shortlist…" };
   }
   return { tone: "running", eyebrow: "RUNNING", title: "Analysis running…" };
 }
@@ -226,12 +313,98 @@ function currentStepLabel(rows: StageRow[]): string | null {
   return completed?.label ?? rows[0]?.label ?? null;
 }
 
+/** Read a finite number out of a stage summary, else `null`. */
+function num(summary: StageEntry["summary"] | undefined, key: string): number | null {
+  const value = summary?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * One code-authored beat sentence for a completed stage, read from the
+ * frame's `summary` counts. `null` for stages with no beat (including every
+ * Evidence search stage) or when the gating count is absent. No full stop;
+ * never a percentage.
+ */
+export function beatSentence(
+  stage: string,
+  summary: StageEntry["summary"] | undefined,
+): string | null {
+  switch (stage) {
+    case "suggest": {
+      const suggested = num(summary, "suggested");
+      if (suggested === null) return null;
+      const fromReport = num(summary, "from_report") ?? 0;
+      let out = `Suggested ${countOf(suggested, "option", "options")}`;
+      if (fromReport > 0) out += ` · ${fromReport} from your evidence search`;
+      return out;
+    }
+    case "option_searches": {
+      const total = num(summary, "total");
+      if (total === null) return null;
+      if (total === 0) return "No option searches to run";
+      const finished = num(summary, "finished") ?? 0;
+      const failed = num(summary, "failed") ?? 0;
+      let out = `Searched for ${finished} of ${countOf(total, "option", "options")}`;
+      if (failed > 0) out += ` · ${failed} failed`;
+      return out;
+    }
+    case "inherit": {
+      const documents = num(summary, "documents");
+      if (documents === null) return null;
+      const links = num(summary, "links") ?? 0;
+      const failedLinks = num(summary, "failed_links") ?? 0;
+      let out = `${countOf(documents, "document", "documents")} from ${countOf(links, "linked task", "linked tasks")}`;
+      if (failedLinks > 0) out += ` · ${failedLinks} could not be read`;
+      return out;
+    }
+    case "extract_interventions": {
+      const documents = num(summary, "documents");
+      const records = num(summary, "records");
+      if (documents === null && records === null) return null;
+      const parts: string[] = [];
+      if (documents !== null) parts.push(`Read ${countOf(documents, "abstract", "abstracts")}`);
+      if (records !== null) parts.push(`${countOf(records, "intervention", "interventions")} covered`);
+      return parts.join(" · ");
+    }
+    case "longlist": {
+      const options = num(summary, "options");
+      if (options === null) return null;
+      const unclustered = num(summary, "unclustered");
+      const notAnOption = num(summary, "not_an_option");
+      const parts: string[] = [countOf(options, "option", "options")];
+      if (unclustered !== null) parts.push(`${countOf(unclustered, "record", "records")} unclustered`);
+      if (notAnOption !== null) parts.push(`${notAnOption} not an option`);
+      return parts.join(" · ");
+    }
+    case "constrain": {
+      const excluded = num(summary, "excluded");
+      const noInScope = num(summary, "no_in_scope");
+      if (excluded === null && noInScope === null) return null;
+      const parts: string[] = [];
+      if (excluded !== null) parts.push(`${excluded} excluded`);
+      if (noInScope !== null) parts.push(`${noInScope} with no in-scope evidence`);
+      return parts.join(" · ");
+    }
+    case "theme": {
+      const themes = num(summary, "themes");
+      if (themes === null) return null;
+      return `${countOf(themes, "theme", "themes")}`;
+    }
+    // option_profile (task 046, R37): the step's label is its only sentence.
+    default:
+      return null;
+  }
+}
+
 /** Extra lines shown when a completed step is expanded. */
 export function stageDetailLines(row: StageRow): string[] {
   const lines: string[] = [];
   if (row.blurb !== undefined && row.blurb !== "") lines.push(row.blurb);
   const counts = timelineSummary(row);
-  if (counts.length > 0) lines.push(counts.join(" · "));
+  const countsLine = counts.length > 0 ? counts.join(" · ") : null;
+  if (countsLine !== null) lines.push(countsLine);
+  const beat = beatSentence(row.stage, row.summary);
+  if (beat !== null && beat !== countsLine) lines.push(beat);
   if (row.status === "completed" && typeof row.seconds === "number") {
     lines.push(`Took ${formatElapsed(row.seconds)}`);
   }
@@ -274,12 +447,14 @@ export function signpostForStage(
 export function runFinishedSignpost(
   taskId: string,
   status: RunStatus | undefined,
+  kind: WalkKind = "evidence_search",
 ): StageSignpost | null {
   if (status === "succeeded" || status === "degraded") {
+    const notice = finishedNotice(kind, status);
     return {
-      href: `/tasks/${taskId}/result`,
+      href: resultHref(taskId, kind),
       label: LIFECYCLE_LABELS.result,
-      message: RUN_FINISHED_MESSAGE,
+      message: `${notice.before} ${LIFECYCLE_LABELS.result} ${notice.after}`,
     };
   }
   return null;
@@ -307,12 +482,14 @@ export function completedSignposts(
 export function resultsSignpost(
   taskId: string,
   status: RunStatus | undefined,
+  kind: WalkKind = "evidence_search",
 ): StageSignpost | null {
   if (status === "succeeded" || status === "degraded") {
+    const notice = finishedNotice(kind, status);
     return {
-      href: `/tasks/${taskId}/result`,
-      label: "Read the report",
-      message: RUN_FINISHED_MESSAGE,
+      href: resultHref(taskId, kind),
+      label: RESULTS_LABEL[kind],
+      message: `${notice.before} ${LIFECYCLE_LABELS.result} ${notice.after}`,
     };
   }
   return null;

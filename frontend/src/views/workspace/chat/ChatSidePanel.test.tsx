@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatSidePanel } from "./ChatSidePanel";
 
 const CHAT_ROW = { id: "c1", kind: "chat", status: "active", closed_at: null, title: "Cost barriers", created_at: new Date().toISOString(), entry_artefact_id: null, latest_turn_preview: null };
-const PLAN_ROW = { id: "plan-1", kind: "planning", status: "active", closed_at: null, title: "Planning", created_at: new Date().toISOString(), entry_artefact_id: null, latest_turn_preview: null };
+const PLAN_ROW = { id: "plan-1", kind: "task_agent", status: "active", closed_at: null, title: "Planning", created_at: new Date().toISOString(), entry_artefact_id: null, latest_turn_preview: null };
 
 const state = vi.hoisted(() => ({
   activeConversationId: null as string | null,
@@ -64,13 +64,13 @@ vi.mock("./DraftChatPane", () => ({
 vi.mock("./ConversationList", () => ({
   ConversationList: ({ selectedId }: { selectedId: string | null }) => <div data-testid="conversation-list">{selectedId}</div>,
 }));
-vi.mock("../PlanningPane", () => ({
+vi.mock("../TaskAgentPane", () => ({
   // Task 033 phase 10c (contract § 11 / rubric 37): echoes the prop back so
   // the "ChatSidePanel duplicate" the rubric names can be checked for
-  // threading `isOwner` through to the planning surface without re-testing
-  // PlanningPane's own read-only rendering here (that's PlanningPane.test.tsx).
-  PlanningPane: ({ isOwner }: { isOwner: boolean }) => (
-    <div data-testid="planning-pane" data-is-owner={String(isOwner)} />
+  // threading `isOwner` through to the task_agent surface without re-testing
+  // TaskAgentPane's own read-only rendering here (that's TaskAgentPane.test.tsx).
+  TaskAgentPane: ({ isOwner }: { isOwner: boolean }) => (
+    <div data-testid="task_agent-pane" data-is-owner={String(isOwner)} />
   ),
 }));
 
@@ -119,7 +119,7 @@ describe("ChatSidePanel", () => {
     expect(state.create).not.toHaveBeenCalled();
   });
 
-  it("ignores a newer planning conversation when picking the latest chat to open", async () => {
+  it("ignores a newer task_agent conversation when picking the latest chat to open", async () => {
     state.activeConversationId = null;
     state.rows = [PLAN_ROW, CHAT_ROW];
     const user = userEvent.setup();
@@ -154,20 +154,20 @@ describe("ChatSidePanel", () => {
     expect(state.setActiveConversation).toHaveBeenCalledWith(null);
   });
 
-  it("shows the planning thread, named Task Agent, when the URL names the planning conversation", () => {
+  it("shows the task_agent thread, named Task Agent, when the URL names the task_agent conversation", () => {
     state.activeConversationId = "plan-1";
     state.rows = [PLAN_ROW, CHAT_ROW];
     render(<ChatSidePanel taskId="p1" isOwner />);
-    expect(screen.getByTestId("planning-pane")).toBeInTheDocument();
+    expect(screen.getByTestId("task_agent-pane")).toBeInTheDocument();
     expect(screen.getByText("Task Agent")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
   });
 
-  it("threads isOwner=false into the planning duplicate (task 033 phase 10c, contract § 11 / rubric 37)", () => {
+  it("threads isOwner=false into the task_agent duplicate (task 033 phase 10c, contract § 11 / rubric 37)", () => {
     state.activeConversationId = "plan-1";
     state.rows = [PLAN_ROW, CHAT_ROW];
     render(<ChatSidePanel taskId="p1" isOwner={false} />);
-    expect(screen.getByTestId("planning-pane")).toHaveAttribute("data-is-owner", "false");
+    expect(screen.getByTestId("task_agent-pane")).toHaveAttribute("data-is-owner", "false");
   });
 
   it("New chat opens a draft — nothing is created — and is disabled until the task has a result", async () => {

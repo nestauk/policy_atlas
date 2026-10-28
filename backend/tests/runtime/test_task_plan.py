@@ -739,7 +739,7 @@ def test_expected_artefact_shape_and_time_band_are_deterministic() -> None:
         search_effort="deep",
         analysis_depth="deep",
         components=["screen_full", "characterise", "select", "extract", "group"],
-        grouping_facets=["population"],
+        grouping_facets=["unit"],
     )
 
     assert landscape.expected_artefact_shape == "landscape coverage, themes and gaps"

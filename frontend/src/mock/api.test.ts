@@ -7,7 +7,7 @@ import {
   MOCK_CHAT_CITATION_CHUNK_ID,
   MOCK_CHAT_CITATION_QUOTE,
   MOCK_CHECK_IN_ID,
-  MOCK_PLANNING_CONVERSATION_ID,
+  MOCK_TASK_AGENT_CONVERSATION_ID,
   MOCK_PROJECT_ID,
   MOCK_TASK_ID,
   MOCK_THEME_ID_ACTIVE_TRAVEL,
@@ -132,7 +132,7 @@ describe("mock API", () => {
     expect(plan.plan.ready).toBe(true);
     expect(plan.plan.search_effort).toBe("rapid");
 
-    const turnsResponse = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/planning-turns`);
+    const turnsResponse = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/task-agent-turns`);
     const turns = await turnsResponse.json() as {
       data: {
         status: string;
@@ -190,20 +190,20 @@ describe("mock API", () => {
   // async enrichment poll's second-read flip, and the chat citation's own
   // chunk-context read.
   describe("chat conversations", () => {
-    it("lists the seeded planning conversation when kind is not filtered to chat", async () => {
+    it("lists the seeded task_agent conversation when kind is not filtered to chat", async () => {
       resetMockScenario();
       const listed = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/conversations?status=active`);
       const { data } = await listed.json() as { data: { id: string; kind: string; title: string }[] };
       expect(data).toEqual(expect.arrayContaining([
         expect.objectContaining({
-          id: MOCK_PLANNING_CONVERSATION_ID,
-          kind: "planning",
+          id: MOCK_TASK_AGENT_CONVERSATION_ID,
+          kind: "task_agent",
           title: "Planning",
         }),
       ]));
       const chatsOnly = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/conversations?kind=chat&status=active`);
       const { data: chats } = await chatsOnly.json() as { data: { id: string }[] };
-      expect(chats.map((row) => row.id)).not.toContain(MOCK_PLANNING_CONVERSATION_ID);
+      expect(chats.map((row) => row.id)).not.toContain(MOCK_TASK_AGENT_CONVERSATION_ID);
     });
 
     it("creates, lists, updates, and archives/unarchives a conversation", async () => {
@@ -373,6 +373,195 @@ describe("mock API", () => {
       const task = await reread.json() as { name: string; visibility: string };
       expect(task.name).not.toBe("Renamed while conflicted");
       expect(task.visibility).toBe("org");
+    });
+  });
+
+  // Task 044, phase 3.4: POST /tasks with from_task_ids builds a Link and a
+  // ready scoping plan, so mock mode and the e2e can show the plan document
+  // without scripting every intermediate Task Agent turn.
+  describe("options scoping: create with Starts from (task 044)", () => {
+    it("builds a Link carrying the previous task's name, and a ready scoping plan", async () => {
+      resetMockScenario();
+      const sourceName = (await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}`)).json() as { name: string }).name;
+
+      const response = await mockFetch("http://localhost/api/v1/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Cutting NEET numbers",
+          question: "How can we reduce NEET numbers?",
+          capability: "options_scoping",
+          project_ids: [MOCK_PROJECT_ID],
+          from_task_ids: [MOCK_TASK_ID],
+        }),
+      });
+      expect(response.status).toBe(201);
+      const task = await response.json() as {
+        capability: string;
+        links: { source_task_name: string; flagged: boolean }[];
+      };
+      expect(task.capability).toBe("options_scoping");
+      expect(task.links).toHaveLength(1);
+      expect(task.links[0].source_task_name).toBe(sourceName);
+      expect(task.links[0].flagged).toBe(false);
+
+      const planResponse = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/plan`);
+      const plan = await planResponse.json() as {
+        capability: string;
+        plan: unknown;
+        scoping: { ready: boolean } | null;
+      };
+      expect(plan.capability).toBe("options_scoping");
+      expect(plan.plan).toBeNull();
+      expect(plan.scoping?.ready).toBe(true);
+    });
+
+    it("carries no link when from_task_ids is empty", async () => {
+      resetMockScenario();
+      const response = await mockFetch("http://localhost/api/v1/tasks", {
+        method: "POST",
+        body: JSON.stringify({ name: "A scoping task with no source", capability: "options_scoping" }),
+      });
+      const task = await response.json() as { links: unknown[] };
+      expect(task.links).toEqual([]);
+    });
+
+    it("starts the new task's Task Agent transcript empty — no stale turns from a previous task", async () => {
+      resetMockScenario();
+      const before = await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/task-agent-turns`)).json() as { data: unknown[] };
+      expect(before.data.length).toBeGreaterThan(0);
+
+      await mockFetch("http://localhost/api/v1/tasks", {
+        method: "POST",
+        body: JSON.stringify({ name: "A fresh task", capability: "evidence_search" }),
+      });
+
+      const after = await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/task-agent-turns`)).json() as { data: unknown[] };
+      expect(after.data).toEqual([]);
+    });
+  });
+
+  describe("shortlist (task 055)", () => {
+    const base = `http://localhost/api/v1/tasks/${MOCK_TASK_ID}`;
+    const post = (path: string) => mockFetch(`${base}${path}`, { method: "POST" });
+    const longlist = async () =>
+      (await (await mockFetch(`${base}/longlist`)).json()) as {
+        options: { option_id: string; name: string; shortlist: { state: string; reason: string | null } | null }[];
+        shortlist: { note: string | null; stale: boolean };
+      };
+
+    it("serves two places, a set-aside option and a note", async () => {
+      resetMockScenario();
+      const body = await longlist();
+      const states = body.options.map((option) => option.shortlist?.state ?? "none").sort();
+      expect(states).toEqual(["added_by_you", "none", "proposed", "set_aside"]);
+      expect(body.shortlist.note).not.toBeNull();
+      expect(body.shortlist.stale).toBe(false);
+    });
+
+    it("shortlist turns a set-aside option into added_by_you; unshortlist sets a pick aside and clears a user place", async () => {
+      resetMockScenario();
+      const before = await longlist();
+      const id = (state: string) => before.options.find((option) => option.shortlist?.state === state)!.option_id;
+      const added = await (await post(`/options/${id("set_aside")}/shortlist`)).json() as { shortlist: { state: string } };
+      expect(added.shortlist.state).toBe("added_by_you");
+      const aside = await (await post(`/options/${id("proposed")}/unshortlist`)).json() as { shortlist: { state: string } };
+      expect(aside.shortlist.state).toBe("set_aside");
+      const cleared = await (await post(`/options/${id("added_by_you")}/unshortlist`)).json() as { shortlist: unknown };
+      expect(cleared.shortlist).toBeNull();
+    });
+
+    it("refuses an excluded option with not_included", async () => {
+      resetMockScenario();
+      const excluded = await mockFetch(`${base}/longlist`).then((r) => r.json() as Promise<{ options: { option_id: string; state: string }[] }>);
+      const response = await post(`/options/${excluded.options.find((o) => o.state === "excluded")!.option_id}/shortlist`);
+      expect(response.status).toBe(409);
+      expect(((await response.json()) as { error: { code: string } }).error.code).toBe("not_included");
+    });
+
+    it("suggest refuses with nothing_to_propose, then fills the open places once a place is cleared", async () => {
+      resetMockScenario();
+      const first = await post("/shortlist/suggest");
+      expect(first.status).toBe(409);
+      expect(((await first.json()) as { error: { code: string } }).error.code).toBe("nothing_to_propose");
+
+      const before = await longlist();
+      const user = before.options.find((option) => option.shortlist?.state === "added_by_you")!;
+      await post(`/options/${user.option_id}/unshortlist`);
+      const second = await post("/shortlist/suggest");
+      expect(second.status).toBe(202);
+      expect(((await second.json()) as { status: string }).status).toBe("succeeded");
+      const after = await longlist();
+      const filled = after.options.find((option) => option.option_id === user.option_id)!;
+      expect(filled.shortlist).toEqual({ state: "proposed", reason: "Mock reason: names a fact on the card." });
+    });
+
+    it("suggest still adds one place when five or more places are held", async () => {
+      resetMockScenario();
+      const added: string[] = [];
+      for (const text of ["Option A", "Option B", "Option C", "Option D"]) {
+        const body = (await (
+          await mockFetch(`${base}/options`, { method: "POST", body: JSON.stringify({ text }) })
+        ).json()) as { option: { option_id: string } };
+        added.push(body.option.option_id);
+      }
+      // Two places in the fixture plus three added by you: five held, one open.
+      for (const id of added.slice(0, 3)) await post(`/options/${id}/shortlist`);
+      const response = await post("/shortlist/suggest");
+      expect(response.status).toBe(202);
+      const after = await longlist();
+      expect(after.options.find((option) => option.option_id === added[3])!.shortlist?.state).toBe("proposed");
+      resetMockScenario();
+    });
+
+    it("exclude clears a place but keeps a set-aside mark", async () => {
+      resetMockScenario();
+      const before = await longlist();
+      const exclude = (id: string) =>
+        mockFetch(`${base}/options/${id}/exclude`, { method: "POST", body: JSON.stringify({ reason: "No." }) }).then(
+          (r) => r.json() as Promise<{ shortlist: { state: string } | null }>,
+        );
+      for (const state of ["proposed", "added_by_you"]) {
+        const id = before.options.find((option) => option.shortlist?.state === state)!.option_id;
+        expect((await exclude(id)).shortlist).toBeNull();
+      }
+      const asideId = before.options.find((option) => option.shortlist?.state === "set_aside")!.option_id;
+      expect((await exclude(asideId)).shortlist).toEqual({ state: "set_aside", reason: null });
+      resetMockScenario();
+    });
+
+    it("refuses every shortlist route with run_active while a walk is running", async () => {
+      resetMockScenario();
+      const confirm = await mockFetch(`${base}/plan/confirm-baseline`, {
+        method: "POST",
+        body: JSON.stringify({ artefact_id: "artefact-1", plan_version: 1 }),
+      });
+      expect(confirm.status).toBe(200);
+      const any = (await longlist()).options[0].option_id;
+      for (const path of [`/options/${any}/shortlist`, `/options/${any}/unshortlist`, "/shortlist/suggest"]) {
+        const response = await post(path);
+        expect(response.status).toBe(409);
+        expect(((await response.json()) as { error: { code: string } }).error.code).toBe("run_active");
+      }
+      resetMockScenario();
+    });
+
+    it("an appetite patch mints a version and marks the proposal stale until the next suggest", async () => {
+      resetMockScenario();
+      await mockFetch("http://localhost/api/v1/tasks", {
+        method: "POST",
+        body: JSON.stringify({ name: "Scoping", capability: "options_scoping" }),
+      });
+      const response = await mockFetch(`${base}/plan`, {
+        method: "PATCH",
+        body: JSON.stringify({ scoping: { risk_appetite: "tried_only" } }),
+      });
+      const plan = (await response.json()) as { version: number; scoping: { risk_appetite: string } };
+      expect(plan.scoping.risk_appetite).toBe("tried_only");
+      expect(plan.version).toBeGreaterThan(1);
+      const stale = await longlist();
+      expect(stale.shortlist.stale).toBe(true);
+      const longlistBody = (await (await mockFetch(`${base}/longlist`)).json()) as { plan_inputs_changed: boolean };
+      expect(longlistBody.plan_inputs_changed).toBe(false);
     });
   });
 });

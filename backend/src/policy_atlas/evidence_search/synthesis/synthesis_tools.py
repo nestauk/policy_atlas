@@ -126,6 +126,13 @@ SEARCH_QUERY_MAX_LENGTH = 1000
 LOOKUP_ROW_CAP = 100
 # Bounds shared with the directive grammar (contract rev 8 M5).
 DIRECTIVE_SECTION_TEXT_MAX = 200
+# A template's section instructions are code, not model output: the baseline's
+# eight foci (``baseline_prompt.BASELINE_SECTIONS``) are lead-authored, versioned
+# with the template and 250-450 characters each. The 200-character bound above
+# exists to fence *untrusted* directive text — a steering delta, a proposal —
+# so it still governs every title, every nav label and every focus outside
+# template mode (task 044, plan S2).
+DIRECTIVE_TEMPLATE_FOCUS_MAX = 600
 DIRECTIVE_LIST_MAX = 200
 
 # The closed lookup query vocabulary v1 (plan rev 2). Unknown kind → tool-level
@@ -207,7 +214,7 @@ class FindingRecord(TypedDict):
     document_title: str
     intervention: str
     outcome: str
-    population: str | None
+    unit: str | None
     setting: str | None
     comparator: str | None
     effect_direction: str
@@ -243,7 +250,7 @@ class ICFFindingRecord(TypedDict):
     claim: str
     intervention: str
     outcome: str | None
-    population: str | None
+    unit: str | None
     setting: str | None
     study_geography: str | None
     study_design: str | None
@@ -312,6 +319,11 @@ class SynthesisDirective:
 
     sections: list[dict[str, Any]] | None = None  # validated section specs
     section_budget: int | None = None
+    #: Output kind. ``None`` is the Evidence search report — today's behaviour,
+    #: unchanged. ``"baseline"`` is **parsed** as of task 044 phase 3.2 and its
+    #: behaviour lands in phase 4.2; until then ``synthesise_scope`` accepts it
+    #: and does nothing beyond the supplied-sections path it already has.
+    template: str | None = None
     column_boosts: dict[str, dict[str, float]] = field(default_factory=dict)
     tag_boosts: dict[str, float] = field(default_factory=dict)
     appraisal_tier_boosts: dict[str, float] = field(default_factory=dict)
@@ -324,6 +336,9 @@ class SynthesisDirective:
         return {
             "sections_source": "scope_context" if self.sections is not None else "proposal",
             "section_budget": self.section_budget,
+            # The output kind the run executed (task 044): ``None`` is the
+            # Evidence search report. Recorded so replay never has to infer it.
+            "template": self.template,
             "retrieval_boosts": {
                 "columns": self.column_boosts,
                 "tags": self.tag_boosts,
@@ -474,9 +489,24 @@ class ToolLoopResult(TypedDict):
 TurnFn = Callable[..., UsageResult[LoopTurn]]
 
 
-_DIRECTIVE_KEYS = {"sections", "retrieval_boosts", "section_budget"}
+_DIRECTIVE_KEYS = {"sections", "retrieval_boosts", "section_budget", "template"}
+
+#: The output kinds ``template`` may name. Fail-closed: an unrecognised
+#: template would otherwise silently fall back to the Evidence search report
+#: while the plan row claims a baseline was written (task 044, plan S2).
+TEMPLATE_KEYS = frozenset({"baseline"})
+
 _SECTION_KEYS_REQUIRED = {"title", "focus"}
 _SECTION_KEYS_WITH_GROUPS = {"title", "focus", "group_ids"}
+#: ``nav_label`` is an optional extra on any section spec. ``SectionSpec`` and
+#: ``_sections_from_directive`` have always read it; before task 044 the key
+#: set below rejected it first, so a supplied section could never carry one.
+#: ``turn_cap`` joined it in phase 4.2: a template's sections carry their own
+#: generation-loop bound (the baseline's is
+#: ``baseline_prompt.BASELINE_SECTION_TURN_CAP``), and a supplied section that
+#: omits it falls back to the template default / ``SECTION_TURN_CAP``.
+_SECTION_KEYS_OPTIONAL: set[str] = {"nav_label", "turn_cap"}
+_SECTION_KEYS_ALLOWED: set[str] = _SECTION_KEYS_WITH_GROUPS | _SECTION_KEYS_OPTIONAL
 _BOOST_KEYS = {"columns", "tags", "appraisal_tier", "screen_confidence"}
 _TOKEN_RE = re.compile(r"[0-9A-Za-z]+")
 GROUP_ID_EXPECTED_FORM = "<facet>:gNN"
@@ -518,15 +548,17 @@ def facet_of_group_id(group_id: str) -> str:
     return group_id.split(":", 1)[0]
 
 
-def _bounded_string(value: Any, *, field: str) -> str:
+def _bounded_string(
+    value: Any, *, field: str, max_length: int = DIRECTIVE_SECTION_TEXT_MAX
+) -> str:
     if not isinstance(value, str):
         _directive_fail(f"synthesis directive {field} must be a string")
     text = cast("str", value)
     if not text:
         _directive_fail(f"synthesis directive {field} must be non-empty")
-    if len(text) > DIRECTIVE_SECTION_TEXT_MAX:
+    if len(text) > max_length:
         _directive_fail(
-            f"synthesis directive {field} exceeds {DIRECTIVE_SECTION_TEXT_MAX} characters"
+            f"synthesis directive {field} exceeds {max_length} characters"
         )
     if has_control_character(text):
         _directive_fail(
@@ -793,6 +825,7 @@ def _parse_sections(
     grouping_group_ids: set[str] | None,
     section_budget: int | None = None,
     defer_group_membership: bool = False,
+    focus_max: int = DIRECTIVE_SECTION_TEXT_MAX,
 ) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         _directive_fail("synthesis directive sections must be a list")
@@ -808,15 +841,23 @@ def _parse_sections(
         if not isinstance(item, dict):
             _directive_fail(f"synthesis directive sections[{index}] must be an object")
         keys = set(item)
-        if keys not in (_SECTION_KEYS_REQUIRED, _SECTION_KEYS_WITH_GROUPS):
+        if not _SECTION_KEYS_REQUIRED <= keys <= _SECTION_KEYS_ALLOWED:
             _directive_fail(f"synthesis directive sections[{index}] has invalid keys")
         title = _bounded_string(item["title"], field=f"sections[{index}].title")
         if title.casefold() in forbidden:
             _directive_fail(f"synthesis directive sections[{index}].title is forbidden")
         section: dict[str, Any] = {
             "title": title,
-            "focus": _bounded_string(item["focus"], field=f"sections[{index}].focus"),
+            "focus": _bounded_string(
+                item["focus"], field=f"sections[{index}].focus", max_length=focus_max
+            ),
         }
+        if "nav_label" in item:
+            section["nav_label"] = _bounded_string(
+                item["nav_label"], field=f"sections[{index}].nav_label"
+            )
+        if "turn_cap" in item:
+            section["turn_cap"] = _parse_section_turn_cap(item["turn_cap"], index)
         if "group_ids" in item:
             if grouping_group_ids is None and not defer_group_membership:
                 _directive_fail("synthesis directive group_ids require grouping")
@@ -849,6 +890,31 @@ def _parse_sections(
             section["group_ids"] = group_ids
         parsed.append(section)
     return parsed
+
+
+def _parse_section_turn_cap(value: Any, index: int) -> int:
+    """Validate one supplied section's generation-loop turn cap.
+
+    Args:
+        value: Candidate JSON directive value.
+        index: Position of the section in the supplied list, for the message.
+
+    Returns:
+        The validated 1..``SECTION_TURN_CAP`` turn cap.
+
+    Raises:
+        SynthesisDirectiveError: If it is not an integer in range. Fail-closed
+            rather than clamped: a cap is execution-bearing (it bounds provider
+            calls), so a malformed one must not silently become a larger one.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        _directive_fail(f"synthesis directive sections[{index}].turn_cap must be an integer")
+    if not 1 <= int(value) <= SECTION_TURN_CAP:
+        _directive_fail(
+            f"synthesis directive sections[{index}].turn_cap must be between 1 "
+            f"and {SECTION_TURN_CAP}"
+        )
+    return int(value)
 
 
 def _parse_retrieval_boosts(
@@ -930,17 +996,30 @@ def parse_synthesis_directive(
     if unknown:
         _directive_fail("synthesis directive has invalid top-level keys")
 
+    template = _parse_template(raw["template"]) if "template" in raw else None
     section_budget = (
         _parse_section_budget(raw["section_budget"])
         if "section_budget" in raw
         else None
     )
+    # In template mode ``section_budget`` means "proposals allowed on top of
+    # the supplied list" (task 044, plan S2/P14), not "ceiling on the whole
+    # report" — the baseline supplies eight required sections and allows two
+    # proposals, so capping the supplied list at two would refuse the very
+    # directive the template exists to carry. Outside template mode the
+    # Evidence search meaning is untouched.
+    supplied_cap = None if template is not None else section_budget
     sections = (
         _parse_sections(
             raw["sections"],
             grouping_group_ids=grouping_group_ids,
-            section_budget=section_budget,
+            section_budget=supplied_cap,
             defer_group_membership=defer_group_membership,
+            focus_max=(
+                DIRECTIVE_TEMPLATE_FOCUS_MAX
+                if template is not None
+                else DIRECTIVE_SECTION_TEXT_MAX
+            ),
         )
         if "sections" in raw
         else None
@@ -959,11 +1038,31 @@ def parse_synthesis_directive(
     return SynthesisDirective(
         sections=sections,
         section_budget=section_budget,
+        template=template,
         column_boosts=column_boosts,
         tag_boosts=tag_boosts,
         appraisal_tier_boosts=appraisal_tier_boosts,
         screen_confidence=screen_confidence,
     )
+
+
+def _parse_template(value: Any) -> str:
+    """Validate the optional output-template key.
+
+    Args:
+        value: Candidate JSON directive value.
+
+    Returns:
+        The validated template key.
+
+    Raises:
+        SynthesisDirectiveError: If it is not a known template.
+    """
+    if not isinstance(value, str) or value not in TEMPLATE_KEYS:
+        _directive_fail(
+            f"synthesis directive template must be one of {sorted(TEMPLATE_KEYS)}"
+        )
+    return str(value)
 
 
 def _parse_section_budget(value: Any) -> int:
@@ -1093,15 +1192,27 @@ def build_retrieval_scope(
     task_id: uuid.UUID,
     scope_id: uuid.UUID,
     selected_tss_ids: set[uuid.UUID],
+    extra_scope_ids: Sequence[uuid.UUID] = (),
 ) -> RetrievalScope:
     """Load the screened-in chunk retrieval scope.
+
+    **Several scopes** (task 045, S11, P13): an options-scoping chat answers
+    over the longlist scope and the option searches' targeted scopes at once.
+    A document screened in under more than one of them is **one** document:
+    the precedence rule keeps one row per ``task_source_snapshot_id`` — the
+    primary scope's row wins, then the latest by ``screened_at`` — and that
+    row's scope supplies its classification and appraisal. With no extra
+    scope the rule is inert (the effective row is already unique per scope
+    and document).
 
     Args:
         conn: Open database connection.
         task_id: Task id that scopes every read.
         scope_id: Evidence scope id whose relevant screened documents form the
-            retrieval corpus.
+            retrieval corpus; with ``extra_scope_ids``, the primary scope.
         selected_tss_ids: Referenced selection set, used only as a soft prior.
+        extra_scope_ids: Further evidence scopes whose relevant screened
+            documents join the corpus under the precedence rule.
 
     Returns:
         Frozen document, chunk and unit records for in-memory retrieval.
@@ -1126,6 +1237,32 @@ def build_retrieval_scope(
     # status='relevant' join, which would leak in demoted docs and double-read
     # confirmed ones).
     effective = effective_screen_rows()
+    scope_ids = [scope_id, *(s for s in extra_scope_ids if s != scope_id)]
+    # One row per document across the scopes (P13): the primary scope first,
+    # then the latest screen, then the scope id for a deterministic tie-break.
+    ranked = (
+        sa_select(
+            effective.c.task_id,
+            effective.c.task_source_snapshot_id,
+            effective.c.evidence_scope_id,
+            effective.c.screen_decision_confidence,
+            effective.c.screen_stage,
+            func.row_number()
+            .over(
+                partition_by=effective.c.task_source_snapshot_id,
+                order_by=(
+                    case((effective.c.evidence_scope_id == scope_id, 0), else_=1),
+                    effective.c.screened_at.desc(),
+                    effective.c.evidence_scope_id,
+                ),
+            )
+            .label("_scope_rank"),
+        )
+        .where(effective.c.task_id == task_id)
+        .where(effective.c.evidence_scope_id.in_(scope_ids))
+        .where(effective.c.status == "relevant")
+        .subquery("scope_ranked")
+    )
     screened_docs = (
         sa_select(
             task_source_snapshot.c.task_source_snapshot_id.label("tss_id"),
@@ -1136,17 +1273,17 @@ def build_retrieval_scope(
             source_snapshot.c.text_basis,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
-            effective.c.screen_decision_confidence,
-            effective.c.screen_stage,
+            ranked.c.screen_decision_confidence,
+            ranked.c.screen_stage,
         )
-        .select_from(effective)
+        .select_from(ranked)
         .join(
             task_source_snapshot,
             (
                 task_source_snapshot.c.task_source_snapshot_id
-                == effective.c.task_source_snapshot_id
+                == ranked.c.task_source_snapshot_id
             )
-            & (task_source_snapshot.c.task_id == effective.c.task_id),
+            & (task_source_snapshot.c.task_id == ranked.c.task_id),
         )
         .join(
             source_snapshot,
@@ -1159,7 +1296,7 @@ def build_retrieval_scope(
                 == task_source_snapshot.c.task_source_snapshot_id
             )
             & (source_classification_result.c.task_id == task_id)
-            & (source_classification_result.c.evidence_scope_id == scope_id),
+            & (source_classification_result.c.evidence_scope_id == ranked.c.evidence_scope_id),
         )
         .outerjoin(
             source_appraisal_result,
@@ -1168,11 +1305,9 @@ def build_retrieval_scope(
                 == task_source_snapshot.c.task_source_snapshot_id
             )
             & (source_appraisal_result.c.task_id == task_id)
-            & (source_appraisal_result.c.evidence_scope_id == scope_id),
+            & (source_appraisal_result.c.evidence_scope_id == ranked.c.evidence_scope_id),
         )
-        .where(effective.c.task_id == task_id)
-        .where(effective.c.evidence_scope_id == scope_id)
-        .where(effective.c.status == "relevant")
+        .where(ranked.c._scope_rank == 1)
         .subquery()
     )
     chunk_text_basis = chunk_text_basis_case(
@@ -1884,7 +2019,7 @@ def _finding_record(row: Any) -> FindingRecord:
         "document_title": _metadata_title(metadata, tss_id),
         "intervention": cast("str", row.intervention),
         "outcome": cast("str", row.outcome),
-        "population": cast("str | None", row.population),
+        "unit": cast("str | None", row.unit),
         "setting": cast("str | None", row.setting),
         "comparator": cast("str | None", row.comparator),
         "effect_direction": cast("str", row.effect_direction),
@@ -1930,7 +2065,7 @@ def _icf_finding_record(row: Any) -> ICFFindingRecord:
         "claim": cast("str", row.claim),
         "intervention": cast("str", row.intervention),
         "outcome": cast("str | None", row.outcome),
-        "population": cast("str | None", row.population),
+        "unit": cast("str | None", row.unit),
         "setting": cast("str | None", row.setting),
         "study_geography": cast("str | None", row.study_geography),
         "study_design": cast("str | None", row.study_design),
@@ -1974,7 +2109,7 @@ def _load_iof_finding_records(
             intervention_outcome_finding.c.extraction_record_id,
             intervention_outcome_finding.c.intervention,
             intervention_outcome_finding.c.outcome,
-            intervention_outcome_finding.c.population,
+            intervention_outcome_finding.c.unit,
             intervention_outcome_finding.c.setting,
             intervention_outcome_finding.c.comparator,
             intervention_outcome_finding.c.effect_direction,
@@ -2058,7 +2193,7 @@ def _load_icf_finding_records(
             implementation_context_finding.c.claim,
             implementation_context_finding.c.intervention,
             implementation_context_finding.c.outcome,
-            implementation_context_finding.c.population,
+            implementation_context_finding.c.unit,
             implementation_context_finding.c.setting,
             implementation_context_finding.c.study_geography,
             implementation_context_finding.c.study_design,
@@ -2453,11 +2588,11 @@ def _ensure_kind(arguments: dict[str, Any]) -> str:
 
 def _screened_in_doc_ids(
     task_id: uuid.UUID,
-    scope_id: uuid.UUID,
+    scope_ids: Sequence[uuid.UUID],
     *,
     screened_by_run_ids: set[uuid.UUID] | None = None,
 ) -> Any:
-    """Select of this scope's screened-in doc ids — the lookup read boundary.
+    """Select of these scopes' screened-in doc ids — the lookup read boundary.
 
     Effective-relevant via the helper (never a raw status='relevant' join),
     per the same screened-in-scope rule as ``_load_retrieval_scope``.
@@ -2466,17 +2601,24 @@ def _screened_in_doc_ids(
     query = (
         sa_select(effective.c.task_source_snapshot_id)
         .where(effective.c.task_id == task_id)
-        .where(effective.c.evidence_scope_id == scope_id)
+        .where(effective.c.evidence_scope_id.in_(list(scope_ids)))
         .where(effective.c.status == "relevant")
     )
     return query
+
+
+def _scope_precedence(
+    scope_column: ColumnElement[uuid.UUID], scope_id: uuid.UUID
+) -> ColumnElement[int]:
+    """Order the primary scope's row first (task 045, P13)."""
+    return case((scope_column == scope_id, 0), else_=1)
 
 
 def _doc_id_for_scope(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    scope_id: uuid.UUID,
+    scope_ids: Sequence[uuid.UUID],
     arguments: dict[str, Any],
     screened_by_run_ids: set[uuid.UUID] | None = None,
 ) -> uuid.UUID:
@@ -2490,7 +2632,7 @@ def _doc_id_for_scope(
         .where(
             task_source_snapshot.c.task_source_snapshot_id.in_(
                 _screened_in_doc_ids(
-                    task_id, scope_id, screened_by_run_ids=screened_by_run_ids
+                    task_id, scope_ids, screened_by_run_ids=screened_by_run_ids
                 )
             )
         )
@@ -2655,13 +2797,20 @@ def make_lookup_reader(
     extraction_run_id: uuid.UUID | None,
     grouping_run_id: uuid.UUID | None,
     snapshot_run_ids: set[uuid.UUID] | None = None,
+    extra_scope_ids: Sequence[uuid.UUID] = (),
 ) -> Callable[[dict[str, Any]], dict[str, Any]]:
     """Create the universal closed-vocabulary lookup reader.
+
+    With ``extra_scope_ids`` (task 045, S11) the per-document and scope-wide
+    reads span every scope, a per-document label reading the primary scope's
+    row first and then the latest (the retrieval precedence rule, P13); the
+    selection, characterisation and grouping reads stay the primary scope's,
+    since their run ids are the primary walk's.
 
     Args:
         conn: Open database connection.
         task_id: Task id scoping all reads.
-        scope_id: Evidence scope id.
+        scope_id: Evidence scope id (the primary scope).
         characterisation_run_id: Optional referenced characterisation run.
         selection_run_id: Optional referenced selection run.
         extraction_run_id: Optional referenced extraction run.
@@ -2669,10 +2818,12 @@ def make_lookup_reader(
         snapshot_run_ids: Optional terminal-walk run ids bounding otherwise
             scope-wide records to the turn-start snapshot. ``None`` preserves
             synthesis's historic whole-scope reads.
+        extra_scope_ids: Further evidence scopes the reads span.
 
     Returns:
         A validated ``lookup`` implementation.
     """
+    scope_ids = [scope_id, *(s for s in extra_scope_ids if s != scope_id)]
 
     def reader(arguments: dict[str, Any]) -> dict[str, Any]:
         kind = _ensure_kind(arguments)
@@ -2680,7 +2831,7 @@ def make_lookup_reader(
             doc_id = _doc_id_for_scope(
                 conn,
                 task_id=task_id,
-                scope_id=scope_id,
+                scope_ids=scope_ids,
                 arguments=arguments,
                 screened_by_run_ids=snapshot_run_ids,
             )
@@ -2692,11 +2843,15 @@ def make_lookup_reader(
                         source_appraisal_result.c.rubric_version,
                     )
                     .where(source_appraisal_result.c.task_id == task_id)
-                    .where(source_appraisal_result.c.evidence_scope_id == scope_id)
+                    .where(source_appraisal_result.c.evidence_scope_id.in_(scope_ids))
                     .where(source_appraisal_result.c.task_source_snapshot_id == doc_id)
                     .where(_snapshot_run_filter(
                         source_appraisal_result.c.appraised_by_run_id, snapshot_run_ids
                     ))
+                    .order_by(
+                        _scope_precedence(source_appraisal_result.c.evidence_scope_id, scope_id),
+                        source_appraisal_result.c.appraised_at.desc(),
+                    )
                 ).first()
                 result = (
                     _absent()
@@ -2710,11 +2865,17 @@ def make_lookup_reader(
                 row = conn.execute(
                     sa_select(source_classification_result.c.primary_evidence_type)
                     .where(source_classification_result.c.task_id == task_id)
-                    .where(source_classification_result.c.evidence_scope_id == scope_id)
+                    .where(source_classification_result.c.evidence_scope_id.in_(scope_ids))
                     .where(source_classification_result.c.task_source_snapshot_id == doc_id)
                     .where(_snapshot_run_filter(
                         source_classification_result.c.classified_by_run_id, snapshot_run_ids
                     ))
+                    .order_by(
+                        _scope_precedence(
+                            source_classification_result.c.evidence_scope_id, scope_id
+                        ),
+                        source_classification_result.c.classified_at.desc(),
+                    )
                 ).first()
                 result = (
                     _absent()
@@ -2757,7 +2918,7 @@ def make_lookup_reader(
                     source_screening_result.c.screen_decision_confidence,
                 )
                 .where(source_screening_result.c.task_id == task_id)
-                .where(source_screening_result.c.evidence_scope_id == scope_id)
+                .where(source_screening_result.c.evidence_scope_id.in_(scope_ids))
                 .where(source_screening_result.c.task_source_snapshot_id == doc_id)
                 .where(_snapshot_run_filter(
                     source_screening_result.c.screened_by_run_id, snapshot_run_ids
@@ -2768,7 +2929,11 @@ def make_lookup_reader(
                 # every decided stage for the doc, never a filtered subset of
                 # decisions (only attempt noise is excluded).
                 .where(source_screening_result.c.status != "failed")
-                .order_by(source_screening_result.c.screen_stage)
+                .order_by(
+                    _scope_precedence(source_screening_result.c.evidence_scope_id, scope_id),
+                    source_screening_result.c.evidence_scope_id,
+                    source_screening_result.c.screen_stage,
+                )
             ).fetchall()
             return {
                 "kind": kind,
@@ -2811,7 +2976,7 @@ def make_lookup_reader(
                     search_coverage_record.c.verdict_origin,
                 )
                 .where(search_coverage_record.c.task_id == task_id)
-                .where(search_coverage_record.c.evidence_scope_id == scope_id)
+                .where(search_coverage_record.c.evidence_scope_id.in_(scope_ids))
                 .where(_snapshot_run_filter(
                     search_coverage_record.c.acquired_by_run_id, snapshot_run_ids
                 ))
@@ -2871,7 +3036,7 @@ def make_lookup_reader(
                     source_tag.c.task_source_snapshot_id.in_(
                         _screened_in_doc_ids(
                             task_id,
-                            scope_id,
+                            scope_ids,
                             screened_by_run_ids=snapshot_run_ids,
                         )
                     )
@@ -2896,7 +3061,7 @@ def make_lookup_reader(
                     source_tag.c.task_source_snapshot_id.in_(
                         _screened_in_doc_ids(
                             task_id,
-                            scope_id,
+                            scope_ids,
                             screened_by_run_ids=snapshot_run_ids,
                         )
                     )

@@ -12,7 +12,7 @@ now call `task`.
 
 # Rule
 
-A task is a container for multiple EB questions; every question's screening pass
+A task is a container for multiple ES questions; every question's screening pass
 re-screens the **whole task pool** (extraction is what gets reused, keyed by memo).
 So the coverage base at characterise is the task pool, not the scope's own
 acquisitions: with two scopes in one task, each scope's coverage honestly reports
