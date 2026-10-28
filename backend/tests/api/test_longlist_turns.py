@@ -69,6 +69,7 @@ from tests.api.org_support import tenancy_client
 from tests.api.resource_support import (  # noqa: F401 — the autouse teardown
     api_client,
     create_task,
+    end_walks,
     remove_committed_tasks_after_walks,
 )
 from tests.api.resource_support import await_walks_ended as _await_walks_ended
@@ -956,6 +957,7 @@ def test_a_turn_while_a_walk_runs_is_run_active(engine: Engine, tmp_path: Path) 
         assert response.status_code == 409, response.text
         assert response.json()["error"]["code"] == "run_active"
         assert agent.longlist_sort_calls == 0
+        end_walks(engine, built.task_id)
 
 
 def test_an_evidence_search_task_never_reaches_the_longlist_sort(tmp_path: Path) -> None:
