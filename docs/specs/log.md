@@ -1,5 +1,12 @@
 # Spec update log
 
+## 2026-10-28 (task 054, Magenta Book layers and short codes)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
+  outcome layer splits into short-term and long-term outcomes, with fixed allowed steps (only
+  long-term outcomes lead to an impact); stored outcome boxes become short-term. Every box and link
+  gets a short code (`S3`, `#5`) that is never reused, shown on the canvas and in the panels, and
+  the canvas draws the accountability ceiling after the outputs. Task 054 contract C34 and C35.
+
 ## 2026-10-27 (task 054, searches for discovered links)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): after
   merge, each kept link that discovery added gets its own light search and pick, as the first

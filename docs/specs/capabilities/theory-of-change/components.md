@@ -41,7 +41,7 @@ build-level word on the chains and their step names.
 |---|---|---|---|---|
 | 0 | inherit | **modified**: shared by ES and OS; gains one direction, from an OS option | Seeds the plan slots from the option and the scoping plan; gives the ToC task a membership row for each of the option's documents (the document itself is shared, not copied), flagged *inherited* and re-screened, with classification and appraisal read from the scoping run. Runs **before** the item searches, so `acquire` does not store those documents again (capability.md § Connections to other tasks). | procedure |
 | 1 | plan | **modified**: the Task Agent profile pattern with ToC slots | The plan conversation and `TocPlan` (capability.md § Plan slots). | agent, lead-authored prompt |
-| 2 | draft | **new**: nothing in the repo writes a causal graph | Candidate success and failure pathways through Inputs, Outputs, Outcomes and Impact; links with mechanisms and conditions; context; supporting activities; result criteria and indicators; the critical connection. Code then checks the graph (the E1 checks). | one call (judgment model) + code checks |
+| 2 | draft | **new**: nothing in the repo writes a causal graph | Candidate success and failure pathways through the Magenta Book layers (C34, 2026-10-28): Inputs and activities, Outputs, Short-term outcomes, Long-term outcomes and Impact, with failure outcomes; 15 to 25 boxes and 1 or 2 impacts; links with mechanisms and conditions; context; supporting activities; result criteria and indicators; the critical connection. Code then checks the graph (the E1 checks), including the allowed steps: input to output, output to short-term outcome, short-term to short-term or long-term outcome, long-term to long-term outcome or impact, and from any of these to a failure outcome. | one call (judgment model) + code checks |
 | 2b | import | **new**: no vision call exists | Reads pasted text, an image or a PDF of an existing theory into the same graph shape, keeping the user's words and labelling what it adds. The file is stored in S3 (§ Uploads). PDF pages become images with `pymupdf` (already a dependency) and go through the existing `chat.completions.parse` path as image parts. | one vision call + the same code checks |
 | — | item search | **reused**: the option-search child walk (`runtime/option_search.py`), at the Evidence search's `link` depth | One acquire-only walk per item (§ Items). Intent = the item text; its first line, the link sentence, is searched as written: OpenAlex by meaning on the sentence (20 results) and on the sentence plus "in the United Kingdom" (10), and Overton on the sentence (10). One query-generation call gives one keyword query, run on OpenAlex with the systematic-review clause and with the trial clause (10 each; C31). Five search calls per link (4 OpenAlex, 1 Overton) and one generation call. Every distinct result is kept (🟡 at most 60). 🟡 At most 80 links per check (C27, C31, 2026-10-27). | procedure |
 | — | web leg | **new backend** behind the existing `search` verb | OpenAI's web search tool (§ Web search). | procedure |
@@ -121,6 +121,15 @@ revisions are in contract § Schema: `toc_box`, `toc_link`, `toc_band_item`, `to
 `toc_pathway_link`, `toc_item_evidence` (revision 1); `toc_upload` (revision 2); and
 `task_link.source_option_id` (revision 3). Boxes, links and pathways carry a *changed by Policy
 Atlas* flag with its reason and the user's prior version.
+
+**Layers and codes (C34, C35; revision `80f4e6c430b0`, 2026-10-28).** `toc_box.layer` is one of
+`input`, `output`, `outcome_short`, `outcome_long`, `impact`, `failure_outcome`; earlier
+`outcome` boxes became `outcome_short`. Every box and link has a short `code`, written by code
+when the row is inserted (`theory_of_change.store.insert`) and never reused in a task, even after
+a delete: boxes a layer letter and a number (`A` inputs and activities, `P` outputs, `S`
+short-term, `L` long-term, `I` impact, `F` failure outcomes), links `#1`, `#2`. The canvas shows a
+box's code small and grey in its corner and a dashed accountability ceiling after the outputs
+("Directly influenced" / "Contributes to"); link codes appear only in the link panel heading.
 
 Shared tables, reused: `task`, `plan`, `task_agent_transcript`, `task_link`, `evidence_scope`,
 `capability_run`, `source_snapshot` and the screening, classification and appraisal results,
