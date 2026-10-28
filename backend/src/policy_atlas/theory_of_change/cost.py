@@ -31,7 +31,7 @@ PRICES: dict[str, tuple[float, float, float]] = {
 }
 
 #: A walk component whose route step has another name.
-_STEP_OF: dict[str, str] = {"toc_select": "toc_pick"}
+_STEP_OF: dict[str, str] = {"toc_select": "toc_pick", "toc_search_new": "toc_pick"}
 
 
 def usd(model: str, usage: dict[str, int]) -> float | None:
