@@ -129,20 +129,23 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         env_name=ENV_NAME,
         cross_region_references=True,
     )
-    # The same app stack with a Bedrock model route, to show the Bedrock key is
-    # wired only then (task 053). Not part of TEMPLATES: the namespacing and
-    # rendering checks below stay about the shipped staging config.
-    BEDROCK_PA_CONFIG = json.loads(json.dumps(PA_CONFIG))
-    BEDROCK_PA_CONFIG["policy_atlas_config"]["backend"]["model_route"] = "bedrock"
-    BEDROCK_APP_STACK = PolicyAtlasStack(
-        APP,
-        "PaV3AppStackBedrock",
-        pa_config=BEDROCK_PA_CONFIG,
-        certificate=CERT_STACK.certificate,
-        env=ENV,
-        env_name=ENV_NAME,
-        cross_region_references=True,
-    )
+    # The same app stack pinned to each model route, to show the Bedrock key is
+    # wired only on a Bedrock route (task 053), whatever route the shipped
+    # config has. Not part of TEMPLATES: the namespacing and rendering checks
+    # below stay about the shipped staging config.
+    ROUTE_APP_STACKS = {}
+    for route, stack_id in (("bedrock", "PaV3AppStackBedrock"), ("openai-direct", "PaV3AppStackOpenAI")):
+        route_config = json.loads(json.dumps(PA_CONFIG))
+        route_config["policy_atlas_config"]["backend"]["model_route"] = route
+        ROUTE_APP_STACKS[route] = PolicyAtlasStack(
+            APP,
+            stack_id,
+            pa_config=route_config,
+            certificate=CERT_STACK.certificate,
+            env=ENV,
+            env_name=ENV_NAME,
+            cross_region_references=True,
+        )
     ANALYTICS_STACK = PaV3AnalyticsStack(
         APP,
         "PaV3AnalyticsStack",
@@ -160,7 +163,8 @@ TEMPLATES = {
     "app": Template.from_stack(APP_STACK).to_json(),
     "analytics": Template.from_stack(ANALYTICS_STACK).to_json(),
 }
-BEDROCK_APP_TEMPLATE = Template.from_stack(BEDROCK_APP_STACK).to_json()
+BEDROCK_APP_TEMPLATE = Template.from_stack(ROUTE_APP_STACKS["bedrock"]).to_json()
+OPENAI_APP_TEMPLATE = Template.from_stack(ROUTE_APP_STACKS["openai-direct"]).to_json()
 RENDERED_TEMPLATES = {
     stack_name: json.dumps(template, sort_keys=True)
     for stack_name, template in TEMPLATES.items()

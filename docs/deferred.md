@@ -860,8 +860,8 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   constraint from 018 stays: nothing new couples to a provider-specific API surface.
   What remains deferred, and to which slice:
   - **Staging and production:** the wiring landed in 053 on 2026-10-21 (owner decision,
-    contract note 9): `backend.model_route` in `infra/pa_config.json` (both environments
-    `openai-direct`), the stack maps `AWS_BEARER_TOKEN_BEDROCK` only on a Bedrock route,
+    contract note 9): `backend.model_route` in `infra/pa_config.json` (staging switched to
+    `bedrock` on 2026-10-28; production still `openai-direct`), the stack maps `AWS_BEARER_TOKEN_BEDROCK` only on a Bedrock route,
     and `infra/DEPLOYMENT.md` § 5 has the switch procedure. The history below is kept
     for the reasoning. The owner's plan changed on 2026-10-21:
     the container does **not** mint its own key from the task role. Both keys live in

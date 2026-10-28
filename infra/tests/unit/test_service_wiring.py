@@ -3,7 +3,7 @@ import json
 import tomllib
 from pathlib import Path
 
-from tests.unit.test_synth import BEDROCK_APP_TEMPLATE, TEMPLATES, _resources
+from tests.unit.test_synth import BEDROCK_APP_TEMPLATE, OPENAI_APP_TEMPLATE, TEMPLATES, _resources
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -55,7 +55,7 @@ def _secret_map(container: dict) -> dict[str, object]:
 
 
 def test_api_container_has_the_complete_deployed_plain_environment_map():
-    api_container = _container(_task_definition("policy-atlas-v3-api"))
+    api_container = _container(_task_definition("policy-atlas-v3-api", OPENAI_APP_TEMPLATE))
     environment = {
         item["Name"]: item["Value"] for item in api_container["Environment"]
     }
@@ -72,7 +72,7 @@ def test_api_container_has_the_complete_deployed_plain_environment_map():
 
 
 def test_api_container_references_database_and_app_secrets_without_values():
-    secrets = _secret_map(_container(_task_definition("policy-atlas-v3-api")))
+    secrets = _secret_map(_container(_task_definition("policy-atlas-v3-api", OPENAI_APP_TEMPLATE)))
     assert set(secrets) == {"DATABASE_URL", *APP_SECRET_NAMES}
 
     database_reference = json.dumps(secrets["DATABASE_URL"])
