@@ -25,10 +25,22 @@ export const linkId = (n: number) => id("c", n);
 export const pathwayId = (n: number) => id("d", n);
 export const docId = (n: number) => id("e", n);
 
+const PREFIX: Record<TocBox["layer"], string> = {
+  input: "A",
+  output: "P",
+  outcome_short: "S",
+  outcome_long: "L",
+  impact: "I",
+  failure_outcome: "F",
+};
+const used: Partial<Record<TocBox["layer"], number>> = {};
+
 function box(n: number, layer: TocBox["layer"], text: string, extra: Partial<TocBox> = {}): TocBox {
+  used[layer] = (used[layer] ?? 0) + 1;
   return {
     box_id: boxId(n),
     layer,
+    code: `${PREFIX[layer]}${used[layer]}`,
     text,
     dosage: null,
     result_criteria: { definition: `Definition of: ${text}`, indicator: `Indicator for: ${text}`, timing: "Within a year" },
@@ -44,9 +56,9 @@ export const BOXES: TocBox[] = [
   box(2, "input", "Nutrient profiling rules, enforced by Ofcom"),
   box(3, "output", "Fewer less healthy food ads shown"),
   box(4, "output", "Some products reformulated to pass the rules"),
-  box(5, "outcome", "Children see fewer ads for less healthy food"),
-  box(6, "outcome", "Children ask for and pick healthier food"),
-  box(7, "outcome", "Households buy fewer calories from less healthy food"),
+  box(5, "outcome_short", "Children see fewer ads for less healthy food"),
+  box(6, "outcome_short", "Children ask for and pick healthier food"),
+  box(7, "outcome_long", "Households buy fewer calories from less healthy food"),
   box(8, "impact", "Fewer children living with obesity at age 10 to 11"),
   box(9, "failure_outcome", "Brands shift spend to brand ads and influencers", { origin: "found_in_evidence" }),
   box(10, "failure_outcome", "Children's exposure barely falls", { origin: "found_in_evidence" }),
@@ -64,6 +76,7 @@ function link(
   const rank = { strong: 3, medium: 2, weak: 1, none: 0 };
   return {
     link_id: linkId(n),
+    code: `#${n}`,
     source_box_id: boxId(source),
     target_box_id: boxId(target),
     sentence: `Link ${n} says the step works.`,
@@ -96,7 +109,7 @@ export const LINKS: TocLink[] = [
   }),
   link(4, 5, 6, "behaviour change", "strong", "weak", { conditions: ["The effect seen in short trials lasts in everyday life"] }),
   link(5, 6, 7, "behaviour change", "medium", "weak"),
-  link(6, 4, 7, "take-up", "medium", "medium", { merged: true, here_sentence: null }),
+  link(6, 4, 6, "take-up", "medium", "medium", { merged: true, here_sentence: null }),
   link(7, 7, 8, "benefits and side effects", "medium", "weak"),
   link(8, 3, 9, "if it goes wrong", "medium", "weak"),
   link(9, 9, 10, "if it goes wrong", "none", "none", { state: "checking" as LinkState }),
@@ -122,7 +135,7 @@ const pathway = (
 
 export const PATHWAYS: TocPathway[] = [
   pathway(1, "success", "Fewer ads, healthier choices", [1, 3, 4, 5, 7]),
-  pathway(2, "success", "Reformulation", [2, 6, 7]),
+  pathway(2, "success", "Reformulation", [2, 6, 5, 7]),
   pathway(3, "failure", "Spend moves elsewhere", [1, 8, 9]),
   pathway(4, "success", "Children ask parents less", [], {
     status: "set_aside",

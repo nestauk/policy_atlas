@@ -43,7 +43,10 @@ function WithDocuments({ taskId, documents, question, children }: { taskId: stri
 function BoxRow({ box }: { box: TocBox }) {
   return (
     <div className="py-3">
-      <p className={REPORT_LABEL_CLASS}>{LAYER_LABEL[box.layer]}</p>
+      <p className={REPORT_LABEL_CLASS}>
+        {LAYER_LABEL[box.layer]}
+        {box.code !== null && ` · ${box.code}`}
+      </p>
       <p className={`${REPORT_BODY_CLASS} font-bold text-navy`}>{scrub(box.text)}</p>
       {box.description !== null && <p className={P}>{scrub(box.description)}</p>}
     </div>

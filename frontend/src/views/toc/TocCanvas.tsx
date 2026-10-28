@@ -52,6 +52,9 @@ interface LabelData extends Record<string, unknown> {
   text: string;
   width?: number;
   line?: boolean;
+  /** A dashed vertical line this tall: the accountability ceiling. */
+  height?: number;
+  alignRight?: boolean;
 }
 
 type BoxNode = Node<BoxData, "box">;
@@ -64,6 +67,8 @@ const LABEL_H = 20;
 const MIN_START_ZOOM = 1;
 const VIEW_PADDING = 0.08;
 const HANDLE_CLASS = "!h-1 !w-1 !border-0 !bg-transparent";
+/** Display-only nodes: never selected, never catching a click meant for a box or a connection. */
+const DECOR = { draggable: false, selectable: false, focusable: false, style: { pointerEvents: "none" as const } };
 
 function BoxView({ data }: NodeProps<BoxNode>) {
   const { box } = data;
@@ -73,7 +78,8 @@ function BoxView({ data }: NodeProps<BoxNode>) {
     <div
       title={tip === "" ? undefined : scrub(tip)}
       className={[
-        "flex cursor-pointer items-center rounded-lg border-[1.5px] bg-paper px-3.5 text-meta font-semibold leading-snug text-navy shadow-sm",
+        "relative flex cursor-pointer items-center rounded-lg border-[1.5px] bg-paper px-3.5 text-meta font-semibold leading-snug text-navy shadow-sm",
+        box.code !== null ? "pt-3.5" : "",
         data.selected ? "border-blue ring-4 ring-blue-tint" : "border-grey/40",
         data.dim ? "opacity-20" : "",
       ].join(" ")}
@@ -81,6 +87,7 @@ function BoxView({ data }: NodeProps<BoxNode>) {
     >
       <Handle id="l" type="target" position={Position.Left} className={HANDLE_CLASS} />
       <Handle id="t" type="target" position={Position.Top} className={HANDLE_CLASS} />
+      {box.code !== null && <span className="absolute left-3.5 top-0.5 text-caption leading-none text-grey">{box.code}</span>}
       <span className="line-clamp-3">{scrub(box.text)}</span>
       <Handle id="r" type="source" position={Position.Right} className={HANDLE_CLASS} />
       <Handle id="b" type="source" position={Position.Bottom} className={HANDLE_CLASS} />
@@ -92,7 +99,8 @@ function BoxView({ data }: NodeProps<BoxNode>) {
 
 function LabelView({ data }: NodeProps<LabelNode>) {
   if (data.line) return <div className="border-t border-line-2" style={{ width: data.width }} />;
-  return <p className="text-meta font-semibold text-grey">{data.text}</p>;
+  if (data.height !== undefined) return <div className="border-l border-dashed border-grey" style={{ height: data.height }} />;
+  return <p className={`text-meta font-semibold text-grey${data.alignRight ? " text-right" : ""}`}>{data.text}</p>;
 }
 
 function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, markerEnd }: EdgeProps<TocEdge>) {
@@ -165,8 +173,9 @@ interface Bounds {
 }
 
 /**
- * The canvas: boxes in four layer columns, curved connections coloured by
- * their lower grade, failure pathways under a line. Read-only; clicking a box
+ * The canvas: boxes in layer columns, curved connections coloured by their
+ * lower grade, failure pathways under a line, and a dashed line (the
+ * accountability ceiling) between outputs and short-term outcomes. Read-only; clicking a box
  * or a connection selects it. Set-aside pathways never appear here.
  */
 export function TocCanvas({
@@ -182,6 +191,9 @@ export function TocCanvas({
   onSelect: (selection: Selection | null) => void;
 }) {
   const layout = layoutToc(graph);
+  // The ceiling runs from under the column headings to its two labels, below the lowest box.
+  const ceilingTop = HEADER_H - 12;
+  const ceilingLabelY = layout.height + 12;
   const shown = visibleLinkIds(graph, pathway);
   const keptLinks = visibleLinkIds(graph, "all");
   const boxById = new Map(graph.boxes.map((box) => [box.box_id, box]));
@@ -203,7 +215,7 @@ export function TocCanvas({
           const left = pathway === "all" ? 0 : Math.min(...placedInView.map((placed) => placed.x));
           const right = pathway === "all" ? layout.width : Math.max(...placedInView.map((placed) => placed.x + BOX_W));
           const top = pathway === "all" ? 0 : Math.min(...placedInView.map((placed) => placed.y));
-          const bottom = Math.max(...placedInView.map((placed) => placed.y + BOX_H));
+          const bottom = pathway === "all" ? ceilingLabelY + LABEL_H : Math.max(...placedInView.map((placed) => placed.y + BOX_H));
           return { x: left, y: top, width: right - left, height: bottom - top };
         })();
   const boxRef = useRef<HTMLDivElement>(null);
@@ -268,6 +280,34 @@ export function TocCanvas({
             focusable: false,
           } as LabelNode,
         ]),
+    // The accountability ceiling (C35): what the programme directly influences, and what it contributes to.
+    {
+      id: "ceiling",
+      type: "label",
+      position: { x: layout.ceilingX, y: ceilingTop },
+      data: { text: "", height: ceilingLabelY + LABEL_H - ceilingTop },
+      width: 1,
+      height: ceilingLabelY + LABEL_H - ceilingTop,
+      ...DECOR,
+    } as LabelNode,
+    {
+      id: "ceiling-left",
+      type: "label",
+      position: { x: layout.ceilingX - 8 - LABEL_W, y: ceilingLabelY },
+      data: { text: "Directly influenced", alignRight: true },
+      width: LABEL_W,
+      height: LABEL_H,
+      ...DECOR,
+    } as LabelNode,
+    {
+      id: "ceiling-right",
+      type: "label",
+      position: { x: layout.ceilingX + 8, y: ceilingLabelY },
+      data: { text: "Contributes to" },
+      width: LABEL_W,
+      height: LABEL_H,
+      ...DECOR,
+    } as LabelNode,
     ...layout.boxes.flatMap((placed): BoxNode[] => {
       const box = boxById.get(placed.id);
       if (box === undefined) return [];

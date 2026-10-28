@@ -47,6 +47,16 @@ describe("canvas", () => {
     expect(edge(9)?.querySelector(".toc-edge--pending")).not.toBeNull(); // still checking
   });
 
+  it("shows each box's code and the accountability ceiling", () => {
+    renderResult();
+    expect(within(node(7)).getByText("L1")).toBeInTheDocument();
+    expect(screen.getByText("Directly influenced")).toBeInTheDocument();
+    expect(screen.getByText("Contributes to")).toBeInTheDocument();
+    // Display only: the ceiling never takes a click meant for a box or a connection.
+    const ceiling = document.querySelector('[data-id="ceiling"]') as HTMLElement;
+    expect(ceiling.style.pointerEvents).toBe("none");
+  });
+
   it("carries exactly one critical dot", () => {
     renderResult();
     expect(screen.getAllByTestId("toc-critical-dot")).toHaveLength(1);
@@ -79,7 +89,8 @@ describe("detail panel", () => {
     const target = edge(3) as Element;
     fireEvent.click(target.querySelector("path") as Element); // d3-zoom needs a real window for mouse-down
     const panel = screen.getByRole("complementary", { name: "Details" });
-    expect(within(panel).getByText("Critical connection · test this first")).toBeInTheDocument();
+    const heading = (text: string) => (_: string, el: Element | null) => el?.tagName === "P" && el.textContent === text;
+    expect(within(panel).getByText(heading("Critical connection #3 · P1 → S1 · test this first"))).toBeInTheDocument();
     expect(within(panel).getByLabelText("Worked elsewhere")).toBeInTheDocument();
     expect(within(panel).getByLabelText("Holds here")).toBeInTheDocument();
     // Listed in full once, plus the one-line "Also counts here" reference.
@@ -94,6 +105,7 @@ describe("detail panel", () => {
     const panel = screen.getByRole("complementary", { name: "Details" });
     expect(within(panel).getByText("Definition of: Households buy fewer calories from less healthy food")).toBeInTheDocument();
     expect(within(panel).getByText(/Case studies \(1\)/)).toBeInTheDocument();
+    expect(within(panel).getByText((_, el) => el?.tagName === "P" && el.textContent === "Long-term outcome L1")).toBeInTheDocument();
   });
 });
 

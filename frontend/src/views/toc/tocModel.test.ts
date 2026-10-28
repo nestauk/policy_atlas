@@ -10,22 +10,29 @@ describe("layoutToc", () => {
   const at = (n: number) => layout.boxes.find((b) => b.id === boxId(n));
 
   it("gives each layer its columns, outcomes one column per step of their chain", () => {
-    // Outcomes C1 → C2 → C3 take columns 2, 3 and 4; the impact comes after them.
+    // Short-term S1 → S2 take columns 2 and 3, long-term L1 column 4; the impact comes after them.
     expect([1, 2, 3, 4, 5, 6, 7, 8].map((n) => at(n)?.column)).toEqual([0, 0, 1, 1, 2, 3, 4, 5]);
     expect(at(5)?.x).toBe(2 * COL_STEP);
     expect(layout.headings.map((h) => [h.label, h.x])).toEqual([
-      ["Inputs", 0],
+      ["Inputs and activities", 0],
       ["Outputs", COL_STEP],
-      ["Outcomes", 2 * COL_STEP],
+      ["Short-term outcomes", 2 * COL_STEP],
+      ["Long-term outcomes", 4 * COL_STEP],
       ["Impact", 5 * COL_STEP],
     ]);
   });
 
+  it("puts the accountability ceiling in the gap after the outputs, down past the lowest box", () => {
+    expect(layout.ceilingX).toBe(COL_STEP + BOX_W + COL_GAP / 2);
+    expect(layout.height).toBe(Math.max(...layout.boxes.map((b) => b.y + BOX_H)));
+  });
+
   it("keeps a chain on one row: each box takes the average row of its sources", () => {
-    for (const n of [1, 3, 5, 6]) expect(at(n)?.row).toBe(0);
+    for (const n of [1, 3, 5]) expect(at(n)?.row).toBe(0);
     expect(at(2)?.row).toBe(1);
     expect(at(4)?.row).toBe(1);
-    // C3 has sources on rows 0 (C2) and 1 (O2): it rounds to the nearest free row.
+    // S2 has sources on rows 0 (S1) and 1 (P2): the average, 0.5, rounds to row 1.
+    expect(at(6)?.row).toBe(1);
     expect(at(7)?.row).toBe(1);
     expect(at(8)?.row).toBe(1);
   });

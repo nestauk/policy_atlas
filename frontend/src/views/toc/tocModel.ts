@@ -53,10 +53,12 @@ export const ORIGIN_LABEL: Record<Origin, string> = {
   options_scoping: "From your options scoping",
 };
 
+/** One box's layer, as the detail panel and the report name it. */
 export const LAYER_LABEL: Record<BoxLayer, string> = {
-  input: "Input",
+  input: "Input or activity",
   output: "Output",
-  outcome: "Outcome",
+  outcome_short: "Short-term outcome",
+  outcome_long: "Long-term outcome",
   impact: "Impact",
   failure_outcome: "Outcome if it goes wrong",
 };
@@ -104,16 +106,21 @@ export interface TocLayout {
   headings: ColumnHeading[];
   /** The y of the "If it goes wrong" line, or null when nothing sits under it. */
   lineY: number | null;
+  /** The x of the accountability ceiling: the dashed line after the outputs (C35). */
+  ceilingX: number;
   width: number;
+  /** The y just below the lowest box. */
+  height: number;
 }
 
 /**
  * Where every box of a kept pathway goes. Deterministic, no layout library.
  *
- * Columns follow the layers, left to right, and outcomes take as many columns
- * as their longest chain: an outcome sits one column after the outcome that
- * leads to it, so a chain reads left to right and the impact comes after the
- * last outcome. Boxes on a success pathway sit above the line; each takes the
+ * Columns follow the layers, left to right. Short-term and long-term outcomes
+ * each take as many columns as their longest chain inside the layer: an
+ * outcome sits one column after the same-layer outcome that leads to it, so a
+ * chain reads left to right and the impact comes after the last long-term
+ * outcome. Boxes on a success pathway sit above the line; each takes the
  * average row of the boxes that lead into it (so a chain stays on one row and
  * fewer connections cross), and boxes in a column never share a row. Boxes
  * found only on failure pathways sit under the line, one band of rows per
@@ -126,11 +133,12 @@ export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">)
   const keptLinks = pathways.flatMap((p) => p.link_ids.map((id) => linkById.get(id))).filter((l): l is TocLink => l !== undefined);
   const layerOf = (id: string) => boxById.get(id)?.layer;
 
-  // Outcome depth: the longest chain of outcome-to-outcome links leading to it.
-  const outcomeSources = new Map<string, string[]>();
+  // Outcome depth: the longest chain of same-layer links leading to an outcome.
+  const sameLayerSources = new Map<string, string[]>();
   for (const link of keptLinks) {
-    if (layerOf(link.source_box_id) === "outcome" && layerOf(link.target_box_id) === "outcome") {
-      outcomeSources.set(link.target_box_id, [...(outcomeSources.get(link.target_box_id) ?? []), link.source_box_id]);
+    const layer = layerOf(link.source_box_id);
+    if ((layer === "outcome_short" || layer === "outcome_long") && layer === layerOf(link.target_box_id)) {
+      sameLayerSources.set(link.target_box_id, [...(sameLayerSources.get(link.target_box_id) ?? []), link.source_box_id]);
     }
   }
   const depth = new Map<string, number>();
@@ -139,13 +147,15 @@ export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">)
     if (known !== undefined) return known;
     if (seen.has(id)) return 0; // a loop: break it here
     seen.add(id);
-    const d = Math.max(-1, ...(outcomeSources.get(id) ?? []).map((source) => depthOf(source, seen))) + 1;
+    const d = Math.max(-1, ...(sameLayerSources.get(id) ?? []).map((source) => depthOf(source, seen))) + 1;
     depth.set(id, d);
     return d;
   };
-  for (const box of graph.boxes) if (box.layer === "outcome") depthOf(box.box_id, new Set());
-  const outcomeColumns = Math.max(1, ...[...depth.values()].map((d) => d + 1));
-  const impactColumn = 2 + outcomeColumns;
+  const columnsOf = (layer: BoxLayer) =>
+    Math.max(1, ...graph.boxes.filter((box) => box.layer === layer).map((box) => depthOf(box.box_id, new Set()) + 1));
+  const shortColumns = columnsOf("outcome_short");
+  const longColumn = 2 + shortColumns;
+  const impactColumn = longColumn + columnsOf("outcome_long");
 
   const column = new Map<string, number>();
   const onSuccess = new Set<string>();
@@ -164,7 +174,14 @@ export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">)
         if (!column.has(id)) {
           order.push(id);
           const sourceColumn = column.get(link.source_box_id);
-          const byLayer = { input: 0, output: 1, outcome: 2 + (depth.get(id) ?? 0), impact: impactColumn, failure_outcome: 2 }[box.layer];
+          const byLayer = {
+            input: 0,
+            output: 1,
+            outcome_short: 2 + (depth.get(id) ?? 0),
+            outcome_long: longColumn + (depth.get(id) ?? 0),
+            impact: impactColumn,
+            failure_outcome: 2,
+          }[box.layer];
           column.set(
             id,
             box.layer === "failure_outcome" && id === link.target_box_id && sourceColumn !== undefined
@@ -232,12 +249,20 @@ export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">)
   }
 
   const headings: ColumnHeading[] = [
-    { label: "Inputs", x: 0 },
+    { label: "Inputs and activities", x: 0 },
     { label: "Outputs", x: COL_STEP },
-    { label: "Outcomes", x: 2 * COL_STEP },
+    { label: "Short-term outcomes", x: 2 * COL_STEP },
+    { label: "Long-term outcomes", x: longColumn * COL_STEP },
     { label: "Impact", x: impactColumn * COL_STEP },
   ];
-  return { boxes: placed, headings, lineY: failureIds.length > 0 ? lineY : null, width: impactColumn * COL_STEP + BOX_W };
+  return {
+    boxes: placed,
+    headings,
+    lineY: failureIds.length > 0 ? lineY : null,
+    ceilingX: COL_STEP + BOX_W + COL_GAP / 2,
+    width: impactColumn * COL_STEP + BOX_W,
+    height: Math.max(HEADER_H + BOX_H, ...placed.map((box) => box.y + BOX_H)),
+  };
 }
 
 export interface EdgeRoute {

@@ -9,8 +9,9 @@ export function ReadingGuide({ graph }: { graph: Pick<TocGraph, "grade_rules" | 
     <section aria-label="How to read this" className="mb-3 border border-line bg-paper-2 px-5 py-4 text-meta">
       <h3 className="text-body font-bold text-navy">How to read this</h3>
       <p className="mt-2 max-w-[64em]">
-        Read from left to right in four layers: Inputs (what the programme puts in), Outputs (what it delivers), Outcomes (the changes it should cause) and
-        Impact (the long-term aim). Steps that could go wrong sit below the line.
+        Read from left to right: Inputs and activities (what the programme does), Outputs (what it delivers), Short-term outcomes (the first changes it
+        should cause), Long-term outcomes (the lasting changes) and Impact (the long-term aim). The dashed line separates what the programme directly
+        influences from what it contributes to. Steps that could go wrong sit below the line.
       </p>
       <p className="mt-2 max-w-[64em]">
         Boxes are the steps. The connections between them carry the evidence, and their colour shows how strong it is:{" "}

@@ -36,7 +36,10 @@ function BoxDetail({ box, evidence }: { box: TocBox; evidence: TocEvidence | nul
   const found = evidence?.boxes.find((entry) => entry.box_id === box.box_id);
   return (
     <>
-      <p className="text-meta text-grey">{LAYER_LABEL[box.layer]}</p>
+      <p className="text-meta text-grey">
+        {LAYER_LABEL[box.layer]}
+        {box.code !== null && <> <span className="text-caption font-semibold">{box.code}</span></>}
+      </p>
       <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(box.text)}</h3>
       {(criteria.definition ?? criteria.indicator ?? criteria.timing) != null && (
         <>
@@ -97,9 +100,17 @@ function BoxDetail({ box, evidence }: { box: TocBox; evidence: TocEvidence | nul
 
 function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: TocLink; graph: TocGraph; evidence: TocEvidence | null | undefined }) {
   const documents = evidence?.links.find((entry) => entry.link_id === link.link_id)?.documents ?? [];
+  const codeOf = (boxId: string) => graph.boxes.find((box) => box.box_id === boxId)?.code ?? null;
+  const [source, target] = [codeOf(link.source_box_id), codeOf(link.target_box_id)];
+  // "Connection #5 · S3 → L1" (C35); rows written before codes have none.
+  const codes = link.code !== null && source !== null && target !== null ? `${link.code} · ${source} → ${target}` : null;
   return (
     <>
-      <p className="text-meta text-grey">{link.critical ? "Critical connection · test this first" : "Connection"}</p>
+      <p className="text-meta text-grey">
+        {link.critical ? "Critical connection" : "Connection"}
+        {codes !== null && <> <span className="text-caption font-semibold">{codes}</span></>}
+        {link.critical && " · test this first"}
+      </p>
       <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(link.sentence)}</h3>
       <p className={HEAD}>How this step works</p>
       <dl className="mt-1 grid grid-cols-[4rem_1fr] gap-x-3 gap-y-1 text-meta">
