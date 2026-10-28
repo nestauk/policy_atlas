@@ -1,5 +1,13 @@
 # Spec update log
 
+## 2026-10-28 (task 054, narrative Detailed information)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md):
+  Detailed information is now a short narrative report in five sections (Summary, How change
+  happens, Assumptions and evidence, What to test and measure, Sources and method), written by one
+  call on every check, with every code and source number checked by code and the source list and
+  method note written by code. Codes in the text select their box or link on the canvas. It
+  replaces the summary's header paragraphs and evaluation questions. Task 054 contract C38.
+
 ## 2026-10-28 (task 054, size of change)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): a new
   step after the judge finds up to three figures per supporting or refuting document (how much the
