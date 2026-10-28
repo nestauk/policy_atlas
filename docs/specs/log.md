@@ -1,5 +1,12 @@
 # Spec update log
 
+## 2026-10-28 (task 054, size of change)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): a new
+  step after the judge finds up to three figures per supporting or refuting document (how much the
+  effect changed, or a baseline level), keeps only those whose quote and number are in the
+  abstract, and shows them as "Size of change" in the link panel (a range across studies, never an
+  average) and as "Figures" on a box. Task 054 contract C37.
+
 ## 2026-10-28 (task 054, one evidence verdict per link)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): each
   link now has one evidence verdict (Confident, Not sure: mixed, Not sure: too little evidence,
