@@ -25,14 +25,14 @@ import type { Selection } from "./DetailPanel";
 import {
   BOX_H,
   BOX_W,
-  GRADE_VAR,
   HEADER_H,
   layoutToc,
   linkTip,
   routeEdge,
+  VERDICT_VAR,
   visibleLinkIds,
 } from "./tocModel";
-import type { Grade, TocBox, TocGraph, TocLink } from "./types";
+import type { TocBox, TocGraph, TocLink, Verdict } from "./types";
 
 interface BoxData extends Record<string, unknown> {
   box: TocBox;
@@ -42,7 +42,7 @@ interface BoxData extends Record<string, unknown> {
 interface EdgeData extends Record<string, unknown> {
   /** Columns from source to target; 0 inside one column. */
   span: number;
-  grade: Grade;
+  verdict: Verdict;
   pending: boolean;
   critical: boolean;
   selected: boolean;
@@ -105,22 +105,24 @@ function LabelView({ data }: NodeProps<LabelNode>) {
 
 function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, markerEnd }: EdgeProps<TocEdge>) {
   if (data === undefined) return null;
-  const [path, labelX, labelY] =
+  const path =
     data.span > 0
-      ? (({ path: p, labelX: x, labelY: y }) => [p, x, y] as const)(routeEdge(sourceX, sourceY, targetX, targetY, data.span))
-      : getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 10 });
-  const kind = data.pending ? "pending" : data.grade;
+      ? routeEdge(sourceX, sourceY, targetX, targetY, data.span).path
+      : getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 10 })[0];
+  const kind = data.pending ? "pending" : data.verdict;
+  const critical = data.critical ? " toc-edge--critical" : "";
   return (
     <g>
       <title>{data.tip}</title>
+      {/* Not sure: mixed is two-tone: an amber line under the green dash. */}
+      {kind === "not_sure_mixed" && <path d={path} className={`toc-edge-under${data.critical ? " toc-edge-under--critical" : ""}`} />}
       <BaseEdge
         id={id}
         path={path}
         markerEnd={markerEnd}
         interactionWidth={18}
-        className={`toc-edge toc-edge--${kind}${data.selected ? " toc-edge--selected" : ""}`}
+        className={`toc-edge toc-edge--${kind}${critical}${data.selected ? " toc-edge--selected" : ""}`}
       />
-      {data.critical && <circle data-testid="toc-critical-dot" className="toc-critical-dot" cx={labelX} cy={labelY} r={6.5} />}
     </g>
   );
 }
@@ -173,8 +175,8 @@ interface Bounds {
 }
 
 /**
- * The canvas: boxes in layer columns, curved connections coloured by their
- * lower grade, failure pathways under a line, and a dashed line (the
+ * The canvas: boxes in layer columns, curved connections styled by their
+ * evidence verdict (critical ones thicker), failure pathways under a line, and a dashed line (the
  * accountability ceiling) between outputs and short-term outcomes. Read-only; clicking a box
  * or a connection selects it. Set-aside pathways never appear here.
  */
@@ -341,10 +343,10 @@ export function TocCanvas({
         target: link.target_box_id,
         sourceHandle: sameColumn ? (upward ? "ts" : "b") : "r",
         targetHandle: sameColumn ? (upward ? "bt" : "t") : "l",
-        markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: pending ? "var(--color-line-2)" : GRADE_VAR[link.lower_grade] },
+        markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: pending ? "var(--color-line-2)" : VERDICT_VAR[link.verdict] },
         data: {
           span: sameColumn ? 0 : (columnOf.get(link.target_box_id) ?? 0) - (columnOf.get(link.source_box_id) ?? 0),
-          grade: link.lower_grade,
+          verdict: link.verdict,
           pending,
           critical: link.critical,
           selected: selection?.kind === "link" && selection.id === link.link_id,

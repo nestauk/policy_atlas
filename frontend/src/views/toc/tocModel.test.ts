@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { boxId, linkId, tocGraphFixture } from "./fixture";
-import { BOX_H, BOX_W, COL_GAP, ROW_GAP, groupAssumptions, gradeSentence, layoutToc, linkTip, routeEdge, tocTitle } from "./tocModel";
+import { BOX_H, BOX_W, COL_GAP, ROW_GAP, evidenceBalance, groupAssumptions, layoutToc, linkTip, routeEdge, tocTitle } from "./tocModel";
 
 const COL_STEP = BOX_W + COL_GAP;
 
@@ -72,16 +72,24 @@ describe("routeEdge", () => {
 });
 
 describe("wording and grouping", () => {
-  it("writes the grade sentences", () => {
-    expect(gradeSentence("medium", "elsewhere")).toBe("Medium evidence it worked elsewhere.");
-    expect(gradeSentence("weak", "here")).toBe("Weak evidence it holds here.");
-    expect(gradeSentence("strong", "merged")).toBe("Strong evidence, including here.");
-    expect(gradeSentence("none", "here")).toBe("No evidence found on whether it holds here.");
+  it("puts each document in its support column, heaviest first, leaving out not-about ones", () => {
+    const columns = evidenceBalance([
+      { support: "weak", weight: 0.2 },
+      { support: "refutes", weight: 0.4 },
+      { support: "weak", weight: 0.6 },
+      { support: "not_about", weight: 0 },
+    ]);
+    expect(columns).toEqual([
+      { support: "refutes", weights: [0.4] },
+      { support: "mixed", weights: [] },
+      { support: "weak", weights: [0.6, 0.2] },
+      { support: "strong", weights: [] },
+    ]);
   });
 
-  it("shows both grades on a link's hover text", () => {
+  it("gives the verdict on a link's hover text", () => {
     const link = tocGraphFixture().links.find((l) => l.link_id === linkId(4));
-    expect(link && linkTip(link)).toBe("Strong evidence it worked elsewhere · Weak evidence it holds here");
+    expect(link && linkTip(link)).toBe("Confident");
   });
 
   it("groups every condition of every kept link by type, in order", () => {

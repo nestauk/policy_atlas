@@ -1,7 +1,43 @@
 import { scrub } from "../../lib/scrub";
-import { GradeDot } from "./Documents";
-import { GRADE_LABEL, GRADES } from "./tocModel";
-import type { TocGraph } from "./types";
+import { VERDICT_LABEL, VERDICT_VAR, VERDICTS } from "./tocModel";
+import type { TocGraph, Verdict } from "./types";
+
+/** A short line sample for each verdict, drawn as on the canvas (C36). */
+function LineSample({ verdict }: { verdict: Verdict }) {
+  const line = (stroke: string, width: number, dash?: string) => (
+    <line x1="0" y1="4" x2="34" y2="4" stroke={stroke} strokeWidth={width} strokeDasharray={dash} />
+  );
+  return (
+    <svg width="34" height="8" aria-hidden="true">
+      {verdict === "confident" && line(VERDICT_VAR.confident, 3)}
+      {verdict === "not_sure_mixed" && (
+        <>
+          {line(VERDICT_VAR.not_sure_mixed, 5)}
+          {line(VERDICT_VAR.confident, 2, "6 6")}
+        </>
+      )}
+      {verdict === "not_sure_insufficient" && line(VERDICT_VAR.not_sure_insufficient, 3, "6 5")}
+      {verdict === "not_confident" && line(VERDICT_VAR.not_confident, 3, "2 5")}
+    </svg>
+  );
+}
+
+/** The key under the canvas: one line style per verdict, and what a thicker line means. */
+export function VerdictLegend() {
+  return (
+    <ul aria-label="Line key" className="mt-2 flex flex-wrap gap-x-[18px] gap-y-1 text-meta text-grey">
+      {VERDICTS.map((verdict) => (
+        <li key={verdict} className="inline-flex items-center gap-1.5">
+          <LineSample verdict={verdict} />
+          {VERDICT_LABEL[verdict]}
+        </li>
+      ))}
+      <li>
+        <b>Thicker</b> = critical connection
+      </li>
+    </ul>
+  );
+}
 
 /** "How to read this": opens above the canvas. */
 export function ReadingGuide({ graph }: { graph: Pick<TocGraph, "grade_rules" | "context" | "supporting_activities"> }) {
@@ -14,19 +50,9 @@ export function ReadingGuide({ graph }: { graph: Pick<TocGraph, "grade_rules" | 
         influences from what it contributes to. Steps that could go wrong sit below the line.
       </p>
       <p className="mt-2 max-w-[64em]">
-        Boxes are the steps. The connections between them carry the evidence, and their colour shows how strong it is:{" "}
-        {GRADES.map((grade, index) => (
-          <span key={grade} className="whitespace-nowrap">
-            <GradeDot grade={grade} />
-            {GRADE_LABEL[grade].toLowerCase()}
-            {index < GRADES.length - 1 ? ", " : "."}{" "}
-          </span>
-        ))}
-        A dashed line means weak, and a dotted line means no evidence found.
-      </p>
-      <p className="mt-2 max-w-[64em]">
-        Every connection answers two questions: did it work where it was tried (worked elsewhere), and will it work here, now (holds here)? A connection
-        takes the colour of the weaker answer; hover to see both. The navy dot marks the critical connection: test it first.
+        Boxes are the steps. Each connection between them has one evidence verdict, and its line style shows it (see the key under the canvas). The
+        verdict weighs every document that supports or refutes the step by its quality and by how well it applies to this population and place. The
+        thicker line is the critical connection: test it first.
       </p>
       <ul className="mt-2 max-w-[64em] space-y-1">
         {graph.grade_rules.map((row) => (

@@ -697,14 +697,14 @@ export function useToc(taskId: string) {
 
 /** `GET /api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context` — one
  *  document's quote highlighted in its passage; fetched when its sheet opens. */
-export function useTocDocumentContext(taskId: string, evidenceId: string | null, question: "elsewhere" | "here") {
+export function useTocDocumentContext(taskId: string, evidenceId: string | null) {
   const client = useApiClient();
   return useQuery({
     enabled: evidenceId !== null,
-    queryKey: [...queryKeys.tocEvidence(taskId), "context", evidenceId, question] as const,
+    queryKey: [...queryKeys.tocEvidence(taskId), "context", evidenceId] as const,
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context", {
-        params: { path: { task_id: taskId, evidence_id: evidenceId ?? "" }, query: { question } },
+        params: { path: { task_id: taskId, evidence_id: evidenceId ?? "" } },
       });
       if (data === undefined) throw error;
       return data;

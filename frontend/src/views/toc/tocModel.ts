@@ -1,4 +1,4 @@
-import type { BoxLayer, Grade, Origin, TocBox, TocGraph, TocLink, TocPathway } from "./types";
+import type { BoxLayer, Origin, Support, TocBox, TocDocument, TocGraph, TocLink, TocPathway, Verdict } from "./types";
 
 /*
  * Pure helpers for the theory-of-change Result page (task 054): wording,
@@ -6,43 +6,53 @@ import type { BoxLayer, Grade, Origin, TocBox, TocGraph, TocLink, TocPathway } f
  * No React here, so the layout and the grouping are unit-tested directly.
  */
 
-export const GRADE_LABEL: Record<Grade, string> = {
-  strong: "Strong",
-  medium: "Medium",
-  weak: "Weak",
-  none: "No evidence found",
+export const VERDICT_LABEL: Record<Verdict, string> = {
+  confident: "Confident",
+  not_sure_mixed: "Not sure: mixed",
+  not_sure_insufficient: "Not sure: too little evidence",
+  not_confident: "Not confident: evidence against",
 };
 
-export const GRADES: readonly Grade[] = ["strong", "medium", "weak", "none"];
+/** Best first: the legend's order. */
+export const VERDICTS: readonly Verdict[] = ["confident", "not_sure_mixed", "not_sure_insufficient", "not_confident"];
 
-/** The CSS variable that colours a grade (defined once in `index.css`). */
-export const GRADE_VAR: Record<Grade, string> = {
-  strong: "var(--color-grade-strong)",
-  medium: "var(--color-grade-medium)",
-  weak: "var(--color-grade-weak)",
-  none: "var(--color-grade-none)",
+/** The CSS variable that colours a verdict's dot and arrowhead (defined once in `index.css`). */
+export const VERDICT_VAR: Record<Verdict, string> = {
+  confident: "var(--color-verdict-confident)",
+  not_sure_mixed: "var(--color-verdict-mixed)",
+  not_sure_insufficient: "var(--color-verdict-little)",
+  not_confident: "var(--color-verdict-against)",
 };
 
-/** "Medium evidence it worked elsewhere." and its siblings. */
-export function gradeSentence(grade: Grade, question: "elsewhere" | "here" | "merged"): string {
-  if (grade === "none") {
-    if (question === "here") return "No evidence found on whether it holds here.";
-    if (question === "elsewhere") return "No evidence found that it worked elsewhere.";
-    return "No evidence found.";
-  }
-  const tail = { elsewhere: "it worked elsewhere", here: "it holds here", merged: "including here" }[question];
-  const comma = question === "merged" ? "," : "";
-  return `${GRADE_LABEL[grade]} evidence${comma} ${tail}.`;
-}
+export const SUPPORT_LABEL: Record<Support, string> = {
+  strong: "Strongly supports",
+  weak: "Weakly supports",
+  mixed: "Mixed",
+  refutes: "Refutes",
+  not_about: "Not about this step",
+};
 
-/** The hover text of an edge: both grades, or one when one answer covers both. */
+export const NEAR_THRESHOLD = "Close to the threshold: one more study could change this verdict.";
+
+/** The hover text of an edge: its verdict, and whether it is close to changing. */
 export function linkTip(link: TocLink): string {
   if (link.state === "checking" || link.state === "unchecked") return "Checking the evidence…";
   const critical = link.critical ? "Critical connection · test this first. " : "";
-  if (link.merged) return `${critical}${gradeSentence(link.elsewhere.grade, "merged").replace(/\.$/, "")}`;
-  const part = (grade: Grade, tail: string) =>
-    grade === "none" ? `No evidence found ${tail}` : `${GRADE_LABEL[grade]} evidence ${tail}`;
-  return `${critical}${part(link.elsewhere.grade, "it worked elsewhere")} · ${part(link.here.grade, "it holds here")}`;
+  return `${critical}${VERDICT_LABEL[link.verdict]}${link.near_threshold ? " · close to the threshold" : ""}`;
+}
+
+/** The evidence balance's four columns, left to right (C36). */
+export const BALANCE: readonly Exclude<Support, "not_about">[] = ["refutes", "mixed", "weak", "strong"];
+
+/** Each column's document weights, heaviest first; documents not about the step are left out. */
+export function evidenceBalance(documents: Pick<TocDocument, "support" | "weight">[]): { support: Exclude<Support, "not_about">; weights: number[] }[] {
+  return BALANCE.map((support) => ({
+    support,
+    weights: documents
+      .filter((doc) => doc.support === support)
+      .map((doc) => doc.weight)
+      .sort((a, b) => b - a),
+  }));
 }
 
 export const ORIGIN_LABEL: Record<Origin, string> = {

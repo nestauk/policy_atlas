@@ -4,17 +4,17 @@ import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS } from "../artefactPresentation";
 import { SectionDisclosure } from "../ArtefactOutline";
-import { GradeWords, QuestionDocuments } from "./Documents";
-import { groupAssumptions, GRADE_VAR, keptPathways, LAYER_LABEL, pathwayTitles } from "./tocModel";
+import { LinkDocuments, VerdictWords } from "./Documents";
+import { groupAssumptions, keptPathways, LAYER_LABEL, pathwayTitles, VERDICT_VAR } from "./tocModel";
 import type { TocBox, TocDocument, TocEvidence, TocGraph, TocLink, TocPathway } from "./types";
 
 const CRITICAL = "Critical connection · test this first";
 const P = `mt-1 max-w-[44em] ${REPORT_BODY_CLASS}`;
 
-/** The small "+" after a sentence: shows or hides that question's documents. */
-function WithDocuments({ taskId, documents, question, children }: { taskId: string; documents: TocDocument[]; question: "elsewhere" | "here"; children: React.ReactNode }) {
+/** The small "+" after a sentence: shows or hides the link's documents. */
+function WithDocuments({ taskId, documents, children }: { taskId: string; documents: TocDocument[]; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
-  const count = documents.filter((doc) => doc[question].stance !== "not_about").length;
+  const count = documents.filter((doc) => doc.support !== "not_about").length;
   return (
     <>
       <p className={P}>
@@ -33,7 +33,7 @@ function WithDocuments({ taskId, documents, question, children }: { taskId: stri
       </p>
       {open && (
         <div className="ml-4 max-w-[44em]">
-          <QuestionDocuments taskId={taskId} documents={documents} question={question} />
+          <LinkDocuments taskId={taskId} documents={documents} />
         </div>
       )}
     </>
@@ -55,31 +55,20 @@ function BoxRow({ box }: { box: TocBox }) {
 
 function LinkRow({ taskId, link, documents }: { taskId: string; link: TocLink; documents: TocDocument[] }) {
   const pending = link.state === "checking" || link.state === "unchecked";
-  const grade = link.lower_grade;
+  const verdict = link.verdict;
+  const dashed = verdict === "not_sure_insufficient" || verdict === "not_confident";
   return (
     <div
       className="my-1 ml-3 border-l-2 py-2 pl-5"
-      style={{ borderLeftColor: pending ? "var(--color-line-2)" : GRADE_VAR[grade], borderLeftStyle: grade === "weak" || grade === "none" ? "dashed" : "solid" }}
+      style={{ borderLeftColor: pending ? "var(--color-line-2)" : VERDICT_VAR[verdict], borderLeftStyle: dashed ? "dashed" : "solid" }}
     >
       {link.critical && <p className={REPORT_LABEL_CLASS}>{CRITICAL}</p>}
       <p className={P}>{scrub(link.sentence)}</p>
-      {link.merged ? (
-        <WithDocuments taskId={taskId} documents={documents} question="elsewhere">
-          <GradeWords grade={link.elsewhere.grade} question="merged" />
-          {link.elsewhere_sentence !== null && <> {scrub(link.elsewhere_sentence)}</>}
-        </WithDocuments>
-      ) : (
-        <>
-          <WithDocuments taskId={taskId} documents={documents} question="elsewhere">
-            <GradeWords grade={link.elsewhere.grade} question="elsewhere" />
-            {link.elsewhere_sentence !== null && <> {scrub(link.elsewhere_sentence)}</>}
-          </WithDocuments>
-          <WithDocuments taskId={taskId} documents={documents} question="here">
-            <GradeWords grade={link.here.grade} question="here" />
-            {link.here_sentence !== null && <> {scrub(link.here_sentence)}</>}
-          </WithDocuments>
-        </>
-      )}
+      {/* Step 5 turns this into the narrative report (C38); for now, the verdict and its sentence. */}
+      <WithDocuments taskId={taskId} documents={documents}>
+        <VerdictWords verdict={verdict} />.
+        {link.evidence_sentence !== null && <> {scrub(link.evidence_sentence)}</>}
+      </WithDocuments>
     </div>
   );
 }
@@ -131,8 +120,8 @@ function Assumptions({ graph }: { graph: TocGraph }) {
                   ))}
                 </ul>
                 <p className="mt-1">
-                  <GradeWords grade={link.here.grade} question="here" />
-                  {link.here.grade !== "none" && link.here_sentence !== null && <> {scrub(link.here_sentence)}</>}
+                  <VerdictWords verdict={link.verdict} />.
+                  {link.evidence_sentence !== null && <> {scrub(link.evidence_sentence)}</>}
                   {link.critical && <strong className="text-navy"> {CRITICAL}.</strong>}
                 </p>
               </div>
@@ -180,7 +169,7 @@ export function DetailedInformation({ taskId, graph, evidence }: { taskId: strin
       <div className="border-t border-line pt-4">
         <SectionDisclosure
           id="toc-assumptions"
-          section={section("Assumptions", "Every condition the theory relies on, grouped by type, with the evidence that it holds here.")}
+          section={section("Assumptions", "Every condition the theory relies on, grouped by type, with the evidence verdict on its step.")}
           defaultOpen={false}
           collapsible
         >

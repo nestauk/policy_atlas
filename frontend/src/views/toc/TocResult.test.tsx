@@ -39,12 +39,32 @@ describe("canvas", () => {
     expect(box.className).not.toMatch(/grade/);
   });
 
-  it("colours each edge by its lower grade and dashes weak ones", () => {
+  it("styles each edge by its verdict: solid, two-tone, dashed, dotted", () => {
     renderResult();
-    expect(edge(1)?.querySelector(".toc-edge--medium")).not.toBeNull(); // strong / medium
-    expect(edge(3)?.querySelector(".toc-edge--weak")).not.toBeNull(); // medium / weak
-    expect(edge(2)?.querySelector(".toc-edge--none")).not.toBeNull(); // weak / none
+    expect(edge(1)?.querySelector(".toc-edge--confident")).not.toBeNull();
+    // Mixed is two-tone: the amber underlay and the green dash on top.
+    expect(edge(5)?.querySelector(".toc-edge--not_sure_mixed")).not.toBeNull();
+    expect(edge(5)?.querySelector(".toc-edge-under")).not.toBeNull();
+    expect(edge(1)?.querySelector(".toc-edge-under")).toBeNull();
+    expect(edge(2)?.querySelector(".toc-edge--not_sure_insufficient")).not.toBeNull();
+    expect(edge(7)?.querySelector(".toc-edge--not_confident")).not.toBeNull();
     expect(edge(9)?.querySelector(".toc-edge--pending")).not.toBeNull(); // still checking
+  });
+
+  it("draws the critical connection thicker, and nothing else", () => {
+    renderResult();
+    expect(document.querySelectorAll(".toc-edge--critical")).toHaveLength(1);
+    expect(edge(3)?.querySelector(".toc-edge--critical")).not.toBeNull();
+    expect(edge(3)?.querySelector(".toc-edge-under--critical")).not.toBeNull();
+  });
+
+  it("keys the four line styles and the thicker critical line", () => {
+    renderResult();
+    const key = screen.getByRole("list", { name: "Line key" });
+    for (const label of ["Confident", "Not sure: mixed", "Not sure: too little evidence", "Not confident: evidence against"]) {
+      expect(within(key).getByText(label)).toBeInTheDocument();
+    }
+    expect(within(key).getByText(/critical connection/)).toBeInTheDocument();
   });
 
   it("shows each box's code and the accountability ceiling", () => {
@@ -57,14 +77,10 @@ describe("canvas", () => {
     expect(ceiling.style.pointerEvents).toBe("none");
   });
 
-  it("carries exactly one critical dot", () => {
+  it("hover text gives the verdict", () => {
     renderResult();
-    expect(screen.getAllByTestId("toc-critical-dot")).toHaveLength(1);
-  });
-
-  it("hover text gives both grades", () => {
-    renderResult();
-    expect(edge(4)?.querySelector("title")?.textContent).toBe("Strong evidence it worked elsewhere · Weak evidence it holds here");
+    expect(edge(4)?.querySelector("title")?.textContent).toBe("Confident");
+    expect(edge(3)?.querySelector("title")?.textContent).toBe("Critical connection · test this first. Not sure: mixed · close to the threshold");
   });
 });
 
@@ -75,7 +91,7 @@ describe("reading guide", () => {
     expect(screen.queryByLabelText("How to read this")).toBeNull();
     await user.click(screen.getByRole("button", { name: "How to read this" }));
     const guide = screen.getByLabelText("How to read this");
-    expect(within(guide).getByText(/Two or more good studies|two or more good studies/)).toBeInTheDocument();
+    expect(within(guide).getByText(/neither clearly supports nor refutes/)).toBeInTheDocument();
     expect(within(guide).getByText(/Rules in force since January 2026/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "How to read this" }));
     expect(screen.queryByLabelText("How to read this")).toBeNull();
@@ -83,7 +99,7 @@ describe("reading guide", () => {
 });
 
 describe("detail panel", () => {
-  it("shows both questions and lists a shared document once", () => {
+  it("shows the verdict, the balance and each document's support, quality and relevance", () => {
     renderResult();
     // Open the critical link from the panel: click its edge.
     const target = edge(3) as Element;
@@ -91,12 +107,21 @@ describe("detail panel", () => {
     const panel = screen.getByRole("complementary", { name: "Details" });
     const heading = (text: string) => (_: string, el: Element | null) => el?.tagName === "P" && el.textContent === text;
     expect(within(panel).getByText(heading("Critical connection #3 · P1 → S1 · test this first"))).toBeInTheDocument();
-    expect(within(panel).getByLabelText("Worked elsewhere")).toBeInTheDocument();
-    expect(within(panel).getByLabelText("Holds here")).toBeInTheDocument();
-    // Listed in full once, plus the one-line "Also counts here" reference.
-    expect(within(panel).getAllByRole("button", { name: SHARED_DOC_TITLE })).toHaveLength(2);
-    expect(within(panel).getAllByText(/Also counts here:/)).toHaveLength(1);
-    expect(within(panel).getByText("This is England, so it counts here.")).toBeInTheDocument();
+    expect(within(panel).getByText("Not sure: mixed")).toBeInTheDocument();
+    expect(within(panel).getByText(/brands moved to brand-only adverts/)).toBeInTheDocument();
+    expect(within(panel).getByText("Close to the threshold: one more study could change this verdict.")).toBeInTheDocument();
+    // The balance: one refuting block, two strongly supporting ones, heights by weight.
+    const blocks = (support: string) => within(within(panel).getByTestId(`balance-${support}`)).queryAllByTestId("balance-block");
+    expect(blocks("refutes")).toHaveLength(1);
+    expect(blocks("mixed")).toHaveLength(0);
+    expect(blocks("weak")).toHaveLength(0);
+    expect(blocks("strong").map((block) => block.style.height)).toEqual(["27px", "9px"]); // weights 0.667 and 0.222
+    // Documents, heaviest first, with their chips.
+    expect(within(panel).getByText("Documents (3)")).toBeInTheDocument();
+    const titles = within(panel).getAllByRole("button", { name: /Chile|Transport for London/ }).map((b) => b.textContent);
+    expect(titles[0]).toBe(SHARED_DOC_TITLE);
+    expect(within(panel).getByText("Strongly supports · quality 2 · relevance 3 · London, so it applies in England")).toBeInTheDocument();
+    expect(within(panel).queryByText(/Worked elsewhere|Holds here/)).toBeNull();
   });
 
   it("opens for a box", () => {
@@ -110,19 +135,20 @@ describe("detail panel", () => {
 });
 
 describe("detailed information", () => {
-  it("expands a pathway, writes one paragraph for a merged link and opens documents from +", async () => {
+  it("expands a pathway, gives each link its verdict and sentence, and opens documents from +", async () => {
     const user = userEvent.setup();
     renderResult();
     const info = screen.getByLabelText("Detailed information");
-    // Pathway 1 starts open; pathway 2 (with the merged link) starts closed.
+    // Pathway 1 starts open; pathway 2 starts closed.
     expect(within(info).getByText("Link 3 says the step works.")).toBeInTheDocument();
     expect(within(info).queryByText("Link 6 says the step works.")).toBeNull();
     await user.click(within(info).getByRole("button", { name: /Pathway 2/ }));
     expect(within(info).getByText("Link 6 says the step works.")).toBeInTheDocument();
-    expect(within(info).getAllByText("Medium evidence, including here.")).toHaveLength(1);
-    // The "+" after the elsewhere sentence of the critical link lists its documents.
+    expect(within(info).getByText(/Evidence sentence for link 6\./)).toBeInTheDocument();
+    expect(within(info).queryByText(/worked elsewhere|holds here/i)).toBeNull();
+    // The "+" after the critical link's sentence lists its documents.
     expect(within(info).queryByText("Exposure fell by about half.")).toBeNull();
-    await user.click(within(info).getAllByRole("button", { name: /Show the 2 documents/ })[0] as HTMLElement);
+    await user.click(within(info).getAllByRole("button", { name: /Show the 3 documents/ })[0] as HTMLElement);
     expect(within(info).getByText("Exposure fell by about half.")).toBeInTheDocument();
     expect(within(info).getAllByText("Critical connection · test this first").length).toBeGreaterThan(0);
   });
@@ -131,10 +157,10 @@ describe("detailed information", () => {
     const user = userEvent.setup();
     renderResult();
     const info = screen.getByLabelText("Detailed information");
-    await user.click(within(info).getAllByRole("button", { name: /Show the 2 documents/ })[0] as HTMLElement);
+    await user.click(within(info).getAllByRole("button", { name: /Show the 3 documents/ })[0] as HTMLElement);
     expect(within(info).getAllByText(/Smith, Jones · 20\d\d · quasi-experiment/).length).toBeGreaterThan(0);
     await user.click(within(info).getByRole("button", { name: "Children's exposure after Chile's Law 20.606" }));
-    expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, expect.stringContaining("0000e"), "elsewhere");
+    expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, expect.stringContaining("0000e"));
     expect(screen.getByText("Where this comes from")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open the source" })).toHaveAttribute("href", expect.stringContaining("example.org"));
   });

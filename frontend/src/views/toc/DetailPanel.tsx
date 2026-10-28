@@ -1,6 +1,6 @@
 import { scrub } from "../../lib/scrub";
-import { DocumentItem, GradeWords, QuestionDocuments } from "./Documents";
-import { LAYER_LABEL, ORIGIN_LABEL } from "./tocModel";
+import { DocumentItem, EvidenceBalance, LinkDocuments, VerdictDot, VerdictWords } from "./Documents";
+import { LAYER_LABEL, NEAR_THRESHOLD, ORIGIN_LABEL } from "./tocModel";
 import type { TocBox, TocEvidence, TocGraph, TocLink } from "./types";
 
 export type Selection = { kind: "box" | "link"; id: string };
@@ -12,7 +12,7 @@ function Origin({ origin, rules }: { origin: TocBox["origin"]; rules?: TocGraph[
     <>
       {rules !== undefined && (
         <details className="mt-3 text-meta">
-          <summary className="cursor-pointer font-bold text-navy">How these grades were given</summary>
+          <summary className="cursor-pointer font-bold text-navy">How the verdict is given</summary>
           <dl className="mt-1 space-y-1 text-grey">
             {rules.map((row) => (
               <div key={row.label}>
@@ -100,6 +100,7 @@ function BoxDetail({ box, evidence }: { box: TocBox; evidence: TocEvidence | nul
 
 function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: TocLink; graph: TocGraph; evidence: TocEvidence | null | undefined }) {
   const documents = evidence?.links.find((entry) => entry.link_id === link.link_id)?.documents ?? [];
+  const pending = link.state === "checking" || link.state === "unchecked";
   const codeOf = (boxId: string) => graph.boxes.find((box) => box.box_id === boxId)?.code ?? null;
   const [source, target] = [codeOf(link.source_box_id), codeOf(link.target_box_id)];
   // "Connection #5 · S3 → L1" (C35); rows written before codes have none.
@@ -112,6 +113,21 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
         {link.critical && " · test this first"}
       </p>
       <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(link.sentence)}</h3>
+      <p className={HEAD}>Evidence verdict</p>
+      {pending ? (
+        <p className="mt-1 text-body text-grey">Checking the evidence…</p>
+      ) : (
+        <>
+          <p className="mt-1 flex items-center text-body">
+            <VerdictDot verdict={link.verdict} />
+            <VerdictWords verdict={link.verdict} />
+          </p>
+          {link.evidence_sentence !== null && <p className="mt-1 text-body">{scrub(link.evidence_sentence)}</p>}
+          {link.near_threshold && <p className="mt-1 text-body">{NEAR_THRESHOLD}</p>}
+          <p className={HEAD}>Evidence balance</p>
+          <EvidenceBalance documents={documents} />
+        </>
+      )}
       <p className={HEAD}>How this step works</p>
       <dl className="mt-1 grid grid-cols-[4rem_1fr] gap-x-3 gap-y-1 text-meta">
         <dt className="text-grey">If</dt>
@@ -133,34 +149,8 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
           </ul>
         </>
       )}
-      {link.merged ? (
-        <section className="mt-4 border-t border-line pt-3 text-meta">
-          <p>
-            <GradeWords grade={link.elsewhere.grade} question="merged" />
-            {link.elsewhere_sentence !== null && <> {scrub(link.elsewhere_sentence)}</>}
-          </p>
-          <QuestionDocuments taskId={taskId} documents={documents} question="elsewhere" />
-        </section>
-      ) : (
-        <>
-          <section className="mt-4 border-t border-line pt-3 text-meta" aria-label="Worked elsewhere">
-            <p className="font-bold text-navy">Worked elsewhere</p>
-            <p className="mt-1">
-              <GradeWords grade={link.elsewhere.grade} question="elsewhere" />
-              {link.elsewhere_sentence !== null && <> {scrub(link.elsewhere_sentence)}</>}
-            </p>
-            <QuestionDocuments taskId={taskId} documents={documents} question="elsewhere" />
-          </section>
-          <section className="mt-4 border-t border-line pt-3 text-meta" aria-label="Holds here">
-            <p className="font-bold text-navy">Holds here</p>
-            <p className="mt-1">
-              <GradeWords grade={link.here.grade} question="here" />
-              {link.here_sentence !== null && <> {scrub(link.here_sentence)}</>}
-            </p>
-            <QuestionDocuments taskId={taskId} documents={documents} question="here" />
-          </section>
-        </>
-      )}
+      <p className={HEAD}>Documents ({documents.filter((doc) => doc.support !== "not_about").length})</p>
+      <LinkDocuments taskId={taskId} documents={documents} />
       <Origin origin={link.origin} rules={graph.grade_rules} />
     </>
   );

@@ -6,7 +6,7 @@ import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS } from "../artefactPresentation";
 import { Button } from "../../ui/brand/Button";
 import { DetailedInformation } from "./DetailedInformation";
 import { DetailPanel, type Selection } from "./DetailPanel";
-import { ReadingGuide } from "./ReadingGuide";
+import { ReadingGuide, VerdictLegend } from "./ReadingGuide";
 import { TocCanvas } from "./TocCanvas";
 import { keptPathways, pathwayTitles, tocTitle } from "./tocModel";
 
@@ -76,6 +76,7 @@ export function TocResult({ taskId }: { taskId: string }) {
         <TocCanvas graph={graph} pathway={pathway} selection={selection} onSelect={setSelection} />
         {selection !== null && <DetailPanel taskId={taskId} graph={graph} evidence={evidence.data} selection={selection} onClose={() => setSelection(null)} />}
       </div>
+      <VerdictLegend />
       <DetailedInformation taskId={taskId} graph={graph} evidence={evidence.data} />
     </main>
   );
