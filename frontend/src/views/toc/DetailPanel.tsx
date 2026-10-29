@@ -1,19 +1,20 @@
 import { scrub } from "../../lib/scrub";
-import { CitationMarker, citedDocuments, DocumentItem, documentCitation, EvidenceBalance, FigureList, ITEM_QUOTE, ITEM_TITLE, LinkDocuments, shortAuthors, VerdictDot, VerdictWords } from "./Documents";
+import { CitationMarker, citedDocuments, documentCitation, EvidenceBalance, FigureList, ITEM_QUOTE, ITEM_TITLE, LinkDocuments, shortAuthors, sourceLine, VerdictDot, VerdictWords } from "./Documents";
+import { CriticalIcon } from "./ReadingGuide";
 import { LAYER_LABEL, ORIGIN_LABEL } from "./tocModel";
 import type { TocBox, TocDocument, TocEvidence, TocGraph, TocLink } from "./types";
 
 export type Selection = { kind: "box" | "link"; id: string };
 
 const HEAD = "mt-5 text-meta font-bold uppercase tracking-[0.06em] text-grey";
-/** A part inside a section ("Conditions", "Size of change"). */
-const SUB = "mt-3 text-meta font-bold text-navy";
+/** A part inside a section ("Conditions", "Size of change"): body size, bold. */
+const SUB = "mt-3 text-body font-bold text-navy";
 
 function Origin({ origin, rules }: { origin: TocBox["origin"]; rules?: TocGraph["grade_rules"] }) {
   return (
     <>
       {rules !== undefined && (
-        <details className="mt-3 text-meta">
+        <details className="mt-3 text-body">
           <summary className="cursor-pointer font-bold text-navy">How the verdict is given</summary>
           <dl className="mt-1 space-y-1 text-grey">
             {rules.map((row) => (
@@ -25,7 +26,7 @@ function Origin({ origin, rules }: { origin: TocBox["origin"]; rules?: TocGraph[
           </dl>
         </details>
       )}
-      <details className="mt-3 text-meta">
+      <details className="mt-3 text-body">
         <summary className="cursor-pointer font-bold text-navy">Where this came from</summary>
         <p className="mt-1 text-grey">{ORIGIN_LABEL[origin]}</p>
       </details>
@@ -83,9 +84,16 @@ function BoxDetail({ taskId, box, evidence }: { taskId: string; box: TocBox; evi
       <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(box.text)}</h3>
       {box.description !== null && <p className="mt-2 text-body">{scrub(box.description)}</p>}
       <Criteria criteria={box.result_criteria} />
+      {(figures.length > 0 || studies.length > 0) && <p className={HEAD}>Evidence</p>}
+      {box.seen_in !== null && (
+        <p className="mt-1 text-body">
+          {scrub(box.seen_in)}
+          <CitationMarker taskId={taskId} claim={box.seen_in} citations={seenIn} />
+        </p>
+      )}
       {figures.length > 0 && (
         <>
-          <p className={HEAD}>Figures</p>
+          <p className={SUB}>Size of change</p>
           <FigureList
             taskId={taskId}
             figures={figures}
@@ -100,28 +108,30 @@ function BoxDetail({ taskId, box, evidence }: { taskId: string; box: TocBox; evi
           />
         </>
       )}
-      {(studies.length > 0 || box.seen_in !== null) && (
+      {studies.length > 0 && (
         <>
-          <p className={HEAD}>Case studies ({studies.length})</p>
-          {box.seen_in !== null && (
-            <p className="mt-1 text-body">
-              {scrub(box.seen_in)}
-              <CitationMarker taskId={taskId} claim={box.seen_in} citations={seenIn} />
-            </p>
-          )}
-          <ul>
+          <p className={SUB}>Case studies ({studies.length})</p>
+          <ul className="mt-1">
             {studies.map((study) => (
-              <li key={`${study.task_source_snapshot_id}-${study.programme}`} className="border-t border-line py-2.5 text-meta">
+              <li key={`${study.task_source_snapshot_id}-${study.programme}`} className="border-t border-line py-2.5 text-body">
                 <p className={ITEM_TITLE}>
                   <span className="mr-1 text-grey">[{numberOf(study.task_source_snapshot_id)}]</span>
                   {scrub(study.programme)}
                   {study.place !== null ? `, ${scrub(study.place)}` : ""}
                 </p>
                 <p className="mt-0.5">{scrub(study.note)}</p>
+                <p className="mt-0.5 text-grey">
+                  {scrub(sourceLine(study.source_type, study.authors, study.year))}
+                  {" · "}
+                  {study.url !== null ? (
+                    <a href={study.url} target="_blank" rel="noreferrer" className="text-blue hover:underline">
+                      {scrub(study.title)}
+                    </a>
+                  ) : (
+                    scrub(study.title)
+                  )}
+                </p>
                 <q className={ITEM_QUOTE}>{scrub(study.quote)}</q>
-                <ul>
-                  <DocumentItem title={study.title} url={study.url} quote={null} authors={study.authors} source_type={study.source_type} year={study.year} evidence_type={null} />
-                </ul>
               </li>
             ))}
           </ul>
@@ -152,6 +162,11 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
   return (
     <>
       <p className="text-meta text-grey">
+        {link.critical && (
+          <span className="mr-1">
+            <CriticalIcon />
+          </span>
+        )}
         {link.critical ? "Critical connection" : "Connection"}
         {codes !== null && <> <span className="font-semibold">{codes}</span></>}
         {link.critical && " · test this first"}

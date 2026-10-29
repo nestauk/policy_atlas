@@ -83,7 +83,7 @@ export function shortAuthors(authors: readonly string[] | undefined): string | n
 }
 
 /** A source line: short authors (or the source type when there are none), then the rest. */
-function sourceLine(sourceType: SourceType, authors: readonly string[] | undefined, ...rest: (string | number | null | undefined)[]): string {
+export function sourceLine(sourceType: SourceType, authors: readonly string[] | undefined, ...rest: (string | number | null | undefined)[]): string {
   const who = sourceType === "web" ? null : shortAuthors(authors);
   return [who ?? SOURCE_LABEL[sourceType], ...rest].filter((part) => part != null && part !== "").join(" · ");
 }
@@ -163,7 +163,7 @@ export function DocumentItem({
   ...rest
 }: { n?: number; title: string; url: string | null; quote: string | null; chips?: string; authors?: string[]; onOpen?: () => void } & Pick<TocDocument, "source_type" | "year" | "evidence_type">) {
   return (
-    <li className="border-t border-line py-2.5 text-meta">
+    <li className="border-t border-line py-2.5 text-body">
       <p className={ITEM_TITLE}>
         {n !== undefined && <span className="mr-1 text-grey">[{n}]</span>}
         {onOpen !== undefined ? (
@@ -195,8 +195,8 @@ function figureSource(figure: TocFigure): string {
 
 /**
  * Figures as the panels show them (C37): each figure leads with its plain
- * statement in bold, then its quote in italics and its source line with a
- * citation marker. Two or more figures with the same measure and unit get a
+ * statement, then its source line with a citation marker and its quote in
+ * italics, as every listed item in the panel does. Two or more figures with the same measure and unit get a
  * bold "Evidence suggests A to B" line first: a range, never an average.
  */
 export function FigureList({ taskId, figures, citationOf }: { taskId: string; figures: TocFigure[]; citationOf: (figure: TocFigure) => TocCitation | null }) {
@@ -206,7 +206,7 @@ export function FigureList({ taskId, figures, citationOf }: { taskId: string; fi
   return (
     <div className="mt-1">
       {shown.map((group) => (
-        <div key={group.key} data-testid="figure-group" className="border-t border-line py-2.5 text-meta">
+        <div key={group.key} data-testid="figure-group" className="border-t border-line py-2.5 text-body">
           {group.figures.length >= 2 && <p className={ITEM_TITLE}>{scrub(figureHeadline(group))}</p>}
           {group.figures.map((figure) => {
             const citation = citationOf(figure);
@@ -224,11 +224,10 @@ export function FigureList({ taskId, figures, citationOf }: { taskId: string; fi
         </div>
       ))}
       {!all && groups.length > FIGURE_GROUPS_SHOWN && (
-        <button type="button" onClick={() => setAll(true)} className="cursor-pointer text-meta font-bold text-blue hover:underline">
+        <button type="button" onClick={() => setAll(true)} className="cursor-pointer text-body font-bold text-blue hover:underline">
           Show all {figures.length} figures
         </button>
       )}
-      <p className="mt-1 text-meta text-grey">Figures come from the documents' abstracts.</p>
     </div>
   );
 }
@@ -247,7 +246,7 @@ export function documentCitation(doc: TocDocument, n: number, quote: string | nu
 export function LinkDocuments({ taskId, documents }: { taskId: string; documents: TocDocument[] }) {
   const [opened, setOpened] = useState<number | null>(null);
   const shown = citedDocuments(documents);
-  if (shown.length === 0) return <p className="text-meta text-grey">None found.</p>;
+  if (shown.length === 0) return <p className="text-body text-grey">None found.</p>;
   const doc = opened === null ? undefined : shown[opened - 1];
   return (
     <>

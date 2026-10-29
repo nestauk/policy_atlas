@@ -112,7 +112,7 @@ have one verdict"). Task 054 contract C36; the scheme is the ground-truth pack's
 - **The critical connection (C6)** keeps its intent, the weakest important step: the lowest
   verdict on a kept success pathway, ties to the link on most pathways.
 - **The canvas** shows the verdict by line style only (solid, two-tone, dashed, dotted red);
-  critical links are thicker.
+  the critical link carries a warning triangle (thicker lines until 2026-10-29).
 
 Why: two grades per link were hard to read ("medium elsewhere, weak here" did not tell a user
 what to do), and the banding ignored how relevant each study was. BEAM's weighting by quality and

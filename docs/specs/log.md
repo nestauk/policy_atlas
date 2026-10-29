@@ -1,5 +1,13 @@
 # Spec update log
 
+## 2026-10-29 (task 054, presentation round 3)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
+  critical connection carries a red warning triangle on its line instead of a thicker line (key,
+  reading guide and panel header too). A box panel has one Evidence section: the "seen in" note,
+  Size of change, then Case studies, each study one item (programme and place, note, source line
+  with its title, quote). Sidebar labels and listed items are body size. Citation sidebars open
+  inside full screen. The "Figures come from the documents' abstracts" line is removed.
+
 ## 2026-10-29 (task 054, presentation round 2)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): a
   link's "How this works" is one sentence with **If**, **for**, **then** and **because** in bold;

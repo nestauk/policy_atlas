@@ -54,20 +54,21 @@ describe("canvas", () => {
     expect(edge(9)?.querySelector(".toc-edge--pending")).not.toBeNull(); // still checking
   });
 
-  it("draws the critical connection thicker, and nothing else", () => {
+  it("marks the critical connection with a warning triangle, not a thicker line", () => {
     renderResult();
-    expect(document.querySelectorAll(".toc-edge--critical")).toHaveLength(1);
-    expect(edge(3)?.querySelector(".toc-edge--critical")).not.toBeNull();
-    expect(edge(3)?.querySelector(".toc-edge-under--critical")).not.toBeNull();
+    // The mark is the edge's only <g transform>: one on the critical edge, none elsewhere.
+    expect(document.querySelectorAll(".react-flow__edge g[transform]")).toHaveLength(1);
+    expect(edge(3)?.querySelector("g[transform]")).not.toBeNull();
+    expect(document.querySelector(".toc-edge--critical")).toBeNull();
   });
 
-  it("keys the four line styles and the thicker critical line", () => {
+  it("keys the four line styles and the critical connection's mark", () => {
     renderResult();
     const key = screen.getByRole("list", { name: "Line key" });
     for (const label of ["Confident", "Not sure: mixed", "Not sure: too little evidence", "Not confident: evidence against"]) {
       expect(within(key).getByText(label)).toBeInTheDocument();
     }
-    expect(within(key).getByText(/critical connection/)).toBeInTheDocument();
+    expect(within(key).getByText(/Critical connection/)).toBeInTheDocument();
   });
 
   it("shows each box's code and the accountability ceiling", () => {
@@ -143,7 +144,7 @@ describe("detail panel", () => {
     expect(within(panel).getByText("Children saw 44% fewer adverts for less healthy food after the rules.").className).toContain("font-semibold");
     expect(within(panel).getByText("odds ratio 1·05 (0·99 to 1·12)")).toBeInTheDocument();
     expect(within(panel).getAllByText(/^Smith et al\. · Obesity Reviews · 2020 · quasi-experiment/).length).toBe(3);
-    expect(within(panel).getByText("Figures come from the documents' abstracts.")).toBeInTheDocument();
+    expect(within(panel).queryByText("Figures come from the documents' abstracts.")).toBeNull();
   });
 
   it("numbers the sentence's citations as the document list does, and opens them in the citation sidebar", async () => {
@@ -177,14 +178,14 @@ describe("detail panel", () => {
     expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, expect.stringContaining("0000e0002"), "Exposure fell 58% after the rules.");
   });
 
-  it("opens for a box: description, how we'd know, figures, then case studies with their seen-in note", async () => {
+  it("opens for a box: description, how we'd know, then one Evidence section: seen-in note, size of change, case studies", async () => {
     const user = userEvent.setup();
     renderResult();
     fireEvent.click(node(7));
     const panel = screen.getByRole("complementary", { name: "Details" });
     expect(within(panel).getByText((_, el) => el?.tagName === "P" && el.textContent === "Long-term outcome L1")).toBeInTheDocument();
     const text = panel.textContent ?? "";
-    const order = ["described in a short paragraph", "How we'd know it happened", "Definition", "Indicator", "Timing", "Figures", "Case studies (1)", "Seen on London transport", "[1]Transport for London advertising restriction"].map((part) =>
+    const order = ["described in a short paragraph", "How we'd know it happened", "Definition", "Indicator", "Timing", "Evidence", "Seen on London transport", "Size of change", "Case studies (1)", "[1]Transport for London advertising restriction"].map((part) =>
       text.indexOf(part),
     );
     expect(order.every((index) => index >= 0)).toBe(true);
@@ -192,7 +193,7 @@ describe("detail panel", () => {
     expect(within(panel).queryByText("Result criteria")).toBeNull();
     expect(within(panel).queryByText("Indicators used")).toBeNull();
     // A case study's source names its authors or publisher and year, not "Academic".
-    expect(within(panel).getByText("Transport for London · 2022")).toBeInTheDocument();
+    expect(within(panel).getByText((_, el) => el?.tagName === "P" && (el.textContent ?? "").startsWith("Transport for London · 2022 · "))).toBeInTheDocument();
     expect(within(panel).queryByText(/^Academic/)).toBeNull();
     // The seen-in note's citation opens the case study's quote in context.
     const seenIn = within(panel).getByText(/Seen on London transport/);

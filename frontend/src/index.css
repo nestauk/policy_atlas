@@ -331,7 +331,8 @@
 /* Theory of change canvas (task 054, C36): the line style shows the link's
    evidence verdict. Confident solid green; Not sure: mixed a green dash over
    an amber underlay (two-tone); too little evidence grey dashed; Not
-   confident dotted red. Critical links are thicker. An unchecked or checking
+   confident dotted red. The critical link carries a warning triangle
+   (CriticalMark), not a thicker line. An unchecked or checking
    edge is grey and pulses. Scoped under .react-flow so the library's own edge
    styles, loaded later, do not win. */
 .react-flow .toc-edge {
@@ -346,9 +347,6 @@
 .react-flow .toc-edge--not_confident { stroke: var(--color-verdict-against); stroke-dasharray: 2 5; }
 .react-flow .toc-edge--pending { stroke: var(--color-line-2); animation: toc-pulse 1.6s ease-in-out infinite; }
 .react-flow .toc-edge--selected { stroke-width: 3; }
-.react-flow .toc-edge--critical { stroke-width: 3.5; }
-.react-flow .toc-edge--critical.toc-edge--selected { stroke-width: 4.5; }
-.react-flow .toc-edge-under--critical { stroke-width: 8; }
 @keyframes toc-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }

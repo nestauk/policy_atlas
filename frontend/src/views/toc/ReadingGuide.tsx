@@ -2,6 +2,26 @@ import { scrub } from "../../lib/scrub";
 import { VERDICT_LABEL, VERDICT_VAR, VERDICTS } from "./tocModel";
 import type { TocGraph, Verdict } from "./types";
 
+/** The critical connection's mark: a warning triangle with an exclamation point, drawn centred on (x, y). */
+export function CriticalMark({ x = 0, y = 0 }: { x?: number; y?: number }) {
+  return (
+    <g transform={`translate(${x},${y})`} aria-hidden="true">
+      <path d="M0,-9 L9,7 L-9,7 Z" fill="var(--color-paper)" stroke={VERDICT_VAR.not_confident} strokeWidth={2} strokeLinejoin="round" />
+      <path d="M0,-3 L0,2" stroke={VERDICT_VAR.not_confident} strokeWidth={2} strokeLinecap="round" />
+      <circle cx="0" cy="4.6" r="1.1" fill={VERDICT_VAR.not_confident} />
+    </g>
+  );
+}
+
+/** The critical mark at text size, for the key and the detail panel. */
+export function CriticalIcon() {
+  return (
+    <svg width="20" height="18" viewBox="-10 -10 20 18" aria-hidden="true" className="inline-block shrink-0 align-[-3px]">
+      <CriticalMark />
+    </svg>
+  );
+}
+
 /** A short line sample for each verdict, drawn as on the canvas (C36). */
 function LineSample({ verdict }: { verdict: Verdict }) {
   const line = (stroke: string, width: number, dash?: string) => (
@@ -22,7 +42,7 @@ function LineSample({ verdict }: { verdict: Verdict }) {
   );
 }
 
-/** The key under the canvas: one line style per verdict, and what a thicker line means. */
+/** The key under the canvas: one line style per verdict, and the critical connection's mark. */
 export function VerdictLegend() {
   return (
     <ul aria-label="Line key" className="mt-2 flex flex-wrap gap-x-[18px] gap-y-1 text-meta text-grey">
@@ -32,8 +52,9 @@ export function VerdictLegend() {
           {VERDICT_LABEL[verdict]}
         </li>
       ))}
-      <li>
-        <b>Thicker</b> = critical connection
+      <li className="inline-flex items-center gap-1.5">
+        <CriticalIcon />
+        Critical connection
       </li>
     </ul>
   );
@@ -52,7 +73,7 @@ export function ReadingGuide({ graph }: { graph: Pick<TocGraph, "grade_rules" | 
       <p className="mt-2 max-w-[64em]">
         Boxes are the steps. Each connection between them has one evidence verdict, and its line style shows it (see the key under the canvas). The
         verdict weighs every document that supports or refutes the step by its quality and by how well it applies to this population and place. The
-        thicker line is the critical connection: test it first.
+        connection marked with a warning triangle is the critical connection: test it first.
       </p>
       <ul className="mt-2 max-w-[64em] space-y-1">
         {graph.grade_rules.map((row) => (

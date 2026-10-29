@@ -25,7 +25,8 @@ export function SheetContent({
   side?: "right" | "left";
 }) {
   return (
-    <DialogPrimitive.Portal>
+    // In full screen only the full-screen element shows, so the sheet opens inside it.
+    <DialogPrimitive.Portal container={typeof document === "undefined" ? undefined : (document.fullscreenElement as HTMLElement | null) ?? undefined}>
       <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-navy/40 transition-opacity duration-200 ease-out starting:opacity-0" />
       <DialogPrimitive.Content
         className={cn(

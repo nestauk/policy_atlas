@@ -22,6 +22,7 @@ import {
 
 import { scrub } from "../../lib/scrub";
 import type { Selection } from "./DetailPanel";
+import { CriticalMark } from "./ReadingGuide";
 import {
   BOX_H,
   BOX_W,
@@ -115,24 +116,24 @@ function Dividers({ lineY, ceilingX }: { lineY: number | null; ceilingX: number 
 
 function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, markerEnd }: EdgeProps<TocEdge>) {
   if (data === undefined) return null;
-  const path =
+  const [path, markX, markY] =
     data.span > 0
-      ? routeEdge(sourceX, sourceY, targetX, targetY, data.span).path
-      : getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 10 })[0];
+      ? (({ path: p, labelX, labelY }) => [p, labelX, labelY] as const)(routeEdge(sourceX, sourceY, targetX, targetY, data.span))
+      : getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 10 });
   const kind = data.pending ? "pending" : data.verdict;
-  const critical = data.critical ? " toc-edge--critical" : "";
   return (
     <g>
       <title>{data.tip}</title>
       {/* Not sure: mixed is two-tone: an amber line under the green dash. */}
-      {kind === "not_sure_mixed" && <path d={path} className={`toc-edge-under${data.critical ? " toc-edge-under--critical" : ""}`} />}
+      {kind === "not_sure_mixed" && <path d={path} className="toc-edge-under" />}
       <BaseEdge
         id={id}
         path={path}
         markerEnd={markerEnd}
         interactionWidth={18}
-        className={`toc-edge toc-edge--${kind}${critical}${data.selected ? " toc-edge--selected" : ""}`}
+        className={`toc-edge toc-edge--${kind}${data.selected ? " toc-edge--selected" : ""}`}
       />
+      {data.critical && <CriticalMark x={markX} y={markY} />}
     </g>
   );
 }
@@ -186,7 +187,7 @@ interface Bounds {
 
 /**
  * The canvas: boxes in layer columns, curved connections styled by their
- * evidence verdict (critical ones thicker), failure pathways under a line, and a dashed line (the
+ * evidence verdict (the critical one marked with a warning triangle), failure pathways under a line, and a dashed line (the
  * accountability ceiling) between outputs and short-term outcomes. Read-only; clicking a box
  * or a connection selects it. Set-aside pathways never appear here.
  */
