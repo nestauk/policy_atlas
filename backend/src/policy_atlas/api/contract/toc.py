@@ -1,7 +1,7 @@
 """Theory-of-change read contract (task 054, plan S14).
 
 Two public reads under ``/api/v1/tasks/{task_id}/toc``: the graph with one
-evidence verdict per link, link states and the summary (``GET ""``), and every
+evidence verdict per link, link states and the narrative report (``GET ""``), and every
 judged document and case study (``GET /evidence``). Verdicts and link states
 are computed on read (C36, C19); nothing here is stored as shown.
 """
@@ -46,6 +46,9 @@ class TocBoxOut(BaseModel):
     dosage: str | None
     result_criteria: TocResultCriteriaOut
     description: str | None
+    #: Where the change has been seen, from its case studies, and the documents it cites.
+    seen_in: str | None
+    seen_in_cites: list[uuid.UUID]
     origin: Origin
     revision: int
 
@@ -76,6 +79,8 @@ class TocLinkOut(BaseModel):
     source_box_id: uuid.UUID
     target_box_id: uuid.UUID
     sentence: str
+    #: A short title (at most 8 words); null until the check has written one.
+    title: str | None
     if_text: str
     for_text: str
     then_text: str
@@ -92,6 +97,8 @@ class TocLinkOut(BaseModel):
     weights: TocWeightsOut
     #: What the documents found and whether it holds here (C36).
     evidence_sentence: str | None
+    #: The documents (task source snapshot ids) the evidence sentence cites.
+    evidence_cites: list[uuid.UUID]
 
 
 class TocPathwayOut(BaseModel):
@@ -108,16 +115,6 @@ class TocPathwayOut(BaseModel):
     link_ids: list[uuid.UUID]
     #: A link is missing between two neighbours (a deletion left a gap).
     broken: bool
-
-
-class TocSummaryOut(BaseModel):
-    """The header paragraphs and the questions for an evaluation (C20)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    about: str
-    evidence_says: str
-    evaluation_questions: list[str]
 
 
 class TocReportSummaryOut(BaseModel):
@@ -179,6 +176,11 @@ class TocReportSourceOut(BaseModel):
     n: int
     citation: str
     url: str | None
+    #: The document's title, the judgement behind the number and its quote, so a
+    #: marker opens the quote in its passage; null on reports written before.
+    title: str | None = None
+    evidence_id: uuid.UUID | None = None
+    quote: str | None = None
 
 
 class TocReportOut(BaseModel):
@@ -186,6 +188,10 @@ class TocReportOut(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    #: The page title (at most 8 words) and the one- or two-sentence summary under it;
+    #: null on reports written before ``toc_report_v2``.
+    title: str | None = None
+    summary_text: str | None = None
     summary: TocReportSummaryOut
     pathways: list[TocReportPathwayOut]
     assumptions: list[TocReportAssumptionOut]
@@ -216,7 +222,6 @@ class TocGraphOut(BaseModel):
     pathways: list[TocPathwayOut]
     context: list[str]
     supporting_activities: list[str]
-    summary: TocSummaryOut | None
     grade_rules: list[TocGradeRuleOut]
     #: The theory's confidence: the lowest verdict among its critical links; null without one.
     confidence: Verdict | None
@@ -283,6 +288,11 @@ class TocFigureOut(BaseModel):
     n: int | None
     k: int | None
     quote: str
+    #: One plain sentence explaining the figure; null on figures found before it existed.
+    statement: str | None
+    #: The judgement the figure came from: ``GET /toc/evidence/{evidence_id}/context``
+    #: shows the quote in its passage.
+    evidence_id: uuid.UUID
     # The source document's short citation, as the documents carry it.
     task_source_snapshot_id: uuid.UUID
     source_title: str
@@ -311,12 +321,16 @@ class TocCaseStudyOut(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    #: The judgement it came from, for the quote in its passage.
+    evidence_id: uuid.UUID
     task_source_snapshot_id: uuid.UUID
     programme: str
     place: str | None
     note: str
     quote: str
     title: str
+    #: Author names, or the publishing organisation for a policy document.
+    authors: list[str]
     year: int | None
     url: str | None
     source_type: Literal["academic", "policy", "web"]

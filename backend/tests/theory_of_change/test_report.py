@@ -158,6 +158,10 @@ def test_the_step_stores_the_report_and_the_read_serves_it(
     assert sent["plan"]["goal"] and sent["theory"]["weakest_critical_links"]
     assert all(row["key"].startswith("r") for row in sent["rows"])
     assert report.summary.directly_influenced == "outputs"
+    assert report.title == "A drafted theory of change"
+    assert report.summary_text == "What the theory says, and where its evidence is weakest."
+    # Each source carries its judgement and quote, so a marker opens it in context.
+    assert all(s.evidence_id is not None and s.quote for s in report.sources)
     assert len(report.pathways) == len(sent["theory"]["pathways"])
     # The stub cites each pathway's first link's first source: renumbered from 1, all listed.
     assert [s.n for s in report.sources] == list(range(1, len(report.sources) + 1))
@@ -168,6 +172,8 @@ def test_the_step_stores_the_report_and_the_read_serves_it(
 
 def test_the_step_counts_what_its_checks_removed(engine: Engine, cleanup: list[uuid.UUID]) -> None:
     bad = ReportResponse(
+        title="A title",
+        summary="A summary.",
         if_then_because="If it happens (L9), then it works [99].",
         context="Context.",
         weakest_links="None.",

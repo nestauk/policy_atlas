@@ -495,7 +495,8 @@ class StubTocBackend:
       text is empty.
     - ``figures``: none.
     - ``choose``: keeps every pathway, no new conditions.
-    - ``summarise``: plain sentences that cite nothing.
+    - ``summarise``: a title per link and a plain sentence citing its first
+      judged document; plain box descriptions with no "seen in".
     - ``report``: a plain report: each pathway's paragraph names its first
       link and cites that link's first source; a reason for every row.
 
@@ -663,24 +664,21 @@ class StubTocBackend:
         boxes = cast(list[dict[str, Any]], theory.get("boxes") or [])
         return (
             SummaryResponse(
-                about="A drafted theory of change.",
-                evidence_says="The evidence check has run.",
-                evaluation_questions=["Does the critical connection hold here?"],
                 links=[
                     LinkSentencesWire(
                         link=str(link["key"]),
+                        title=f"Step {link['key']}",
                         sentence="Documents were judged for this step.",
-                        cites=[],
+                        # The first judged document, so citations show.
+                        cites=[str(doc["id"]) for doc in (link.get("documents") or [])[:1]],
                     )
                     for link in links
                 ],
                 boxes=[
                     BoxDescriptionWire(
                         box=str(box["key"]),
-                        description=(
-                            "A step in the theory. No case studies were found in the "
-                            "documents read."
-                        ),
+                        description="A step in the theory.",
+                        seen_in=None,
                         cites=[],
                     )
                     for box in boxes
@@ -720,6 +718,8 @@ class StubTocBackend:
         weakest = cast(list[str], theory.get("weakest_critical_links") or [])
         return (
             ReportResponse(
+                title="A drafted theory of change",
+                summary="What the theory says, and where its evidence is weakest.",
                 if_then_because=f"If {plan.get('intervention') or 'it'} happens, then "
                 f"{plan.get('goal')}, because of the mechanism.",
                 context="The setting matters.",

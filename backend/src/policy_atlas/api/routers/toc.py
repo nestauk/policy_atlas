@@ -3,7 +3,7 @@
 Three reads under ``/api/v1/tasks/{task_id}/toc``, public-readable like the
 Result and Sources tabs (the read grade or the narrow public leg, through
 ``_readable``): the graph with one evidence verdict per link, link states and
-the summary; every judged document and case study; and one judgement's quote
+the narrative report; every judged document and case study; and one judgement's quote
 in its passage. Verdicts and states are computed on read (C36, C19). A
 readable task that is not a theory of change is a 404 ``toc_not_found``; an
 unreadable one keeps the generic ``not_found``.
@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any, Literal, cast
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Row
 
@@ -35,7 +35,6 @@ from policy_atlas.api.contract.toc import (
     TocPathwayOut,
     TocReportOut,
     TocResultCriteriaOut,
-    TocSummaryOut,
     TocWeightsOut,
 )
 from policy_atlas.api.deps import get_conn, get_optional_user
@@ -120,24 +119,6 @@ def check_status(walk: Row[Any] | None) -> CheckStatus:
     return "failed"
 
 
-def _summary(conn: Connection, task_id: uuid.UUID) -> TocSummaryOut | None:
-    payload = conn.execute(
-        select(event_log.c.payload)
-        .where(event_log.c.task_id == task_id)
-        .where(event_log.c.event_type == "component.completed")
-        .where(event_log.c.payload["component"].astext == "toc_summarise")
-        .order_by(event_log.c.sequence.desc())
-        .limit(1)
-    ).scalar_one_or_none()
-    if not isinstance(payload, dict) or "about" not in payload:
-        return None
-    return TocSummaryOut(
-        about=str(payload["about"]),
-        evidence_says=str(payload.get("evidence_says") or ""),
-        evaluation_questions=[str(q) for q in payload.get("evaluation_questions") or []],
-    )
-
-
 def _report(conn: Connection, task_id: uuid.UUID) -> TocReportOut | None:
     """The latest check walk's narrative report (C38), from its step payload."""
     payload = conn.execute(
@@ -208,6 +189,7 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
                 source_box_id=row.source_box_id,
                 target_box_id=row.target_box_id,
                 sentence=row.sentence or "",
+                title=row.title,
                 if_text=row.if_text,
                 for_text=row.for_text,
                 then_text=row.then_text,
@@ -233,6 +215,7 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
                     n_documents=verdict.n_documents,
                 ),
                 evidence_sentence=row.evidence_sentence,
+                evidence_cites=list(row.evidence_cites or []),
             )
         )
     steps = _steps(conn, task_id)
@@ -273,6 +256,8 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
                     timing=(row.result_criteria or {}).get("timing"),
                 ),
                 description=row.description,
+                seen_in=row.seen_in,
+                seen_in_cites=list(row.seen_in_cites or []),
                 origin=row.origin,
                 revision=row.revision,
             )
@@ -282,7 +267,6 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
         pathways=pathways,
         context=[row.text for row in rows.band_items if row.band == "context"],
         supporting_activities=[row.text for row in rows.band_items if row.band == "supporting"],
-        summary=_summary(conn, task_id),
         grade_rules=[TocGradeRuleOut(label=label, rule=rule) for label, rule in rule_text()],
         confidence=lowest(link.verdict for link in links if link.critical),
         report=_report(conn, task_id),
@@ -365,6 +349,8 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
     indicators: dict[str, list[str]] = {key: [] for key in rows.boxes}
     # Each judged document's short citation, for its figures (C37).
     cites: dict[uuid.UUID, dict[str, Any]] = {}
+    # The current judgement of each (link, document), for its figures' quote in context.
+    judgement_of: dict[tuple[str, uuid.UUID], uuid.UUID] = {}
     for row in evidence:
         key = str(row.link_id)
         link_row = rows.links.get(key)
@@ -387,6 +373,8 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
             "url": url,
         }
         previous = row.item_hash != link_row.counted_hash
+        if not previous:
+            judgement_of[(key, row.task_source_snapshot_id)] = row.evidence_id
         appraisal = appraisals.get(str(row.task_source_snapshot_id))
         existing = documents[key].get(row.task_source_snapshot_id)
         # One entry per document: the counted judgement wins over an earlier wording's.
@@ -414,12 +402,14 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
         if box in case_studies and row.case_study is not None:
             case = row.case_study
             out = TocCaseStudyOut(
+                evidence_id=row.evidence_id,
                 task_source_snapshot_id=row.task_source_snapshot_id,
                 programme=str(case.get("programme") or ""),
                 place=case.get("place"),
                 note=str(case.get("note") or ""),
                 quote=str(case.get("quote") or ""),
                 title=title,
+                authors=[author.name for author in _authorships(metadata)],
                 year=year,
                 url=url,
                 source_type=source_type,
@@ -440,7 +430,13 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
         link_row = rows.links.get(key)
         cite = cites.get(figure.task_source_snapshot_id)
         # Only the link's current wording counts, as for its judgements (C19).
-        if link_row is None or cite is None or figure.item_hash != link_row.counted_hash:
+        judgement = judgement_of.get((key, figure.task_source_snapshot_id))
+        if (
+            link_row is None
+            or cite is None
+            or judgement is None
+            or figure.item_hash != link_row.counted_hash
+        ):
             continue
         shown = TocFigureOut(
             **{
@@ -448,6 +444,7 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
                 for name in TocFigureOut.model_fields
                 if name not in cite and name in figure._mapping
             },
+            evidence_id=judgement,
             **cite,
         )
         if figure.box == "link":
@@ -499,7 +496,7 @@ def get_toc_evidence(
 
 
 def toc_evidence_context_out(
-    conn: Connection, task_id: uuid.UUID, evidence_id: uuid.UUID
+    conn: Connection, task_id: uuid.UUID, evidence_id: uuid.UUID, quote: str | None = None
 ) -> ChunkContextOut | None:
     """One judgement's verified quote, highlighted in the text the judge read.
 
@@ -511,6 +508,8 @@ def toc_evidence_context_out(
         conn: Open connection.
         task_id: The task; another task's judgement is not found.
         evidence_id: The ``toc_item_evidence`` row.
+        quote: Another passage of the same document to highlight (a figure's or
+            a case study's quote); the judgement's own quote when ``None``.
 
     Returns:
         The window, or ``None`` when the row is unknown, has no quote, or the
@@ -541,7 +540,7 @@ def toc_evidence_context_out(
     ).one_or_none()
     if row is None:
         return None
-    quote = row.quote
+    quote = quote or row.quote
     if not quote:
         return None
     metadata = cast(dict[str, Any], row.metadata or {})
@@ -562,10 +561,11 @@ def get_toc_evidence_context(
     evidence_id: uuid.UUID,
     user: Annotated[AuthenticatedUser | None, Depends(get_optional_user)],
     conn: Annotated[Connection, Depends(get_conn)],
+    quote: Annotated[str | None, Query(max_length=2_000)] = None,
 ) -> ChunkContextOut:
-    """Return one judgement's quote highlighted in its passage."""
+    """Return one judgement's quote, or another passage of its document, in its passage."""
     _readable_toc(conn, task_id, user)
-    result = toc_evidence_context_out(conn, task_id, evidence_id)
+    result = toc_evidence_context_out(conn, task_id, evidence_id, quote)
     if result is None:
         raise HTTPException(status_code=404, detail="resource not found")
     return result

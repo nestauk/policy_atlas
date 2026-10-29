@@ -55,6 +55,7 @@ def _figure(**values: Any) -> FigureWire:
         "n": None,
         "k": None,
         "quote": "intake rose by 60 kcal (95% CI 3·1 to 116·9; 11 studies)",
+        "statement": "Children ate 60 more calories after seeing food adverts than without them.",
     }
     return FigureWire(**{**base, **values})
 
@@ -149,10 +150,12 @@ def test_the_step_stores_checked_figures_and_the_read_attaches_them_to_the_box(
         evidence = toc_evidence_out(conn, task_id)
     assert len(rows) == calls
     assert all(row.box == "source" and row.ci_lower is None for row in rows)
+    assert all(row.statement and row.statement.startswith("Children ate") for row in rows)
     # A source-box figure belongs to the link's source box, with its document's citation.
     box_figures = [figure for box in evidence.boxes for figure in box.figures]
     assert len(box_figures) == calls
     assert all(f.source_title.startswith("Advertising ban study") for f in box_figures)
+    assert all(f.statement and f.evidence_id for f in box_figures)
     assert all(not link.figures for link in evidence.links)  # none were link effects
 
 

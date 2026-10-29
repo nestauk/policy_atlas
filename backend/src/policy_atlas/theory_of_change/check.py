@@ -155,7 +155,7 @@ NO_EVIDENCE_SENTENCE = "No evidence was found in the documents read."
 UNSETTLED_SENTENCE = "The documents read do not settle this step."
 
 #: The fixed box description that replaces one whose citations fail (C20).
-BOX_FALLBACK_DESCRIPTION = "A step in the theory. No case studies were found in the documents read."
+BOX_FALLBACK_DESCRIPTION = "A step in the theory."
 
 
 # --- shared reads ---------------------------------------------------------------
@@ -2267,11 +2267,12 @@ def toc_summarise_scope(
     context: ScopeContext,
     backend: TocBackend,
 ) -> dict[str, Any]:
-    """Write the header paragraphs and every sentence, each citation checked (C20).
+    """Write each link's title and evidence sentence and each box's texts (C20).
 
-    ``about``, ``evidence_says`` and ``evaluation_questions`` are returned in
-    the summary (the step's ``component.completed`` payload), which the read
-    API serves; link sentences and box descriptions are written on the rows.
+    Every citation is checked; a sentence that fails is replaced with a fixed
+    one, and a "seen in" note that fails is dropped. The texts are written on
+    the rows, with the documents each cites. The theory's title, summary and
+    narrative are the report's (``toc_report``).
 
     Args:
         conn: Open connection inside the component transaction.
@@ -2281,7 +2282,7 @@ def toc_summarise_scope(
         backend: The ToC model seam.
 
     Returns:
-        The header paragraphs, the questions, the replaced count and the usage.
+        The count of replaced texts and the usage.
 
     Raises:
         RuntimeError: If the summary call failed twice.
@@ -2319,6 +2320,7 @@ def toc_summarise_scope(
     log_ = store.ChangeLog()
     for key, row in rows.links.items():
         item = answered.get(key)
+        cites: list[str] = []
         if not allowed[key]:
             sentence = NO_EVIDENCE_SENTENCE
         elif (
@@ -2328,16 +2330,18 @@ def toc_summarise_scope(
             and check_citations(item.cites, allowed[key])
         ):
             sentence = item.sentence.strip()
+            cites = list(dict.fromkeys(item.cites))
         else:
             replaced += 1
             sentence = UNSETTLED_SENTENCE
+        title = item.title.strip() if item is not None and item.title.strip() else None
         store.update(
             conn,
             log_,
             toc_link,
             row.link_id,
             observed_revision=row.revision,
-            values={"evidence_sentence": sentence},
+            values={"title": title, "evidence_sentence": sentence, "evidence_cites": cites},
         )
     case_docs: dict[str, set[str]] = {}
     for row in every:
@@ -2346,28 +2350,30 @@ def toc_summarise_scope(
     described = {back.get(item.box): item for item in response.boxes}
     for key, row in rows.boxes.items():
         item = described.get(key)
-        if (
-            item is not None
-            and item.description.strip()
-            and check_citations(item.cites, case_docs.get(key, set()))
-        ):
+        if item is not None and item.description.strip():
             description = item.description.strip()
         else:
             replaced += 1
             description = BOX_FALLBACK_DESCRIPTION
+        # "Seen in" stands only when the box has case studies and it cites only them.
+        seen_in: str | None = None
+        seen_cites: list[str] = []
+        if item is not None and item.seen_in and item.seen_in.strip():
+            docs = case_docs.get(key, set())
+            if docs and check_citations(item.cites, docs):
+                seen_in, seen_cites = item.seen_in.strip(), list(dict.fromkeys(item.cites))
+            else:
+                replaced += 1
         store.update(
             conn,
             log_,
             toc_box,
             row.box_id,
             observed_revision=row.revision,
-            values={"description": description},
+            values={"description": description, "seen_in": seen_in, "seen_in_cites": seen_cites},
         )
     store.record(conn, task_id=task_id, run_id=run_id, step="toc_summarise", log=log_)
     summary = {
-        "about": response.about,
-        "evidence_says": response.evidence_says,
-        "evaluation_questions": list(response.evaluation_questions),
         "replaced": replaced,
         "backend_mode": backend.mode,
         "usage_totals": usage.payload(),

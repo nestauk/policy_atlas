@@ -159,6 +159,7 @@ def check_figure(figure: FigureWire, text: str) -> CheckedFigure | str:
             "n": stats["n"],
             "k": stats["k"],
             "quote": figure.quote,
+            "statement": _as_text(figure.statement),
         },
         range_dropped=dropped,
     )

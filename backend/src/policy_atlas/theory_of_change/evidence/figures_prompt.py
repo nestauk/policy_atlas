@@ -1,4 +1,4 @@
-"""The ``toc_figures_v1`` prompt: the size of change behind one link (task 054, C37).
+"""The ``toc_figures_v2`` prompt: the size of change behind one link (task 054, C37).
 
 Lead-authored and versioned. One small call per document the judge found
 supporting or refuting a link reads the same title and abstract the judge read
@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_FIGURES_PROMPT_VERSION = "toc_figures_v1"
+TOC_FIGURES_PROMPT_VERSION = "toc_figures_v2"
 TOC_FIGURES_MAX_OUTPUT_TOKENS = 4_000
 
 #: Figures one document may give for one link.
@@ -43,6 +43,14 @@ class FigureWire(BaseModel):
             "What the number shows, in at most 14 plain words, including which way it "
             "went as the document reports it, e.g. 'more calories eaten after seeing TV "
             "food adverts', 'no change in children's share of exposure'."
+        )
+    )
+    statement: str = Field(
+        description=(
+            "One plain sentence, at most 30 words, that a policy maker can read "
+            "without the paper: what changed, by how much, compared with what, for "
+            "whom. Explain a ratio or standardised effect in words (an odds ratio of "
+            "1 means no difference). Use only numbers from the passage."
         )
     )
     effect_size: float | str = Field(description="The number as reported.")
@@ -107,6 +115,11 @@ Rules:
   near zero): report it, saying "no change" in the measure.
 - Keep the number as reported: no conversion, rounding or arithmetic. Give the
   range or confidence interval only when the text reports it.
+- Write the statement so it stands on its own: say what changed, by how
+  much and against what (before and after, with and without, a share of
+  what). For a ratio or standardised effect, say in words what it means. For
+  a range across groups, say what the range covers. Never add a number the
+  passage does not give.
 - Say what the number shows in plain words a policy maker would use,
   including which way it went in the study (more, fewer, no change), as the
   study reports it, even when the step is worded the other way round.

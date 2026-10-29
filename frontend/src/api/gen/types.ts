@@ -1157,7 +1157,7 @@ export interface paths {
         };
         /**
          * Get Toc Evidence Context
-         * @description Return one judgement's quote highlighted in its passage.
+         * @description Return one judgement's quote, or another passage of its document, in its passage.
          */
         get: operations["get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get"];
         put?: never;
@@ -5403,6 +5403,10 @@ export interface components {
             result_criteria: components["schemas"]["TocResultCriteriaOut"];
             /** Revision */
             revision: number;
+            /** Seen In */
+            seen_in: string | null;
+            /** Seen In Cites */
+            seen_in_cites: string[];
             /** Text */
             text: string;
         };
@@ -5411,6 +5415,13 @@ export interface components {
          * @description Where one box was seen (or, for an input, put in place).
          */
         TocCaseStudyOut: {
+            /** Authors */
+            authors: string[];
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
             /** Note */
             note: string;
             /** Place */
@@ -5521,6 +5532,11 @@ export interface components {
              * @enum {string}
              */
             effect_size_type: "absolute_change" | "relative_change" | "standardised" | "ratio" | "level";
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
             /** Evidence Type */
             evidence_type: string | null;
             /**
@@ -5553,6 +5569,8 @@ export interface components {
             source_venue: string | null;
             /** Source Year */
             source_year: number | null;
+            /** Statement */
+            statement: string | null;
             /**
              * Task Source Snapshot Id
              * Format: uuid
@@ -5604,7 +5622,6 @@ export interface components {
             /** Pathways */
             pathways: components["schemas"]["TocPathwayOut"][];
             report: components["schemas"]["TocReportOut"] | null;
-            summary: components["schemas"]["TocSummaryOut"] | null;
             /** Supporting Activities */
             supporting_activities: string[];
             /**
@@ -5643,6 +5660,8 @@ export interface components {
             conditions: string[];
             /** Critical */
             critical: boolean;
+            /** Evidence Cites */
+            evidence_cites: string[];
             /** Evidence Sentence */
             evidence_sentence: string | null;
             /** For Text */
@@ -5682,6 +5701,8 @@ export interface components {
             target_box_id: string;
             /** Then Text */
             then_text: string;
+            /** Title */
+            title: string | null;
             /**
              * Verdict
              * @enum {string}
@@ -5844,8 +5865,12 @@ export interface components {
             /** Sources */
             sources: components["schemas"]["TocReportSourceOut"][];
             summary: components["schemas"]["TocReportSummaryOut"];
+            /** Summary Text */
+            summary_text?: string | null;
             /** Tests */
             tests: components["schemas"]["TocReportTestOut"][];
+            /** Title */
+            title?: string | null;
         };
         /**
          * TocReportPathwayOut
@@ -5864,8 +5889,14 @@ export interface components {
         TocReportSourceOut: {
             /** Citation */
             citation: string;
+            /** Evidence Id */
+            evidence_id?: string | null;
             /** N */
             n: number;
+            /** Quote */
+            quote?: string | null;
+            /** Title */
+            title?: string | null;
             /** Url */
             url: string | null;
         };
@@ -5914,18 +5945,6 @@ export interface components {
             indicator?: string | null;
             /** Timing */
             timing?: string | null;
-        };
-        /**
-         * TocSummaryOut
-         * @description The header paragraphs and the questions for an evaluation (C20).
-         */
-        TocSummaryOut: {
-            /** About */
-            about: string;
-            /** Evaluation Questions */
-            evaluation_questions: string[];
-            /** Evidence Says */
-            evidence_says: string;
         };
         /**
          * TocWeightsOut
@@ -7767,7 +7786,9 @@ export interface operations {
     };
     get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get: {
         parameters: {
-            query?: never;
+            query?: {
+                quote?: string | null;
+            };
             header?: never;
             path: {
                 task_id: string;

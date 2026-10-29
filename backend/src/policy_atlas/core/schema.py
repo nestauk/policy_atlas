@@ -1770,8 +1770,11 @@ toc_box = Table(
     Column("dosage", Text, nullable=True),
     Column("result_criteria", JSONB, nullable=False),
     Column("indicator", Text, nullable=True),
-    # Two sentences written by summarise (C20); boxes are described, not graded (W4).
+    # Written by summarise (C20); boxes are described, not graded (W4).
     Column("description", Text, nullable=True),
+    # Where the change has been seen, from its case studies, and the documents it cites.
+    Column("seen_in", Text, nullable=True),
+    Column("seen_in_cites", JSONB, nullable=True),
     Column("origin", Text, nullable=False),
     *_toc_flags(),
     Column("position", JSONB, nullable=True),
@@ -1802,8 +1805,12 @@ toc_link = Table(
     # What must hold for the link to work here: the Magenta Book's assumptions (W14).
     Column("conditions", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("sentence", Text, nullable=True),
-    # What the documents found and whether it holds here, one sentence (C36).
+    # A short title (at most 8 words), written by summarise.
+    Column("title", Text, nullable=True),
+    # What the documents found and whether it holds here, one sentence (C36),
+    # and the documents (task source snapshot ids) it cites.
     Column("evidence_sentence", Text, nullable=True),
+    Column("evidence_cites", JSONB, nullable=True),
     # The two sentences before C36; kept for old rows, no longer written.
     Column("elsewhere_sentence", Text, nullable=True),
     Column("here_sentence", Text, nullable=True),
@@ -1994,6 +2001,8 @@ toc_figure = Table(
     Column("n", Integer, nullable=True),
     Column("k", Integer, nullable=True),
     Column("quote", Text, nullable=False),
+    # One plain sentence explaining the figure (toc_figures_v2).
+    Column("statement", Text, nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     ForeignKeyConstraint(
         ["link_id", "task_id"],

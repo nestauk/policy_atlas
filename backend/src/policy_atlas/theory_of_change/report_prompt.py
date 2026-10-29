@@ -1,4 +1,4 @@
-"""The ``toc_report_v1`` prompt: Detailed information as a short narrative (task 054, C38).
+"""The ``toc_report_v2`` prompt: Detailed information as a short narrative (task 054, C38).
 
 Lead-authored and versioned. One frontier call writes the prose of the five-section
 report the ground-truth pack recommends (Summary; How change happens; Assumptions
@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_REPORT_PROMPT_VERSION = "toc_report_v1"
+TOC_REPORT_PROMPT_VERSION = "toc_report_v2"
 TOC_REPORT_MAX_OUTPUT_TOKENS = 12_000
 
 
@@ -65,6 +65,18 @@ class ReportResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    title: str = Field(
+        description=(
+            "A plain title for the whole theory, at most 8 words, naming the "
+            "intervention and its aim, e.g. 'Food advert limits and childhood obesity'."
+        )
+    )
+    summary: str = Field(
+        description=(
+            "One or two sentences, at most 45 words, under the title: what the theory "
+            "says and where the evidence is weakest."
+        )
+    )
     if_then_because: str = Field(
         description="One sentence: If ..., then ..., because .... At most 60 words."
     )
@@ -147,7 +159,8 @@ TOC_REPORT_USER_TEMPLATE = """\
 {sources_json}
 </sources>
 
-Write the if-then-because sentence, the context, the weakest links, one
+Write the title and the one- or two-sentence summary, the if-then-because
+sentence, the context, the weakest links, one
 paragraph per pathway (failure pathways may share one paragraph titled "How it
 could fail"), a reason for every assumption row, and 3 to 6 test rows.
 """

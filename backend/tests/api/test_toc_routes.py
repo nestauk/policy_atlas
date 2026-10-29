@@ -143,6 +143,10 @@ def test_the_context_read_highlights_the_quote_in_its_passage(
         assert body["context"][body["span_start"] : body["span_end"]] == "It worked."
         assert "Schools in Leeds" in body["context"]
         assert body["authorships"] == [{"name": "Ada Lovelace", "institutions": []}]
+        # Another passage of the same document (a figure's quote) is highlighted instead.
+        other_quote = client.get(url, params={"quote": "Schools in Leeds"}).json()
+        span = other_quote["context"][other_quote["span_start"] : other_quote["span_end"]]
+        assert span == "Schools in Leeds"
         # Another task's judgement is not found under this task.
         foreign = CONTEXT.format(task_id=ids["task_id"], evidence_id=other["evidence"])
         assert client.get(foreign).status_code == 404

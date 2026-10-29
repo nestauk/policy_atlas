@@ -225,8 +225,9 @@ def renumber(report: dict[str, Any], sources: list[dict[str, Any]]) -> None:
     """
     summary, rows = report["summary"], report["assumptions"]
     texts: list[tuple[dict[str, Any], str]] = [
-        (summary, key) for key in ("if_then_because", "context", "weakest_links")
+        (report, key) for key in ("title", "summary_text") if key in report
     ]
+    texts += [(summary, key) for key in ("if_then_because", "context", "weakest_links")]
     texts += [(p, key) for p in report["pathways"] for key in ("title", "paragraph")]
     first: dict[int, int] = {}
 
@@ -416,6 +417,10 @@ def toc_report_scope(
                         ),
                         "short": _short(authors, year, title, venue),
                         "url": _url(meta, locator),
+                        "title": title,
+                        # The judgement behind the number: a marker opens its quote in context.
+                        "evidence_id": str(r.evidence_id),
+                        "quote": r.quote,
                         "finding": " ".join((r.quote or "").split()[:FINDING_WORDS]),
                     }
                 )
@@ -533,6 +538,8 @@ def toc_report_scope(
             }
         )
     report: dict[str, Any] = {
+        "title": check(response.title),
+        "summary_text": check(response.summary),
         "summary": {
             "goal": plan.intended_change,
             "if_then_because": check(response.if_then_because),
@@ -548,7 +555,8 @@ def toc_report_scope(
     }
     renumber(report, sources)
     report["sources"] = [
-        {"n": s["n"], "citation": s["citation"], "url": s["url"]} for s in report["sources"]
+        {key: s[key] for key in ("n", "citation", "url", "title", "evidence_id", "quote")}
+        for s in report["sources"]
     ]
     report["method"] = method_note(now(), route().model_for("toc_judge"))
     summary = {

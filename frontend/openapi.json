@@ -8468,6 +8468,25 @@
             "title": "Revision",
             "type": "integer"
           },
+          "seen_in": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seen In"
+          },
+          "seen_in_cites": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Seen In Cites",
+            "type": "array"
+          },
           "text": {
             "title": "Text",
             "type": "string"
@@ -8481,6 +8500,8 @@
           "dosage",
           "result_criteria",
           "description",
+          "seen_in",
+          "seen_in_cites",
           "origin",
           "revision"
         ],
@@ -8491,6 +8512,18 @@
         "additionalProperties": false,
         "description": "Where one box was seen (or, for an input, put in place).",
         "properties": {
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
           "note": {
             "title": "Note",
             "type": "string"
@@ -8556,12 +8589,14 @@
           }
         },
         "required": [
+          "evidence_id",
           "task_source_snapshot_id",
           "programme",
           "place",
           "note",
           "quote",
           "title",
+          "authors",
           "year",
           "url",
           "source_type"
@@ -8824,6 +8859,11 @@
             "title": "Effect Size Type",
             "type": "string"
           },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
           "evidence_type": {
             "anyOf": [
               {
@@ -8934,6 +8974,17 @@
             ],
             "title": "Source Year"
           },
+          "statement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statement"
+          },
           "task_source_snapshot_id": {
             "format": "uuid",
             "title": "Task Source Snapshot Id",
@@ -9006,6 +9057,8 @@
           "n",
           "k",
           "quote",
+          "statement",
+          "evidence_id",
           "task_source_snapshot_id",
           "source_title",
           "source_authors",
@@ -9119,16 +9172,6 @@
               }
             ]
           },
-          "summary": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TocSummaryOut"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "supporting_activities": {
             "items": {
               "type": "string"
@@ -9150,7 +9193,6 @@
           "pathways",
           "context",
           "supporting_activities",
-          "summary",
           "grade_rules",
           "confidence",
           "report",
@@ -9225,6 +9267,14 @@
             "title": "Critical",
             "type": "boolean"
           },
+          "evidence_cites": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Evidence Cites",
+            "type": "array"
+          },
           "evidence_sentence": {
             "anyOf": [
               {
@@ -9298,6 +9348,17 @@
             "title": "Then Text",
             "type": "string"
           },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
           "verdict": {
             "enum": [
               "confident",
@@ -9318,6 +9379,7 @@
           "source_box_id",
           "target_box_id",
           "sentence",
+          "title",
           "if_text",
           "for_text",
           "then_text",
@@ -9331,7 +9393,8 @@
           "verdict",
           "near_threshold",
           "weights",
-          "evidence_sentence"
+          "evidence_sentence",
+          "evidence_cites"
         ],
         "title": "TocLinkOut",
         "type": "object"
@@ -9648,12 +9711,34 @@
           "summary": {
             "$ref": "#/components/schemas/TocReportSummaryOut"
           },
+          "summary_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Text"
+          },
           "tests": {
             "items": {
               "$ref": "#/components/schemas/TocReportTestOut"
             },
             "title": "Tests",
             "type": "array"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
           }
         },
         "required": [
@@ -9695,9 +9780,43 @@
             "title": "Citation",
             "type": "string"
           },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
           "n": {
             "title": "N",
             "type": "integer"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
           },
           "url": {
             "anyOf": [
@@ -9840,34 +9959,6 @@
           }
         },
         "title": "TocResultCriteriaOut",
-        "type": "object"
-      },
-      "TocSummaryOut": {
-        "additionalProperties": false,
-        "description": "The header paragraphs and the questions for an evaluation (C20).",
-        "properties": {
-          "about": {
-            "title": "About",
-            "type": "string"
-          },
-          "evaluation_questions": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Evaluation Questions",
-            "type": "array"
-          },
-          "evidence_says": {
-            "title": "Evidence Says",
-            "type": "string"
-          }
-        },
-        "required": [
-          "about",
-          "evidence_says",
-          "evaluation_questions"
-        ],
-        "title": "TocSummaryOut",
         "type": "object"
       },
       "TocWeightsOut": {
@@ -13555,7 +13646,7 @@
     },
     "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context": {
       "get": {
-        "description": "Return one judgement's quote highlighted in its passage.",
+        "description": "Return one judgement's quote, or another passage of its document, in its passage.",
         "operationId": "get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get",
         "parameters": [
           {
@@ -13576,6 +13667,23 @@
               "format": "uuid",
               "title": "Evidence Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "quote",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Quote"
             }
           }
         ],

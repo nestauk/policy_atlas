@@ -602,6 +602,7 @@ class _BadCitation(StubTocBackend):
         links = [
             LinkSentencesWire(
                 link=str(link["key"]),
+                title="A short title",
                 sentence="A study showed it.",
                 cites=[str(uuid.uuid4())],
             )
@@ -861,3 +862,47 @@ def test_a_link_without_its_own_search_reads_the_closest_documents() -> None:
     assert [d.tss_id.int for d in picked] == list(range(1, 11))
     # Doc 0 ranks last; no embedder keeps the pool order.
     assert nearest(None, docs, vectors, text="the step") == docs[:JUDGE_TOP_K]
+
+
+def test_summarise_writes_titles_cited_sentences_and_box_texts(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    from policy_atlas.theory_of_change.summary_prompt import BoxDescriptionWire
+
+    class _SeenIn(StubTocBackend):
+        """Adds a "seen in" note to every box, citing a document no case study names."""
+
+        def summarise(self, *, plan: Any, theory: Any) -> Any:
+            response, usage = super().summarise(plan=plan, theory=theory)
+            boxes = [
+                BoxDescriptionWire(
+                    box=str(box["key"]),
+                    description="Why it matters.",
+                    seen_in="Seen in Leeds (2020).",
+                    cites=[str(uuid.uuid4())],
+                )
+                for box in theory["boxes"]
+            ]
+            return response.model_copy(update={"boxes": boxes}), usage
+
+    task_id = _run(engine, cleanup, _SeenIn())
+    summary = _summary(engine, task_id, "toc_summarise")
+    assert not {"about", "evidence_says", "evaluation_questions"} & set(summary)
+    with engine.connect() as conn:
+        out = toc_graph_out(conn, task_id)
+        judged = {
+            str(tss)
+            for tss in conn.execute(
+                select(toc_item_evidence.c.task_source_snapshot_id).where(
+                    toc_item_evidence.c.task_id == task_id
+                )
+            ).scalars()
+        }
+    assert not hasattr(out, "summary")
+    assert all(link.title and link.title.startswith("Step ") for link in out.links)
+    # Each sentence cites its link's first judged document; the panel numbers it.
+    cited = [link for link in out.links if link.evidence_cites]
+    assert cited and all({str(c) for c in link.evidence_cites} <= judged for link in cited)
+    # No box has case studies, so its "seen in" is dropped and counted.
+    assert all(box.description == "Why it matters." and box.seen_in is None for box in out.boxes)
+    assert summary["replaced"] >= len(out.boxes)
