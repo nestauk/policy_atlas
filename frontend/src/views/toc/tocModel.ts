@@ -77,9 +77,12 @@ export function figureGroups(figures: TocFigure[]): FigureGroup[] {
   return [...groups].map(([key, items]) => ({ key, figures: items }));
 }
 
-function withUnit(value: string, unit: string | null): string {
-  if (unit === null || unit === "") return value;
-  return unit === "%" ? `${value}%` : `${value} ${unit}`;
+/** The value with its unit, never twice: "45%" stays "45%", not "45%%". */
+export function withUnit(value: string, unit: string | null): string {
+  if (unit === null || unit.trim() === "") return value;
+  const u = unit.trim();
+  if (value.trim().toLowerCase().endsWith(u.toLowerCase())) return value;
+  return u === "%" ? `${value}%` : `${value} ${u}`;
 }
 
 /**

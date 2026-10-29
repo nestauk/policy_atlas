@@ -68,6 +68,8 @@ const MIN_START_ZOOM = 1;
 const VIEW_PADDING = 0.08;
 const HANDLE_CLASS = "!h-1 !w-1 !border-0 !bg-transparent";
 /** Display-only nodes: never selected, never catching a click meant for a box or a connection. */
+/** How far the two dividers run each way, in flow units: past any pan or zoom (minZoom 0.3). */
+export const FAR = 1_000_000;
 const DECOR = { draggable: false, selectable: false, focusable: false, style: { pointerEvents: "none" as const } };
 
 function BoxView({ data }: NodeProps<BoxNode>) {
@@ -193,8 +195,7 @@ export function TocCanvas({
   onSelect: (selection: Selection | null) => void;
 }) {
   const layout = layoutToc(graph);
-  // The ceiling runs from under the column headings to its two labels, below the lowest box.
-  const ceilingTop = HEADER_H - 12;
+  // The ceiling's two labels sit below the lowest box.
   const ceilingLabelY = layout.height + 12;
   const shown = visibleLinkIds(graph, pathway);
   const keptLinks = visibleLinkIds(graph, "all");
@@ -262,13 +263,12 @@ export function TocCanvas({
           {
             id: "line",
             type: "label",
-            position: { x: 0, y: layout.lineY },
-            data: { text: "", line: true, width: layout.width },
-            width: layout.width,
+            // Edge to edge, however far the view pans (owner: "from minus to plus infinity").
+            position: { x: -FAR, y: layout.lineY },
+            data: { text: "", line: true, width: 2 * FAR },
+            width: 2 * FAR,
             height: 1,
-            draggable: false,
-            selectable: false,
-            focusable: false,
+            ...DECOR,
           } as LabelNode,
           {
             id: "line-label",
@@ -286,10 +286,11 @@ export function TocCanvas({
     {
       id: "ceiling",
       type: "label",
-      position: { x: layout.ceilingX, y: ceilingTop },
-      data: { text: "", height: ceilingLabelY + LABEL_H - ceilingTop },
+      // Top to bottom, however far the view pans; its labels stay below the lowest box.
+      position: { x: layout.ceilingX, y: -FAR },
+      data: { text: "", height: 2 * FAR },
       width: 1,
-      height: ceilingLabelY + LABEL_H - ceilingTop,
+      height: 2 * FAR,
       ...DECOR,
     } as LabelNode,
     {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useToc, useTocEvidence } from "../../api/queries";
+import { useTask, useToc, useTocEvidence } from "../../api/queries";
 import { scrub } from "../../lib/scrub";
 import { REPORT_BODY_CLASS } from "../artefactPresentation";
 import { Button } from "../../ui/brand/Button";
@@ -13,6 +13,7 @@ import { keptPathways, pathwayTitles, tocTitle } from "./tocModel";
 /** The theory-of-change Result tab: header, canvas with its detail panel, Detailed information. */
 export function TocResult({ taskId }: { taskId: string }) {
   const toc = useToc(taskId);
+  const task = useTask(taskId);
   const evidence = useTocEvidence(taskId);
   const [pathway, setPathway] = useState("all");
   const [guideOpen, setGuideOpen] = useState(false);
@@ -37,7 +38,9 @@ export function TocResult({ taskId }: { taskId: string }) {
   const titles = pathwayTitles(graph);
   return (
     <main className="mx-auto my-8 w-full max-w-[1280px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0">
-      <h1 className="text-title font-extrabold leading-tight tracking-[-0.2px] text-navy">{scrub(tocTitle(graph))}</h1>
+      {/* The report's short title and summary; the task's name until a report is written. */}
+      <h1 className="text-title font-extrabold leading-tight tracking-[-0.2px] text-navy">{scrub(graph.report?.title ?? task.data?.name ?? tocTitle(graph))}</h1>
+      {graph.report?.summary_text != null && <p className={`mt-3 max-w-[56em] ${REPORT_BODY_CLASS}`}>{scrub(graph.report.summary_text)}</p>}
       {running && (
         <p className={`mt-4 max-w-[1100px] ${REPORT_BODY_CLASS}`}>
           Policy Atlas is checking each step against the evidence. Steps take their colour as they are checked.
@@ -68,7 +71,7 @@ export function TocResult({ taskId }: { taskId: string }) {
         {selection !== null && <DetailPanel taskId={taskId} graph={graph} evidence={evidence.data} selection={selection} onClose={() => setSelection(null)} />}
       </div>
       <VerdictLegend />
-      <DetailedInformation graph={graph} onSelect={select} />
+      <DetailedInformation taskId={taskId} graph={graph} onSelect={select} />
     </main>
   );
 }

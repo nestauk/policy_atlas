@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { boxId, linkId, tocEvidenceFixture, tocGraphFixture } from "./fixture";
-import { BOX_H, BOX_W, COL_GAP, ROW_GAP, evidenceBalance, figureGroups, figureHeadline, layoutToc, linkTip, routeEdge, tocTitle } from "./tocModel";
+import { BOX_H, BOX_W, COL_GAP, ROW_GAP, evidenceBalance, figureGroups, figureHeadline, layoutToc, withUnit, linkTip, routeEdge, tocTitle } from "./tocModel";
 
 const COL_STEP = BOX_W + COL_GAP;
 
@@ -103,6 +103,13 @@ describe("wording and grouping", () => {
     expect(figureHeadline({ key: "k", figures: [first!, same] })).toBe(
       "Evidence suggests 44% fewer adverts for less healthy food seen by children (1 study)",
     );
+  });
+
+  it("never writes the unit twice", () => {
+    expect(withUnit("45%", "%")).toBe("45%");
+    expect(withUnit("45", "%")).toBe("45%");
+    expect(withUnit("60 kcal", "kcal")).toBe("60 kcal");
+    expect(withUnit("60", "kcal")).toBe("60 kcal");
   });
 
   it("gives the verdict on a link's hover text", () => {

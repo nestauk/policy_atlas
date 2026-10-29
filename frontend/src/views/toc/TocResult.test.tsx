@@ -6,13 +6,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as queries from "../../api/queries";
 import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 import { FigureList } from "./Documents";
+import { FAR } from "./TocCanvas";
 import { boxId, linkId, SHARED_DOC_TITLE, TASK_ID, tocEvidenceFixture, tocGraphFixture } from "./fixture";
 import { TocResult } from "./TocResult";
 import type { TocGraph } from "./types";
 
-vi.mock("../../api/queries", () => ({ useToc: vi.fn(), useTocEvidence: vi.fn(), useTocDocumentContext: vi.fn() }));
+vi.mock("../../api/queries", () => ({ useTask: vi.fn(), useToc: vi.fn(), useTocEvidence: vi.fn(), useTocDocumentContext: vi.fn() }));
 
 function renderResult(graph: TocGraph = tocGraphFixture()) {
+  vi.mocked(queries.useTask).mockReturnValue({ data: { name: "Ads and obesity" } } as unknown as ReturnType<typeof queries.useTask>);
   vi.mocked(queries.useToc).mockReturnValue({ data: graph, isPending: false } as unknown as ReturnType<typeof queries.useToc>);
   vi.mocked(queries.useTocEvidence).mockReturnValue({ data: tocEvidenceFixture() } as unknown as ReturnType<typeof queries.useTocEvidence>);
   vi.mocked(queries.useTocDocumentContext).mockReturnValue({
@@ -77,6 +79,11 @@ describe("canvas", () => {
     // Display only: the ceiling never takes a click meant for a box or a connection.
     const ceiling = document.querySelector('[data-id="ceiling"]') as HTMLElement;
     expect(ceiling.style.pointerEvents).toBe("none");
+    // Both dividers run edge to edge, however far the view pans or zooms.
+    const line = document.querySelector('[data-id="line"]') as HTMLElement;
+    expect(parseFloat(line.style.width)).toBeGreaterThanOrEqual(2 * FAR);
+    expect(parseFloat(ceiling.style.height)).toBeGreaterThanOrEqual(2 * FAR);
+    expect(line.style.pointerEvents).toBe("none");
   });
 
   it("hover text gives the verdict", () => {
@@ -101,50 +108,103 @@ describe("reading guide", () => {
 });
 
 describe("detail panel", () => {
-  it("shows the verdict, the balance and each document's support, quality and relevance", () => {
+  const openLink = (n: number) => {
+    fireEvent.click((edge(n) as Element).querySelector("path") as Element); // d3-zoom needs a real window for mouse-down
+    return screen.getByRole("complementary", { name: "Details" });
+  };
+
+  it("leads with the title and its verdict, then how it works, then the evidence in order", () => {
     renderResult();
-    // Open the critical link from the panel: click its edge.
-    const target = edge(3) as Element;
-    fireEvent.click(target.querySelector("path") as Element); // d3-zoom needs a real window for mouse-down
-    const panel = screen.getByRole("complementary", { name: "Details" });
+    const panel = openLink(3);
     const heading = (text: string) => (_: string, el: Element | null) => el?.tagName === "P" && el.textContent === text;
     expect(within(panel).getByText(heading("Critical connection #3 · P1 → S1 · test this first"))).toBeInTheDocument();
-    expect(within(panel).getByText("Not sure: mixed")).toBeInTheDocument();
-    expect(within(panel).getByText(/brands moved to brand-only adverts/)).toBeInTheDocument();
-    expect(within(panel).getByText("Close to the threshold: one more study could change this verdict.")).toBeInTheDocument();
-    // The balance: one refuting block, two strongly supporting ones, heights by weight.
-    const blocks = (support: string) => within(within(panel).getByTestId(`balance-${support}`)).queryAllByTestId("balance-block");
-    expect(blocks("refutes")).toHaveLength(1);
-    expect(blocks("mixed")).toHaveLength(0);
-    expect(blocks("weak")).toHaveLength(0);
-    expect(blocks("strong").map((block) => block.style.height)).toEqual(["27px", "9px"]); // weights 0.667 and 0.222
-    // Documents, heaviest first, with their chips.
-    expect(within(panel).getByText("Documents (3)")).toBeInTheDocument();
-    const titles = within(panel).getAllByRole("button", { name: /Chile|Transport for London/ }).map((b) => b.textContent);
-    expect(titles[0]).toBe(SHARED_DOC_TITLE);
-    expect(within(panel).getByText("Strongly supports · quality 2 · relevance 3 · London, so it applies in England")).toBeInTheDocument();
+    const title = within(panel).getByRole("heading", { level: 3 });
+    expect(title.textContent).toBe("Link 3 title");
+    // The verdict right under the title: the dot and the label.
+    const verdict = within(panel).getByTestId("link-verdict");
+    expect(title.nextElementSibling).toBe(verdict);
+    expect(verdict.textContent).toBe("Not sure: mixed");
+    // Section order: How this works (clauses, then Conditions); Evidence (size, balance, sentence, documents).
+    const text = panel.textContent ?? "";
+    const order = [
+      "How this works",
+      "Link 3 says the step works.",
+      "Conditions",
+      "Evidence",
+      "Size of change",
+      "Evidence balance",
+      "Close to the threshold",
+      "brands moved to brand-only adverts",
+      "Documents (3)",
+    ].map((part) => text.indexOf(part, text.indexOf("How this works")));
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((x, y) => x - y)).toEqual(order);
     expect(within(panel).queryByText(/Worked elsewhere|Holds here/)).toBeNull();
-    // Size of change: the grouped range, each quote and its source line, and the note.
-    expect(within(panel).getByText("Size of change")).toBeInTheDocument();
+  });
+
+  it("shows each figure's statement, quote and source, and groups same-measure figures as a range", () => {
+    renderResult();
+    const panel = openLink(3);
     expect(within(panel).getAllByTestId("figure-group")).toHaveLength(2);
     expect(within(panel).getByText("Evidence suggests 44 to 58% fewer adverts for less healthy food seen by children (2 studies)")).toBeInTheDocument();
+    expect(within(panel).getByText("Children saw 44% fewer adverts for less healthy food after the rules.").className).toContain("font-bold");
     expect(within(panel).getByText("odds ratio 1·05 (0·99 to 1·12)")).toBeInTheDocument();
-    expect(within(panel).getAllByText("Smith, Jones · Obesity Reviews · 2020 · quasi-experiment").length).toBe(3);
+    expect(within(panel).getAllByText(/^Smith et al\. · Obesity Reviews · 2020 · quasi-experiment/).length).toBe(3);
     expect(within(panel).getByText("Figures come from the documents' abstracts.")).toBeInTheDocument();
   });
 
-  it("opens for a box", () => {
+  it("numbers the sentence's citations as the document list does, and opens them in the citation sidebar", async () => {
+    const user = userEvent.setup();
+    renderResult();
+    const panel = openLink(3);
+    // The list, heaviest first: [1] the London study, [2] the brand study, [3] Chile.
+    const listed = within(panel)
+      .getAllByRole("listitem")
+      .map((item) => item.textContent ?? "")
+      .filter((item) => item.includes("quality"));
+    expect(listed[0]).toContain(`[1]${SHARED_DOC_TITLE}`);
+    expect(listed[2]).toContain("[3]Children's exposure after Chile's Law 20.606");
+    const marker = within(panel).getByRole("button", { name: "Citations 1, 3" });
+    expect(marker.className).toContain("citation-marker");
+    await user.click(marker);
+    const sheet = screen.getByRole("dialog");
+    expect(within(sheet).getByText("Where this comes from")).toBeInTheDocument();
+    expect(within(sheet).getByText(/brands moved to brand-only adverts/)).toBeInTheDocument();
+    expect(within(sheet).getByText(SHARED_DOC_TITLE)).toBeInTheDocument();
+    expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, expect.stringContaining("0000e0002"), null);
+  });
+
+  it("gives each figure a marker that opens its own quote in context", async () => {
+    const user = userEvent.setup();
+    renderResult();
+    const panel = openLink(3);
+    // Figure 2 comes from the London study, number 1.
+    const [marker] = within(panel).getAllByRole("button", { name: "Citations 1" });
+    await user.click(marker as HTMLElement);
+    expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, expect.stringContaining("0000e0002"), "Exposure fell 58% after the rules.");
+  });
+
+  it("opens for a box: description, how we'd know, figures, then case studies with their seen-in note", async () => {
+    const user = userEvent.setup();
     renderResult();
     fireEvent.click(node(7));
     const panel = screen.getByRole("complementary", { name: "Details" });
-    expect(within(panel).getByText("Definition of: Households buy fewer calories from less healthy food")).toBeInTheDocument();
-    expect(within(panel).getByText(/Case studies \(1\)/)).toBeInTheDocument();
     expect(within(panel).getByText((_, el) => el?.tagName === "P" && el.textContent === "Long-term outcome L1")).toBeInTheDocument();
-    // Figures: a level of this box, reported by one of its links' documents.
-    expect(within(panel).getByText("Figures")).toBeInTheDocument();
-    expect(within(panel).getByText("140 kcal excess calories a day eaten by children")).toBeInTheDocument();
-    expect(within(panel).getByText("children overall eat 140 excess kcal per day")).toBeInTheDocument();
-    expect(within(panel).getByText(/Public Health England · 2020 · government evidence review/)).toBeInTheDocument();
+    const text = panel.textContent ?? "";
+    const order = ["described in a short paragraph", "How we'd know it happened", "Definition", "Indicator", "Timing", "Figures", "Case studies (1)", "Seen on London transport", "[1]Transport for London advertising restriction"].map((part) =>
+      text.indexOf(part),
+    );
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((x, y) => x - y)).toEqual(order);
+    expect(within(panel).queryByText("Result criteria")).toBeNull();
+    expect(within(panel).queryByText("Indicators used")).toBeNull();
+    // A case study's source names its authors or publisher and year, not "Academic".
+    expect(within(panel).getByText("Transport for London · 2022")).toBeInTheDocument();
+    expect(within(panel).queryByText(/^Academic/)).toBeNull();
+    // The seen-in note's citation opens the case study's quote in context.
+    const seenIn = within(panel).getByText(/Seen on London transport/);
+    await user.click(within(seenIn).getByRole("button", { name: "Citations 1" }));
+    expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, "00000000-0000-4000-8000-0000000e0009", "Calories bought fell by about 7%.");
   });
 });
 
@@ -188,11 +248,15 @@ describe("detailed information", () => {
     expect(within(screen.getByRole("complementary", { name: "Details" })).getByText("Children see fewer ads for less healthy food")).toBeInTheDocument();
   });
 
-  it("links each [n] to its source in the list", () => {
+  it("opens each [n] in the citation sidebar, as the Evidence search does", async () => {
+    const user = userEvent.setup();
     renderResult();
     const info = screen.getByLabelText("Detailed information");
-    const [marker] = within(info).getAllByRole("link", { name: "[3]" });
-    expect(marker).toHaveAttribute("href", "#toc-source-3");
+    const [marker] = within(info).getAllByRole("button", { name: "Citations 3" });
+    expect(marker?.className).toContain("citation-marker");
+    await user.click(marker as HTMLElement);
+    expect(within(screen.getByRole("dialog")).getByText("Where this comes from")).toBeInTheDocument();
+    expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, "00000000-0000-4000-8000-0000000e0003", null);
     expect(info.querySelector("#toc-source-3")?.textContent).toContain("Food brand advertising after Chile's restrictions");
   });
 
@@ -226,9 +290,9 @@ describe("detail panel documents", () => {
     renderResult();
     fireEvent.click((edge(3) as Element).querySelector("path") as Element);
     const panel = screen.getByRole("complementary", { name: "Details" });
-    expect(within(panel).getAllByText(/Smith, Jones · 20\d\d · quasi-experiment/).length).toBeGreaterThan(0);
+    expect(within(panel).getAllByText(/^Smith et al\. · 20\d\d · quasi-experiment/).length).toBeGreaterThan(0);
     await user.click(within(panel).getByRole("button", { name: "Children's exposure after Chile's Law 20.606" }));
-    expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, expect.stringContaining("0000e"));
+    expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, expect.stringContaining("0000e"), null);
     expect(screen.getByText("Where this comes from")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open the source" })).toHaveAttribute("href", expect.stringContaining("example.org"));
   });
@@ -240,10 +304,14 @@ describe("header", () => {
     expect(screen.getByText(/checking each step against the evidence/)).toBeInTheDocument();
   });
 
-  it("leaves the summary paragraphs to the report", () => {
-    renderResult();
+  it("shows the report's title and summary, or the task's name before a report", () => {
+    const { unmount } = renderResult();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Food advert limits and childhood obesity");
+    expect(screen.getByText(/whether children see fewer adverts overall is the weakest step/).className).toContain(REPORT_BODY_CLASS);
     expect(screen.queryByText("About this theory")).toBeNull();
-    expect(screen.queryByText("What the evidence says")).toBeNull();
+    unmount();
+    renderResult(tocGraphFixture({ report: null }));
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Ads and obesity");
   });
 });
 
@@ -252,7 +320,7 @@ describe("figures", () => {
     const user = userEvent.setup();
     const [base] = tocEvidenceFixture().links[0]?.figures ?? [];
     const figures = ["a", "b", "c", "d"].map((measure, i) => ({ ...base!, figure_id: `f${i}`, measure }));
-    render(<FigureList figures={figures} />);
+    render(<FigureList taskId={TASK_ID} figures={figures} citationOf={() => null} />);
     expect(screen.getAllByTestId("figure-group")).toHaveLength(3);
     await user.click(screen.getByRole("button", { name: "Show all 4 figures" }));
     expect(screen.getAllByTestId("figure-group")).toHaveLength(4);

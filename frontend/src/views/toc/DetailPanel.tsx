@@ -1,11 +1,13 @@
 import { scrub } from "../../lib/scrub";
-import { DocumentItem, EvidenceBalance, FigureList, LinkDocuments, VerdictDot, VerdictWords } from "./Documents";
+import { CitationMarker, citedDocuments, DocumentItem, documentCitation, EvidenceBalance, FigureList, LinkDocuments, VerdictDot, VerdictWords } from "./Documents";
 import { LAYER_LABEL, NEAR_THRESHOLD, ORIGIN_LABEL } from "./tocModel";
-import type { TocBox, TocEvidence, TocGraph, TocLink } from "./types";
+import type { TocBox, TocDocument, TocEvidence, TocGraph, TocLink } from "./types";
 
 export type Selection = { kind: "box" | "link"; id: string };
 
-const HEAD = "mt-4 text-meta font-bold text-navy";
+const HEAD = "mt-5 text-meta font-bold uppercase tracking-[0.06em] text-grey";
+/** A part inside a section ("Conditions", "Size of change"). */
+const SUB = "mt-3 text-meta font-bold text-navy";
 
 function Origin({ origin, rules }: { origin: TocBox["origin"]; rules?: TocGraph["grade_rules"] }) {
   return (
@@ -31,9 +33,47 @@ function Origin({ origin, rules }: { origin: TocBox["origin"]; rules?: TocGraph[
   );
 }
 
-function BoxDetail({ box, evidence }: { box: TocBox; evidence: TocEvidence | null | undefined }) {
-  const criteria = box.result_criteria;
+/** "Definition", "Indicator", "Timing": how we'd know a box's change happened. */
+function Criteria({ criteria }: { criteria: TocBox["result_criteria"] }) {
+  const rows = [
+    ["Definition", criteria.definition],
+    ["Indicator", criteria.indicator],
+    ["Timing", criteria.timing],
+  ].filter((row): row is [string, string] => row[1] != null);
+  if (rows.length === 0) return null;
+  return (
+    <>
+      <p className={HEAD}>How we'd know it happened</p>
+      <dl className="mt-1 grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-1 text-meta">
+        {rows.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="text-grey">{label}</dt>
+            <dd>{scrub(value)}</dd>
+          </div>
+        ))}
+      </dl>
+    </>
+  );
+}
+
+function BoxDetail({ taskId, box, evidence }: { taskId: string; box: TocBox; evidence: TocEvidence | null | undefined }) {
   const found = evidence?.boxes.find((entry) => entry.box_id === box.box_id);
+  const studies = found?.case_studies ?? [];
+  const figures = found?.figures ?? [];
+  // One numbering for the panel: the case studies' documents, then the figures'.
+  const order = [...new Set([...studies.map((study) => study.task_source_snapshot_id), ...figures.map((figure) => figure.task_source_snapshot_id)])];
+  const numberOf = (tss: string) => order.indexOf(tss) + 1;
+  const seenIn = studies
+    .filter((study) => box.seen_in_cites.includes(study.task_source_snapshot_id))
+    .filter((study, index, all) => all.findIndex((other) => other.task_source_snapshot_id === study.task_source_snapshot_id) === index)
+    .map((study) => ({
+      n: numberOf(study.task_source_snapshot_id),
+      evidenceId: study.evidence_id,
+      title: study.title,
+      url: study.url,
+      quote: study.quote,
+      fallbackQuote: study.quote,
+    }));
   return (
     <>
       <p className="text-meta text-grey">
@@ -41,62 +81,50 @@ function BoxDetail({ box, evidence }: { box: TocBox; evidence: TocEvidence | nul
         {box.code !== null && <> <span className="text-caption font-semibold">{box.code}</span></>}
       </p>
       <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(box.text)}</h3>
-      {(criteria.definition ?? criteria.indicator ?? criteria.timing) != null && (
-        <>
-          <p className={HEAD}>Result criteria</p>
-          <dl className="mt-1 grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-1 text-meta">
-            {criteria.definition != null && (
-              <>
-                <dt className="text-grey">Definition</dt>
-                <dd>{scrub(criteria.definition)}</dd>
-              </>
-            )}
-            {criteria.indicator != null && (
-              <>
-                <dt className="text-grey">Indicator</dt>
-                <dd>{scrub(criteria.indicator)}</dd>
-              </>
-            )}
-            {criteria.timing != null && (
-              <>
-                <dt className="text-grey">Timing</dt>
-                <dd>{scrub(criteria.timing)}</dd>
-              </>
-            )}
-          </dl>
-        </>
-      )}
-      {box.description !== null && <p className="mt-3 text-meta">{scrub(box.description)}</p>}
-      {found !== undefined && found.figures.length > 0 && (
+      {box.description !== null && <p className="mt-2 text-body">{scrub(box.description)}</p>}
+      <Criteria criteria={box.result_criteria} />
+      {figures.length > 0 && (
         <>
           <p className={HEAD}>Figures</p>
-          <FigureList figures={found.figures} />
+          <FigureList
+            taskId={taskId}
+            figures={figures}
+            citationOf={(figure) => ({
+              n: numberOf(figure.task_source_snapshot_id),
+              evidenceId: figure.evidence_id,
+              title: figure.source_title,
+              url: figure.url,
+              quote: figure.quote,
+              fallbackQuote: figure.quote,
+            })}
+          />
         </>
       )}
-      {found !== undefined && found.case_studies.length > 0 && (
+      {(studies.length > 0 || box.seen_in !== null) && (
         <>
-          <p className={HEAD}>Case studies ({found.case_studies.length})</p>
+          <p className={HEAD}>Case studies ({studies.length})</p>
+          {box.seen_in !== null && (
+            <p className="mt-1 text-body">
+              {scrub(box.seen_in)}
+              <CitationMarker taskId={taskId} claim={box.seen_in} citations={seenIn} />
+            </p>
+          )}
           <ul>
-            {found.case_studies.map((study) => (
+            {studies.map((study) => (
               <li key={`${study.task_source_snapshot_id}-${study.programme}`} className="border-t border-line py-2.5 text-meta">
                 <p className="font-semibold text-navy">
+                  <span className="mr-1 text-grey">[{numberOf(study.task_source_snapshot_id)}]</span>
                   {scrub(study.programme)}
                   {study.place !== null ? `, ${scrub(study.place)}` : ""}
                 </p>
                 <p className="mt-0.5">{scrub(study.note)}</p>
                 <q className="mt-1 block text-navy">{scrub(study.quote)}</q>
                 <ul>
-                  <DocumentItem title={study.title} url={study.url} quote={null} source_type={study.source_type} year={study.year} evidence_type={null} />
+                  <DocumentItem title={study.title} url={study.url} quote={null} authors={study.authors} source_type={study.source_type} year={study.year} evidence_type={null} />
                 </ul>
               </li>
             ))}
           </ul>
-        </>
-      )}
-      {found !== undefined && found.indicators.length > 0 && (
-        <>
-          <p className={HEAD}>Indicators used</p>
-          <p className="text-meta">{found.indicators.map(scrub).join(" · ")}</p>
         </>
       )}
       <Origin origin={box.origin} />
@@ -108,6 +136,14 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
   const linkEvidence = evidence?.links.find((entry) => entry.link_id === link.link_id);
   const documents = linkEvidence?.documents ?? [];
   const figures = linkEvidence?.figures ?? [];
+  // The citation list's order numbers every marker in this panel.
+  const cited = citedDocuments(documents);
+  const numberOf = (tss: string) => cited.findIndex((doc) => doc.task_source_snapshot_id === tss) + 1;
+  const sentenceCitations = link.evidence_cites
+    .map((tss) => cited.find((doc) => doc.task_source_snapshot_id === tss))
+    .filter((doc): doc is TocDocument => doc !== undefined)
+    .map((doc) => documentCitation(doc, numberOf(doc.task_source_snapshot_id)))
+    .sort((a, b) => a.n - b.n);
   const pending = link.state === "checking" || link.state === "unchecked";
   const codeOf = (boxId: string) => graph.boxes.find((box) => box.box_id === boxId)?.code ?? null;
   const [source, target] = [codeOf(link.source_box_id), codeOf(link.target_box_id)];
@@ -120,29 +156,18 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
         {codes !== null && <> <span className="text-caption font-semibold">{codes}</span></>}
         {link.critical && " · test this first"}
       </p>
-      <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(link.sentence)}</h3>
-      <p className={HEAD}>Evidence verdict</p>
+      <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(link.title ?? link.sentence)}</h3>
       {pending ? (
         <p className="mt-1 text-body text-grey">Checking the evidence…</p>
       ) : (
-        <>
-          <p className="mt-1 flex items-center text-body">
-            <VerdictDot verdict={link.verdict} />
-            <VerdictWords verdict={link.verdict} />
-          </p>
-          {link.evidence_sentence !== null && <p className="mt-1 text-body">{scrub(link.evidence_sentence)}</p>}
-          {link.near_threshold && <p className="mt-1 text-body">{NEAR_THRESHOLD}</p>}
-          <p className={HEAD}>Evidence balance</p>
-          <EvidenceBalance documents={documents} />
-          {figures.length > 0 && (
-            <>
-              <p className={HEAD}>Size of change</p>
-              <FigureList figures={figures} />
-            </>
-          )}
-        </>
+        <p data-testid="link-verdict" className="mt-1 flex items-center text-body">
+          <VerdictDot verdict={link.verdict} />
+          <VerdictWords verdict={link.verdict} />
+        </p>
       )}
-      <p className={HEAD}>How this step works</p>
+
+      <p className={HEAD}>How this works</p>
+      {link.title !== null && <p className="mt-1 text-meta">{scrub(link.sentence)}</p>}
       <dl className="mt-1 grid grid-cols-[4rem_1fr] gap-x-3 gap-y-1 text-meta">
         <dt className="text-grey">If</dt>
         <dd>{scrub(link.if_text)}</dd>
@@ -155,7 +180,7 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
       </dl>
       {link.conditions.length > 0 && (
         <>
-          <p className={HEAD}>Conditions</p>
+          <p className={SUB}>Conditions</p>
           <ul className="mt-1 list-disc pl-5 text-meta">
             {link.conditions.map((condition) => (
               <li key={condition}>{scrub(condition)}</li>
@@ -163,7 +188,37 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
           </ul>
         </>
       )}
-      <p className={HEAD}>Documents ({documents.filter((doc) => doc.support !== "not_about").length})</p>
+
+      <p className={HEAD}>Evidence</p>
+      {!pending && (
+        <>
+          {figures.length > 0 && (
+            <>
+              <p className={SUB}>Size of change</p>
+              <FigureList
+                taskId={taskId}
+                figures={figures}
+                citationOf={(figure) => {
+                  const doc = cited.find((item) => item.task_source_snapshot_id === figure.task_source_snapshot_id);
+                  return doc === undefined ? null : { ...documentCitation(doc, numberOf(figure.task_source_snapshot_id), figure.quote), evidenceId: figure.evidence_id };
+                }}
+              />
+            </>
+          )}
+          <p className={SUB}>
+            Evidence balance · <VerdictWords verdict={link.verdict} />
+          </p>
+          <EvidenceBalance documents={documents} />
+          {link.near_threshold && <p className="mt-1 text-body">{NEAR_THRESHOLD}</p>}
+          {link.evidence_sentence !== null && (
+            <p className="mt-2 text-body">
+              {scrub(link.evidence_sentence)}
+              <CitationMarker taskId={taskId} claim={link.evidence_sentence} citations={sentenceCitations} />
+            </p>
+          )}
+        </>
+      )}
+      <p className={SUB}>Documents ({cited.length})</p>
       <LinkDocuments taskId={taskId} documents={documents} />
       <Origin origin={link.origin} rules={graph.grade_rules} />
     </>
@@ -192,7 +247,7 @@ export function DetailPanel({
       <button type="button" onClick={onClose} aria-label="Close" className="float-right cursor-pointer text-lead leading-none text-grey hover:text-navy">
         ×
       </button>
-      {box !== undefined && <BoxDetail box={box} evidence={evidence} />}
+      {box !== undefined && <BoxDetail taskId={taskId} box={box} evidence={evidence} />}
       {link !== undefined && <LinkDetail taskId={taskId} link={link} graph={graph} evidence={evidence} />}
     </aside>
   );

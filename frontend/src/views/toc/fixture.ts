@@ -46,6 +46,8 @@ function box(n: number, layer: TocBox["layer"], text: string, extra: Partial<Toc
     dosage: null,
     result_criteria: { definition: `Definition of: ${text}`, indicator: `Indicator for: ${text}`, timing: "Within a year" },
     description: `${text}, described in a short paragraph.`,
+    seen_in: null,
+    seen_in_cites: [],
     origin: "drafted",
     revision: 1,
     ...extra,
@@ -59,7 +61,10 @@ export const BOXES: TocBox[] = [
   box(4, "output", "Some products reformulated to pass the rules"),
   box(5, "outcome_short", "Children see fewer ads for less healthy food"),
   box(6, "outcome_short", "Children ask for and pick healthier food"),
-  box(7, "outcome_long", "Households buy fewer calories from less healthy food"),
+  box(7, "outcome_long", "Households buy fewer calories from less healthy food", {
+    seen_in: "Seen on London transport after its 2019 advertising restriction.",
+    seen_in_cites: [docId(9)],
+  }),
   box(8, "impact", "Fewer children living with obesity at age 10 to 11"),
   box(9, "failure_outcome", "Brands shift spend to brand ads and influencers", { origin: "found_in_evidence" }),
   box(10, "failure_outcome", "Children's exposure barely falls", { origin: "found_in_evidence" }),
@@ -72,6 +77,7 @@ function link(n: number, source: number, target: number, type: string, verdict: 
     source_box_id: boxId(source),
     target_box_id: boxId(target),
     sentence: `Link ${n} says the step works.`,
+    title: `Link ${n} title`,
     if_text: `if step ${source}`,
     for_text: "children aged 4 to 15 in England",
     then_text: `then step ${target}`,
@@ -86,6 +92,7 @@ function link(n: number, source: number, target: number, type: string, verdict: 
     near_threshold: false,
     weights: { total_weight: 1.2, mean_support: 1.1, refute_share: 0, n_documents: 2 },
     evidence_sentence: `Evidence sentence for link ${n}.`,
+    evidence_cites: [],
     ...extra,
   };
 }
@@ -98,6 +105,7 @@ export const LINKS: TocLink[] = [
     near_threshold: true,
     conditions: ["Brands do not move their spend to brand-only ads, sponsorship and influencers"],
     evidence_sentence: "Exposure fell under Chile's rules and on London transport, but brands moved to brand-only adverts.",
+    evidence_cites: [docId(1), docId(2)],
   }),
   link(4, 5, 6, "behaviour change", "confident", { conditions: ["The effect seen in short trials lasts in everyday life"] }),
   link(5, 6, 7, "behaviour change", "not_sure_mixed"),
@@ -144,11 +152,6 @@ export function tocGraphFixture(overrides: Partial<TocGraph> = {}): TocGraph {
     pathways: PATHWAYS,
     context: ["Rules in force since January 2026.", "Children's viewing is moving to YouTube and TikTok."],
     supporting_activities: ["Ofcom monitoring", "Industry guidance on nutrient profiling"],
-    summary: {
-      about: "How restricting ads for less healthy food could mean fewer children living with obesity.",
-      evidence_says: "Most steps worked where they were tried, but few have been shown to hold in England.",
-      evaluation_questions: ["Did children's exposure fall across all channels?", "Are the calories cut made up from other food?"],
-    },
     grade_rules: [
       { label: "Confident", rule: "enough evidence, and on average it supports the step." },
       { label: "Not sure: mixed", rule: "enough evidence, but it neither clearly supports nor refutes the step." },
@@ -157,6 +160,8 @@ export function tocGraphFixture(overrides: Partial<TocGraph> = {}): TocGraph {
     ],
     confidence: "not_sure_mixed",
     report: {
+      title: "Food advert limits and childhood obesity",
+      summary_text: "Removing adverts should cut snacking, but whether children see fewer adverts overall is the weakest step.",
       summary: {
         goal: "Fewer children in England living with obesity within five years",
         if_then_because:
@@ -191,9 +196,9 @@ export function tocGraphFixture(overrides: Partial<TocGraph> = {}): TocGraph {
         },
       ],
       sources: [
-        { n: 1, citation: "Smith et al. (2020) Children's exposure after Chile's Law 20.606. Obesity Reviews.", url: "https://example.org/doc-1" },
-        { n: 2, citation: "Smith et al. (2022) Household purchases after the TfL restriction.", url: null },
-        { n: 3, citation: "Smith et al. (2023) Food brand advertising after Chile's restrictions.", url: null },
+        { n: 1, citation: "Smith et al. (2020) Children's exposure after Chile's Law 20.606. Obesity Reviews.", url: "https://example.org/doc-1", title: "Source 1", evidence_id: "00000000-0000-4000-8000-0000000e0001", quote: "Exposure fell by about half." },
+        { n: 2, citation: "Smith et al. (2022) Household purchases after the TfL restriction.", url: null, title: "Source 2", evidence_id: "00000000-0000-4000-8000-0000000e0002", quote: "Exposure fell by about half." },
+        { n: 3, citation: "Smith et al. (2023) Food brand advertising after Chile's restrictions.", url: null, title: "Source 3", evidence_id: "00000000-0000-4000-8000-0000000e0003", quote: "Exposure fell by about half." },
       ],
       method:
         "Generated by Policy Atlas with AI on 28 October 2026 from OpenAlex and Overton searches for each step; evidence judged by gpt-6.1-terra; not yet reviewed by a person. 'Too little evidence' means none was found in this search, not that none exists.",
@@ -244,6 +249,8 @@ function figure(n: number, doc: number, measure: string, value: number, extra: P
     n: null,
     k: null,
     quote: `Exposure fell ${value}% after the rules.`,
+    statement: `Children saw ${value}% fewer adverts for less healthy food after the rules.`,
+    evidence_id: `00000000-0000-4000-8000-0000000e${String(doc).padStart(4, "0")}`,
     task_source_snapshot_id: docId(doc),
     source_title: `Study ${doc}`,
     source_authors: ["Smith", "Jones"],
@@ -265,7 +272,9 @@ export function tocEvidenceFixture(): TocEvidence {
       box_id: boxId(7),
       case_studies: [
         {
+          evidence_id: "00000000-0000-4000-8000-0000000e0009",
           task_source_snapshot_id: docId(9),
+          authors: ["Transport for London"],
           programme: "Transport for London advertising restriction",
           place: "London",
           note: "Weekly calories fell against a comparison area.",

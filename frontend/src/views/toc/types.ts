@@ -9,7 +9,6 @@ export type TocBox = Schemas["TocBoxOut"];
 export type TocWeights = Schemas["TocWeightsOut"];
 export type TocLink = Schemas["TocLinkOut"];
 export type TocPathway = Schemas["TocPathwayOut"];
-export type TocSummary = Schemas["TocSummaryOut"];
 export type TocGradeRule = Schemas["TocGradeRuleOut"];
 export type TocGraph = Schemas["TocGraphOut"];
 export type TocDocument = Schemas["TocDocumentOut"];
