@@ -24,6 +24,10 @@ export const VERDICT_VAR: Record<Verdict, string> = {
   not_confident: "var(--color-verdict-against)",
 };
 
+/** What makes a connection critical: the rule in the backend's `critical_link` (C6, C36). */
+export const CRITICAL_DEFINITION =
+  "The weakest step on the routes to the impact: of the connections on the kept pathways, the one with the lowest evidence verdict. When several tie, it is the one the most pathways pass through. Test it first.";
+
 export const SUPPORT_LABEL: Record<Support, string> = {
   strong: "Strongly supports",
   weak: "Weakly supports",
@@ -35,7 +39,7 @@ export const SUPPORT_LABEL: Record<Support, string> = {
 /** The hover text of an edge: its verdict. */
 export function linkTip(link: TocLink): string {
   if (link.state === "checking" || link.state === "unchecked") return "Checking the evidence…";
-  const critical = link.critical ? "Critical connection · test this first. " : "";
+  const critical = link.critical ? "Critical connection. " : "";
   return `${critical}${VERDICT_LABEL[link.verdict]}`;
 }
 
@@ -373,15 +377,16 @@ function roundedPath(points: [number, number][], radius: number): string {
  * source, runs along the empty lane just above the target's row, and turns
  * down in the gap before the target. Connections leaving one box share their
  * first stretch, so a fan-out reads as one trunk with branches. The label
- * point (the critical connection's dot) is on the last stretch, which is the
- * connection's own.
+ * point (the critical connection's mark) is the route's middle: the turn into
+ * the target's row in the gap, or the middle of the lane.
  */
 export function routeEdge(sourceX: number, sourceY: number, targetX: number, targetY: number, span: number): EdgeRoute {
   const radius = 10;
   const afterSource = sourceX + COL_GAP / 2;
   if (span <= 1 || Math.abs(targetY - sourceY) < 1) {
     const points: [number, number][] = [[sourceX, sourceY], [afterSource, sourceY], [afterSource, targetY], [targetX, targetY]];
-    return { path: roundedPath(points, radius), labelX: (afterSource + targetX) / 2, labelY: targetY };
+    // The middle of the gap, on the target's row: this connection's own stretch.
+    return { path: roundedPath(points, radius), labelX: afterSource, labelY: targetY };
   }
   const beforeTarget = targetX - COL_GAP / 2;
   const lane = targetY - BOX_H / 2 - ROW_GAP / 2;
@@ -393,7 +398,8 @@ export function routeEdge(sourceX: number, sourceY: number, targetX: number, tar
     [beforeTarget, targetY],
     [targetX, targetY],
   ];
-  return { path: roundedPath(points, radius), labelX: (beforeTarget + targetX) / 2, labelY: targetY };
+  // The middle of the lane.
+  return { path: roundedPath(points, radius), labelX: (afterSource + beforeTarget) / 2, labelY: lane };
 }
 
 /** "Intervention → intended change", from the first input and the last impact. */

@@ -1,5 +1,15 @@
 # Spec update log
 
+## 2026-10-29 (task 054, presentation round 4)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
+  label is "Critical connection" (no "test this first"); hovering it gives the rule: the weakest
+  step on the kept pathways (lowest verdict), ties to the one most pathways pass through. The
+  warning triangle sits at the middle of the route. Sidebar section labels are blue, part labels
+  bold body ink; source lines and judgement lines are body ink, not grey. Hovering or focusing a
+  block of the evidence balance shows its document as the document list does. In a connection's
+  Evidence, the balance and its sentence come before Size of change. Tooltips, like sidebars,
+  open inside full screen.
+
 ## 2026-10-29 (task 054, presentation round 3)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
   critical connection carries a red warning triangle on its line instead of a thicker line (key,

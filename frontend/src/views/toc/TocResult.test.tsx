@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as queries from "../../api/queries";
+import { TooltipProvider } from "../../ui/radix/Tooltip";
 import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 import { FigureList } from "./Documents";
 import { boxId, linkId, SHARED_DOC_TITLE, TASK_ID, tocEvidenceFixture, tocGraphFixture } from "./fixture";
@@ -23,7 +24,9 @@ function renderResult(graph: TocGraph = tocGraphFixture()) {
   } as unknown as ReturnType<typeof queries.useTocDocumentContext>);
   return render(
     <MemoryRouter>
-      <TocResult taskId={TASK_ID} />
+      <TooltipProvider delayDuration={0}>
+        <TocResult taskId={TASK_ID} />
+      </TooltipProvider>
     </MemoryRouter>,
   );
 }
@@ -84,7 +87,7 @@ describe("canvas", () => {
   it("hover text gives the verdict", () => {
     renderResult();
     expect(edge(4)?.querySelector("title")?.textContent).toBe("Confident");
-    expect(edge(3)?.querySelector("title")?.textContent).toBe("Critical connection · test this first. Not sure: mixed");
+    expect(edge(3)?.querySelector("title")?.textContent).toBe("Critical connection. Not sure: mixed");
   });
 });
 
@@ -112,28 +115,45 @@ describe("detail panel", () => {
     renderResult();
     const panel = openLink(3);
     const heading = (text: string) => (_: string, el: Element | null) => el?.tagName === "P" && el.textContent === text;
-    expect(within(panel).getByText(heading("Critical connection #3 · P1 → S1 · test this first"))).toBeInTheDocument();
+    expect(within(panel).getByText(heading("Critical connection #3 · P1 → S1"))).toBeInTheDocument();
     const title = within(panel).getByRole("heading", { level: 3 });
     expect(title.textContent).toBe("Link 3 title");
     // The verdict right under the title: the dot and the label.
     const verdict = within(panel).getByTestId("link-verdict");
     expect(title.nextElementSibling).toBe(verdict);
     expect(verdict.textContent).toBe("Not sure: mixed");
-    // Section order: How this works (clauses, then Conditions); Evidence (size, balance, sentence, documents).
+    // Section order: How this works (clauses, then Conditions); Evidence (balance, sentence, size, documents).
     const text = panel.textContent ?? "";
     const order = [
       "How this works",
       "because",
       "Conditions",
       "Evidence",
-      "Size of change",
       "Evidence balance: Not sure: mixed",
       "brands moved to brand-only adverts",
+      "Size of change",
       "Documents (3)",
     ].map((part) => text.indexOf(part, text.indexOf("How this works")));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect([...order].sort((x, y) => x - y)).toEqual(order);
     expect(within(panel).queryByText(/Worked elsewhere|Holds here/)).toBeNull();
+  });
+
+  it("shows a balance block's document on hover, as the document list shows it", async () => {
+    const user = userEvent.setup();
+    renderResult();
+    const panel = openLink(3);
+    const [block] = within(panel).getAllByTestId("balance-block");
+    await user.hover(block as HTMLElement);
+    expect((await screen.findByRole("tooltip")).textContent).toContain("quality");
+  });
+
+  it("says what makes a connection critical on hover", async () => {
+    const user = userEvent.setup();
+    renderResult();
+    const panel = openLink(3);
+    await user.hover(within(panel).getByText("Critical connection"));
+    expect((await screen.findByRole("tooltip")).textContent).toContain("lowest evidence verdict");
   });
 
   it("shows each figure's statement, quote and source, and groups same-measure figures as a range", () => {

@@ -1,14 +1,15 @@
 import { scrub } from "../../lib/scrub";
-import { CitationMarker, citedDocuments, documentCitation, EvidenceBalance, FigureList, ITEM_QUOTE, ITEM_TITLE, LinkDocuments, shortAuthors, sourceLine, VerdictDot, VerdictWords } from "./Documents";
+import { Tooltip } from "../../ui/radix/Tooltip";
+import { CitationMarker, citedDocuments, documentCitation, DocumentItem, documentChips, EvidenceBalance, FigureList, ITEM_QUOTE, ITEM_TITLE, LinkDocuments, sourceLine, VerdictDot, VerdictWords } from "./Documents";
 import { CriticalIcon } from "./ReadingGuide";
-import { LAYER_LABEL, ORIGIN_LABEL } from "./tocModel";
+import { CRITICAL_DEFINITION, LAYER_LABEL, ORIGIN_LABEL } from "./tocModel";
 import type { TocBox, TocDocument, TocEvidence, TocGraph, TocLink } from "./types";
 
 export type Selection = { kind: "box" | "link"; id: string };
 
-const HEAD = "mt-5 text-meta font-bold uppercase tracking-[0.06em] text-grey";
-/** A part inside a section ("Conditions", "Size of change"): body size, bold. */
-const SUB = "mt-3 text-body font-bold text-navy";
+const HEAD = "mt-5 text-meta font-bold uppercase tracking-[0.06em] text-blue";
+/** A part inside a section ("Conditions", "Size of change"): body size, bold, body ink. */
+const SUB = "mt-3 text-body font-bold text-ink";
 
 function Origin({ origin, rules }: { origin: TocBox["origin"]; rules?: TocGraph["grade_rules"] }) {
   return (
@@ -120,7 +121,7 @@ function BoxDetail({ taskId, box, evidence }: { taskId: string; box: TocBox; evi
                   {study.place !== null ? `, ${scrub(study.place)}` : ""}
                 </p>
                 <p className="mt-0.5">{scrub(study.note)}</p>
-                <p className="mt-0.5 text-grey">
+                <p className="mt-0.5">
                   {scrub(sourceLine(study.source_type, study.authors, study.year))}
                   {" · "}
                   {study.url !== null ? (
@@ -167,9 +168,16 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
             <CriticalIcon />
           </span>
         )}
-        {link.critical ? "Critical connection" : "Connection"}
+        {link.critical ? (
+          <Tooltip content={CRITICAL_DEFINITION} className="max-w-sm text-body text-ink">
+            <span tabIndex={0} className="cursor-help underline decoration-dotted underline-offset-2">
+              Critical connection
+            </span>
+          </Tooltip>
+        ) : (
+          "Connection"
+        )}
         {codes !== null && <> <span className="font-semibold">{codes}</span></>}
-        {link.critical && " · test this first"}
       </p>
       <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(link.title ?? link.sentence)}</h3>
       {pending ? (
@@ -212,6 +220,33 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
       <p className={HEAD}>Evidence</p>
       {!pending && (
         <>
+          <p className={SUB}>
+            Evidence balance: <VerdictWords verdict={link.verdict} />
+          </p>
+          <EvidenceBalance
+            documents={cited}
+            detail={(doc) => (
+              <ul className="[&>li]:border-0 [&>li]:py-0">
+                <DocumentItem
+                  n={numberOf(doc.task_source_snapshot_id)}
+                  title={doc.title}
+                  url={null}
+                  quote={doc.quote}
+                  chips={documentChips(doc)}
+                  authors={doc.authors}
+                  source_type={doc.source_type}
+                  year={doc.year}
+                  evidence_type={doc.evidence_type}
+                />
+              </ul>
+            )}
+          />
+          {link.evidence_sentence !== null && (
+            <p className="mt-2 text-body">
+              {scrub(link.evidence_sentence)}
+              <CitationMarker taskId={taskId} claim={link.evidence_sentence} citations={sentenceCitations} />
+            </p>
+          )}
           {figures.length > 0 && (
             <>
               <p className={SUB}>Size of change</p>
@@ -224,19 +259,6 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
                 }}
               />
             </>
-          )}
-          <p className={SUB}>
-            Evidence balance: <VerdictWords verdict={link.verdict} />
-          </p>
-          <EvidenceBalance
-            documents={cited}
-            label={(doc) => [`[${numberOf(doc.task_source_snapshot_id)}]`, shortAuthors(doc.authors), doc.year, scrub(doc.title)].filter((part) => part != null).join(" ")}
-          />
-          {link.evidence_sentence !== null && (
-            <p className="mt-2 text-body">
-              {scrub(link.evidence_sentence)}
-              <CitationMarker taskId={taskId} claim={link.evidence_sentence} citations={sentenceCitations} />
-            </p>
           )}
         </>
       )}

@@ -59,7 +59,7 @@ describe("routeEdge", () => {
   it("turns once in the gap between neighbouring columns", () => {
     const route = routeEdge(200, 40, 280, 140, 1);
     expect(route.path).toMatch(/^M 200,40 L 230,40 Q 240,40 240,50 L 240,130 Q 240,140 250,140 L 280,140$/);
-    expect([route.labelX, route.labelY]).toEqual([260, 140]);
+    expect([route.labelX, route.labelY]).toEqual([240, 140]);
   });
 
   it("runs a longer connection along the lane above the target's row, never through a box", () => {
