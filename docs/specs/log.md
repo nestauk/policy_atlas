@@ -1,5 +1,14 @@
 # Spec update log
 
+## 2026-10-29 (task 054, presentation of information)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
+  Result page's title and summary come from the report; each link has a short title, and its
+  panel reads title and verdict, how it works, then one Evidence section (size of change with a
+  plain statement per figure, the balance, the cited sentence, the numbered documents); box panels
+  show "How we'd know it happened" and a "seen in" note from case studies; citations open the
+  Evidence search's source sidebar with the quote in context; the canvas dividers run edge to
+  edge. The summary step no longer writes header paragraphs or evaluation questions.
+
 ## 2026-10-28 (task 054, narrative Detailed information)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md):
   Detailed information is now a short narrative report in five sections (Summary, How change
