@@ -9776,6 +9776,14 @@
         "additionalProperties": false,
         "description": "One numbered source, in order of first citation.",
         "properties": {
+          "authors": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
           "citation": {
             "title": "Citation",
             "type": "string"
@@ -9828,6 +9836,28 @@
               }
             ],
             "title": "Url"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
           }
         },
         "required": [

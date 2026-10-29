@@ -1,6 +1,6 @@
 import { scrub } from "../../lib/scrub";
-import { CitationMarker, citedDocuments, DocumentItem, documentCitation, EvidenceBalance, FigureList, LinkDocuments, VerdictDot, VerdictWords } from "./Documents";
-import { LAYER_LABEL, NEAR_THRESHOLD, ORIGIN_LABEL } from "./tocModel";
+import { CitationMarker, citedDocuments, DocumentItem, documentCitation, EvidenceBalance, FigureList, ITEM_QUOTE, ITEM_TITLE, LinkDocuments, shortAuthors, VerdictDot, VerdictWords } from "./Documents";
+import { LAYER_LABEL, ORIGIN_LABEL } from "./tocModel";
 import type { TocBox, TocDocument, TocEvidence, TocGraph, TocLink } from "./types";
 
 export type Selection = { kind: "box" | "link"; id: string };
@@ -44,7 +44,7 @@ function Criteria({ criteria }: { criteria: TocBox["result_criteria"] }) {
   return (
     <>
       <p className={HEAD}>How we'd know it happened</p>
-      <dl className="mt-1 grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-1 text-meta">
+      <dl className="mt-1 grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-1 text-body">
         {rows.map(([label, value]) => (
           <div key={label} className="contents">
             <dt className="text-grey">{label}</dt>
@@ -78,7 +78,7 @@ function BoxDetail({ taskId, box, evidence }: { taskId: string; box: TocBox; evi
     <>
       <p className="text-meta text-grey">
         {LAYER_LABEL[box.layer]}
-        {box.code !== null && <> <span className="text-caption font-semibold">{box.code}</span></>}
+        {box.code !== null && <> <span className="font-semibold">{box.code}</span></>}
       </p>
       <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(box.text)}</h3>
       {box.description !== null && <p className="mt-2 text-body">{scrub(box.description)}</p>}
@@ -112,13 +112,13 @@ function BoxDetail({ taskId, box, evidence }: { taskId: string; box: TocBox; evi
           <ul>
             {studies.map((study) => (
               <li key={`${study.task_source_snapshot_id}-${study.programme}`} className="border-t border-line py-2.5 text-meta">
-                <p className="font-semibold text-navy">
+                <p className={ITEM_TITLE}>
                   <span className="mr-1 text-grey">[{numberOf(study.task_source_snapshot_id)}]</span>
                   {scrub(study.programme)}
                   {study.place !== null ? `, ${scrub(study.place)}` : ""}
                 </p>
                 <p className="mt-0.5">{scrub(study.note)}</p>
-                <q className="mt-1 block text-navy">{scrub(study.quote)}</q>
+                <q className={ITEM_QUOTE}>{scrub(study.quote)}</q>
                 <ul>
                   <DocumentItem title={study.title} url={study.url} quote={null} authors={study.authors} source_type={study.source_type} year={study.year} evidence_type={null} />
                 </ul>
@@ -153,7 +153,7 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
     <>
       <p className="text-meta text-grey">
         {link.critical ? "Critical connection" : "Connection"}
-        {codes !== null && <> <span className="text-caption font-semibold">{codes}</span></>}
+        {codes !== null && <> <span className="font-semibold">{codes}</span></>}
         {link.critical && " · test this first"}
       </p>
       <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(link.title ?? link.sentence)}</h3>
@@ -167,21 +167,26 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
       )}
 
       <p className={HEAD}>How this works</p>
-      {link.title !== null && <p className="mt-1 text-meta">{scrub(link.sentence)}</p>}
-      <dl className="mt-1 grid grid-cols-[4rem_1fr] gap-x-3 gap-y-1 text-meta">
-        <dt className="text-grey">If</dt>
-        <dd>{scrub(link.if_text)}</dd>
-        <dt className="text-grey">For</dt>
-        <dd>{scrub(link.for_text)}</dd>
-        <dt className="text-grey">Then</dt>
-        <dd>{scrub(link.then_text)}</dd>
-        <dt className="text-grey">Because</dt>
-        <dd>{scrub(link.because_text)}</dd>
-      </dl>
+      <p className="mt-1 text-body">
+        {(
+          [
+            ["If", link.if_text],
+            ["for", link.for_text],
+            ["then", link.then_text],
+            ["because", link.because_text],
+          ] as const
+        ).map(([word, text], index) => (
+          <span key={word}>
+            {index > 0 && ", "}
+            <b>{word}</b> {scrub(text.replace(/[.,;\s]+$/, ""))}
+          </span>
+        ))}
+        .
+      </p>
       {link.conditions.length > 0 && (
         <>
           <p className={SUB}>Conditions</p>
-          <ul className="mt-1 list-disc pl-5 text-meta">
+          <ul className="mt-1 list-disc pl-5 text-body">
             {link.conditions.map((condition) => (
               <li key={condition}>{scrub(condition)}</li>
             ))}
@@ -206,10 +211,12 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
             </>
           )}
           <p className={SUB}>
-            Evidence balance · <VerdictWords verdict={link.verdict} />
+            Evidence balance: <VerdictWords verdict={link.verdict} />
           </p>
-          <EvidenceBalance documents={documents} />
-          {link.near_threshold && <p className="mt-1 text-body">{NEAR_THRESHOLD}</p>}
+          <EvidenceBalance
+            documents={cited}
+            label={(doc) => [`[${numberOf(doc.task_source_snapshot_id)}]`, shortAuthors(doc.authors), doc.year, scrub(doc.title)].filter((part) => part != null).join(" ")}
+          />
           {link.evidence_sentence !== null && (
             <p className="mt-2 text-body">
               {scrub(link.evidence_sentence)}
@@ -243,7 +250,7 @@ export function DetailPanel({
   const link = selection.kind === "link" ? graph.links.find((l) => l.link_id === selection.id) : undefined;
   if (box === undefined && link === undefined) return null;
   return (
-    <aside aria-label="Details" className="max-h-[680px] w-[380px] shrink-0 overflow-y-auto border-l border-line bg-paper px-5 py-4 max-lg:w-full max-lg:border-l-0 max-lg:border-t">
+    <aside aria-label="Details" className="max-h-[680px] [:fullscreen>&]:max-h-screen w-[380px] shrink-0 overflow-y-auto border-l border-line bg-paper px-5 py-4 max-lg:w-full max-lg:border-l-0 max-lg:border-t">
       <button type="button" onClick={onClose} aria-label="Close" className="float-right cursor-pointer text-lead leading-none text-grey hover:text-navy">
         ×
       </button>

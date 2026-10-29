@@ -5887,6 +5887,11 @@ export interface components {
          * @description One numbered source, in order of first citation.
          */
         TocReportSourceOut: {
+            /**
+             * Authors
+             * @default []
+             */
+            authors: string[];
             /** Citation */
             citation: string;
             /** Evidence Id */
@@ -5899,6 +5904,10 @@ export interface components {
             title?: string | null;
             /** Url */
             url: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Year */
+            year?: number | null;
         };
         /**
          * TocReportSummaryOut

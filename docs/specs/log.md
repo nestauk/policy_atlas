@@ -1,5 +1,15 @@
 # Spec update log
 
+## 2026-10-29 (task 054, presentation round 2)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): a
+  link's "How this works" is one sentence with **If**, **for**, **then** and **because** in bold;
+  hovering a block of the evidence balance names its document; the "close to the threshold"
+  sentence is gone; sidebar items (documents, figures, case studies) share one title, source-line
+  and quote style. A chosen pathway also shows the inputs and outputs that feed it. The last
+  report section is "Sources", listed as the Evidence search lists references (title, authors,
+  year, venue); the method note is no longer shown. The canvas dividers follow the view instead
+  of being very long nodes, which made panning slow.
+
 ## 2026-10-29 (task 054, presentation of information)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
   Result page's title and summary come from the report; each link has a short title, and its

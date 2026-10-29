@@ -32,26 +32,21 @@ export const SUPPORT_LABEL: Record<Support, string> = {
   not_about: "Not about this step",
 };
 
-export const NEAR_THRESHOLD = "Close to the threshold: one more study could change this verdict.";
-
-/** The hover text of an edge: its verdict, and whether it is close to changing. */
+/** The hover text of an edge: its verdict. */
 export function linkTip(link: TocLink): string {
   if (link.state === "checking" || link.state === "unchecked") return "Checking the evidence…";
   const critical = link.critical ? "Critical connection · test this first. " : "";
-  return `${critical}${VERDICT_LABEL[link.verdict]}${link.near_threshold ? " · close to the threshold" : ""}`;
+  return `${critical}${VERDICT_LABEL[link.verdict]}`;
 }
 
 /** The evidence balance's four columns, left to right (C36). */
 export const BALANCE: readonly Exclude<Support, "not_about">[] = ["refutes", "mixed", "weak", "strong"];
 
-/** Each column's document weights, heaviest first; documents not about the step are left out. */
-export function evidenceBalance(documents: Pick<TocDocument, "support" | "weight">[]): { support: Exclude<Support, "not_about">; weights: number[] }[] {
+/** Each column's documents, heaviest first; documents not about the step are left out. */
+export function evidenceBalance<T extends Pick<TocDocument, "support" | "weight">>(documents: T[]): { support: Exclude<Support, "not_about">; docs: T[] }[] {
   return BALANCE.map((support) => ({
     support,
-    weights: documents
-      .filter((doc) => doc.support === support)
-      .map((doc) => doc.weight)
-      .sort((a, b) => b - a),
+    docs: documents.filter((doc) => doc.support === support).sort((a, b) => b.weight - a.weight),
   }));
 }
 
@@ -128,10 +123,31 @@ export function keptPathways(graph: Pick<TocGraph, "pathways">): TocPathway[] {
   return [...kept.filter((p) => p.kind === "success"), ...kept.filter((p) => p.kind === "failure")];
 }
 
-/** The link ids shown for a pathway choice ("all" or one pathway id). */
-export function visibleLinkIds(graph: Pick<TocGraph, "pathways">, choice: string): Set<string> {
+/**
+ * The link ids shown for a pathway choice ("all" or one pathway id). One
+ * pathway shows its own chain plus every input and output that feeds into
+ * it: several activities often meet at a shared outcome, and each of them
+ * contributes to every route that leaves it.
+ */
+export function visibleLinkIds(graph: Pick<TocGraph, "pathways" | "links" | "boxes">, choice: string): Set<string> {
   const chosen = keptPathways(graph).filter((p) => choice === "all" || p.pathway_id === choice);
-  return new Set(chosen.flatMap((p) => p.link_ids));
+  const shown = new Set(chosen.flatMap((p) => p.link_ids));
+  if (choice === "all") return shown;
+  const kept = new Set(keptPathways(graph).flatMap((p) => p.link_ids));
+  const layerOf = new Map(graph.boxes.map((box) => [box.box_id, box.layer]));
+  const feeds = graph.links.filter((link) => kept.has(link.link_id) && ["input", "output"].includes(layerOf.get(link.source_box_id) ?? ""));
+  const reached = new Set(graph.links.filter((link) => shown.has(link.link_id)).map((link) => link.target_box_id));
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const link of feeds) {
+      if (!shown.has(link.link_id) && reached.has(link.target_box_id)) {
+        shown.add(link.link_id);
+        reached.add(link.source_box_id);
+        grew = true;
+      }
+    }
+  }
+  return shown;
 }
 
 export const BOX_W = 200;

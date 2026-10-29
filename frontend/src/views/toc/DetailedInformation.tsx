@@ -1,14 +1,16 @@
+import { useState } from "react";
+
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
-import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
+import { referenceAuthorsLine, REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 import type { Selection } from "./DetailPanel";
-import { CitationMarker } from "./Documents";
+import { CitationMarker, CitationSheet } from "./Documents";
 import type { TocGraph } from "./types";
 
 type Report = NonNullable<TocGraph["report"]>;
 
 const P = `mt-2 max-w-[44em] ${REPORT_BODY_CLASS}`;
-/** Metadata lines (the scope, the method): body size, grey. */
+/** Metadata lines (the scope): body size, grey. */
 const GREY = P.replace("text-ink", "text-grey");
 const H3 = `mt-8 ${REPORT_SECTION_HEADING_CLASS}`;
 const TOKEN = /(#\d+|\b[APSLIF]\d+\b|\[\d+\])/;
@@ -103,6 +105,57 @@ function Table({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
   );
 }
 
+/**
+ * The numbered sources, as the Evidence search lists its references: the
+ * number, the title (opens the source's quote in the citation sidebar), then
+ * authors, year and venue in grey. Reports written before those fields show
+ * their one-line citation.
+ */
+function SourceList({ taskId, sources }: { taskId: string; sources: Report["sources"] }) {
+  const [opened, setOpened] = useState<Report["sources"][number] | null>(null);
+  if (sources.length === 0) return null;
+  return (
+    <>
+      <ol className={`mt-3 max-w-[44em] space-y-1.5 ${REPORT_BODY_CLASS}`}>
+        {sources.map((source) => {
+          const authors = referenceAuthorsLine((source.authors ?? []).map((name) => ({ name })));
+          const title = source.title ?? source.citation;
+          return (
+            <li key={source.n} id={`toc-source-${source.n}`} className="flex gap-2">
+              <span className="font-bold text-blue">[{source.n}]</span>
+              <span>
+                {source.evidence_id != null ? (
+                  <button type="button" className="cursor-pointer text-left hover:underline" onClick={() => setOpened(source)}>
+                    {scrub(title)}
+                  </button>
+                ) : source.url !== null ? (
+                  <a href={source.url} target="_blank" rel="noreferrer" className="hover:underline">
+                    {scrub(title)}
+                  </a>
+                ) : (
+                  scrub(title)
+                )}
+                {authors !== null && <span className="text-grey"> — {scrub(authors)}</span>}
+                {source.year != null && <span className="text-grey"> ({source.year})</span>}
+                {source.venue != null && <span className="text-grey"> · {scrub(source.venue)}</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      {opened !== null && (
+        <CitationSheet
+          taskId={taskId}
+          claim={null}
+          numbered={false}
+          citations={[{ n: opened.n, evidenceId: opened.evidence_id ?? null, title: opened.title ?? opened.citation, url: opened.url, quote: null, fallbackQuote: opened.quote ?? "" }]}
+          onClose={() => setOpened(null)}
+        />
+      )}
+    </>
+  );
+}
+
 function ReportBody({ taskId, report, graph, onSelect }: { taskId: string; report: Report; graph: TocGraph; onSelect: (selection: Selection) => void }) {
   const codes = codeTargets(graph);
   const rich = (text: string) => <Rich taskId={taskId} text={text} codes={codes} sources={report.sources} onSelect={onSelect} />;
@@ -172,31 +225,15 @@ function ReportBody({ taskId, report, graph, onSelect }: { taskId: string; repor
         rows={report.tests.map((row) => [rich(row.link), rich(row.question), rich(row.indicator), rich(row.test_and_learn)])}
       />
 
-      <h3 className={H3}>Sources and method</h3>
-      {report.sources.length > 0 && (
-        <p className={P}>
-          {report.sources.map((source, index) => (
-            <span key={source.n} id={`toc-source-${source.n}`}>
-              {index > 0 && " · "}[{source.n}]{" "}
-              {source.url !== null ? (
-                <a href={source.url} target="_blank" rel="noreferrer" className="hover:underline">
-                  {scrub(source.citation)}
-                </a>
-              ) : (
-                scrub(source.citation)
-              )}
-            </span>
-          ))}
-        </p>
-      )}
-      <p className={GREY}>{scrub(report.method)}</p>
+      <h3 className={H3}>Sources</h3>
+      <SourceList taskId={taskId} sources={report.sources} />
     </>
   );
 }
 
 /**
  * Detailed information: a short narrative report beside the canvas (C38),
- * and the PDF. Five sections, the report's four text styles only; nothing
+ * and the PDF. Five sections (the last is the numbered sources), the report's four text styles only; nothing
  * collapses, so the print view shows it whole.
  */
 export function DetailedInformation({ taskId, graph, onSelect }: { taskId: string; graph: TocGraph; onSelect: (selection: Selection) => void }) {

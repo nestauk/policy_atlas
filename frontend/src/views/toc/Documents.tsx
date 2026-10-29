@@ -6,6 +6,14 @@ import { CITATION_MARKER_CLASS, CitationProvenanceBlock, ProvenanceSheet } from 
 import { evidenceBalance, figureGroups, figureHeadline, SUPPORT_LABEL, VERDICT_LABEL, VERDICT_VAR } from "./tocModel";
 import type { SourceType, Support, TocDocument, TocFigure, Verdict } from "./types";
 
+/**
+ * The sidebar's two text sizes: body for prose, meta for every listed item.
+ * Listed items (documents, figures, case studies) share one look: a semibold
+ * title, a grey source line, and the quote in italics.
+ */
+export const ITEM_TITLE = "font-semibold leading-snug text-navy";
+export const ITEM_QUOTE = "mt-1 block italic text-ink";
+
 const SOURCE_LABEL: Record<SourceType, string> = { academic: "Academic", policy: "Policy document", web: "Web page" };
 
 /** A coloured dot for a verdict. */
@@ -30,22 +38,24 @@ const PX_PER_WEIGHT = 40;
 
 /**
  * The evidence balance (C36): four columns, Refutes to Strongly supports, each
- * document a block whose height is proportional to its weight.
+ * document a block whose height is proportional to its weight. Hovering a
+ * block names its document.
  */
-export function EvidenceBalance({ documents }: { documents: Pick<TocDocument, "support" | "weight">[] }) {
+export function EvidenceBalance<T extends Pick<TocDocument, "support" | "weight">>({ documents, label }: { documents: T[]; label?: (doc: T) => string }) {
   const columns = evidenceBalance(documents);
   const caption = { refutes: "Refutes", mixed: "Mixed", weak: "Weakly supports", strong: "Strongly supports" };
   return (
-    <div className="mt-2" role="img" aria-label={columns.map((col) => `${caption[col.support]}: ${col.weights.length}`).join(", ")}>
+    <div className="mt-2" role="img" aria-label={columns.map((col) => `${caption[col.support]}: ${col.docs.length}`).join(", ")}>
       <div className="grid grid-cols-4 items-end gap-2">
         {columns.map((col) => (
           <div key={col.support} data-testid={`balance-${col.support}`} className="flex min-h-16 flex-col-reverse gap-[3px] border-b-2 border-line-2 pb-[3px]">
-            {col.weights.map((weight, index) => (
+            {col.docs.map((doc, index) => (
               <div
                 key={index}
                 data-testid="balance-block"
+                title={label?.(doc)}
                 className="rounded-[3px]"
-                style={{ height: Math.max(4, Math.round(weight * PX_PER_WEIGHT)), ...BLOCK[col.support] }}
+                style={{ height: Math.max(4, Math.round(doc.weight * PX_PER_WEIGHT)), ...BLOCK[col.support] }}
               />
             ))}
           </div>
@@ -154,7 +164,7 @@ export function DocumentItem({
 }: { n?: number; title: string; url: string | null; quote: string | null; chips?: string; authors?: string[]; onOpen?: () => void } & Pick<TocDocument, "source_type" | "year" | "evidence_type">) {
   return (
     <li className="border-t border-line py-2.5 text-meta">
-      <p className="font-semibold leading-snug text-navy">
+      <p className={ITEM_TITLE}>
         {n !== undefined && <span className="mr-1 text-grey">[{n}]</span>}
         {onOpen !== undefined ? (
           <button type="button" onClick={onOpen} className="cursor-pointer text-left text-blue hover:underline">
@@ -170,7 +180,7 @@ export function DocumentItem({
       </p>
       <p className="mt-0.5 text-grey">{sourceLine(rest.source_type, authors, rest.year, rest.evidence_type)}</p>
       {chips !== undefined && <p className="mt-0.5 text-grey">{scrub(chips)}</p>}
-      {quote !== null && quote !== "" && <q className="mt-1 block text-navy">{scrub(quote)}</q>}
+      {quote !== null && quote !== "" && <q className={ITEM_QUOTE}>{scrub(quote)}</q>}
     </li>
   );
 }
@@ -196,18 +206,18 @@ export function FigureList({ taskId, figures, citationOf }: { taskId: string; fi
   return (
     <div className="mt-1">
       {shown.map((group) => (
-        <div key={group.key} data-testid="figure-group" className="my-2.5 border-l-[3px] border-line-2 py-0.5 pl-3">
-          {group.figures.length >= 2 && <p className="text-body font-bold text-navy">{scrub(figureHeadline(group))}</p>}
+        <div key={group.key} data-testid="figure-group" className="border-t border-line py-2.5 text-meta">
+          {group.figures.length >= 2 && <p className={ITEM_TITLE}>{scrub(figureHeadline(group))}</p>}
           {group.figures.map((figure) => {
             const citation = citationOf(figure);
             return (
               <div key={figure.figure_id} className="mt-1">
-                <p className="text-body font-bold text-navy">{scrub(figure.statement ?? figureHeadline({ key: figure.figure_id, figures: [figure] }))}</p>
-                <q className="mt-0.5 block text-body italic">{scrub(figure.quote)}</q>
-                <p className="text-meta text-grey">
+                <p className={ITEM_TITLE}>{scrub(figure.statement ?? figureHeadline({ key: figure.figure_id, figures: [figure] }))}</p>
+                <p className="mt-0.5 text-grey">
                   {scrub(figureSource(figure))}
                   {citation !== null && <CitationMarker taskId={taskId} claim={figure.statement} citations={[citation]} />}
                 </p>
+                <q className={ITEM_QUOTE}>{scrub(figure.quote)}</q>
               </div>
             );
           })}

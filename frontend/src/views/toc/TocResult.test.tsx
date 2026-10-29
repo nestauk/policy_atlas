@@ -6,7 +6,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as queries from "../../api/queries";
 import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 import { FigureList } from "./Documents";
-import { FAR } from "./TocCanvas";
 import { boxId, linkId, SHARED_DOC_TITLE, TASK_ID, tocEvidenceFixture, tocGraphFixture } from "./fixture";
 import { TocResult } from "./TocResult";
 import type { TocGraph } from "./types";
@@ -76,20 +75,15 @@ describe("canvas", () => {
     expect(within(node(7)).getByText("L1")).toBeInTheDocument();
     expect(screen.getByText("Directly influenced")).toBeInTheDocument();
     expect(screen.getByText("Contributes to")).toBeInTheDocument();
-    // Display only: the ceiling never takes a click meant for a box or a connection.
-    const ceiling = document.querySelector('[data-id="ceiling"]') as HTMLElement;
-    expect(ceiling.style.pointerEvents).toBe("none");
-    // Both dividers run edge to edge, however far the view pans or zooms.
-    const line = document.querySelector('[data-id="line"]') as HTMLElement;
-    expect(parseFloat(line.style.width)).toBeGreaterThanOrEqual(2 * FAR);
-    expect(parseFloat(ceiling.style.height)).toBeGreaterThanOrEqual(2 * FAR);
-    expect(line.style.pointerEvents).toBe("none");
+    // Both dividers run edge to edge of the view and never take a click meant for a box or a connection.
+    expect(screen.getByTestId("toc-line")).toHaveClass("inset-x-0", "pointer-events-none");
+    expect(screen.getByTestId("toc-ceiling")).toHaveClass("inset-y-0", "pointer-events-none");
   });
 
   it("hover text gives the verdict", () => {
     renderResult();
     expect(edge(4)?.querySelector("title")?.textContent).toBe("Confident");
-    expect(edge(3)?.querySelector("title")?.textContent).toBe("Critical connection · test this first. Not sure: mixed · close to the threshold");
+    expect(edge(3)?.querySelector("title")?.textContent).toBe("Critical connection · test this first. Not sure: mixed");
   });
 });
 
@@ -128,12 +122,11 @@ describe("detail panel", () => {
     const text = panel.textContent ?? "";
     const order = [
       "How this works",
-      "Link 3 says the step works.",
+      "because",
       "Conditions",
       "Evidence",
       "Size of change",
-      "Evidence balance",
-      "Close to the threshold",
+      "Evidence balance: Not sure: mixed",
       "brands moved to brand-only adverts",
       "Documents (3)",
     ].map((part) => text.indexOf(part, text.indexOf("How this works")));
@@ -147,7 +140,7 @@ describe("detail panel", () => {
     const panel = openLink(3);
     expect(within(panel).getAllByTestId("figure-group")).toHaveLength(2);
     expect(within(panel).getByText("Evidence suggests 44 to 58% fewer adverts for less healthy food seen by children (2 studies)")).toBeInTheDocument();
-    expect(within(panel).getByText("Children saw 44% fewer adverts for less healthy food after the rules.").className).toContain("font-bold");
+    expect(within(panel).getByText("Children saw 44% fewer adverts for less healthy food after the rules.").className).toContain("font-semibold");
     expect(within(panel).getByText("odds ratio 1·05 (0·99 to 1·12)")).toBeInTheDocument();
     expect(within(panel).getAllByText(/^Smith et al\. · Obesity Reviews · 2020 · quasi-experiment/).length).toBe(3);
     expect(within(panel).getByText("Figures come from the documents' abstracts.")).toBeInTheDocument();
@@ -209,7 +202,7 @@ describe("detail panel", () => {
 });
 
 describe("detailed information", () => {
-  const SECTIONS = ["Summary", "How change happens", "Assumptions and evidence", "What to test and measure", "Sources and method"];
+  const SECTIONS = ["Summary", "How change happens", "Assumptions and evidence", "What to test and measure", "Sources"];
 
   it("is the five-section report, in the report's four text styles only", () => {
     renderResult();
@@ -219,7 +212,7 @@ describe("detailed information", () => {
     expect(sections.map((h) => h.textContent)).toEqual(SECTIONS);
     for (const heading of sections) expect(heading.className).toContain(REPORT_SECTION_HEADING_CLASS);
     // Every text element uses one of the four styles (body, label, part or section heading);
-    // metadata lines (the scope, the method) are the body style in grey.
+    // metadata lines (the scope) are the body style in grey.
     const greyBody = REPORT_BODY_CLASS.replace("text-ink", "text-grey");
     const styles = [REPORT_BODY_CLASS, greyBody, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS];
     for (const el of info.querySelectorAll("p, ul, table, th, h2, h3")) {
@@ -234,7 +227,8 @@ describe("detailed information", () => {
     expect(within(info).getByText("Fewer adverts, less snacking.")).toBeInTheDocument();
     // Tables scroll sideways on a narrow screen.
     expect(info.querySelectorAll(".overflow-x-auto table")).toHaveLength(2);
-    expect(within(info).getByText(/'Too little evidence' means none was found/)).toBeInTheDocument();
+    // No method paragraph under the sources.
+    expect(within(info).queryByText(/'Too little evidence' means none was found/)).toBeNull();
   });
 
   it("selects a link or box on the canvas from a code in the text", async () => {
@@ -257,7 +251,8 @@ describe("detailed information", () => {
     await user.click(marker as HTMLElement);
     expect(within(screen.getByRole("dialog")).getByText("Where this comes from")).toBeInTheDocument();
     expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, "00000000-0000-4000-8000-0000000e0003", null);
-    expect(info.querySelector("#toc-source-3")?.textContent).toContain("Food brand advertising after Chile's restrictions");
+    // The source list reads as the Evidence search's references: number, title, then authors, year and venue.
+    expect(info.querySelector("#toc-source-3")?.textContent).toBe("[3]Source 3 — Ann Smith, Bo Lee (2020) · Obesity Reviews");
   });
 
   it("lists the set-aside pathways in one line each, at the end of How change happens", () => {

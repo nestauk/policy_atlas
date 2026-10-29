@@ -418,6 +418,9 @@ def toc_report_scope(
                         "short": _short(authors, year, title, venue),
                         "url": _url(meta, locator),
                         "title": title,
+                        "authors": authors,
+                        "year": year,
+                        "venue": venue,
                         # The judgement behind the number: a marker opens its quote in context.
                         "evidence_id": str(r.evidence_id),
                         "quote": r.quote,
@@ -555,7 +558,20 @@ def toc_report_scope(
     }
     renumber(report, sources)
     report["sources"] = [
-        {key: s[key] for key in ("n", "citation", "url", "title", "evidence_id", "quote")}
+        {
+            key: s[key]
+            for key in (
+                "n",
+                "citation",
+                "url",
+                "title",
+                "authors",
+                "year",
+                "venue",
+                "evidence_id",
+                "quote",
+            )
+        }
         for s in report["sources"]
     ]
     report["method"] = method_note(now(), route().model_for("toc_judge"))

@@ -37,9 +37,7 @@ class TocBoxOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     box_id: uuid.UUID
-    layer: Literal[
-        "input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"
-    ]
+    layer: Literal["input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"]
     #: Short stable label, e.g. ``S3`` (C35); null only on rows written before codes.
     code: str | None
     text: str
@@ -181,6 +179,11 @@ class TocReportSourceOut(BaseModel):
     title: str | None = None
     evidence_id: uuid.UUID | None = None
     quote: str | None = None
+    #: Shown as the Evidence search shows its references: title, then authors,
+    #: year and venue; empty or null on reports written before.
+    authors: list[str] = []
+    year: int | None = None
+    venue: str | None = None
 
 
 class TocReportOut(BaseModel):

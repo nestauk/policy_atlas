@@ -50,10 +50,6 @@ interface EdgeData extends Record<string, unknown> {
 }
 interface LabelData extends Record<string, unknown> {
   text: string;
-  width?: number;
-  line?: boolean;
-  /** A dashed vertical line this tall: the accountability ceiling. */
-  height?: number;
   alignRight?: boolean;
 }
 
@@ -68,8 +64,6 @@ const MIN_START_ZOOM = 1;
 const VIEW_PADDING = 0.08;
 const HANDLE_CLASS = "!h-1 !w-1 !border-0 !bg-transparent";
 /** Display-only nodes: never selected, never catching a click meant for a box or a connection. */
-/** How far the two dividers run each way, in flow units: past any pan or zoom (minZoom 0.3). */
-export const FAR = 1_000_000;
 const DECOR = { draggable: false, selectable: false, focusable: false, style: { pointerEvents: "none" as const } };
 
 function BoxView({ data }: NodeProps<BoxNode>) {
@@ -100,9 +94,23 @@ function BoxView({ data }: NodeProps<BoxNode>) {
 }
 
 function LabelView({ data }: NodeProps<LabelNode>) {
-  if (data.line) return <div className="border-t border-line-2" style={{ width: data.width }} />;
-  if (data.height !== undefined) return <div className="border-l border-dashed border-grey" style={{ height: data.height }} />;
   return <p className={`text-meta font-semibold text-grey${data.alignRight ? " text-right" : ""}`}>{data.text}</p>;
+}
+
+/**
+ * The two dividers, edge to edge of the view however it pans: the "If it goes
+ * wrong" line and the dashed accountability ceiling (C35). Drawn as two
+ * screen-sized lines that follow the viewport, not as nodes: a node long
+ * enough to reach past any pan made every pan and zoom slow.
+ */
+function Dividers({ lineY, ceilingX }: { lineY: number | null; ceilingX: number }) {
+  const [x, y, zoom] = useStore((state) => state.transform);
+  return (
+    <>
+      {lineY !== null && <div data-testid="toc-line" className="pointer-events-none absolute inset-x-0 border-t border-line-2" style={{ top: y + lineY * zoom }} />}
+      <div data-testid="toc-ceiling" className="pointer-events-none absolute inset-y-0 border-l border-dashed border-grey" style={{ left: x + ceilingX * zoom }} />
+    </>
+  );
 }
 
 function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, markerEnd }: EdgeProps<TocEdge>) {
@@ -261,16 +269,6 @@ export function TocCanvas({
       ? []
       : [
           {
-            id: "line",
-            type: "label",
-            // Edge to edge, however far the view pans (owner: "from minus to plus infinity").
-            position: { x: -FAR, y: layout.lineY },
-            data: { text: "", line: true, width: 2 * FAR },
-            width: 2 * FAR,
-            height: 1,
-            ...DECOR,
-          } as LabelNode,
-          {
             id: "line-label",
             type: "label",
             position: { x: 0, y: layout.lineY + 10 },
@@ -283,16 +281,6 @@ export function TocCanvas({
           } as LabelNode,
         ]),
     // The accountability ceiling (C35): what the programme directly influences, and what it contributes to.
-    {
-      id: "ceiling",
-      type: "label",
-      // Top to bottom, however far the view pans; its labels stay below the lowest box.
-      position: { x: layout.ceilingX, y: -FAR },
-      data: { text: "", height: 2 * FAR },
-      width: 1,
-      height: 2 * FAR,
-      ...DECOR,
-    } as LabelNode,
     {
       id: "ceiling-left",
       type: "label",
@@ -375,6 +363,7 @@ export function TocCanvas({
         onEdgeClick={(_, edge) => onSelect({ kind: "link", id: edge.id })}
         onPaneClick={() => onSelect(null)}
       >
+        <Dividers lineY={layout.lineY} ceilingX={layout.ceilingX} />
         <ViewFitter boxes={layout.boxes.length} bounds={bounds} refit={refit} />
         <Controls showInteractive={false} showFitView={false}>
           {/* Our own fit button: the library's would fit below the minimum zoom. */}

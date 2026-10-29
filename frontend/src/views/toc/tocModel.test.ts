@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { boxId, linkId, tocEvidenceFixture, tocGraphFixture } from "./fixture";
-import { BOX_H, BOX_W, COL_GAP, ROW_GAP, evidenceBalance, figureGroups, figureHeadline, layoutToc, withUnit, linkTip, routeEdge, tocTitle } from "./tocModel";
+import { visibleLinkIds, BOX_H, BOX_W, COL_GAP, ROW_GAP, evidenceBalance, figureGroups, figureHeadline, layoutToc, withUnit, linkTip, routeEdge, tocTitle } from "./tocModel";
 
 const COL_STEP = BOX_W + COL_GAP;
 
@@ -71,6 +71,20 @@ describe("routeEdge", () => {
   });
 });
 
+describe("visibleLinkIds", () => {
+  it("shows every input and output that feeds a chosen pathway, and nothing from other routes", () => {
+    const box = (box_id: string, layer: string) => ({ box_id, layer }) as never;
+    const link = (link_id: string, source_box_id: string, target_box_id: string) => ({ link_id, source_box_id, target_box_id }) as never;
+    const pathway = (pathway_id: string, link_ids: string[]) => ({ pathway_id, link_ids, kind: "success", status: "kept" }) as never;
+    const graph = {
+      boxes: [box("A1", "input"), box("A2", "input"), box("P1", "output"), box("P2", "output"), box("S1", "outcome_short"), box("L1", "outcome_long"), box("L2", "outcome_long")],
+      links: [link("a1p1", "A1", "P1"), link("a2p2", "A2", "P2"), link("p1s1", "P1", "S1"), link("p2s1", "P2", "S1"), link("s1l1", "S1", "L1"), link("s1l2", "S1", "L2")],
+      pathways: [pathway("one", ["a1p1", "p1s1", "s1l1"]), pathway("two", ["a2p2", "p2s1", "s1l2"])],
+    };
+    expect([...visibleLinkIds(graph, "one")].sort()).toEqual(["a1p1", "a2p2", "p1s1", "p2s1", "s1l1"]);
+  });
+});
+
 describe("wording and grouping", () => {
   it("puts each document in its support column, heaviest first, leaving out not-about ones", () => {
     const columns = evidenceBalance([
@@ -79,11 +93,11 @@ describe("wording and grouping", () => {
       { support: "weak", weight: 0.6 },
       { support: "not_about", weight: 0 },
     ]);
-    expect(columns).toEqual([
-      { support: "refutes", weights: [0.4] },
-      { support: "mixed", weights: [] },
-      { support: "weak", weights: [0.6, 0.2] },
-      { support: "strong", weights: [] },
+    expect(columns.map((col) => [col.support, col.docs.map((doc) => doc.weight)])).toEqual([
+      ["refutes", [0.4]],
+      ["mixed", []],
+      ["weak", [0.6, 0.2]],
+      ["strong", []],
     ]);
   });
 
