@@ -97,8 +97,12 @@ export function EvidenceBalance<T extends Pick<TocDocument, "support" | "weight"
 }
 
 /** "Strongly supports · quality 3 · relevance 2 · UK children aged 9 to 11". */
-export function documentChips(doc: Pick<TocDocument, "support" | "quality" | "relevance" | "relevance_reason">): string {
-  return [SUPPORT_LABEL[doc.support], `quality ${doc.quality}`, `relevance ${doc.relevance}`, doc.relevance_reason].filter(Boolean).join(" · ");
+export function documentChips(doc: Pick<TocDocument, "support" | "quality" | "relevance" | "relevance_reason"> & Partial<Pick<TocDocument, "scored_by" | "judge_support" | "judge_relevance" | "added_by">>): string {
+  // The user's scores count (C42); the judge's stay visible beside them.
+  const judge =
+    doc.scored_by != null && doc.judge_support != null ? `your scores (judge: ${SUPPORT_LABEL[doc.judge_support].toLowerCase()} · relevance ${doc.judge_relevance})` : null;
+  const added = doc.added_by != null ? `added by ${doc.added_by}` : null;
+  return [SUPPORT_LABEL[doc.support], `quality ${doc.quality}`, `relevance ${doc.relevance}`, judge, added, doc.relevance_reason].filter(Boolean).join(" · ");
 }
 
 /** "Smith et al.", one author's name, or the publishing organisation (Overton's single author); null when unknown. */
@@ -186,10 +190,24 @@ export function DocumentItem({
   chips,
   onOpen,
   authors,
+  actions,
+  muted = false,
   ...rest
-}: { n?: number; title: string; url: string | null; quote: string | null; chips?: string; authors?: string[]; onOpen?: () => void } & Pick<TocDocument, "source_type" | "year" | "evidence_type">) {
+}: {
+  n?: number;
+  title: string;
+  url: string | null;
+  quote: string | null;
+  chips?: string;
+  authors?: string[];
+  onOpen?: () => void;
+  /** Editing controls under the document (C42). */
+  actions?: ReactNode;
+  /** Greyed: removed from the link by the user. */
+  muted?: boolean;
+} & Pick<TocDocument, "source_type" | "year" | "evidence_type">) {
   return (
-    <li className="border-t border-line py-2.5 text-body">
+    <li className={`border-t border-line py-2.5 text-body${muted ? " opacity-60" : ""}`}>
       <p className={ITEM_TITLE}>
         {n !== undefined && <span className="mr-1 text-grey">[{n}]</span>}
         {onOpen !== undefined ? (
@@ -207,6 +225,7 @@ export function DocumentItem({
       <p className="mt-0.5">{sourceLine(rest.source_type, authors, rest.year, rest.evidence_type)}</p>
       {chips !== undefined && <p className="mt-0.5">{scrub(chips)}</p>}
       {quote !== null && quote !== "" && <q className={ITEM_QUOTE}>{scrub(quote)}</q>}
+      {actions}
     </li>
   );
 }
@@ -260,7 +279,9 @@ export function FigureList({ taskId, figures, citationOf }: { taskId: string; fi
 
 /** A link's documents that support or refute it, heaviest first: the order the panel numbers them in. */
 export function citedDocuments(documents: TocDocument[]): TocDocument[] {
-  return documents.filter((doc) => doc.support !== "not_about").sort((a, b) => b.weight - a.weight);
+  return documents
+    .filter((doc) => doc.support !== "not_about" && doc.removed_by == null && (doc.status ?? "counted") === "counted")
+    .sort((a, b) => b.weight - a.weight);
 }
 
 /** A cited document as a citation, with its number. */
@@ -269,7 +290,7 @@ export function documentCitation(doc: TocDocument, n: number, quote: string | nu
 }
 
 /** The citation list: a link's documents, numbered as the markers number them, each with its support, quality and relevance. */
-export function LinkDocuments({ taskId, documents }: { taskId: string; documents: TocDocument[] }) {
+export function LinkDocuments({ taskId, documents, actions }: { taskId: string; documents: TocDocument[]; actions?: (doc: TocDocument) => ReactNode }) {
   const [opened, setOpened] = useState<number | null>(null);
   const shown = citedDocuments(documents);
   if (shown.length === 0) return <p className="text-body text-grey">None found.</p>;
@@ -287,6 +308,7 @@ export function LinkDocuments({ taskId, documents }: { taskId: string; documents
             chips={documentChips(item)}
             authors={item.authors}
             onOpen={() => setOpened(index + 1)}
+            actions={actions?.(item)}
             source_type={item.source_type}
             year={item.year}
             evidence_type={item.evidence_type}

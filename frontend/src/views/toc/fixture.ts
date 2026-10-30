@@ -228,6 +228,10 @@ function doc(n: number, title: string, support: TocDocument["support"], quote: s
     weight: Math.round(((quality * relevance) / 9) * 1000) / 1000,
     condition: null,
     previous_wording: false,
+    judge_support: support,
+    judge_relevance: relevance,
+    status: "counted",
+    revision: 1,
   };
 }
 

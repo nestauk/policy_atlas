@@ -357,7 +357,10 @@ export type TocEdit =
   | { kind: "patchLink"; linkId: string; body: Schemas["TocLinkPatch"] }
   | { kind: "deleteLink"; linkId: string; revision: number }
   | { kind: "undo"; eventId: string }
-  | { kind: "check"; body: Schemas["TocCheckIn"] };
+  | { kind: "check"; body: Schemas["TocCheckIn"] }
+  | { kind: "evidence"; evidenceId: string; body: Schemas["TocEvidencePatch"] }
+  | { kind: "keep"; body: Schemas["TocLinksIn"] }
+  | { kind: "addStudy"; linkId: string; body: Schemas["TocStudyIn"] };
 
 /**
  * Every theory-of-change write, as one mutation. Each refreshes the graph,
@@ -399,6 +402,12 @@ export function useTocEdit(taskId: string) {
           return done(await client.POST("/api/v1/tasks/{task_id}/toc/events/{event_id}/undo", { params: { path: { ...task, event_id: edit.eventId } } }));
         case "check":
           return done(await client.POST("/api/v1/tasks/{task_id}/toc/check", { params: { path: task }, body: edit.body }));
+        case "evidence":
+          return done(await client.PATCH("/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}", { params: { path: { ...task, evidence_id: edit.evidenceId } }, body: edit.body }));
+        case "keep":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/links/keep", { params: { path: task }, body: edit.body }));
+        case "addStudy":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/links/{link_id}/studies", { params: { path: { ...task, link_id: edit.linkId } }, body: edit.body }));
       }
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.toc(taskId) }),

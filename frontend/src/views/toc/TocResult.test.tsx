@@ -21,10 +21,10 @@ vi.mock("../../api/queries", () => ({
 const mutate = vi.fn();
 vi.mock("../../api/mutations", () => ({ useTocEdit: vi.fn(() => ({ mutate, isPending: false })) }));
 
-function renderResult(graph: TocGraph = tocGraphFixture()) {
+function renderResult(graph: TocGraph = tocGraphFixture(), evidence = tocEvidenceFixture()) {
   vi.mocked(queries.useTask).mockReturnValue({ data: { name: "Ads and obesity" } } as unknown as ReturnType<typeof queries.useTask>);
   vi.mocked(queries.useToc).mockReturnValue({ data: graph, isPending: false } as unknown as ReturnType<typeof queries.useToc>);
-  vi.mocked(queries.useTocEvidence).mockReturnValue({ data: tocEvidenceFixture() } as unknown as ReturnType<typeof queries.useTocEvidence>);
+  vi.mocked(queries.useTocEvidence).mockReturnValue({ data: evidence } as unknown as ReturnType<typeof queries.useTocEvidence>);
   vi.mocked(queries.useTocDocumentContext).mockReturnValue({
     isPending: false,
     isError: false,
@@ -450,5 +450,62 @@ describe("editing (C41, C47, C40)", () => {
     await user.click(screen.getByText(/^History/));
     await user.click(screen.getByRole("button", { name: "Undo" }));
     expect(lastEdit()).toEqual({ kind: "undo", eventId: "e1" });
+  });
+});
+
+
+describe("editing the evidence (C42, C43)", () => {
+  const editable = (extra: Partial<TocGraph> = {}) => tocGraphFixture({ can_edit: true, ...extra });
+  const panel = () => screen.getByRole("complementary", { name: "Details" });
+  const lastEdit = () => mutate.mock.calls.at(-1)?.[0];
+  const openLink = (n: number) => fireEvent.click((edge(n) as Element).querySelector("path") as Element);
+
+  it("sets the user's scores on a document, keeping the judge's in view", async () => {
+    const user = userEvent.setup();
+    renderResult(editable());
+    openLink(3);
+    await user.click(within(panel()).getAllByRole("button", { name: "Change" })[0] as HTMLElement);
+    const menu = within(panel()).getByRole("group", { name: "Change this document" });
+    expect(within(menu).getByText(/^Judge said:/)).toBeInTheDocument();
+    await user.click(within(menu).getByRole("button", { name: "Refutes" }));
+    await user.click(within(menu).getByRole("button", { name: "Relevance 3" }));
+    await user.click(within(menu).getByRole("button", { name: "Save" }));
+    expect(lastEdit()).toMatchObject({ kind: "evidence", body: { action: "score", support: "refutes", relevance: 3, expected_revision: 1 } });
+  });
+
+  it("removes a document, and lists a removed one greyed with Restore", async () => {
+    const user = userEvent.setup();
+    const evidence = tocEvidenceFixture();
+    const onLink3 = evidence.links.find((entry) => entry.link_id === linkId(3));
+    if (onLink3?.documents[0] !== undefined) onLink3.documents[0] = { ...onLink3.documents[0], removed_by: "Ada" };
+    renderResult(editable(), evidence);
+    openLink(3);
+    expect(within(panel()).getByText("Removed (1)")).toBeInTheDocument();
+    await user.click(within(panel()).getByRole("button", { name: "Restore" }));
+    expect(lastEdit()).toMatchObject({ kind: "evidence", body: { action: "restore" } });
+    await user.click(within(panel()).getAllByRole("button", { name: "Change" })[0] as HTMLElement);
+    await user.click(within(panel()).getByRole("button", { name: "Remove from this connection" }));
+    expect(lastEdit()).toMatchObject({ kind: "evidence", body: { action: "remove" } });
+  });
+
+  it("adds a study by its DOI", async () => {
+    const user = userEvent.setup();
+    renderResult(editable());
+    openLink(3);
+    await user.type(within(panel()).getByLabelText("DOI"), "10.1016/j.appet.2016.02.017");
+    await user.click(within(panel()).getByRole("button", { name: "Add" }));
+    expect(lastEdit()).toEqual({ kind: "addStudy", linkId: linkId(3), body: { identifier: "10.1016/j.appet.2016.02.017" } });
+  });
+
+  it("offers Keep the evidence or Check again after an edit", async () => {
+    const user = userEvent.setup();
+    const links = tocGraphFixture().links.map((item) => (item.link_id === linkId(3) ? { ...item, state: "pending" as const } : item));
+    renderResult(editable({ links }));
+    openLink(3);
+    expect(within(panel()).getByText("Evidence from the earlier wording")).toBeInTheDocument();
+    await user.click(within(panel()).getByRole("button", { name: "Keep the evidence" }));
+    expect(lastEdit()).toEqual({ kind: "keep", body: { link_ids: [linkId(3)] } });
+    await user.click(within(panel()).getByRole("button", { name: "Check again" }));
+    expect(lastEdit()).toEqual({ kind: "check", body: { link_ids: [linkId(3)], mode: "check_again" } });
   });
 });

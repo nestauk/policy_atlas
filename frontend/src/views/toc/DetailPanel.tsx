@@ -5,6 +5,7 @@ import { Tooltip } from "../../ui/radix/Tooltip";
 import { CitationMarker, CitationSheet, citedDocuments, documentCitation, DocumentItem, documentChips, EvidenceBalance, FigureList, ITEM_QUOTE, ITEM_TITLE, LinkDocuments, sourceLine, VerdictDot, VerdictWords } from "./Documents";
 import { type Editor, EditedLine } from "./Editing";
 import { BoxEditForm, LinkEditForm, NeedsEvidence } from "./EditForms";
+import { AddStudy, DocumentActions, EditedEvidenceBlock, RemovedDocuments } from "./EvidenceEdits";
 import { CriticalIcon } from "./ReadingGuide";
 import { CRITICAL_DEFINITION, LAYER_LABEL, ORIGIN_LABEL } from "./tocModel";
 import type { TocBox, TocDocument, TocEvidence, TocGraph, TocLink } from "./types";
@@ -249,6 +250,7 @@ function LinkDetail({
       </p>
       <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(link.title ?? link.sentence)}</h3>
       <EditedLine by={link.edited_by} at={link.edited_at} />
+      <EditedEvidenceBlock link={link} graph={graph} editor={editor} />
       {link.state === "unchecked" ? (
         <NeedsEvidence links={[link]} graph={graph} editor={editor} />
       ) : pending ? (
@@ -344,7 +346,9 @@ function LinkDetail({
         />
       )}
       <p className={SUB}>Documents ({cited.length})</p>
-      <LinkDocuments taskId={taskId} documents={documents} />
+      <LinkDocuments taskId={taskId} documents={documents} actions={editor !== null ? (doc) => <DocumentActions doc={doc} editor={editor} /> : undefined} />
+      <RemovedDocuments documents={documents} editor={editor} />
+      {editor !== null && <AddStudy link={link} editor={editor} running={graph.check_status === "drafting" || graph.check_status === "checking"} />}
       <Origin origin={link.origin} rules={graph.grade_rules} />
     </>
   );
