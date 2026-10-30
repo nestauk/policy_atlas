@@ -8866,6 +8866,21 @@
         "title": "TocCriteriaIn",
         "type": "object"
       },
+      "TocDecideIn": {
+        "additionalProperties": false,
+        "description": "Accept or reject every pending document on one link (C44).",
+        "properties": {
+          "accept": {
+            "title": "Accept",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accept"
+        ],
+        "title": "TocDecideIn",
+        "type": "object"
+      },
       "TocDocumentOut": {
         "additionalProperties": false,
         "description": "One judged document of one link, with what it adds to the verdict (C36).",
@@ -9139,7 +9154,9 @@
               "remove",
               "restore",
               "score",
-              "unscore"
+              "unscore",
+              "accept",
+              "reject"
             ],
             "title": "Action",
             "type": "string"
@@ -9509,6 +9526,7 @@
               "drafting",
               "checking",
               "checked",
+              "stopped",
               "failed"
             ],
             "title": "Check Status",
@@ -9799,6 +9817,11 @@
             "title": "Origin",
             "type": "string"
           },
+          "pending_count": {
+            "default": 0,
+            "title": "Pending Count",
+            "type": "integer"
+          },
           "revision": {
             "title": "Revision",
             "type": "integer"
@@ -9855,6 +9878,25 @@
             ],
             "title": "Verdict",
             "type": "string"
+          },
+          "verdict_if_accepted": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confident",
+                  "leaning_supports",
+                  "not_sure_mixed",
+                  "leaning_against",
+                  "not_sure_insufficient",
+                  "not_confident"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict If Accepted"
           },
           "weights": {
             "$ref": "#/components/schemas/TocWeightsOut"
@@ -14644,6 +14686,59 @@
         ]
       }
     },
+    "/api/v1/tasks/{task_id}/toc/check/stop": {
+      "post": {
+        "description": "Stop the running check before its next step; what it finished stays (C48).",
+        "operationId": "stop_toc_check_api_v1_tasks__task_id__toc_check_stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Stop Toc Check Api V1 Tasks  Task Id  Toc Check Stop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stop Toc Check",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
     "/api/v1/tasks/{task_id}/toc/events/{event_id}/undo": {
       "post": {
         "description": "Put back the state before one edit; rows changed since are skipped and named (C10).",
@@ -15233,6 +15328,75 @@
           }
         ],
         "summary": "Patch Toc Link",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/links/{link_id}/decide": {
+      "post": {
+        "description": "Accept or reject all the new evidence Find more evidence found on one link (C44).",
+        "operationId": "decide_toc_pending_api_v1_tasks__task_id__toc_links__link_id__decide_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocDecideIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Decide Toc Pending",
         "tags": [
           "theory-of-change"
         ]

@@ -49,6 +49,8 @@ interface EdgeData extends Record<string, unknown> {
   span: number;
   /** A box at either end was moved: a smooth curve between the facing sides (C47). */
   curved: boolean;
+  /** Something waits for the user here: new evidence, or an edit's evidence to review (C43, C44). */
+  attention: boolean;
   verdict: Verdict;
   pending: boolean;
   critical: boolean;
@@ -150,6 +152,7 @@ function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
         className={`toc-edge toc-edge--${kind}${data.selected ? " toc-edge--selected" : ""}`}
       />
       {data.critical && <CriticalMark x={markX} y={markY} />}
+      {data.attention && <circle data-testid="toc-edge-attention" cx={markX} cy={data.critical ? markY - 16 : markY} r={5.5} className="pointer-events-none fill-blue stroke-paper" strokeWidth={2} />}
     </g>
   );
 }
@@ -432,6 +435,7 @@ export function TocCanvas({
         data: {
           span: sameColumn ? 0 : (columnOf.get(link.target_box_id) ?? 0) - (columnOf.get(link.source_box_id) ?? 0),
           curved,
+          attention: link.pending_count > 0 || link.state === "pending",
           verdict: link.verdict,
           pending,
           critical: link.critical,

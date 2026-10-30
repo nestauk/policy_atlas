@@ -93,6 +93,8 @@ export function link(n: number, source: number, target: number, type: string, ve
     weights: { total_weight: 1.2, mean_support: 1.1, refute_share: 0, n_documents: 2 },
     evidence_sentence: `Evidence sentence for link ${n}.`,
     evidence_cites: [],
+    pending_count: 0,
+    verdict_if_accepted: null,
     ...extra,
   };
 }

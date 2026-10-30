@@ -76,6 +76,11 @@ export function EditToolbar({
   const moved = graph.boxes.some((box) => box.position != null);
   return (
     <>
+      {running && (
+        <Button variant="secondary" size="sm" disabled={editor.busy} onClick={() => editor.run({ kind: "stop" })}>
+          Stop the check
+        </Button>
+      )}
       <Button variant="secondary" size="sm" onClick={onAddBox}>
         ＋ Add box
       </Button>

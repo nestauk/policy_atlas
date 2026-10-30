@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { components } from "../../api/gen/types";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
-import { DocumentItem } from "./Documents";
+import { DocumentItem, documentChips, VerdictWords } from "./Documents";
 import type { Editor } from "./Editing";
 import { SUPPORT_LABEL } from "./tocModel";
 import type { Support, TocDocument, TocGraph, TocLink } from "./types";
@@ -182,6 +182,85 @@ export function EditedEvidenceBlock({ link, graph, editor }: { link: TocLink; gr
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** New evidence from Find more evidence: nothing counts until accepted (C44). */
+export function NewEvidenceBlock({ link, documents, editor }: { link: TocLink; documents: TocDocument[]; editor: Editor | null }) {
+  const pending = documents.filter((doc) => doc.status === "pending");
+  if (pending.length === 0) return null;
+  return (
+    <div className="mt-3 border-l-[3px] border-blue bg-blue-tint-2 px-3 py-2.5">
+      <p className="text-body font-bold text-ink">
+        New evidence found: {pending.length} document{pending.length === 1 ? "" : "s"}
+      </p>
+      {link.verdict_if_accepted != null && (
+        <p className="text-body">
+          Verdict now: <VerdictWords verdict={link.verdict} /> → if accepted: <VerdictWords verdict={link.verdict_if_accepted} />
+        </p>
+      )}
+      <ul>
+        {pending.map((doc) => (
+          <DocumentItem
+            key={doc.evidence_id}
+            title={doc.title}
+            url={doc.url}
+            quote={doc.quote}
+            chips={documentChips(doc)}
+            authors={doc.authors}
+            source_type={doc.source_type}
+            year={doc.year}
+            evidence_type={doc.evidence_type}
+            actions={
+              editor !== null && (
+                <span className="mt-1.5 flex gap-2">
+                  <Button size="sm" variant="secondary" disabled={editor.busy} onClick={() => editor.run({ kind: "evidence", evidenceId: doc.evidence_id, body: { expected_revision: doc.revision, action: "accept" } }, "Accepted a document")}>
+                    Accept
+                  </Button>
+                  <Button size="sm" variant="secondary" disabled={editor.busy} onClick={() => editor.run({ kind: "evidence", evidenceId: doc.evidence_id, body: { expected_revision: doc.revision, action: "reject" } }, "Rejected a document")}>
+                    Reject
+                  </Button>
+                </span>
+              )
+            }
+          />
+        ))}
+      </ul>
+      {editor !== null && pending.length > 1 && (
+        <div className="mt-2 flex gap-2">
+          <Button size="sm" disabled={editor.busy} onClick={() => editor.run({ kind: "decide", linkId: link.link_id, accept: true }, "Accepted the new documents")}>
+            Accept all
+          </Button>
+          <Button size="sm" variant="secondary" disabled={editor.busy} onClick={() => editor.run({ kind: "decide", linkId: link.link_id, accept: false }, "Rejected the new documents")}>
+            Reject all
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Find more evidence for some links (C44): the button at the bottom of a sidebar. */
+export function FindMore({ links, graph, editor }: { links: TocLink[]; graph: TocGraph; editor: Editor }) {
+  const running = graph.check_status === "drafting" || graph.check_status === "checking";
+  const ready = links.filter((link) => link.state !== "pending" && link.state !== "unchecked");
+  if (links.length === 0) return null;
+  return (
+    <div className="mt-5 border-t border-line pt-3">
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={editor.busy || running || ready.length === 0}
+        onClick={() => editor.run({ kind: "check", body: { link_ids: ready.map((link) => link.link_id), mode: "find_more" } })}
+      >
+        {running ? "A check is running" : "Find more evidence"}
+      </Button>
+      <p className="mt-1 text-meta text-grey">
+        {ready.length === 0
+          ? "Check this connection first: its evidence is from an earlier wording or not found yet."
+          : "Searches again, leaving out what it has already judged. New documents wait for you to accept them."}
+      </p>
     </div>
   );
 }

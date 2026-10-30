@@ -26,7 +26,7 @@ Verdict = Literal[
 Support = Literal["strong", "weak", "mixed", "refutes", "not_about"]
 LinkState = Literal["unchecked", "checking", "checked", "pending", "kept", "no_change"]
 Origin = Literal["drafted", "found_in_evidence", "imported", "user", "options_scoping"]
-CheckStatus = Literal["none", "drafting", "checking", "checked", "failed"]
+CheckStatus = Literal["none", "drafting", "checking", "checked", "stopped", "failed"]
 
 
 class TocResultCriteriaOut(BaseModel):
@@ -122,6 +122,9 @@ class TocLinkOut(BaseModel):
     #: Who last edited it (a display name) and when; null when nobody has (C41).
     edited_by: str | None = None
     edited_at: datetime | None = None
+    #: New evidence waiting for the user's Accept (C44), and the verdict if they accept it all.
+    pending_count: int = 0
+    verdict_if_accepted: Verdict | None = None
 
 
 class TocPathwayOut(BaseModel):
@@ -538,7 +541,7 @@ class TocEvidencePatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     expected_revision: int
-    action: Literal["remove", "restore", "score", "unscore"]
+    action: Literal["remove", "restore", "score", "unscore", "accept", "reject"]
     support: Support | None = None
     relevance: int | None = Field(default=None, ge=0, le=3)
 
@@ -565,3 +568,11 @@ class TocStudyIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     identifier: str = Field(min_length=4, max_length=2000)
+
+
+class TocDecideIn(BaseModel):
+    """Accept or reject every pending document on one link (C44)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    accept: bool

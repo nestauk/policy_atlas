@@ -360,7 +360,9 @@ export type TocEdit =
   | { kind: "check"; body: Schemas["TocCheckIn"] }
   | { kind: "evidence"; evidenceId: string; body: Schemas["TocEvidencePatch"] }
   | { kind: "keep"; body: Schemas["TocLinksIn"] }
-  | { kind: "addStudy"; linkId: string; body: Schemas["TocStudyIn"] };
+  | { kind: "addStudy"; linkId: string; body: Schemas["TocStudyIn"] }
+  | { kind: "decide"; linkId: string; accept: boolean }
+  | { kind: "stop" };
 
 /**
  * Every theory-of-change write, as one mutation. Each refreshes the graph,
@@ -406,6 +408,10 @@ export function useTocEdit(taskId: string) {
           return done(await client.PATCH("/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}", { params: { path: { ...task, evidence_id: edit.evidenceId } }, body: edit.body }));
         case "keep":
           return done(await client.POST("/api/v1/tasks/{task_id}/toc/links/keep", { params: { path: task }, body: edit.body }));
+        case "decide":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/links/{link_id}/decide", { params: { path: { ...task, link_id: edit.linkId } }, body: { accept: edit.accept } }));
+        case "stop":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/check/stop", { params: { path: task } }));
         case "addStudy":
           return done(await client.POST("/api/v1/tasks/{task_id}/toc/links/{link_id}/studies", { params: { path: { ...task, link_id: edit.linkId } }, body: edit.body }));
       }

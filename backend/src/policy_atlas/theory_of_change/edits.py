@@ -506,6 +506,13 @@ def edit_evidence(
             "override_at": None,
         }
         verb = "Returned to the judge's scores for"
+    elif action in ("accept", "reject"):
+        values = {
+            "status": "counted" if action == "accept" else "rejected",
+            "decided_by": actor.user_id,
+            "decided_at": now,
+        }
+        verb = "Accepted" if action == "accept" else "Rejected"
     else:
         raise EditRefused("toc_invalid", f"no evidence action {action!r}", status=422)
     log = store.ChangeLog()
@@ -528,6 +535,48 @@ def _document_title(conn: Connection, tss_id: uuid.UUID) -> str:
     ).scalar()
     title = str((metadata or {}).get("title") or "a document")
     return title if len(title) <= 70 else title[:67] + "…"
+
+
+def decide_pending(
+    conn: Connection, *, task_id: uuid.UUID, actor: Actor, link_id: uuid.UUID, accept: bool
+) -> int:
+    """Accept or reject every pending document on one link (C44); returns how many."""
+    rows = list(
+        conn.execute(
+            select(toc_item_evidence).where(
+                toc_item_evidence.c.task_id == task_id,
+                toc_item_evidence.c.link_id == link_id,
+                toc_item_evidence.c.status == "pending",
+            )
+        )
+    )
+    if not rows:
+        return 0
+    log = store.ChangeLog()
+    now = _now()
+    for row in rows:
+        _update(
+            conn,
+            log,
+            toc_item_evidence,
+            row,
+            actor=actor,
+            values={
+                "status": "counted" if accept else "rejected",
+                "decided_by": actor.user_id,
+                "decided_at": now,
+            },
+        )
+    code = conn.execute(select(toc_link.c.code).where(toc_link.c.link_id == link_id)).scalar()
+    verb = "Accepted" if accept else "Rejected"
+    _record(
+        conn,
+        task_id=task_id,
+        actor=actor,
+        log=log,
+        change=f"{verb} {len(rows)} new document{'s' if len(rows) != 1 else ''} on {code}",
+    )
+    return len(rows)
 
 
 def keep_evidence(

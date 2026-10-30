@@ -343,3 +343,48 @@ def test_an_added_doi_resolves_to_the_tasks_document_and_decisions_carry_over(
         )
         carried = _user_decisions(conn, task_id, {str(ids["link"])})
     assert carried[(str(ids["link"]), ids["tss"])]["excluded_by"] == ME.user_id
+
+
+# --- Pending evidence and Stop (C44, C48) ---------------------------------------------------
+
+
+def test_pending_evidence_waits_for_accept_and_shows_the_verdict_if_accepted(
+    engine: Engine, ids: Any
+) -> None:
+    from policy_atlas.theory_of_change.check import counted_judgements
+
+    task_id = ids["task_id"]
+    _count_seeded(engine, ids)
+    with engine.begin() as conn:
+        conn.execute(
+            toc_item_evidence.update()
+            .where(toc_item_evidence.c.evidence_id == ids["evidence"])
+            .values(status="pending")
+        )
+        assert counted_judgements(conn, task_id=task_id) == {}
+        shown = next(x for x in toc_graph_out(conn, task_id).links if x.link_id == ids["link"])
+        assert shown.pending_count == 1 and shown.verdict_if_accepted is not None
+        assert (
+            edits.decide_pending(conn, task_id=task_id, actor=ME, link_id=ids["link"], accept=True)
+            == 1
+        )
+        assert len(counted_judgements(conn, task_id=task_id)[str(ids["link"])]) == 1
+        shown = next(x for x in toc_graph_out(conn, task_id).links if x.link_id == ids["link"])
+        assert shown.pending_count == 0 and shown.verdict_if_accepted is None
+
+
+def test_a_stop_request_is_seen_by_the_runner_check(engine: Engine, ids: Any) -> None:
+    from policy_atlas.core import events
+    from policy_atlas.runtime.toc_plan import TOC_STOP_EVENT, toc_stop_requested
+
+    task_id, walk = ids["task_id"], ids["walk"]
+    assert not toc_stop_requested(engine, task_id=task_id, capability_run_id=walk)
+    with engine.begin() as conn:
+        events.append(
+            conn,
+            task_id=task_id,
+            run_id=None,
+            event_type=TOC_STOP_EVENT,
+            payload={"capability_run_id": str(walk)},
+        )
+    assert toc_stop_requested(engine, task_id=task_id, capability_run_id=walk)

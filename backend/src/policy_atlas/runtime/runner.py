@@ -163,6 +163,7 @@ from policy_atlas.runtime.toc_plan import (
     TOC_STUDIES_KEY,
     TOC_WALK_CHECK,
     TOC_WALK_KEY,
+    toc_stop_requested,
 )
 from policy_atlas.theory_of_change.backend import TocBackend
 from policy_atlas.theory_of_change.cost import walk_cost
@@ -1109,6 +1110,19 @@ def _run_plan_impl(
 
     while remaining_steps:
         step = remaining_steps.pop(0)
+        # The user stopped a theory-of-change walk (task 054, C48): end it before the
+        # next step; what finished stays.
+        if purpose == TOC_PURPOSE and toc_stop_requested(
+            engine, task_id=task_id, capability_run_id=capability_run_id
+        ):
+            return _finish_run(
+                engine,
+                step_outcomes,
+                flagged_events,
+                status="aborted",
+                capability_run_id=capability_run_id,
+                task_id=task_id,
+            )
         if toc_check:
             if toc_children is None:
                 toc_children = option_search.dispatch_toc_item_searches(

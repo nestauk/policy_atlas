@@ -57,6 +57,9 @@ export function TocResult({ taskId }: { taskId: string }) {
           Policy Atlas is checking each step against the evidence. Steps take their colour as they are checked.
         </p>
       )}
+      {graph.check_status === "stopped" && (
+        <p className={`mt-4 max-w-[1100px] ${REPORT_BODY_CLASS}`}>The check was stopped. What it finished stays; connections it did not reach show Needs evidence.</p>
+      )}
       <div className="mb-3 mt-6 flex items-center gap-2">
         <select
           aria-label="Pathway"

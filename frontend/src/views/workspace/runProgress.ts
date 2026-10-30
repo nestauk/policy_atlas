@@ -145,8 +145,23 @@ export function elapsedSeconds(
   return Math.max(0, (endMs - started) / 1000);
 }
 
+/** A theory-of-change walk's steps (task 054, C48): the running card shows one row each. */
+const TOC_STEPS: readonly PlanStepPreview[] = [
+  { stage: "toc_draft", label: "Drafting the theory", blurb: "Writing boxes, connections and pathways from the plan." },
+  { stage: "toc_item_searches", label: "Searching for each connection", blurb: "One search per connection in academic and policy databases." },
+  { stage: "toc_select", label: "Picking documents", blurb: "Choosing the documents most likely to test each connection." },
+  { stage: "toc_discover", label: "Looking for other routes", blurb: "Reading the documents for pathways the draft missed." },
+  { stage: "toc_merge", label: "Merging similar steps", blurb: "Folding boxes and pathways that say the same thing." },
+  { stage: "toc_search_new", label: "Searching for the new connections", blurb: "Searching for the connections discovery added." },
+  { stage: "toc_judge", label: "Judging the evidence", blurb: "Reading each document against its connection." },
+  { stage: "toc_figures", label: "Finding the size of change", blurb: "Taking the numbers each document reports." },
+  { stage: "toc_choose", label: "Choosing pathways", blurb: "Keeping the best-evidenced routes." },
+  { stage: "toc_summarise", label: "Writing titles and evidence sentences", blurb: "Plain titles and one sentence per connection." },
+  { stage: "toc_report", label: "Writing the report", blurb: "The short narrative under the canvas." },
+];
+
 function vocabByStage(backendScope?: string | null): Map<string, PlanStepPreview> {
-  return new Map(stepsForAnalysisDepth("deep", backendScope).map((step) => [step.stage, step]));
+  return new Map([...stepsForAnalysisDepth("deep", backendScope), ...TOC_STEPS].map((step) => [step.stage, step]));
 }
 
 function rowFromVocab(

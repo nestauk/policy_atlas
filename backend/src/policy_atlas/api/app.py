@@ -59,6 +59,7 @@ _CONFLICT_CODES = {
     "toc_stale_revision",
     "toc_duplicate",
     "toc_already_undone",
+    "toc_not_running",
 }
 
 _CAPACITY_CODES = {"chat_capacity"}

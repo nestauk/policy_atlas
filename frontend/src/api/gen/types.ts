@@ -1212,6 +1212,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/toc/check/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Toc Check
+         * @description Stop the running check before its next step; what it finished stays (C48).
+         */
+        post: operations["stop_toc_check_api_v1_tasks__task_id__toc_check_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}/toc/events/{event_id}/undo": {
         parameters: {
             query?: never;
@@ -1394,6 +1414,26 @@ export interface paths {
          * @description Edit a link's title, parts or conditions, or mark it critical (C41).
          */
         patch: operations["patch_toc_link_api_v1_tasks__task_id__toc_links__link_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/links/{link_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Toc Pending
+         * @description Accept or reject all the new evidence Find more evidence found on one link (C44).
+         */
+        post: operations["decide_toc_pending_api_v1_tasks__task_id__toc_links__link_id__decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/tasks/{task_id}/toc/links/{link_id}/studies": {
@@ -5790,6 +5830,14 @@ export interface components {
             timing?: string | null;
         };
         /**
+         * TocDecideIn
+         * @description Accept or reject every pending document on one link (C44).
+         */
+        TocDecideIn: {
+            /** Accept */
+            accept: boolean;
+        };
+        /**
          * TocDocumentOut
          * @description One judged document of one link, with what it adds to the verdict (C36).
          */
@@ -5881,7 +5929,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "remove" | "restore" | "score" | "unscore";
+            action: "remove" | "restore" | "score" | "unscore" | "accept" | "reject";
             /** Expected Revision */
             expected_revision: number;
             /** Relevance */
@@ -5993,7 +6041,7 @@ export interface components {
              * Check Status
              * @enum {string}
              */
-            check_status: "none" | "drafting" | "checking" | "checked" | "failed";
+            check_status: "none" | "drafting" | "checking" | "checked" | "stopped" | "failed";
             /** Confidence */
             confidence: ("confident" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "not_confident") | null;
             /** Context */
@@ -6107,6 +6155,11 @@ export interface components {
              * @enum {string}
              */
             origin: "drafted" | "found_in_evidence" | "imported" | "user" | "options_scoping";
+            /**
+             * Pending Count
+             * @default 0
+             */
+            pending_count: number;
             /** Revision */
             revision: number;
             /** Sentence */
@@ -6135,6 +6188,8 @@ export interface components {
              * @enum {string}
              */
             verdict: "confident" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "not_confident";
+            /** Verdict If Accepted */
+            verdict_if_accepted?: ("confident" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "not_confident") | null;
             weights: components["schemas"]["TocWeightsOut"];
         };
         /**
@@ -8439,6 +8494,39 @@ export interface operations {
             };
         };
     };
+    stop_toc_check_api_v1_tasks__task_id__toc_check_stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     undo_toc_edit_api_v1_tasks__task_id__toc_events__event_id__undo_post: {
         parameters: {
             query?: never;
@@ -8757,6 +8845,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TocRevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_toc_pending_api_v1_tasks__task_id__toc_links__link_id__decide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocDecideIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCountOut"];
                 };
             };
             /** @description Validation Error */

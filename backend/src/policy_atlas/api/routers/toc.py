@@ -33,6 +33,7 @@ from policy_atlas.api.contract.toc import (
     TocCheckOut,
     TocCountOut,
     TocCreatedOut,
+    TocDecideIn,
     TocDocumentOut,
     TocEvidenceOut,
     TocEvidencePatch,
@@ -73,6 +74,7 @@ from policy_atlas.api.readmodels.repository import (
 from policy_atlas.api.routers._access import accessible_task, readable_or_public_task
 from policy_atlas.api.routers.runs import start_toc_check
 from policy_atlas.api.settings import Settings
+from policy_atlas.core import events
 from policy_atlas.core.schema import (
     capability_run,
     event_log,
@@ -93,6 +95,7 @@ from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.toc_plan import (
     TOC_LINKS_KEY,
     TOC_PURPOSE,
+    TOC_STOP_EVENT,
     TOC_WALK_CHECK,
     TOC_WALK_KEY,
 )
@@ -102,6 +105,7 @@ from policy_atlas.theory_of_change.check import (
     appraisals_for,
     counted_judgements,
     link_verdict_of,
+    pending_judgements,
     row_case_score,
     row_judgement,
     top_case_studies,
@@ -112,7 +116,7 @@ from policy_atlas.theory_of_change.graph import assumption_type, item_hash, link
 
 router = APIRouter(prefix="/api/v1/tasks/{task_id}/toc", tags=["theory-of-change"])
 
-CheckStatus = Literal["none", "drafting", "checking", "checked", "failed"]
+CheckStatus = Literal["none", "drafting", "checking", "checked", "stopped", "failed"]
 
 
 def _readable_toc(conn: Connection, task_id: uuid.UUID, user: AuthenticatedUser | None) -> None:
@@ -153,6 +157,8 @@ def check_status(walk: Row[Any] | None) -> CheckStatus:
     if walk.status in ("succeeded", "degraded"):
         # A draft that landed is followed at once by its check (S4).
         return "checked" if kind == TOC_WALK_CHECK else "checking"
+    if walk.status == "aborted" and kind == TOC_WALK_CHECK:
+        return "stopped"  # the user's Stop (C48)
     return "failed"
 
 
@@ -202,8 +208,11 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
     walk = _latest_walk(conn, task_id)
     status = check_status(walk)
     counted = counted_judgements(conn, task_id=task_id)
+    pending = pending_judgements(conn, task_id=task_id)
     appraisals = appraisals_for(
-        conn, task_id=task_id, evidence_rows=[r for group in counted.values() for r in group]
+        conn,
+        task_id=task_id,
+        evidence_rows=[r for group in [*counted.values(), *pending.values()] for r in group],
     )
     judged_hashes = {
         (str(row.link_id), row.item_hash)
@@ -262,6 +271,12 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
                 evidence_cites=list(row.evidence_cites or []),
                 edited_by=names.get(row.edited_by) if row.edited_by else None,
                 edited_at=row.edited_at,
+                pending_count=len(pending.get(key, [])),
+                verdict_if_accepted=(
+                    link_verdict_of([*counted.get(key, []), *pending[key]], appraisals).verdict
+                    if pending.get(key)
+                    else None
+                ),
             )
         )
     steps = _steps(conn, task_id)
@@ -415,6 +430,8 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
     judgement_of: dict[tuple[str, uuid.UUID], uuid.UUID] = {}
     #: The counted judgement's relevance, for which box figures show.
     relevance_of: dict[tuple[str, uuid.UUID], int] = {}
+    #: Judgements that count now: accepted and not removed (C42, C44); only their figures show.
+    countable: set[tuple[str, uuid.UUID]] = set()
     for row in evidence:
         key = str(row.link_id)
         link_row = rows.links.get(key)
@@ -439,6 +456,8 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
         previous = row.item_hash != link_row.counted_hash
         if not previous:
             judgement_of[(key, row.task_source_snapshot_id)] = row.evidence_id
+            if row.status == "counted" and row.excluded_at is None:
+                countable.add((key, row.task_source_snapshot_id))
             effective = row_judgement(row)
             relevance_of[(key, row.task_source_snapshot_id)] = (
                 effective.relevance
@@ -516,6 +535,7 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
             or cite is None
             or judgement is None
             or figure.item_hash != link_row.counted_hash
+            or (key, figure.task_source_snapshot_id) not in countable
         ):
             continue
         shown = TocFigureOut(
@@ -1032,3 +1052,45 @@ def add_toc_study(
         studies={str(link_id): [doi]},
     )
     return TocCheckOut(capability_run_id=walk_id)
+
+
+@router.post("/links/{link_id}/decide", response_model=TocCountOut)
+def decide_toc_pending(
+    task_id: uuid.UUID,
+    link_id: uuid.UUID,
+    body: TocDecideIn,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> TocCountOut:
+    """Accept or reject all the new evidence Find more evidence found on one link (C44)."""
+    _editable_toc(conn, task_id, user)
+    return TocCountOut(
+        count=edits.decide_pending(
+            conn,
+            task_id=task_id,
+            actor=edits.Actor(user.user_id),
+            link_id=link_id,
+            accept=body.accept,
+        )
+    )
+
+
+@router.post("/check/stop", status_code=202)
+def stop_toc_check(
+    task_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> dict[str, str]:
+    """Stop the running check before its next step; what it finished stays (C48)."""
+    _editable_toc(conn, task_id, user)
+    walk = _latest_walk(conn, task_id)
+    if walk is None or walk.status != "running":
+        raise ApiConflict("toc_not_running", "no check is running")
+    events.append(
+        conn,
+        task_id=task_id,
+        run_id=None,
+        event_type=TOC_STOP_EVENT,
+        payload={"capability_run_id": str(walk.capability_run_id), "by": user.user_id},
+    )
+    return {"status": "stopping"}

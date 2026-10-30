@@ -509,3 +509,54 @@ describe("editing the evidence (C42, C43)", () => {
     expect(lastEdit()).toEqual({ kind: "check", body: { link_ids: [linkId(3)], mode: "check_again" } });
   });
 });
+
+describe("finding more and stopping (C44, C48)", () => {
+  const editable = (extra: Partial<TocGraph> = {}) => tocGraphFixture({ can_edit: true, ...extra });
+  const panel = () => screen.getByRole("complementary", { name: "Details" });
+  const lastEdit = () => mutate.mock.calls.at(-1)?.[0];
+  const openLink = (n: number) => fireEvent.click((edge(n) as Element).querySelector("path") as Element);
+
+  it("shows new evidence waiting for Accept, with the verdict if accepted, and a dot on the canvas", async () => {
+    const user = userEvent.setup();
+    const links = tocGraphFixture().links.map((item) =>
+      item.link_id === linkId(3) ? { ...item, pending_count: 2, verdict_if_accepted: "confident" as const } : item,
+    );
+    const evidence = tocEvidenceFixture();
+    const onLink3 = evidence.links.find((entry) => entry.link_id === linkId(3));
+    if (onLink3 !== undefined) onLink3.documents = onLink3.documents.map((doc, index) => (index < 2 ? { ...doc, status: "pending" as const } : doc));
+    renderResult(editable({ links }), evidence);
+    expect(edge(3)?.querySelector('[data-testid="toc-edge-attention"]')).not.toBeNull();
+    expect(edge(4)?.querySelector('[data-testid="toc-edge-attention"]')).toBeNull();
+    openLink(3);
+    expect(within(panel()).getByText("New evidence found: 2 documents")).toBeInTheDocument();
+    expect(within(panel()).getByText(/if accepted:/)).toBeInTheDocument();
+    // Pending documents are not in the counted list.
+    expect(within(panel()).getByText("Documents (1)")).toBeInTheDocument();
+    await user.click(within(panel()).getByRole("button", { name: "Accept all" }));
+    expect(lastEdit()).toEqual({ kind: "decide", linkId: linkId(3), accept: true });
+    await user.click(within(panel()).getAllByRole("button", { name: "Reject" })[0] as HTMLElement);
+    expect(lastEdit()).toMatchObject({ kind: "evidence", body: { action: "reject" } });
+  });
+
+  it("finds more evidence for a connection, and for a box's connections", async () => {
+    const user = userEvent.setup();
+    renderResult(editable());
+    openLink(3);
+    await user.click(within(panel()).getByRole("button", { name: "Find more evidence" }));
+    expect(lastEdit()).toEqual({ kind: "check", body: { link_ids: [linkId(3)], mode: "find_more" } });
+    fireEvent.click(node(5));
+    await user.click(within(panel()).getByRole("button", { name: "Find more evidence" }));
+    expect(lastEdit()).toMatchObject({ kind: "check", body: { mode: "find_more" } });
+    expect((lastEdit() as { body: { link_ids: string[] } }).body.link_ids.length).toBeGreaterThan(1);
+  });
+
+  it("stops a running check, and says when one was stopped", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderResult(editable({ check_status: "checking" }));
+    await user.click(screen.getByRole("button", { name: "Stop the check" }));
+    expect(lastEdit()).toEqual({ kind: "stop" });
+    unmount();
+    renderResult(editable({ check_status: "stopped" }));
+    expect(screen.getByText(/The check was stopped/)).toBeInTheDocument();
+  });
+});

@@ -331,6 +331,27 @@ def counted_judgements(conn: Connection, *, task_id: uuid.UUID) -> dict[str, lis
     return out
 
 
+def pending_judgements(conn: Connection, *, task_id: uuid.UUID) -> dict[str, list[Row[Any]]]:
+    """Each link's new evidence waiting for the user's Accept (C44), for its current count."""
+    rows = conn.execute(
+        select(toc_item_evidence)
+        .join(
+            toc_link,
+            (toc_link.c.link_id == toc_item_evidence.c.link_id)
+            & (toc_link.c.task_id == toc_item_evidence.c.task_id)
+            & (toc_link.c.counted_hash == toc_item_evidence.c.item_hash),
+        )
+        .where(toc_item_evidence.c.task_id == task_id)
+        .where(toc_item_evidence.c.status == "pending")
+        .where(toc_item_evidence.c.excluded_at.is_(None))
+        .order_by(toc_item_evidence.c.created_at, toc_item_evidence.c.evidence_id)
+    )
+    out: dict[str, list[Row[Any]]] = {}
+    for row in rows:
+        out.setdefault(str(row.link_id), []).append(row)
+    return out
+
+
 def row_judgement(row: Row[Any]) -> Judgement:
     """A ``toc_item_evidence`` row as the verdict reads it: the user's scores win (C42)."""
     support_override = getattr(row, "support_override", None)
@@ -1386,6 +1407,12 @@ def _select_links(
     for key in [*studies, *again]:
         candidates.setdefault(key, [])
         targets.add(key)
+    # Find more evidence (C44): the documents already judged for a link make way for new ones.
+    if only is None and context.context.get(TOC_CHECK_MODE_KEY) == "find_more":
+        judged = _judged_documents(conn, task_id, sorted(targets))
+        for key in targets:
+            seen = set(judged.get(key, []))
+            candidates[key] = [c for c in candidates[key] if c.tss_id not in seen]
     if backend.mode == "live":
         candidates.update(_fill_abstracts(conn, {k: candidates[k] for k in targets}))
     plan = walk_toc_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
@@ -1401,6 +1428,11 @@ def _select_links(
                 population=plan.target_population,
                 place=plan.where,
             )
+    already: dict[str, set[uuid.UUID]] = (
+        {k: set(v) for k, v in _judged_documents(conn, task_id, sorted(texts)).items()}
+        if only is None and context.context.get(TOC_CHECK_MODE_KEY) == "find_more"
+        else {}
+    )
     # The shared pool (C31): the walk's other documents closest to each link.
     walk_pool = list({c.tss_id: c for docs in candidates.values() for c in docs}.values())
     vectors = _document_vectors(conn, [c.tss_id for c in walk_pool]) if texts else {}
@@ -1409,7 +1441,11 @@ def _select_links(
         own = candidates[key]
         mine = {c.tss_id for c in own}
         others = [c for c in walk_pool if c.tss_id not in mine]
-        extra = nearest(embedder, others, vectors, text=texts[key])
+        extra = [
+            c
+            for c in nearest(embedder, others, vectors, text=texts[key])
+            if c.tss_id not in already.get(key, set())
+        ]
         shared += len(extra)
         candidates[key] = [*own, *extra]
     called = [k for k in texts if len(candidates[k]) > PICK_N]
@@ -1993,6 +2029,7 @@ def toc_judge_scope(
 
     stored = unverified = failed = 0
     started_by = context.context.get(TOC_STARTED_BY_KEY)
+    find_more = context.context.get(TOC_CHECK_MODE_KEY) == "find_more"
     study_links = set(context.context.get(TOC_STUDIES_KEY) or {})
     carried = _user_decisions(conn, task_id, {job.link_key for job in jobs})
     for job, outcome in zip(jobs, outcomes, strict=True):
@@ -2056,14 +2093,17 @@ def toc_judge_scope(
                 # A study the user added (C42) and their earlier decisions on this
                 # document for this link, carried to the new wording (C43).
                 "added_by": started_by if job.link_key in study_links else None,
+                # What Find more evidence found waits for the user's Accept (C44).
+                "status": "pending" if find_more else "counted",
                 **carried.get((job.link_key, job.document.tss_id), {}),
             },
         )
         stored += 1
 
     # Every covered link now counts the judgements of its current wording (C19).
+    # Find more evidence leaves that alone: what it found waits as pending (C44).
     log_ = store.ChangeLog()
-    for key in link_keys:
+    for key in link_keys if not find_more else []:
         row = rows.links[key]
         store.update(
             conn,

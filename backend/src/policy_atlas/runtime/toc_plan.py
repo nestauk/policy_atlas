@@ -68,6 +68,29 @@ TOC_CHECK_MODE_KEY = "mode"
 #: The user who started a named check, for ``added_by`` on the studies they added.
 TOC_STARTED_BY_KEY = "started_by"
 
+#: The event a Stop writes; the runner ends the walk before its next step (C48).
+TOC_STOP_EVENT = "toc.stop_requested"
+
+
+def toc_stop_requested(engine: Any, *, task_id: Any, capability_run_id: Any) -> bool:
+    """Whether the user asked to stop this theory-of-change walk (C48)."""
+    from sqlalchemy import select
+
+    from policy_atlas.core.schema import event_log
+
+    with engine.connect() as conn:
+        return (
+            conn.execute(
+                select(event_log.c.event_id)
+                .where(event_log.c.task_id == task_id)
+                .where(event_log.c.event_type == TOC_STOP_EVENT)
+                .where(event_log.c.payload["capability_run_id"].astext == str(capability_run_id))
+                .limit(1)
+            ).first()
+            is not None
+        )
+
+
 #: Records each item search may keep per backend: every distinct result of
 #: its five calls (C27, C31). ``toc_select`` then picks the documents judged.
 TOC_ITEM_RECORD_CAP = 60
@@ -185,9 +208,7 @@ class TocPlan(BaseModel):
     evidence_restriction: TocEvidenceRestriction | None = None
     from_option: TocFromOption | None = None
     steering_mode: Literal["unattended"] = "unattended"
-    steer_point_defaults: list[ScopingSteerPointDefault] = Field(
-        default_factory=list, max_length=0
-    )
+    steer_point_defaults: list[ScopingSteerPointDefault] = Field(default_factory=list, max_length=0)
     source_turn_index: int | None = None
 
     @property

@@ -294,6 +294,10 @@ def run_toc_sequence(
         The check walk's outcome when one ran here, else ``None``.
     """
     walk_id = first_outcome.capability_run_id
+    if walk_id is not None and first_outcome.status == "aborted":
+        # The user's Stop (C48): say what stays and how to go on.
+        post_agent_message(engine, task_id=task_id, text=STOPPED_MESSAGE)
+        return None
     if walk_id is None or first_outcome.status not in _ENDED_WELL:
         return None
     with engine.connect() as conn:
@@ -423,9 +427,60 @@ def check_changes(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) -
     return lines
 
 
+#: Posted when the user stops a check (C48).
+STOPPED_MESSAGE = (
+    "The check stopped. What it finished stays on the canvas. Connections it did not "
+    "reach show Needs evidence: use Find evidence in the toolbar to check them."
+)
+
+
+def _pending_found(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> str | None:
+    """The message for a Find more evidence walk, or ``None`` for any other walk (C44)."""
+    from policy_atlas.core.schema import toc_item_evidence, toc_link
+    from policy_atlas.runtime.toc_plan import TOC_CHECK_MODE_KEY
+
+    context = conn.execute(
+        select(evidence_scope.c.context)
+        .select_from(
+            capability_run.join(
+                evidence_scope,
+                (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+                & (evidence_scope.c.task_id == capability_run.c.task_id),
+            )
+        )
+        .where(capability_run.c.capability_run_id == walk_id)
+    ).scalar_one_or_none()
+    if (context or {}).get(TOC_CHECK_MODE_KEY) != "find_more":
+        return None
+    rows = conn.execute(
+        select(toc_link.c.code, toc_item_evidence.c.support)
+        .join(toc_link, toc_link.c.link_id == toc_item_evidence.c.link_id)
+        .where(toc_item_evidence.c.task_id == task_id)
+        .where(toc_item_evidence.c.capability_run_id == walk_id)
+        .where(toc_item_evidence.c.status == "pending")
+    ).all()
+    useful = [row for row in rows if row.support != "not_about"]
+    codes = sorted({row.code for row in useful if row.code})
+    if not useful:
+        return "Find more evidence is done. It found no new documents that test these connections."
+    return (
+        f"Find more evidence is done. It found {len(useful)} new document"
+        f"{'s' if len(useful) != 1 else ''} that test {', '.join(codes)}. They do not count "
+        "until you accept them: open the connection to see the verdict if you do."
+    )
+
+
 def post_check_message(engine: Engine, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> None:
-    """Post the check's end message: what changed, then the stress-test suggestion (J5, J7)."""
+    """Post the check's end message: what changed, then the stress-test suggestion (J5, J7).
+
+    A Find more evidence walk (C44) says instead how many new documents wait for
+    the user, and where.
+    """
     with engine.connect() as conn:
+        found = _pending_found(conn, task_id=task_id, walk_id=walk_id)
+        if found is not None:
+            post_agent_message(engine, task_id=task_id, text=found)
+            return
         changes = check_changes(conn, task_id=task_id, walk_id=walk_id)
     if changes:
         body = "The evidence check is done. What it changed:\n" + "\n".join(
