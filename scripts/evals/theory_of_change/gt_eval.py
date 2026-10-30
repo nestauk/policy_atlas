@@ -171,12 +171,21 @@ def layers_agree(gt: str, pa: str) -> bool:
 WEAK_GRADES = ("weak", "none")
 STRENGTH = {"strong": 3, "medium": 2, "weak": 1, "none": 0}
 #: Current build (C36): one verdict per link. Weak mirrors the published "Some" and
-#: "Limited" ratings (lead decision, 2026-10-28).
-WEAK_VERDICTS = ("not_sure_mixed", "not_sure_insufficient", "not_confident")
+#: "Limited" ratings (lead decision, 2026-10-28); the leaning verdicts (2026-10-30)
+#: are "Some" at best, so they count as weak too.
+WEAK_VERDICTS = (
+    "leaning_supports",
+    "not_sure_mixed",
+    "leaning_against",
+    "not_sure_insufficient",
+    "not_confident",
+)
 VERDICT_STRENGTH = {
     "confident": 3,
+    "leaning_supports": 2,
     "not_sure_mixed": 2,
     "not_sure_insufficient": 1,
+    "leaning_against": 1,
     "not_confident": 0,
 }
 
@@ -985,8 +994,9 @@ class Models:
         user = (
             "PUBLISHED THEORY (the dataset, with its notes on how it was built):\n\n"
             + gt["notes"]
-            + "\n\nGENERATED THEORY (JSON; each link's evidence is its verdict: confident, "
-            "not_sure_mixed, not_sure_insufficient or not_confident; or, on older builds, "
+            + "\n\nGENERATED THEORY (JSON; each link's evidence is its verdict, best first: "
+            "confident, leaning_supports, not_sure_mixed (mixed), not_sure_insufficient (not "
+            "enough evidence), leaning_against or not_confident; or, on older builds, "
             "lower_grade, the lower of two grades: strong, medium, weak or none):\n\n"
             + json.dumps(generated, indent=1, ensure_ascii=False)
             + "\n\nGENERATED NARRATIVE REPORT (shown to the user as Detailed information):\n\n"

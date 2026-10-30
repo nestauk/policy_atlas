@@ -5610,7 +5610,7 @@ export interface components {
              */
             check_status: "none" | "drafting" | "checking" | "checked" | "failed";
             /** Confidence */
-            confidence: ("confident" | "not_sure_mixed" | "not_sure_insufficient" | "not_confident") | null;
+            confidence: ("confident" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "not_confident") | null;
             /** Context */
             context: string[];
             /** Grade Rules */
@@ -5707,7 +5707,7 @@ export interface components {
              * Verdict
              * @enum {string}
              */
-            verdict: "confident" | "not_sure_mixed" | "not_sure_insufficient" | "not_confident";
+            verdict: "confident" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "not_confident";
             weights: components["schemas"]["TocWeightsOut"];
         };
         /**

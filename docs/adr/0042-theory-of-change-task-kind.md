@@ -109,6 +109,11 @@ have one verdict"). Task 054 contract C36; the scheme is the ground-truth pack's
   mixed*. A link within 0.2 of a support threshold, or 0.25 of W = 1, is flagged as close to the
   threshold. The thresholds are named constants in `evidence/grade.py`, to calibrate from the
   evals. The theory's confidence is the lowest verdict among its critical links.
+  **Amended 2026-10-30 (owner):** six verdicts, without "Not sure": *Not enough evidence*
+  when W < 4/9; with 4/9 ≤ W < 1, *Leaning supports* (S̄ ≥ 0.5) or *Leaning against*
+  (S̄ ≤ −0.5), else Not enough evidence; with W ≥ 1, *Confident* (S̄ ≥ 1, under 25%
+  refutes), *Leaning supports* (S̄ ≥ 0.5), *Not confident: evidence against* (S̄ ≤ −1),
+  *Leaning against* (S̄ ≤ −0.5), else *Mixed*. Calibrated over six runs, 123 links.
 - **The critical connection (C6)** keeps its intent, the weakest important step: the lowest
   verdict on a kept success pathway, ties to the link on most pathways.
 - **The canvas** shows the verdict by line style only (solid, two-tone, dashed, dotted red);

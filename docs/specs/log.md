@@ -1,5 +1,17 @@
 # Spec update log
 
+## 2026-10-30 (task 054, verdict calibration and report navigation)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md) and
+  ADR 0042's verdict rule: six verdicts, "Not sure" dropped. Not enough evidence (W < 4/9);
+  Leaning supports / Leaning against (some evidence, or enough but not clear-cut, average
+  support beyond ±0.5); Confident (W ≥ 1, S̄ ≥ 1, under 25% refuting, was 15%); Mixed;
+  Not confident (S̄ ≤ −1, was −0.5). Calibrated over six runs (123 links). Keys
+  `not_sure_mixed` and `not_sure_insufficient` keep their names. Prompts `toc_choose_v3` and
+  `toc_report_v3` name the new verdicts. The Result page gains the Evidence search's contents
+  sidebar (Canvas, then the report's sections); the report loses its "Detailed information"
+  heading and "Sources" becomes "References"; a code clicked in the report centres the canvas
+  on it; clicking an evidence-balance block opens its citation.
+
 ## 2026-10-29 (task 054, presentation round 4)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
   label is "Critical connection" (no "test this first"); hovering it gives the rule: the weakest

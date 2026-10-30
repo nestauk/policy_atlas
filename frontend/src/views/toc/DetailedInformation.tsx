@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
-import { referenceAuthorsLine, REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
+import { referenceAuthorsLine, REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 import type { Selection } from "./DetailPanel";
 import { CitationMarker, CitationSheet } from "./Documents";
 import type { TocGraph } from "./types";
@@ -167,7 +167,7 @@ function ReportBody({ taskId, report, graph, onSelect }: { taskId: string; repor
   const setAside = graph.pathways.filter((pathway) => pathway.status === "set_aside");
   return (
     <>
-      <h3 className={H3}>Summary</h3>
+      <h3 id="toc-summary" className={H3}>Summary</h3>
       <p className={P}>
         <b>Goal:</b> {scrub(goal)}{" "}
         {summary.if_then_because.split(/\b(If|then|because)\b/).map((part, index) =>
@@ -186,7 +186,7 @@ function ReportBody({ taskId, report, graph, onSelect }: { taskId: string; repor
         </p>
       )}
 
-      <h3 className={H3}>How change happens</h3>
+      <h3 id="toc-how" className={H3}>How change happens</h3>
       {report.pathways.map((pathway, index) => (
         <p key={index} className={P}>
           <b>{scrub(pathway.title.replace(/\.?$/, "."))}</b> {rich(pathway.paragraph)}
@@ -206,7 +206,7 @@ function ReportBody({ taskId, report, graph, onSelect }: { taskId: string; repor
         </>
       )}
 
-      <h3 className={H3}>Assumptions and evidence</h3>
+      <h3 id="toc-assumptions" className={H3}>Assumptions and evidence</h3>
       <Table
         head={["Code", "Assumption", "Kind", "Verdict", "Why", "Sources"]}
         rows={report.assumptions.map((row) => [
@@ -219,28 +219,37 @@ function ReportBody({ taskId, report, graph, onSelect }: { taskId: string; repor
         ])}
       />
 
-      <h3 className={H3}>What to test and measure</h3>
+      <h3 id="toc-tests" className={H3}>What to test and measure</h3>
       <Table
         head={["Weak link", "Question", "Indicator and data", "Test and learn"]}
         rows={report.tests.map((row) => [rich(row.link), rich(row.question), rich(row.indicator), rich(row.test_and_learn)])}
       />
 
-      <h3 className={H3}>Sources</h3>
+      <h3 id="toc-references" className={H3}>References</h3>
       <SourceList taskId={taskId} sources={report.sources} />
     </>
   );
 }
 
+/** The report's sections, for the contents sidebar (after "Canvas"). */
+export const REPORT_SECTIONS = [
+  { id: "toc-summary", title: "Summary" },
+  { id: "toc-how", title: "How change happens" },
+  { id: "toc-assumptions", title: "Assumptions and evidence" },
+  { id: "toc-tests", title: "What to test and measure" },
+  { id: "toc-references", title: "References" },
+] as const;
+
 /**
- * Detailed information: a short narrative report beside the canvas (C38),
- * and the PDF. Five sections (the last is the numbered sources), the report's four text styles only; nothing
+ * Detailed information: a short narrative report under the canvas (C38),
+ * and the PDF. It has no heading of its own: the contents sidebar names its
+ * sections. Five sections (the last is the numbered sources), the report's four text styles only; nothing
  * collapses, so the print view shows it whole.
  */
 export function DetailedInformation({ taskId, graph, onSelect }: { taskId: string; graph: TocGraph; onSelect: (selection: Selection) => void }) {
   return (
     <section aria-label="Detailed information" className="mt-10 border-t border-line pt-6">
-      <div className="flex items-center justify-between gap-4 pb-2">
-        <h2 className={REPORT_PART_HEADING_CLASS}>Detailed information</h2>
+      <div className="flex items-center justify-end gap-4 pb-2">
         <Button variant="secondary" size="sm" className="print-hide border border-navy" onClick={() => window.print()}>
           Download as PDF
         </Button>

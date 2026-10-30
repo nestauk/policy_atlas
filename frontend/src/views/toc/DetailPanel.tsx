@@ -1,6 +1,8 @@
+import { useState } from "react";
+
 import { scrub } from "../../lib/scrub";
 import { Tooltip } from "../../ui/radix/Tooltip";
-import { CitationMarker, citedDocuments, documentCitation, DocumentItem, documentChips, EvidenceBalance, FigureList, ITEM_QUOTE, ITEM_TITLE, LinkDocuments, sourceLine, VerdictDot, VerdictWords } from "./Documents";
+import { CitationMarker, CitationSheet, citedDocuments, documentCitation, DocumentItem, documentChips, EvidenceBalance, FigureList, ITEM_QUOTE, ITEM_TITLE, LinkDocuments, sourceLine, VerdictDot, VerdictWords } from "./Documents";
 import { CriticalIcon } from "./ReadingGuide";
 import { CRITICAL_DEFINITION, LAYER_LABEL, ORIGIN_LABEL } from "./tocModel";
 import type { TocBox, TocDocument, TocEvidence, TocGraph, TocLink } from "./types";
@@ -144,6 +146,7 @@ function BoxDetail({ taskId, box, evidence }: { taskId: string; box: TocBox; evi
 }
 
 function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: TocLink; graph: TocGraph; evidence: TocEvidence | null | undefined }) {
+  const [opened, setOpened] = useState<TocDocument | null>(null);
   const linkEvidence = evidence?.links.find((entry) => entry.link_id === link.link_id);
   const documents = linkEvidence?.documents ?? [];
   const figures = linkEvidence?.figures ?? [];
@@ -225,6 +228,7 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
           </p>
           <EvidenceBalance
             documents={cited}
+            onOpen={(doc) => setOpened(doc)}
             detail={(doc) => (
               <ul className="[&>li]:border-0 [&>li]:py-0">
                 <DocumentItem
@@ -262,6 +266,15 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
           )}
         </>
       )}
+      {opened !== null && (
+        <CitationSheet
+          taskId={taskId}
+          claim={null}
+          citations={[documentCitation(opened, numberOf(opened.task_source_snapshot_id))]}
+          numbered={false}
+          onClose={() => setOpened(null)}
+        />
+      )}
       <p className={SUB}>Documents ({cited.length})</p>
       <LinkDocuments taskId={taskId} documents={documents} />
       <Origin origin={link.origin} rules={graph.grade_rules} />
@@ -292,7 +305,7 @@ export function DetailPanel({
         ×
       </button>
       {box !== undefined && <BoxDetail taskId={taskId} box={box} evidence={evidence} />}
-      {link !== undefined && <LinkDetail taskId={taskId} link={link} graph={graph} evidence={evidence} />}
+      {link !== undefined && <LinkDetail key={link.link_id} taskId={taskId} link={link} graph={graph} evidence={evidence} />}
     </aside>
   );
 }

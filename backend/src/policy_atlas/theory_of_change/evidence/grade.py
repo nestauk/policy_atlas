@@ -18,9 +18,18 @@ counts strong +2, weak +1, mixed 0, refutes −2; *not about* is ignored. Per li
 
 - W, the total weight; S̄, the weight-averaged support (−2 to +2); and R%, the
   share of the weight that refutes.
-- **Not sure: too little evidence** when W < 1; else **Confident** when
-  S̄ ≥ 1 and R% < 15%; else **Not confident: evidence against** when S̄ ≤ −0.5;
-  else **Not sure: mixed**.
+- **Not enough evidence** when W < 4/9 (less than about half of one strong,
+  relevant study).
+- Some evidence (4/9 ≤ W < 1): **Leaning supports** when S̄ ≥ 0.5, **Leaning
+  against** when S̄ ≤ −0.5, else Not enough evidence.
+- Enough evidence (W ≥ 1): **Confident** when S̄ ≥ 1 and R% < 25%; else
+  **Leaning supports** when S̄ ≥ 0.5; **Not confident: evidence against** when
+  S̄ ≤ −1; **Leaning against** when S̄ ≤ −0.5; else **Mixed**.
+
+Calibrated on 2026-10-30 over six runs (123 links): the leaning verdicts say
+which way thin or uneven evidence points instead of "not sure", without letting
+one weak analogue study decide (owner, task 054). The keys ``not_sure_mixed``
+and ``not_sure_insufficient`` keep their names; only their labels changed.
 - **Close to the threshold** when S̄ is within 0.2 of a support threshold that
   applies, or W is within 0.25 of 1: one more document could change the verdict.
 
@@ -39,7 +48,14 @@ from typing import Literal
 from urllib.parse import urlparse
 
 Support = Literal["strong", "weak", "mixed", "refutes", "not_about"]
-Verdict = Literal["confident", "not_sure_mixed", "not_sure_insufficient", "not_confident"]
+Verdict = Literal[
+    "confident",
+    "leaning_supports",
+    "not_sure_mixed",
+    "leaning_against",
+    "not_sure_insufficient",
+    "not_confident",
+]
 
 #: The value of each support in the weighted average (BEAM Table 1).
 SUPPORT_VALUE: dict[str, int] = {"strong": 2, "weak": 1, "mixed": 0, "refutes": -2}
@@ -47,14 +63,19 @@ SUPPORT_VALUE: dict[str, int] = {"strong": 2, "weak": 1, "mixed": 0, "refutes": 
 PERFECT = 9
 
 # The verdict thresholds (BEAM §3.2), to calibrate from the evals.
-#: Below this total weight there is too little evidence.
+#: Below this total weight a verdict is only "leaning", never Confident, Mixed or Not confident.
 MIN_WEIGHT = 1.0
+#: Below this total weight there is not enough evidence to lean either way.
+LEAN_WEIGHT = 4 / 9
 #: At or above this average support (and little refuting) the verdict is Confident.
 CONFIDENT_SUPPORT = 1.0
 #: Confident needs less than this share of the weight on refutes.
-MAX_REFUTE_SHARE = 0.15
+MAX_REFUTE_SHARE = 0.25
 #: At or below this average support the verdict is Not confident.
-AGAINST_SUPPORT = -0.5
+AGAINST_SUPPORT = -1.0
+#: Beyond these average supports, evidence that falls short of the above leans that way.
+LEAN_SUPPORT = 0.5
+LEAN_AGAINST = -0.5
 #: How close to a threshold counts as close (average support, total weight).
 NEAR_SUPPORT = 0.2
 NEAR_WEIGHT = 0.25
@@ -62,15 +83,19 @@ NEAR_WEIGHT = 0.25
 #: Low to high: the theory's confidence is the lowest among its critical links.
 VERDICT_ORDER: tuple[Verdict, ...] = (
     "not_confident",
+    "leaning_against",
     "not_sure_insufficient",
     "not_sure_mixed",
+    "leaning_supports",
     "confident",
 )
 
 VERDICT_LABELS: dict[Verdict, str] = {
     "confident": "Confident",
-    "not_sure_mixed": "Not sure: mixed",
-    "not_sure_insufficient": "Not sure: too little evidence",
+    "leaning_supports": "Leaning supports",
+    "not_sure_mixed": "Mixed",
+    "leaning_against": "Leaning against",
+    "not_sure_insufficient": "Not enough evidence",
     "not_confident": "Not confident: evidence against",
 }
 
@@ -210,17 +235,32 @@ def link_verdict(
     mean = supported / units if units else 0.0
     share = refuting / units if units else 0.0
     verdict: Verdict
-    if total < MIN_WEIGHT:
+    # Compare in whole units so 4/9 is exact.
+    if units < LEAN_WEIGHT * PERFECT - 1e-9:
         verdict = "not_sure_insufficient"
+    elif total < MIN_WEIGHT:
+        verdict = (
+            "leaning_supports"
+            if mean >= LEAN_SUPPORT
+            else "leaning_against"
+            if mean <= LEAN_AGAINST
+            else "not_sure_insufficient"
+        )
     elif mean >= CONFIDENT_SUPPORT and share < MAX_REFUTE_SHARE:
         verdict = "confident"
+    elif mean >= LEAN_SUPPORT:
+        verdict = "leaning_supports"
     elif mean <= AGAINST_SUPPORT:
         verdict = "not_confident"
+    elif mean <= LEAN_AGAINST:
+        verdict = "leaning_against"
     else:
         verdict = "not_sure_mixed"
-    near = abs(total - MIN_WEIGHT) <= NEAR_WEIGHT or (
-        total >= MIN_WEIGHT
-        and any(abs(mean - t) <= NEAR_SUPPORT for t in (CONFIDENT_SUPPORT, AGAINST_SUPPORT))
+    thresholds = (CONFIDENT_SUPPORT, LEAN_SUPPORT, LEAN_AGAINST, AGAINST_SUPPORT)
+    near = (
+        abs(total - MIN_WEIGHT) <= NEAR_WEIGHT
+        or abs(total - LEAN_WEIGHT) <= NEAR_WEIGHT / 2
+        or (total >= LEAN_WEIGHT and any(abs(mean - t) <= NEAR_SUPPORT for t in thresholds))
     )
     return LinkVerdict(
         verdict=verdict,
@@ -247,23 +287,35 @@ def rule_text() -> list[tuple[str, str]]:
         (
             VERDICT_LABELS["confident"],
             f"The documents add up to at least one strong, relevant study (total weight "
-            f"{MIN_WEIGHT:g}), on average they support the step (average "
+            f"{MIN_WEIGHT:g} or more), on average they support the step (average "
             f"{CONFIDENT_SUPPORT:+g} or more, on a scale from -2 to +2), and less than "
             f"{MAX_REFUTE_SHARE:.0%} of the weight is against it.",
+        ),
+        (
+            VERDICT_LABELS["leaning_supports"],
+            f"The evidence points towards the step (average {LEAN_SUPPORT:+g} or more) but "
+            "is either thinner than one strong, relevant study or not clear enough for "
+            "Confident.",
         ),
         (
             VERDICT_LABELS["not_sure_mixed"],
             "Enough evidence, but it neither clearly supports nor clearly refutes the step.",
         ),
         (
-            VERDICT_LABELS["not_sure_insufficient"],
-            f"The documents add up to less than one strong, relevant study (total weight "
-            f"under {MIN_WEIGHT:g}), including when none was found.",
+            VERDICT_LABELS["leaning_against"],
+            f"The evidence points against the step (average {LEAN_AGAINST:+g} or lower) but "
+            "is either thinner than one strong, relevant study or not clear enough for "
+            "Not confident.",
         ),
         (
             VERDICT_LABELS["not_confident"],
             f"Enough evidence, and on average it is against the step (average "
             f"{AGAINST_SUPPORT:+g} or lower).",
+        ),
+        (
+            VERDICT_LABELS["not_sure_insufficient"],
+            "The documents add up to less than about half of one strong, relevant study "
+            "(total weight under 0.44), including when none was found in this search.",
         ),
         (
             "How a document weighs",

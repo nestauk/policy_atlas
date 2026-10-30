@@ -74,7 +74,7 @@ def test_rows_put_the_critical_link_first_then_the_worst_verdict_and_fill_to_fiv
         # Only four rows from the rule: a Confident link's condition fills to five.
         ("r5", "#1", "c1a", "assumption"),
     ]
-    assert rows[0]["verdict"] == "Not sure: mixed" and rows[0]["sources"] == [3, 4]
+    assert rows[0]["verdict"] == "Mixed" and rows[0]["sources"] == [3, 4]
 
 
 def test_rows_stop_at_twelve() -> None:

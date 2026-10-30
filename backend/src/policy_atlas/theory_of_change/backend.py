@@ -176,7 +176,7 @@ class TocBackend(Protocol):
         max_success: int,
         max_failure: int,
     ) -> UsageResult[ChooseResponse]:
-        """Choose pathways and name new conditions (``toc_choose_v2``)."""
+        """Choose pathways and name new conditions (``toc_choose_v3``)."""
         ...
 
     def summarise(

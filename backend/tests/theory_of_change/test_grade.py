@@ -28,7 +28,8 @@ def test_the_beam_worked_example() -> None:
     assert round(result.total_weight, 2) == 1.33
     assert result.mean_support == -0.5
     assert round(result.refute_share, 2) == 0.33
-    assert result.verdict == "not_confident"
+    # Against on average, but not clearly (S̄ above -1): leaning against, on its threshold.
+    assert result.verdict == "leaning_against"
     assert result.near_threshold
     assert result.n_documents == 3
 
@@ -36,17 +37,38 @@ def test_the_beam_worked_example() -> None:
 @pytest.mark.parametrize(
     ("rows", "verdict", "near"),
     [
-        # Nothing found, or only not_about: too little evidence.
+        # Nothing found, or only not_about: not enough evidence.
         ([], "not_sure_insufficient", False),
         ([("not_about", 3, 0)], "not_sure_insufficient", False),
-        # One strong, partly relevant study: W 6/9 < 1, and 0.33 away from 1, so not near.
-        ([("strong", 3, 2)], "not_sure_insufficient", False),
+        # One analogue study (Q3 R1, W 3/9): below the 4/9 floor, whatever it says; near it.
+        ([("refutes", 3, 1)], "not_sure_insufficient", True),
+        # Some evidence (W 6/9) that clearly supports: leaning supports.
+        ([("strong", 3, 2)], "leaning_supports", False),
         # W 8/9 is within 0.25 of 1: near.
-        ([("strong", 2, 2), ("strong", 2, 2)], "not_sure_insufficient", True),
+        ([("strong", 2, 2), ("strong", 2, 2)], "leaning_supports", True),
+        # Some evidence, all against (run 9 #5): leaning against.
+        ([("refutes", 2, 2), ("refutes", 2, 1)], "leaning_against", False),
+        # Some evidence pulling both ways (S̄ -0.25): not enough to lean.
+        ([("weak", 2, 2), ("refutes", 1, 2)], "not_sure_insufficient", False),
         # Two strong, fully relevant studies: Confident, far from every threshold.
         ([("strong", 3, 3), ("strong", 3, 3)], "confident", False),
-        # Supportive on average (S̄ 0.67) but a third of the weight against: mixed.
-        ([("strong", 3, 3), ("strong", 3, 3), ("refutes", 3, 3)], "not_sure_mixed", False),
+        # Five supporting, one refuting (run 9 #4; 17% of the weight against): Confident.
+        (
+            [
+                ("weak", 2, 2),
+                ("refutes", 2, 2),
+                ("strong", 2, 3),
+                ("strong", 3, 1),
+                ("weak", 3, 1),
+                ("strong", 3, 1),
+            ],
+            "confident",
+            True,
+        ),
+        # Supportive on average (S̄ 0.67) but a third of the weight against: leaning supports.
+        ([("strong", 3, 3), ("strong", 3, 3), ("refutes", 3, 3)], "leaning_supports", True),
+        # Enough evidence that neither supports nor refutes: mixed.
+        ([("strong", 3, 3), ("refutes", 3, 3), ("mixed", 3, 3)], "not_sure_mixed", False),
         # Clearly against.
         ([("refutes", 3, 3), ("refutes", 3, 3)], "not_confident", False),
         # S̄ exactly 1.0 with W 2: Confident, and on the threshold.
@@ -91,9 +113,11 @@ def test_the_lowest_verdict_is_the_theory_confidence() -> None:
 
 def test_the_rule_text_names_every_verdict() -> None:
     labels = [label for label, _ in rule_text()]
-    assert labels[:4] == [
+    assert labels[:6] == [
         "Confident",
-        "Not sure: mixed",
-        "Not sure: too little evidence",
+        "Leaning supports",
+        "Mixed",
+        "Leaning against",
         "Not confident: evidence against",
+        "Not enough evidence",
     ]

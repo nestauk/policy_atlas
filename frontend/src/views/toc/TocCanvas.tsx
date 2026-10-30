@@ -124,7 +124,7 @@ function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
   return (
     <g>
       <title>{data.tip}</title>
-      {/* Not sure: mixed is two-tone: an amber line under the green dash. */}
+      {/* Mixed is two-tone: an amber line under the green dash. */}
       {kind === "not_sure_mixed" && <path d={path} className="toc-edge-under" />}
       <BaseEdge
         id={id}
@@ -178,6 +178,26 @@ function ViewFitter({ boxes, bounds, refit }: { boxes: number; bounds: Bounds; r
   return null;
 }
 
+/** Most zoom a focus may use: a box or connection close enough to read, with its neighbours in view. */
+const FOCUS_MAX_ZOOM = 1.25;
+
+/**
+ * Centres the view on a box, or on both ends of a connection, when the report
+ * asks (a code clicked there). Zooms in to at most FOCUS_MAX_ZOOM.
+ */
+function Focuser({ count, rect }: { count: number; rect: Bounds | null }) {
+  const { setViewport } = useReactFlow();
+  const store = useStoreApi();
+  const { x = 0, y = 0, width = 0, height = 0 } = rect ?? {};
+  const has = rect !== null;
+  useEffect(() => {
+    if (count === 0 || !has) return;
+    const view = store.getState();
+    void setViewport(getViewportForBounds({ x, y, width, height }, view.width, view.height, 0.5, FOCUS_MAX_ZOOM, 0.25), { duration: 400 });
+  }, [count, has, x, y, width, height, setViewport, store]);
+  return null;
+}
+
 interface Bounds {
   x: number;
   y: number;
@@ -195,12 +215,15 @@ export function TocCanvas({
   graph,
   pathway,
   selection,
+  focus = null,
   onSelect,
 }: {
   graph: TocGraph;
   /** "all" or one kept pathway's id. */
   pathway: string;
   selection: Selection | null;
+  /** A box or connection to centre on, from the report. */
+  focus?: { target: Selection; count: number } | null;
   onSelect: (selection: Selection | null) => void;
 }) {
   const layout = layoutToc(graph);
@@ -230,6 +253,16 @@ export function TocCanvas({
           const bottom = pathway === "all" ? ceilingLabelY + LABEL_H : Math.max(...placedInView.map((placed) => placed.y + BOX_H));
           return { x: left, y: top, width: right - left, height: bottom - top };
         })();
+  // The area a focus centres on: the box, or both ends of the connection.
+  const rectOf = (target: Selection): Bounds | null => {
+    const link = target.kind === "link" ? graph.links.find((item) => item.link_id === target.id) : undefined;
+    const ids = target.kind === "box" ? [target.id] : link === undefined ? [] : [link.source_box_id, link.target_box_id];
+    const placed = layout.boxes.filter((box) => ids.includes(box.id));
+    if (placed.length === 0) return null;
+    const x = Math.min(...placed.map((box) => box.x));
+    const y = Math.min(...placed.map((box) => box.y));
+    return { x, y, width: Math.max(...placed.map((box) => box.x + BOX_W)) - x, height: Math.max(...placed.map((box) => box.y + BOX_H)) - y };
+  };
   const boxRef = useRef<HTMLDivElement>(null);
   // Full screen takes the whole row (canvas and detail panel), which is the canvas's parent.
   const fsEl = () => boxRef.current?.parentElement ?? null;
@@ -365,6 +398,7 @@ export function TocCanvas({
         onPaneClick={() => onSelect(null)}
       >
         <Dividers lineY={layout.lineY} ceilingX={layout.ceilingX} />
+        <Focuser count={focus?.count ?? 0} rect={focus === null ? null : rectOf(focus.target)} />
         <ViewFitter boxes={layout.boxes.length} bounds={bounds} refit={refit} />
         <Controls showInteractive={false} showFitView={false}>
           {/* Our own fit button: the library's would fit below the minimum zoom. */}

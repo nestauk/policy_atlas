@@ -65,10 +65,10 @@ describe("canvas", () => {
     expect(document.querySelector(".toc-edge--critical")).toBeNull();
   });
 
-  it("keys the four line styles and the critical connection's mark", () => {
+  it("keys the six line styles and the critical connection's mark", () => {
     renderResult();
     const key = screen.getByRole("list", { name: "Line key" });
-    for (const label of ["Confident", "Not sure: mixed", "Not sure: too little evidence", "Not confident: evidence against"]) {
+    for (const label of ["Confident", "Leaning supports", "Mixed", "Leaning against", "Not confident: evidence against", "Not enough evidence"]) {
       expect(within(key).getByText(label)).toBeInTheDocument();
     }
     expect(within(key).getByText(/Critical connection/)).toBeInTheDocument();
@@ -87,7 +87,7 @@ describe("canvas", () => {
   it("hover text gives the verdict", () => {
     renderResult();
     expect(edge(4)?.querySelector("title")?.textContent).toBe("Confident");
-    expect(edge(3)?.querySelector("title")?.textContent).toBe("Critical connection. Not sure: mixed");
+    expect(edge(3)?.querySelector("title")?.textContent).toBe("Critical connection. Mixed");
   });
 });
 
@@ -121,7 +121,7 @@ describe("detail panel", () => {
     // The verdict right under the title: the dot and the label.
     const verdict = within(panel).getByTestId("link-verdict");
     expect(title.nextElementSibling).toBe(verdict);
-    expect(verdict.textContent).toBe("Not sure: mixed");
+    expect(verdict.textContent).toBe("Mixed");
     // Section order: How this works (clauses, then Conditions); Evidence (balance, sentence, size, documents).
     const text = panel.textContent ?? "";
     const order = [
@@ -129,7 +129,7 @@ describe("detail panel", () => {
       "because",
       "Conditions",
       "Evidence",
-      "Evidence balance: Not sure: mixed",
+      "Evidence balance: Mixed",
       "brands moved to brand-only adverts",
       "Size of change",
       "Documents (3)",
@@ -146,6 +146,14 @@ describe("detail panel", () => {
     const [block] = within(panel).getAllByTestId("balance-block");
     await user.hover(block as HTMLElement);
     expect((await screen.findByRole("tooltip")).textContent).toContain("quality");
+  });
+
+  it("opens a balance block's document in the citation sidebar on click", async () => {
+    const user = userEvent.setup();
+    renderResult();
+    const panel = openLink(3);
+    await user.click(within(panel).getAllByTestId("balance-block")[0] as HTMLElement);
+    expect(within(screen.getByRole("dialog")).getByText("Where this comes from")).toBeInTheDocument();
   });
 
   it("says what makes a connection critical on hover", async () => {
@@ -223,12 +231,15 @@ describe("detail panel", () => {
 });
 
 describe("detailed information", () => {
-  const SECTIONS = ["Summary", "How change happens", "Assumptions and evidence", "What to test and measure", "Sources"];
+  const SECTIONS = ["Summary", "How change happens", "Assumptions and evidence", "What to test and measure", "References"];
 
   it("is the five-section report, in the report's four text styles only", () => {
     renderResult();
     const info = screen.getByLabelText("Detailed information");
-    expect(within(info).getByRole("heading", { level: 2 }).className).toBe(REPORT_PART_HEADING_CLASS);
+    // No heading of its own: the contents sidebar lists the canvas, then the report's sections.
+    expect(within(info).queryByRole("heading", { level: 2 })).toBeNull();
+    const contents = screen.getByRole("navigation", { name: "Contents" });
+    expect(within(contents).getAllByRole("link").map((a) => a.textContent)).toEqual(["Canvas", ...SECTIONS]);
     const sections = within(info).getAllByRole("heading", { level: 3 });
     expect(sections.map((h) => h.textContent)).toEqual(SECTIONS);
     for (const heading of sections) expect(heading.className).toContain(REPORT_SECTION_HEADING_CLASS);

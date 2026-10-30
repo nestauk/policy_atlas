@@ -4,13 +4,14 @@ import { useTask, useToc, useTocEvidence } from "../../api/queries";
 import { scrub } from "../../lib/scrub";
 import { REPORT_BODY_CLASS } from "../artefactPresentation";
 import { Button } from "../../ui/brand/Button";
-import { DetailedInformation } from "./DetailedInformation";
+import { ContentsSidebar } from "../ArtefactOutline";
+import { DetailedInformation, REPORT_SECTIONS } from "./DetailedInformation";
 import { DetailPanel, type Selection } from "./DetailPanel";
 import { ReadingGuide, VerdictLegend } from "./ReadingGuide";
 import { TocCanvas } from "./TocCanvas";
 import { keptPathways, pathwayTitles, tocTitle } from "./tocModel";
 
-/** The theory-of-change Result tab: header, canvas with its detail panel, Detailed information. */
+/** The theory-of-change Result tab: contents sidebar, header, canvas with its detail panel, the report. */
 export function TocResult({ taskId }: { taskId: string }) {
   const toc = useToc(taskId);
   const task = useTask(taskId);
@@ -18,6 +19,8 @@ export function TocResult({ taskId }: { taskId: string }) {
   const [pathway, setPathway] = useState("all");
   const [guideOpen, setGuideOpen] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
+  // A code clicked in the report: the canvas centres on it (count makes a repeat click re-centre).
+  const [focus, setFocus] = useState<{ target: Selection; count: number } | null>(null);
 
   const graph = toc.data;
   if (graph == null || graph.boxes.length === 0) {
@@ -29,15 +32,18 @@ export function TocResult({ taskId }: { taskId: string }) {
   }
 
   const running = graph.check_status === "drafting" || graph.check_status === "checking";
-  // A code in the report selects its box or link and brings the canvas into view.
+  // A code in the report selects its box or link, brings the canvas into view and centres it there.
   const select = (target: Selection) => {
     setSelection(target);
+    setFocus((current) => ({ target, count: (current?.count ?? 0) + 1 }));
     const canvas = document.querySelector('[aria-label="Theory of change canvas"]');
     if (canvas instanceof HTMLElement && typeof canvas.scrollIntoView === "function") canvas.scrollIntoView({ behavior: "smooth", block: "center" });
   };
   const titles = pathwayTitles(graph);
   return (
-    <main className="mx-auto my-8 w-full max-w-[1280px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0">
+    <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-6 px-6 max-md:gap-0 max-md:px-0 md:flex-row">
+    <ContentsSidebar entries={[{ id: "toc-canvas", title: "Canvas" }, ...REPORT_SECTIONS]} />
+    <main className="my-8 min-w-0 flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0">
       {/* The report's short title and summary; the task's name until a report is written. */}
       <h1 className="text-title font-extrabold leading-tight tracking-[-0.2px] text-navy">{scrub(graph.report?.title ?? task.data?.name ?? tocTitle(graph))}</h1>
       {graph.report?.summary_text != null && <p className={`mt-3 max-w-[56em] ${REPORT_BODY_CLASS}`}>{scrub(graph.report.summary_text)}</p>}
@@ -66,12 +72,13 @@ export function TocResult({ taskId }: { taskId: string }) {
         </Button>
       </div>
       {guideOpen && <ReadingGuide graph={graph} />}
-      <div className="flex border border-line bg-paper max-lg:flex-col">
-        <TocCanvas graph={graph} pathway={pathway} selection={selection} onSelect={setSelection} />
+      <div id="toc-canvas" className="flex scroll-mt-4 border border-line bg-paper max-lg:flex-col">
+        <TocCanvas graph={graph} pathway={pathway} selection={selection} focus={focus} onSelect={setSelection} />
         {selection !== null && <DetailPanel taskId={taskId} graph={graph} evidence={evidence.data} selection={selection} onClose={() => setSelection(null)} />}
       </div>
       <VerdictLegend />
       <DetailedInformation taskId={taskId} graph={graph} onSelect={select} />
     </main>
+    </div>
   );
 }

@@ -154,8 +154,8 @@ export function tocGraphFixture(overrides: Partial<TocGraph> = {}): TocGraph {
     supporting_activities: ["Ofcom monitoring", "Industry guidance on nutrient profiling"],
     grade_rules: [
       { label: "Confident", rule: "enough evidence, and on average it supports the step." },
-      { label: "Not sure: mixed", rule: "enough evidence, but it neither clearly supports nor refutes the step." },
-      { label: "Not sure: too little evidence", rule: "the documents add up to less than one strong, relevant study." },
+      { label: "Mixed", rule: "enough evidence, but it neither clearly supports nor refutes the step." },
+      { label: "Not enough evidence", rule: "the documents add up to less than one strong, relevant study." },
       { label: "Not confident: evidence against", rule: "enough evidence, and on average it is against the step." },
     ],
     confidence: "not_sure_mixed",
@@ -181,11 +181,11 @@ export function tocGraphFixture(overrides: Partial<TocGraph> = {}): TocGraph {
           code: "#3",
           statement: "Brands do not move their spend to brand-only ads",
           kind: "assumption",
-          verdict: "Not sure: mixed",
+          verdict: "Mixed",
           why: "Chile cut exposure; brands moved to brand-only ads",
           sources: [1, 3],
         },
-        { code: "F1", statement: "Marketing moves to unrestricted spaces", kind: "risk", verdict: "Not sure: mixed", why: "Seen after Chile's rules", sources: [3] },
+        { code: "F1", statement: "Marketing moves to unrestricted spaces", kind: "risk", verdict: "Mixed", why: "Seen after Chile's rules", sources: [3] },
       ],
       tests: [
         {

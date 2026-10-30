@@ -14,7 +14,14 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 #: One evidence verdict per link (C36, simplified BEAM).
-Verdict = Literal["confident", "not_sure_mixed", "not_sure_insufficient", "not_confident"]
+Verdict = Literal[
+    "confident",
+    "leaning_supports",
+    "not_sure_mixed",
+    "leaning_against",
+    "not_sure_insufficient",
+    "not_confident",
+]
 Support = Literal["strong", "weak", "mixed", "refutes", "not_about"]
 LinkState = Literal["unchecked", "checking", "checked", "pending", "kept", "no_change"]
 Origin = Literal["drafted", "found_in_evidence", "imported", "user", "options_scoping"]
@@ -148,7 +155,7 @@ class TocReportAssumptionOut(BaseModel):
     code: str
     statement: str
     kind: Literal["assumption", "risk"]
-    #: The verdict's label, e.g. "Not sure: mixed".
+    #: The verdict's label, e.g. "Leaning supports".
     verdict: str
     why: str
     #: Numbers in the report's source list.

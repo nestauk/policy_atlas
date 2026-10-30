@@ -1,4 +1,4 @@
-"""The ``toc_report_v2`` prompt: Detailed information as a short narrative (task 054, C38).
+"""The ``toc_report_v3`` prompt: Detailed information as a short narrative (task 054, C38).
 
 Lead-authored and versioned. One frontier call writes the prose of the five-section
 report the ground-truth pack recommends (Summary; How change happens; Assumptions
@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_REPORT_PROMPT_VERSION = "toc_report_v2"
+TOC_REPORT_PROMPT_VERSION = "toc_report_v3"
 TOC_REPORT_MAX_OUTPUT_TOKENS = 12_000
 
 
@@ -106,8 +106,9 @@ number, finding or source.
 
 Write in plain UK English, short sentences, active voice. Say plainly that the
 impact is contributed to, not attributed. Name places and years when they
-matter to the evidence. Where a verdict says there is too little evidence,
-say none was found in this search, not that none exists.
+matter to the evidence. Where a verdict says there is not enough evidence,
+say too little was found in this search, not that none exists. A leaning
+verdict says which way thin or uneven evidence points; say so plainly.
 
 Length: the whole report, with the tables, is about 400 to 600 words. Match
 the worked example below for length, tone and density.
@@ -123,8 +124,8 @@ food marketing is moving to social media and influencers, which the rules
 cover only in part.
 
 Weakest critical links: whether fewer covered adverts mean children see fewer
-adverts overall (#2: not sure, mixed), and whether fewer requests change what
-households buy (#4: too little evidence).
+adverts overall (#2: mixed), and whether fewer requests change what
+households buy (#4: not enough evidence).
 
 Fewer adverts, less snacking: Removing covered adverts (A1 → P1) should cut
 children's exposure (S1). Experiments consistently show children eat more

@@ -9118,7 +9118,9 @@
               {
                 "enum": [
                   "confident",
+                  "leaning_supports",
                   "not_sure_mixed",
+                  "leaning_against",
                   "not_sure_insufficient",
                   "not_confident"
                 ],
@@ -9362,7 +9364,9 @@
           "verdict": {
             "enum": [
               "confident",
+              "leaning_supports",
               "not_sure_mixed",
+              "leaning_against",
               "not_sure_insufficient",
               "not_confident"
             ],

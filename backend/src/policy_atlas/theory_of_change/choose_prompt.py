@@ -1,4 +1,4 @@
-"""The ``toc_choose_v2`` prompt: choose after grading (task 054, C6).
+"""The ``toc_choose_v3`` prompt: choose after grading (task 054, C6).
 
 Lead-authored and versioned. Called only when there is something to choose:
 more kept pathways than the limits (6 success, 3 failure), or conditions that
@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_CHOOSE_PROMPT_VERSION = "toc_choose_v2"
+TOC_CHOOSE_PROMPT_VERSION = "toc_choose_v3"
 
 TOC_CHOOSE_MAX_OUTPUT_TOKENS = 12_000
 
@@ -69,10 +69,10 @@ things.
    {max_failure} failure pathways, keep at most that many of each. Keep the
    routes that are most plausible within what the intervention can
    influence, and whose steps have the better evidence verdicts. The
-   verdicts, from best to worst: Confident; Not sure: mixed; Not sure: too
-   little evidence; Not confident: evidence against. A route with two
-   Confident steps and one Not sure is better evidenced than one whose steps
-   have too little evidence; never invent a score. When there are not more than the limits,
+   verdicts, from best to worst: Confident; Leaning supports; Mixed; Not
+   enough evidence; Leaning against; Not confident: evidence against. A
+   route with two Confident steps and one Mixed is better evidenced than one
+   whose steps have not enough evidence; never invent a score. When there are not more than the limits,
    keep every pathway. Every pathway gets one line of reason naming the
    criterion (promising, evidence). Do not set aside a pathway the user
    wrote or edited unless the limits force it; say why when you do.

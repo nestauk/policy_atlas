@@ -8,17 +8,21 @@ import type { BoxLayer, Origin, Support, TocBox, TocDocument, TocFigure, TocGrap
 
 export const VERDICT_LABEL: Record<Verdict, string> = {
   confident: "Confident",
-  not_sure_mixed: "Not sure: mixed",
-  not_sure_insufficient: "Not sure: too little evidence",
+  leaning_supports: "Leaning supports",
+  not_sure_mixed: "Mixed",
+  not_sure_insufficient: "Not enough evidence",
+  leaning_against: "Leaning against",
   not_confident: "Not confident: evidence against",
 };
 
-/** Best first: the legend's order. */
-export const VERDICTS: readonly Verdict[] = ["confident", "not_sure_mixed", "not_sure_insufficient", "not_confident"];
+/** The legend's order: supports to against, then not enough evidence. */
+export const VERDICTS: readonly Verdict[] = ["confident", "leaning_supports", "not_sure_mixed", "leaning_against", "not_confident", "not_sure_insufficient"];
 
 /** The CSS variable that colours a verdict's dot and arrowhead (defined once in `index.css`). */
 export const VERDICT_VAR: Record<Verdict, string> = {
   confident: "var(--color-verdict-confident)",
+  leaning_supports: "var(--color-verdict-confident)",
+  leaning_against: "var(--color-verdict-against)",
   not_sure_mixed: "var(--color-verdict-mixed)",
   not_sure_insufficient: "var(--color-verdict-little)",
   not_confident: "var(--color-verdict-against)",

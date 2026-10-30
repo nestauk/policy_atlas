@@ -329,8 +329,9 @@
 }
 
 /* Theory of change canvas (task 054, C36): the line style shows the link's
-   evidence verdict. Confident solid green; Not sure: mixed a green dash over
-   an amber underlay (two-tone); too little evidence grey dashed; Not
+   evidence verdict. Confident solid green; Leaning supports long green
+   dashes; Mixed a green dash over an amber underlay (two-tone); Not enough
+   evidence grey dashed; Leaning against long red dashes; Not
    confident dotted red. The critical link carries a warning triangle
    (CriticalMark), not a thicker line. An unchecked or checking
    edge is grey and pulses. Scoped under .react-flow so the library's own edge
@@ -345,6 +346,8 @@
 .react-flow .toc-edge-under { fill: none; stroke: var(--color-verdict-mixed); stroke-width: 5; pointer-events: none; }
 .react-flow .toc-edge--not_sure_insufficient { stroke: var(--color-verdict-little); stroke-dasharray: 6 5; }
 .react-flow .toc-edge--not_confident { stroke: var(--color-verdict-against); stroke-dasharray: 2 5; }
+.react-flow .toc-edge--leaning_supports { stroke: var(--color-verdict-confident); stroke-dasharray: 12 5; }
+.react-flow .toc-edge--leaning_against { stroke: var(--color-verdict-against); stroke-dasharray: 12 5; }
 .react-flow .toc-edge--pending { stroke: var(--color-line-2); animation: toc-pulse 1.6s ease-in-out infinite; }
 .react-flow .toc-edge--selected { stroke-width: 3; }
 @keyframes toc-pulse {
@@ -358,6 +361,8 @@
 .toc-verdict-not_sure_mixed { color: var(--color-verdict-mixed-text); }
 .toc-verdict-not_sure_insufficient { color: var(--color-verdict-little-text); }
 .toc-verdict-not_confident { color: var(--color-verdict-against-text); }
+.toc-verdict-leaning_supports { color: var(--color-verdict-confident-text); }
+.toc-verdict-leaning_against { color: var(--color-verdict-against-text); }
 /* PDF: the panel is hidden (aside), the canvas and toolbar stay. */
 @media print {
   .toc-canvas { height: 520px !important; break-inside: avoid; }

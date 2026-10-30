@@ -38,6 +38,8 @@ function LineSample({ verdict }: { verdict: Verdict }) {
       )}
       {verdict === "not_sure_insufficient" && line(VERDICT_VAR.not_sure_insufficient, 3, "6 5")}
       {verdict === "not_confident" && line(VERDICT_VAR.not_confident, 3, "2 5")}
+      {verdict === "leaning_supports" && line(VERDICT_VAR.leaning_supports, 3, "12 5")}
+      {verdict === "leaning_against" && line(VERDICT_VAR.leaning_against, 3, "12 5")}
     </svg>
   );
 }

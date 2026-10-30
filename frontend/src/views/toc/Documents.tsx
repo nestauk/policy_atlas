@@ -22,7 +22,7 @@ export function VerdictDot({ verdict }: { verdict: Verdict }) {
   return <span aria-hidden="true" className="mr-2 inline-block h-[10px] w-[10px] shrink-0 rounded-full" style={{ background: VERDICT_VAR[verdict] }} />;
 }
 
-/** "Not sure: mixed" in the verdict's own colour, bold. */
+/** "Leaning supports" in the verdict's own colour, bold. */
 export function VerdictWords({ verdict }: { verdict: Verdict }) {
   return <span className={`toc-verdict-${verdict} font-bold`}>{VERDICT_LABEL[verdict]}</span>;
 }
@@ -40,9 +40,19 @@ const PX_PER_WEIGHT = 40;
 /**
  * The evidence balance (C36): four columns, Refutes to Strongly supports, each
  * document a block whose height is proportional to its weight. Hovering or
- * focusing a block shows its document as the document list shows it.
+ * focusing a block shows its document as the document list shows it; clicking
+ * it opens the document's citation, as the list does.
  */
-export function EvidenceBalance<T extends Pick<TocDocument, "support" | "weight">>({ documents, detail }: { documents: T[]; detail?: (doc: T) => ReactNode }) {
+export function EvidenceBalance<T extends Pick<TocDocument, "support" | "weight">>({
+  documents,
+  detail,
+  onOpen,
+}: {
+  documents: T[];
+  detail?: (doc: T) => ReactNode;
+  /** Clicking a block opens its document's citation. */
+  onOpen?: (doc: T) => void;
+}) {
   const columns = evidenceBalance(documents);
   const caption = { refutes: "Refutes", mixed: "Mixed", weak: "Weakly supports", strong: "Strongly supports" };
   return (
@@ -51,15 +61,21 @@ export function EvidenceBalance<T extends Pick<TocDocument, "support" | "weight"
         {columns.map((col) => (
           <div key={col.support} data-testid={`balance-${col.support}`} className="flex min-h-16 flex-col-reverse gap-[3px] border-b-2 border-line-2 pb-[3px]">
             {col.docs.map((doc, index) => {
-              const block = (
-                <div
-                  key={index}
-                  data-testid="balance-block"
-                  tabIndex={detail === undefined ? undefined : 0}
-                  className="rounded-[3px] outline-offset-2"
-                  style={{ height: Math.max(4, Math.round(doc.weight * PX_PER_WEIGHT)), ...BLOCK[col.support] }}
-                />
-              );
+              const style = { height: Math.max(4, Math.round(doc.weight * PX_PER_WEIGHT)), ...BLOCK[col.support] };
+              const block =
+                onOpen === undefined ? (
+                  <div key={index} data-testid="balance-block" tabIndex={detail === undefined ? undefined : 0} className="rounded-[3px] outline-offset-2" style={style} />
+                ) : (
+                  <button
+                    key={index}
+                    type="button"
+                    data-testid="balance-block"
+                    aria-label={`Open document ${index + 1} in ${caption[col.support]}`}
+                    onClick={() => onOpen(doc)}
+                    className="block w-full cursor-pointer rounded-[3px] outline-offset-2 hover:brightness-90"
+                    style={style}
+                  />
+                );
               return detail === undefined ? (
                 block
               ) : (
