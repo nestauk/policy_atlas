@@ -435,7 +435,7 @@ STOPPED_MESSAGE = (
 
 
 def _pending_found(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> str | None:
-    """The message for a Find more evidence walk, or ``None`` for any other walk (C44)."""
+    """The message for a named check (C40 to C45), or ``None`` for a full check."""
     from policy_atlas.core.schema import toc_item_evidence, toc_link
     from policy_atlas.runtime.toc_plan import TOC_CHECK_MODE_KEY
 
@@ -450,7 +450,30 @@ def _pending_found(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) 
         )
         .where(capability_run.c.capability_run_id == walk_id)
     ).scalar_one_or_none()
-    if (context or {}).get(TOC_CHECK_MODE_KEY) != "find_more":
+    mode = (context or {}).get(TOC_CHECK_MODE_KEY)
+    if mode in ("new_items", "check_again", "add_study", "report"):
+        # A small named check says what it did in one line, not the full change list.
+        if mode == "report":
+            return "The report is updated for the theory as it is now."
+        codes = sorted(
+            code
+            for code in conn.execute(
+                select(toc_link.c.code).where(
+                    toc_link.c.link_id.in_(
+                        [uuid.UUID(key) for key in (context or {}).get("links") or []]
+                    )
+                )
+            ).scalars()
+            if code
+        )
+        done = {
+            "new_items": "Finding evidence",
+            "check_again": "Checking again",
+            "add_study": "Adding the study",
+        }[mode]
+        names = ", ".join(codes) or "the connection"
+        return f"{done} for {names} is done. Open it on the canvas to see its evidence."
+    if mode != "find_more":
         return None
     rows = conn.execute(
         select(toc_link.c.code, toc_item_evidence.c.support)

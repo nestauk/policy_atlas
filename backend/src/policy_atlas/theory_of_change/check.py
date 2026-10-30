@@ -2097,8 +2097,9 @@ def toc_judge_scope(
                 # A study the user added (C42) and their earlier decisions on this
                 # document for this link, carried to the new wording (C43).
                 "added_by": started_by if job.link_key in study_links else None,
-                # What Find more evidence found waits for the user's Accept (C44).
-                "status": "pending" if find_more else "counted",
+                # What Find more evidence found waits for the user's Accept (C44); a
+                # document not about the step changes nothing, so it does not wait.
+                "status": "pending" if find_more and about else "counted",
                 **carried.get((job.link_key, job.document.tss_id), {}),
             },
         )
