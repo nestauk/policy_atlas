@@ -9,7 +9,10 @@
   "Alongside" steps (other links into the same target or out of the same source); a case study
   must show the box itself, and is kept only from a document about the step. `toc_figures_v3`
   sees the link sentence, the judge's support and quote and the neighbouring steps, and keeps
-  to the judge's finding. `toc_summary_v4` may leave "seen in" empty. A box shows a level only
+  to the judge's finding. `toc_summary_v4` may leave "seen in" empty
+  (`toc_summary_v5`, same day: a box with case studies normally gets one, including a case where
+  the change failed, its mirror image, or a modelled estimate; empty only when every case study is
+  about another product, channel or kind of rule). A box shows a level only
   from a document of relevance 2 or more.
 
 ## 2026-10-30 (task 054, verdict calibration and report navigation)
