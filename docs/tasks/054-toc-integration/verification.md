@@ -266,3 +266,32 @@ Evidence searches per link and an LLM rerank.
 
 Not built, by evidence: a second search round for empty links (eval and live test on run 6's
 empty links found nothing new; the gap came from discovered links having no search of their own).
+
+## Increment 2: editing, slices A to D (2026-10-30, lead)
+
+Built on `task/054-1-core` from the approved design (contract C40 to C51, `wireframes-editing.html`).
+Live checks ran on run 10 (task `f7bb283e`), through a temporary server on port 8001, on the
+`openai-6x` route.
+
+| Slice | What was tried live | Result |
+|---|---|---|
+| A | Add a box, connect it, move it, a stale move (409), History, Undo of the move, Find evidence for the new link | All worked. The named check took 71 s: 10 documents picked and judged, a title written. |
+| B | Add a study by DOI (Boyland 2016), a non-DOI address, override its scores, edit #7 then Check again | All worked. OpenAlex and Crossref had no abstract for Boyland, so the judge saw the title only and said "not about"; the override put it in the verdict at once. Check again turned #7 from pending to checked: 4 documents, Confident. |
+| C | Find more evidence on #20; Find more on 6 links, then Stop | Find more found 8 documents, all "not about"; fix: only on-topic results now wait as pending. Stop ended the walk before its next step; the page shows "stopped". |
+| D | Review the theory; accept its suggestion; a chat request for a failure route and a clarification; Update the report | The review (21 s) found #22 and #23 on no pathway and proposed the full pathway; accepted, it appears in the pathway list. The Task Agent proposed reworking F1 and #16 and said the under-16s change needs a new plan. Update the report (67 s) added "Fruit instead of sweets" and closed the review's suggestion. |
+
+**Deviations from the design, for the owner:**
+- Suggestions show in a panel above the canvas; the Task Agent posts a message that points to it
+  (the wireframe put the card inside the chat).
+- Add a study takes a DOI or a doi.org address; other web addresses wait for web search
+  (increment 3), and the user is told so.
+- Find more evidence leaves out documents already judged for the link, rather than raising the
+  search's record cap (the cap is set per plan step, not per link).
+- Check again and Find evidence for new items count their results at once; only Find more
+  evidence waits for Accept (a re-check of an edited link moves the counted wording, so pending
+  results would leave it with none).
+- A merge the user accepts may fold a box the user wrote (the automatic merge still never does).
+
+**Gates:** the full `make verify` for slices A and B found 7 failures, all fixed: five table-count
+tests pinned at 49 since iteration 3, a chain test expecting a named check to write the report,
+and a route test that needs the local signing key (it passes in the main checkout).
