@@ -17,6 +17,7 @@ vi.mock("../../api/queries", () => ({
   useTocEvidence: vi.fn(),
   useTocDocumentContext: vi.fn(),
   useTocHistory: vi.fn(() => ({ data: [{ event_id: "e1", at: "2026-10-30T11:20:00Z", who: "Ada", what: "Edited S1: text", undoable: true }] })),
+  useTocProposals: vi.fn(() => ({ data: [] })),
 }));
 const mutate = vi.fn();
 vi.mock("../../api/mutations", () => ({ useTocEdit: vi.fn(() => ({ mutate, isPending: false })) }));
@@ -558,5 +559,49 @@ describe("finding more and stopping (C44, C48)", () => {
     unmount();
     renderResult(editable({ check_status: "stopped" }));
     expect(screen.getByText(/The check was stopped/)).toBeInTheDocument();
+  });
+});
+
+
+describe("review and suggestions (C45, C46)", () => {
+  const editable = (extra: Partial<TocGraph> = {}) => tocGraphFixture({ can_edit: true, ...extra });
+  const lastEdit = () => mutate.mock.calls.at(-1)?.[0];
+  const proposal = {
+    proposal_id: "p1",
+    source: "review" as const,
+    summary: "S5 leads nowhere.",
+    created_at: "2026-10-30T12:00:00Z",
+    edits: [
+      { index: 0, op: "add_link", line: "Connect S5 → L1", reason: "S5 reaches no impact.", status: "pending" as const },
+      { index: 1, op: "merge_boxes", line: "Merge S4 into S2", reason: "They say the same thing.", status: "pending" as const },
+    ],
+    report_findings: [{ section: "how_change_happens", why: "A step changed." }],
+  };
+
+  it("asks for a review, counting the changes since the last one", async () => {
+    const user = userEvent.setup();
+    renderResult(editable({ edits_since_review: 6 }));
+    await user.click(screen.getByRole("button", { name: "Review the theory (6 changes)" }));
+    expect(lastEdit()).toEqual({ kind: "review" });
+  });
+
+  it("lists suggestions with Accept, Reject, Accept all, Update the report and Dismiss", async () => {
+    const user = userEvent.setup();
+    vi.mocked(queries.useTocProposals).mockReturnValue({ data: [proposal] } as unknown as ReturnType<typeof queries.useTocProposals>);
+    renderResult(editable());
+    const card = screen.getByRole("region", { name: "Suggestions" });
+    expect(within(card).getByText("Connect S5 → L1")).toBeInTheDocument();
+    expect(within(card).getByText(/How change happens/)).toBeInTheDocument();
+    await user.click(within(card).getAllByRole("button", { name: "Accept" })[0] as HTMLElement);
+    expect(lastEdit()).toEqual({ kind: "proposal", proposalId: "p1", body: { index: 0, accept: true } });
+    await user.click(within(card).getAllByRole("button", { name: "Reject" })[1] as HTMLElement);
+    expect(lastEdit()).toEqual({ kind: "proposal", proposalId: "p1", body: { index: 1, accept: false } });
+    await user.click(within(card).getByRole("button", { name: "Accept all" }));
+    expect(lastEdit()).toEqual({ kind: "proposal", proposalId: "p1", body: { index: null, accept: true } });
+    await user.click(within(card).getByRole("button", { name: "Update the report" }));
+    expect(lastEdit()).toEqual({ kind: "updateReport", proposalId: "p1" });
+    await user.click(within(card).getByRole("button", { name: "Dismiss" }));
+    expect(lastEdit()).toEqual({ kind: "dismiss", proposalId: "p1" });
+    vi.mocked(queries.useTocProposals).mockReturnValue({ data: [] } as unknown as ReturnType<typeof queries.useTocProposals>);
   });
 });

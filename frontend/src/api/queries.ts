@@ -59,6 +59,7 @@ export const queryKeys = {
   toc: (taskId: string) => ["tasks", taskId, "toc"] as const,
   tocEvidence: (taskId: string) => ["tasks", taskId, "toc", "evidence"] as const,
   tocHistory: (taskId: string) => ["tasks", taskId, "toc", "history"] as const,
+  tocProposals: (taskId: string) => ["tasks", taskId, "toc", "proposals"] as const,
 };
 
 /** `GET /api/v1/tasks` filters (task 033 phase 10a adds `scope` and
@@ -749,5 +750,23 @@ export function useTocHistory(taskId: string, enabled: boolean) {
       return data ?? [];
     },
     enabled: Boolean(taskId) && enabled,
+  });
+}
+
+/** `GET /api/v1/tasks/{task_id}/toc/proposals` — open suggestions (task 054, C45, C46). Editors only.
+ *  Polled while a review is expected, so its card appears without a reload. */
+export function useTocProposals(taskId: string, enabled: boolean, polling: boolean) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.tocProposals(taskId),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/toc/proposals", {
+        params: { path: { task_id: taskId } },
+      });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: Boolean(taskId) && enabled,
+    refetchInterval: polling ? 4_000 : false,
   });
 }

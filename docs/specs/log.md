@@ -1,5 +1,19 @@
 # Spec update log
 
+## 2026-10-30 (task 054, editing slices B to D)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): an editor
+  can remove a study from a connection, set their own support and relevance over the judge's (the
+  judge's stay visible), and add a study by DOI (C42); an edit marks the evidence "from the earlier
+  wording" with Keep the evidence or Check again (C43). Find more evidence searches again, leaving
+  out what was judged; what it finds waits as pending, with the verdict if accepted (C44). A running
+  check can be stopped (C48); ToC stages show in the Task Agent's running card. Review the theory
+  (`toc_review_v1`, frontier) proposes edits from a closed list and names report sections that no
+  longer match; Update the report rewrites the sentences and the report (C45). The Task Agent
+  (`task_agent_toc_v2`) sees the theory by code, proposes edits as suggestions and records
+  clarifications, which every later step reads through the plan's context (C46, C49). Suggestions
+  apply as the user's own edits. Deviation from the wireframe: suggestions show in a panel above
+  the canvas, and the Task Agent message points to it, rather than as a card inside the chat.
+
 ## 2026-10-30 (task 054, editing slice A)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): editors
   can add, edit, connect, delete and move boxes and connections, mark a connection critical, reset

@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useTask, useToc, useTocEvidence } from "../../api/queries";
+import { useTask, useToc, useTocEvidence, useTocProposals } from "../../api/queries";
 import { scrub } from "../../lib/scrub";
 import { REPORT_BODY_CLASS } from "../artefactPresentation";
 import { Button } from "../../ui/brand/Button";
@@ -8,6 +8,7 @@ import { ContentsSidebar } from "../ArtefactOutline";
 import { DetailedInformation, REPORT_SECTIONS } from "./DetailedInformation";
 import { DetailPanel, type Selection } from "./DetailPanel";
 import { AddBoxForm, EditToolbar, HistorySection, UndoToast, useTocEditor } from "./Editing";
+import { Suggestions } from "./Suggestions";
 import { ReadingGuide, VerdictLegend } from "./ReadingGuide";
 import { TocCanvas } from "./TocCanvas";
 import { keptPathways, pathwayTitles, tocTitle } from "./tocModel";
@@ -26,6 +27,14 @@ export function TocResult({ taskId }: { taskId: string }) {
   const [adding, setAdding] = useState(false);
   const canEdit = toc.data?.can_edit === true;
   const { editor, toast, dismissToast, undoLast, error, history } = useTocEditor(taskId, canEdit);
+  // A review runs in the background; poll for its card for a while after asking (C45).
+  const [reviewing, setReviewing] = useState(false);
+  const proposals = useTocProposals(taskId, canEdit, reviewing);
+  const askReview = () =>
+    editor.run({ kind: "review" }, undefined, () => {
+      setReviewing(true);
+      window.setTimeout(() => setReviewing(false), 180_000);
+    });
 
   const graph = toc.data;
   if (graph == null || graph.boxes.length === 0) {
@@ -76,6 +85,16 @@ export function TocResult({ taskId }: { taskId: string }) {
         </select>
         <span className="flex-1" />
         {canEdit && <EditToolbar graph={graph} editor={editor} mode={mode} onMode={setMode} onAddBox={() => setAdding(true)} />}
+        {canEdit && (
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={editor.busy || (reviewing && (proposals.data ?? []).length === 0)}
+            onClick={askReview}
+          >
+            Review the theory{graph.edits_since_review >= 5 ? ` (${graph.edits_since_review} changes)` : ""}
+          </Button>
+        )}
         <Button variant="secondary" size="sm" aria-expanded={guideOpen} onClick={() => setGuideOpen((open) => !open)}>
           How to read this
         </Button>
@@ -85,6 +104,10 @@ export function TocResult({ taskId }: { taskId: string }) {
         <p role="alert" className="mb-2 text-body text-[var(--color-verdict-against-text)]">
           {error}
         </p>
+      )}
+      {canEdit && <Suggestions proposals={proposals.data ?? []} editor={editor} />}
+      {reviewing && (proposals.data ?? []).length === 0 && (
+        <p className="mb-2 text-body text-grey">Policy Atlas is reviewing the theory. Its suggestions appear here.</p>
       )}
       {adding && (
         <AddBoxForm

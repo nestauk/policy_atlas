@@ -150,6 +150,7 @@ export function tocGraphFixture(overrides: Partial<TocGraph> = {}): TocGraph {
     task_id: TASK_ID,
     check_status: "checked",
     can_edit: false,
+    edits_since_review: 0,
     boxes: BOXES,
     links: LINKS,
     pathways: PATHWAYS,
