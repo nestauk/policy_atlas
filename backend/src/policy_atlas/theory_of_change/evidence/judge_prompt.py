@@ -1,4 +1,4 @@
-"""The ``toc_judge_v7`` prompt: one link against one document (task 054, C5).
+"""The ``toc_judge_v8`` prompt: one link against one document (task 054, C5).
 
 Lead-authored and versioned. One call per link and document returns two
 stances, each with its own verbatim quote: *worked elsewhere* (where this step
@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_JUDGE_PROMPT_VERSION = "toc_judge_v7"
+TOC_JUDGE_PROMPT_VERSION = "toc_judge_v8"
 
 TOC_JUDGE_MAX_OUTPUT_TOKENS = 4_000
 
@@ -135,17 +135,33 @@ product's marketing tests the step's mechanism. Judge its support as usual
 and score its relevance by the extra assumptions needed (usually 1, or 2 when
 the intervention is close).
 
+When the step names a channel (television, online, social media, outdoor) or
+a kind of rule (a ban, a restriction), evidence about another channel, or
+about a rule that removes nothing (disclosure, labelling, a voluntary code),
+is an analogue: support at most weak, relevance at most 1. Brands appearing
+in creators' own videos are not paid adverts.
+
 It does not test the step, so the answer is not_about, when it:
 - only asserts the step without data (a commentary, an editorial, an
   introduction);
 - reports only on a neighbouring step (see <neighbouring_steps>): a study of
   whether restrictions cut children's exposure is not about a step whose
   target is what children eat;
+- reports only on a step alongside this one (an "Alongside" line: the same
+  effect through another channel or from another cause): a television
+  study is not about the online version of the step;
+- shows the step's source not happening: the adverts were not removed, a
+  voluntary code was ignored, the rule removed nothing. Then it is about the
+  step that should produce the source, not this one.
 - speaks only to the topic, or describes an intervention without reporting
   what it changed.
 Stay close to the text: no answer from what the document probably found.
 
 ## Support
+
+Support says what happened to the target once the source happened. Check
+first that the source happened in the document (the rule in force, the
+adverts removed, the snacks cut); if it did not, the answer is not_about.
 
 - strong: a direct test, and the target moved the way the step says, clearly
   (a significant or consistent effect).
@@ -154,8 +170,8 @@ Stay close to the text: no answer from what the document probably found.
   end, or an effect in some groups only.
 - mixed: the data support and refute the step about equally, or show no clear
   effect in a study too small or short to tell.
-- refutes: no change in a study able to detect one, the opposite change, or
-  the mechanism failing.
+- refutes: the source happened, and the target did not follow: no change in
+  a study able to detect one, the opposite change, or the mechanism failing.
 - not_about: as above.
 
 ## Relevance (0 to 3)
@@ -196,9 +212,12 @@ shows it, the answer is not_about.
 condition: only when support is strong or weak and the document says the
 effect held only for some groups, places or settings. One plain statement.
 
-case_study: when the document describes a named programme or place where the
-source or target of the step was seen (or, for an input, put in place and
-what it took). Otherwise null.
+case_study: only where this box itself was seen, in a named programme or
+place: for an input or output, the same kind of intervention on the same
+channel (put in place, and what it took); for an outcome, the same outcome
+measured, with a finding. An analogue (another product, channel or kind of
+rule) or a description of a study's method is not a case study. Its box is
+the end of the step its quote measures. Otherwise null.
 
 indicator: when the document names a measure for the source or target.
 Otherwise null.
@@ -274,8 +293,9 @@ def build_judge_messages(
         title: The document title.
         year: Publication year, or ``None``.
         text: The abstract or page excerpt.
-        neighbours: The steps just before and after this one, one sentence per
-            line, so the judge can tell a neighbouring step's evidence apart.
+        neighbours: The steps just before, after and alongside this one, one
+            sentence per line, so the judge can tell a neighbouring step's
+            evidence apart.
 
     Returns:
         Chat messages ready for a schema-constrained completion.

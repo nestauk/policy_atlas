@@ -281,6 +281,10 @@ def _source_type(metadata: dict[str, Any]) -> Literal["academic", "policy", "web
     return "policy" if backend == "overton" else "academic"
 
 
+#: Least relevance of a document whose levels a box shows (fit review, 2026-10-30).
+BOX_FIGURE_RELEVANCE = 2
+
+
 def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
     """Build the evidence read: every judged document per link, case studies per box."""
     _, rows = store.load_graph(conn, task_id)
@@ -351,6 +355,8 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
     cites: dict[uuid.UUID, dict[str, Any]] = {}
     # The current judgement of each (link, document), for its figures' quote in context.
     judgement_of: dict[tuple[str, uuid.UUID], uuid.UUID] = {}
+    #: The counted judgement's relevance, for which box figures show.
+    relevance_of: dict[tuple[str, uuid.UUID], int] = {}
     for row in evidence:
         key = str(row.link_id)
         link_row = rows.links.get(key)
@@ -375,6 +381,9 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
         previous = row.item_hash != link_row.counted_hash
         if not previous:
             judgement_of[(key, row.task_source_snapshot_id)] = row.evidence_id
+            relevance_of[(key, row.task_source_snapshot_id)] = (
+                row.relevance if row.support != "not_about" else 0
+            )
         appraisal = appraisals.get(str(row.task_source_snapshot_id))
         existing = documents[key].get(row.task_source_snapshot_id)
         # One entry per document: the counted judgement wins over an earlier wording's.
@@ -449,8 +458,9 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
         )
         if figure.box == "link":
             link_figures[key].append(shown)
-        else:
-            # A level of the link's source or target belongs to that box.
+        elif relevance_of.get((key, figure.task_source_snapshot_id), 0) >= BOX_FIGURE_RELEVANCE:
+            # A level of the link's source or target belongs to that box, when its
+            # document applies here: a level from another country or setting misleads.
             end = str(link_row.source_box_id if figure.box == "source" else link_row.target_box_id)
             if end in box_figures:
                 box_figures[end].append(shown)

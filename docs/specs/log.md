@@ -1,5 +1,17 @@
 # Spec update log
 
+## 2026-10-30 (task 054, evidence fit)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): after a
+  fit review of run 9 (15 of 65 documents, 8 of 38 link figures, 9 of 18 box figures and 8 of 22
+  case studies misfit), `toc_judge_v8` requires the step's source to happen (else not_about;
+  "refutes" means the source happened and the target did not follow), caps evidence from
+  another channel or a rule that removes nothing at weak support and relevance 1, and sees
+  "Alongside" steps (other links into the same target or out of the same source); a case study
+  must show the box itself, and is kept only from a document about the step. `toc_figures_v3`
+  sees the link sentence, the judge's support and quote and the neighbouring steps, and keeps
+  to the judge's finding. `toc_summary_v4` may leave "seen in" empty. A box shows a level only
+  from a document of relevance 2 or more.
+
 ## 2026-10-30 (task 054, verdict calibration and report navigation)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md) and
   ADR 0042's verdict rule: six verdicts, "Not sure" dropped. Not enough evidence (W < 4/9);

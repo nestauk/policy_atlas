@@ -1732,11 +1732,13 @@ NEIGHBOURS_PER_SIDE = 3
 
 
 def neighbour_lines(graph: Graph, key: str) -> str:
-    """The steps just before and after a link, for the judge (``toc_judge_v3``).
+    """The steps just before, after and alongside a link, for the judge (``toc_judge_v8``).
 
     One ``Before: <sentence>`` line per link that ends at this link's source
-    box and one ``After: <sentence>`` line per link that starts at its target
-    box, at most :data:`NEIGHBOURS_PER_SIDE` each, in graph order.
+    box, one ``After: <sentence>`` line per link that starts at its target
+    box, and one ``Alongside: <sentence>`` line per other link into the same
+    target or out of the same source (the same effect by another route), at
+    most :data:`NEIGHBOURS_PER_SIDE` each, in graph order.
 
     Args:
         graph: The current theory.
@@ -1755,7 +1757,14 @@ def neighbour_lines(graph: Graph, key: str) -> str:
     others = [other for k, other in graph.links.items() if k != key]
     before = [f"Before: {sentence(o)}" for o in others if o.target == link.source]
     after = [f"After: {sentence(o)}" for o in others if o.source == link.target]
-    return "\n".join(before[:NEIGHBOURS_PER_SIDE] + after[:NEIGHBOURS_PER_SIDE])
+    alongside = [
+        f"Alongside: {sentence(o)}"
+        for o in others
+        if o.target == link.target or o.source == link.source
+    ]
+    return "\n".join(
+        before[:NEIGHBOURS_PER_SIDE] + after[:NEIGHBOURS_PER_SIDE] + alongside[:NEIGHBOURS_PER_SIDE]
+    )
 
 
 def toc_judge_scope(
@@ -1874,7 +1883,8 @@ def toc_judge_scope(
             unverified += 1
             support = "not_about"
         about = support != "not_about"
-        case = response.case_study
+        # A case study only from a document about the step, with a quote in its text.
+        case = response.case_study if about else None
         if case is not None and not quote_found(text, case.quote):
             case = None
         indicator = response.indicator

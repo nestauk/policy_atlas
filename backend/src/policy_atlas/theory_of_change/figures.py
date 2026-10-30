@@ -39,6 +39,7 @@ from policy_atlas.theory_of_change.check import (
     _map_traced,
     _outcome_value,
     _year,
+    neighbour_lines,
     quote_found,
 )
 from policy_atlas.theory_of_change.draft import walk_toc_plan
@@ -201,6 +202,11 @@ class _Job:
     item_hash: str
     source: str
     target: str
+    #: The link sentence, the judge's support and quote, and the steps around it (fit review).
+    step: str
+    support: str
+    judge_quote: str
+    neighbours: str
     document: Document
 
 
@@ -242,6 +248,8 @@ def toc_figures_scope(
                 toc_item_evidence.c.task_source_snapshot_id,
                 toc_item_evidence.c.item_hash,
                 toc_item_evidence.c.figures_checked_at,
+                toc_item_evidence.c.support,
+                toc_item_evidence.c.quote,
             )
             .where(toc_item_evidence.c.task_id == task_id)
             .where(toc_item_evidence.c.support != "not_about")
@@ -258,6 +266,10 @@ def toc_figures_scope(
             item_hash=row.item_hash,
             source=graph.boxes[graph.links[str(row.link_id)].source].text,
             target=graph.boxes[graph.links[str(row.link_id)].target].text,
+            step=graph.links[str(row.link_id)].sentence,
+            support=row.support,
+            judge_quote=row.quote or "",
+            neighbours=neighbour_lines(graph, str(row.link_id)),
             document=documents[row.task_source_snapshot_id],
         )
         for row in todo
@@ -270,6 +282,10 @@ def toc_figures_scope(
             lambda: backend.figures(
                 source=job.source,
                 target=job.target,
+                step=job.step,
+                support=job.support,
+                judge_quote=job.judge_quote,
+                neighbours=job.neighbours,
                 population=plan.target_population,
                 place=plan.where or "not stated",
                 title=job.document.title,

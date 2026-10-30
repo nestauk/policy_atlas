@@ -143,7 +143,10 @@ def test_each_judge_call_carries_its_neighbouring_steps(
     _run(engine, cleanup, backend)
     sent = {call["neighbours"] for call in backend.inputs["judge"]}
     # Stub draft: l1 b1->b2, l2 b2->b3, l3 b3->b6, l4 b2->b5, l5 b6->b4.
-    assert "Before: Step l1 leads on.\nAfter: Step l3 leads on." in sent  # l2
+    # l2 shares its source b2 with l4: the same cause by another route is "Alongside".
+    assert (
+        "Before: Step l1 leads on.\nAfter: Step l3 leads on.\nAlongside: Step l4 leads on." in sent
+    )  # l2
     assert "After: Step l2 leads on.\nAfter: Step l4 leads on." in sent  # l1
 
 

@@ -72,9 +72,9 @@ things.
    verdicts, from best to worst: Confident; Leaning supports; Mixed; Not
    enough evidence; Leaning against; Not confident: evidence against. A
    route with two Confident steps and one Mixed is better evidenced than one
-   whose steps have not enough evidence; never invent a score. When there are not more than the limits,
-   keep every pathway. Every pathway gets one line of reason naming the
-   criterion (promising, evidence). Do not set aside a pathway the user
+   whose steps have not enough evidence; never invent a score. When there
+   are not more than the limits, keep every pathway. Every pathway gets one
+   line of reason naming the criterion (promising, evidence). Do not set aside a pathway the user
    wrote or edited unless the limits force it; say why when you do.
 
 2. Name new conditions. Some supporting documents said a step held only for

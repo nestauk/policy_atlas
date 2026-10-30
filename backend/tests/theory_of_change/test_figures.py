@@ -6,7 +6,7 @@ import uuid
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.routers.toc import toc_evidence_out
@@ -142,9 +142,12 @@ def test_the_step_stores_checked_figures_and_the_read_attaches_them_to_the_box(
     assert summary["figures"] == calls
     assert summary["dropped_quote_not_in_text"] == summary["dropped_number_not_in_quote"] == calls
     assert summary["ranges_dropped"] == calls
-    # The calls get the link's boxes and the plan's population.
+    # The calls get the link's boxes, its sentence, the judge's support and quote,
+    # and the steps around it, so a neighbouring step's number stays there.
     sent = backend.inputs["figures"][0]
     assert sent["source"] and sent["target"] and sent["population"]
+    assert sent["step"] and sent["support"] != "not_about" and sent["judge_quote"]
+    assert "neighbours" in sent
     with engine.connect() as conn:
         rows = conn.execute(select(toc_figure).where(toc_figure.c.task_id == task_id)).all()
         evidence = toc_evidence_out(conn, task_id)
@@ -157,6 +160,15 @@ def test_the_step_stores_checked_figures_and_the_read_attaches_them_to_the_box(
     assert all(f.source_title.startswith("Advertising ban study") for f in box_figures)
     assert all(f.statement and f.evidence_id for f in box_figures)
     assert all(not link.figures for link in evidence.links)  # none were link effects
+    # A level from a document that applies only loosely here (relevance 1) is not shown.
+    with engine.begin() as conn:
+        conn.execute(
+            update(toc_item_evidence)
+            .where(toc_item_evidence.c.task_id == task_id)
+            .values(relevance=1)
+        )
+        evidence = toc_evidence_out(conn, task_id)
+    assert not [figure for box in evidence.boxes for figure in box.figures]
 
 
 def test_a_judgement_already_done_is_not_asked_again(
