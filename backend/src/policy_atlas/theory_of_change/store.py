@@ -38,6 +38,7 @@ _PRIMARY_KEY: dict[str, str] = {
     "toc_link": "link_id",
     "toc_pathway": "pathway_id",
     "toc_band_item": "item_id",
+    "toc_item_evidence": "evidence_id",
 }
 
 

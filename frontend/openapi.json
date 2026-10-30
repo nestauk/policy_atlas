@@ -8794,6 +8794,21 @@
         "title": "TocCheckOut",
         "type": "object"
       },
+      "TocCountOut": {
+        "additionalProperties": false,
+        "description": "How many items an action changed.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "TocCountOut",
+        "type": "object"
+      },
       "TocCreatedOut": {
         "additionalProperties": false,
         "description": "The id of what was added.",
@@ -8855,6 +8870,17 @@
         "additionalProperties": false,
         "description": "One judged document of one link, with what it adds to the verdict (C36).",
         "properties": {
+          "added_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added By"
+          },
           "appraisal_score": {
             "anyOf": [
               {
@@ -8900,6 +8926,35 @@
             ],
             "title": "Evidence Type"
           },
+          "judge_relevance": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judge Relevance"
+          },
+          "judge_support": {
+            "anyOf": [
+              {
+                "enum": [
+                  "strong",
+                  "weak",
+                  "mixed",
+                  "refutes",
+                  "not_about"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judge Support"
+          },
           "previous_wording": {
             "title": "Previous Wording",
             "type": "boolean"
@@ -8934,6 +8989,33 @@
             ],
             "title": "Relevance Reason"
           },
+          "removed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed By"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "scored_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scored By"
+          },
           "source_type": {
             "enum": [
               "academic",
@@ -8941,6 +9023,16 @@
               "web"
             ],
             "title": "Source Type",
+            "type": "string"
+          },
+          "status": {
+            "default": "counted",
+            "enum": [
+              "counted",
+              "pending",
+              "rejected"
+            ],
+            "title": "Status",
             "type": "string"
           },
           "support": {
@@ -9036,6 +9128,63 @@
           "boxes"
         ],
         "title": "TocEvidenceOut",
+        "type": "object"
+      },
+      "TocEvidencePatch": {
+        "additionalProperties": false,
+        "description": "Change how one judged document counts for its link (C42), with its revision (C10).",
+        "properties": {
+          "action": {
+            "enum": [
+              "remove",
+              "restore",
+              "score",
+              "unscore"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "expected_revision": {
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "relevance": {
+            "anyOf": [
+              {
+                "maximum": 3.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance"
+          },
+          "support": {
+            "anyOf": [
+              {
+                "enum": [
+                  "strong",
+                  "weak",
+                  "mixed",
+                  "refutes",
+                  "not_about"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Support"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "action"
+        ],
+        "title": "TocEvidencePatch",
         "type": "object"
       },
       "TocFigureOut": {
@@ -9838,6 +9987,27 @@
         "title": "TocLinkPatch",
         "type": "object"
       },
+      "TocLinksIn": {
+        "additionalProperties": false,
+        "description": "Links to act on (Keep the evidence, C43).",
+        "properties": {
+          "link_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Link Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "link_ids"
+        ],
+        "title": "TocLinksIn",
+        "type": "object"
+      },
       "TocMoveIn": {
         "additionalProperties": false,
         "description": "Where the user dropped a box.",
@@ -10488,6 +10658,23 @@
           "revision"
         ],
         "title": "TocRevisionOut",
+        "type": "object"
+      },
+      "TocStudyIn": {
+        "additionalProperties": false,
+        "description": "A study the user adds to a link: a DOI or a web address (C42).",
+        "properties": {
+          "identifier": {
+            "maxLength": 2000,
+            "minLength": 4,
+            "title": "Identifier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identifier"
+        ],
+        "title": "TocStudyIn",
         "type": "object"
       },
       "TocUndoOut": {
@@ -14565,6 +14752,75 @@
         ]
       }
     },
+    "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}": {
+      "patch": {
+        "description": "Remove a document from its link, restore it, or set or clear the user's scores (C42).",
+        "operationId": "patch_toc_evidence_api_v1_tasks__task_id__toc_evidence__evidence_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocEvidencePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocRevisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patch Toc Evidence",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
     "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context": {
       "get": {
         "description": "Return one judgement's quote, or another passage of its document, in its passage.",
@@ -14795,6 +15051,65 @@
         ]
       }
     },
+    "/api/v1/tasks/{task_id}/toc/links/keep": {
+      "post": {
+        "description": "Keep the evidence of edited links for their new wording (C43).",
+        "operationId": "keep_toc_evidence_api_v1_tasks__task_id__toc_links_keep_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocLinksIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Keep Toc Evidence",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
     "/api/v1/tasks/{task_id}/toc/links/{link_id}": {
       "delete": {
         "description": "Delete a link; Undo restores it with its evidence (C41).",
@@ -14918,6 +15233,75 @@
           }
         ],
         "summary": "Patch Toc Link",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/links/{link_id}/studies": {
+      "post": {
+        "description": "Add a study to a link by its DOI (C42): Policy Atlas fetches, judges and adds it.\n\nA check named on the link runs with the DOI as its only search; the judge,\nfigures, classify and appraise read it as any other document, and its\njudgement is marked as added by the user.",
+        "operationId": "add_toc_study_api_v1_tasks__task_id__toc_links__link_id__studies_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocStudyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add Toc Study",
         "tags": [
           "theory-of-change"
         ]

@@ -61,6 +61,13 @@ TOC_WALK_RECHECK = "recheck"
 #: The intent-record context key naming the links a check walk covers.
 TOC_LINKS_KEY = "links"
 
+#: Link id → DOIs the user added (C42): those links' searches only look them up.
+TOC_STUDIES_KEY = "studies"
+#: Why a named check runs (C40): ``new_items`` · ``check_again`` · ``find_more`` · ``rest``.
+TOC_CHECK_MODE_KEY = "mode"
+#: The user who started a named check, for ``added_by`` on the studies they added.
+TOC_STARTED_BY_KEY = "started_by"
+
 #: Records each item search may keep per backend: every distinct result of
 #: its five calls (C27, C31). ``toc_select`` then picks the documents judged.
 TOC_ITEM_RECORD_CAP = 60

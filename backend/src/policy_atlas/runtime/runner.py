@@ -160,6 +160,7 @@ from policy_atlas.runtime.task_plan import (
 from policy_atlas.runtime.toc_plan import (
     TOC_LINKS_KEY,
     TOC_PURPOSE,
+    TOC_STUDIES_KEY,
     TOC_WALK_CHECK,
     TOC_WALK_KEY,
 )
@@ -1122,6 +1123,7 @@ def _run_plan_impl(
                     backends=backend_bundle,
                     session_id=session_id,
                     links=scope_context.get(TOC_LINKS_KEY),
+                    dois=scope_context.get(TOC_STUDIES_KEY),
                 )
             if step.component == "toc_select" and not toc_joined:
                 toc_joined = True

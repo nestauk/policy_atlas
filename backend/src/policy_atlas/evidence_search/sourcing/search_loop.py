@@ -1624,6 +1624,68 @@ def _overton_leg(
     return search.entries([c.record for c in ranked], "overton"), summary
 
 
+#: The context key of a search that only looks up given DOIs (task 054, C42: a
+#: study the user adds to a theory-of-change link).
+USER_DOIS_KEY = "lookup_dois"
+
+
+def _acquire_user_dois(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: acquire.AcquireContext,
+    backends: list[acquire.SearchBackendBase],
+    embedder: EmbeddingBackend | None,
+    dois: list[str],
+) -> dict[str, Any]:
+    """Look up the user's DOIs in OpenAlex and acquire them: no generation, no ranking."""
+    openalex = [backend for backend in backends if backend.name == "openalex"]
+    started = time.monotonic()
+    try:
+        records = openalex[0].lookup_dois(dois) if openalex else []
+        call = ExecutedCall(
+            backend_name="openalex",
+            verb="lookup_dois",
+            query=" ".join(dois),
+            query_origin="suggestion_doi",
+            wire_params={},
+            records=records,
+            status="ok",
+            error=None,
+        )
+    except Exception as exc:  # a provider failure leaves the link with nothing new
+        log.warning("search.user_doi_lookup_failed", error=type(exc).__name__)
+        call = ExecutedCall(
+            backend_name="openalex",
+            verb="lookup_dois",
+            query=" ".join(dois),
+            query_origin="suggestion_doi",
+            wire_params={},
+            records=[],
+            status="error",
+            error=type(exc).__name__,
+        )
+    counts = acquire.acquire_sources(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=context,
+        backends=openalex,
+        embedder=embedder,
+        executed_calls=[call],
+        depth="link",
+    )
+    counts["search"] = {
+        "depth": "link",
+        "user_dois": len(dois),
+        "wall_clock_s": time.monotonic() - started,
+        "generation_calls": 0,
+    }
+    counts["usage_totals"] = UsageAccumulator().payload()
+    return counts
+
+
 def run_search(
     conn: Connection,
     *,
@@ -1659,6 +1721,17 @@ def run_search(
         SearchDirectiveError: If the search directive or filters are malformed.
         RuntimeError: If generation fails.
     """
+    user_dois = context.context.get(USER_DOIS_KEY)
+    if user_dois:
+        return _acquire_user_dois(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            context=context,
+            backends=backends,
+            embedder=embedder,
+            dois=[str(doi) for doi in user_dois],
+        )
     depth, raw_filters, guidance = parse_search_directive(context.context)
     constants = DEPTH_CONSTANTS[depth]
     names = [backend.name for backend in backends]

@@ -1252,6 +1252,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Toc Evidence
+         * @description Remove a document from its link, restore it, or set or clear the user's scores (C42).
+         */
+        patch: operations["patch_toc_evidence_api_v1_tasks__task_id__toc_evidence__evidence_id__patch"];
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context": {
         parameters: {
             query?: never;
@@ -1332,6 +1352,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/toc/links/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Keep Toc Evidence
+         * @description Keep the evidence of edited links for their new wording (C43).
+         */
+        post: operations["keep_toc_evidence_api_v1_tasks__task_id__toc_links_keep_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}/toc/links/{link_id}": {
         parameters: {
             query?: never;
@@ -1354,6 +1394,30 @@ export interface paths {
          * @description Edit a link's title, parts or conditions, or mark it critical (C41).
          */
         patch: operations["patch_toc_link_api_v1_tasks__task_id__toc_links__link_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/links/{link_id}/studies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Toc Study
+         * @description Add a study to a link by its DOI (C42): Policy Atlas fetches, judges and adds it.
+         *
+         *     A check named on the link runs with the DOI as its only search; the judge,
+         *     figures, classify and appraise read it as any other document, and its
+         *     judgement is marked as added by the user.
+         */
+        post: operations["add_toc_study_api_v1_tasks__task_id__toc_links__link_id__studies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/waitlist": {
@@ -5695,6 +5759,14 @@ export interface components {
             capability_run_id: string;
         };
         /**
+         * TocCountOut
+         * @description How many items an action changed.
+         */
+        TocCountOut: {
+            /** Count */
+            count: number;
+        };
+        /**
          * TocCreatedOut
          * @description The id of what was added.
          */
@@ -5722,6 +5794,8 @@ export interface components {
          * @description One judged document of one link, with what it adds to the verdict (C36).
          */
         TocDocumentOut: {
+            /** Added By */
+            added_by?: string | null;
             /** Appraisal Score */
             appraisal_score: number | null;
             /** Authors */
@@ -5735,6 +5809,10 @@ export interface components {
             evidence_id: string;
             /** Evidence Type */
             evidence_type: string | null;
+            /** Judge Relevance */
+            judge_relevance?: number | null;
+            /** Judge Support */
+            judge_support?: ("strong" | "weak" | "mixed" | "refutes" | "not_about") | null;
             /** Previous Wording */
             previous_wording: boolean;
             /** Quality */
@@ -5745,11 +5823,26 @@ export interface components {
             relevance: number;
             /** Relevance Reason */
             relevance_reason: string | null;
+            /** Removed By */
+            removed_by?: string | null;
+            /**
+             * Revision
+             * @default 1
+             */
+            revision: number;
+            /** Scored By */
+            scored_by?: string | null;
             /**
              * Source Type
              * @enum {string}
              */
             source_type: "academic" | "policy" | "web";
+            /**
+             * Status
+             * @default counted
+             * @enum {string}
+             */
+            status: "counted" | "pending" | "rejected";
             /**
              * Support
              * @enum {string}
@@ -5778,6 +5871,23 @@ export interface components {
             boxes: components["schemas"]["TocBoxEvidenceOut"][];
             /** Links */
             links: components["schemas"]["TocLinkEvidenceOut"][];
+        };
+        /**
+         * TocEvidencePatch
+         * @description Change how one judged document counts for its link (C42), with its revision (C10).
+         */
+        TocEvidencePatch: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "remove" | "restore" | "score" | "unscore";
+            /** Expected Revision */
+            expected_revision: number;
+            /** Relevance */
+            relevance?: number | null;
+            /** Support */
+            support?: ("strong" | "weak" | "mixed" | "refutes" | "not_about") | null;
         };
         /**
          * TocFigureOut
@@ -6048,6 +6158,14 @@ export interface components {
             then_text?: string | null;
             /** Title */
             title?: string | null;
+        };
+        /**
+         * TocLinksIn
+         * @description Links to act on (Keep the evidence, C43).
+         */
+        TocLinksIn: {
+            /** Link Ids */
+            link_ids: string[];
         };
         /**
          * TocMoveIn
@@ -6323,6 +6441,14 @@ export interface components {
         TocRevisionOut: {
             /** Revision */
             revision: number;
+        };
+        /**
+         * TocStudyIn
+         * @description A study the user adds to a link: a DOI or a web address (C42).
+         */
+        TocStudyIn: {
+            /** Identifier */
+            identifier: string;
         };
         /**
          * TocUndoOut
@@ -8376,6 +8502,42 @@ export interface operations {
             };
         };
     };
+    patch_toc_evidence_api_v1_tasks__task_id__toc_evidence__evidence_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocEvidencePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocRevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get: {
         parameters: {
             query?: {
@@ -8505,6 +8667,41 @@ export interface operations {
             };
         };
     };
+    keep_toc_evidence_api_v1_tasks__task_id__toc_links_keep_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocLinksIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_toc_link_api_v1_tasks__task_id__toc_links__link_id__delete: {
         parameters: {
             query: {
@@ -8560,6 +8757,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TocRevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_toc_study_api_v1_tasks__task_id__toc_links__link_id__studies_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocStudyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCheckOut"];
                 };
             };
             /** @description Validation Error */

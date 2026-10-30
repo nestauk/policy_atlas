@@ -394,7 +394,9 @@ def toc_report_scope(
     bears: dict[int, set[str]] = {}
     sources: list[dict[str, Any]] = []
     for code in link_order:
-        group = [r for r in counted.get(by_code[code].key, []) if r.support != "not_about"]
+        group = [
+            r for r in counted.get(by_code[code].key, []) if row_judgement(r).support != "not_about"
+        ]
         group.sort(
             key=lambda r: -weight(appraisals.get(str(r.task_source_snapshot_id)), row_judgement(r))
         )

@@ -76,7 +76,13 @@ from policy_atlas.runtime.capability_registry import (
     expect_toc_plan,
     validate_plan,
 )
-from policy_atlas.runtime.toc_plan import TOC_LINK_CAP, TOC_LINKS_KEY
+from policy_atlas.runtime.toc_plan import (
+    TOC_CHECK_MODE_KEY,
+    TOC_LINK_CAP,
+    TOC_LINKS_KEY,
+    TOC_STARTED_BY_KEY,
+    TOC_STUDIES_KEY,
+)
 from policy_atlas.theory_of_change import store
 from policy_atlas.theory_of_change.backend import TocBackend
 from policy_atlas.theory_of_change.discover_prompt import (
@@ -301,7 +307,11 @@ def appraisals_for(
 
 
 def counted_judgements(conn: Connection, *, task_id: uuid.UUID) -> dict[str, list[Row[Any]]]:
-    """Each link's judgements whose item hash equals its counted hash (C19)."""
+    """Each link's judgements that count: its counted hash (C19), accepted and not removed.
+
+    A judgement the user removed from the link (C42), or one still pending or
+    rejected (C44), does not count; the evidence list still shows it.
+    """
     rows = conn.execute(
         select(toc_item_evidence)
         .join(
@@ -311,6 +321,8 @@ def counted_judgements(conn: Connection, *, task_id: uuid.UUID) -> dict[str, lis
             & (toc_link.c.counted_hash == toc_item_evidence.c.item_hash),
         )
         .where(toc_item_evidence.c.task_id == task_id)
+        .where(toc_item_evidence.c.status == "counted")
+        .where(toc_item_evidence.c.excluded_at.is_(None))
         .order_by(toc_item_evidence.c.created_at, toc_item_evidence.c.evidence_id)
     )
     out: dict[str, list[Row[Any]]] = {}
@@ -320,11 +332,13 @@ def counted_judgements(conn: Connection, *, task_id: uuid.UUID) -> dict[str, lis
 
 
 def row_judgement(row: Row[Any]) -> Judgement:
-    """A ``toc_item_evidence`` row as the verdict reads it."""
+    """A ``toc_item_evidence`` row as the verdict reads it: the user's scores win (C42)."""
+    support_override = getattr(row, "support_override", None)
+    relevance_override = getattr(row, "relevance_override", None)
     return Judgement(
         document_id=str(row.task_source_snapshot_id),
-        support=row.support,
-        relevance=row.relevance,
+        support=support_override or row.support,
+        relevance=row.relevance if relevance_override is None else relevance_override,
         robust_model=row.robust_model,
     )
 
@@ -1357,6 +1371,21 @@ def _select_links(
     walk_id = walk_of_run(conn, task_id=task_id, run_id=run_id)
     candidates = _link_candidates(conn, task_id=task_id, walk_id=walk_id)
     targets = set(candidates) if only is None else only & set(candidates)
+    # A named check (C40): studies the user added are picked as given (C42); Check
+    # again also re-judges the documents already judged for the link (C43).
+    studies = (
+        _studies_by_link(conn, task_id, context.context.get(TOC_STUDIES_KEY) or {})
+        if only is None
+        else {}
+    )
+    again = (
+        _judged_documents(conn, task_id, context.context.get(TOC_LINKS_KEY) or [])
+        if only is None and context.context.get(TOC_CHECK_MODE_KEY) == "check_again"
+        else {}
+    )
+    for key in [*studies, *again]:
+        candidates.setdefault(key, [])
+        targets.add(key)
     if backend.mode == "live":
         candidates.update(_fill_abstracts(conn, {k: candidates[k] for k in targets}))
     plan = walk_toc_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
@@ -1408,6 +1437,10 @@ def _select_links(
         per_link[key] = (
             picked_ids(response.ids, docs) if response is not None else select_for_link(docs)
         )
+        if key in studies:
+            per_link[key] = studies[key]
+        elif key in again:
+            per_link[key] = list(dict.fromkeys([*again[key], *per_link[key]]))
     picked = {tss for chosen in per_link.values() for tss in chosen}
     if only is None or per_link:
         earlier = (
@@ -1458,6 +1491,94 @@ def _select_links(
         "backend_mode": backend.mode,
         "usage_totals": usage.payload(),
     }
+
+
+def _studies_by_link(
+    conn: Connection, task_id: uuid.UUID, dois_by_link: dict[str, list[str]]
+) -> dict[str, list[uuid.UUID]]:
+    """The task's documents for the DOIs the user added to each link (C42).
+
+    The link's search has acquired them, or found them already in the task.
+    """
+    if not dois_by_link:
+        return {}
+    wanted = {
+        doi.lower().removeprefix("https://doi.org/")
+        for dois in dois_by_link.values()
+        for doi in dois
+    }
+    found: dict[str, uuid.UUID] = {}
+    for tss_id, metadata in conn.execute(
+        select(task_source_snapshot.c.task_source_snapshot_id, source_snapshot.c.metadata)
+        .join(
+            source_snapshot,
+            source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
+        )
+        .where(task_source_snapshot.c.task_id == task_id)
+    ):
+        doi = str((metadata or {}).get("doi") or "").lower().removeprefix("https://doi.org/")
+        if doi in wanted:
+            found.setdefault(doi, tss_id)
+    return {
+        key: [
+            found[d]
+            for d in (doi.lower().removeprefix("https://doi.org/") for doi in dois)
+            if d in found
+        ]
+        for key, dois in dois_by_link.items()
+    }
+
+
+#: The user's decisions on a judged document that carry to a new wording (C43).
+_CARRIED = (
+    "excluded_by",
+    "excluded_at",
+    "support_override",
+    "relevance_override",
+    "override_by",
+    "override_at",
+    "added_by",
+)
+
+
+def _user_decisions(
+    conn: Connection, task_id: uuid.UUID, link_keys: set[str]
+) -> dict[tuple[str, uuid.UUID], dict[str, Any]]:
+    """(link, document) → the user's latest removal, scores or addition, from earlier wordings."""
+    out: dict[tuple[str, uuid.UUID], dict[str, Any]] = {}
+    if not link_keys:
+        return out
+    for row in conn.execute(
+        select(toc_item_evidence)
+        .where(toc_item_evidence.c.task_id == task_id)
+        .where(toc_item_evidence.c.link_id.in_([uuid.UUID(key) for key in link_keys]))
+        .order_by(toc_item_evidence.c.created_at)
+    ):
+        decided = {name: getattr(row, name) for name in _CARRIED if getattr(row, name) is not None}
+        if decided:
+            out[(str(row.link_id), row.task_source_snapshot_id)] = decided
+    return out
+
+
+def _judged_documents(
+    conn: Connection, task_id: uuid.UUID, link_ids: list[str]
+) -> dict[str, list[uuid.UUID]]:
+    """The documents already judged for each link, any wording, not removed (C43)."""
+    out: dict[str, list[uuid.UUID]] = {}
+    if not link_ids:
+        return out
+    for link_id, tss_id in conn.execute(
+        select(toc_item_evidence.c.link_id, toc_item_evidence.c.task_source_snapshot_id)
+        .where(toc_item_evidence.c.task_id == task_id)
+        .where(toc_item_evidence.c.link_id.in_([uuid.UUID(key) for key in link_ids]))
+        .where(toc_item_evidence.c.excluded_at.is_(None))
+        .where(toc_item_evidence.c.status != "rejected")
+        .order_by(toc_item_evidence.c.created_at)
+    ):
+        chosen = out.setdefault(str(link_id), [])
+        if tss_id not in chosen:
+            chosen.append(tss_id)
+    return out
 
 
 def links_without_search(
@@ -1871,6 +1992,9 @@ def toc_judge_scope(
     outcomes = _map_traced(run_job, jobs, JUDGE_WORKERS)
 
     stored = unverified = failed = 0
+    started_by = context.context.get(TOC_STARTED_BY_KEY)
+    study_links = set(context.context.get(TOC_STUDIES_KEY) or {})
+    carried = _user_decisions(conn, task_id, {job.link_key for job in jobs})
     for job, outcome in zip(jobs, outcomes, strict=True):
         response = _outcome_value(outcome, usage)
         if response is None:
@@ -1929,6 +2053,10 @@ def toc_judge_scope(
                 # which now runs after the judge, also calls it a modelling study (C31).
                 "robust_model": response.robust_model,
                 "item_hash": job.item_hash,
+                # A study the user added (C42) and their earlier decisions on this
+                # document for this link, carried to the new wording (C43).
+                "added_by": started_by if job.link_key in study_links else None,
+                **carried.get((job.link_key, job.document.tss_id), {}),
             },
         )
         stored += 1
@@ -2321,7 +2449,7 @@ def toc_summarise_scope(
         key: {
             str(r.task_source_snapshot_id)
             for r in counted.get(key, [])
-            if r.support != "not_about"
+            if row_judgement(r).support != "not_about"
         }
         for key in graph.links
     }
@@ -2428,7 +2556,7 @@ def top_case_studies[T](
 
 def row_case_score(row: Row[Any], appraisal: DocAppraisal | None) -> tuple[int, bool]:
     """A judgement row's ``(quality, supports)`` for :func:`top_case_studies`."""
-    return quality(appraisal, row.robust_model), row.support in ("strong", "weak")
+    return quality(appraisal, row.robust_model), row_judgement(row).support in ("strong", "weak")
 
 
 def _titles(
@@ -2496,14 +2624,14 @@ def _theory_for_summary(
                         "id": str(row.task_source_snapshot_id),
                         "title": titles.get(str(row.task_source_snapshot_id), ("", None))[0],
                         "year": titles.get(str(row.task_source_snapshot_id), ("", None))[1],
-                        "support": row.support,
+                        "support": row_judgement(row).support,
                         "quote": row.quote,
-                        "relevance": row.relevance,
+                        "relevance": row_judgement(row).relevance,
                         "relevance_note": row.relevance_reason,
                         "condition": row.condition,
                     }
                     for row in group
-                    if row.support != "not_about"
+                    if row_judgement(row).support != "not_about"
                 ],
             }
         )

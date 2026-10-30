@@ -125,6 +125,7 @@ def mint_scope(
     toc_walk: str,
     links: list[str] | None = None,
     draft_run_id: uuid.UUID | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> uuid.UUID:
     """Insert one main theory-of-change intent record and return its id.
 
@@ -135,6 +136,8 @@ def mint_scope(
         toc_walk: ``draft`` or ``check``.
         links: The link ids a named-link check covers, or ``None``.
         draft_run_id: The draft walk a check follows, or ``None``.
+        extra: More context for a named check (C40): its mode, the studies the
+            user added, who started it.
 
     Returns:
         The new intent record's id.
@@ -145,6 +148,7 @@ def mint_scope(
         context[TOC_LINKS_KEY] = links
     if draft_run_id is not None:
         context[DRAFT_WALK_KEY] = str(draft_run_id)
+    context.update(extra or {})
     scope_id = uuid.uuid4()
     conn.execute(
         evidence_scope.insert().values(

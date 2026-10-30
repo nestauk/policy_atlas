@@ -11,6 +11,7 @@ unreadable one keeps the generic ``not_found``.
 
 from __future__ import annotations
 
+import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, Any, Literal, cast
@@ -30,9 +31,11 @@ from policy_atlas.api.contract.toc import (
     TocCaseStudyOut,
     TocCheckIn,
     TocCheckOut,
+    TocCountOut,
     TocCreatedOut,
     TocDocumentOut,
     TocEvidenceOut,
+    TocEvidencePatch,
     TocFigureOut,
     TocGradeRuleOut,
     TocGraphOut,
@@ -41,12 +44,14 @@ from policy_atlas.api.contract.toc import (
     TocLinkEvidenceOut,
     TocLinkOut,
     TocLinkPatch,
+    TocLinksIn,
     TocMoveIn,
     TocPathwayOut,
     TocPositionOut,
     TocReportOut,
     TocResultCriteriaOut,
     TocRevisionOut,
+    TocStudyIn,
     TocUndoOut,
     TocWeightsOut,
 )
@@ -390,6 +395,15 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
         )
     )
     appraisals = appraisals_for(conn, task_id=task_id, evidence_rows=evidence)
+    names = edits.names_of(
+        conn,
+        {
+            uid
+            for row in evidence
+            for uid in (row.override_by, row.excluded_by, row.added_by)
+            if uid is not None
+        },
+    )
     documents: dict[str, dict[uuid.UUID, TocDocumentOut]] = {key: {} for key in rows.links}
     case_studies: dict[str, list[tuple[TocCaseStudyOut, str, str | None, int, bool]]] = {
         key: [] for key in rows.boxes
@@ -425,13 +439,19 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
         previous = row.item_hash != link_row.counted_hash
         if not previous:
             judgement_of[(key, row.task_source_snapshot_id)] = row.evidence_id
+            effective = row_judgement(row)
             relevance_of[(key, row.task_source_snapshot_id)] = (
-                row.relevance if row.support != "not_about" else 0
+                effective.relevance
+                if effective.support != "not_about"
+                and row.status == "counted"
+                and row.excluded_at is None
+                else 0
             )
         appraisal = appraisals.get(str(row.task_source_snapshot_id))
         existing = documents[key].get(row.task_source_snapshot_id)
         # One entry per document: the counted judgement wins over an earlier wording's.
         if existing is None or (existing.previous_wording and not previous):
+            effective = row_judgement(row)
             documents[key][row.task_source_snapshot_id] = TocDocumentOut(
                 evidence_id=row.evidence_id,
                 task_source_snapshot_id=row.task_source_snapshot_id,
@@ -442,14 +462,21 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
                 source_type=source_type,
                 evidence_type=row.primary_evidence_type,
                 appraisal_score=row.quality_score,
-                support=row.support,
+                support=cast(Any, effective.support),
                 quote=row.quote,
-                relevance=row.relevance,
+                relevance=effective.relevance,
                 relevance_reason=row.relevance_reason,
                 quality=quality(appraisal, row.robust_model),
-                weight=round(weight(appraisal, row_judgement(row)), 3),
+                weight=round(weight(appraisal, effective), 3),
                 condition=row.condition,
                 previous_wording=previous,
+                judge_support=row.support,
+                judge_relevance=row.relevance,
+                scored_by=names.get(row.override_by) if row.override_by else None,
+                removed_by=names.get(row.excluded_by) if row.excluded_by else None,
+                added_by=names.get(row.added_by) if row.added_by else None,
+                status=row.status,
+                revision=row.revision,
             )
         box = str(row.case_box_id) if row.case_box_id is not None else None
         if box in case_studies and row.case_study is not None:
@@ -910,5 +937,98 @@ def start_toc_link_check(
         settings=settings,
         executor=executor,
         backends=backends,
+        mode=body.mode,
+    )
+    return TocCheckOut(capability_run_id=walk_id)
+
+
+@router.patch("/evidence/{evidence_id}", response_model=TocRevisionOut)
+def patch_toc_evidence(
+    task_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+    body: TocEvidencePatch,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> TocRevisionOut:
+    """Remove a document from its link, restore it, or set or clear the user's scores (C42)."""
+    _editable_toc(conn, task_id, user)
+    _edit(
+        edits.edit_evidence,
+        conn=conn,
+        task_id=task_id,
+        actor=edits.Actor(user.user_id),
+        evidence_id=evidence_id,
+        expected_revision=body.expected_revision,
+        action=body.action,
+        support=body.support,
+        relevance=body.relevance,
+    )
+    return TocRevisionOut(revision=body.expected_revision + 1)
+
+
+@router.post("/links/keep", response_model=TocCountOut)
+def keep_toc_evidence(
+    task_id: uuid.UUID,
+    body: TocLinksIn,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> TocCountOut:
+    """Keep the evidence of edited links for their new wording (C43)."""
+    _editable_toc(conn, task_id, user)
+    return TocCountOut(
+        count=edits.keep_evidence(
+            conn, task_id=task_id, actor=edits.Actor(user.user_id), link_ids=body.link_ids
+        )
+    )
+
+
+#: A DOI anywhere in what the user pasted: bare, ``doi:``, or a doi.org address.
+_DOI = re.compile(r"10\.\d{4,9}/[^\s\"<>]+", re.IGNORECASE)
+
+
+@router.post("/links/{link_id}/studies", response_model=TocCheckOut, status_code=202)
+def add_toc_study(
+    task_id: uuid.UUID,
+    link_id: uuid.UUID,
+    body: TocStudyIn,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    engine: Annotated[Engine, Depends(get_engine)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
+    backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+) -> TocCheckOut:
+    """Add a study to a link by its DOI (C42): Policy Atlas fetches, judges and adds it.
+
+    A check named on the link runs with the DOI as its only search; the judge,
+    figures, classify and appraise read it as any other document, and its
+    judgement is marked as added by the user.
+    """
+    with engine.begin() as conn:
+        _editable_toc(conn, task_id, user)
+        known = conn.execute(
+            select(toc_link.c.link_id).where(
+                toc_link.c.task_id == task_id, toc_link.c.link_id == link_id
+            )
+        ).first()
+    if known is None:
+        raise ApiNotFound("toc_not_found", "that connection is not in this theory")
+    found = _DOI.search(body.identifier)
+    if found is None:
+        raise ApiUnprocessable(
+            "toc_invalid",
+            "Paste the study's DOI (for example 10.1016/j.appet.2016.02.017) or its doi.org "
+            "address. Other web addresses will work once web search is built.",
+        )
+    doi = found.group(0).rstrip(".,;)").lower()
+    walk_id = start_toc_check(
+        engine,
+        task_id=task_id,
+        link_ids=[link_id],
+        user_id=user.user_id,
+        settings=settings,
+        executor=executor,
+        backends=backends,
+        mode="add_study",
+        studies={str(link_id): [doi]},
     )
     return TocCheckOut(capability_run_id=walk_id)

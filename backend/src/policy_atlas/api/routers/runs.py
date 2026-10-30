@@ -440,6 +440,8 @@ def start_toc_check(
     settings: Settings,
     executor: ThreadPoolExecutor,
     backends: RunnerBackends,
+    mode: str = "new_items",
+    studies: dict[str, list[str]] | None = None,
 ) -> uuid.UUID:
     """Start a check walk named on links (task 054, C40), as Start does for a whole walk.
 
@@ -455,7 +457,12 @@ def start_toc_check(
     """
     # Imported here: the opener imports this module.
     from policy_atlas.api.toc_start import mint_scope
-    from policy_atlas.runtime.toc_plan import TOC_WALK_CHECK
+    from policy_atlas.runtime.toc_plan import (
+        TOC_CHECK_MODE_KEY,
+        TOC_STARTED_BY_KEY,
+        TOC_STUDIES_KEY,
+        TOC_WALK_CHECK,
+    )
 
     walk_id = uuid.uuid4()
     with _dispatch_lock:
@@ -473,6 +480,11 @@ def start_toc_check(
                 plan_row=plan_row,
                 toc_walk=TOC_WALK_CHECK,
                 links=[str(link_id) for link_id in link_ids],
+                extra={
+                    TOC_CHECK_MODE_KEY: mode,
+                    TOC_STARTED_BY_KEY: user_id,
+                    **({TOC_STUDIES_KEY: studies} if studies else {}),
+                },
             )
             _dispatching_tasks.add(task_id)
         executor.submit(

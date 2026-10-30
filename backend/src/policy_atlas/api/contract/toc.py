@@ -289,6 +289,18 @@ class TocDocumentOut(BaseModel):
     condition: str | None
     #: True when the judgement was made for an earlier wording of the link.
     previous_wording: bool
+    #: ``support`` and ``relevance`` above are what counts: the user's scores when
+    #: they changed them (C42), else the judge's. The judge's own stay here.
+    judge_support: Support | None = None
+    judge_relevance: int | None = None
+    #: Who changed the scores, removed the document from the link, or added it (display names).
+    scored_by: str | None = None
+    removed_by: str | None = None
+    added_by: str | None = None
+    #: ``pending`` evidence waits for the user's Accept and does not count yet (C44).
+    status: Literal["counted", "pending", "rejected"] = "counted"
+    #: The judgement row's revision, for an edit to it (C10).
+    revision: int = 1
 
 
 class TocFigureOut(BaseModel):
@@ -518,3 +530,38 @@ class TocCheckOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     capability_run_id: uuid.UUID
+
+
+class TocEvidencePatch(BaseModel):
+    """Change how one judged document counts for its link (C42), with its revision (C10)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_revision: int
+    action: Literal["remove", "restore", "score", "unscore"]
+    support: Support | None = None
+    relevance: int | None = Field(default=None, ge=0, le=3)
+
+
+class TocLinksIn(BaseModel):
+    """Links to act on (Keep the evidence, C43)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    link_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+
+
+class TocCountOut(BaseModel):
+    """How many items an action changed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    count: int
+
+
+class TocStudyIn(BaseModel):
+    """A study the user adds to a link: a DOI or a web address (C42)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    identifier: str = Field(min_length=4, max_length=2000)

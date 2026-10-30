@@ -454,6 +454,124 @@ def reset_layout(conn: Connection, *, task_id: uuid.UUID, actor: Actor) -> int:
     return len(rows)
 
 
+SUPPORTS = frozenset({"strong", "weak", "mixed", "refutes", "not_about"})
+
+
+def edit_evidence(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    actor: Actor,
+    evidence_id: uuid.UUID,
+    expected_revision: int,
+    action: str,
+    support: str | None = None,
+    relevance: int | None = None,
+) -> None:
+    """Change how one judged document counts for its link (C42).
+
+    ``remove`` takes it out of the verdict (it stays listed); ``restore``
+    puts it back; ``score`` sets the user's support and relevance in place of
+    the judge's; ``unscore`` returns to the judge's.
+
+    Raises:
+        EditRefused: On a stale revision, an unknown action or score.
+    """
+    row = _row(conn, toc_item_evidence, evidence_id, task_id)
+    _stale(row, expected_revision)
+    now = _now()
+    if action == "remove":
+        values: dict[str, Any] = {"excluded_by": actor.user_id, "excluded_at": now}
+        verb = "Removed"
+    elif action == "restore":
+        values = {"excluded_by": None, "excluded_at": None}
+        verb = "Restored"
+    elif action == "score":
+        if support not in SUPPORTS or relevance is None or not 0 <= relevance <= 3:
+            raise EditRefused(
+                "toc_invalid", "give a support and a relevance from 0 to 3", status=422
+            )
+        values = {
+            "support_override": support,
+            "relevance_override": relevance,
+            "override_by": actor.user_id,
+            "override_at": now,
+        }
+        verb = "Changed the scores of"
+    elif action == "unscore":
+        values = {
+            "support_override": None,
+            "relevance_override": None,
+            "override_by": None,
+            "override_at": None,
+        }
+        verb = "Returned to the judge's scores for"
+    else:
+        raise EditRefused("toc_invalid", f"no evidence action {action!r}", status=422)
+    log = store.ChangeLog()
+    _update(conn, log, toc_item_evidence, row, actor=actor, values=values)
+    title = _document_title(conn, row.task_source_snapshot_id)
+    code = conn.execute(select(toc_link.c.code).where(toc_link.c.link_id == row.link_id)).scalar()
+    _record(conn, task_id=task_id, actor=actor, log=log, change=f"{verb} “{title}” on {code}")
+
+
+def _document_title(conn: Connection, tss_id: uuid.UUID) -> str:
+    from policy_atlas.core.schema import source_snapshot, task_source_snapshot
+
+    metadata = conn.execute(
+        select(source_snapshot.c.metadata)
+        .join(
+            task_source_snapshot,
+            task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
+        )
+        .where(task_source_snapshot.c.task_source_snapshot_id == tss_id)
+    ).scalar()
+    title = str((metadata or {}).get("title") or "a document")
+    return title if len(title) <= 70 else title[:67] + "…"
+
+
+def keep_evidence(
+    conn: Connection, *, task_id: uuid.UUID, actor: Actor, link_ids: list[uuid.UUID]
+) -> int:
+    """Keep the evidence of edited links for their new wording (C43); returns how many.
+
+    The link's judgements still count, now marked as kept by the user for the
+    current wording (``kept_hash``, C19), so it no longer shows as pending.
+    """
+    from policy_atlas.theory_of_change.graph import item_hash
+
+    graph, rows = store.load_graph(conn, task_id)
+    log = store.ChangeLog()
+    codes = []
+    for link_id in link_ids:
+        key = str(link_id)
+        link = graph.links.get(key)
+        if link is None:
+            continue
+        current = item_hash(link, graph.boxes[link.source].text, graph.boxes[link.target].text)
+        row = rows.links[key]
+        if current in (row.counted_hash, row.kept_hash):
+            continue
+        store.update(
+            conn,
+            log,
+            toc_link,
+            row.link_id,
+            observed_revision=row.revision,
+            values={"kept_hash": current, "kept_by": "user"},
+        )
+        codes.append(row.code or key)
+    if codes:
+        _record(
+            conn,
+            task_id=task_id,
+            actor=actor,
+            log=log,
+            change=f"Kept the evidence of {', '.join(codes)} for the new wording",
+        )
+    return len(codes)
+
+
 def _typed(table: Table, state: dict[str, Any]) -> dict[str, Any]:
     """A before-state's JSON values back as the column types expect."""
     values: dict[str, Any] = {}
@@ -533,7 +651,11 @@ def undo(conn: Connection, *, task_id: uuid.UUID, actor: Actor, event_id: uuid.U
             if name in store._PRIMARY_KEY:
                 log.created.append({"table": name, "id": str(values[store._PRIMARY_KEY[name]])})
     for entry in payload.get("before", []):
-        if entry.get("deleted") or entry["table"] not in ("toc_box", "toc_link"):
+        if entry.get("deleted") or entry["table"] not in (
+            "toc_box",
+            "toc_link",
+            "toc_item_evidence",
+        ):
             continue
         table = _TABLES[entry["table"]]
         before = _typed(table, entry["row"])

@@ -690,6 +690,7 @@ def dispatch_toc_item_searches(
     session_id: uuid.UUID | None,
     links: list[str] | None = None,
     stage: str = TOC_ITEM_SEARCHES_STAGE,
+    dois: Mapping[str, list[str]] | None = None,
 ) -> list[uuid.UUID]:
     """A check walk's fan-out: one acquire-only item search per link (task 054, S3).
 
@@ -706,6 +707,8 @@ def dispatch_toc_item_searches(
         session_id: The walk's tracing session, recorded on the stage event.
         links: The links a named-link check covers, or ``None`` for all.
         stage: The fan-out's stage: the first, or the new links' (C32).
+        dois: Link id → the DOIs the user added to it (C42): that link's search
+            only looks them up.
 
     Returns:
         The child walks' ids, in dispatch order.
@@ -736,6 +739,11 @@ def dispatch_toc_item_searches(
                             "capability": THEORY_OF_CHANGE,
                             "link_id": link_id,
                             ACQUIRE_ONLY_KEY: True,
+                            **(
+                                {"lookup_dois": list(dois[link_id])}
+                                if dois and link_id in dois
+                                else {}
+                            ),
                         },
                         plan_id=uuid.UUID(str(plan_row["plan_id"])),
                         stage=stage,
