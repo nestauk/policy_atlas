@@ -759,6 +759,8 @@ _STEP_TEXT = {
     "toc_choose": "Chose the pathways to keep",
     "toc_discover": "Added pathways found in the evidence",
     "toc_summarise": "Wrote titles and evidence sentences",
+    "toc_judge": "Judged the evidence",
+    "toc_search_new": "Searched for the new connections",
 }
 
 
