@@ -158,6 +158,7 @@ from policy_atlas.runtime.task_plan import (
     registry_component_for,
 )
 from policy_atlas.runtime.toc_plan import (
+    TOC_CHECK_MODE_KEY,
     TOC_LINKS_KEY,
     TOC_PURPOSE,
     TOC_STUDIES_KEY,
@@ -982,6 +983,8 @@ def _run_plan_impl(
         resume_from is None
         and purpose == TOC_PURPOSE
         and scope_context.get(TOC_WALK_KEY) == TOC_WALK_CHECK
+        # Updating the report searches nothing (C45).
+        and scope_context.get(TOC_CHECK_MODE_KEY) != "report"
     )
     toc_children: list[uuid.UUID] | None = None
     toc_joined = False

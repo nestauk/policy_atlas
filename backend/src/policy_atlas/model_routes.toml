@@ -68,6 +68,8 @@ toc_pick = "fast"
 toc_summarise = "standard"
 # One call writes Detailed information as a short narrative report (C38).
 toc_report = "frontier"
+# One call reviews the theory's shape after the user's edits (C45).
+toc_review = "frontier"
 
 # ---------------------------------------------------------------------------
 [routes.openai-direct]

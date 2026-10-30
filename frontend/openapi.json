@@ -8794,6 +8794,23 @@
         "title": "TocCheckOut",
         "type": "object"
       },
+      "TocClarificationIn": {
+        "additionalProperties": false,
+        "description": "A clarification to the plan the next check reads (C49).",
+        "properties": {
+          "text": {
+            "maxLength": 1000,
+            "minLength": 3,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TocClarificationIn",
+        "type": "object"
+      },
       "TocCountOut": {
         "additionalProperties": false,
         "description": "How many items an action changed.",
@@ -9557,6 +9574,11 @@
             },
             "title": "Context",
             "type": "array"
+          },
+          "edits_since_review": {
+            "default": 0,
+            "title": "Edits Since Review",
+            "type": "integer"
           },
           "grade_rules": {
             "items": {
@@ -10328,6 +10350,142 @@
         "title": "TocPositionOut",
         "type": "object"
       },
+      "TocProblemsOut": {
+        "additionalProperties": false,
+        "description": "Suggested edits that could not apply, with why.",
+        "properties": {
+          "problems": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Problems",
+            "type": "array"
+          }
+        },
+        "required": [
+          "problems"
+        ],
+        "title": "TocProblemsOut",
+        "type": "object"
+      },
+      "TocProposalDecideIn": {
+        "additionalProperties": false,
+        "description": "Accept or reject one suggested edit, or all pending ones (``index`` null).",
+        "properties": {
+          "accept": {
+            "title": "Accept",
+            "type": "boolean"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          }
+        },
+        "required": [
+          "accept"
+        ],
+        "title": "TocProposalDecideIn",
+        "type": "object"
+      },
+      "TocProposalEditOut": {
+        "additionalProperties": false,
+        "description": "One suggested edit and what the user decided (C45, C46).",
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
+          },
+          "op": {
+            "title": "Op",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "op",
+          "line",
+          "reason",
+          "status"
+        ],
+        "title": "TocProposalEditOut",
+        "type": "object"
+      },
+      "TocProposalOut": {
+        "additionalProperties": false,
+        "description": "A suggestion from the review or the chat, waiting for the user (C45, C46).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "edits": {
+            "items": {
+              "$ref": "#/components/schemas/TocProposalEditOut"
+            },
+            "title": "Edits",
+            "type": "array"
+          },
+          "proposal_id": {
+            "format": "uuid",
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "report_findings": {
+            "items": {
+              "$ref": "#/components/schemas/TocReportFindingOut"
+            },
+            "title": "Report Findings",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "review",
+              "chat"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "source",
+          "summary",
+          "created_at",
+          "edits",
+          "report_findings"
+        ],
+        "title": "TocProposalOut",
+        "type": "object"
+      },
       "TocReportAssumptionOut": {
         "additionalProperties": false,
         "description": "One row of Assumptions and evidence.",
@@ -10373,6 +10531,26 @@
           "sources"
         ],
         "title": "TocReportAssumptionOut",
+        "type": "object"
+      },
+      "TocReportFindingOut": {
+        "additionalProperties": false,
+        "description": "A report section that no longer matches the theory (C45).",
+        "properties": {
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "section",
+          "why"
+        ],
+        "title": "TocReportFindingOut",
         "type": "object"
       },
       "TocReportOut": {
@@ -14739,6 +14917,58 @@
         ]
       }
     },
+    "/api/v1/tasks/{task_id}/toc/clarifications": {
+      "post": {
+        "description": "Add a clarification to the plan; the next check, search and review read it (C49).",
+        "operationId": "add_toc_clarification_api_v1_tasks__task_id__toc_clarifications_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocClarificationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add Toc Clarification",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
     "/api/v1/tasks/{task_id}/toc/events/{event_id}/undo": {
       "post": {
         "description": "Put back the state before one edit; rows changed since are skipped and named (C10).",
@@ -15466,6 +15696,299 @@
           }
         ],
         "summary": "Add Toc Study",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/proposals": {
+      "get": {
+        "description": "The open suggestions, newest first (C45, C46).",
+        "operationId": "get_toc_proposals_api_v1_tasks__task_id__toc_proposals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TocProposalOut"
+                  },
+                  "title": "Response Get Toc Proposals Api V1 Tasks  Task Id  Toc Proposals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Toc Proposals",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/proposals/{proposal_id}/decide": {
+      "post": {
+        "description": "Accept or reject one suggested edit, or all; accepted edits apply as the user's (C45).",
+        "operationId": "decide_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__decide_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocProposalDecideIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocProblemsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Decide Toc Proposal",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/proposals/{proposal_id}/dismiss": {
+      "post": {
+        "description": "Close a suggestion without acting on what is left of it.",
+        "operationId": "dismiss_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__dismiss_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Dismiss Toc Proposal",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/report/update": {
+      "post": {
+        "description": "Rewrite the titles, sentences and the report for the theory as it is now (C45).",
+        "operationId": "update_toc_report_api_v1_tasks__task_id__toc_report_update_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "proposal_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Toc Report",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/review": {
+      "post": {
+        "description": "Review the theory after edits, off the request path; the Task Agent reports (C45).",
+        "operationId": "start_toc_review_api_v1_tasks__task_id__toc_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Start Toc Review Api V1 Tasks  Task Id  Toc Review Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start Toc Review",
         "tags": [
           "theory-of-change"
         ]

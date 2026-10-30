@@ -869,13 +869,16 @@ def _user_written(row: Row[Any]) -> bool:
     return bool(row.user_edited) or row.origin in _USER_ORIGINS
 
 
-def fold_problem(rows: store.GraphRows, box: str, into: str) -> str | None:
+def fold_problem(
+    rows: store.GraphRows, box: str, into: str, *, by_user: bool = False
+) -> str | None:
     """Why one box may not be folded into another, or ``None`` when it may (C29).
 
     Args:
         rows: The current graph rows.
         box: The box to fold away (row id as text).
         into: The box it would be folded into.
+        by_user: The user accepted this merge (C45): their own boxes may go.
 
     Returns:
         The reason, or ``None``.
@@ -886,7 +889,7 @@ def fold_problem(rows: store.GraphRows, box: str, into: str) -> str | None:
         return "it is the same box"
     if rows.boxes[box].layer != rows.boxes[into].layer:
         return "the boxes are in different layers"
-    if _user_written(rows.boxes[box]) and not _user_written(rows.boxes[into]):
+    if not by_user and _user_written(rows.boxes[box]) and not _user_written(rows.boxes[into]):
         return "a box the user wrote is never folded into one they did not"
     return None
 
@@ -902,6 +905,7 @@ def fold_box(
     task_id: uuid.UUID,
     box: str,
     into: str,
+    by_user: bool = False,
 ) -> bool:
     """Fold one box into another of the same layer (C29).
 
@@ -922,7 +926,7 @@ def fold_box(
         Whether the fold was applied.
     """
     _, rows = store.load_graph(conn, task_id)
-    if fold_problem(rows, box, into) is not None:
+    if fold_problem(rows, box, into, by_user=by_user) is not None:
         return False
     old, new = uuid.UUID(box), uuid.UUID(into)
 

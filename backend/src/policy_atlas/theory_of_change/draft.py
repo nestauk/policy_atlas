@@ -106,7 +106,42 @@ def walk_toc_plan(
     )
     if payload is None:
         raise ValueError("theory of change: no plan version found for the walk")
-    return expect_toc_plan(validate_plan(THEORY_OF_CHANGE, payload))
+    return with_clarifications(
+        conn, task_id, expect_toc_plan(validate_plan(THEORY_OF_CHANGE, payload))
+    )
+
+
+#: The event a clarification to the plan is stored as (C49).
+TOC_CLARIFICATION_EVENT = "toc.clarification"
+
+
+def clarifications(conn: Connection, task_id: uuid.UUID) -> list[str]:
+    """The user's clarifications to the plan, oldest first (C49)."""
+    from policy_atlas.core.schema import event_log
+
+    return [
+        str(payload.get("text"))
+        for payload in conn.execute(
+            select(event_log.c.payload)
+            .where(event_log.c.task_id == task_id)
+            .where(event_log.c.event_type == TOC_CLARIFICATION_EVENT)
+            .order_by(event_log.c.sequence)
+        ).scalars()
+        if payload.get("text")
+    ]
+
+
+def with_clarifications(conn: Connection, task_id: uuid.UUID, plan: TocPlan) -> TocPlan:
+    """The plan with the user's clarifications added to its context, which every prompt reads."""
+    notes = clarifications(conn, task_id)
+    if not notes:
+        return plan
+    context = "\n".join(
+        part
+        for part in [plan.context or "", "The user's clarifications: " + " ".join(notes)]
+        if part
+    )
+    return plan.model_copy(update={"context": context})
 
 
 def plan_data(plan: TocPlan) -> dict[str, object]:

@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.contract import TocPlanDraft
 from policy_atlas.core.model_routes import route
@@ -78,11 +78,14 @@ class TocInputs:
         theory_state: The code-authored theory-state line.
         has_draft: Whether the graph exists (the plan is then fixed).
         approved: The latest approved plan, if any.
+        theory_outline: The theory by code, once a draft exists (C46).
     """
 
     theory_state: str
     has_draft: bool
     approved: TocPlan | None
+    #: Once a draft exists: its boxes, links, verdicts and pathways by code (C46).
+    theory_outline: str = ""
 
 
 def read_theory_state(conn: Connection, task_id: uuid.UUID) -> tuple[str, bool]:
@@ -131,7 +134,63 @@ def load_toc_inputs(conn: Connection, task_id: uuid.UUID) -> TocInputs:
         if row is not None
         else None
     )
-    return TocInputs(theory_state=state, has_draft=drafted, approved=approved)
+    return TocInputs(
+        theory_state=state,
+        has_draft=drafted,
+        approved=approved,
+        theory_outline=theory_outline(conn, task_id) if drafted else "",
+    )
+
+
+def theory_outline(conn: Connection, task_id: uuid.UUID) -> str:
+    """The theory as the Task Agent reads it: one line per box, link and pathway (C46)."""
+    from policy_atlas.theory_of_change.review import _theory
+
+    theory = _theory(conn, task_id)
+    lines = [f"Box {b['code']} ({b['layer']}): {b['text']}" for b in theory["boxes"]]
+    lines += [
+        f"Link {link['code']} {link['from']} → {link['to']}: {link['sentence']} [{link['verdict']}]"
+        for link in theory["links"]
+    ]
+    lines += [
+        f"Pathway {p['key']} ({p['kind']}): {p['label']}: {' → '.join(str(c) for c in p['links'])}"
+        for p in theory["pathways"]
+    ]
+    return "\n".join(lines)
+
+
+def toc_after_turn(engine: Engine, task_id: uuid.UUID, turn: Any, user_id: str) -> str | None:
+    """Store what a turn proposed and any clarification; say where to find them (C46, C49)."""
+    from policy_atlas.core import events
+    from policy_atlas.theory_of_change import proposals
+    from policy_atlas.theory_of_change.draft import TOC_CLARIFICATION_EVENT
+
+    edits = list(getattr(turn, "proposed_edits", None) or [])
+    clarification = (getattr(turn, "clarification", None) or "").strip()
+    notes: list[str] = []
+    with engine.begin() as conn:
+        if not has_graph(conn, task_id):
+            return None
+        if edits:
+            proposals.create_proposal(
+                conn,
+                task_id=task_id,
+                source="chat",
+                summary=f"Suggested in the chat: {len(edits)} change"
+                + ("s" if len(edits) != 1 else ""),
+                ops=edits[:6],
+            )
+            notes.append("The changes are under Suggestions, above the canvas.")
+        if clarification:
+            events.append(
+                conn,
+                task_id=task_id,
+                run_id=None,
+                event_type=TOC_CLARIFICATION_EVENT,
+                payload={"text": clarification, "by": user_id},
+            )
+            notes.append("I noted the clarification; the next check reads it.")
+    return " ".join(notes) or None
 
 
 def toc_draft_from_plan(plan: Any) -> TocPlanDraft:
@@ -206,7 +265,9 @@ def stub_toc_turn(turns: list[dict[str, str]]) -> TocTurnWire:
 def _build_messages(
     turns: list[dict[str, str]], previous: dict[str, object] | None, inputs: TocInputs
 ) -> list[Any]:
-    return build_toc_messages(turns, previous, theory_state=inputs.theory_state)
+    return build_toc_messages(
+        turns, previous, theory_state=inputs.theory_state, theory_outline=inputs.theory_outline
+    )
 
 
 TOC_TASK_AGENT = TaskAgentProfile(
@@ -226,4 +287,5 @@ TOC_TASK_AGENT = TaskAgentProfile(
     seed_draft=seed_toc_draft,
     stub_turn=stub_toc_turn,
     part_ids=frozenset(),
+    after_turn=toc_after_turn,
 )

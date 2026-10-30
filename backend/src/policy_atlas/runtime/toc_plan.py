@@ -299,6 +299,9 @@ def compose_toc(
             steps = [("inherit", True)] if plan.from_option is not None else []
             return _chain([*steps, ("toc_draft", True)], plan)
         if walk == TOC_WALK_CHECK:
+            # Update the report (C45): the sentences and the report, nothing searched.
+            if context.get(TOC_CHECK_MODE_KEY) == "report":
+                return _chain([("toc_summarise", True), ("toc_report", True)], plan)
             if context.get(TOC_LINKS_KEY):
                 return _chain(
                     [step for step in TOC_CHECK_CHAIN if step[0] not in _NAMED_LINK_SKIPS], plan

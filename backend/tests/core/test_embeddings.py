@@ -87,8 +87,9 @@ def test_table_count(conn: Connection) -> None:
     # Link between two tasks); 38 -> 43: task 045 adds `option`,
     # `option_membership`, `option_relation`, `longlist_result` and
     # `intervention_profile_record`; no evidence-search table changed. 49 -> 50:
-    # task 054 iteration 3 adds `toc_figure` (C37).
-    assert len(metadata.tables) == 50
+    # task 054 iteration 3 adds `toc_figure` (C37); 50 -> 51: increment 2 adds
+    # `toc_proposal` (C45).
+    assert len(metadata.tables) == 51
 
 
 def test_uq_chunk_embedding_unit_rejects_duplicate(conn: Connection) -> None:

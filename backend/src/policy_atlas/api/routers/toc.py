@@ -16,6 +16,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, Any, Literal, cast
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine, Row
@@ -31,6 +32,7 @@ from policy_atlas.api.contract.toc import (
     TocCaseStudyOut,
     TocCheckIn,
     TocCheckOut,
+    TocClarificationIn,
     TocCountOut,
     TocCreatedOut,
     TocDecideIn,
@@ -49,6 +51,11 @@ from policy_atlas.api.contract.toc import (
     TocMoveIn,
     TocPathwayOut,
     TocPositionOut,
+    TocProblemsOut,
+    TocProposalDecideIn,
+    TocProposalEditOut,
+    TocProposalOut,
+    TocReportFindingOut,
     TocReportOut,
     TocResultCriteriaOut,
     TocRevisionOut,
@@ -74,7 +81,7 @@ from policy_atlas.api.readmodels.repository import (
 from policy_atlas.api.routers._access import accessible_task, readable_or_public_task
 from policy_atlas.api.routers.runs import start_toc_check
 from policy_atlas.api.settings import Settings
-from policy_atlas.core import events
+from policy_atlas.core import events, tracing
 from policy_atlas.core.schema import (
     capability_run,
     event_log,
@@ -93,13 +100,15 @@ from policy_atlas.runtime.capability_registry import THEORY_OF_CHANGE
 from policy_atlas.runtime.option_search import TOC_ITEM_SEARCHES_STAGE
 from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.toc_plan import (
+    TOC_CHECK_MODE_KEY,
     TOC_LINKS_KEY,
     TOC_PURPOSE,
     TOC_STOP_EVENT,
     TOC_WALK_CHECK,
     TOC_WALK_KEY,
 )
-from policy_atlas.theory_of_change import edits, store
+from policy_atlas.theory_of_change import edits, proposals, store
+from policy_atlas.theory_of_change.backend import StubTocBackend
 from policy_atlas.theory_of_change.check import (
     Document,
     appraisals_for,
@@ -110,11 +119,14 @@ from policy_atlas.theory_of_change.check import (
     row_judgement,
     top_case_studies,
 )
+from policy_atlas.theory_of_change.draft import TOC_CLARIFICATION_EVENT
 from policy_atlas.theory_of_change.edits import EditRefused
 from policy_atlas.theory_of_change.evidence.grade import lowest, quality, rule_text, weight
 from policy_atlas.theory_of_change.graph import assumption_type, item_hash, link_state
+from policy_atlas.theory_of_change.review import edits_since_review, run_review
 
 router = APIRouter(prefix="/api/v1/tasks/{task_id}/toc", tags=["theory-of-change"])
+log = structlog.get_logger()
 
 CheckStatus = Literal["none", "drafting", "checking", "checked", "stopped", "failed"]
 
@@ -225,8 +237,11 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
     names = edits.names_of(
         conn, {row.edited_by for row in [*rows.boxes.values(), *rows.links.values()]}
     )
-    # A check named on links (C40) is "checking" only those links.
-    named = set((walk.context or {}).get(TOC_LINKS_KEY) or []) if walk is not None else set()
+    # A check named on links (C40) is "checking" only those links; updating the
+    # report checks none.
+    walk_context = (walk.context or {}) if walk is not None else {}
+    named = set(walk_context.get(TOC_LINKS_KEY) or [])
+    report_only = walk_context.get(TOC_CHECK_MODE_KEY) == "report"
     links: list[TocLinkOut] = []
     for key, row in rows.links.items():
         link = graph.links[key]
@@ -256,6 +271,7 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
                     kept_hash=row.kept_hash,
                     kept_by=row.kept_by,
                     checking=status == "checking"
+                    and not report_only
                     and (not named or key in named)
                     and (key, current) not in judged_hashes,
                 ),
@@ -584,6 +600,8 @@ def get_toc(
     _readable_toc(conn, task_id, user)
     out = toc_graph_out(conn, task_id)
     out.can_edit = user is not None and _can_edit(conn, task_id, user.user_id)
+    if out.can_edit:
+        out.edits_since_review = len(edits_since_review(conn, task_id))
     return out
 
 
@@ -1094,3 +1112,143 @@ def stop_toc_check(
         payload={"capability_run_id": str(walk.capability_run_id), "by": user.user_id},
     )
     return {"status": "stopping"}
+
+
+# --- Review, suggestions, the report and clarifications (C45, C46, C49) ----------------
+
+
+@router.post("/review", status_code=202)
+def start_toc_review(
+    task_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    engine: Annotated[Engine, Depends(get_engine)],
+    executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
+    backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+) -> dict[str, str]:
+    """Review the theory after edits, off the request path; the Task Agent reports (C45)."""
+    with engine.begin() as conn:
+        _editable_toc(conn, task_id, user)
+    backend = backends.toc if backends.toc is not None else StubTocBackend()
+
+    def review() -> None:
+        try:
+            with tracing.trace_scope(user_id=user.user_id):
+                run_review(engine, task_id=task_id, backend=backend)
+        except Exception:
+            log.exception("toc_review.failed", task_id=str(task_id))
+
+    executor.submit(review)
+    return {"status": "reviewing"}
+
+
+@router.get("/proposals", response_model=list[TocProposalOut])
+def get_toc_proposals(
+    task_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> list[TocProposalOut]:
+    """The open suggestions, newest first (C45, C46)."""
+    _editable_toc(conn, task_id, user)
+    return [
+        TocProposalOut(
+            proposal_id=row.proposal_id,
+            source=row.source,
+            summary=row.summary,
+            created_at=row.created_at,
+            edits=[
+                TocProposalEditOut(
+                    index=i,
+                    op=str(op.get("op")),
+                    line=str(op.get("line") or proposals.describe(op)),
+                    reason=str(op.get("reason") or ""),
+                    status=op.get("status", "pending"),
+                )
+                for i, op in enumerate(row.edits)
+            ],
+            report_findings=[
+                TocReportFindingOut(section=str(f.get("section")), why=str(f.get("why")))
+                for f in row.report_findings
+            ],
+        )
+        for row in proposals.open_proposals(conn, task_id)
+    ]
+
+
+@router.post("/proposals/{proposal_id}/decide", response_model=TocProblemsOut)
+def decide_toc_proposal(
+    task_id: uuid.UUID,
+    proposal_id: uuid.UUID,
+    body: TocProposalDecideIn,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> TocProblemsOut:
+    """Accept or reject one suggested edit, or all; accepted edits apply as the user's (C45)."""
+    _editable_toc(conn, task_id, user)
+    problems = _edit(
+        proposals.decide,
+        conn=conn,
+        task_id=task_id,
+        actor=edits.Actor(user.user_id),
+        proposal_id=proposal_id,
+        index=body.index,
+        accept=body.accept,
+    )
+    return TocProblemsOut(problems=problems)
+
+
+@router.post("/proposals/{proposal_id}/dismiss", status_code=204)
+def dismiss_toc_proposal(
+    task_id: uuid.UUID,
+    proposal_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> None:
+    """Close a suggestion without acting on what is left of it."""
+    _editable_toc(conn, task_id, user)
+    proposals.close(conn, task_id=task_id, proposal_id=proposal_id)
+
+
+@router.post("/report/update", response_model=TocCheckOut, status_code=202)
+def update_toc_report(
+    task_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    engine: Annotated[Engine, Depends(get_engine)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
+    backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+    proposal_id: Annotated[uuid.UUID | None, Query()] = None,
+) -> TocCheckOut:
+    """Rewrite the titles, sentences and the report for the theory as it is now (C45)."""
+    with engine.begin() as conn:
+        _editable_toc(conn, task_id, user)
+        if proposal_id is not None:
+            proposals.close(conn, task_id=task_id, proposal_id=proposal_id)
+    walk_id = start_toc_check(
+        engine,
+        task_id=task_id,
+        link_ids=[],
+        user_id=user.user_id,
+        settings=settings,
+        executor=executor,
+        backends=backends,
+        mode="report",
+    )
+    return TocCheckOut(capability_run_id=walk_id)
+
+
+@router.post("/clarifications", status_code=204)
+def add_toc_clarification(
+    task_id: uuid.UUID,
+    body: TocClarificationIn,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> None:
+    """Add a clarification to the plan; the next check, search and review read it (C49)."""
+    _editable_toc(conn, task_id, user)
+    events.append(
+        conn,
+        task_id=task_id,
+        run_id=None,
+        event_type=TOC_CLARIFICATION_EVENT,
+        payload={"text": body.text.strip(), "by": user.user_id},
+    )

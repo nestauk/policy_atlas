@@ -65,6 +65,7 @@ def test_the_check_walk_classifies_only_after_the_judge() -> None:
         ("toc_summarise", False),
         ("toc_report", False),
     ]
+    # A check named on links (C40) leaves the report to Update the report (C45).
     named = compose_toc(_plan(), "toc", {"toc_walk": "check", "links": ["l1"]})
     assert named.components == [
         "toc_select",
@@ -73,8 +74,9 @@ def test_the_check_walk_classifies_only_after_the_judge() -> None:
         "classify",
         "appraise",
         "toc_summarise",
-        "toc_report",
     ]
+    report = compose_toc(_plan(), "toc", {"toc_walk": "check", "mode": "report"})
+    assert report.components == ["toc_summarise", "toc_report"]
 
 
 def test_the_check_walk_has_no_screen_directive() -> None:

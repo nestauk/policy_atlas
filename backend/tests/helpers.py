@@ -329,6 +329,7 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
 
     # Task 054 theory-of-change rows first: judgements name documents and walks.
     for toc_table in (
+        "toc_proposal",
         "toc_item_evidence",
         "toc_pathway_link",
         "toc_pathway",

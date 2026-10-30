@@ -2006,6 +2006,24 @@ toc_item_evidence = Table(
     ),
 )
 
+#: Edits Policy Atlas suggests (the review after edits, the Task Agent's chat), each
+#: waiting for the user's Accept or Reject (task 054, C45, C46).
+toc_proposal = Table(
+    "toc_proposal",
+    metadata,
+    Column("proposal_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("source", Text, nullable=False),
+    Column("summary", Text, nullable=False),
+    Column("edits", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("report_findings", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("status", Text, nullable=False, server_default=text("'open'")),
+    *_toc_common(),
+    CheckConstraint("source IN ('review', 'chat')", name="ck_toc_proposal_source"),
+    CheckConstraint("status IN ('open', 'closed')", name="ck_toc_proposal_status"),
+    Index("ix_toc_proposal_task", "task_id"),
+)
+
 #: One number a judged document reports about a link's cause or effect (C37).
 toc_figure = Table(
     "toc_figure",

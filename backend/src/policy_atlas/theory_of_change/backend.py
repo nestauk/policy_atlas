@@ -85,6 +85,13 @@ from policy_atlas.theory_of_change.report_prompt import (
     TestRowWire,
     build_report_messages,
 )
+from policy_atlas.theory_of_change.review_prompt import (
+    TOC_REVIEW_MAX_OUTPUT_TOKENS,
+    TOC_REVIEW_PROMPT_VERSION,
+    ReportFindingWire,
+    ReviewResponse,
+    build_review_messages,
+)
 from policy_atlas.theory_of_change.summary_prompt import (
     TOC_SUMMARY_MAX_OUTPUT_TOKENS,
     TOC_SUMMARY_PROMPT_VERSION,
@@ -194,6 +201,17 @@ class TocBackend(Protocol):
         sources: list[dict[str, object]],
     ) -> UsageResult[ReportResponse]:
         """Write the narrative Detailed information (``toc_report_v1``)."""
+        ...
+
+    def review(
+        self,
+        *,
+        plan: dict[str, object],
+        theory: dict[str, object],
+        edits: list[str],
+        report: dict[str, object] | None,
+    ) -> UsageResult[ReviewResponse]:
+        """Review the theory's shape after the user's edits (``toc_review_v1``, C45)."""
         ...
 
 
@@ -388,6 +406,23 @@ class OpenAITocBackend:
             step="toc_summarise",
             max_output_tokens=TOC_SUMMARY_MAX_OUTPUT_TOKENS,
             prompt_version=TOC_SUMMARY_PROMPT_VERSION,
+        )
+
+    def review(
+        self,
+        *,
+        plan: dict[str, object],
+        theory: dict[str, object],
+        edits: list[str],
+        report: dict[str, object] | None,
+    ) -> UsageResult[ReviewResponse]:
+        """See :class:`TocBackend`."""
+        return self._call(
+            build_review_messages(plan=plan, theory=theory, edits=edits, report=report),
+            response_format=ReviewResponse,
+            step="toc_review",
+            max_output_tokens=TOC_REVIEW_MAX_OUTPUT_TOKENS,
+            prompt_version=TOC_REVIEW_PROMPT_VERSION,
         )
 
     def report(
@@ -594,7 +629,7 @@ class StubTocBackend:
                     pathway=str(p["key"]), action="keep", into=None, reason="Distinct route."
                 )
                 for p in pathways
-            ]
+            ],
         )
         return (queued or default), None
 
@@ -683,6 +718,32 @@ class StubTocBackend:
                     )
                     for box in boxes
                 ],
+            ),
+            None,
+        )
+
+    def review(
+        self,
+        *,
+        plan: dict[str, object],
+        theory: dict[str, object],
+        edits: list[str],
+        report: dict[str, object] | None,
+    ) -> UsageResult[ReviewResponse]:
+        """See :class:`StubTocBackend`: no edits; flags How change happens after any edit."""
+        inputs = {"plan": plan, "theory": theory, "edits": edits, "report": report}
+        queued = self._next("review", inputs)
+        if queued is not None:
+            return queued, None
+        return (
+            ReviewResponse(
+                summary="The theory's shape holds after the edits.",
+                edits=[],
+                report_findings=(
+                    [ReportFindingWire(section="how_change_happens", why="A step changed.")]
+                    if edits and report
+                    else []
+                ),
             ),
             None,
         )

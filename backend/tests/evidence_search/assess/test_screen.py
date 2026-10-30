@@ -74,7 +74,7 @@ def test_screen_table_count(conn: Connection) -> None:
     # Link between two tasks); 38 -> 43: task 045 adds `option`,
     # `option_membership`, `option_relation`, `longlist_result` and
     # `intervention_profile_record`; no evidence-search table changed.
-    assert len(metadata.tables) == 49
+    assert len(metadata.tables) == 51  # task 054 adds toc_figure and toc_proposal
 
 
 def test_tss_has_composite_unique(conn: Connection) -> None:

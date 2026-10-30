@@ -1232,6 +1232,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/toc/clarifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Toc Clarification
+         * @description Add a clarification to the plan; the next check, search and review read it (C49).
+         */
+        post: operations["add_toc_clarification_api_v1_tasks__task_id__toc_clarifications_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}/toc/events/{event_id}/undo": {
         parameters: {
             query?: never;
@@ -1454,6 +1474,106 @@ export interface paths {
          *     judgement is marked as added by the user.
          */
         post: operations["add_toc_study_api_v1_tasks__task_id__toc_links__link_id__studies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc Proposals
+         * @description The open suggestions, newest first (C45, C46).
+         */
+        get: operations["get_toc_proposals_api_v1_tasks__task_id__toc_proposals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/proposals/{proposal_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Toc Proposal
+         * @description Accept or reject one suggested edit, or all; accepted edits apply as the user's (C45).
+         */
+        post: operations["decide_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/proposals/{proposal_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismiss Toc Proposal
+         * @description Close a suggestion without acting on what is left of it.
+         */
+        post: operations["dismiss_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/report/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Toc Report
+         * @description Rewrite the titles, sentences and the report for the theory as it is now (C45).
+         */
+        post: operations["update_toc_report_api_v1_tasks__task_id__toc_report_update_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Toc Review
+         * @description Review the theory after edits, off the request path; the Task Agent reports (C45).
+         */
+        post: operations["start_toc_review_api_v1_tasks__task_id__toc_review_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5799,6 +5919,14 @@ export interface components {
             capability_run_id: string;
         };
         /**
+         * TocClarificationIn
+         * @description A clarification to the plan the next check reads (C49).
+         */
+        TocClarificationIn: {
+            /** Text */
+            text: string;
+        };
+        /**
          * TocCountOut
          * @description How many items an action changed.
          */
@@ -6046,6 +6174,11 @@ export interface components {
             confidence: ("confident" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "not_confident") | null;
             /** Context */
             context: string[];
+            /**
+             * Edits Since Review
+             * @default 0
+             */
+            edits_since_review: number;
             /** Grade Rules */
             grade_rules: components["schemas"]["TocGradeRuleOut"][];
             /** Links */
@@ -6365,6 +6498,70 @@ export interface components {
             y: number;
         };
         /**
+         * TocProblemsOut
+         * @description Suggested edits that could not apply, with why.
+         */
+        TocProblemsOut: {
+            /** Problems */
+            problems: string[];
+        };
+        /**
+         * TocProposalDecideIn
+         * @description Accept or reject one suggested edit, or all pending ones (``index`` null).
+         */
+        TocProposalDecideIn: {
+            /** Accept */
+            accept: boolean;
+            /** Index */
+            index?: number | null;
+        };
+        /**
+         * TocProposalEditOut
+         * @description One suggested edit and what the user decided (C45, C46).
+         */
+        TocProposalEditOut: {
+            /** Index */
+            index: number;
+            /** Line */
+            line: string;
+            /** Op */
+            op: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+        };
+        /**
+         * TocProposalOut
+         * @description A suggestion from the review or the chat, waiting for the user (C45, C46).
+         */
+        TocProposalOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Edits */
+            edits: components["schemas"]["TocProposalEditOut"][];
+            /**
+             * Proposal Id
+             * Format: uuid
+             */
+            proposal_id: string;
+            /** Report Findings */
+            report_findings: components["schemas"]["TocReportFindingOut"][];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "review" | "chat";
+            /** Summary */
+            summary: string;
+        };
+        /**
          * TocReportAssumptionOut
          * @description One row of Assumptions and evidence.
          */
@@ -6382,6 +6579,16 @@ export interface components {
             statement: string;
             /** Verdict */
             verdict: string;
+            /** Why */
+            why: string;
+        };
+        /**
+         * TocReportFindingOut
+         * @description A report section that no longer matches the theory (C45).
+         */
+        TocReportFindingOut: {
+            /** Section */
+            section: string;
             /** Why */
             why: string;
         };
@@ -8527,6 +8734,39 @@ export interface operations {
             };
         };
     };
+    add_toc_clarification_api_v1_tasks__task_id__toc_clarifications_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocClarificationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     undo_toc_edit_api_v1_tasks__task_id__toc_events__event_id__undo_post: {
         parameters: {
             query?: never;
@@ -8917,6 +9157,169 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TocCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_proposals_api_v1_tasks__task_id__toc_proposals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocProposalOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__decide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocProposalDecideIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocProblemsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_toc_report_api_v1_tasks__task_id__toc_report_update_post: {
+        parameters: {
+            query?: {
+                proposal_id?: string | null;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_toc_review_api_v1_tasks__task_id__toc_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
             /** @description Validation Error */

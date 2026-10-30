@@ -109,6 +109,7 @@ class TaskAgentProfile:
         part_ids: The part (card) ids this Task Agent may propose.
         no_primary_parts: Part ids whose options carry no primary.
         degrade_suggestions: Whether malformed suggested answers are dropped.
+        after_turn: Optional hook after every turn (task 054).
         after_approve: Optional ``(engine, task_id, plan, agent)`` →
             ``(plan, reply note)``, run outside any transaction once a turn
             approves a plan.
@@ -135,6 +136,10 @@ class TaskAgentProfile:
     after_approve: (
         Callable[[Engine, uuid.UUID, Any, Any], tuple[AnyPlan, str | None]] | None
     ) = None
+    #: ``(engine, task_id, turn, user_id)`` → a note added to the reply, after any
+    #: turn: the theory of change stores proposed edits and clarifications here
+    #: (task 054, C46, C49).
+    after_turn: Callable[[Engine, uuid.UUID, Any, str], str | None] | None = None
 
 
 @dataclass(frozen=True)

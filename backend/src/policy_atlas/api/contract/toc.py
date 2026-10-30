@@ -262,6 +262,8 @@ class TocGraphOut(BaseModel):
     links_left_out: int
     #: Whether the caller may edit (the task's owner, C50); false for public readers.
     can_edit: bool = False
+    #: The editor's changes since the last review (C45); 0 for readers.
+    edits_since_review: int = 0
 
 
 class TocDocumentOut(BaseModel):
@@ -576,3 +578,62 @@ class TocDecideIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     accept: bool
+
+
+class TocProposalEditOut(BaseModel):
+    """One suggested edit and what the user decided (C45, C46)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    index: int
+    op: str
+    line: str
+    reason: str
+    status: Literal["pending", "accepted", "rejected"]
+
+
+class TocReportFindingOut(BaseModel):
+    """A report section that no longer matches the theory (C45)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    section: str
+    why: str
+
+
+class TocProposalOut(BaseModel):
+    """A suggestion from the review or the chat, waiting for the user (C45, C46)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    proposal_id: uuid.UUID
+    source: Literal["review", "chat"]
+    summary: str
+    created_at: datetime
+    edits: list[TocProposalEditOut]
+    report_findings: list[TocReportFindingOut]
+
+
+class TocProposalDecideIn(BaseModel):
+    """Accept or reject one suggested edit, or all pending ones (``index`` null)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    index: int | None = None
+    accept: bool
+
+
+class TocProblemsOut(BaseModel):
+    """Suggested edits that could not apply, with why."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    problems: list[str]
+
+
+class TocClarificationIn(BaseModel):
+    """A clarification to the plan the next check reads (C49)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=3, max_length=1000)

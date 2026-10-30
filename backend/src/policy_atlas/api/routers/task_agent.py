@@ -1137,6 +1137,12 @@ def create_task_agent_turn(
                 approved, note = profile.after_approve(engine, task_id, approved, agent)
             if note is not None:
                 reply_text = f"{turn.reply.rstrip()}\n\n{note}"
+        if profile.after_turn is not None:
+            # Outside any transaction: the theory of change stores the edits the
+            # turn proposed and any clarification, and says so (task 054, C46, C49).
+            note = profile.after_turn(engine, task_id, turn, user.user_id)
+            if note:
+                reply_text = f"{reply_text.rstrip()}\n\n{note}"
         part = _validated_part(getattr(turn, "part", None), profile)
         draft = (
             profile.draft_from_plan(approved)
