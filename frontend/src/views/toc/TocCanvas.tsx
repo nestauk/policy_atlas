@@ -124,6 +124,8 @@ function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
   return (
     <g>
       <title>{data.tip}</title>
+      {/* The selected connection gets the boxes' blue halo, under its own line. */}
+      {data.selected && <path d={path} data-testid="toc-edge-halo" className="toc-edge-halo" />}
       {/* Mixed is two-tone: an amber line under the green dash. */}
       {kind === "not_sure_mixed" && <path d={path} className="toc-edge-under" />}
       <BaseEdge

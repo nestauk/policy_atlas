@@ -84,6 +84,14 @@ describe("canvas", () => {
     expect(screen.getByTestId("toc-ceiling")).toHaveClass("inset-y-0", "pointer-events-none");
   });
 
+  it("puts a blue halo under the selected connection only", () => {
+    renderResult();
+    expect(document.querySelector('[data-testid="toc-edge-halo"]')).toBeNull();
+    fireEvent.click((edge(3) as Element).querySelector("path") as Element);
+    expect(document.querySelectorAll('[data-testid="toc-edge-halo"]')).toHaveLength(1);
+    expect(edge(3)?.querySelector('[data-testid="toc-edge-halo"]')).not.toBeNull();
+  });
+
   it("hover text gives the verdict", () => {
     renderResult();
     expect(edge(4)?.querySelector("title")?.textContent).toBe("Confident");

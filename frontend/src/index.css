@@ -350,6 +350,7 @@
 .react-flow .toc-edge--leaning_against { stroke: var(--color-verdict-against); stroke-dasharray: 12 5; }
 .react-flow .toc-edge--pending { stroke: var(--color-line-2); animation: toc-pulse 1.6s ease-in-out infinite; }
 .react-flow .toc-edge--selected { stroke-width: 3; }
+.react-flow .toc-edge-halo { fill: none; stroke: var(--color-blue); stroke-opacity: 0.18; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 @keyframes toc-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
