@@ -294,4 +294,6 @@ Live checks ran on run 10 (task `f7bb283e`), through a temporary server on port 
 
 **Gates:** the full `make verify` for slices A and B found 7 failures, all fixed: five table-count
 tests pinned at 49 since iteration 3, a chain test expecting a named check to write the report,
-and a route test that needs the local signing key (it passes in the main checkout).
+and a route test that needs the local signing key (it passes in the main checkout). The full
+`make verify` for slices A to D: 3,869 passed, 2 failed: the same route test (passes in the main
+checkout) and a model-route test that lists every step (now includes `toc_review`); both pass.
