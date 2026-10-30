@@ -8356,6 +8356,46 @@
         "title": "TickFrame",
         "type": "object"
       },
+      "TocBoxCreate": {
+        "additionalProperties": false,
+        "description": "A box the user adds.",
+        "properties": {
+          "layer": {
+            "enum": [
+              "input",
+              "output",
+              "outcome_short",
+              "outcome_long",
+              "impact",
+              "failure_outcome"
+            ],
+            "title": "Layer",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocPositionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "layer",
+          "text"
+        ],
+        "title": "TocBoxCreate",
+        "type": "object"
+      },
       "TocBoxEvidenceOut": {
         "additionalProperties": false,
         "description": "A box's case studies, the indicators its documents used, and its figures.",
@@ -8438,6 +8478,29 @@
             ],
             "title": "Dosage"
           },
+          "edited_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited At"
+          },
+          "edited_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited By"
+          },
           "layer": {
             "enum": [
               "input",
@@ -8460,6 +8523,16 @@
             ],
             "title": "Origin",
             "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocPositionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "result_criteria": {
             "$ref": "#/components/schemas/TocResultCriteriaOut"
@@ -8506,6 +8579,75 @@
           "revision"
         ],
         "title": "TocBoxOut",
+        "type": "object"
+      },
+      "TocBoxPatch": {
+        "additionalProperties": false,
+        "description": "A change to one box, with the revision the client saw (C10).",
+        "properties": {
+          "criteria": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocCriteriaIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "expected_revision": {
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "enum": [
+                  "input",
+                  "output",
+                  "outcome_short",
+                  "outcome_long",
+                  "impact",
+                  "failure_outcome"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layer"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "title": "TocBoxPatch",
         "type": "object"
       },
       "TocCaseStudyOut": {
@@ -8602,6 +8744,111 @@
           "source_type"
         ],
         "title": "TocCaseStudyOut",
+        "type": "object"
+      },
+      "TocCheckIn": {
+        "additionalProperties": false,
+        "description": "Check named links (C40): new items, or the ones the user picked.",
+        "properties": {
+          "link_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 80,
+            "minItems": 1,
+            "title": "Link Ids",
+            "type": "array"
+          },
+          "mode": {
+            "default": "new_items",
+            "enum": [
+              "new_items",
+              "check_again",
+              "find_more",
+              "rest"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "link_ids"
+        ],
+        "title": "TocCheckIn",
+        "type": "object"
+      },
+      "TocCheckOut": {
+        "additionalProperties": false,
+        "description": "The check walk that started.",
+        "properties": {
+          "capability_run_id": {
+            "format": "uuid",
+            "title": "Capability Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability_run_id"
+        ],
+        "title": "TocCheckOut",
+        "type": "object"
+      },
+      "TocCreatedOut": {
+        "additionalProperties": false,
+        "description": "The id of what was added.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "TocCreatedOut",
+        "type": "object"
+      },
+      "TocCriteriaIn": {
+        "additionalProperties": false,
+        "description": "How we'd know a box's change happened.",
+        "properties": {
+          "definition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Definition"
+          },
+          "indicator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indicator"
+          },
+          "timing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timing"
+          }
+        },
+        "title": "TocCriteriaIn",
         "type": "object"
       },
       "TocDocumentOut": {
@@ -9102,6 +9349,11 @@
             "title": "Boxes",
             "type": "array"
           },
+          "can_edit": {
+            "default": false,
+            "title": "Can Edit",
+            "type": "boolean"
+          },
           "check_status": {
             "enum": [
               "none",
@@ -9203,6 +9455,65 @@
         "title": "TocGraphOut",
         "type": "object"
       },
+      "TocHistoryEntryOut": {
+        "additionalProperties": false,
+        "description": "One change in History (C41).",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "undoable": {
+            "title": "Undoable",
+            "type": "boolean"
+          },
+          "what": {
+            "title": "What",
+            "type": "string"
+          },
+          "who": {
+            "title": "Who",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "at",
+          "who",
+          "what",
+          "undoable"
+        ],
+        "title": "TocHistoryEntryOut",
+        "type": "object"
+      },
+      "TocLinkCreate": {
+        "additionalProperties": false,
+        "description": "Two boxes the user connects.",
+        "properties": {
+          "source_box_id": {
+            "format": "uuid",
+            "title": "Source Box Id",
+            "type": "string"
+          },
+          "target_box_id": {
+            "format": "uuid",
+            "title": "Target Box Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_box_id",
+          "target_box_id"
+        ],
+        "title": "TocLinkCreate",
+        "type": "object"
+      },
       "TocLinkEvidenceOut": {
         "additionalProperties": false,
         "description": "Every document judged for one link, and the figures they give.",
@@ -9268,6 +9579,29 @@
           "critical": {
             "title": "Critical",
             "type": "boolean"
+          },
+          "edited_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited At"
+          },
+          "edited_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited By"
           },
           "evidence_cites": {
             "items": {
@@ -9401,6 +9735,132 @@
           "evidence_cites"
         ],
         "title": "TocLinkOut",
+        "type": "object"
+      },
+      "TocLinkPatch": {
+        "additionalProperties": false,
+        "description": "A change to one link, with the revision the client saw (C10).",
+        "properties": {
+          "because_text": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Because Text"
+          },
+          "conditions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditions"
+          },
+          "critical": {
+            "anyOf": [
+              {
+                "const": true,
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Critical"
+          },
+          "expected_revision": {
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "for_text": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "For Text"
+          },
+          "if_text": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "If Text"
+          },
+          "then_text": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Then Text"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "title": "TocLinkPatch",
+        "type": "object"
+      },
+      "TocMoveIn": {
+        "additionalProperties": false,
+        "description": "Where the user dropped a box.",
+        "properties": {
+          "expected_revision": {
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "x",
+          "y"
+        ],
+        "title": "TocMoveIn",
         "type": "object"
       },
       "TocPathwayOut": {
@@ -9634,6 +10094,26 @@
           }
         },
         "title": "TocPlanDraft",
+        "type": "object"
+      },
+      "TocPositionOut": {
+        "additionalProperties": false,
+        "description": "Where the user dropped a box on the canvas (C47).",
+        "properties": {
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "TocPositionOut",
         "type": "object"
       },
       "TocReportAssumptionOut": {
@@ -9993,6 +10473,39 @@
           }
         },
         "title": "TocResultCriteriaOut",
+        "type": "object"
+      },
+      "TocRevisionOut": {
+        "additionalProperties": false,
+        "description": "The row's revision after a write.",
+        "properties": {
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "title": "TocRevisionOut",
+        "type": "object"
+      },
+      "TocUndoOut": {
+        "additionalProperties": false,
+        "description": "What Undo could not put back because it changed since (C10).",
+        "properties": {
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "skipped"
+        ],
+        "title": "TocUndoOut",
         "type": "object"
       },
       "TocWeightsOut": {
@@ -13629,6 +14142,380 @@
         ]
       }
     },
+    "/api/v1/tasks/{task_id}/toc/boxes": {
+      "post": {
+        "description": "Add a box the user wrote (C41).",
+        "operationId": "create_toc_box_api_v1_tasks__task_id__toc_boxes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocBoxCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Toc Box",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/boxes/{box_id}": {
+      "delete": {
+        "description": "Delete a box and its links; Undo restores them with their evidence (C41).",
+        "operationId": "delete_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "box_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Box Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_revision",
+            "required": true,
+            "schema": {
+              "title": "Expected Revision",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Toc Box",
+        "tags": [
+          "theory-of-change"
+        ]
+      },
+      "patch": {
+        "description": "Edit a box's text, layer, description or how we'd know it happened (C41).",
+        "operationId": "patch_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "box_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Box Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocBoxPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocRevisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patch Toc Box",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/boxes/{box_id}/position": {
+      "patch": {
+        "description": "Save where the user dropped a box (C47).",
+        "operationId": "move_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__position_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "box_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Box Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocMoveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocRevisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Move Toc Box",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/check": {
+      "post": {
+        "description": "Check named links only (C40): search, pick, judge, figures, summarise.",
+        "operationId": "start_toc_link_check_api_v1_tasks__task_id__toc_check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocCheckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start Toc Link Check",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/events/{event_id}/undo": {
+      "post": {
+        "description": "Put back the state before one edit; rows changed since are skipped and named (C10).",
+        "operationId": "undo_toc_edit_api_v1_tasks__task_id__toc_events__event_id__undo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocUndoOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Undo Toc Edit",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
     "/api/v1/tasks/{task_id}/toc/evidence": {
       "get": {
         "description": "Return every judged document per link and every case study per box.",
@@ -13749,6 +14636,288 @@
           }
         ],
         "summary": "Get Toc Evidence Context",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/history": {
+      "get": {
+        "description": "Who changed what, newest first (C41). Editors only: it names people.",
+        "operationId": "get_toc_history_api_v1_tasks__task_id__toc_history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TocHistoryEntryOut"
+                  },
+                  "title": "Response Get Toc History Api V1 Tasks  Task Id  Toc History Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Toc History",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/layout/reset": {
+      "post": {
+        "description": "Return every moved box to the computed layout (C47).",
+        "operationId": "reset_toc_layout_api_v1_tasks__task_id__toc_layout_reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reset Toc Layout",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/links": {
+      "post": {
+        "description": "Connect two boxes (C41). The sentence starts from the box texts.",
+        "operationId": "create_toc_link_api_v1_tasks__task_id__toc_links_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocLinkCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Toc Link",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/links/{link_id}": {
+      "delete": {
+        "description": "Delete a link; Undo restores it with its evidence (C41).",
+        "operationId": "delete_toc_link_api_v1_tasks__task_id__toc_links__link_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_revision",
+            "required": true,
+            "schema": {
+              "title": "Expected Revision",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Toc Link",
+        "tags": [
+          "theory-of-change"
+        ]
+      },
+      "patch": {
+        "description": "Edit a link's title, parts or conditions, or mark it critical (C41).",
+        "operationId": "patch_toc_link_api_v1_tasks__task_id__toc_links__link_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocLinkPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocRevisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patch Toc Link",
         "tags": [
           "theory-of-change"
         ]

@@ -1,4 +1,4 @@
-"""Theory-of-change read contract (task 054, plan S14).
+"""Theory-of-change read and write contract (task 054, plan S14; editing C41 to C47).
 
 Two public reads under ``/api/v1/tasks/{task_id}/toc``: the graph with one
 evidence verdict per link, link states and the narrative report (``GET ""``), and every
@@ -9,9 +9,10 @@ are computed on read (C36, C19); nothing here is stored as shown.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 #: One evidence verdict per link (C36, simplified BEAM).
 Verdict = Literal[
@@ -38,6 +39,15 @@ class TocResultCriteriaOut(BaseModel):
     timing: str | None = None
 
 
+class TocPositionOut(BaseModel):
+    """Where the user dropped a box on the canvas (C47)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    x: float
+    y: float
+
+
 class TocBoxOut(BaseModel):
     """One element in a layer. Boxes are described, not graded (W4)."""
 
@@ -56,6 +66,11 @@ class TocBoxOut(BaseModel):
     seen_in_cites: list[uuid.UUID]
     origin: Origin
     revision: int
+    #: Where the user moved the box; null keeps the computed layout (C47).
+    position: TocPositionOut | None = None
+    #: Who last edited it (a display name) and when; null when nobody has (C41).
+    edited_by: str | None = None
+    edited_at: datetime | None = None
 
 
 class TocWeightsOut(BaseModel):
@@ -104,6 +119,9 @@ class TocLinkOut(BaseModel):
     evidence_sentence: str | None
     #: The documents (task source snapshot ids) the evidence sentence cites.
     evidence_cites: list[uuid.UUID]
+    #: Who last edited it (a display name) and when; null when nobody has (C41).
+    edited_by: str | None = None
+    edited_at: datetime | None = None
 
 
 class TocPathwayOut(BaseModel):
@@ -239,6 +257,8 @@ class TocGraphOut(BaseModel):
     report: TocReportOut | None
     #: Links the 80-link cap left unchecked in the last check walk.
     links_left_out: int
+    #: Whether the caller may edit (the task's owner, C50); false for public readers.
+    can_edit: bool = False
 
 
 class TocDocumentOut(BaseModel):
@@ -365,3 +385,136 @@ class TocEvidenceOut(BaseModel):
 
     links: list[TocLinkEvidenceOut]
     boxes: list[TocBoxEvidenceOut]
+
+
+# --- Writes (C41, C47, C10) -----------------------------------------------------------------
+
+
+class TocBoxCreate(BaseModel):
+    """A box the user adds."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    layer: Literal["input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"]
+    text: str = Field(min_length=1, max_length=500)
+    position: TocPositionOut | None = None
+
+
+class TocCriteriaIn(BaseModel):
+    """How we'd know a box's change happened."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    definition: str | None = None
+    indicator: str | None = None
+    timing: str | None = None
+
+
+class TocBoxPatch(BaseModel):
+    """A change to one box, with the revision the client saw (C10)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_revision: int
+    text: str | None = Field(default=None, min_length=1, max_length=500)
+    layer: (
+        Literal["input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"]
+        | None
+    ) = None
+    description: str | None = Field(default=None, max_length=2000)
+    criteria: TocCriteriaIn | None = None
+
+
+class TocLinkCreate(BaseModel):
+    """Two boxes the user connects."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_box_id: uuid.UUID
+    target_box_id: uuid.UUID
+
+
+class TocLinkPatch(BaseModel):
+    """A change to one link, with the revision the client saw (C10)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_revision: int
+    title: str | None = Field(default=None, max_length=200)
+    if_text: str | None = Field(default=None, max_length=1000)
+    for_text: str | None = Field(default=None, max_length=1000)
+    then_text: str | None = Field(default=None, max_length=1000)
+    because_text: str | None = Field(default=None, max_length=1000)
+    conditions: list[str] | None = None
+    critical: Literal[True] | None = None
+
+
+class TocRevisionIn(BaseModel):
+    """The revision the client saw, for a delete (C10)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_revision: int
+
+
+class TocMoveIn(BaseModel):
+    """Where the user dropped a box."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_revision: int
+    x: float
+    y: float
+
+
+class TocCreatedOut(BaseModel):
+    """The id of what was added."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+
+
+class TocRevisionOut(BaseModel):
+    """The row's revision after a write."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    revision: int
+
+
+class TocHistoryEntryOut(BaseModel):
+    """One change in History (C41)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: uuid.UUID
+    at: datetime
+    who: str
+    what: str
+    undoable: bool
+
+
+class TocUndoOut(BaseModel):
+    """What Undo could not put back because it changed since (C10)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    skipped: list[str]
+
+
+class TocCheckIn(BaseModel):
+    """Check named links (C40): new items, or the ones the user picked."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    link_ids: list[uuid.UUID] = Field(min_length=1, max_length=80)
+    mode: Literal["new_items", "check_again", "find_more", "rest"] = "new_items"
+
+
+class TocCheckOut(BaseModel):
+    """The check walk that started."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    capability_run_id: uuid.UUID

@@ -429,3 +429,61 @@ def get_run(
     if row is None:
         raise HTTPException(status_code=404, detail="resource not found")
     return run_out(row)
+
+
+def start_toc_check(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    link_ids: list[uuid.UUID],
+    user_id: str,
+    settings: Settings,
+    executor: ThreadPoolExecutor,
+    backends: RunnerBackends,
+) -> uuid.UUID:
+    """Start a check walk named on links (task 054, C40), as Start does for a whole walk.
+
+    The caller has checked the write grade. Same admission as ``POST /runs``:
+    one parentless walk per task and the executor's capacity.
+
+    Returns:
+        The new walk's id.
+
+    Raises:
+        ApiConflict: ``run_active`` or ``capacity``.
+        HTTPException: 400 when the task has no approved plan.
+    """
+    # Imported here: the opener imports this module.
+    from policy_atlas.api.toc_start import mint_scope
+    from policy_atlas.runtime.toc_plan import TOC_WALK_CHECK
+
+    walk_id = uuid.uuid4()
+    with _dispatch_lock:
+        with engine.begin() as conn:
+            if active_parentless_walk(conn, task_id) is not None or task_id in _dispatching_tasks:
+                raise ApiConflict("run_active", "the task already has an active run")
+            if executor_full(conn, settings.run_executor_max):
+                raise ApiConflict("capacity", "the walk executor is at capacity")
+            plan_row = latest_approved_plan_row(conn, task_id)
+            if plan_row is None:
+                raise HTTPException(status_code=400, detail="no approved plan")
+            scope_id = mint_scope(
+                conn,
+                task_id=task_id,
+                plan_row=plan_row,
+                toc_walk=TOC_WALK_CHECK,
+                links=[str(link_id) for link_id in link_ids],
+            )
+            _dispatching_tasks.add(task_id)
+        executor.submit(
+            _dispatch_run,
+            engine,
+            task_id=task_id,
+            capability=THEORY_OF_CHANGE,
+            plan_row=dict(plan_row),
+            backends=backends,
+            user_id=user_id,
+            evidence_scope_id=scope_id,
+            capability_run_id=walk_id,
+        )
+    return walk_id

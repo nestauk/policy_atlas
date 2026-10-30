@@ -88,8 +88,11 @@ TOC_CHECK_CHAIN: tuple[tuple[str, bool], ...] = (
     ("toc_report", False),
 )
 
-#: The steps a named-link check (Search for more) leaves out.
-_NAMED_LINK_SKIPS = frozenset({"toc_discover", "toc_merge", "toc_search_new", "toc_choose"})
+#: The steps a named-link check (C40) leaves out. The report is rewritten by the
+#: review's Update the report (C45), not by every small check.
+_NAMED_LINK_SKIPS = frozenset(
+    {"toc_discover", "toc_merge", "toc_search_new", "toc_choose", "toc_report"}
+)
 
 EntryPoint = Literal["outcome_first", "intervention_first", "existing_theory"]
 

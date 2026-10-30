@@ -1778,6 +1778,9 @@ toc_box = Table(
     Column("origin", Text, nullable=False),
     *_toc_flags(),
     Column("position", JSONB, nullable=True),
+    # Who last edited the box and when (C41): a user id, resolved to a name on read.
+    Column("edited_by", Text, nullable=True),
+    Column("edited_at", DateTime(timezone=True), nullable=True),
     *_toc_common(),
     UniqueConstraint("box_id", "task_id", name="uq_toc_box_id_task"),
     CheckConstraint(
@@ -1822,6 +1825,9 @@ toc_link = Table(
     Column("kept_by", Text, nullable=True),
     Column("origin", Text, nullable=False),
     *_toc_flags(),
+    # Who last edited the link and when (C41).
+    Column("edited_by", Text, nullable=True),
+    Column("edited_at", DateTime(timezone=True), nullable=True),
     *_toc_common(),
     UniqueConstraint("link_id", "task_id", name="uq_toc_link_id_task"),
     UniqueConstraint("task_id", "source_box_id", "target_box_id", name="uq_toc_link_pair"),
@@ -1930,6 +1936,20 @@ toc_item_evidence = Table(
     Column("item_hash", Text, nullable=False),
     # When the figures call for this judgement succeeded (C37): not asked again.
     Column("figures_checked_at", DateTime(timezone=True), nullable=True),
+    # The user's edits to the evidence (C42): removed from the link, their own
+    # scores in place of the judge's, a study they added. User ids, resolved on read.
+    Column("excluded_by", Text, nullable=True),
+    Column("excluded_at", DateTime(timezone=True), nullable=True),
+    Column("support_override", Text, nullable=True),
+    Column("relevance_override", Integer, nullable=True),
+    Column("override_by", Text, nullable=True),
+    Column("override_at", DateTime(timezone=True), nullable=True),
+    Column("added_by", Text, nullable=True),
+    # Evidence found after the first check waits for the user (C44): only
+    # ``counted`` rows count; ``decided_*`` say who accepted or rejected it.
+    Column("status", Text, nullable=False, server_default=text("'counted'")),
+    Column("decided_by", Text, nullable=True),
+    Column("decided_at", DateTime(timezone=True), nullable=True),
     *_toc_common(),
     ForeignKeyConstraint(
         ["link_id", "task_id"],
@@ -1971,6 +1991,18 @@ toc_item_evidence = Table(
     CheckConstraint("relevance BETWEEN 0 AND 3", name="ck_toc_evidence_relevance"),
     CheckConstraint(
         "support = 'not_about' OR quote IS NOT NULL", name="ck_toc_evidence_support_quote"
+    ),
+    CheckConstraint(
+        "status IN ('counted', 'pending', 'rejected')", name="ck_toc_item_evidence_status"
+    ),
+    CheckConstraint(
+        "support_override IS NULL OR support_override IN"
+        " ('strong', 'weak', 'mixed', 'refutes', 'not_about')",
+        name="ck_toc_item_evidence_support_override",
+    ),
+    CheckConstraint(
+        "relevance_override IS NULL OR relevance_override BETWEEN 0 AND 3",
+        name="ck_toc_item_evidence_relevance_override",
     ),
 )
 

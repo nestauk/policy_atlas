@@ -54,6 +54,11 @@ _CONFLICT_CODES = {
     "link_project_mismatch",
     "link_source_unfinished",
     "link_source_capability",
+    # Task 054 (C10, C41): an edit made against an old revision, two boxes
+    # already connected, an Undo already applied.
+    "toc_stale_revision",
+    "toc_duplicate",
+    "toc_already_undone",
 }
 
 _CAPACITY_CODES = {"chat_capacity"}
@@ -62,7 +67,7 @@ _CAPACITY_CODES = {"chat_capacity"}
 _NOT_FOUND_CODES = {"toc_not_found"}
 
 #: Task 054 (C15): a capability this deployment has switched off.
-_UNPROCESSABLE_CODES = {"capability_not_enabled"}
+_UNPROCESSABLE_CODES = {"capability_not_enabled", "toc_invalid"}
 
 
 class ApiConflict(Exception):
@@ -174,7 +179,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         CORSMiddleware,
         allow_origins=[app_settings.app_origin],
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
     _install_exception_handlers(app)

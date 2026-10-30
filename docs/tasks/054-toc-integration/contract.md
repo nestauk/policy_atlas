@@ -17,8 +17,8 @@ entry point from Options scoping.
 > fixes folded, one finding kept on the owner's word). ADR
 > [0042](../../adr/0042-theory-of-change-task-kind.md): Accepted 2026-10-26.
 >
-> **Increment 2 (editing) drafted 2026-10-30** (§ Increment 2: editing, C40 to C51), for the
-> owner's design review with `wireframes-editing.html`.
+> **Increment 2 (editing) approved 2026-10-30** (§ Increment 2: editing, C40 to C51; wireframes
+> `wireframes-editing.html`).
 >
 > **Design sources.** Product intent and every owner ruling: the capability spec
 > [`docs/specs/capabilities/theory-of-change/`](../../specs/capabilities/theory-of-change/capability.md)
@@ -553,8 +553,8 @@ kept.
 Owner, 2026-10-30: build editing before the broad review and refactor. Every user edit applies
 at once, with Undo; everything Policy Atlas finds or proposes after the first check waits for the
 user's **Accept** (owner agreed, 2026-10-30). Design first (`wireframes-editing.html`), then
-four slices (A to D), each tried in the app, committed and pushed. **Draft for the owner's
-design review.** This section replaces the increment 2 parts of C9, C19 and S9 where they differ;
+four slices (A to D), each tried in the app, committed and pushed. **Approved 2026-10-30** (owner:
+"Design looks good, please proceed with A-D"). This section replaces the increment 2 parts of C9, C19 and S9 where they differ;
 C10 (revisions and 409) stands as written.
 
 - **C40. Checking part of the theory (the seam, slice A).** One function runs the evidence check

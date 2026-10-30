@@ -285,6 +285,8 @@ def record(
     step: str,
     log: ChangeLog,
     changes: list[Change] | None = None,
+    actor: str | None = None,
+    undoes: str | None = None,
 ) -> None:
     """Write one ``toc.changed`` event for everything a step wrote.
 
@@ -297,6 +299,9 @@ def record(
         changes: Plain-language changes for the Task Agent's list (J5). A
             change about one pathway is ``{"text", "pathway_id"}``, so the list
             can leave out a pathway the same check added and then set aside.
+        actor: The user who made the change (a user edit or Undo), or ``None``
+            for Policy Atlas's own steps.
+        undoes: The event an Undo reverses.
     """
     events.append(
         conn,
@@ -309,6 +314,8 @@ def record(
             "before": log.before,
             "skipped": log.skipped,
             "changes": changes or [],
+            **({"actor": actor} if actor else {}),
+            **({"undoes": undoes} if undoes else {}),
         },
     )
 

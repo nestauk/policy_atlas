@@ -12,39 +12,62 @@ unreadable one keeps the generic ``not_found``.
 from __future__ import annotations
 
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
-from sqlalchemy.engine import Connection, Row
+from sqlalchemy.engine import Connection, Engine, Row
 
-from policy_atlas.api.app import ApiNotFound
+from policy_atlas.api.app import ApiConflict, ApiNotFound, ApiUnprocessable
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract.read_models import ChunkContextOut
 from policy_atlas.api.contract.toc import (
+    TocBoxCreate,
     TocBoxEvidenceOut,
     TocBoxOut,
+    TocBoxPatch,
     TocCaseStudyOut,
+    TocCheckIn,
+    TocCheckOut,
+    TocCreatedOut,
     TocDocumentOut,
     TocEvidenceOut,
     TocFigureOut,
     TocGradeRuleOut,
     TocGraphOut,
+    TocHistoryEntryOut,
+    TocLinkCreate,
     TocLinkEvidenceOut,
     TocLinkOut,
+    TocLinkPatch,
+    TocMoveIn,
     TocPathwayOut,
+    TocPositionOut,
     TocReportOut,
     TocResultCriteriaOut,
+    TocRevisionOut,
+    TocUndoOut,
     TocWeightsOut,
 )
-from policy_atlas.api.deps import get_conn, get_optional_user
+from policy_atlas.api.deps import (
+    get_conn,
+    get_current_user,
+    get_engine,
+    get_executor,
+    get_optional_user,
+    get_runner_backends,
+    get_settings,
+)
 from policy_atlas.api.readmodels.repository import (
     _authorships,
     _clamped_quote_window,
     _url,
     _venue,
 )
-from policy_atlas.api.routers._access import readable_or_public_task
+from policy_atlas.api.routers._access import accessible_task, readable_or_public_task
+from policy_atlas.api.routers.runs import start_toc_check
+from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import (
     capability_run,
     event_log,
@@ -53,14 +76,22 @@ from policy_atlas.core.schema import (
     source_classification_result,
     source_snapshot,
     task_source_snapshot,
+    toc_box,
     toc_figure,
     toc_item_evidence,
+    toc_link,
     toc_pathway_link,
 )
 from policy_atlas.runtime.capability_registry import THEORY_OF_CHANGE
 from policy_atlas.runtime.option_search import TOC_ITEM_SEARCHES_STAGE
-from policy_atlas.runtime.toc_plan import TOC_PURPOSE, TOC_WALK_CHECK, TOC_WALK_KEY
-from policy_atlas.theory_of_change import store
+from policy_atlas.runtime.runner import RunnerBackends
+from policy_atlas.runtime.toc_plan import (
+    TOC_LINKS_KEY,
+    TOC_PURPOSE,
+    TOC_WALK_CHECK,
+    TOC_WALK_KEY,
+)
+from policy_atlas.theory_of_change import edits, store
 from policy_atlas.theory_of_change.check import (
     Document,
     appraisals_for,
@@ -70,6 +101,7 @@ from policy_atlas.theory_of_change.check import (
     row_judgement,
     top_case_studies,
 )
+from policy_atlas.theory_of_change.edits import EditRefused
 from policy_atlas.theory_of_change.evidence.grade import lowest, quality, rule_text, weight
 from policy_atlas.theory_of_change.graph import assumption_type, item_hash, link_state
 
@@ -176,6 +208,11 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
             .distinct()
         )
     }
+    names = edits.names_of(
+        conn, {row.edited_by for row in [*rows.boxes.values(), *rows.links.values()]}
+    )
+    # A check named on links (C40) is "checking" only those links.
+    named = set((walk.context or {}).get(TOC_LINKS_KEY) or []) if walk is not None else set()
     links: list[TocLinkOut] = []
     for key, row in rows.links.items():
         link = graph.links[key]
@@ -204,7 +241,9 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
                     counted_hash=row.counted_hash,
                     kept_hash=row.kept_hash,
                     kept_by=row.kept_by,
-                    checking=status == "checking" and (key, current) not in judged_hashes,
+                    checking=status == "checking"
+                    and (not named or key in named)
+                    and (key, current) not in judged_hashes,
                 ),
                 verdict=verdict.verdict,
                 near_threshold=verdict.near_threshold,
@@ -216,6 +255,8 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
                 ),
                 evidence_sentence=row.evidence_sentence,
                 evidence_cites=list(row.evidence_cites or []),
+                edited_by=names.get(row.edited_by) if row.edited_by else None,
+                edited_at=row.edited_at,
             )
         )
     steps = _steps(conn, task_id)
@@ -260,6 +301,9 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
                 seen_in_cites=list(row.seen_in_cites or []),
                 origin=row.origin,
                 revision=row.revision,
+                position=TocPositionOut(**row.position) if row.position else None,
+                edited_by=names.get(row.edited_by) if row.edited_by else None,
+                edited_at=row.edited_at,
             )
             for row in rows.boxes.values()
         ],
@@ -491,7 +535,18 @@ def get_toc(
 ) -> TocGraphOut:
     """Return the theory: boxes, links with their verdicts and states, pathways, summary."""
     _readable_toc(conn, task_id, user)
-    return toc_graph_out(conn, task_id)
+    out = toc_graph_out(conn, task_id)
+    out.can_edit = user is not None and _can_edit(conn, task_id, user.user_id)
+    return out
+
+
+def _can_edit(conn: Connection, task_id: uuid.UUID, user_id: str) -> bool:
+    """Whether the caller holds the write grade (C50); never raises."""
+    try:
+        accessible_task(conn, task_id=task_id, user_id=user_id, write=True)
+    except HTTPException:
+        return False
+    return True
 
 
 @router.get("/evidence", response_model=TocEvidenceOut)
@@ -579,3 +634,281 @@ def get_toc_evidence_context(
     if result is None:
         raise HTTPException(status_code=404, detail="resource not found")
     return result
+
+
+# --- Editing (C41, C47, C10, C40) ---------------------------------------------------------
+
+
+def _editable_toc(conn: Connection, task_id: uuid.UUID, user: AuthenticatedUser) -> None:
+    """The write grade on a theory-of-change task (C50), or 403/404."""
+    access = accessible_task(conn, task_id=task_id, user_id=user.user_id, write=True)
+    if access.row["capability"] != THEORY_OF_CHANGE:
+        raise ApiNotFound("toc_not_found", "this task is not a theory of change")
+
+
+def _edit(fn: Any, **kwargs: Any) -> Any:
+    """Run one edit, turning a refusal into the API's 409, 404 or 422."""
+    try:
+        return fn(**kwargs)
+    except EditRefused as exc:
+        if exc.status == 404:
+            raise ApiNotFound("toc_not_found", exc.message) from exc
+        if exc.status == 422:
+            raise ApiUnprocessable("toc_invalid", exc.message) from exc
+        raise ApiConflict(exc.code, exc.message) from exc
+
+
+@router.post("/boxes", response_model=TocCreatedOut, status_code=201)
+def create_toc_box(
+    task_id: uuid.UUID,
+    body: TocBoxCreate,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> TocCreatedOut:
+    """Add a box the user wrote (C41)."""
+    _editable_toc(conn, task_id, user)
+    box_id = _edit(
+        edits.create_box,
+        conn=conn,
+        task_id=task_id,
+        actor=edits.Actor(user.user_id),
+        layer=body.layer,
+        text=body.text,
+        position=body.position.model_dump() if body.position else None,
+    )
+    return TocCreatedOut(id=box_id)
+
+
+@router.patch("/boxes/{box_id}", response_model=TocRevisionOut)
+def patch_toc_box(
+    task_id: uuid.UUID,
+    box_id: uuid.UUID,
+    body: TocBoxPatch,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> TocRevisionOut:
+    """Edit a box's text, layer, description or how we'd know it happened (C41)."""
+    _editable_toc(conn, task_id, user)
+    fields: dict[str, Any] = body.model_dump(
+        exclude_unset=True, exclude={"expected_revision", "criteria"}
+    )
+    if body.criteria is not None:
+        given = body.criteria.model_dump(exclude_unset=True)
+        if "indicator" in given:
+            fields["indicator"] = given.pop("indicator")
+        if given:
+            current = conn.execute(
+                select(toc_box.c.result_criteria).where(
+                    toc_box.c.box_id == box_id, toc_box.c.task_id == task_id
+                )
+            ).scalar_one_or_none()
+            fields["result_criteria"] = {**(current or {}), **given}
+    _edit(
+        edits.edit_box,
+        conn=conn,
+        task_id=task_id,
+        actor=edits.Actor(user.user_id),
+        box_id=box_id,
+        expected_revision=body.expected_revision,
+        fields=fields,
+    )
+    return TocRevisionOut(revision=body.expected_revision + 1)
+
+
+@router.delete("/boxes/{box_id}", status_code=204)
+def delete_toc_box(
+    task_id: uuid.UUID,
+    box_id: uuid.UUID,
+    expected_revision: Annotated[int, Query()],
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> None:
+    """Delete a box and its links; Undo restores them with their evidence (C41)."""
+    _editable_toc(conn, task_id, user)
+    _edit(
+        edits.delete_box,
+        conn=conn,
+        task_id=task_id,
+        actor=edits.Actor(user.user_id),
+        box_id=box_id,
+        expected_revision=expected_revision,
+    )
+
+
+@router.patch("/boxes/{box_id}/position", response_model=TocRevisionOut)
+def move_toc_box(
+    task_id: uuid.UUID,
+    box_id: uuid.UUID,
+    body: TocMoveIn,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> TocRevisionOut:
+    """Save where the user dropped a box (C47)."""
+    _editable_toc(conn, task_id, user)
+    revision = _edit(
+        edits.move_box,
+        conn=conn,
+        task_id=task_id,
+        actor=edits.Actor(user.user_id),
+        box_id=box_id,
+        expected_revision=body.expected_revision,
+        position={"x": body.x, "y": body.y},
+    )
+    return TocRevisionOut(revision=revision)
+
+
+@router.post("/layout/reset", status_code=204)
+def reset_toc_layout(
+    task_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> None:
+    """Return every moved box to the computed layout (C47)."""
+    _editable_toc(conn, task_id, user)
+    edits.reset_layout(conn, task_id=task_id, actor=edits.Actor(user.user_id))
+
+
+@router.post("/links", response_model=TocCreatedOut, status_code=201)
+def create_toc_link(
+    task_id: uuid.UUID,
+    body: TocLinkCreate,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> TocCreatedOut:
+    """Connect two boxes (C41). The sentence starts from the box texts."""
+    _editable_toc(conn, task_id, user)
+    link_id = _edit(
+        edits.create_link,
+        conn=conn,
+        task_id=task_id,
+        actor=edits.Actor(user.user_id),
+        source_box_id=body.source_box_id,
+        target_box_id=body.target_box_id,
+    )
+    return TocCreatedOut(id=link_id)
+
+
+@router.patch("/links/{link_id}", response_model=TocRevisionOut)
+def patch_toc_link(
+    task_id: uuid.UUID,
+    link_id: uuid.UUID,
+    body: TocLinkPatch,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> TocRevisionOut:
+    """Edit a link's title, parts or conditions, or mark it critical (C41)."""
+    _editable_toc(conn, task_id, user)
+    actor = edits.Actor(user.user_id)
+    if body.critical:
+        _edit(
+            edits.set_critical,
+            conn=conn,
+            task_id=task_id,
+            actor=actor,
+            link_id=link_id,
+            expected_revision=body.expected_revision,
+        )
+        return TocRevisionOut(revision=body.expected_revision + 1)
+    _edit(
+        edits.edit_link,
+        conn=conn,
+        task_id=task_id,
+        actor=actor,
+        link_id=link_id,
+        expected_revision=body.expected_revision,
+        fields=body.model_dump(exclude_unset=True, exclude={"expected_revision", "critical"}),
+    )
+    return TocRevisionOut(revision=body.expected_revision + 1)
+
+
+@router.delete("/links/{link_id}", status_code=204)
+def delete_toc_link(
+    task_id: uuid.UUID,
+    link_id: uuid.UUID,
+    expected_revision: Annotated[int, Query()],
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> None:
+    """Delete a link; Undo restores it with its evidence (C41)."""
+    _editable_toc(conn, task_id, user)
+    _edit(
+        edits.delete_link,
+        conn=conn,
+        task_id=task_id,
+        actor=edits.Actor(user.user_id),
+        link_id=link_id,
+        expected_revision=expected_revision,
+    )
+
+
+@router.get("/history", response_model=list[TocHistoryEntryOut])
+def get_toc_history(
+    task_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> list[TocHistoryEntryOut]:
+    """Who changed what, newest first (C41). Editors only: it names people."""
+    _editable_toc(conn, task_id, user)
+    return [
+        TocHistoryEntryOut(
+            event_id=entry.event_id,
+            at=entry.at,
+            who=entry.who,
+            what=entry.what,
+            undoable=entry.undoable,
+        )
+        for entry in edits.history(conn, task_id)
+    ]
+
+
+@router.post("/events/{event_id}/undo", response_model=TocUndoOut)
+def undo_toc_edit(
+    task_id: uuid.UUID,
+    event_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> TocUndoOut:
+    """Put back the state before one edit; rows changed since are skipped and named (C10)."""
+    _editable_toc(conn, task_id, user)
+    skipped = _edit(
+        edits.undo,
+        conn=conn,
+        task_id=task_id,
+        actor=edits.Actor(user.user_id),
+        event_id=event_id,
+    )
+    return TocUndoOut(skipped=skipped)
+
+
+@router.post("/check", response_model=TocCheckOut, status_code=202)
+def start_toc_link_check(
+    task_id: uuid.UUID,
+    body: TocCheckIn,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    engine: Annotated[Engine, Depends(get_engine)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
+    backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+) -> TocCheckOut:
+    """Check named links only (C40): search, pick, judge, figures, summarise."""
+    with engine.begin() as conn:
+        _editable_toc(conn, task_id, user)
+        known = set(
+            conn.execute(
+                select(toc_link.c.link_id).where(
+                    toc_link.c.task_id == task_id, toc_link.c.link_id.in_(body.link_ids)
+                )
+            ).scalars()
+        )
+    if known != set(body.link_ids):
+        raise ApiNotFound("toc_not_found", "a named connection is not in this theory")
+    walk_id = start_toc_check(
+        engine,
+        task_id=task_id,
+        link_ids=body.link_ids,
+        user_id=user.user_id,
+        settings=settings,
+        executor=executor,
+        backends=backends,
+    )
+    return TocCheckOut(capability_run_id=walk_id)
