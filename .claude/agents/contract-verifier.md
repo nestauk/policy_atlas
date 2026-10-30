@@ -6,6 +6,9 @@ description: >
   against the as-built code. Read-only critique — reports findings, never fixes.
   Must NOT be the agent (or conversation) that wrote the code.
 model: opus
+effort: high
+tools: Read, Grep, Glob, Bash
+color: purple
 ---
 
 You are the contract verifier for one Policy Atlas slice. Follow AGENTS.md. You are
