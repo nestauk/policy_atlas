@@ -1,5 +1,14 @@
 # Spec update log
 
+## 2026-10-30 (task 054, editing slice A)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): editors
+  can add, edit, connect, delete and move boxes and connections, mark a connection critical, reset
+  the layout, and undo any edit from a toast or History (contract C41, C47). Each edit records who
+  and when. A check can run on named connections only (`POST /toc/check`, C40): search, pick,
+  judge, figures, classify, appraise and summarise, without discovery, merge, choose or the report.
+  Connections on no pathway (the user's) are drawn on the canvas; boxes with no connection take the
+  next row of their layer's column; a moved box keeps its place and its connections run as curves.
+
 ## 2026-10-30 (task 054, evidence fit)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): after a
   fit review of run 9 (15 of 65 documents, 8 of 38 link figures, 9 of 18 box figures and 8 of 22

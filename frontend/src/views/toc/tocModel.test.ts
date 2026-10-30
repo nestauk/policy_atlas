@@ -135,3 +135,19 @@ describe("wording and grouping", () => {
     expect(tocTitle(tocGraphFixture())).toBe("Ban on less healthy food ads → Fewer children living with obesity at age 10 to 11");
   });
 });
+
+describe("layout with the user's edits (C41, C47)", () => {
+  it("draws a connection on no pathway, places a box with no connection, and keeps a moved box where it was dropped", () => {
+    const base = tocGraphFixture();
+    const added = { ...base.links[0], link_id: "new-link", source_box_id: boxId(3), target_box_id: boxId(8), origin: "user" } as (typeof base.links)[number];
+    const lone = { ...base.boxes[4], box_id: "lone-box", code: "S9", origin: "user" } as (typeof base.boxes)[number];
+    const moved = { ...base.boxes[0], position: { x: 900, y: 700 } } as (typeof base.boxes)[number];
+    const graph = { ...base, links: [...base.links, added], boxes: [moved, ...base.boxes.slice(1), lone] };
+    expect(visibleLinkIds(graph, "all").has("new-link")).toBe(true);
+    const layout = layoutToc(graph);
+    const placed = new Map(layout.boxes.map((box) => [box.id, box]));
+    expect(placed.get("lone-box")?.column).toBe(2);
+    expect(placed.get(boxId(1))).toMatchObject({ x: 900, y: 700, moved: true });
+    expect(placed.get(boxId(2))?.moved).toBeUndefined();
+  });
+});

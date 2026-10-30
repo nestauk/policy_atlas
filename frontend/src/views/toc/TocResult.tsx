@@ -7,6 +7,7 @@ import { Button } from "../../ui/brand/Button";
 import { ContentsSidebar } from "../ArtefactOutline";
 import { DetailedInformation, REPORT_SECTIONS } from "./DetailedInformation";
 import { DetailPanel, type Selection } from "./DetailPanel";
+import { AddBoxForm, EditToolbar, HistorySection, UndoToast, useTocEditor } from "./Editing";
 import { ReadingGuide, VerdictLegend } from "./ReadingGuide";
 import { TocCanvas } from "./TocCanvas";
 import { keptPathways, pathwayTitles, tocTitle } from "./tocModel";
@@ -21,6 +22,10 @@ export function TocResult({ taskId }: { taskId: string }) {
   const [selection, setSelection] = useState<Selection | null>(null);
   // A code clicked in the report: the canvas centres on it (count makes a repeat click re-centre).
   const [focus, setFocus] = useState<{ target: Selection; count: number } | null>(null);
+  const [mode, setMode] = useState<"view" | "connect">("view");
+  const [adding, setAdding] = useState(false);
+  const canEdit = toc.data?.can_edit === true;
+  const { editor, toast, dismissToast, undoLast, error, history } = useTocEditor(taskId, canEdit);
 
   const graph = toc.data;
   if (graph == null || graph.boxes.length === 0) {
@@ -67,17 +72,61 @@ export function TocResult({ taskId }: { taskId: string }) {
           ))}
         </select>
         <span className="flex-1" />
+        {canEdit && <EditToolbar graph={graph} editor={editor} mode={mode} onMode={setMode} onAddBox={() => setAdding(true)} />}
         <Button variant="secondary" size="sm" aria-expanded={guideOpen} onClick={() => setGuideOpen((open) => !open)}>
           How to read this
         </Button>
       </div>
       {guideOpen && <ReadingGuide graph={graph} />}
+      {error !== null && (
+        <p role="alert" className="mb-2 text-body text-[var(--color-verdict-against-text)]">
+          {error}
+        </p>
+      )}
+      {adding && (
+        <AddBoxForm
+          editor={editor}
+          onDone={(boxId) => {
+            setAdding(false);
+            if (boxId !== null) setSelection({ kind: "box", id: boxId });
+          }}
+        />
+      )}
       <div id="toc-canvas" className="flex scroll-mt-4 border border-line bg-paper max-lg:flex-col">
-        <TocCanvas graph={graph} pathway={pathway} selection={selection} focus={focus} onSelect={setSelection} />
-        {selection !== null && <DetailPanel taskId={taskId} graph={graph} evidence={evidence.data} selection={selection} onClose={() => setSelection(null)} />}
+        <TocCanvas
+          graph={graph}
+          pathway={pathway}
+          selection={selection}
+          focus={focus}
+          onSelect={setSelection}
+          editing={
+            canEdit
+              ? {
+                  mode,
+                  onMove: (boxId, revision, x, y) => {
+                    const code = graph.boxes.find((box) => box.box_id === boxId)?.code ?? "a box";
+                    editor.run({ kind: "moveBox", boxId, body: { expected_revision: revision, x, y } }, `Moved ${code}`);
+                  },
+                  onConnect: (source, target) => {
+                    setMode("view");
+                    editor.run({ kind: "createLink", body: { source_box_id: source, target_box_id: target } }, "Added a connection", (data) => {
+                      const id = (data as { id?: string } | undefined)?.id;
+                      if (id !== undefined) setSelection({ kind: "link", id });
+                    });
+                  },
+                  onCancelConnect: () => setMode("view"),
+                }
+              : null
+          }
+        />
+        {selection !== null && (
+          <DetailPanel taskId={taskId} graph={graph} evidence={evidence.data} selection={selection} editor={canEdit ? editor : null} onClose={() => setSelection(null)} />
+        )}
       </div>
       <VerdictLegend />
       <DetailedInformation taskId={taskId} graph={graph} onSelect={select} />
+      {canEdit && <HistorySection entries={history} editor={editor} />}
+      {toast !== null && <UndoToast text={toast} onUndo={undoLast} onClose={dismissToast} />}
     </main>
     </div>
   );

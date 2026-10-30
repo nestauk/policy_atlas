@@ -343,3 +343,64 @@ export function useAnswerCheckIn(taskId: string) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.taskRoot(taskId) }),
   });
 }
+
+type Schemas = components["schemas"];
+
+/** One edit to a theory of change (task 054, C41, C47, C40). */
+export type TocEdit =
+  | { kind: "createBox"; body: Schemas["TocBoxCreate"] }
+  | { kind: "patchBox"; boxId: string; body: Schemas["TocBoxPatch"] }
+  | { kind: "deleteBox"; boxId: string; revision: number }
+  | { kind: "moveBox"; boxId: string; body: Schemas["TocMoveIn"] }
+  | { kind: "resetLayout" }
+  | { kind: "createLink"; body: Schemas["TocLinkCreate"] }
+  | { kind: "patchLink"; linkId: string; body: Schemas["TocLinkPatch"] }
+  | { kind: "deleteLink"; linkId: string; revision: number }
+  | { kind: "undo"; eventId: string }
+  | { kind: "check"; body: Schemas["TocCheckIn"] };
+
+/**
+ * Every theory-of-change write, as one mutation. Each refreshes the graph,
+ * its evidence and History (all under the task's `toc` key). A 409
+ * `toc_stale_revision` reaches the caller as `error.code`.
+ */
+export function useTocEdit(taskId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (edit: TocEdit) => {
+      const task = { task_id: taskId };
+      const done = ({ data, error, response }: { data?: unknown; error?: unknown; response: Response }) => {
+        if (!response.ok) raise(error, response.status);
+        return data;
+      };
+      switch (edit.kind) {
+        case "createBox":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/boxes", { params: { path: task }, body: edit.body }));
+        case "patchBox":
+          return done(await client.PATCH("/api/v1/tasks/{task_id}/toc/boxes/{box_id}", { params: { path: { ...task, box_id: edit.boxId } }, body: edit.body }));
+        case "deleteBox":
+          return done(
+            await client.DELETE("/api/v1/tasks/{task_id}/toc/boxes/{box_id}", { params: { path: { ...task, box_id: edit.boxId }, query: { expected_revision: edit.revision } } }),
+          );
+        case "moveBox":
+          return done(await client.PATCH("/api/v1/tasks/{task_id}/toc/boxes/{box_id}/position", { params: { path: { ...task, box_id: edit.boxId } }, body: edit.body }));
+        case "resetLayout":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/layout/reset", { params: { path: task } }));
+        case "createLink":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/links", { params: { path: task }, body: edit.body }));
+        case "patchLink":
+          return done(await client.PATCH("/api/v1/tasks/{task_id}/toc/links/{link_id}", { params: { path: { ...task, link_id: edit.linkId } }, body: edit.body }));
+        case "deleteLink":
+          return done(
+            await client.DELETE("/api/v1/tasks/{task_id}/toc/links/{link_id}", { params: { path: { ...task, link_id: edit.linkId }, query: { expected_revision: edit.revision } } }),
+          );
+        case "undo":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/events/{event_id}/undo", { params: { path: { ...task, event_id: edit.eventId } } }));
+        case "check":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/check", { params: { path: task }, body: edit.body }));
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.toc(taskId) }),
+  });
+}

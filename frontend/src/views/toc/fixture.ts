@@ -36,7 +36,7 @@ const PREFIX: Record<TocBox["layer"], string> = {
 };
 const used: Partial<Record<TocBox["layer"], number>> = {};
 
-function box(n: number, layer: TocBox["layer"], text: string, extra: Partial<TocBox> = {}): TocBox {
+export function box(n: number, layer: TocBox["layer"], text: string, extra: Partial<TocBox> = {}): TocBox {
   used[layer] = (used[layer] ?? 0) + 1;
   return {
     box_id: boxId(n),
@@ -70,7 +70,7 @@ export const BOXES: TocBox[] = [
   box(10, "failure_outcome", "Children's exposure barely falls", { origin: "found_in_evidence" }),
 ];
 
-function link(n: number, source: number, target: number, type: string, verdict: Verdict, extra: Partial<TocLink> = {}): TocLink {
+export function link(n: number, source: number, target: number, type: string, verdict: Verdict, extra: Partial<TocLink> = {}): TocLink {
   return {
     link_id: linkId(n),
     code: `#${n}`,
@@ -147,6 +147,7 @@ export function tocGraphFixture(overrides: Partial<TocGraph> = {}): TocGraph {
   return {
     task_id: TASK_ID,
     check_status: "checked",
+    can_edit: false,
     boxes: BOXES,
     links: LINKS,
     pathways: PATHWAYS,

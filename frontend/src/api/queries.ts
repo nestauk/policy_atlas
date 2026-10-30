@@ -58,6 +58,7 @@ export const queryKeys = {
   project: (projectId: string) => ["projects", projectId, "detail"] as const,
   toc: (taskId: string) => ["tasks", taskId, "toc"] as const,
   tocEvidence: (taskId: string) => ["tasks", taskId, "toc", "evidence"] as const,
+  tocHistory: (taskId: string) => ["tasks", taskId, "toc", "history"] as const,
 };
 
 /** `GET /api/v1/tasks` filters (task 033 phase 10a adds `scope` and
@@ -732,5 +733,21 @@ export function useTocEvidence(taskId: string) {
       const status = queryClient.getQueryData<TocGraph | null>(queryKeys.toc(taskId))?.check_status;
       return status === "drafting" || status === "checking" ? 5_000 : false;
     },
+  });
+}
+
+/** `GET /api/v1/tasks/{task_id}/toc/history` — who changed what (task 054, C41). Editors only. */
+export function useTocHistory(taskId: string, enabled: boolean) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.tocHistory(taskId),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/toc/history", {
+        params: { path: { task_id: taskId } },
+      });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: Boolean(taskId) && enabled,
   });
 }

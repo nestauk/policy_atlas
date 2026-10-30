@@ -3,6 +3,8 @@ import { useState } from "react";
 import { scrub } from "../../lib/scrub";
 import { Tooltip } from "../../ui/radix/Tooltip";
 import { CitationMarker, CitationSheet, citedDocuments, documentCitation, DocumentItem, documentChips, EvidenceBalance, FigureList, ITEM_QUOTE, ITEM_TITLE, LinkDocuments, sourceLine, VerdictDot, VerdictWords } from "./Documents";
+import { type Editor, EditedLine } from "./Editing";
+import { BoxEditForm, LinkEditForm, NeedsEvidence } from "./EditForms";
 import { CriticalIcon } from "./ReadingGuide";
 import { CRITICAL_DEFINITION, LAYER_LABEL, ORIGIN_LABEL } from "./tocModel";
 import type { TocBox, TocDocument, TocEvidence, TocGraph, TocLink } from "./types";
@@ -60,7 +62,20 @@ function Criteria({ criteria }: { criteria: TocBox["result_criteria"] }) {
   );
 }
 
-function BoxDetail({ taskId, box, evidence }: { taskId: string; box: TocBox; evidence: TocEvidence | null | undefined }) {
+function BoxDetail({
+  taskId,
+  box,
+  graph,
+  evidence,
+  editor,
+}: {
+  taskId: string;
+  box: TocBox;
+  graph: TocGraph;
+  evidence: TocEvidence | null | undefined;
+  editor: Editor | null;
+}) {
+  const [editing, setEditing] = useState(false);
   const found = evidence?.boxes.find((entry) => entry.box_id === box.box_id);
   const studies = found?.case_studies ?? [];
   const figures = found?.figures ?? [];
@@ -78,14 +93,29 @@ function BoxDetail({ taskId, box, evidence }: { taskId: string; box: TocBox; evi
       quote: study.quote,
       fallbackQuote: study.quote,
     }));
+  if (editing && editor !== null) return <BoxEditForm box={box} graph={graph} editor={editor} onDone={() => setEditing(false)} />;
+  const ownLinks = graph.links.filter((link) => link.source_box_id === box.box_id || link.target_box_id === box.box_id);
   return (
     <>
       <p className="text-meta text-grey">
         {LAYER_LABEL[box.layer]}
         {box.code !== null && <> <span className="font-semibold">{box.code}</span></>}
+        {editor !== null && (
+          <>
+            {" · "}
+            <button type="button" onClick={() => setEditing(true)} className="cursor-pointer font-semibold text-blue hover:underline">
+              Edit
+            </button>
+          </>
+        )}
       </p>
       <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(box.text)}</h3>
+      <EditedLine by={box.edited_by} at={box.edited_at} />
       {box.description !== null && <p className="mt-2 text-body">{scrub(box.description)}</p>}
+      {box.origin === "user" && ownLinks.length === 0 && (
+        <p className="mt-3 border-l-[3px] border-blue bg-blue-tint-2 px-3 py-2.5 text-body">Connect it to another box (Connect, in the toolbar) to find evidence for it.</p>
+      )}
+      {box.origin === "user" && <NeedsEvidence links={ownLinks} graph={graph} editor={editor} />}
       <Criteria criteria={box.result_criteria} />
       {(figures.length > 0 || studies.length > 0) && <p className={HEAD}>Evidence</p>}
       {box.seen_in !== null && (
@@ -145,7 +175,20 @@ function BoxDetail({ taskId, box, evidence }: { taskId: string; box: TocBox; evi
   );
 }
 
-function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: TocLink; graph: TocGraph; evidence: TocEvidence | null | undefined }) {
+function LinkDetail({
+  taskId,
+  link,
+  graph,
+  evidence,
+  editor,
+}: {
+  taskId: string;
+  link: TocLink;
+  graph: TocGraph;
+  evidence: TocEvidence | null | undefined;
+  editor: Editor | null;
+}) {
+  const [editing, setEditing] = useState(false);
   const [opened, setOpened] = useState<TocDocument | null>(null);
   const linkEvidence = evidence?.links.find((entry) => entry.link_id === link.link_id);
   const documents = linkEvidence?.documents ?? [];
@@ -159,6 +202,7 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
     .map((doc) => documentCitation(doc, numberOf(doc.task_source_snapshot_id)))
     .sort((a, b) => a.n - b.n);
   const pending = link.state === "checking" || link.state === "unchecked";
+  if (editing && editor !== null) return <LinkEditForm link={link} editor={editor} onDone={() => setEditing(false)} />;
   const codeOf = (boxId: string) => graph.boxes.find((box) => box.box_id === boxId)?.code ?? null;
   const [source, target] = [codeOf(link.source_box_id), codeOf(link.target_box_id)];
   // "Connection #5 · S3 → L1" (C35); rows written before codes have none.
@@ -181,9 +225,33 @@ function LinkDetail({ taskId, link, graph, evidence }: { taskId: string; link: T
           "Connection"
         )}
         {codes !== null && <> <span className="font-semibold">{codes}</span></>}
+        {editor !== null && (
+          <>
+            {" · "}
+            <button type="button" onClick={() => setEditing(true)} className="cursor-pointer font-semibold text-blue hover:underline">
+              Edit
+            </button>
+          </>
+        )}
+        {editor !== null && !link.critical && (
+          <>
+            {" · "}
+            <button
+              type="button"
+              disabled={editor.busy}
+              onClick={() => editor.run({ kind: "patchLink", linkId: link.link_id, body: { expected_revision: link.revision, critical: true } }, `Marked ${link.code ?? "it"} as critical`)}
+              className="cursor-pointer font-semibold text-blue hover:underline"
+            >
+              Mark as critical
+            </button>
+          </>
+        )}
       </p>
       <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(link.title ?? link.sentence)}</h3>
-      {pending ? (
+      <EditedLine by={link.edited_by} at={link.edited_at} />
+      {link.state === "unchecked" ? (
+        <NeedsEvidence links={[link]} graph={graph} editor={editor} />
+      ) : pending ? (
         <p className="mt-1 text-body text-grey">Checking the evidence…</p>
       ) : (
         <p data-testid="link-verdict" className="mt-1 flex items-center text-body">
@@ -289,12 +357,15 @@ export function DetailPanel({
   evidence,
   selection,
   onClose,
+  editor = null,
 }: {
   taskId: string;
   graph: TocGraph;
   evidence: TocEvidence | null | undefined;
   selection: Selection;
   onClose: () => void;
+  /** Editing controls for an editor (C41); null keeps the panel read-only. */
+  editor?: Editor | null;
 }) {
   const box = selection.kind === "box" ? graph.boxes.find((b) => b.box_id === selection.id) : undefined;
   const link = selection.kind === "link" ? graph.links.find((l) => l.link_id === selection.id) : undefined;
@@ -304,8 +375,8 @@ export function DetailPanel({
       <button type="button" onClick={onClose} aria-label="Close" className="float-right cursor-pointer text-lead leading-none text-grey hover:text-navy">
         ×
       </button>
-      {box !== undefined && <BoxDetail taskId={taskId} box={box} evidence={evidence} />}
-      {link !== undefined && <LinkDetail key={link.link_id} taskId={taskId} link={link} graph={graph} evidence={evidence} />}
+      {box !== undefined && <BoxDetail key={box.box_id} taskId={taskId} box={box} graph={graph} evidence={evidence} editor={editor} />}
+      {link !== undefined && <LinkDetail key={link.link_id} taskId={taskId} link={link} graph={graph} evidence={evidence} editor={editor} />}
     </aside>
   );
 }

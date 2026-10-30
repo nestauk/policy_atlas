@@ -131,6 +131,24 @@ export function keptPathways(graph: Pick<TocGraph, "pathways">): TocPathway[] {
   return [...kept.filter((p) => p.kind === "success"), ...kept.filter((p) => p.kind === "failure")];
 }
 
+/** The pathway id of the links on no pathway (the user's, until the review places them, C41). */
+export const UNASSIGNED = "__unassigned";
+
+/** Links on no pathway at all, kept or set aside: the ones the user added. */
+export function unassignedLinkIds(graph: Pick<TocGraph, "pathways" | "links">): string[] {
+  const onAny = new Set(graph.pathways.flatMap((p) => p.link_ids));
+  return graph.links.filter((link) => !onAny.has(link.link_id)).map((link) => link.link_id);
+}
+
+/** Kept pathways plus one success "pathway" holding the unassigned links, so the canvas draws them. */
+function drawnPathways(graph: Pick<TocGraph, "pathways" | "links">): TocPathway[] {
+  const kept = keptPathways(graph);
+  const extra = unassignedLinkIds(graph);
+  if (extra.length === 0) return kept;
+  const unassigned = { pathway_id: UNASSIGNED, kind: "success", status: "kept", label: "", reason: null, origin: "user", link_ids: extra, broken: false } as TocPathway;
+  return [...kept.filter((p) => p.kind === "success"), unassigned, ...kept.filter((p) => p.kind === "failure")];
+}
+
 /**
  * The link ids shown for a pathway choice ("all" or one pathway id). One
  * pathway shows its own chain plus every input and output that feeds into
@@ -138,10 +156,10 @@ export function keptPathways(graph: Pick<TocGraph, "pathways">): TocPathway[] {
  * contributes to every route that leaves it.
  */
 export function visibleLinkIds(graph: Pick<TocGraph, "pathways" | "links" | "boxes">, choice: string): Set<string> {
-  const chosen = keptPathways(graph).filter((p) => choice === "all" || p.pathway_id === choice);
+  const chosen = drawnPathways(graph).filter((p) => choice === "all" || p.pathway_id === choice);
   const shown = new Set(chosen.flatMap((p) => p.link_ids));
   if (choice === "all") return shown;
-  const kept = new Set(keptPathways(graph).flatMap((p) => p.link_ids));
+  const kept = new Set(drawnPathways(graph).flatMap((p) => p.link_ids));
   const layerOf = new Map(graph.boxes.map((box) => [box.box_id, box.layer]));
   const feeds = graph.links.filter((link) => kept.has(link.link_id) && ["input", "output"].includes(layerOf.get(link.source_box_id) ?? ""));
   const reached = new Set(graph.links.filter((link) => shown.has(link.link_id)).map((link) => link.target_box_id));
@@ -176,6 +194,8 @@ export interface PlacedBox {
   y: number;
   /** True for a box that sits only on failure pathways (under the line). */
   failure: boolean;
+  /** True when the user moved it: its connections run as curves (C47). */
+  moved?: boolean;
 }
 
 export interface ColumnHeading {
@@ -212,7 +232,7 @@ export interface TocLayout {
 export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">): TocLayout {
   const boxById = new Map<string, TocBox>(graph.boxes.map((box) => [box.box_id, box]));
   const linkById = new Map(graph.links.map((link) => [link.link_id, link]));
-  const pathways = keptPathways(graph);
+  const pathways = drawnPathways(graph);
   const keptLinks = pathways.flatMap((p) => p.link_ids.map((id) => linkById.get(id))).filter((l): l is TocLink => l !== undefined);
   const layerOf = (id: string) => boxById.get(id)?.layer;
 
@@ -303,6 +323,23 @@ export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">)
     }
     successRowCount = Math.max(successRowCount, next);
   }
+  // Boxes with no connection at all (just added, C41): the next free row in their layer's column.
+  const linked = new Set(graph.links.flatMap((link) => [link.source_box_id, link.target_box_id]));
+  const failureColumn = 2;
+  for (const box of graph.boxes) {
+    if (linked.has(box.box_id) || column.has(box.box_id)) continue;
+    const col = { input: 0, output: 1, outcome_short: 2, outcome_long: longColumn, impact: impactColumn, failure_outcome: failureColumn }[box.layer];
+    column.set(box.box_id, col);
+    order.push(box.box_id);
+    if (box.layer === "failure_outcome") {
+      failRank.set(box.box_id, Math.max(-1, ...failRank.values()) + 1);
+      continue;
+    }
+    onSuccess.add(box.box_id);
+    const row = Math.max(-1, ...placed.filter((item) => item.column === col).map((item) => item.row)) + 1;
+    placed.push({ id: box.box_id, column: col, row, x: col * COL_STEP, y: HEADER_H + row * ROW_STEP, failure: false });
+    successRowCount = Math.max(successRowCount, row + 1);
+  }
   const lineY = HEADER_H + successRowCount * ROW_STEP + 8;
 
   const failureIds = order.filter((id) => !onSuccess.has(id));
@@ -338,13 +375,19 @@ export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">)
     { label: "Long-term outcomes", x: longColumn * COL_STEP },
     { label: "Impact", x: impactColumn * COL_STEP },
   ];
+  // A box the user moved keeps its place (C47); the rest stay where the layout put them.
+  const moved = new Map(graph.boxes.filter((box) => box.position != null).map((box) => [box.box_id, box.position as { x: number; y: number }]));
+  const shown = placed.map((box) => {
+    const at = moved.get(box.id);
+    return at === undefined ? box : { ...box, x: at.x, y: at.y, moved: true };
+  });
   return {
-    boxes: placed,
+    boxes: shown,
     headings,
     lineY: failureIds.length > 0 ? lineY : null,
     ceilingX: COL_STEP + BOX_W + COL_GAP / 2,
     width: impactColumn * COL_STEP + BOX_W,
-    height: Math.max(HEADER_H + BOX_H, ...placed.map((box) => box.y + BOX_H)),
+    height: Math.max(HEADER_H + BOX_H, ...shown.map((box) => box.y + BOX_H)),
   };
 }
 

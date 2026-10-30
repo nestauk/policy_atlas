@@ -7,11 +7,19 @@ import * as queries from "../../api/queries";
 import { TooltipProvider } from "../../ui/radix/Tooltip";
 import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 import { FigureList } from "./Documents";
-import { boxId, linkId, SHARED_DOC_TITLE, TASK_ID, tocEvidenceFixture, tocGraphFixture } from "./fixture";
+import { boxId, link, linkId, SHARED_DOC_TITLE, TASK_ID, tocEvidenceFixture, tocGraphFixture } from "./fixture";
 import { TocResult } from "./TocResult";
 import type { TocGraph } from "./types";
 
-vi.mock("../../api/queries", () => ({ useTask: vi.fn(), useToc: vi.fn(), useTocEvidence: vi.fn(), useTocDocumentContext: vi.fn() }));
+vi.mock("../../api/queries", () => ({
+  useTask: vi.fn(),
+  useToc: vi.fn(),
+  useTocEvidence: vi.fn(),
+  useTocDocumentContext: vi.fn(),
+  useTocHistory: vi.fn(() => ({ data: [{ event_id: "e1", at: "2026-10-30T11:20:00Z", who: "Ada", what: "Edited S1: text", undoable: true }] })),
+}));
+const mutate = vi.fn();
+vi.mock("../../api/mutations", () => ({ useTocEdit: vi.fn(() => ({ mutate, isPending: false })) }));
 
 function renderResult(graph: TocGraph = tocGraphFixture()) {
   vi.mocked(queries.useTask).mockReturnValue({ data: { name: "Ads and obesity" } } as unknown as ReturnType<typeof queries.useTask>);
@@ -360,5 +368,87 @@ describe("figures", () => {
     await user.click(screen.getByRole("button", { name: "Show all 4 figures" }));
     expect(screen.getAllByTestId("figure-group")).toHaveLength(4);
     expect(screen.queryByRole("button", { name: /Show all/ })).toBeNull();
+  });
+});
+
+describe("editing (C41, C47, C40)", () => {
+  const editable = (extra: Partial<TocGraph> = {}) => tocGraphFixture({ can_edit: true, ...extra });
+  const panel = () => screen.getByRole("complementary", { name: "Details" });
+  const lastEdit = () => mutate.mock.calls.at(-1)?.[0];
+
+  it("shows no editing controls to a reader", () => {
+    renderResult();
+    expect(screen.queryByRole("button", { name: /Add box/ })).toBeNull();
+    fireEvent.click(node(1));
+    expect(within(panel()).queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByText(/^History/)).toBeNull();
+  });
+
+  it("adds a box from the toolbar", async () => {
+    const user = userEvent.setup();
+    renderResult(editable());
+    await user.click(screen.getByRole("button", { name: /Add box/ }));
+    const form = screen.getByRole("form", { name: "Add a box" });
+    await user.type(within(form).getByLabelText("What changes"), "Parents set limits on screen time");
+    await user.click(within(form).getByRole("button", { name: "Add" }));
+    expect(lastEdit()).toEqual({ kind: "createBox", body: { layer: "outcome_short", text: "Parents set limits on screen time" } });
+  });
+
+  it("edits a box in its sidebar with the revision it showed", async () => {
+    const user = userEvent.setup();
+    renderResult(editable());
+    fireEvent.click(node(5));
+    await user.click(within(panel()).getByRole("button", { name: "Edit" }));
+    const text = within(panel()).getByLabelText("Text");
+    await user.clear(text);
+    await user.type(text, "Children see fewer adverts overall");
+    // A text change warns that its connections' evidence was for the earlier wording.
+    expect(within(panel()).getByText(/evidence from the earlier wording/)).toBeInTheDocument();
+    await user.click(within(panel()).getByRole("button", { name: "Save" }));
+    expect(lastEdit()).toMatchObject({ kind: "patchBox", boxId: boxId(5), body: { expected_revision: 1, text: "Children see fewer adverts overall" } });
+  });
+
+  it("asks before deleting a box, naming its connections", async () => {
+    const user = userEvent.setup();
+    renderResult(editable());
+    fireEvent.click(node(5));
+    await user.click(within(panel()).getByRole("button", { name: "Edit" }));
+    await user.click(within(panel()).getByRole("button", { name: "Delete box" }));
+    expect(within(panel()).getByText(/Also deletes its \d+ connections/)).toBeInTheDocument();
+    await user.click(within(panel()).getByRole("button", { name: "Delete" }));
+    expect(lastEdit()).toEqual({ kind: "deleteBox", boxId: boxId(5), revision: 1 });
+  });
+
+  it("connects two boxes in Connect mode", async () => {
+    const user = userEvent.setup();
+    renderResult(editable());
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    expect(screen.getByText(/Click the box the connection starts from/)).toBeInTheDocument();
+    fireEvent.click(node(3));
+    expect(screen.getByText(/Click the box it leads to/)).toBeInTheDocument();
+    fireEvent.click(node(8));
+    expect(lastEdit()).toEqual({ kind: "createLink", body: { source_box_id: boxId(3), target_box_id: boxId(8) } });
+  });
+
+  it("offers Find evidence for a connection no check has judged, alone or with the others", async () => {
+    const user = userEvent.setup();
+    const added = link(20, 3, 8, "Short-term to impact", "not_sure_insufficient", { state: "unchecked", origin: "user", title: null, sentence: "If a, then b." });
+    renderResult(editable({ links: [...tocGraphFixture().links, added] }));
+    expect(screen.getByRole("button", { name: "Find evidence for new connections (1)" })).toBeInTheDocument();
+    fireEvent.click((edge(20) as Element).querySelector("path") as Element);
+    expect(within(panel()).getByText("Needs evidence")).toBeInTheDocument();
+    await user.click(within(panel()).getByRole("button", { name: "Find evidence" }));
+    expect(lastEdit()).toEqual({ kind: "check", body: { link_ids: [linkId(20)], mode: "new_items" } });
+  });
+
+  it("marks a connection critical and lists History with Undo", async () => {
+    const user = userEvent.setup();
+    renderResult(editable());
+    fireEvent.click((edge(4) as Element).querySelector("path") as Element);
+    await user.click(within(panel()).getByRole("button", { name: "Mark as critical" }));
+    expect(lastEdit()).toEqual({ kind: "patchLink", linkId: linkId(4), body: { expected_revision: 1, critical: true } });
+    await user.click(screen.getByText(/^History/));
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(lastEdit()).toEqual({ kind: "undo", eventId: "e1" });
   });
 });
