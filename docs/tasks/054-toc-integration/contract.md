@@ -17,6 +17,9 @@ entry point from Options scoping.
 > fixes folded, one finding kept on the owner's word). ADR
 > [0042](../../adr/0042-theory-of-change-task-kind.md): Accepted 2026-10-26.
 >
+> **Increment 2 (editing) drafted 2026-10-30** (§ Increment 2: editing, C40 to C51), for the
+> owner's design review with `wireframes-editing.html`.
+>
 > **Design sources.** Product intent and every owner ruling: the capability spec
 > [`docs/specs/capabilities/theory-of-change/`](../../specs/capabilities/theory-of-change/capability.md)
 > ([components](../../specs/capabilities/theory-of-change/components.md)). Screens:
@@ -544,6 +547,129 @@ kept.
   own verdict. Evidence stays on box-to-box links; nothing is graded at container level.
   **Containers are the default canvas view** (owner); "All boxes" shows the full canvas. Not in
   this round's build.
+
+### Increment 2: editing (draft, 2026-10-30)
+
+Owner, 2026-10-30: build editing before the broad review and refactor. Every user edit applies
+at once, with Undo; everything Policy Atlas finds or proposes after the first check waits for the
+user's **Accept** (owner agreed, 2026-10-30). Design first (`wireframes-editing.html`), then
+four slices (A to D), each tried in the app, committed and pushed. **Draft for the owner's
+design review.** This section replaces the increment 2 parts of C9, C19 and S9 where they differ;
+C10 (revisions and 409) stands as written.
+
+- **C40. Checking part of the theory (the seam, slice A).** One function runs the evidence check
+  on named links only: item search (C27 depth "link") → pick (C28) → judge (`toc_judge_v8`) →
+  figures → classify and appraise → summarise for the named links and their boxes. No draft,
+  discover, merge or choose. It runs as a **check walk named on links** (`toc_walk: "check_links"`
+  with `link_ids`), so progress, cost lines, Langfuse and the run stream work as for a full check.
+  Every later feature that "finds evidence" calls it: Check again (C43), Find more evidence (C44),
+  checking new boxes and links (C41), and judging a study the user adds (C42, judge only). It is
+  built first, as a refactor of `check.py`'s step list, and the full check uses the same pieces.
+- **C41. Direct edits (slice A).** On the canvas and in the sidebar the user can:
+  - **Edit a box:** its text, layer, description, and Definition, Indicator and Timing.
+  - **Edit a link:** its title, if, for, then and because, and its conditions.
+  - **Add a box** (choose the layer) and **connect** two boxes (pick the source, then the
+    target, as in the prototype). A new box or link is marked *Needs evidence*. The sidebar
+    offers **Find evidence** for it, and the Task Agent offers **Find evidence for all new
+    items** once there are two or more (C40, one walk).
+  - **Delete** a box (its links go with it) or a link. A pathway that loses a link is shown as
+    *broken* in the pathway list; the review (C45) proposes how to repair it.
+  - **Mark a link critical.** A user-marked critical link is kept by the rule (C6).
+  - **Pathways:** links the user adds join no pathway. "All pathways" shows every link that is
+    not set aside, so they are visible; the review (C45) proposes which pathways they belong to.
+  - **Who edited what.** Every write records the user (`edited_by`, the user's display name and
+    id) and the time on the row, and one `toc.changed` event with the before-state. The sidebar
+    shows "Edited by Karlis · 30 Oct, 11:20" under the title, and a **History** list (who, what,
+    when) at the bottom of the Result page. **Undo** is offered right after each edit (a small
+    toast) and per entry in History; it applies the before-state with C10's revision check.
+- **C42. Editing the evidence (slice B).** In a link's document list each document gets:
+  - **Remove from this link:** the document leaves the balance and the verdict is recomputed on
+    read (no rerun). It stays listed, greyed, under "Removed by you", with **Restore**.
+  - **Change the judge's scores:** support (strong, weak, mixed, refutes) and relevance (0 to 3).
+    The verdict uses the user's scores; the judge's scores stay visible ("Judge: weak · 2").
+    Clearing the override returns to the judge's scores.
+  - **Add a study:** paste a DOI or a web address. Policy Atlas fetches the record (OpenAlex for a
+    DOI, the page fetch for a URL), judges it for this link, extracts its figures and adds it,
+    marked *Added by you*. A study the judge finds not about the step is listed with that answer
+    and the user can override it. Added studies count at once: the user asked for them.
+- **C43. An edit marks evidence for review (slice B; C19 simplified).** Editing a link, or a box
+  at either end of it, marks the link *Edited · evidence from the earlier wording*. Its evidence
+  and verdict stay. The block at the top of its sidebar offers **Keep the evidence** (the
+  evidence still fits) or **Check again** (C40 on that link: the documents already judged are
+  judged again for the new wording, plus a fresh search; the results are pending, C44). The Task
+  Agent lists all such links with **Keep all** and **Check all**. The same-meaning call
+  (`toc_same_meaning`) is dropped: Keep and Check again cover it.
+- **C44. Find more evidence; pending results (slice C).** A **Find more evidence** button at the
+  bottom of the link and box sidebars (for a box: its incoming and outgoing links) runs C40 with
+  a wider search (both study-design clauses, an analogue query, and the plan's place). New
+  judgements arrive **pending**: they do not count until accepted. The link's sidebar shows a
+  *New evidence found* block at the top: each new document with its support and relevance, the
+  verdict now and the verdict if accepted ("Not enough evidence → Leaning supports"), and
+  **Accept**, **Reject** per document and **Accept all**. The canvas shows a small blue dot on a
+  link with pending evidence; the Task Agent posts one message per finished search with the
+  same counts and buttons.
+- **C45. Review after edits (slice D).** A **Review the theory** button in the toolbar, and a Task
+  Agent suggestion after five or more edits since the last review. One frontier call
+  (`toc_review_v1`) reads the plan, the theory with verdicts, the edits since the last review and
+  the report, and returns: (1) **shape findings**, each with a reason and a proposed edit from
+  the C41 list (orphan box, a layer jump, two boxes that say the same thing, a route with no
+  failure pathway, a new link's pathway, a broken pathway); (2) **report findings**: which report
+  sections no longer match the theory. Posted in the Task Agent as one card: each proposed edit
+  with **Accept** and **Reject**, **Accept all**, and **Update the report** (reruns summarise for
+  changed items and `toc_report`). Accepted edits are recorded as "Proposed by Policy Atlas,
+  accepted by Karlis".
+- **C46. Edits from the chat (slice D; S9 revised).** `task_agent_toc_v2` gets three tools:
+  `propose_edits` (the C41 operations, as a proposal card like C45's; nothing applies until
+  accepted), `find_evidence` (C44 on named links or boxes) and `review_theory` (C45). The agent
+  says what it proposed and why; the user accepts in the card.
+- **C47. Moving boxes (slice A).** Boxes can be dragged. On drop the position saves to
+  `toc_box.position` with the row revision (C10); boxes never moved keep the computed layout.
+  Connections re-route as boxes move: between boxes still in their computed places the current
+  right-angled routes stay; a connection with a moved box at either end runs as a smooth curve
+  between the facing sides of the two boxes (the prototype's rule). **Reset layout** clears every
+  position. Positions are per task, shared by everyone who can edit it.
+- **C48. Run control and progress (slice C; parked items).** A **Stop** button on a running check
+  (a stopped walk keeps what it finished; links not judged stay *Needs evidence*). **Check the
+  rest** restarts an interrupted or stopped check on the links with no judgements (C40). The Task
+  Agent shows one progress line per stage with counts ("Searching for 11 links", "Judging: 12 of
+  20 links"). Pause is Stop plus Check the rest, so it gets no button of its own.
+- **C49. Clarifications to the plan (slice D; parked item).** In the Task Agent the user can add a
+  clarification ("only England, not the UK") while a check runs or after it. It is stored on the
+  plan as a note; the next check, Find more evidence and the review read it. A clarification
+  that changes a plan field (place, population, horizon) goes through C11 instead.
+- **C50. Who can edit.** Editing uses the existing write grade: the task's owner and its
+  editors. Public readers and viewers see the page read-only, with no edit controls.
+- **C51. Slices and what each is tried with.**
+  - **A: the seam and direct edits** (C40, C41, C47, Undo and History). Try it: edit, add,
+    connect, delete, drag, reset, undo; find evidence for one new link.
+  - **B: evidence edits** (C42, C43). Try it: remove a study, override a score, add a DOI,
+    edit a link and Keep or Check again.
+  - **C: finding more** (C44, C48). Try it: Find more evidence on a weak link, accept part of it;
+    stop and restart a check.
+  - **D: review and chat** (C45, C46, C49). Try it: five edits, review, accept two findings,
+    update the report; ask the Task Agent for an edit.
+  - Each slice: lead-written prompts, tests with the slice, `make verify-fast` between pieces,
+    full `make verify` at the end of each slice, commit and push. A live run at the end of B
+    and of D.
+
+**Schema (one migration per slice).**
+- A: `toc_box` and `toc_link` gain `edited_by JSONB NULL` (`{id, name}`) and `edited_at`;
+  `toc_link.needs_evidence` is derived (no judgements), not stored.
+- B: `toc_item_evidence` gains `excluded_by JSONB NULL`, `excluded_at`, `support_override`,
+  `relevance_override`, `override_by JSONB NULL`, `added_by JSONB NULL`.
+- C: `toc_item_evidence` gains `status` (`counted` · `pending` · `rejected`, default `counted`),
+  `decided_by JSONB NULL`, `decided_at`. The verdict reads `counted` rows only.
+- D: `toc_proposal` (`proposal_id`, `task_id`, `source` (`review` · `chat`), `edits JSONB`,
+  `report_findings JSONB`, `status`, `created_at`, `decided_by`); the plan gains `notes JSONB`.
+
+**Endpoints** (prefix `/api/v1/tasks/{task_id}/toc`, write grade, each write carrying
+`expected_revision`, 409 `toc_stale_revision` on a mismatch): `POST/PATCH/DELETE /boxes`,
+`/links`; `PATCH /boxes/{id}/position`, `POST /layout/reset`; `POST /events/{event_id}/undo`;
+`GET /history`; `PATCH /evidence/{evidence_id}` (exclude, restore, override, accept, reject);
+`POST /links/{id}/studies` (DOI or URL); `POST /links/keep`, `POST /check` (body: link ids and
+mode `check_again` · `find_more` · `new_items` · `rest`); `POST /check/stop`; `POST /review`;
+`POST /proposals/{id}/decide` (accept or reject per edit, or all); `POST /report/update`.
+`DELETE` joins CORS with a preflight test.
 
 ## ADR scope
 

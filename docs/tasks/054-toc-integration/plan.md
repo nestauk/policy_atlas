@@ -244,6 +244,13 @@ security lane on the public read API and the server setting.
 
 ## Increment 2 — Editing and changes
 
+> **Redesigned 2026-10-30.** The contract's § Increment 2: editing (C40 to C51) and
+> `wireframes-editing.html` replace the build steps below where they differ: four slices (A: the
+> subset check, direct edits, moving boxes, History and Undo; B: evidence edits and the edit
+> flag; C: Find more evidence, pending results, Stop and progress; D: the review, edits from the
+> chat, clarifications). The steps below are kept for their detail on revisions, Undo and the
+> race tests.
+
 **Added by the owner, 2026-10-27 (after the third live run), to build with the edits:**
 - **Run control:** a Stop button and endpoint (today the only stop is a server restart, which
   marks the walk interrupted), Pause, and Restart of an interrupted check from where it stopped.
