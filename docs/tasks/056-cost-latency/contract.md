@@ -13,8 +13,13 @@ One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); spe
 > the model set (D2, D2a: runtime egress to GPT-6 models on both routes), the
 > public-interface change for the reading stage (S5), the spec amendments S1 to S3 as
 > revised, and the new Europe PMC host (S7) subject to a named approval at the plan gate.
-> Plan approved (before implementation): _pending_ · ADR: _0042 planned_ · Branch:
-> `task/056-cost-latency`.
+> Plan-gate items decided 2026-11-01 (owner took the lead's recommendation on all seven; see
+> [adversarial-review-plan.md](adversarial-review-plan.md)): X5 dropped; three more prompt
+> pins approved; typed count fields on the progress tick (S5); the S3 label wording deviation
+> recorded; the N8 batch hand-over fix in; Europe PMC egress approved (host `www.ebi.ac.uk`,
+> data sent: a PubMed Central id only); the `components.md` § 9 repair wording accepted as
+> spec item S9. Plan approved (before implementation): _pending_ · ADR: 0042 (Proposed until
+> plan approval) · Branch: `task/056-cost-latency`.
 
 ## Goal
 
@@ -147,7 +152,7 @@ Probed or measured 2026-10-29 and 2026-10-30; file names are under the experimen
 | N5 | Repair input guard: send chunks over the oversized threshold as a window around the quote. | `build_section_repair_messages` sends whole dependency chunks; `OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS` and the window rule exist in `synthesis_tools.py`; deferred.md records "repair resends oversized chunks un-windowed". | Repair input tokens per call before and after; no change in repair pass rate. |
 | N6 | Summary judge and summariser prompts refined together for gpt-6.1-terra (O3). | `summary_prompts.py` (judge, block summary, artefact summary); `judge_summary` shares the writer's model. | Zero corrupted summaries pass on the 90-item set; the 20 adjudicated items re-run; first-attempt pass rate on the fixed questions up. |
 | N7 | Reasoning effort per step, set deliberately, with `medium` as the default (owner). | See D4. Classify measured: `medium` on gpt-6-luna. | Per-step tokens, reasoning tokens and latency before and after; labels or outputs within run-to-run noise. |
-| N8 | Ingest: any-free-slot draining and preloaded workers; keep timeouts and safeguards. | `_run_parse_jobs`, `_drain_parse_job`, `_worker_entry`; the shared ingest semaphore from task 045; the per-document timeout and large-payload safeguards. | Parse wall time on the fixed questions; output byte-identical on a saved corpus; staging measurement recorded. |
+| N8 | Ingest: any-free-slot draining and preloaded workers; keep timeouts and safeguards. | `_run_parse_jobs`, `_drain_parse_job`, `_worker_entry`; the shared ingest semaphore from task 045; the per-document timeout and large-payload safeguards. | Parse wall time on the fixed questions; output byte-identical on a committed fixture corpus and on the saved local corpus; the batch hand-over in `ingest_full_text_sources` measured and fixed in the same phase (owner, 2026-11-01); staging measurement recorded. |
 | N9 | A progress stage for full-text reading with counts from the document store (S5). | No stage key for `ingest_full_text`. | The stage appears with fetched and parsed counts on a fixed-question run. |
 | N10 | Prefer structured non-PDF full text: store PubMed Central ids, add a Europe PMC XML path, HTML with headings only if a share remains (S7). | `candidate_urls` is PDF first; HTML parse is plain text. | Share of documents taking the XML route on the fixed questions; chunk headings and tables at least as good as PDF. |
 
@@ -164,8 +169,8 @@ lever (finding 11). The owner reads the fixed-question reports after P1, P2 and 
 
 **D2. The model set. Decided (owner, 2026-10-29 and 2026-10-30).** Both routes:
 `fast` = gpt-6-luna (Bedrock `global.openai.gpt-6-luna`), `standard` = gpt-6.1-terra,
-`frontier` = gpt-6.1-sol. Knobs: `gpt-6.1-terra = "none"`, `gpt-6-luna = "none"`,
-`gpt-6.1-sol = "low"`. The two scoping judgment steps (`task_agent_scoping`,
+`frontier` = gpt-6.1-sol. Effort is per step (D4); the model-keyed knob table is deleted.
+The tool-bearing Terra steps carry `none`; gpt-6.1-sol, if ever used, needs at least `low`. The two scoping judgment steps (`task_agent_scoping`,
 `longlist_judgment`) move to `standard` as step exceptions, so no step uses `frontier`; it
 stays defined as the one-line step-up if the owner's read of the scoping fixed question says
 the longlist got worse. The `bedrock-claude` route follows `bedrock`. No prompt text changes
@@ -213,7 +218,7 @@ kept item to a phase and the files it touches.
 | P2 caching | N3 with the GPT-6 re-test first; D3; D8; D10; X3 | `core/openai_client.py`, `synthesis/section_prompt.py`, `synthesis_backend.py`, `synthesis_tools.py` (lookup kinds), the one-shot sites |
 | P3 unrated | N4, D7 (S1 to S3 as revised) | `assess/appraise.py`, `core/schema.py` (nullable flag column: see D7), a migration, `api/routers/read_models.py` label, `synthesise.py`, frontend label copy |
 | P4 repair guard | N5 | `synthesis_backend.py`, `synthesis_tools.py` |
-| P5 effort and overlap | N7; X5 as limited by finding 12 | `model_routes.toml`, `synthesise.py` |
+| P5 effort | N7 | `model_routes.toml` |
 | P6 ingest, progress, XML | N8; N9 and S5; N10 and S7 | `ingest_full_text.py`, `fetch_live.py`, `search_live.py` (OpenAlex `ids`), `api/stage_vocabulary.py`, `api/contract/sse.py`, `frontend/src/views/workspace/runProgress.ts`, a JATS parser module |
 
 P6 is last and the first to cut if budget runs short; queued parsing (the next task)
@@ -248,9 +253,13 @@ a recorded re-pin.
 - **S2 (spec and words).** The citable bar treats Unrated as below bar for pattern and
   coverage counting; the reader-facing word is "Unrated"; the spec's internal term "below
   policy" is not surfaced. Grounding is the judge's verdict alone.
-- **S3 (code).** The flag column, the migration, the label in `SCORE_LABELS` and the API
+- **S3 (code).** The flag column, the migration (drop NOT NULL on the score, add the
+  consistency check; the 1 to 5 check is untouched because a CHECK passes on NULL), a
+  separate `UNRATED_LABEL = "Unrated"` beside `SCORE_LABELS` (which maps 1 to 5 and cannot
+  hold a null key; wording deviation recorded, owner 2026-11-01), the label in the API
   vocabulary, the rubric-domain test extended to the two types, and
-  `DEFAULT_RUBRIC_VERSION` bumped.
+  `DEFAULT_RUBRIC_VERSION` bumped. Readers that compare `quality_score` filter nulls
+  (`steering_triggers.py`) or already treat None as missing (`select.py`); tests pin both.
 
 **D8. Explicit cache breakpoint in the section writer. Decided; verified on GPT-5.6, to
 be re-verified on GPT-6 at the start of P2.** The run message becomes a text content part
@@ -303,19 +312,26 @@ Prompt hashes with their diffs.
   to reduce childhood obesity?"; Options scoping: "How do we reduce the potential economic
   disruption to the labour market caused by the rise in AI?". Run fresh as new tasks.
 - **S5 (public interface).** A `StageKey` for full-text reading ("Reading the full texts")
-  in `api/contract/sse.py` and the web-api spec, progress events with fetched and parsed
-  counts read from the document store, and the frontend case in `runProgress.ts`.
-- **S6.** Out. **S7.** In: XML first (new host Europe PMC: runtime egress, named approval
-  at the plan gate; XML parsed with the standard library, `defusedxml` only if the plan
-  shows a need, as an approved dependency). **S8.** Out.
+  in `api/contract/sse.py` and the web-api spec; the tick frame gains typed optional
+  `fetched`, `parsed` and `total` count fields (owner, 2026-11-01), filled from the document
+  store's statuses; and the frontend case in `runProgress.ts`.
+- **S6.** Out. **S7.** In: XML first. Egress approved 2026-11-01: host `www.ebi.ac.uk` (Europe PMC
+  REST `fullTextXML`), data sent a PubMed Central id only. XML parsed with Python 3.12's
+  expat (amplification limits, no external entity fetching), `defusedxml` only if a test
+  shows a need, as an approved dependency. **S9 (spec, owner 2026-11-01).** `components.md`
+  § 9: "repair as a dependency-complete id-carrying micro-call (never a transcript resend)"
+  becomes "repair as a dependency-complete id-carrying call that starts with the section's
+  own first-turn request so it reads the section's prompt cache, never a resend of the tool
+  transcript". **S8.** Out.
 - **X1.** Grounding judge replay on gpt-6-luna before P1 ships, with prompt refinement if
   the read asks. **X2.** In O3. **X3.** The section writer's `lookup` tool lists only the
   kinds the run can serve (4 to 7 wasted `characterisation_summary` calls per scoping
   baseline). **X4.** Replay the 046 tuning set for `extract_interventions` and the
   option-profile folding calls on gpt-6-luna; prompt work only if it fails (fold stays on
-  `standard` by O2 unless D9's split moves it). **X5.** Judge section N while section N+1
-  reads, but N+1's write turn waits for N's verdict so the ledger is unchanged (finding
-  12); the plan confirms this is feasible. **X6, X7.** Out. **X8.** Gather/writer split
+  `standard` by O2 unless D9's split moves it). **X5.** Dropped (owner, 2026-11-01): the
+  ledger is sent in the section task message from the first turn and there is no separate
+  write turn, so the overlap needs a prompt-shape change; it goes to the synthesis
+  refinement task. **X6, X7.** Out. **X8.** Gather/writer split
   moved to the synthesis refinement task.
 
 ## Tidy-ups folded into P0 (owner, 2026-10-30)
@@ -382,12 +398,13 @@ in-or-out line for every entry in § System-level cost and latency.
   library cannot parse JATS safely, approved then.
 - **Production config.** None.
 - **Prompt hashes.** Expected re-pins, each recorded with its diff: P0 `section_prompt.py`
-  (new pin), `finding_vetter.py` (new pin), `interventions_prompt.py` and `theme_prompt.py`
+  (new pin), `finding_vetter.py`, `ranking.py`, `theme_grouping.py`, `group_clustering.py`
+  (new pins, owner 2026-11-01; they hold model-facing text outside the guard), `interventions_prompt.py` and `theme_prompt.py`
   (renames), deletion of the v6 entry; P1 `summary_prompts.py` (O3), `grounding_judge.py`
   (X1 if needed), `classify_prompt.py` and the other pinned modules whose `route().model_for`
   or effort lines change for D4 and D9 (code-only diffs); P2 `section_prompt.py` (D8
-  message shape, D10 request shape), `synthesis_tools.py` is not pinned (X3's tool
-  description lives in `section_prompt.py` after D11); P3 `section_prompt.py` only if D7's
+  message shape, D10 request shape, X3's tool description); caching modes live in one
+  committed table module keyed by call name, so no other pinned file changes for D3; P3 `section_prompt.py` only if D7's
   sentence is added. Any re-pin not on this list stops the slice.
 - **Tests stay offline.** Stubs return the usage shape with cache-write and reasoning
   counts.

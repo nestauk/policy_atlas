@@ -67,29 +67,32 @@ Caching (P2)
 
 Unrated (P3)
 22. [ ] D7 and S1 to S3: untyped documents get an appraisal row with a null score and
-        `unrated = true`; the 1 to 5 check holds for scored rows; they are citable; the writer sees
+        `unrated = true`; the 1 to 5 check is untouched and holds for scored rows; the consistency
+        check holds; `steering_triggers.py` filters null scores (test); they are citable; the writer sees
         "Unrated" beside the evidence type; the reader sees "Unrated" wherever appraisal is shown;
         coverage counts carry Unrated as its own bucket; `select.py` and `steering_triggers.py`
         behaviour unchanged (test); `DEFAULT_RUBRIC_VERSION` bumped; the spec amendments applied as
         the owner accepted them; the owner's read recorded.
 
-Repair guard, effort, overlap (P4, P5)
+Repair guard and effort (P4, P5)
 23. [ ] N5: chunks over the oversized threshold are sent as a window using the existing helper;
         repair input tokens per call recorded before and after; repair pass rate not lower.
 24. [ ] N7: each step's effort set deliberately, with per-step tokens, reasoning tokens and latency
         before and after and outputs within noise; classify at `medium`.
-25. [ ] X5: the judge for section N runs while section N+1 reads, with N+1's write turn waiting for
-        N's verdict; a test shows the ledger each section receives is unchanged.
+25. [ ] X5 dropped (owner, 2026-11-01); nothing to check. The deferred-log entry for the ledger move
+        is written at step 8.
 
 Ingest, progress, XML (P6)
-26. [ ] N8: any-free-slot draining and preloaded workers; output byte-identical on the saved
-        corpus; the per-document timeout, large-payload safeguards and shared ingest semaphore
+26. [ ] N8: any-free-slot draining and preloaded workers, and the batch hand-over fixed; output
+        byte-identical on a committed fixture corpus (CI) and on the saved local corpus
+        (verification line); the per-document timeout, large-payload safeguards and shared ingest semaphore
         kept (tests); parse wall time recorded locally and on staging.
-27. [ ] N9 and S5: the "Reading the full texts" stage appears with fetched and parsed counts from
-        the document store on a fixed-question run; the web-api spec amended as the owner
+27. [ ] N9 and S5: the "Reading the full texts" stage appears, its ticks carry typed `fetched`,
+        `parsed` and `total` counts from the document store on a fixed-question run; the web-api spec amended as the owner
         accepted.
-28. [ ] N10 and S7: PubMed Central ids stored in provider metadata without changing the hashed
-        envelope text; the Europe PMC host approved and recorded; XML parsed safely; the share of
+28. [ ] N10 and S7: PubMed Central ids present in fresh acquisitions (or the gap found and fixed)
+        without changing the hashed envelope text; the Europe PMC egress approval (2026-11-01)
+        recorded; billion-laughs and external-entity tests on the XML parser; XML parsed safely; the share of
         documents taking the XML route and their chunk quality recorded.
 
 Target

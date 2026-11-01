@@ -1,362 +1,403 @@
 # Implementation plan: 056-cost-latency
 
-> Status: draft 1, 2026-10-30, awaiting the plan-stage adversarial review and the owner's
-> approval. Contract: [contract.md](contract.md) (approved 2026-10-30, revision 2). Rubric:
-> [rubric.md](rubric.md). ADR: 0042, written at plan approval. Terms, need numbers (N1 to
-> N10), decisions (D1 to D11) and owner items (O, S, X) are defined in the contract and are
-> not restated here. Executor marks follow AGENTS.md § Agent-side model routing; Codex is
-> unavailable this slice (workspace spend cap, 2026-10-30), so judgment-bearing
-> implementation goes to `deep-reasoner` per the recorded fallback, and that substitution is
-> logged in `verification.md`.
+> Status: draft 2, 2026-11-01. Plan-stage adversarial review adjudicated
+> ([adversarial-review-plan.md](adversarial-review-plan.md), 24 findings, all folded; the
+> owner took the lead's recommendation on the seven gate items). Contract:
+> [contract.md](contract.md) (approved 2026-10-30, revision 2, gate items 2026-11-01). Rubric:
+> [rubric.md](rubric.md). ADR: [0042](../../adr/0042-gpt6-switch-per-call-site-routing-and-caching.md),
+> Proposed until this plan is approved. Terms, needs (N1 to N10), decisions (D1 to D11) and
+> owner items (O, S, X) are defined in the contract and not restated here. Codex is
+> unavailable this slice (workspace spend cap), so judgment-bearing implementation goes to
+> `deep-reasoner` per the recorded fallback; the substitution is logged in `verification.md`.
+> **Awaiting the owner's approval.**
 
 ## Context
 
-Facts the plan relies on beyond the contract, checked in the code on 2026-10-30. The full
-call-site inventory (58 rows: module, call name, step, request path, effort today, pinned,
-system-prompt size) is `docs/research-and-development/synthesis-refinement/experiments/call-site-inventory-056.md`
-(gitignored); its counts are reproduced here so the plan reads cold.
+Facts beyond the contract, checked in the code on 2026-10-30. The full call-site inventory
+(58 rows) is `docs/research-and-development/synthesis-refinement/experiments/call-site-inventory-056.md`
+(gitignored); what the plan needs from it is reproduced below.
 
-- **58 model call sites, 27 route steps.** Ten steps serve more than one call:
-  `longlist_judgment` 12, `synthesis` 7, `agent` 4, `chat` 3 (one trace name, `chat:call`),
-  `agent_triage` 3, `longlist_assignment` 3, `screen` 2, `group_clustering` 2,
-  `search_queries` 2, `search_reformulate` 2. The Claude search backend uses no step and no
-  route selects it.
-- **Request paths.** 24 rows go through `traced_parse` (`core/tracing.py`), which forwards
-  only `model` and `max_completion_tokens`; the agent backend, task agents and every
-  longlist and option-profile call are among them. `grounding_judge`, `mrs_note` and
+- **58 model call sites, 27 route steps today.** Ten steps serve more than one call:
+  `longlist_judgment` 12, `synthesis` 7, `agent` 4, `chat` 3 (one trace name), `agent_triage`
+  3, `longlist_assignment` 3, `screen` 2, `group_clustering` 2, `search_queries` 2,
+  `search_reformulate` 2. Thirteen call sites run on the `frontier` tier today (the scoping
+  task agent and twelve longlist and option-profile calls); the fold and place-sentence
+  calls run on `longlist_assignment`, the fast tier. The Claude search backend uses no step.
+- **Request paths.** 24 rows go through `traced_parse` (in `core/openai_client.py`), which
+  forwards only `model` and `max_completion_tokens`. `grounding_judge`, `mrs_note` and
   `full_report_intro` call `client.chat.completions.parse` with `model=` only. Eleven rows
-  (seven synthesis, case studies, three chat) read `route().reasoning_effort_for(model)`,
-  which returns `none` for Terra and nothing for Luna or Sol. Four rows send a hard-coded
-  `"high"` (classify, two finding vetters, relevance annotator). Every other row sends no
-  effort, so the provider default (medium) applies.
-- **Unpinned prompt text.** The live section prompt (`SECTION_PREAMBLES` + `SECTION_CORE`,
-  about 2,900 tokens), the section run, task, final-turn and repair templates, the five tool
-  schemas, the sections-proposal prompts and the key-findings, case-studies, source-note and
-  intro prompts all live in `synthesis_backend.py` (lines 377 to 1122), which the hash guard
-  does not cover. `ranking.py`, `theme_grouping.py`, `group_clustering.py` and
-  `finding_vetter.py` also hold model-facing text outside the guard. `summary_prompts.py`,
-  `baseline_prompt.py` and `voice_prompt.py` are pinned already. The byte-identity pin for
-  the section prompt is `tests/evidence_search/synthesis/test_section_prompt_templates.py`.
-- **System prompts over about 1,000 tokens** sit on 17 rows, including classify (1,230),
-  the grounding judge (1,150), screen stage 1 (995, just under) and the section writer.
-- **Section turns** send `parallel_tool_calls = not force_emit` (`synthesis_backend.py:2115`);
-  the repair sends one tool (`:2245`).
-- **Appraisal row.** `source_appraisal_result` in `core/schema.py:594-634`: `quality_score
-  SmallInteger NOT NULL` (602), `CheckConstraint("quality_score BETWEEN 1 AND 5",
-  name="ck_sar_quality_score")` (632), index `ix_sar_scope_score`. Readers of the score:
-  `appraise.py` (`SCORE_LABELS` 50-56), `corpus/select.py:558-562` (None → 0.5 and flagged
-  missing; else `(score-1)/4`), `corpus/characterise.py` 346-488, `runtime/steering_triggers.py:286-306`
-  (`score <= 2` counts as weak), `runtime/steering_bundles.py`, `runtime/runner.py:759`,
-  `synthesise.py:5090-5101` and `:5552` (`appraisal_order` by label), `synthesis_tools.py`
-  1136, 2043, 2085 (label = str(score)), `options_scoping/labels.py`, `longlist/coverage.py`,
-  `option_profile/place_sentences.py`, `api/answer_core.py:334`, `api/chat_scope.py:450`,
-  `api/readmodels/repository.py` (1109-1118 tier and strength filter; 1224 strength sort;
-  1885; 2796). A null score is already handled by `select.py` (missing) and by every
-  `SCORE_LABELS.get(...)` reader (None), so D7's flag changes nothing for them until a
-  reader is taught the label.
-- **Strength vocabulary.** `api/routers/read_models.py:97` is a Literal of the five labels
-  (and `:90` the sort). Frontend copies: `frontend/src/api/gen/types.ts:6573` (generated by
-  `make openapi-sync`; `make drift-check` is the gate), `api/queries.ts:109`,
-  `views/sourcesPresentation.ts:57-63` and `:133` ("five bands from Weak to Very strong"),
-  `views/ArtefactView.tsx:166`, `mock/api.ts` 80, 113-119, 682, 699, `mock/fixtures.ts`,
-  three tests. `api/contract/read_models.py` `appraisal_tier` and `appraisal_label` are plain
-  strings.
-- **Migrations.** `backend/alembic/versions/<12-hex>_<slug>.py`; head is
-  `b33ffb8c3a16_shortlist_places.py` (task 055). It is also the pattern for adding a nullable
-  column and relaxing a CHECK (drop and recreate), with a downgrade that nulls the rows only
-  the new value allows. Each migration has its own round-trip test in `tests/core/`
-  (`test_migration_055_shortlist.py` is the pattern).
-- **SSE stage contract.** `StageKey` in `api/contract/sse.py:25-44` (18 members, no ingest),
-  `STAGE_KEYS` tuple 47-66, frames 92-212, `TickFrame` 198. `PlanStageKey` mirror in
-  `api/contract/task_agent.py:66`. Presentation in `api/stage_vocabulary.py` (19-52, 54-74).
-  Frame builder `api/routers/sse.py:241-317`. Pin tests `tests/api/test_stage_vocabulary.py`
-  (four tests), `test_sse.py`, `test_contract_models.py`. Spec: `docs/specs/system/web-api.md`
-  § SSE (673), stage list at 712 (nine keys, stale for scoping). Frontend:
-  `frontend/src/views/workspace/runProgress.ts` (stage rows 176-300, `beatSentence` 328-398),
+  read `route().reasoning_effort_for(model)` (`none` on Terra, nothing on Luna or Sol).
+  Four rows send a hard-coded `"high"` (classify, two finding vetters, relevance annotator).
+  Every other row sends no effort, so the provider default applies; that the default is
+  `medium` is a provider statement the plan verifies live in Phase 0 (step 8).
+- **Unpinned prompt text.** The live section prompt (about 2,900 tokens), the section run,
+  task, final-turn and repair templates, the five tool schemas, the sections-proposal
+  prompts and the key-findings, case-studies, source-note and intro prompts live in
+  `synthesis_backend.py:377-1122`, outside the hash guard; so does model-facing text in
+  `ranking.py`, `theme_grouping.py`, `group_clustering.py` and `finding_vetter.py`. The
+  byte-identity pin for the section prompt is
+  `tests/evidence_search/synthesis/test_section_prompt_templates.py`.
+- **System prompts over about 1,000 tokens** sit on 17 rows, including classify (1,230) and
+  the grounding judge (1,150); screen stage 1 is 995.
+- **Section turns** send `parallel_tool_calls = not force_emit` (`synthesis_backend.py:2115`)
+  and `require_single_tool_call` guards the forced turn and the repair (`:2132`, `:2251`).
+- **The ledger** is in the section task message from the first turn (`synthesise.py:6111`,
+  `synthesis_backend.py:1187-1193`, `:1323-1330`), which is why X5 was dropped.
+- **Appraisal row.** `source_appraisal_result` (`core/schema.py:594-634`): `quality_score
+  SmallInteger NOT NULL` (602), `ck_sar_quality_score BETWEEN 1 AND 5` (632). Readers of the
+  score and how each handles a null: `appraise.py` `SCORE_LABELS` (`.get` → None),
+  `corpus/select.py:558-562` (None → 0.5, flagged missing), `runtime/steering_triggers.py:286-306`
+  (`score <= 2` would raise on None: filter nulls), `runtime/steering_bundles.py:618`
+  (str(score)), `runtime/runner.py:759`, `synthesise.py:5090-5101` and `:5552`
+  (`appraisal_order` by label), `synthesis_tools.py` 1136, 2043, 2085, `corpus/characterise.py:486`,
+  `options_scoping/labels.py`, `longlist/coverage.py`, `option_profile/place_sentences.py`,
+  `api/answer_core.py:334`, `api/chat_scope.py:450`, `api/readmodels/repository.py` 1109-1118,
+  1224, 1885, 2796.
+- **Strength vocabulary.** `api/routers/read_models.py:97` (Literal of five labels; `:90`
+  the sort). Frontend: `frontend/src/api/gen/types.ts:6573` (regenerated by `make openapi-sync`;
+  `make drift-check` gates it), `api/queries.ts:109`, `views/sourcesPresentation.ts:57-63`
+  and `:133`, `views/ArtefactView.tsx:166`, `views/artefactPresentation.ts:247-284`,
+  `mock/api.ts` 80, 113-119, 682, 699, `mock/fixtures.ts`, three tests.
+- **Migrations.** `backend/alembic/versions/<12-hex>_<slug>.py`; head `b33ffb8c3a16_shortlist_places.py`
+  (task 055) is the pattern for a nullable column and a check; each migration has a
+  round-trip test in `tests/core/` (`test_migration_055_shortlist.py`).
+- **SSE stage contract.** `StageKey` `api/contract/sse.py:25-44` (18 members), `STAGE_KEYS`
+  47-66, `TickFrame` 198-210 (stage and free-text `note`, never persisted), `PlanStageKey`
+  mirror `api/contract/task_agent.py:66`, presentation `api/stage_vocabulary.py`, frames
+  built in `api/routers/sse.py:241-317`, pin tests `tests/api/test_stage_vocabulary.py`,
+  `test_sse.py`, `test_contract_models.py`; spec `docs/specs/system/web-api.md` § SSE (673,
+  stage list 712). Frontend `views/workspace/runProgress.ts` (176-300, 328-398),
   `planVocabulary.ts:139-172`.
-- **Progress plumbing.** `runtime/progress.py` is synthesis-only (`ProgressEmitter`);
-  component started, completed and failed events come from `runtime/harness.py`;
-  per-document events are appended by classify (`classify.py:522-535`, `source.classified`)
-  and screen (`screen.py:444-448`); ephemeral ticks go through `core/liveness.py`
-  `publish_current_tick(stage=, note=)`, used today by `search_live.py` and `fetch_live.py`
-  with `stage="acquire"`. `ingest_full_text.py` emits no events and no ticks; the
+- **Progress plumbing.** Component started/completed/failed events come from
+  `runtime/harness.py`; per-document events from classify (`classify.py:522-535`) and screen
+  (`screen.py:444-448`); ephemeral ticks via `core/liveness.py` `publish_current_tick(stage=, note=)`
+  (used by `search_live.py`, `fetch_live.py`). `ingest_full_text.py` emits nothing; the
   per-document point is `_drain_ready_parse_jobs` 1066-1086.
-- **OpenAlex `ids`** is already in `OA_SELECT` (`search_live.py:94`) and retained
-  (`acquire.py:280`); the snapshot `content_hash` covers title plus abstract only
-  (`acquire.py:433-437`, `:699`), so no field change touches it. Local snapshots carry no
-  `pmcid`; whether fresh acquisitions do is the first check of the XML step.
-- **Tests that exist**: `tests/core/test_usage.py`, `test_model_routes.py`;
+- **OpenAlex `ids`** is requested (`search_live.py:94`) and retained (`acquire.py:280`); the
+  snapshot `content_hash` covers title plus abstract only (`acquire.py:433-437`, `:699`).
+  Local snapshots carry no `pmcid`; fresh acquisitions are checked in Phase 6.
+- **Existing tests**: `tests/core/test_usage.py`, `test_model_routes.py`;
   `tests/evidence_search/synthesis/test_synthesis_backend.py`, `test_section_prompt_templates.py`,
   `test_synthesis_prompts.py`, `test_synthesise_judgment.py`; `tests/evidence_search/assess/test_appraise.py`;
   `tests/evidence_search/sourcing/test_ingest_full_text.py` (`test_fanout_determinism_workers_1_vs_4`,
   `test_parse_timeout_terminates_worker_and_run_completes`, `test_release_body_called_for_parse_and_preparse_reject`);
   `tests/api/test_stage_vocabulary.py`, `test_sse.py`. No dedicated test for
-  `core/openai_client.py` or `grounding_judge.py`.
+  `core/openai_client.py` or `grounding_judge.py`. The extraction fingerprint embeds the
+  vetter effort constants (`extract.py:293`, `:335`).
+- **Locations the plan refers to**: the seed's scripts (`costbase.py`, probes) in
+  `docs/research-and-development/synthesis-refinement/experiments/`; the 046 tuning set and
+  folding replay scripts in `docs/tasks/046-longlist-refinement/` and the feasibility
+  folder named there; the 90 judge items in `experiments/summary-judge-tiering-items.json`;
+  the cache test driver `experiments/cache-breakpoint-test-driver.py`.
 
 ## Decisions taken in this plan
 
 | # | Topic | Decision |
 |---|---|---|
-| P1 | Step naming (D9) | A step name is the trace name with `:` replaced by `_` and no other change (`synthesise:section_turn` → `synthesise_section_turn`; `option_profile:fold` → `option_profile_fold`). Exceptions by contract: section turns and repair share `synthesise_section_turn`; the two screen-vote calls share `screen_abstract`; the three chat rows share `chat`. The inventory file is the source list; the plan's § Steps table is the committed form. |
-| P2 | Effort plumbing (D4) | `openai_kwargs(model, *, reasoning_effort, prompt_cache)` stays the one builder of provider kwargs. `parse_structured` and `traced_parse` gain `reasoning_effort: str \| None` and `prompt_cache` and pass them to it. `Route.effort_for(step)` returns the step's value from the route file: `"medium"` written explicitly for every step that sends nothing today, `"none"` for the Terra tool sites, `"high"` for the four constants' steps, `"medium"` for classify after P5 only. The first commit's test asserts that the request each site builds is byte-identical to today's except that an explicit `"medium"` replaces an omitted field, and documents that the provider default is medium (OpenAI reasoning guide). |
-| P3 | Caching plumbing (D3) | `prompt_cache` is `"auto"` (today's behaviour), `"off"` (explicit mode, no breakpoints) or `"breakpoint"` (the builder marks the end of the stable prefix as a text content part). The per-site value is a constant beside each call site, not in the route file: caching mode is a property of the call's shape, not of the model. A test enumerates every site and its mode against a committed table. |
-| P4 | Section prompt module (D11) | `evidence_search/synthesis/section_prompt.py` receives, unchanged, every model-facing constant from `synthesis_backend.py:377-1122` plus the message builders that only assemble text (`_section_system_prompt`, `_section_run_payload`, `_section_task_payload`, `build_sections_messages`, `build_section_messages`, `build_section_repair_messages`, `build_case_studies_messages`). `synthesis_backend.py` imports them. The byte-identity pin test keeps passing unchanged. `ranking.py`, `theme_grouping.py`, `group_clustering.py` and `finding_vetter.py` join `EXTRA_FILES`. |
-| P5 | Shared request builder (D10) | One function in `section_prompt.py` builds the common prefix (tools, system, run message with breakpoint, task message) for both the section turn and the repair; the repair appends its instruction message; `tool_choice` and `parallel_tool_calls=True` are set by the caller. A test serialises both requests and asserts the prefix bytes are identical. The forced final turn uses `allowed_tools` with only `emit_section` and rejects a response with more than one tool call. |
-| P6 | Unrated storage (D7) | Migration `<rev>_unrated_appraisal.py`: `quality_score` becomes nullable; `ck_sar_quality_score` becomes `quality_score IS NULL OR quality_score BETWEEN 1 AND 5`; new column `unrated BOOLEAN NOT NULL DEFAULT false`; new check `ck_sar_unrated_consistent`: `(unrated AND quality_score IS NULL) OR (NOT unrated AND quality_score IS NOT NULL)`. Downgrade deletes unrated rows and restores the old check. `SCORE_LABELS` is unchanged; a separate `UNRATED_LABEL = "Unrated"` is used where a row has `unrated`. Readers that take `SCORE_LABELS.get(score)` keep returning None for these rows unless the contract names them (writer tool results, provenance sheet, sources list, the strength filter and sort, coverage counts). `select.py` and `steering_triggers.py` are untouched (null score, as today). |
-| P7 | Fixed-question runs | A committed script `scripts/fixed_questions.py` creates the four tasks fresh and starts them with the standard plan; `scripts/cost_per_run.py <session>` reports cost by stage and by call name. Both run only by the lead; results go into `verification.md` with session ids. |
-| P8 | Measurement unit per phase (D1) | P1 and the end: whole-run cost on the fixed questions. P2 to P5: tokens and cost per call name for the touched sites, from `cost_per_run.py`, plus cache read and write shares for P2 and reasoning tokens for P5. |
-| P9 | Sequencing | Phases run in order; no parallel phases, because test lanes share one Postgres. Within P1 the model-only switch is committed and measured before the prompt loop starts (finding 21). |
-| P10 | Gates | Full `make verify`: P0 open (baseline), end of P1 (every call site touched), end of P3 (schema), end of P6 (step-6 exit). `make verify-fast` + `make prompt-guard` at the end of P0, P2, P4, P5. `make audit` only if `defusedxml` is added (P6). `make drift-check` after any API change (P3, P6). |
+| P1 | Step naming (D9) | The step name is the trace name with `:` replaced by `_` and nothing else. Exceptions by contract: the section turn and the repair share `synthesise_section_turn`; the three chat rows share `chat`. Screen stage 1 and stage 2 are two steps (`screen_abstract`, `screen_full`), since they are two prompts. The V2 search rows give one step per call with the placeholder removed; the Claude search backend gets no step. The § Steps table is the committed form; the fast-worker sweep follows it exactly. |
+| P2 | Effort plumbing (D4) | `openai_kwargs(model, *, reasoning_effort, prompt_cache)` is the one builder of provider kwargs. `parse_structured` and `traced_parse` gain `reasoning_effort` and `prompt_cache` and pass them through; the three direct `.parse` sites and the two direct `.create` sites call `openai_kwargs`. `Route.effort_for(step)` returns the step's value: explicit `medium` for every step that sends nothing today, `none` for the Terra tool sites, `high` for the four constants' steps. The model-keyed knob table is deleted. The first commit's test pins the resolved (model, effort) per step on all three routes to today's values, with one forwarding test per request path and the extraction fingerprint value pinned before the constants move. |
+| P3 | Caching plumbing (D3) | `prompt_cache` is `auto`, `off` or `breakpoint`. The per-site mode lives in one committed table module, `evidence_search/synthesis/cache_modes.py` (keyed by call name, default `auto`), read by the builders; the enumerating test reads the same table. No pinned module is edited for a caching mode. |
+| P4 | Section prompt module (D11) | `evidence_search/synthesis/section_prompt.py` receives, unchanged, every model-facing constant from `synthesis_backend.py:377-1122` and the text-only builders (`_section_system_prompt`, `_section_run_payload`, `_section_task_payload`, `build_sections_messages`, `build_section_messages`, `build_section_repair_messages`, `build_case_studies_messages`). The byte-identity pin keeps passing unchanged. `finding_vetter.py`, `ranking.py`, `theme_grouping.py`, `group_clustering.py` join `EXTRA_FILES` (owner, 2026-11-01). |
+| P5 | Shared request builder (D10) | One function in `section_prompt.py` builds the common prefix (five tools, system, run message with breakpoint, task message) for section turns and the repair; the repair appends its instruction message. `parallel_tool_calls=True` on every turn. Normal turns use `tool_choice = allowed_tools` with the four section tools (tested T6). The forced final turn keeps the named-function force on `emit_section` that T5 tested; a second tool call on the forced turn or the repair takes the first `emit_section` / `emit_repairs`, logs and counts it (test). |
+| P6 | Unrated storage (D7) | Migration `<rev>_unrated_appraisal.py`: `ALTER quality_score DROP NOT NULL`; new column `unrated BOOLEAN NOT NULL DEFAULT false` (server default in migration and `schema.py`); new check `ck_sar_unrated_consistent`: `(unrated AND quality_score IS NULL) OR (NOT unrated AND quality_score IS NOT NULL)`. `ck_sar_quality_score` and `ix_sar_scope_score` unchanged (a CHECK passes on NULL). Downgrade: delete unrated rows (documented as lossy), drop the check and column, restore NOT NULL. `UNRATED_LABEL = "Unrated"` beside `SCORE_LABELS`. `steering_triggers.py` filters `quality_score IS NOT NULL`; `select.py` unchanged (None → missing). |
+| P7 | Fixed-question runs | `scripts/fixed_questions.py` creates the four tasks fresh and starts them at standard depth; `scripts/cost_per_run.py <session>` reports cost by stage and by call name. Both run only by the lead; results with session ids go into `verification.md`. |
+| P8 | Measurement unit (D1) | Phase 0 (baseline), Phase 1 and the end: whole-run cost on the fixed questions. Phases 2 to 5: tokens and cost per call name for the touched sites from `cost_per_run.py`; cache read and write shares for Phase 2; reasoning tokens for Phase 5. Standard depth has no extract stage, so the vetters, the relevance annotator and the extract steps are measured on replays only. |
+| P9 | Sequencing | Phases in order; no parallel phases (one shared test Postgres). Within Phase 1 the model-only switch is committed and measured before the prompt loop. |
+| P10 | Gates | Full `make verify` (which includes `prompt-guard` and `drift-check`): end of Phase 0 (baseline and the tidy-ups), end of Phase 1, end of Phase 3 (schema), end of Phase 6 (step-6 exit). `make verify-fast` + `make prompt-guard` at the end of Phases 2, 4, 5. `make audit` only if `defusedxml` is added. |
 
 ## Steps table (D9)
 
-Committed `[steps]` after P1. Default tier in brackets; `*` marks a step exception on both
-routes.
+Fifty-six steps, one per call site after the contract's merges. Today's model is the
+tier's model on every route (no step exceptions exist today); `bedrock-claude` follows
+`bedrock`. "medium (default, was not sent)" marks steps whose effort the first commit writes
+explicitly as `medium`. After the switch the thirteen `frontier` steps carry the exception
+`standard`; no other exceptions.
 
-- fast: `screen_abstract` (two vote calls), `screen_full`, `classify`, `search_queries`,
-  `search_reformulate`, `search_suggest`, `extract_iof`, `extract_icf`, `finding_vetter_iof`,
-  `finding_vetter_icf`, `relevance`, `rerank`, `theme_discovery`, `theme_assignment`,
-  `group_clustering_discover`, `group_clustering_assign`, `grounding_judge`, `mrs_note`,
-  `full_report_intro`, `agent_triage` (three rows: one step each, named from the inventory),
-  `extract_interventions`, `longlist_assign`, `longlist_assign_themes`
-- standard: `synthesise_section_turn` (section turns and repair), `synthesise_propose_sections`,
-  `synthesise_write_block_summary`, `synthesise_write_artefact_summary`, `synthesise_judge_summary`,
-  `synthesise_write_key_findings`, `case_studies`, `chat`, `task_agent`, `agent` (four rows:
-  one step each), `task_agent_scoping`*, `longlist_discover`*, `longlist_themes`*,
-  `longlist_type`*, `longlist_constrain`*, `longlist_authority`*, `longlist_distinct`*,
-  `longlist_shortlist`*, `option_profile_potential_impact`*, `option_profile_ambition`*,
-  `option_profile_setting`*, `option_profile_fold`*, `option_profile_place_sentences`*
-- frontier: no step; tier defined as gpt-6.1-sol at `low`.
-
-`longlist_assign_themes` today runs on the judgment model although it is an assignment
-call; it keeps that model in the first commit (no behaviour change) and P5 decides.
+| step name | call site(s) (module:function, trace name) | today's route step | today's model: openai-direct / bedrock | today's tier | today's effort as sent | default tier after split | step exception after GPT-6 switch | request path | pinned module | system prompt tokens |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `classify_document` | classification_backend.py:OpenAIClassificationBackend._classify_once, classify:document | `classify` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | high | fast | none | parse_structured + openai_kwargs | Y | 1229 |
+| `screen_abstract` | screening_backend.py:OpenAIScreeningBackend.screen_envelope, screen:abstract | `screen` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | Y | 995 |
+| `screen_full` | screening_backend.py:OpenAIScreeningBackend.screen_fulltext, screen:full | `screen` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | Y | 440 |
+| `select_rerank` | ranking.py:OpenAIRankingBackend._rank_once, select:rerank | `rerank` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | N | 395 |
+| `characterise_discover` | theme_grouping.py:OpenAIThemeGroupingBackend.discover, characterise:discover | `theme_discovery` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | N | 286 (+ optional guidance paragraph 490 chars) |
+| `characterise_assign` | theme_grouping.py:OpenAIThemeGroupingBackend.assign, characterise:assign | `theme_assignment` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | N | 210 |
+| `group_discover` | group_clustering.py:backend._call/_parse stage discover, group:discover | `group_clustering` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | N | 384 |
+| `group_assign` | group_clustering.py:backend._call/_parse stage assign, group:assign | `group_clustering` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | N | 184 |
+| `extract_iof_findings` | extraction_backend.py:OpenAIExtractionBackend._extract_once, extract:iof_findings | `extract` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | Y | 4020 |
+| `extract_icf_findings` | extraction_backend.py:OpenAIICFExtractionBackend._extract_once, extract:icf_findings | `icf_extract` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | Y | 3711 |
+| `extract_interventions` | extraction_backend.py:OpenAIInterventionsBackend.extract, extract:interventions | `extract_interventions` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | Y | 6568 |
+| `extract_vet_iof_findings` | finding_vetter.py:OpenAIFindingVetterBackend.judge, extract:vet_iof_findings | `finding_vetter` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | high | fast | none | parse_structured + openai_kwargs | N | 529 |
+| `extract_vet_icf_findings` | finding_vetter.py:OpenAIICFFindingVetterBackend.judge, extract:vet_icf_findings | `icf_finding_vetter` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | high | fast | none | parse_structured + openai_kwargs | N | 700 |
+| `extract_annotate_relevance` | relevance_annotator.py:OpenAIRelevanceAnnotatorBackend.annotate, extract:annotate_relevance | `relevance` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | high | fast | none | parse_structured + openai_kwargs | Y | 334 |
+| `search_generate_queries` | search_generation.py:OpenAISearchGenerationBackend.generate_queries, search:generate_queries | `search_queries` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | Y | 484 |
+| `search_reformulate` | search_generation.py:OpenAISearchGenerationBackend.reformulate, search:reformulate | `search_reformulate` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | Y | 517 |
+| `search_suggest` | search_generation.py:OpenAISearchGenerationBackend.suggest, search:suggest | `search_suggest` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | Y | 344 |
+| `search_queries_v2_openalex` | search_generation.py:V2SearchGenerationBackend.generate_queries (OpenAlex call), search_queries_v2_openalex:{n} | `search_queries` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | Y | 353 |
+| `search_queries_v2_overton` | search_generation.py:V2SearchGenerationBackend.generate_queries (Overton call), search_queries_v2_overton:{n} | `search_queries` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | Y | 425 |
+| `search_reformulate_v2_openalex` | search_generation.py:V2SearchGenerationBackend.reformulate (OpenAlex call), search_reformulate_v2_openalex:r{round}:{n} | `search_reformulate` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | Y | 353 |
+| `search_reformulate_v2_overton` | search_generation.py:V2SearchGenerationBackend.reformulate (Overton call), search_reformulate_v2_overton:r{round}:{n} | `search_reformulate` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | parse_structured | Y | 425 |
+| `synthesise_propose_sections` | synthesis_backend.py:OpenAISynthesisBackend.propose_sections, synthesise:propose_sections | `synthesis` | `gpt-5.6-terra` / `global.openai.gpt-5.6-terra` | standard | none | standard | none | direct parse + openai_kwargs | N | 949 (+ optional budget clause) |
+| `synthesise_write_block_summary` | synthesis_backend.py:write_block_summary, synthesise:write_block_summary | `synthesis` | `gpt-5.6-terra` / `global.openai.gpt-5.6-terra` | standard | none | standard | none | direct parse + openai_kwargs | Y | 551 |
+| `synthesise_write_artefact_summary` | synthesis_backend.py:write_artefact_summary, synthesise:write_artefact_summary | `synthesis` | `gpt-5.6-terra` / `global.openai.gpt-5.6-terra` | standard | none | standard | none | direct parse + openai_kwargs | Y | 624 |
+| `synthesise_judge_summary` | synthesis_backend.py:judge_summary, synthesise:judge_summary | `synthesis` | `gpt-5.6-terra` / `global.openai.gpt-5.6-terra` | standard | none | standard | none | direct parse + openai_kwargs | Y | 353 |
+| `synthesise_section_turn` | SHARED by two call sites: synthesis_backend.py:section_turn (_create_section_turn_once, looped by run_tool_loop), synthesise:section_turn; and synthesis_backend.py:repair_section (_repair_once), synthesise:repair_claims | `synthesis` | `gpt-5.6-terra` / `global.openai.gpt-5.6-terra` | standard | none | standard | none | tool loop (direct create + openai_kwargs) for the section turn; direct create + openai_kwargs for the repair call | N (live v7 prompt; v6 variant file is Y) | 2909 (both calls; >1k) |
+| `synthesise_write_key_findings` | synthesis_backend.py:write_key_findings, synthesise:write_key_findings | `synthesis` | `gpt-5.6-terra` / `global.openai.gpt-5.6-terra` | standard | none | standard | none | direct create + openai_kwargs | N | 907 |
+| `synthesise_write_case_studies` | synthesis_backend.py:write_case_studies, synthesise:write_case_studies | `case_studies` | `gpt-5.6-terra` / `global.openai.gpt-5.6-terra` | standard | none | standard | none | direct parse + openai_kwargs | N | 693 |
+| `synthesise_write_source_note` | synthesis_backend.py:write_source_note, synthesise:write_source_note | `mrs_note` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | direct parse (model only) | N | 74 |
+| `synthesise_write_intro` | synthesis_backend.py:write_full_report_intro, synthesise:write_intro | `full_report_intro` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | direct parse (model only) | N | 253 |
+| `judge_grounding` | grounding_judge.py:OpenAIGroundingJudgeBackend.judge_block, judge:grounding | `grounding_judge` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | direct parse (model only) | Y (EXTRA_FILES) | 1151 |
+| `chat` | SHARED by three call sites: chat_backend_openai.py:OpenAIChatBackend._tool_turn; _stream_then_parse step 1 (prose stream); _stream_then_parse step 2 (structured parse); all chat:call | `chat` | `gpt-5.6-terra` / `global.openai.gpt-5.6-terra` | standard | none | standard | none | tool loop (direct create + openai_kwargs); direct create stream + openai_kwargs; direct parse + openai_kwargs | Y | 838 |
+| `agent_route` | agent_backend.py:OpenAIAgentBackend.route, agent:route | `agent` | `gpt-5.6-terra` / `global.openai.gpt-5.6-terra` | standard | medium (default, was not sent) | standard | none | traced_parse | Y | 1225 |
+| `agent_triage` | agent_backend.py:OpenAIAgentBackend.triage, agent:triage | `agent_triage` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | traced_parse | Y | 393 |
+| `agent_decide` | agent_backend.py:OpenAIAgentBackend.decide, agent:decide | `agent` | `gpt-5.6-terra` / `global.openai.gpt-5.6-terra` | standard | medium (default, was not sent) | standard | none | traced_parse | Y | 790 (authoring framing 756) |
+| `agent_gate_sort` | agent_backend.py:OpenAIAgentBackend.sort_gate_turn, agent:gate_sort | `agent_triage` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | traced_parse | Y | 596 |
+| `agent_longlist_sort` | agent_backend.py:OpenAIAgentBackend.sort_longlist_turn, agent:longlist_sort | `agent_triage` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | traced_parse | Y | 752 |
+| `agent_option_design` | agent_backend.py:OpenAIAgentBackend.propose_option_design, agent:option_design | `agent` | `gpt-5.6-terra` / `global.openai.gpt-5.6-terra` | standard | medium (default, was not sent) | standard | none | traced_parse | Y | 598 |
+| `agent_suggest` | agent_backend.py:OpenAIAgentBackend.suggest_options, agent:suggest | `agent` | `gpt-5.6-terra` / `global.openai.gpt-5.6-terra` | standard | medium (default, was not sent) | standard | none | traced_parse | Y | 1214 |
+| `task_agent_turn` | task_agent.py:TaskAgent turn call (EVIDENCE_SEARCH_TASK_AGENT), task_agent:turn | `task_agent` | `gpt-5.6-terra` / `global.openai.gpt-5.6-terra` | standard | medium (default, was not sent) | standard | none | traced_parse | Y | 5565 |
+| `task_agent_scoping_turn` | task_agent_scoping.py:same call (OPTIONS_SCOPING_TASK_AGENT), task_agent_scoping:turn | `task_agent_scoping` | `gpt-5.6-sol` / `global.openai.gpt-5.6-sol` | frontier | medium (default, was not sent) | frontier | standard | traced_parse | Y | 5580 |
+| `longlist_discover` | longlist_backend.py:OpenAILonglistBackend.discover, longlist:discover | `longlist_judgment` | `gpt-5.6-sol` / `global.openai.gpt-5.6-sol` | frontier | medium (default, was not sent) | frontier | standard | traced_parse | Y | 1157 |
+| `longlist_assign` | longlist_backend.py:OpenAILonglistBackend.assign, longlist:assign | `longlist_assignment` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | traced_parse | Y | 847 |
+| `longlist_themes` | longlist_backend.py:OpenAILonglistBackend.discover_themes, longlist:themes | `longlist_judgment` | `gpt-5.6-sol` / `global.openai.gpt-5.6-sol` | frontier | medium (default, was not sent) | frontier | standard | traced_parse | Y | 311 |
+| `longlist_assign_themes` | longlist_backend.py:OpenAILonglistBackend.assign_themes, longlist:assign_themes | `longlist_judgment` | `gpt-5.6-sol` / `global.openai.gpt-5.6-sol` | frontier | medium (default, was not sent) | frontier | standard | traced_parse | Y | 94 |
+| `longlist_type` | longlist_backend.py:OpenAILonglistBackend.type_options, longlist:type | `longlist_judgment` | `gpt-5.6-sol` / `global.openai.gpt-5.6-sol` | frontier | medium (default, was not sent) | frontier | standard | traced_parse | Y | 721 |
+| `longlist_constrain` | longlist_backend.py:OpenAILonglistBackend.constrain, longlist:constrain | `longlist_judgment` | `gpt-5.6-sol` / `global.openai.gpt-5.6-sol` | frontier | medium (default, was not sent) | frontier | standard | traced_parse | Y | 1202 |
+| `longlist_distinct` | longlist_backend.py:OpenAILonglistBackend.distinct, longlist:distinct | `longlist_judgment` | `gpt-5.6-sol` / `global.openai.gpt-5.6-sol` | frontier | medium (default, was not sent) | frontier | standard | traced_parse | Y | 399 |
+| `longlist_authority` | longlist_backend.py:OpenAILonglistBackend.authority, longlist:authority | `longlist_judgment` | `gpt-5.6-sol` / `global.openai.gpt-5.6-sol` | frontier | medium (default, was not sent) | frontier | standard | traced_parse | Y | 742 |
+| `longlist_shortlist` | longlist_backend.py:OpenAILonglistBackend.propose_shortlist, longlist:shortlist | `longlist_judgment` | `gpt-5.6-sol` / `global.openai.gpt-5.6-sol` | frontier | medium (default, was not sent) | frontier | standard | traced_parse | Y | 1112 |
+| `option_profile_line` | longlist_backend.py:OpenAILonglistBackend.profile_line, option_profile:line | `longlist_judgment` | `gpt-5.6-sol` / `global.openai.gpt-5.6-sol` | frontier | medium (default, was not sent) | frontier | standard | traced_parse | Y | 651 (marked) / 390 (plain) |
+| `option_profile_potential_impact` | longlist_backend.py:OpenAILonglistBackend.profile_potential_impact, option_profile:potential_impact | `longlist_judgment` | `gpt-5.6-sol` / `global.openai.gpt-5.6-sol` | frontier | medium (default, was not sent) | frontier | standard | traced_parse | Y | 1106 |
+| `option_profile_ambition` | longlist_backend.py:OpenAILonglistBackend.profile_ambition, option_profile:ambition | `longlist_judgment` | `gpt-5.6-sol` / `global.openai.gpt-5.6-sol` | frontier | medium (default, was not sent) | frontier | standard | traced_parse | Y | 649 |
+| `option_profile_setting` | longlist_backend.py:OpenAILonglistBackend.profile_setting, option_profile:setting | `longlist_judgment` | `gpt-5.6-sol` / `global.openai.gpt-5.6-sol` | frontier | medium (default, was not sent) | frontier | standard | traced_parse | Y | 554 |
+| `option_profile_fold` | longlist_backend.py:OpenAILonglistBackend.fold, option_profile:fold | `longlist_assignment` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | traced_parse | Y | 1106 (measures) / 987 (tried_on) |
+| `option_profile_place_sentences` | longlist_backend.py:OpenAILonglistBackend.place_sentences, option_profile:place_sentences | `longlist_assignment` | `gpt-5.6-luna` / `global.openai.gpt-5.6-luna` | fast | medium (default, was not sent) | fast | none | traced_parse | Y | 1459 |
 
 ## Gates
 
 | # | When | Class |
 |---|---|---|
-| 1 | P0 open | build-open baseline, full `make verify` |
-| 2 | End of P1 | every call site touched: full `make verify` |
-| 3 | End of P3 | schema: full `make verify` + `make drift-check` |
-| 4 | End of P6 | step-6 exit: full `make verify` + `make drift-check` (+ `make audit` if a dependency was added) |
+| 1 | Phase 0 open | build-open baseline, full `make verify` |
+| 2 | End of Phase 0 | tidy-ups renamed API and ingest modules: full `make verify` |
+| 3 | End of Phase 1 | every call site touched: full `make verify` |
+| 4 | End of Phase 3 | schema and API vocabulary: full `make verify` |
+| 5 | End of Phase 6 | step-6 exit: full `make verify` (+ `make audit` if a dependency was added) |
 
-P0, P2, P4, P5 gate on `make verify-fast` + `make prompt-guard`.
+Phases 2, 4, 5 gate on `make verify-fast` + `make prompt-guard`.
+
+## Owner items recorded at this gate (2026-11-01)
+
+X5 dropped. Pins for `ranking.py`, `theme_grouping.py`, `group_clustering.py` approved.
+Typed `fetched`, `parsed`, `total` fields on the tick frame (S5). `UNRATED_LABEL` beside
+`SCORE_LABELS` (S3 wording). The N8 batch hand-over fix in scope. Europe PMC egress approved
+(host `www.ebi.ac.uk`; data sent: a PubMed Central id only). `components.md` § 9 repair
+wording accepted as spec item S9.
 
 ## Phases
 
-Each phase ends in a commit on `task/056-cost-latency`. Every `lead` mark carries its
-reason.
+Each phase ends in a commit on `task/056-cost-latency`. Every `lead` mark carries its reason.
 
-### Phase 0 — Instrument and tidy (N1, D11, D2a, tidy-ups)
+### Phase 0 — Instrument, baseline, tidy (N1, D11, D2a, tidy-ups)
 
 0. `make verify` on the branch as it stands; record counts and time. — **lead inline**.
-1. `core/usage.py`: `TokenUsage` gains `cache_write` and `reasoning`; `token_usage_from_provider`
-   reads `prompt_tokens_details.cache_write_tokens` and `completion_tokens_details.reasoning_tokens`;
-   `usage_details` emits `input_cache_write_tokens` and `output_reasoning_tokens` as
-   exclusive buckets (input and output net of them); `UsageAccumulator` and the stored
-   payload gain the two fields. Tests in `tests/core/test_usage.py` for the netting and for
-   the `None` cases. — **deep-reasoner** (the netting rule is the judgment; the file is
-   small).
-2. `core/tracing.py`: forward the new buckets in every `usage_details=` call. — **fast-worker**.
-3. `scripts/cost_per_run.py`: port of the seed's `costbase.py` (session → cost by stage and
-   by call name at list prices, prices in one table at the top with their date), plus
-   `scripts/fixed_questions.py` (creates the four fixed tasks). Tests: price table parses;
-   the script reproduces the contract's baseline table from a saved Langfuse fixture of one
-   session. — **fast-worker** (port of an existing script against a saved fixture).
-4. `synthesis/section_prompt.py` (P4): move the constants and text-only builders; update
-   imports; `EXTRA_FILES` gains `section_prompt.py` (by name it is picked up anyway),
-   `finding_vetter.py`, `ranking.py`, `theme_grouping.py`, `group_clustering.py`; delete
-   `synthesis_prompts_v6.py`, the `prompt_variant` switch, its test and its hash entry;
-   re-pin. The byte-identity test must pass unchanged. — **deep-reasoner** (a move with
-   import surgery across a 3,100-line module; done is `make verify` plus the unchanged
-   byte-identity test).
-5. Tidy-ups from the contract § Tidy-ups: moves, renames, deletions, docstrings. — **fast-worker**
-   (exact list; `make verify` is the check).
-6. D2a: Bedrock London quota check for the three GPT-6 ids via the console or `aws
-   service-quotas` with the owner's profile; record in `verification.md`. — **lead inline**
-   (needs the owner's login).
-7. One live generation on the `bedrock` route checked in Langfuse for the new buckets and a
-   non-zero write price. — **lead inline**.
+1. Capture the no-behaviour-change fixture on this tree: for every call site, the provider
+   kwargs it builds (model, effort, tools shape) via the existing fake clients, plus the
+   extraction fingerprint value; commit as `tests/core/data/call_site_kwargs_056.json`.
+   — **deep-reasoner** (one concern; done is the committed fixture plus a test that reads it).
+2. `core/usage.py`: `TokenUsage` gains `cache_write` and `reasoning`;
+   `token_usage_from_provider` reads `prompt_tokens_details.cache_write_tokens` and
+   `completion_tokens_details.reasoning_tokens`; `usage_details` keeps the OpenAI shape and
+   adds `cache_write_tokens` under `prompt_tokens_details` and `reasoning_tokens` under
+   `completion_tokens_details` (Langfuse maps and nets them itself); `UsageAccumulator` and
+   the stored payload gain `cache_write` and `reasoning`. Tests for netting and `None`.
+   — **deep-reasoner**.
+3. `core/tracing.py`: forward the new fields on the embed span's `usage_details`
+   (the chat helper already forwards). — **fast-worker**.
+4. `scripts/cost_per_run.py` from the lead's spec: group by observation name and model;
+   price table with date at the top; cost = input × in + cached × cached + cache_write ×
+   1.25 in + output × out + reasoning × out; both the old (pre-N1) and new usage shapes;
+   output by stage and by call name; `scripts/fixed_questions.py` creates the four tasks.
+   Done: reproduces the contract's § Goal table on the listed sessions from a saved Langfuse
+   fixture of two sessions (one old shape, one new). — **deep-reasoner** (new work with a
+   bucket rule; the lead writes the spec).
+5. `synthesis/section_prompt.py` (P4): move the constants and text-only builders; update
+   imports; `EXTRA_FILES` gains the four modules; delete `synthesis_prompts_v6.py`, the
+   `prompt_variant` switch, its test and its hash entry; re-pin. The byte-identity test
+   passes unchanged. — **deep-reasoner**.
+6. Tidy-ups from the contract § Tidy-ups (moves, renames, deletions, two docstrings).
+   — **fast-worker**.
+7. D2a: Bedrock London quotas for the three GPT-6 ids with the owner's profile; recorded.
+   — **lead inline** (owner login).
+8. Live probes, saved to `verification.md`: (a) one generation on each route checked in
+   Langfuse for the new buckets and non-zero cache-write and reasoning prices; (b) effort
+   default: five calls each with effort omitted and with explicit `medium` on gpt-5.6-luna
+   and gpt-5.6-terra, both routes, comparing reasoning tokens; (c) every effort value and
+   request shape the new route file will send on gpt-6-luna and gpt-6.1-terra (`medium`
+   and `high` with structured output; `none` with tools). — **builder** runs, **lead** reads.
+9. Baseline: the four fixed questions on `bedrock` and NEET on `openai-direct`;
+   `cost_per_run.py` on each; the owner's read of the reports (the "before").
+   — **lead** (live evidence).
 
-**Done when:** `make verify-fast`, `make prompt-guard` green; the cost script reproduces the
-baseline table; the live generation shows the buckets.
-**Gate:** `make verify-fast` + `make prompt-guard` (gate 1 already ran at step 0).
+**Gate:** full `make verify` (gate 2).
 
-### Phase 1 — Switch, steps, effort, prompt loop (N2, N6, D2, D4, D9, O3, X1, X2, X4)
+### Phase 1 — Steps, effort plumbing, switch, prompt loop (N2, N6, D2, D4, D9, O3, X1, X2, X4)
 
-1. `core/model_routes.py`: the `[routes.<name>.steps]` exception may be a table with `model`
-   and `reasoning_effort`; `Route.effort_for(step)`; fail-loud on unknown keys; the loader
-   requires every step in `[steps]` to have an effort on each route (explicit `medium` where
-   nothing was sent). Loader tests on fixture files. — **lead** (seam design; the fixture
-   design is the judgment).
-2. `model_routes.toml`: the § Steps table, both routes, today's models and efforts
-   (gpt-5.6 ids at this step; the switch is step 5), every step exception written out.
-   — **lead** (the design surface a cold reader judges by).
-3. Replace the 27 step lookups with 58 per-site lookups per the inventory; `traced_parse`
-   and `parse_structured` gain `reasoning_effort` and `prompt_cache` and pass them to
-   `openai_kwargs`; every site passes `route().effort_for(<step>)`; delete the four effort
-   constants; `_synthesis_openai_kwargs()` becomes per-step. — **fast-worker** for the
-   lookups (exact table), **deep-reasoner** for the two plumbing functions and the
-   `openai_kwargs` signature (one concern, pinned by step 4).
-4. The no-behaviour-change test: for every site, build the request kwargs before and after
-   (a fixture captures today's) and assert identity except an omitted effort becoming
-   `"medium"`; the resolved model per step on both routes equals today's. Re-pin the prompt
-   modules whose lookup lines changed (code-only diffs recorded). — **lead** (the test is
-   the slice's safety net).
-5. **Commit A (no behaviour change).** `make verify-fast` + `make prompt-guard`.
-6. The switch: tiers to gpt-6-luna / gpt-6.1-terra / gpt-6.1-sol on both routes, knobs
-   `none`/`none`/`low`, the two scoping steps as `standard` exceptions; the pin test's
-   expected models updated to the new set. **Commit B.** — **lead inline** (three lines per
-   route, exactly as approved).
-7. Fixed questions on `bedrock` (four tasks) and the NEET question on `openai-direct`;
-   `cost_per_run.py` on each; the owner reads the reports. — **lead** (live evidence).
-8. X1: grounding judge replay on gpt-6-luna over the judge items from the funnel measurement
-   (`experiments/citation-funnel-measurement.md` data), flipped verdicts hand-read by the
-   lead. — **builder** runs it, **lead** reads.
-9. X4: replay the 046 tuning set for `extract_interventions` and the five option-profile
-   calls on their new models; report agreement against the stored outputs. — **builder**.
-10. O3 loop: the judge prompt and the two summariser prompts in `summary_prompts.py`, with
-    the five open rules written in (gap status wording, qualifier dropping, "leads with",
-    annotation labels, "be strict" vs "would mislead") and the judge's reason fed to the
-    retry (`_write_and_judge_summary` in `synthesise.py`); version bumps; replay on the 90
-    items (`experiments/summary-judge-tiering-items.json`) and the 20 adjudicated items with
-    the driver from that experiment; zero corrupted pass; re-pin. — **lead** (prompt-bearing;
-    the owner's standing rule), **builder** runs the replays.
-11. Fixed questions again; cost; owner's read. **Commit C.** — **lead**.
+1. `core/model_routes.py`: the step-exception table form with `model` and
+   `reasoning_effort`; `Route.effort_for(step)`; every step must resolve an effort on every
+   route; fail-loud on unknown keys; the model-keyed knob table removed from the loader.
+   Loader tests on fixture files. — **lead** (seam and fixture design).
+2. `model_routes.toml`: the § Steps table as `[steps]` with default tiers, today's models on
+   all three routes, every step's effort written out (`medium` where nothing was sent).
+   — **lead** (design surface).
+3. The 58 per-site lookups per the § Steps table; `traced_parse` and `parse_structured` gain
+   `reasoning_effort` and `prompt_cache`; the three direct `.parse` and two direct `.create`
+   sites route through `openai_kwargs`; every site passes `route().effort_for(<step>)`;
+   delete the four effort constants (the fingerprint keeps its pinned value);
+   `_synthesis_openai_kwargs()` becomes per-step. — **fast-worker** for the lookups (exact
+   table), **deep-reasoner** for the plumbing functions.
+4. The no-behaviour-change test against the Phase 0 fixture: identical kwargs except an
+   omitted effort becoming `medium`; resolved (model, effort) per step on three routes; one
+   forwarding test per request path; code-only re-pins of the pinned modules whose lookup
+   lines changed, diffs recorded. — **lead** (the safety net).
+5. **Commit A.** `make verify-fast` + `make prompt-guard`.
+6. The switch: tiers to gpt-6-luna / gpt-6.1-terra / gpt-6.1-sol on all three routes; the
+   thirteen `frontier` steps as `standard` exceptions; the pin test's expected models
+   updated. **Commit B.** — **lead inline** (exactly as approved).
+7. Fixed questions on `bedrock` and NEET on `openai-direct`; cost; the owner's read
+   (model-only). — **lead**.
+8. X1: grounding judge replay on gpt-6-luna over the judge items from
+   `experiments/citation-funnel-measurement.md`; flipped verdicts hand-read by the lead.
+   — **builder** runs, **lead** reads; prompt refinement only if the read asks (lead).
+9. X4: `extract_interventions` on gpt-6-luna and the fold calls on gpt-6.1-terra replayed
+   on the 046 tuning set; agreement with stored outputs. — **builder**.
+10. O3 loop (lead, prompt-bearing): the judge prompt and the two summariser prompts in
+    `summary_prompts.py` with the five open rules written in; the judge's reason fed to the
+    retry (`_write_and_judge_summary`); version bumps; replay on the 90 items and the 20
+    adjudicated with the driver from `experiments/summary-judge-tiering-scripts/`; zero
+    corrupted pass; re-pin. — **lead**, **builder** runs the replays.
+11. Fixed questions again; cost; the owner's read. **Commit C.** — **lead**.
 
-**Done when:** both reads recorded; the pin test green with the new model set; the O3 loop's
-measures met.
-**Gate:** full `make verify` (gate 2) + `make prompt-guard`.
+**Gate:** full `make verify` (gate 3).
 
 ### Phase 2 — Caching (N3, D3, D8, D10, X3)
 
-1. GPT-6 re-test: the 96-call breakpoint test (`experiments/cache-breakpoint-test-driver.py`)
-   on gpt-6.1-terra and gpt-6-luna, both routes; plus the opt-out probe; output saved. If
-   explicit breakpoints, implicit reads or the write charge do not behave as on GPT-5.6,
-   stop and report to the owner. — **builder**.
-2. Per-site measurement for the N3 sites: 10 calls each in `auto`, `off` and `breakpoint`
-   (where the stable prefix is over 1,024 tokens), on the new models; pick the cheaper of
-   read-at-5-to-10% vs no-write per site; table in `verification.md`. — **builder** runs,
-   **lead** picks.
-3. `openai_kwargs` `prompt_cache` modes (P3) and the per-site constants; the breakpoint
-   content-part rendering in `section_prompt.py`; the enumerating test. — **deep-reasoner**.
-4. D8 and D10 in `section_prompt.py` and `synthesis_backend.py`: shared prefix builder, five
-   tools everywhere, `allowed_tools` on section turns, forced-turn single-tool check,
-   `parallel_tool_calls=True` on every turn, repair appends and forces `emit_repairs`; the
-   byte-identical-prefix test; version bumps for the section-turn and repair surfaces;
-   re-pin. — **lead** designs the message shape and writes the two version bumps,
-   **deep-reasoner** implements against the prefix test.
-5. X3: `lookup` kinds offered per run equal what the run can serve (the
-   `characterisation_summary` kind only with a characterisation); tool description re-pin;
-   test. — **deep-reasoner**.
-6. Fixed questions on `bedrock` plus the NEET question on `openai-direct`; cache read and
-   write shares per call name before and after; the owner reads (S4 surfaces). — **lead**.
+1. GPT-6 re-test: `experiments/cache-breakpoint-test-driver.py` on gpt-6.1-terra and
+   gpt-6-luna, both routes, plus the opt-out probe; output saved. If breakpoints, implicit
+   reads or the write charge differ from GPT-5.6, stop and report. — **builder**.
+2. `cache_modes.py` table, the three modes in `openai_kwargs`, the breakpoint content-part
+   rendering in `section_prompt.py`, the enumerating test. — **deep-reasoner**.
+3. Per-site measurement driver: builds requests from the product's message builders with a
+   local kwargs override, 10 calls each in `auto`, `off` and (where the stable prefix is
+   over 1,024 tokens) `breakpoint`, on the new models; `off` applies to any call whose whole
+   prompt exceeds 1,024 tokens; the lead picks per site and fills `cache_modes.py`.
+   — **builder** runs, **lead** picks.
+4. D8 and D10 per P5 in `section_prompt.py` and `synthesis_backend.py`; the
+   byte-identical-prefix test; the two-call handling test; version bumps for the
+   section-turn and repair surfaces; re-pin. — **lead** designs and writes the bumps,
+   **deep-reasoner** implements.
+5. X3: the lead writes the `lookup` kinds offered per run and the description;
+   deep-reasoner the plumbing and test; wasted `characterisation_summary` calls counted from
+   the scoping fixed question's traces before and after. — **lead** + **deep-reasoner**.
+6. Fixed questions on `bedrock` and NEET on `openai-direct`; cache read and write shares per
+   call name; the owner's read (the section-turn and repair surfaces). — **lead**.
 
 **Gate:** `make verify-fast` + `make prompt-guard`.
 
 ### Phase 3 — Unrated (N4, D7, S1 to S3)
 
-1. Migration per P6 with its round-trip test (pattern: `test_migration_055_shortlist.py`),
-   schema in `core/schema.py`. — **deep-reasoner** (the pattern is exact; the checks are the
-   judgment; done is the round trip).
-2. `appraise.py`: the two types get a row with `quality_score NULL, unrated true`; counts
-   `appraised_unrated` replace `skipped_non_evidence` and `skipped_unknown`; the directive
-   parser unchanged; `DEFAULT_RUBRIC_VERSION` bumped; the domain test extended. — **deep-reasoner**.
-3. Citability: `synthesise.py` treats a document with an appraisal row (scored or unrated)
-   as appraised; `unappraised_doc_citation` stays for rows that do not exist;
-   `synthesis_tools.py` sets `appraisal_label = "Unrated"` for unrated rows; the coverage
-   counters carry an Unrated bucket; `appraisal_order` gains "Unrated" last. — **deep-reasoner**.
-4. Reader surfaces: `api/readmodels/repository.py` tier = "Unrated" for unrated rows; the
-   `strength` Literal and the sort gain "Unrated"; `make openapi-sync`; frontend
-   `STRENGTH_FILTER_OPTIONS`, `queries.ts`, the two "five bands" strings (become "six bands"
-   or name Unrated), `artefactPresentation.ts` card strength, mocks and tests. — **fast-worker**
-   for the mechanical copies, **lead** for the two copy strings (reader-facing words).
-5. Spec amendments S1 to S3 applied exactly as the owner accepted them, plus a line in the
-   spec bundle's `log.md`. — **lead** (owner-accepted spec text only).
-6. Fixed questions; `unappraised_doc_citation` count before and after; the owner reads.
+1. Migration per P6 with its round-trip test and the two-check admission test; `schema.py`.
+   — **deep-reasoner**.
+2. `appraise.py`: rows with null score and `unrated` for the two types; counts
+   `appraised_unrated`; `UNRATED_LABEL`; `DEFAULT_RUBRIC_VERSION` bumped; domain test
+   extended. `steering_triggers.py` null filter with a test that its output is unchanged
+   with unrated rows present; a `select.py` test for the same. — **deep-reasoner**.
+3. Citability and labels, every surface: `synthesise.py` treats a row as appraised;
+   `synthesis_tools.py` label "Unrated"; `appraisal_order` gains "Unrated" last; coverage
+   buckets; `api/readmodels/repository.py` tier and the `strength` Literal and sort;
+   `answer_core.py`, `chat_scope.py`, `steering_bundles.py`, `characterise.py` show
+   "Unrated" where they show a tier. — **deep-reasoner**.
+4. Frontend: `make openapi-sync`; `STRENGTH_FILTER_OPTIONS`, `queries.ts`,
+   `artefactPresentation.ts`, mocks and tests (fast-worker); the two "five bands" strings
+   (lead, reader-facing words). — **fast-worker** + **lead**.
+5. Spec amendments S1 to S3 and S9 exactly as the owner accepted, plus the spec bundle's
+   `log.md` line. — **lead**.
+6. Fixed questions; `unappraised_doc_citation` count before and after; the owner's read.
    — **lead**.
 
-**Gate:** full `make verify` (gate 3) + `make drift-check`.
+**Gate:** full `make verify` (gate 4).
 
 ### Phase 4 — Repair input guard (N5)
 
-1. `build_section_repair_messages`: dependency chunks over the oversized threshold are
-   rendered through the existing window helper (`synthesis_tools.py` `OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS`
-   and its rule) around the cited quote, or around the longest matching stretch when the
-   quote was not found; smaller chunks whole; test on a saved repair payload; repair-template
-   re-pin if its wording about windows changes. — **deep-reasoner**.
+1. `build_section_repair_messages`: dependency chunks over the oversized threshold rendered
+   through the existing window helper around the cited quote, or around the longest matching
+   stretch when the quote was not found; smaller chunks whole; no template wording change;
+   test on a saved repair payload. — **deep-reasoner**.
 2. Repair input tokens per call before and after on the fixed questions; repair pass rate.
    — **lead**.
 
 **Gate:** `make verify-fast` + `make prompt-guard`.
 
-### Phase 5 — Effort per step and the judge overlap (N7, X5)
+### Phase 5 — Effort per step (N7)
 
-1. Classify to `medium` on both routes (measured in `experiments/classify-effort-sweep.md`).
-   For the three remaining `high` sites and for `longlist_assign_themes`'s tier, a replay on
-   their stored outputs at the candidate value; pin only values whose outputs stay within
-   run-to-run noise. — **builder** runs, **lead** pins.
-2. X5: the grounding judge for section N runs while section N+1's read turns run; section
-   N+1's write turn waits for N's verdict and repair so the ledger it receives is unchanged;
-   a test shows the ledger per section is identical to the serial run on a stub backend.
-   Measure wall time on the fixed questions. — **deep-reasoner** (orchestration inside
-   `synthesise.py`; done is the ledger test plus `make verify`).
-3. Tokens, reasoning tokens and latency per step before and after. — **lead**.
+1. Classify to `medium` on all routes (measured). For the three remaining `high` steps, a
+   replay on stored outputs at `medium`; pin only if outputs stay within run-to-run noise;
+   otherwise keep `high`. `longlist_assign_themes` keeps today's tier (no change beyond D2).
+   — **builder** runs, **lead** pins.
+2. Tokens, reasoning tokens and latency per step before and after (fixed questions for the
+   steps that run at standard depth; replays for the rest). — **lead**.
 
 **Gate:** `make verify-fast` + `make prompt-guard`.
 
 ### Phase 6 — Ingest scheduler, progress stage, XML route (N8, N9, N10, S5, S7)
 
-1. N8: any-free-slot draining in `_run_parse_jobs` and the preloaded forkserver start
-   method, as prototyped (`experiments/ingest-scheduler-prototype.md` and its scripts);
-   `_drain_parse_job` and `_worker_entry` reused; the timeout, large-payload and
-   shared-semaphore tests kept and a byte-identity test on the saved corpus added; the
-   batch hand-over in `ingest_full_text_sources` measured and, if it still serialises
-   behind one slow document, fixed in the same commit. — **deep-reasoner**.
-2. N9 and S5: `StageKey` gains `ingest` ("Reading the full texts", blurb to the owner's
-   taste), `STAGE_BY_REGISTRY` maps `ingest_full_text`; the harness's run.started and
-   component.completed events already produce the row; per-document progress as ticks via
-   `publish_current_tick(stage="ingest", note=...)` with fetched and parsed counts read from
-   the document store's statuses; `PlanStageKey` mirror; the four vocabulary tests; the
-   web-api spec stage list updated (and the stale scoping omission fixed while there, as an
-   owner spec item); `runProgress.ts` row and a `beatSentence` case; `make openapi-sync`.
-   — **deep-reasoner** for backend, **lead** for the stage words and the frontend row (reader-facing).
-3. N10 and S7: check whether fresh fixed-question acquisitions store `ids.pmcid`; if not,
-   find why (the OpenAlex response or the retain step) and fix; Europe PMC fetch
-   (`https://www.ebi.ac.uk/europepmc/webservices/rest/<PMCID>/fullTextXML`) added to the
-   cascade ahead of PDF for documents with an id, behind the owner's egress approval
-   recorded at the plan gate; a JATS parser (`sourcing/parse_jats.py`) producing the same
-   markdown shape `parse_and_segment` consumes (headings, paragraphs, tables), standard
-   library `xml.etree` with entity expansion disabled, `defusedxml` only if a test shows the
-   standard library insufficient (then `make audit`); tests on saved XML; share of documents
-   on the XML route and chunk quality recorded on the fixed questions. — **deep-reasoner**.
-4. Fixed questions; parse wall time locally and on staging; the owner reads. — **lead**.
+1. N8: any-free-slot draining in `_run_parse_jobs` and the preloaded forkserver, as
+   prototyped (`experiments/ingest-scheduler-prototype.md`); `_drain_parse_job` and
+   `_worker_entry` reused; the batch hand-over in `ingest_full_text_sources` measured and
+   fixed; the timeout, large-payload and shared-semaphore tests kept; a byte-identity test on
+   a committed openly licensed fixture corpus (sanitized-fixtures policy; three to five small
+   PDFs) plus a local verification line on the saved 52-document corpus. — **deep-reasoner**.
+2. N9 and S5: `StageKey` gains `ingest` ("Reading the full texts"; blurb by the lead);
+   `STAGE_BY_REGISTRY` maps `ingest_full_text`; the harness events produce the row;
+   `TickFrame` gains optional `fetched`, `parsed`, `total`; ticks from
+   `_drain_ready_parse_jobs` and the fetch loop with counts read from the document store's
+   statuses; `PlanStageKey` mirror; the vocabulary and frame tests; web-api spec stage list
+   gains `ingest` only; `runProgress.ts` row and a `beatSentence` case; `make openapi-sync`.
+   — **deep-reasoner** backend, **lead** words and frontend row.
+3. N10 and S7: on a fresh fixed-question acquisition check whether `ids.pmcid` is stored;
+   if not, find and fix why; Europe PMC `fullTextXML` fetch (approved host) ahead of PDF for
+   documents with an id, sending the id only; `sourcing/parse_jats.py` producing the
+   markdown shape `parse_and_segment` consumes (headings, paragraphs, tables), Python 3.12
+   expat (its amplification limits; no external entity fetching), undefined JATS entities
+   replaced by a declared fallback, tests with a billion-laughs payload, an external-entity
+   payload and three saved JATS files; `defusedxml` only if a test shows the standard
+   library insufficient (then `make audit` and the dependency gate). Share of documents on
+   the XML route and chunk headings and tables recorded on the fixed questions. The HTML
+   branch is deferred to the queued-parsing task. — **deep-reasoner**.
+4. Fixed questions; parse wall time locally and on staging; the owner's read. — **lead**.
 
-**Gate:** full `make verify` (gate 4) + `make drift-check` (+ `make audit` if needed).
+**Gate:** full `make verify` (gate 5) (+ `make audit` if needed).
 
 ### Step-6 exit — lead
 
-Rubric walk, `verification.md` complete with every table in the contract's § Verification
-evidence, final fixed-question cost against O1, the deferred-log close-out entries listed in
-the contract. **Stop.** The review runs in a fresh conversation.
+Rubric walk; `verification.md` complete per the contract's § Verification evidence; final
+fixed-question cost against O1. Durable records (deferred-log close-out, knowledge notes)
+are written at step 8, not here. **Stop.** The review runs in a fresh conversation.
 
 ## Executor summary
 
-- **lead** — route file and loader design, every prompt-bearing change (O3, X1 if needed,
-  X3's description, the D10 request shape and version bumps, D7's possible sentence, stage
-  words, the two frontend copy strings), the no-behaviour-change test, spec amendments,
-  every live run and every read, inline one-line edits.
-- **deep-reasoner** (Codex's stand-in) — usage buckets, the prompt-module move, plumbing
-  functions, caching modes, D8/D10 implementation, X3, the migration and appraise changes,
-  citability, the repair guard, X5, the scheduler, the stage plumbing, the XML path.
-- **fast-worker** — tracing forwards, the two scripts, the 58 lookups, tidy-up moves and
-  renames, the mechanical label copies.
-- **builder** — the GPT-6 cache re-test, per-site cache measurement, the X1, X4, O3 and
-  P5 replays.
+- **lead** — route file and loader design, the no-behaviour-change test, every
+  prompt-bearing change (O3, X1 if needed, X3's kinds and description, the D10 shape and
+  version bumps, D7's possible sentence, stage words, the two copy strings), the cost-script
+  spec, spec amendments, every live run and read, inline one-line edits.
+- **deep-reasoner** (Codex's stand-in) — the kwargs fixture, usage buckets, the cost
+  script, the prompt-module move, plumbing functions, caching modes, D8/D10 implementation,
+  X3 plumbing, the migration and appraise changes, citability and label surfaces, the repair
+  guard, the scheduler, the stage plumbing, the XML path.
+- **fast-worker** — the tracing forward, the 58 lookups, tidy-up moves and renames, the
+  mechanical frontend copies.
+- **builder** — the live probes, the GPT-6 cache re-test, per-site cache measurement, the
+  X1, X4, O3 and Phase 5 replays.
 
 ## Out of this slice
 
-Everything in contract D6 and § Out of scope: pointer citations and the emit schema,
-rerankers, Flex, cross-task reuse, a faster parse profile, timeouts and pool sizes,
-queued parsing, the perceived-latency work beyond N9, and any spec text the owner has not
-accepted.
+Everything in contract D6 and § Out of scope, plus X5 (the judge overlap, now the synthesis
+refinement task's) and N10's HTML branch (the queued-parsing task's).
