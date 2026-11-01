@@ -80,7 +80,7 @@ A pull request where:
 | **Standard depth** | An Evidence search run at the `standard` analysis depth: acquire, screen (two stages), classify, appraise, ingest full text, characterise, select, synthesise (`runtime/task_plan.py` `ANALYSIS_DEPTH_TABLE`). Not the `standard` model tier. |
 | **Cost per run** | The sum of every model call's cost inside one Langfuse session, from token counts and list prices, not from Langfuse's stored cost (wrong for rows before 2026-10-29). |
 | **Route** | A named set of models in `backend/src/policy_atlas/model_routes.toml`. `openai-direct` calls OpenAI; `bedrock` calls Amazon Bedrock in London. Staging runs `bedrock`, production `openai-direct` (`infra/pa_config.json`). |
-| **Model tier** | A role in the route file: `fast`, `standard`, `frontier`. After D2 the `frontier` tier serves no step; it stays defined as the step-up. |
+| **Model tier** | A role in the route file: `fast`, `standard`, `frontier`. After D2 the `frontier` tier is gpt-6.1-sol at `low` and serves the thirteen Options scoping call sites until replays justify moving each one down. |
 | **Route step** | One named model call site in the route file's `[steps]` table. After D9 every call site has one. Distinct from a pipeline stage (acquire, screen, …) and from a task-cycle step (contract, plan, …). |
 | **Prompt cache** | The provider keeps a prompt prefix for 30 minutes so a later call with the same prefix pays the cached-read price for those tokens: 10% of input on GPT-5.6, 5% on gpt-6.1-terra and gpt-6.1-sol, 10% on gpt-6-luna (see § Facts, prices). On GPT-5.6 and later the provider also charges 1.25x input to store the prefix, on every call over 1,024 tokens whose prefix is not already stored. Entries are stored at breakpoints; the default places one at the end of each request. |
 | **One-shot call** | A call whose whole prompt never repeats. Many "one-shot" sites still share a system prompt over 1,024 tokens, so they may do better with a breakpoint after it than with caching off (finding 6, D3). |
@@ -169,11 +169,15 @@ lever (finding 11). The owner reads the fixed-question reports after P1, P2 and 
 
 **D2. The model set. Decided (owner, 2026-10-29 and 2026-10-30).** Both routes:
 `fast` = gpt-6-luna (Bedrock `global.openai.gpt-6-luna`), `standard` = gpt-6.1-terra,
-`frontier` = gpt-6.1-sol. Effort is per step (D4); the model-keyed knob table is deleted.
-The tool-bearing Terra steps carry `none`; gpt-6.1-sol, if ever used, needs at least `low`. The two scoping judgment steps (`task_agent_scoping`,
-`longlist_judgment`) move to `standard` as step exceptions, so no step uses `frontier`; it
-stays defined as the one-line step-up if the owner's read of the scoping fixed question says
-the longlist got worse. The `bedrock-claude` route follows `bedrock`. No prompt text changes
+`frontier` = gpt-6.1-sol at `low` (the lowest effort it accepts). Effort is per step (D4);
+the model-keyed knob table is deleted. The tool-bearing Terra steps carry `none`. **The
+thirteen Options scoping call sites on the frontier tier today stay on `frontier` at the
+switch** (owner, 2026-11-01, replacing the earlier lean to move them all to `standard`):
+gpt-6.1-sol at `low` is their like-for-like replacement, all thirteen use structured output,
+and each is moved down to `standard` or `fast` only after a small-scale replay on its own
+stored inputs shows agreement within the run-to-run noise floor at several effort levels
+(`experiments/frontier-steps-replay.md`, started 2026-11-01; results carried into the plan
+and pinned per step in P5). The `bedrock-claude` route follows `bedrock`. No prompt text changes
 in the switch itself (same model family, prompting rule 12 does not fire). Data residency
 is unchanged: the same `global.` profiles as today.
 
@@ -299,9 +303,10 @@ Prompt hashes with their diffs.
 ## Owner decisions (2026-10-29 and 2026-10-30)
 
 - **O1.** Target: median standard-depth run under $2; a broad target, lower is better.
-- **O2.** No frontier tier in use; the two scoping judgment steps move to `standard`;
-  step-up to gpt-6.1-sol at `low` if the read asks. (Their effort today is "not sent",
-  D4.)
+- **O2 (revised 2026-11-01).** The thirteen frontier call sites move to gpt-6.1-sol at
+  `low` at the switch (like for like) and are downgraded per step only on replay evidence
+  at several effort levels; the owner reads side-by-side samples before any downgrade is
+  pinned. (Their effort today is "not sent", D4.)
 - **O3.** Judge prompt and the two summariser prompts refined together as one loop for
   gpt-6.1-terra, aiming at a judge that rejects only summaries that would mislead; the
   retry carries the judge's reason (X2). Replay set: the 90 items and the 20 adjudicated.

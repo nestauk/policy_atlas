@@ -110,8 +110,9 @@ Facts beyond the contract, checked in the code on 2026-10-30. The full call-site
 Fifty-six steps, one per call site after the contract's merges. Today's model is the
 tier's model on every route (no step exceptions exist today); `bedrock-claude` follows
 `bedrock`. "medium (default, was not sent)" marks steps whose effort the first commit writes
-explicitly as `medium`. After the switch the thirteen `frontier` steps carry the exception
-`standard`; no other exceptions.
+explicitly as `medium`. At the switch the thirteen `frontier` steps stay on `frontier` (gpt-6.1-sol at `low`);
+the table's "step exception after the switch" column therefore reads "none" for them
+(owner, 2026-11-01); per-step downgrades are pinned in Phase 5 on replay evidence.
 
 | step name | call site(s) (module:function, trace name) | today's route step | today's model: openai-direct / bedrock | today's tier | today's effort as sent | default tier after split | step exception after GPT-6 switch | request path | pinned module | system prompt tokens |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -259,9 +260,9 @@ Each phase ends in a commit on `task/056-cost-latency`. Every `lead` mark carrie
    forwarding test per request path; code-only re-pins of the pinned modules whose lookup
    lines changed, diffs recorded. — **lead** (the safety net).
 5. **Commit A.** `make verify-fast` + `make prompt-guard`.
-6. The switch: tiers to gpt-6-luna / gpt-6.1-terra / gpt-6.1-sol on all three routes; the
-   thirteen `frontier` steps as `standard` exceptions; the pin test's expected models
-   updated. **Commit B.** — **lead inline** (exactly as approved).
+6. The switch: tiers to gpt-6-luna / gpt-6.1-terra / gpt-6.1-sol (effort `low`) on all
+   three routes; the thirteen `frontier` steps stay on `frontier`; the pin test's expected
+   models updated. **Commit B.** — **lead inline** (exactly as approved).
 7. Fixed questions on `bedrock` and NEET on `openai-direct`; cost; the owner's read
    (model-only). — **lead**.
 8. X1: grounding judge replay on gpt-6-luna over the judge items from
@@ -336,12 +337,18 @@ Each phase ends in a commit on `task/056-cost-latency`. Every `lead` mark carrie
 
 **Gate:** `make verify-fast` + `make prompt-guard`.
 
-### Phase 5 — Effort per step (N7)
+### Phase 5 — Effort and tier per step (N7, O2)
 
 1. Classify to `medium` on all routes (measured). For the three remaining `high` steps, a
    replay on stored outputs at `medium`; pin only if outputs stay within run-to-run noise;
-   otherwise keep `high`. `longlist_assign_themes` keeps today's tier (no change beyond D2).
-   — **builder** runs, **lead** pins.
+   otherwise keep `high`. — **builder** runs, **lead** pins.
+1b. The thirteen frontier steps: from `experiments/frontier-steps-replay.md` (gpt-6.1-sol at
+   `low` against gpt-6.1-terra at `none`, `medium`, `high`, and gpt-6-luna at `medium` for
+   the assignment-shaped calls, each on 12 to 20 stored inputs with a measured noise floor),
+   the owner reads the side-by-side samples and the lead pins, per step, the cheapest
+   configuration within the noise floor, or keeps `frontier`. Each pinned downgrade is a step
+   exception with its effort; the scoping fixed question runs again after the downgrades and
+   the owner reads the longlist. — **lead** (model choice is judgment; the owner reads).
 2. Tokens, reasoning tokens and latency per step before and after (fixed questions for the
    steps that run at standard depth; replays for the rest). — **lead**.
 
