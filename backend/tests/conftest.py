@@ -50,6 +50,45 @@ os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
 # FixtureFetcher's default resolution at the repo test-data home for the suite.
 os.environ.setdefault("POLICY_ATLAS_FIXTURE_CORPUS", str(Path(__file__).parent / "data"))
 
+# One test database per pytest-xdist worker (task 056, owner 2026-11-02). `make test`
+# runs the suite on every core; the workers would otherwise share one Postgres
+# database and trip over each other's rows. Each worker takes the database named in
+# DATABASE_URL, appends its worker id (``policy_atlas_test_gw3``), creates that
+# database fresh, and rewrites DATABASE_URL for its own process, so every later
+# reader of the variable (the engine fixture, the migration and API tests) sees the
+# worker's copy. The engine fixture then runs the migrations on it as before. The
+# copies are dropped when the worker finishes. A run without xdist (``-p no:xdist``,
+# or ``-n 0``) has no worker id and keeps the plain database.
+_WORKER = os.environ.get("PYTEST_XDIST_WORKER")
+if _WORKER and os.environ.get("DATABASE_URL"):
+    import psycopg
+
+    _base_url = os.environ["DATABASE_URL"]
+    _head, _name = _base_url.rstrip("/").rsplit("/", 1)
+    _name, _, _query = _name.partition("?")
+    if not _name.lower().endswith("_test"):
+        raise RuntimeError(f"refusing to copy a test database not named *_test: {_name!r}")
+    _worker_name = f"{_name}_{_WORKER}"
+    # psycopg wants the plain scheme, not SQLAlchemy's "postgresql+psycopg".
+    _base_dsn = _base_url.replace("postgresql+psycopg://", "postgresql://", 1)
+    # The base database already exists (make reset-test-db); connect to it in
+    # autocommit mode, because CREATE DATABASE cannot run inside a transaction.
+    with psycopg.connect(_base_dsn, autocommit=True) as _c:
+        _c.execute(f'DROP DATABASE IF EXISTS "{_worker_name}" WITH (FORCE)')
+        _c.execute(f'CREATE DATABASE "{_worker_name}"')
+    os.environ["DATABASE_URL"] = f"{_head}/{_worker_name}" + (f"?{_query}" if _query else "")
+
+    import atexit
+
+    def _drop_worker_db() -> None:
+        try:
+            with psycopg.connect(_base_dsn, autocommit=True) as c:
+                c.execute(f'DROP DATABASE IF EXISTS "{_worker_name}" WITH (FORCE)')
+        except Exception:  # noqa: BLE001 - best effort at interpreter exit
+            pass
+
+    atexit.register(_drop_worker_db)
+
 
 def _alembic_cfg() -> AlembicConfig:
     cfg = AlembicConfig("alembic.ini")
