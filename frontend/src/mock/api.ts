@@ -83,6 +83,10 @@ const APPRAISAL_TIER_SORT_RANK: Record<string, number> = {
   "High confidence": 2,
 };
 
+/** The label of an appraisal with no score (task 056). Like the server, it
+ *  sorts after every scored row in both directions, before an unappraised one. */
+const UNRATED_TIER = "Unrated";
+
 /** Mirrors `repository._relevance_rank`: the p(relevant) spectrum. */
 function mockRelevanceRank(item: EvidenceItemOut): number | null {
   if (item.screen_status === "relevant") return item.screen_confidence ?? 0.5;
@@ -101,6 +105,12 @@ function compareMockEvidenceSort(
 ): number {
   let leftValue: string | number | null;
   let rightValue: string | number | null;
+  if (sort === "strength" && left.appraisal_tier === UNRATED_TIER && right.appraisal_tier !== UNRATED_TIER) {
+    return right.appraisal_tier == null || !(right.appraisal_tier in APPRAISAL_TIER_SORT_RANK) ? -1 : 1;
+  }
+  if (sort === "strength" && right.appraisal_tier === UNRATED_TIER && left.appraisal_tier !== UNRATED_TIER) {
+    return left.appraisal_tier == null || !(left.appraisal_tier in APPRAISAL_TIER_SORT_RANK) ? 1 : -1;
+  }
   if (sort === "title") {
     leftValue = left.title.toLowerCase();
     rightValue = right.title.toLowerCase();

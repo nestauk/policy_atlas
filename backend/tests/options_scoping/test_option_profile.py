@@ -20,12 +20,11 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core.schema import option
 from policy_atlas.options_scoping.context import ScopeContext
-from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPE_KEYS, TAXONOMY_VERSION
-from policy_atlas.options_scoping.longlist.longlist_backend import (
-    STUB_POTENTIAL_IMPACT,
-    StubLonglistBackend,
-)
 from policy_atlas.options_scoping.option_profile.folding_prompt import FoldingResponse, FoldWire
+from policy_atlas.options_scoping.option_profile.lever_types import (
+    LEVER_TYPE_KEYS,
+    TAXONOMY_VERSION,
+)
 from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
     build_lever_typing_messages,
 )
@@ -53,6 +52,10 @@ from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
 from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
     PlaceSentencesResponse,
     PlaceSentenceWire,
+)
+from policy_atlas.options_scoping.scoping_backend import (
+    STUB_POTENTIAL_IMPACT,
+    StubLonglistBackend,
 )
 from policy_atlas.runtime import harness
 from policy_atlas.runtime.scoping_plan import PROFILE_LINE_KEYS

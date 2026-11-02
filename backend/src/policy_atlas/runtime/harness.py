@@ -106,12 +106,12 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
 from policy_atlas.options_scoping.constrain.constrain import constrain_scope
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.longlist.longlist import longlist_scope
-from policy_atlas.options_scoping.longlist.longlist_backend import (
+from policy_atlas.options_scoping.longlist_intent import plan_tagging_context
+from policy_atlas.options_scoping.option_profile.option_profile import option_profile_scope
+from policy_atlas.options_scoping.scoping_backend import (
     LonglistBackend,
     StubLonglistBackend,
 )
-from policy_atlas.options_scoping.longlist_intent import plan_tagging_context
-from policy_atlas.options_scoping.option_profile.option_profile import option_profile_scope
 from policy_atlas.options_scoping.shortlist.shortlist import shortlist_scope
 from policy_atlas.options_scoping.suggest.suggest import SuggestBackend, suggest_options
 from policy_atlas.options_scoping.theme.theme import theme_scope

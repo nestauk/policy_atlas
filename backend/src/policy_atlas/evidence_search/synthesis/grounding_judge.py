@@ -1,4 +1,4 @@
-"""The ``grounding_judge_v2`` prompt surface and judge seam (task 013).
+"""The ``grounding_judge_v3`` prompt surface and judge seam (task 013; v3 in task 056).
 
 The repo's seventh product prompt — lead-authored, versioned, recorded on every
 judged claim's annotation payload. Verification is **non-agentic** (contract
@@ -25,7 +25,12 @@ from pydantic import BaseModel, ConfigDict
 
 from policy_atlas.core import tracing
 from policy_atlas.core.model_routes import route
-from policy_atlas.core.openai_client import require_parsed, resolve_openai_client
+from policy_atlas.core.openai_client import (
+    openai_kwargs,
+    require_parsed,
+    resolve_openai_client,
+    with_system_breakpoint,
+)
 from policy_atlas.core.usage import (
     UsageResult,
     log_usage,
@@ -33,13 +38,16 @@ from policy_atlas.core.usage import (
     usage_details,
     usage_metadata,
 )
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 
-JUDGE_PROMPT_VERSION = "grounding_judge_v2"
+JUDGE_PROMPT_VERSION = "grounding_judge_v3"
 ENVELOPE_VERSION = "synthesis_envelope_v2"
 
 # The contracted model floor; judge calibration is eval-workstream territory —
 # this slice's bar is mechanism correctness.
-JUDGE_MODEL = route().model_for("grounding_judge")
+JUDGE_MODEL = route().model_for("judge_grounding")
+JUDGE_EFFORT = route().effort_for("judge_grounding")
+JUDGE_CACHE = cache_mode_for("judge_grounding")
 
 VERDICTS = ("tier_1", "tier_2", "tier_3", "tier_4", "unsupported_mis_cited")
 
@@ -123,10 +131,16 @@ Instructions:
   support the claim.
 - Reasoning claims (claim_type "reasoning") are strict-routed: they carry no
   citations by design and are legitimately "tier_4" ONLY while they stay
-  visibly-labelled background reasoning. A reasoning claim that asserts
-  policy-specific, empirical, causal, comparative or evaluative content — a
-  claim that would need evidence — is "unsupported_mis_cited": such content
-  must never escape into tier_4.
+  visibly-labelled background reasoning. The test is what the claim asserts
+  as settled, not what it is about. A reasoning claim that states, as
+  established, something that would need a citation — an empirical fact or
+  figure, a causal effect, a comparison between options, places or groups,
+  an evaluation of what works — is "unsupported_mis_cited": such content
+  must never escape into tier_4. A reasoning claim that visibly frames a
+  question, a hypothesis or an assumption to check, a dispute between the
+  sources, or a limit of what the cited evidence covers stays "tier_4" even
+  when it names the policy, the place, the population or the outcome:
+  naming the topic is not asserting a fact about it.
 - Set "weakly_grounded" true when a claim stands but is under-evidenced (a
   thin or cut-short tier_2/tier_3 — the claim holds, corroboration is
   needed). This flag is orthogonal to the verdict and is not a sixth lane.
@@ -326,8 +340,12 @@ class OpenAIGroundingJudgeBackend:
     ) -> UsageResult[JudgeResponseWire]:
         completions: Any = self._client.chat.completions
         response = completions.parse(
-            model=JUDGE_MODEL,
-            messages=messages,
+            **openai_kwargs(
+                JUDGE_MODEL,
+                reasoning_effort=JUDGE_EFFORT,
+                prompt_cache=JUDGE_CACHE,
+            ),
+            messages=with_system_breakpoint(messages) if JUDGE_CACHE == "breakpoint" else messages,
             response_format=JudgeResponseWire,
         )
         log_usage("grounding_judge.judge.usage", response.usage)

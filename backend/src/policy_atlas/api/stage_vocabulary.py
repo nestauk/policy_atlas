@@ -21,6 +21,10 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
     "screen": ("Screening for relevance", "Every title and abstract, against your question."),
     "classify": ("Sorting by evidence type", "Each source is labelled by its evidence type."),
     "appraise": ("Appraising quality", "How much weight each source can bear."),
+    "ingest": (
+        "Reading the full texts",
+        "Fetching each selected document's full text and reading it into sections.",
+    ),
     "characterise": ("Mapping the landscape", "What the evidence covers, and where it is thin."),
     "select": ("Shortlisting", "The strongest, most varied set for close reading."),
     "extract": ("Extracting findings", "Each claim is pulled out with its exact quote."),
@@ -57,6 +61,7 @@ STAGE_BY_REGISTRY: dict[str, StageKey] = {
     "screen_full": "screen",
     "classify": "classify",
     "appraise": "appraise",
+    "ingest_full_text": "ingest",
     "characterise": "characterise",
     "select": "select",
     "extract": "extract",

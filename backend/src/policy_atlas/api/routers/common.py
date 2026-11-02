@@ -3,7 +3,7 @@
 The owner-only row helpers this module used to carry (``owned_task``,
 ``owned_project``, ``_owned_conversation``) are gone: every task-,
 project- and conversation-scoped route now resolves through the graded
-helpers in ``_access`` (task 033). What is left is projection and display.
+helpers in ``access`` (task 033). What is left is projection and display.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from sqlalchemy.engine import Connection, RowMapping
 
 from policy_atlas.api.contract import LatestRun, RunOut, TaskLinkOut, TaskOut
 from policy_atlas.api.identity import owner_display_for
-from policy_atlas.api.routers._access import readable_task_leg
+from policy_atlas.api.routers.access import readable_task_leg
 from policy_atlas.core.schema import (
     app_user,
     artefact,
@@ -253,7 +253,7 @@ def links_for_tasks(
     walk, currently flagged or not — are the target's provenance and stay
     visible, because they are properties of the row the caller is reading.
     The grade is decided inside the join that already fetches the source
-    (:func:`_access.readable_task_leg`), so this costs no extra query.
+    (:func:`access.readable_task_leg`), so this costs no extra query.
 
     ``flagged`` is derived here rather than stored (C12): a Link whose two
     tasks stop sharing a project is **marked, not broken**. The inheritance

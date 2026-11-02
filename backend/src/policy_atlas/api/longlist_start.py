@@ -39,7 +39,7 @@ from sqlalchemy.engine import Connection, Engine
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.contract import LatestRun
 from policy_atlas.api.locks import task_lock
-from policy_atlas.api.routers._common import ACTIVE_WALK_STATUSES, active_parentless_walk
+from policy_atlas.api.routers.common import ACTIVE_WALK_STATUSES, active_parentless_walk
 from policy_atlas.api.routers.runs import (
     _await_new_run,
     _dispatch_lock,

@@ -31,7 +31,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.contract import OptionDocumentOut
 from policy_atlas.api.deps import get_agent_backend, get_runner_backends
-from policy_atlas.api.readmodels import repository
+from policy_atlas.api.read_models import repository
 from policy_atlas.core.schema import (
     capability_run,
     evidence_scope,
@@ -51,8 +51,8 @@ from policy_atlas.options_scoping.constrain.constrain import (
 )
 from policy_atlas.options_scoping.constrain.constrain_prompt import ConstrainResponse
 from policy_atlas.options_scoping.context import ScopeContext
-from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPES, TAXONOMY_VERSION
-from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
+from policy_atlas.options_scoping.option_profile.lever_types import LEVER_TYPES, TAXONOMY_VERSION
+from policy_atlas.options_scoping.scoping_backend import StubLonglistBackend
 from policy_atlas.runtime.agent_backend import StubAgentBackend
 from policy_atlas.runtime.option_design_prompt import OptionDesignWire
 from policy_atlas.runtime.scoping_plan import (
@@ -1541,7 +1541,7 @@ def test_the_documents_are_one_per_document_best_first_with_a_year(conn: Connect
 
 
 def test_a_document_with_no_row_here_takes_its_twin_s_own_row() -> None:
-    from policy_atlas.api.readmodels.repository import _collapse_document_lines
+    from policy_atlas.api.read_models.repository import _collapse_document_lines
 
     def _collapse_documents(entries: list[Any]) -> list[OptionDocumentOut]:
         return [line.document for line in _collapse_document_lines(entries)]

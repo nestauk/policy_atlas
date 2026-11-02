@@ -41,7 +41,11 @@ SCREEN_FULLTEXT_PROMPT_VERSION = "screen_fulltext_v1"
 # Stage-1 model (task 051, contract D10): ``screen_v4`` was tuned on Luna and
 # measured there (0.917 recall on the labelled mini set); the adaptive vote in
 # ``screen.py`` adds the redundancy, full text carries the signal at stage 2.
-SCREEN_MODEL = route().model_for("screen")
+SCREEN_MODEL = route().model_for("screen_abstract")
+SCREEN_EFFORT = route().effort_for("screen_abstract")
+# Stage 2 (full text) is its own step: its own model and effort.
+SCREEN_FULL_MODEL = route().model_for("screen_full")
+SCREEN_FULL_EFFORT = route().effort_for("screen_full")
 
 STAGE2_REPS = 1
 

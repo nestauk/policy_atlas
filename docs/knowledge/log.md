@@ -653,3 +653,22 @@
   [evidence readbacks](evidence-readbacks-name-the-task-they-read.md) (hand marks written back).
   Declined as knowledge: the stub `to_ready` helper adds a turn per plan part and
   `_folded_coverage` copies only `outcome_counts` (both code-local, recorded in 055 verification.md).
+
+## 2026-11-02
+* **Update** (task 056 review): ten concepts —
+  [Langfuse usage buckets](langfuse-usage-buckets-are-exclusive.md),
+  [pydantic docstrings are prompt text](pydantic-docstrings-in-tool-schemas-are-prompt-text.md),
+  [cost basis before target](cost-per-run-basis-before-target.md),
+  [omitted effort is medium, GPT-6 shapes](reasoning-effort-omitted-is-medium-gpt6-shapes.md),
+  [client timeout sized to the healthy tail](client-timeout-sized-to-healthy-tail.md),
+  [cache measurement needs isolated prefixes](cache-measurement-needs-isolated-prefixes.md),
+  [executor capacity counts database rows](run-executor-capacity-counts-database-rows.md),
+  [poll-deadline tests under parallel load](poll-deadline-tests-under-parallel-load.md) (two of the build's widened deadlines were races; made deterministic at review),
+  [frontend label lists mirror the backend vocabulary](frontend-label-lists-mirror-backend-vocabulary.md),
+  [parallel-agent briefs forbid git stash](parallel-agent-briefs-forbid-git-stash.md).
+  Folded: the SDK's missing `cache_write_tokens` and the v1-only observations API into the
+  Langfuse concept; embedding dominating ingest on bedrock into the cost basis; the 409 on two
+  servers, the kept plan after 409 and the worktree migration step into the executor concept;
+  the xdist name collision into the poll-deadline concept. The build's "re-run alone" and
+  "the fix is the deadline" candidates were ordered, not contradicted. Declined as knowledge:
+  the walk's `extract:interventions` stall figures (task-specific, in verification.md).

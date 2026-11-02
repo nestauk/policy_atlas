@@ -54,7 +54,11 @@ from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.schema import citation as citation_table
 from policy_atlas.core.tags import has_control_character
 from policy_atlas.core.usage import UsageAccumulator
-from policy_atlas.evidence_search.assess.appraise import SCORE_LABELS
+from policy_atlas.evidence_search.assess.appraise import (
+    SCORE_LABELS,
+    UNRATED_LABEL,
+    appraisal_label,
+)
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 from policy_atlas.evidence_search.extract.extract import record_ids_by_profile
 from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
@@ -85,27 +89,18 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     GroundingJudgeBackend,
     build_envelope,
 )
-from policy_atlas.evidence_search.synthesis.summary_prompts import (
-    SUMMARISER_PROMPT_VERSION,
-    SUMMARY_JUDGE_PROMPT_VERSION,
-)
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
-    CASE_STUDIES_MODEL,
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     CASE_STUDIES_PROMPT_VERSION,
-    FORBIDDEN_SECTION_TITLES,
-    FULL_REPORT_INTRO_MODEL,
     FULL_REPORT_INTRO_PROMPT_VERSION,
     KEY_FINDINGS_GAP_MAX,
     KEY_FINDINGS_PROMPT_VERSION,
     MOST_RELEVANT_NOTE_PROMPT_VERSION,
-    MRS_NOTE_MODEL,
     NAV_LABEL_MAX,
     SECTION_FOCUS_MAX,
     SECTION_PROMPT_VERSION,
     SECTION_TITLE_PROPOSAL_MAX,
     SECTION_TOOL_SCHEMAS,
     SECTIONS_PROMPT_VERSION,
-    SYNTHESIS_MODEL,
     CaseStudyCardWire,
     CaseStudyWire,
     ClaimWire,
@@ -113,6 +108,18 @@ from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     SectionProposalWire,
     SectionProseWire,
     SectionRepairWire,
+)
+from policy_atlas.evidence_search.synthesis.summary_prompts import (
+    SUMMARISER_PROMPT_VERSION,
+    SUMMARY_FORMAT_RETRY_REASON,
+    SUMMARY_JUDGE_PROMPT_VERSION,
+)
+from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+    CASE_STUDIES_MODEL,
+    FORBIDDEN_SECTION_TITLES,
+    FULL_REPORT_INTRO_MODEL,
+    MRS_NOTE_MODEL,
+    SYNTHESIS_MODEL,
     SynthesisBackend,
     _chunk_content_by_id,
 )
@@ -133,6 +140,7 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     RetrievalUnitCapError,
     SynthesisDirectiveError,
     ToolExchange,
+    available_lookup_kinds,
     build_retrieval_scope,
     build_section_tools,
     chunk_text_basis_case,
@@ -5088,6 +5096,7 @@ def _build_doc_meta(
         sa_select(
             source_appraisal_result.c.task_source_snapshot_id,
             source_appraisal_result.c.quality_score,
+            source_appraisal_result.c.unrated,
         ).where(
             source_appraisal_result.c.task_id == task_id,
             source_appraisal_result.c.task_source_snapshot_id.in_(
@@ -5095,10 +5104,11 @@ def _build_doc_meta(
             ),
         )
     ).fetchall()
-    appraisal_by_tss: dict[str, int] = {}
+    # Reader-facing label per document: a score word, or "Unrated" (task 056).
+    label_by_tss: dict[str, str | None] = {}
     for row in appraisal_rows:
         key = str(row.task_source_snapshot_id)
-        appraisal_by_tss[key] = row.quality_score
+        label_by_tss[key] = appraisal_label(row.quality_score, unrated=row.unrated)
 
     classification_rows = conn.execute(
         sa_select(
@@ -5134,8 +5144,7 @@ def _build_doc_meta(
 
     result: dict[str, dict[str, Any]] = {}
     for finding_id, info in all_findings.items():
-        score = appraisal_by_tss.get(info.tss_id)
-        label = SCORE_LABELS.get(score) if score is not None else None
+        label = label_by_tss.get(info.tss_id)
         evidence_type = classification_by_tss.get(info.tss_id)
         meta = metadata_by_snapshot.get(info.source_snapshot_id, {})
         year_val = meta.get("publication_year", meta.get("year"))
@@ -5549,7 +5558,11 @@ def _ranked_top_sources(
     Returns:
         List of dicts with source_id + metadata for note generation.
     """
-    appraisal_order = {"Very strong": 0, "Strong": 1, "Moderate": 2, "Limited": 3, "Weak": 4}
+    # Unrated (no score, task 056) ranks after every scored band; no label ranks last.
+    appraisal_order = {
+        "Very strong": 0, "Strong": 1, "Moderate": 2, "Limited": 3, "Weak": 4,
+        UNRATED_LABEL: 5,
+    }
 
     source_counts: dict[str, int] = {}
     source_claim_texts: dict[str, list[str]] = {}
@@ -5588,7 +5601,7 @@ def _ranked_top_sources(
     def _sort_key(item: tuple[str, int]) -> tuple[int, int, str]:
         sid, count = item
         meta = source_meta.get(sid, {})
-        rank = appraisal_order.get(meta.get("appraisal_label", ""), 5)
+        rank = appraisal_order.get(meta.get("appraisal_label") or "", 6)
         title = meta.get("title") or ""
         return (-count, rank, title)
 
@@ -6059,6 +6072,12 @@ def synthesise_scope(
         grouping_run_id=refs.grouping_run_id,
     )
 
+    lookup_kinds = available_lookup_kinds(
+        characterisation_run_id=refs.characterisation_run_id,
+        selection_run_id=refs.selection_run_id,
+        grouping_run_id=refs.grouping_run_id,
+    )
+
     available_claim_types = available_claim_types_for_substrate(substrate)
     all_claims: list[ClaimDraft] = []
     # Per-section (spec, surviving claims) for the key-findings ledger, and the
@@ -6106,12 +6125,17 @@ def synthesise_scope(
                 )
             ],
             "available_claim_types": sorted(available_claim_types),
+            # Task 056 X3: run-stable, so every section's request prefix is
+            # identical. Read by section_prompt.section_request_tools to offer
+            # only the lookup kinds the reader above can serve; a control field
+            # on the seed, never part of the run message's data payload.
+            "available_lookup_kinds": lookup_kinds,
             "member_findings": member_findings,
             "computed_spread": _computed_spread(section, substrate),
             "ledger": build_ledger(all_claims),
             # B2′ (024): gates the v8 priority-findings block into the section
             # system prompt (a control flag on the seed, never a data-payload
-            # field — see synthesis_backend._section_system_prompt).
+            # field — see section_prompt._section_system_prompt).
             "priority_block_active": priority_block_active,
             # Output kind (task 044): selects the section writer's preamble.
             # ``None`` is the Evidence search report — today's prompt, unchanged.
@@ -6947,18 +6971,40 @@ def _write_and_judge_summary(
     seed: dict[str, Any],
     detail: dict[str, Any],
 ) -> dict[str, Any]:
+    """Write a summary and judge it, retrying with the last failure's reason.
+
+    A retry sends the writer the original seed plus ``previous_attempt``: the
+    summary that failed and why (the judge's reason, or a plain sentence for a
+    format violation). Only the latest failed attempt is carried.
+    """
     totals = UsageAccumulator()
     writer_calls = 0
     judge_calls = 0
+    previous_attempt: dict[str, str] | None = None
     for attempt in range(SUMMARY_REGENERATE_CAP + 1):
+        if previous_attempt is not None:
+            log.info(
+                "synthesise.summary_retry",
+                attempt=attempt,
+                reason=previous_attempt["judge_reason"][:200],
+            )
+        writer_seed = (
+            seed if previous_attempt is None else {**seed, "previous_attempt": previous_attempt}
+        )
         try:
-            emitted, usage = synthesis_backend.write_block_summary(seed)
+            emitted, usage = synthesis_backend.write_block_summary(writer_seed)
             writer_calls += 1
             totals.add(usage)
             format_reason = _summary_format_violation(emitted.summary, seed=seed)
             if format_reason is not None:
                 log.warning("synthesise.summary_format_violation", reason=format_reason)
                 if attempt < SUMMARY_REGENERATE_CAP:
+                    previous_attempt = {
+                        "summary": emitted.summary,
+                        "judge_reason": SUMMARY_FORMAT_RETRY_REASON.get(
+                            format_reason, format_reason
+                        ),
+                    }
                     continue
                 return {
                     "status": "failed",
@@ -6996,6 +7042,7 @@ def _write_and_judge_summary(
                 "usage_totals": totals.payload(),
             }
         if attempt < SUMMARY_REGENERATE_CAP:
+            previous_attempt = {"summary": emitted.summary, "judge_reason": verdict.reason}
             continue
         return {
             "status": "failed",

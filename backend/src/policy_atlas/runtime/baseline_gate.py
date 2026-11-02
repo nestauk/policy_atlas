@@ -7,7 +7,7 @@ assumption* section and four fields of the approved plan — so nothing here
 calls a model, and the same walk always renders the same card.
 
 The runner builds the bundle at the boundary and persists the render on the
-pause event (the check-in content of record); ``api/checkin_read.py`` projects
+pause event (the check-in content of record); ``api/check_ins_read.py`` projects
 the bundle's display fields back out for the card.
 """
 

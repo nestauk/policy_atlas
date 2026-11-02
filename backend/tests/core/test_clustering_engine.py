@@ -7,8 +7,7 @@ from typing import Literal
 
 import pytest
 
-from policy_atlas.core.usage import TokenUsage, UsageResult
-from policy_atlas.evidence_search.clustering_engine import (
+from policy_atlas.core.clustering_engine import (
     AssignmentOutput,
     ClusterAssignment,
     ClusteringFailure,
@@ -19,6 +18,7 @@ from policy_atlas.evidence_search.clustering_engine import (
     cluster_units,
     validate_discovered_labels,
 )
+from policy_atlas.core.usage import TokenUsage, UsageResult
 
 
 def _policy(
@@ -136,7 +136,14 @@ def test_assignment_unknown_label_conflict_and_unknown_id_repair_once() -> None:
     assert result.assignments == {"u1": "A", "u2": "A", "u3": "A"}
     assert result.assignment_repair_calls_used == 1
     assert result.residual_ids == []
-    assert result.usage_totals == {"prompt": 9, "completion": 12, "total": 21, "cached": 2}
+    assert result.usage_totals == {
+        "prompt": 9,
+        "completion": 12,
+        "total": 21,
+        "cached": 2,
+        "cache_write": 0,
+        "reasoning": 0,
+    }
     assert "assignment invented 1 unknown ids" in result.rejection_reasons
     assert "assignment used 1 unknown labels" in result.rejection_reasons
     assert "assignment had 1 conflicting duplicate ids" in result.rejection_reasons

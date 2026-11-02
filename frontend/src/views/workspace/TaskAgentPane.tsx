@@ -787,6 +787,7 @@ export function TaskAgentPane({
           taskId={taskId}
           status={stream.run.status}
           stages={stream.stages}
+          liveness={stream.liveness}
           plan={stream.plan?.plan}
           startedAt={stream.run.startedAt}
           endedAt={stream.run.endedAt}
@@ -1025,6 +1026,7 @@ export function TaskAgentPane({
           <RunningCardDock
             status={stream.run.status}
             stages={stream.stages}
+            liveness={stream.liveness}
             plan={stream.plan?.plan}
             elapsedLabel={liveElapsed}
             onOpen={() => {

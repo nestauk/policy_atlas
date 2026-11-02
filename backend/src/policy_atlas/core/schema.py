@@ -599,7 +599,11 @@ source_appraisal_result = Table(
     Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=False),
     Column("task_id", UUID(as_uuid=True), nullable=False),
     Column("appraised_by_run_id", UUID(as_uuid=True), nullable=False),
-    Column("quality_score", SmallInteger, nullable=False),  # 1..5, 5 = strongest (v2 rating)
+    # 1..5, 5 = strongest (v2 rating); NULL only on an Unrated row (task 056, D7).
+    Column("quality_score", SmallInteger, nullable=True),
+    # True for a document the classifier typed Unknown or Other (Non-evidence): it is
+    # appraised as "Unrated", has no score, and is citable (task 056, D7).
+    Column("unrated", Boolean, nullable=False, server_default=text("false")),
     Column("rubric_version", Text, nullable=False),  # provenance travels with each appraisal
     Column("appraised_at", DateTime(timezone=True), nullable=False),
     # Cross-task FK guards: all three parents must share the same task_id.
@@ -630,6 +634,10 @@ source_appraisal_result = Table(
         name="uq_sar_scope_source",
     ),
     CheckConstraint("quality_score BETWEEN 1 AND 5", name="ck_sar_quality_score"),
+    CheckConstraint(
+        "(unrated AND quality_score IS NULL) OR (NOT unrated AND quality_score IS NOT NULL)",
+        name="ck_sar_unrated_consistent",
+    ),
     Index("ix_sar_scope_score", "evidence_scope_id", "quality_score"),
 )
 

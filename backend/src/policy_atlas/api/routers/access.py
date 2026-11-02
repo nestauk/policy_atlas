@@ -1,7 +1,7 @@
 """Graded row access for tenancy-aware routes (task 033).
 
 One helper per entity, replacing the owner-only ``owned_task`` /
-``owned_project`` pair in ``_common``. Two grades:
+``owned_project`` pair in ``common``. Two grades:
 
 - **read** = the owner leg (``owner_user_id`` matches the caller) *or* the
   same-org leg *or* the **admin leg** (contract § 3a: ``app_user.is_admin``,
@@ -71,7 +71,7 @@ from policy_atlas.core.schema import app_user, conversation, project, task
 log = structlog.get_logger()
 
 # The 404 body every failed read grade produces. Byte-identical to the string
-# ``_common``'s owner-only helpers raise, so the cutover in phase 4 cannot
+# ``common``'s owner-only helpers raise, so the cutover in phase 4 cannot
 # change what a probing caller observes.
 NOT_FOUND_DETAIL = "resource not found"
 
@@ -603,7 +603,7 @@ def readable_task_leg(user_id: str) -> ColumnElement[bool]:
     :func:`readable_task_exists` answers the same question for one named task
     id with its own ``EXISTS``; this is the correlated form, for a statement
     that has already joined ``task`` and wants the grade decided per joined
-    row. The Links projection uses it (:func:`_common.links_for_tasks`): a
+    row. The Links projection uses it (:func:`common.links_for_tasks`): a
     Link grants no read (ADR 0037 decision 2), so the source's *name* is
     shown only to a caller who could have read that task anyway, and the
     whole page's worth of sources is graded inside the join that fetches them.

@@ -13,25 +13,28 @@ import pytest
 from structlog.testing import capture_logs
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.evidence_search.synthesis.grounding_judge import (
     StubGroundingJudgeBackend,
     build_envelope,
+)
+from policy_atlas.evidence_search.synthesis.section_prompt import (
+    ClaimWire,
+    GapPayloadWire,
+    RepairItemWire,
+    SectionProposalWire,
+    SectionRepairWire,
+    build_section_messages,
+    build_section_repair_messages,
 )
 from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     CLAIM_TEXT_MAX,
     EMISSION_CLAIMS_MAX,
     SYNTHESIS_MODEL,
-    ClaimWire,
-    GapPayloadWire,
     OpenAISynthesisBackend,
-    RepairItemWire,
-    SectionProposalWire,
-    SectionRepairWire,
     SectionTurn,
     StubSynthesisBackend,
     _salvage_section,
-    build_section_messages,
-    build_section_repair_messages,
 )
 from policy_atlas.evidence_search.synthesis.synthesis_tools import ToolExchange, run_section_loop
 
@@ -115,7 +118,12 @@ def test_section_messages_split_run_and_section_seed_deterministically() -> None
         "tool",
         "user",
     ]
-    run_payload = _message_json(first[1]["content"])
+    # Task 056 D8: the run message is one text content part carrying the
+    # explicit cache breakpoint; its text is unchanged.
+    [run_part] = first[1]["content"]
+    assert run_part["type"] == "text"
+    assert run_part["prompt_cache_breakpoint"] == {"mode": "explicit"}
+    run_payload = _message_json(run_part["text"])
     section_payload = _message_json(first[2]["content"])
     assert set(run_payload) == {
         "intent",
@@ -137,7 +145,8 @@ def test_section_messages_split_run_and_section_seed_deterministically() -> None
     assert first[-1]["content"].startswith("This is your final turn")
 
 
-def test_repair_messages_are_micro_call_without_transcript_and_with_dependencies() -> None:
+def test_repair_messages_start_with_section_prefix_without_transcript_and_with_dependencies(
+) -> None:
     seed = _seed()
     transcript = [_search_exchange("Transcript-only source text should not be resent.")]
     repair_input = [
@@ -165,13 +174,20 @@ def test_repair_messages_are_micro_call_without_transcript_and_with_dependencies
     loop_messages = build_section_messages(seed, transcript, force_emit=False)
     repair_messages = build_section_repair_messages(seed, failing=repair_input)
 
-    assert len(repair_messages) == 3
-    assert [message["role"] for message in repair_messages] == ["system", "user", "user"]
-    assert repair_messages[1] == loop_messages[1]
+    # Task 056 D10: the repair starts with the section's own first-turn prefix
+    # (system, run, section task), then appends the repair instruction.
+    assert len(repair_messages) == 4
+    assert [message["role"] for message in repair_messages] == [
+        "system",
+        "user",
+        "user",
+        "user",
+    ]
+    assert repair_messages[:3] == loop_messages[:3]
     assert all(message["role"] not in {"assistant", "tool"} for message in repair_messages)
     serialized = json.dumps(repair_messages, ensure_ascii=False)
     assert "Transcript-only source text should not be resent." not in serialized
-    payload = _repair_message_json(repair_messages[2]["content"])
+    payload = _repair_message_json(repair_messages[3]["content"])
     failing = payload["failing_claims"][0]
     assert failing["claim_id"] == "s0c0"
     assert failing["dependencies"]["chunks"]["chunk-1"]["content"] == (
@@ -294,13 +310,21 @@ def test_live_section_turn_parses_two_read_tool_calls_in_order() -> None:
     ]
     [kwargs] = cast("Any", backend)._client.chat.completions.calls
     assert kwargs["parallel_tool_calls"] is True
-    assert kwargs["tool_choice"] == "required"
+    # Task 056 D10: allowed_tools over the four section tools (never emit_repairs).
+    assert kwargs["tool_choice"] == {
+        "type": "allowed_tools",
+        "allowed_tools": {
+            "mode": "required",
+            "tools": [
+                {"type": "function", "function": {"name": name}}
+                for name in ("search_chunks", "query_findings", "lookup", "emit_section")
+            ],
+        },
+    }
     assert kwargs["model"] == SYNTHESIS_MODEL
     # Pin regression: gpt-5.6-terra 400s on function tools without this (029).
-    if SYNTHESIS_MODEL == "gpt-5.6-terra":
-        assert kwargs["reasoning_effort"] == "none"
-    else:
-        assert "reasoning_effort" not in kwargs
+    assert kwargs["reasoning_effort"] == route().effort_for("synthesise_section_turn")
+    assert kwargs["reasoning_effort"] == "none"
 
 
 def test_live_section_turn_drops_emit_section_alongside_reads() -> None:
@@ -320,18 +344,19 @@ def test_live_section_turn_drops_emit_section_alongside_reads() -> None:
     assert any(entry["event"] == "synthesis.emit_with_reads_deferred" for entry in logs)
 
 
-def test_synthesis_openai_kwargs_omit_effort_on_gpt_55(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """gpt-5.5 keeps the provider default; do not force terra's effort pin."""
+def test_step_kwargs_send_the_steps_model_and_effort() -> None:
+    """Each synthesis call site's kwargs come from its own route-file step."""
     from policy_atlas.evidence_search.synthesis import synthesis_backend as sb
 
-    monkeypatch.setattr(sb, "SYNTHESIS_MODEL", "gpt-5.5")
-    assert sb._synthesis_openai_kwargs() == {"model": "gpt-5.5"}
-    monkeypatch.setattr(sb, "SYNTHESIS_MODEL", "gpt-5.6-terra")
-    assert sb._synthesis_openai_kwargs() == {
-        "model": "gpt-5.6-terra",
+    assert sb._step_kwargs("synthesise_section_turn") == {
+        "model": route().model_for("synthesise_section_turn"),
         "reasoning_effort": "none",
+    }
+    # A "breakpoint" step also sends the body that turns the provider's own storing off.
+    assert sb._step_kwargs("synthesise_write_source_note") == {
+        "model": route().model_for("synthesise_write_source_note"),
+        "reasoning_effort": "medium",
+        "extra_body": {"prompt_cache_options": {"mode": "explicit"}},
     }
 
 

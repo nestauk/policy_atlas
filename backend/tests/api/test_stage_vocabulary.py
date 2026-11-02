@@ -11,7 +11,11 @@ from typing import get_args
 
 from policy_atlas.api.contract.sse import STAGE_KEYS, StageKey
 from policy_atlas.api.contract.task_agent import PlanStageKey
-from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
+from policy_atlas.api.stage_vocabulary import (
+    STAGE_BY_REGISTRY,
+    STAGE_PRESENTATION,
+    stage_for_payload,
+)
 
 
 def test_stage_keys_tuple_matches_literal() -> None:
@@ -34,3 +38,14 @@ def test_every_registry_mapping_targets_a_stage_key() -> None:
     stage_keys = set(get_args(StageKey))
     for registry_component, stage in STAGE_BY_REGISTRY.items():
         assert stage in stage_keys, f"{registry_component} -> {stage} is not a StageKey"
+
+
+def test_ingest_stage_words_and_registry_mapping() -> None:
+    """Task 056 (N9, S5): full-text reading has its own public stage and words."""
+    assert STAGE_KEYS.index("ingest") == STAGE_KEYS.index("appraise") + 1
+    assert STAGE_PRESENTATION["ingest"] == (
+        "Reading the full texts",
+        "Fetching each selected document's full text and reading it into sections.",
+    )
+    assert STAGE_BY_REGISTRY["ingest_full_text"] == "ingest"
+    assert stage_for_payload({"component": "ingest_full_text"}) == "ingest"

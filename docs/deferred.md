@@ -3328,3 +3328,61 @@ Recorded by the task 055 contract, plan and build (`docs/tasks/055-scoping-short
   opens a full shortlist walk (about USD 0.15 at 25–43 options). Bounded by `run_active`
   serialisation and executor capacity only, the same posture as Rebuild; a per-task cap belongs with
   the price envelope (open question 2).
+
+## Cost and latency (task 056 seams)
+
+Seams left by task 056 (GPT-6 on both routes, one route step per call site, prompt caching,
+Unrated appraisal, the ingest scheduler and the Europe PMC XML route) and by its review stack
+(2026-11-02). Each entry says what is true today and what the lever is.
+
+- **Timeout retries are billed but untraced** (review: Codex and the security lane, convergent). A
+  model request that completes at the provider after the client's 60 s timeout is billed, retried
+  by the OpenAI SDK (`max_retries=2`) and never reaches Langfuse, so `scripts/cost_per_run.py` is a
+  floor. Lever: `max_retries=0` on every client plus a traced retry of our own, so each attempt is
+  a generation.
+- **The summary retry can oscillate** (review, trace lane). `_write_and_judge_summary` carries
+  only the latest failed attempt; on scoping task 809fe75c attempt 3 repeated attempt 1 word for
+  word and the block ended `failed` with no summary. Lever: carry every failed attempt
+  (`previous_attempts`) and say so in both summariser prompts (a deliberate re-pin).
+- **A block summary's failure reason is not persisted.** `block.summary_status` says `failed`;
+  the judge's reason lives only in logs and the trace. Lever: a `summary_reason` column, so the
+  decision is diagnosable without the trace.
+- **The cache-mode table lives beside the route file, not in it** (review, code-review R5).
+  `synthesis/cache_modes.py` is a second per-step table that `assess`, `corpus`, `extract`,
+  `runtime` and `options_scoping` import from a synthesis module; a test keeps it in step with
+  `[steps]`. Lever: a `prompt_cache` key per step in `model_routes.toml` and
+  `Route.cache_mode_for(step)`, so one table enumerates steps and `core` owns it.
+- **Scoping derives its route step from the trace name** (review, code-review R6).
+  `scoping_backend._call` turns `longlist:discover` into `longlist_discover`; a trace rename
+  fails at call time (the kwargs fixture and the route test catch it in the suite). Lever: an
+  explicit `step=` per call as `agent_backend._parse` has.
+- **Extra tool calls on a forced turn are dropped, not merged** (review, Codex H2; contract D10
+  said "reject"). `_first_named_tool_call` keeps the first `emit_section` / `emit_repairs` and
+  counts the rest in `extra_tool_calls_ignored` (0 of 434 calls on 2026-11-02). Lever: if the
+  count ever goes non-zero, merge repair payloads or retry the turn.
+- **`set_forkserver_preload` only applies before the forkserver starts** (review, code-review
+  R8). Ingest is the only forkserver user in `backend/src`; a future earlier user would silently
+  cost 1 to 2 s of imports per parse worker. Lever: a log line when the preload is set on a
+  started server, or start the server in `_parse_process_context`.
+- **Worker test databases survive a hard kill** (review, Codex L1). `tests/conftest.py` drops
+  `policy_atlas_test_gw<N>_<pid>` at interpreter exit; a kill leaves it. Cleanup:
+  `psql "$DATABASE_URL" -Atc "select datname from pg_database where datname like 'policy_atlas_test_gw%'" | xargs -n1 dropdb -U policy_atlas --force`
+  (against the compose Postgres). Lever: a sweep of names whose pid is dead at suite start.
+- **`cost_per_run.py` pages every trace to resolve a session prefix** (review, code-review R10):
+  about 40 s per session on our instance. Lever: filter traces by `sessionId` for a full id, the
+  sessions endpoint for a prefix.
+- **A second breakpoint after run-stable user-message blocks** was not measured (judge_summary
+  `detail`, group:assign label list, screen:abstract scope block, the extract document envelope);
+  the `bedrock-claude` route's breakpoint content part is unmeasured and no route selects it.
+- **The Claude-direct search path reads only `cacheReadInputTokens`** (no cache-write capture; no
+  route selects it today).
+- **The section ledger overlap (contract X5, dropped 2026-11-01).** The ledger is sent in the
+  section task message from the first turn and there is no separate write turn, so removing the
+  overlap needs a prompt-shape change; it goes to the synthesis refinement task.
+- **Dependency-direction knots the tidy-ups exposed:** `core` importing a capability; the
+  options-scoping and API read models reaching into each other. `baseline_prompt.py:14` still
+  names `synthesis_backend.py` as the home of the shared core (a pinned file; fix at the next
+  deliberate re-pin).
+- **Owner items after deploy:** N8 parse wall time on staging (2 CPUs; measured on a laptop
+  only); chunk quality of the XML route on live documents (fixtures only); the 60 s timeout on
+  the long-output extraction and vetter steps (decision item 2 in the task's verification.md).

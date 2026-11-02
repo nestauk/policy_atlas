@@ -39,7 +39,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.locks import task_lock
 from policy_atlas.api.longlist_start import LonglistRefused
-from policy_atlas.api.readmodels.repository import (
+from policy_atlas.api.read_models.repository import (
     OPTION_ADDED,
     OPTION_EXCLUDED,
     OPTION_INCLUDED,
@@ -47,7 +47,7 @@ from policy_atlas.api.readmodels.repository import (
     OPTION_UNSHORTLISTED,
     clean_text,
 )
-from policy_atlas.api.routers._common import active_parentless_walk
+from policy_atlas.api.routers.common import active_parentless_walk
 from policy_atlas.api.routers.runs import (
     _await_new_run,
     _dispatch_lock,

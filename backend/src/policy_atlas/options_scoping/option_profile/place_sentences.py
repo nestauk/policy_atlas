@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from policy_atlas.core.schema import EVIDENCE_TYPES
-from policy_atlas.evidence_search.assess.appraise import SCORE_LABELS
+from policy_atlas.evidence_search.assess.appraise import SCORE_LABELS, appraisal_label
 from policy_atlas.options_scoping.labels import DocumentLabels
 from policy_atlas.options_scoping.longlist.coverage import (
     ROLE_BUCKETS,
@@ -164,7 +164,8 @@ class PlaceDocument:
             else its outcome's folded Measures kind.
         study_geography: The first record's study geography, as written.
         place_detail: That geography when it adds a place below the top level.
-        tier: The appraisal's tier label ("Very strong" … "Weak"), or ``None``.
+        tier: The appraisal's tier label ("Very strong" … "Weak", or "Unrated"
+            for an appraisal with no score), or ``None``.
         quality_score: The appraisal's score, or ``None``.
         evidence_type: The classified evidence type, or ``None``.
         year: The publication year, or ``None``.
@@ -275,7 +276,7 @@ def tier_label(label: DocumentLabels | None) -> tuple[str | None, int | None, st
         return None, None, None
     score = label.quality_score
     return (
-        SCORE_LABELS.get(score) if score is not None else None,
+        appraisal_label(score, unrated=label.unrated),
         score,
         label.evidence_type,
     )

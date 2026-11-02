@@ -51,13 +51,15 @@ reset-test-db:
 	docker compose -f ../docker-compose.yml exec -T db \
 		createdb -U policy_atlas $(TEST_DB_NAME)
 
+# -n auto: one pytest-xdist worker per core, each on its own copy of the test database
+# (tests/conftest.py makes the copies; task 056, owner 2026-11-02).
 test: reset-test-db
-	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest
+	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest -n auto
 
 # Inner-loop convenience: everything except the ingest integration tests (~11 real
 # document-ingest runs, minutes). Full `make test` / `make verify` remain the gate.
 test-fast: reset-test-db
-	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest --ignore=tests/test_ingest_full_text.py
+	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest -n auto --ignore=tests/evidence_search/sourcing/test_ingest_full_text.py
 
 typecheck:
 	uv run mypy src tests

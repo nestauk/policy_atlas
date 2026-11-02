@@ -163,7 +163,7 @@ const GAP_GRADE_TEXT: Record<string, string> = {
  *  document type (the type is the rubric's scoring input — see the dynamic
  *  tooltip in CitationCard). */
 const APPRAISAL_FALLBACK_HINT =
-  "The cited source's appraised evidence strength — five bands from Weak to Very strong, scored from its classified document type.";
+  "The cited source's appraised evidence strength — five bands from Weak to Very strong, scored from its classified document type; Unrated when the type is not scored.";
 
 /** The grounding-tier vocabulary (demo ui.tsx TIER_LABEL/TIER_TEXT — locked;
  *  unknown tier → the raw value never renders, the chip omits). Exported so
@@ -406,7 +406,9 @@ export function AppraisalChip({ label, evidenceType }: { label: string; evidence
       content={
         <span className="text-meta">
           {typeof evidenceType === "string"
-            ? `${scrub(label)} evidence strength — appraised from the document type: ${scrub(evidenceType)}.`
+            ? label === "Unrated"
+              ? `Unrated — the document type (${scrub(evidenceType)}) is not scored; the source can be cited but counts below the evidence bar.`
+              : `${scrub(label)} evidence strength — appraised from the document type: ${scrub(evidenceType)}.`
             : APPRAISAL_FALLBACK_HINT}
         </span>
       }

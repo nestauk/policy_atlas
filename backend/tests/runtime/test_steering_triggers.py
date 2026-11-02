@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import inspect
 import uuid
+from collections.abc import Sequence
 from typing import Any
 
 import pytest
@@ -86,8 +87,13 @@ def _seed_classification_rows(
 
 
 def _seed_appraisal_rows(
-    conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID, scores: list[int]
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    scores: Sequence[int | None],
 ) -> uuid.UUID:
+    """Seed one appraisal row per score; ``None`` seeds an Unrated row (task 056)."""
     run_id = seed_run(conn, task_id)
     for score in scores:
         _, tss_id = seed_source(conn, task_id)
@@ -99,6 +105,7 @@ def _seed_appraisal_rows(
                 task_id=task_id,
                 appraised_by_run_id=run_id,
                 quality_score=score,
+                unrated=score is None,
                 rubric_version="v1",
                 appraised_at=now(),
             )
@@ -365,6 +372,24 @@ def test_appraisal_collapse_fires_over_threshold(conn: Connection) -> None:
             "detail": {"weak_count": 8, "total": 10, "share": 0.8, "score_max": 2},
         }
     ]
+
+
+@pytest.mark.parametrize(
+    "scores",
+    [[1] * 8 + [5] * 2, [1] * 7 + [5] * 3],
+    ids=["fires", "boundary"],
+)
+def test_appraisal_collapse_unchanged_by_unrated_rows(
+    conn: Connection, scores: list[int | None]
+) -> None:
+    """Task 056, D7: Unrated rows (no score) neither crash nor shift the trigger."""
+    task_id, _run_id = _seed_task_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    _seed_appraisal_rows(conn, task_id=task_id, scope_id=scope_id, scores=scores)
+    before = st.appraisal_collapse_trigger(conn, task_id=task_id, evidence_scope_id=scope_id)
+    _seed_appraisal_rows(conn, task_id=task_id, scope_id=scope_id, scores=[None] * 5)
+    after = st.appraisal_collapse_trigger(conn, task_id=task_id, evidence_scope_id=scope_id)
+    assert after == before
 
 
 def test_appraisal_collapse_not_fired_at_boundary(conn: Connection) -> None:

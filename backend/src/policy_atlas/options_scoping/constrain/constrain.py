@@ -132,13 +132,13 @@ from policy_atlas.options_scoping.longlist.longlist import (
     latest_longlist,
     read_membership,
 )
-from policy_atlas.options_scoping.longlist.longlist_backend import (
-    LONGLIST_JUDGMENT_MODEL,
-    LonglistBackend,
-)
 from policy_atlas.options_scoping.longlist.where_tried import resolve_country
 from policy_atlas.options_scoping.longlist_intent import who_decides_considerations
 from policy_atlas.options_scoping.model_calls import CallOutcome, call_with_retry
+from policy_atlas.options_scoping.scoping_backend import (
+    LONGLIST_JUDGMENT_MODEL,
+    LonglistBackend,
+)
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, ScopingPlan
 

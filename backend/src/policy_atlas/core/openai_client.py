@@ -12,7 +12,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from openai import OpenAI
 from pydantic import BaseModel
@@ -26,6 +26,31 @@ from policy_atlas.core.usage import (
     usage_metadata,
 )
 
+#: How a call site uses the provider's prompt cache (task 056, contract D3).
+#:
+#: In plain terms, the provider can store the start (the "prefix") of a prompt and
+#: bill it far more cheaply when a later call starts with the same text:
+#:
+#: - ``"auto"``: the provider's default. On every call over 1,024 tokens whose
+#:   prefix is not already stored, it stores the prefix at 1.25 times the normal
+#:   input price; when the prefix repeats, it reads it back at 5 to 10% of the price.
+#: - ``"off"``: no storing and no reading. For one-shot prompts that never repeat,
+#:   this saves the 25% storing surcharge. Measured caveat (GPT-6 re-test,
+#:   2026-11-02): on OpenAI direct this is a true off; on Bedrock it stops the
+#:   store (the cache write) being reported, but identical requests can still
+#:   read a stored prefix.
+#: - ``"breakpoint"``: store and read only the stable prefix (the system message).
+#:   For sites whose system prompt repeats across calls but whose user message
+#:   never does. It sends the same request body as ``"off"`` (explicit mode, so the
+#:   provider stores nothing on its own) plus one breakpoint on the system message
+#:   (the one place it may store). Without explicit mode the provider would still
+#:   store every whole request at 1.25x, which is what the per-site measurement
+#:   (``experiments/cache-modes-per-site-2026-11-02``) was careful not to send.
+#:
+#: The per-step table is ``evidence_search.synthesis.cache_modes.CACHE_MODES``,
+#: which re-exports this type (it lives here so ``core`` never imports
+#: ``evidence_search`` when it loads).
+PromptCache = Literal["auto", "off", "breakpoint"]
 
 @dataclass
 class CallBudget:
@@ -81,16 +106,67 @@ def resolve_openai_client(
     )
 
 
-def openai_kwargs(model: str, *, reasoning_effort: str | None = None) -> dict[str, Any]:
-    """Request kwargs shared by OpenAI chat-completions call sites.
+def openai_kwargs(
+    model: str, *, reasoning_effort: str, prompt_cache: PromptCache
+) -> dict[str, Any]:
+    """Request kwargs shared by every OpenAI chat-completions call site.
 
-    Omits reasoning_effort when None so non-reasoning call sites are byte-identical.
-    Provider-neutral by shape: a future Bedrock backend maps or ignores the string.
+    Every call site states its reasoning effort (task 056, D4): the value comes
+    from the route file (``route().effort_for(step)``), never from a literal in
+    code. ``"none"`` is sent as the string the provider expects.
+
+    Args:
+        model: The model id for this call site's route step.
+        reasoning_effort: One of the route file's effort values.
+        prompt_cache: The step's prompt-cache mode (:data:`PromptCache`).
+            ``"off"`` and ``"breakpoint"`` add the request body that turns
+            automatic storing off (``"breakpoint"`` then stores only at the
+            breakpoint set on the messages, see :func:`with_system_breakpoint`);
+            ``"auto"`` adds nothing.
     """
-    kwargs: dict[str, Any] = {"model": model}
-    if reasoning_effort is not None:
-        kwargs["reasoning_effort"] = reasoning_effort
+    kwargs: dict[str, Any] = {"model": model, "reasoning_effort": reasoning_effort}
+    if prompt_cache in ("off", "breakpoint"):
+        kwargs["extra_body"] = {"prompt_cache_options": {"mode": "explicit"}}
     return kwargs
+
+
+def with_system_breakpoint(messages: list[Any]) -> list[Any]:
+    """Return the messages with a cache breakpoint on the first system message.
+
+    The breakpoint tells the provider to store and read only the prompt up to the
+    end of the system message (the ``"breakpoint"`` mode). The first system
+    message is rewritten into the content-part shape carrying the breakpoint;
+    every other message is passed through untouched. The caller's list and
+    message objects are never changed: a new list is returned.
+
+    Args:
+        messages: Chat messages; the first ``system`` message must hold its text
+            as a plain string.
+
+    Returns:
+        A new list with the first system message rewritten (or an unchanged copy
+        when there is no system message).
+    """
+    rewritten = list(messages)
+    for index, message in enumerate(rewritten):
+        if isinstance(message, Mapping) and message.get("role") == "system":
+            if not isinstance(message.get("content"), str):
+                raise TypeError(
+                    "with_system_breakpoint: the first system message must hold its text "
+                    f"as a plain string, not {type(message.get('content')).__name__}"
+                )
+            rewritten[index] = {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": message["content"],
+                        "prompt_cache_breakpoint": {"mode": "explicit"},
+                    }
+                ],
+            }
+            break
+    return rewritten
 
 
 def require_parsed(response: Any, *, label: str) -> Any:
@@ -121,6 +197,9 @@ def parse_structured[T: BaseModel](
     response_format: type[T],
     usage_event: str,
     label: str,
+    model: str,
+    reasoning_effort: str,
+    prompt_cache: PromptCache,
     **parse_kwargs: Any,
 ) -> UsageResult[T]:
     """Run one ``chat.completions.parse`` call and apply the shared guards.
@@ -136,9 +215,13 @@ def parse_structured[T: BaseModel](
         response_format: The pydantic wire type to parse into.
         usage_event: structlog event name for usage logging.
         label: Human-readable call label used in guard error messages.
+        model: The model id for this call site's route step.
+        reasoning_effort: The step's effort (``route().effort_for(step)``).
+        prompt_cache: The step's prompt-cache mode (:data:`PromptCache`);
+            ``"breakpoint"`` sends the messages through
+            :func:`with_system_breakpoint`.
         **parse_kwargs: Additional keyword arguments forwarded to
-            ``chat.completions.parse`` (``model``, ``max_completion_tokens``,
-            ``reasoning_effort``, ...).
+            ``chat.completions.parse`` (``max_completion_tokens``, ...).
 
     Returns:
         The parsed structured output plus provider-neutral token usage.
@@ -147,8 +230,9 @@ def parse_structured[T: BaseModel](
         RuntimeError: If the response has no choices or was not parsed.
     """
     response = client.chat.completions.parse(
-        messages=messages,
+        messages=with_system_breakpoint(messages) if prompt_cache == "breakpoint" else messages,
         response_format=response_format,
+        **openai_kwargs(model, reasoning_effort=reasoning_effort, prompt_cache=prompt_cache),
         **parse_kwargs,
     )
     log_usage(usage_event, response.usage)
@@ -163,6 +247,7 @@ def traced_parse[T: BaseModel](
     messages: list[Any],
     response_format: type[T],
     model: str,
+    reasoning_effort: str,
     max_output_tokens: int,
     usage_event: str,
     label: str,
@@ -171,6 +256,7 @@ def traced_parse[T: BaseModel](
     session_id: uuid.UUID | None = None,
     metadata: Mapping[str, Any] | None = None,
     clean: Callable[[T], T] | None = None,
+    prompt_cache: PromptCache,
 ) -> UsageResult[T]:
     """Run :func:`parse_structured` under one Langfuse generation.
 
@@ -184,6 +270,7 @@ def traced_parse[T: BaseModel](
         messages: Chat messages for the call.
         response_format: The pydantic wire type to parse into.
         model: Model id.
+        reasoning_effort: The step's effort (``route().effort_for(step)``).
         max_output_tokens: Completion token cap.
         usage_event: structlog event name for usage logging.
         label: Call label used in guard error messages.
@@ -193,6 +280,9 @@ def traced_parse[T: BaseModel](
         metadata: Extra span metadata, after the prompt version.
         clean: Optional step applied to the parsed output before it is
             traced and returned (for example a NUL scrub).
+        prompt_cache: The step's prompt-cache mode (:data:`PromptCache`),
+            forwarded to :func:`parse_structured` and recorded in the span
+            metadata.
 
     Returns:
         The parsed (and cleaned) output plus token usage.
@@ -211,6 +301,8 @@ def traced_parse[T: BaseModel](
             usage_event=usage_event,
             label=label,
             model=model,
+            reasoning_effort=reasoning_effort,
+            prompt_cache=prompt_cache,
             max_completion_tokens=max_output_tokens,
         )
         return (clean(parsed) if clean is not None else parsed), usage
@@ -224,6 +316,8 @@ def traced_parse[T: BaseModel](
             model=model,
             metadata={
                 "prompt_version": prompt_version,
+                "reasoning_effort": reasoning_effort,
+                "prompt_cache": prompt_cache,
                 **(metadata or {}),
                 **usage_metadata(usage),
             },

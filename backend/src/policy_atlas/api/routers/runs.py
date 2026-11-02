@@ -24,8 +24,8 @@ from policy_atlas.api.deps import (
     get_runner_backends,
     get_settings,
 )
-from policy_atlas.api.routers._access import accessible_task
-from policy_atlas.api.routers._common import (
+from policy_atlas.api.routers.access import accessible_task
+from policy_atlas.api.routers.common import (
     active_parentless_walk,
     executor_walk,
     parentless_walk,

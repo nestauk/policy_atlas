@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from policy_atlas.core.usage import UsageResult
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     CaseStudyWire,
     ClaimWire,
     IntroWire,
@@ -20,10 +20,10 @@ from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     SectionProposalWire,
     SectionProseWire,
     SectionRepairWire,
-    SectionTurn,
     SummaryJudgeWire,
     SummaryWire,
 )
+from policy_atlas.evidence_search.synthesis.synthesis_backend import SectionTurn
 from policy_atlas.evidence_search.synthesis.synthesis_tools import ToolExchange
 
 

@@ -1,5 +1,22 @@
 # Spec update log
 
+## 2026-11-02
+Task 056 (cost and latency), the owner-accepted spec items S1, S2 and S9 (contract rev 2, plan
+gate 2026-11-01), applied at the build (step 5) because the Unrated behaviour ships in this slice.
+Contract: `docs/tasks/056-cost-latency/contract.md`; decisions in ADR 0042.
+* **Update** (S1): [ES components § 4](capabilities/evidence-search/components.md) — Non-evidence
+  and Unknown are appraised as Unrated (no score), citable, and counted as their own bucket; § 3
+  unchanged (Non-evidence still excludes from select/extract).
+* **Update** (S2): [ES provenance](capabilities/evidence-search/provenance.md) and
+  [system provenance-grounding](system/provenance-grounding.md) — Unrated is below the citable
+  bar for pattern and coverage counting, its own coverage bucket, the reader-facing word is
+  "Unrated", and grounding stays the judge's verdict alone.
+* **Update** (S9): [ES components § 9](capabilities/evidence-search/components.md) — repair is a
+  dependency-complete id-carrying call that starts with the section's own first-turn request so
+  it reads the section's prompt cache, never a resend of the tool transcript.
+* S5 (the full-text reading stage and the typed progress counts) is applied with Phase 6.
+* **Update** (S5 wording, review of task 056, owner 2026-11-02): [web-api](system/web-api.md) — a `tick`'s three counts `fetched`, `parsed` and `total` are sent as null when absent (were "omitted"), so the wire matches the generated contract, which lists them as always present and nullable.
+
 ## 2026-10-12
 Task 046 (the longlist refinement), contract § Spec changes, applied at the step-7 review on the
 owner's word ("Make the spec changes"; items 1–17 of `spec-changes-proposed.md` and the amendment 3

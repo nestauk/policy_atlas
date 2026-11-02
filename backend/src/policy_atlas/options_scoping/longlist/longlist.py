@@ -20,7 +20,7 @@ decisions 7 and 8. The longlist walk's clustering step:
    (and the user's own), on a rebuild every existing option (D14).
    :class:`LonglistClusteringBackend` returns the seeds plus newly
    discovered options from ``discover`` and places each unit under one label
-   in ``assign``; :func:`~policy_atlas.evidence_search.clustering_engine.cluster_units`
+   in ``assign``; :func:`~policy_atlas.core.clustering_engine.cluster_units`
    runs exactly as characterise runs it. Discovery reads the plan, the
    baseline, the seeds and the **corpus digest** — never a unit record — and
    works to :data:`LONGLIST_TARGET_SIZE`; new options stop at
@@ -83,6 +83,17 @@ from pydantic import ValidationError
 from sqlalchemy import and_, select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.core.clustering_engine import (
+    AssignmentOutput,
+    ClusterAssignment,
+    ClusteringBackend,
+    ClusteringFailure,
+    ClusteringPolicy,
+    ClusteringResult,
+    ClusterLabel,
+    ClusterUnit,
+    cluster_units,
+)
 from policy_atlas.core.schema import (
     capability_run,
     evidence_scope,
@@ -102,17 +113,6 @@ from policy_atlas.core.schema import (
     task_source_snapshot,
 )
 from policy_atlas.core.usage import UsageAccumulator, UsageResult
-from policy_atlas.evidence_search.clustering_engine import (
-    AssignmentOutput,
-    ClusterAssignment,
-    ClusteringBackend,
-    ClusteringFailure,
-    ClusteringPolicy,
-    ClusteringResult,
-    ClusterLabel,
-    ClusterUnit,
-    cluster_units,
-)
 from policy_atlas.evidence_search.extract.extract import (
     EXTRACT_RETRY_CAP,
     record_ids_by_profile,
@@ -137,11 +137,6 @@ from policy_atlas.options_scoping.longlist.coverage import (
     normalise_doi,
     option_coverage,
 )
-from policy_atlas.options_scoping.longlist.longlist_backend import (
-    LONGLIST_ASSIGNMENT_MODEL,
-    LONGLIST_JUDGMENT_MODEL,
-    LonglistBackend,
-)
 from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     LONGLIST_CLUSTER_PROMPT_VERSION,
     NOT_AN_OPTION_LABEL,
@@ -151,6 +146,11 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
 )
 from policy_atlas.options_scoping.longlist.where_tried import resolve_country
 from policy_atlas.options_scoping.longlist_intent import longlist_plan_data, plan_tagging_context
+from policy_atlas.options_scoping.scoping_backend import (
+    LONGLIST_ASSIGNMENT_MODEL,
+    LONGLIST_JUDGMENT_MODEL,
+    LonglistBackend,
+)
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.options_scoping.text import fold_text
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan

@@ -104,6 +104,7 @@ dev = [
     "types-psycopg2",
     "pytest-socket>=0.8.0",
     "ipykernel>=7.3.0",
+    "pytest-xdist>=3.6",
 ]
 
 # Task 033 (approved dependency gate, contract rev 3.0 § 10): the operator CLI's

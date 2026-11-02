@@ -1,5 +1,5 @@
 import { LIFECYCLE_LABELS, countOf } from "../../lib/vocabulary";
-import type { PlanDraft, RunStatus, StageEntry, StageStatus } from "../../store";
+import type { PlanDraft, RunStatus, StageEntry, StageLiveness, StageStatus } from "../../store";
 import { isScoping } from "../scopingActivity";
 import { timelineSummary } from "./journey/presentation";
 import { stepsForAnalysisDepth, type PlanStepPreview } from "./planVocabulary";
@@ -233,7 +233,30 @@ Every acquire/screen SSE entry is kept so Broad/Broadest rounds do not
 collapse to the last one. Ingest is omitted from Searching by the server
 (unmapped from public acquire).
 */
-export function stageRows(stages: StageEntry[], plan: PlanDraft | null | undefined): StageRow[] {
+export function stageRows(
+  stages: StageEntry[],
+  plan: PlanDraft | null | undefined,
+  liveness: Record<string, StageLiveness> = {},
+): StageRow[] {
+  return withLiveCounts(stagedRows(stages, plan), liveness);
+}
+
+/** Tick counts (task 056: full-text reading) ride on an in-flight row's
+ *  summary, where `beatSentence` reads them; a finished row keeps its own. */
+function withLiveCounts(rows: StageRow[], liveness: Record<string, StageLiveness>): StageRow[] {
+  return rows.map((row) => {
+    const live = liveness[row.stage];
+    if (row.status !== "started" || live === undefined) return row;
+    const counts: Record<string, number> = {};
+    for (const key of ["fetched", "parsed", "total"] as const) {
+      const value = live[key];
+      if (value !== undefined) counts[key] = value;
+    }
+    return Object.keys(counts).length === 0 ? row : { ...row, summary: { ...row.summary, ...counts } };
+  });
+}
+
+function stagedRows(stages: StageEntry[], plan: PlanDraft | null | undefined): StageRow[] {
   const liveByStage = new Map<string, StageEntry>(stages.map((entry) => [entry.stage, entry]));
   const scope = plan?.backend_scope;
   const vocab = vocabByStage(scope);
@@ -305,10 +328,17 @@ export function stageRows(stages: StageEntry[], plan: PlanDraft | null | undefin
   });
 }
 
+/** What a row reads as: an in-flight row with live counts reads as its beat
+ *  sentence (full-text reading, task 056), every other row as its label. */
+export function rowLabel(row: StageRow): string {
+  if (row.status !== "started") return row.label;
+  return beatSentence(row.stage, row.summary) ?? row.label;
+}
+
 /** Label of the in-flight step, else the last completed one. */
 function currentStepLabel(rows: StageRow[]): string | null {
   const started = rows.find((row) => row.status === "started");
-  if (started !== undefined) return started.label;
+  if (started !== undefined) return rowLabel(started);
   const completed = [...rows].reverse().find((row) => row.status === "completed");
   return completed?.label ?? rows[0]?.label ?? null;
 }
@@ -389,6 +419,16 @@ export function beatSentence(
       const themes = num(summary, "themes");
       if (themes === null) return null;
       return `${countOf(themes, "theme", "themes")}`;
+    }
+    case "ingest": {
+      // Live counts from the stage's ticks (task 056, S5); none → the label alone.
+      const total = num(summary, "total");
+      if (total === null) return null;
+      const parsed = num(summary, "parsed") ?? 0;
+      const fetched = num(summary, "fetched") ?? 0;
+      if (parsed > 0) return `Reading the full texts: ${parsed} of ${total} read`;
+      if (fetched > 0) return `Reading the full texts: ${fetched} fetched`;
+      return null;
     }
     // option_profile (task 046, R37): the step's label is its only sentence.
     default:

@@ -31,7 +31,6 @@ from policy_atlas.core.schema import (
     task_plan,
 )
 from policy_atlas.core.usage import UsageAccumulator
-from policy_atlas.evidence_search.assess.appraise import DEFAULT_RUBRIC
 from policy_atlas.evidence_search.assess.classification_backend import ClassificationBackend
 from policy_atlas.evidence_search.assess.classify import SKIP_TSS_KEY
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
@@ -64,7 +63,7 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
     write_summaries_after_commit,
 )
 from policy_atlas.options_scoping.labels import labels_for_snapshots
-from policy_atlas.options_scoping.longlist.longlist_backend import LonglistBackend
+from policy_atlas.options_scoping.scoping_backend import LonglistBackend
 from policy_atlas.options_scoping.suggest.suggest import SuggestBackend
 from policy_atlas.runtime import option_search, steering_events
 from policy_atlas.runtime.agent_backend import (
@@ -722,12 +721,13 @@ def resolved_skip_ids(
     keep the Evidence search's per-scope discipline.
 
     - ``classify``: the evidence type is inherited-resolved **and** nothing is
-      left for appraise to do — the tier is inherited-resolved too (not a
-      stale rubric), or the type is outside the rubric's domain. Appraise
-      works from this scope's classification rows, so a document whose
-      inherited appraisal is under a stale rubric (or missing, or whose tier
-      is this task's own) is classified here and appraised afresh rather than
-      left without a tier.
+      left for appraise to do — the tier is inherited-resolved too (a score
+      or Unrated, not a stale rubric). Appraise works from this scope's
+      classification rows, so a document whose inherited appraisal is under a
+      stale rubric (or missing, or whose tier is this task's own) is
+      classified here and appraised afresh rather than left without a tier.
+      Since task 056 (D7) every type gets a tier (Unknown and Non-evidence get
+      Unrated), so a type outside the rubric no longer means "nothing to do".
     - ``appraise``: the tier **and** the type are both inherited-resolved and
       the tier is not under a stale rubric (the resolver withholds a stale
       score), so a stale-rubric document is re-appraised, and an inherited
@@ -756,12 +756,10 @@ def resolved_skip_ids(
             continue
         if not label.type_inherited or label.evidence_type is None:
             continue
-        tier_resolved = label.tier_inherited and label.quality_score is not None
-        if component == "appraise":
-            if tier_resolved:
-                skip.add(tss_id)
-            continue
-        if tier_resolved or label.evidence_type not in DEFAULT_RUBRIC:
+        tier_resolved = label.tier_inherited and (
+            label.quality_score is not None or label.unrated
+        )
+        if tier_resolved:
             skip.add(tss_id)
     return skip
 
@@ -6227,6 +6225,8 @@ def _usage_totals(
         "completion": usage["completion"] if isinstance(usage.get("completion"), int) else 0,
         "total": usage["total"] if isinstance(usage.get("total"), int) else 0,
         "cached": usage["cached"] if isinstance(usage.get("cached"), int) else 0,
+        "cache_write": usage["cache_write"] if isinstance(usage.get("cache_write"), int) else 0,
+        "reasoning": usage["reasoning"] if isinstance(usage.get("reasoning"), int) else 0,
     }
 
 

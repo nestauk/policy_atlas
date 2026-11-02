@@ -414,6 +414,107 @@ def test_timeout_does_not_swallow_completed_sibling() -> None:
     assert not multiprocessing.active_children(), "worker processes leaked"
 
 
+def _release_by_marker_parse(
+    body: bytes, content_type: str, thin_min: int  # noqa: ARG001
+) -> dict[str, Any]:
+    """Picklable double: ``slow:<dir>`` returns once ``a``, ``b`` and ``c`` have run.
+
+    The body is ``<kind>:<dir>``. A quick job touches ``<dir>/done-<kind>`` and
+    returns; the slow job waits for all three sentinels, then a second more so their
+    results reach the parent first. No fixed sleep: a 4 s and then a 10 s sleep both
+    lost to the forkserver's per-job start under a loaded suite (task 056, 2026-11-02,
+    four times), and the property is the order, not a duration.
+    """
+    kind, _, folder = body.decode().partition(":")
+    if kind == "slow":
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            if all((Path(folder) / f"done-{quick}").exists() for quick in "abc"):
+                break
+            time.sleep(0.05)
+        time.sleep(1.0)
+    else:
+        (Path(folder) / f"done-{kind}").touch()
+    return {"status": "ok", "chunks": [{"content": kind, "locator": {}}],
+            "parse_profile": "p", "segmentation_policy": "s"}
+
+
+def test_slow_first_job_does_not_delay_later_jobs(tmp_path: Path) -> None:
+    """Any-free-slot draining (task 056, N8): a slow job at the head of the queue
+    holds only its own slot; the jobs behind it finish first, through the other
+    slot, from the preloaded forkserver."""
+    assert ingest_full_text._parse_process_context().get_start_method() == "forkserver"
+    marked = [(0, "slow"), (1, "a"), (2, "b"), (3, "c")]
+    results = _run_parse_jobs(
+        [(i, f"{kind}:{tmp_path}".encode(), "text/plain") for i, kind in marked],
+        max_workers=2, parse_timeout=60.0, thin_min=0, parse_fn=_release_by_marker_parse,
+    )
+    # results come back in completion order
+    assert list(results) == [1, 2, 3, 0]
+    assert all(r["status"] == "ok" for r in results.values())
+
+
+# Openly licensed committed fixtures (licences in tests/data/fulltext_manifest.json):
+# three CC-BY-4.0 articles and the CC0 generated corrupt PDF (error path).
+_BYTE_IDENTITY_FILES = (
+    "frontiers_getting_ready_2018.pdf",
+    "frontiers_school_readiness_2022.pdf",
+    "plos_food_environment_review.pdf",
+    "derived_corrupt.pdf",
+)
+# SHA-256 of the parse results below as produced by the scheduler BEFORE task 056
+# (spawn start method, in-order draining; commit 35c92e59) at workers 1 and 4, and by
+# an in-process parse_and_segment. A pymupdf4llm/pymupdf/trafilatura upgrade may move
+# it: re-derive it with the old scheduler only if the in-process leg also changed.
+_BYTE_IDENTITY_DIGEST = "15f69fc20ab88c0d21ad866686e26da009a0f65e52b6587b74b2f108787078b9"
+
+
+def _results_digest(results: dict[int, dict[str, Any]]) -> str:
+    import hashlib
+
+    ordered = [results[i] for i in sorted(results)]
+    return hashlib.sha256(json.dumps(ordered, sort_keys=True).encode()).hexdigest()
+
+
+def test_scheduler_output_is_byte_identical_workers_1_vs_4() -> None:
+    """The scheduler changes nothing in the output (task 056, N8): chunk text,
+    locators, parse profile and status are identical at workers 1 and 4, equal to
+    an in-process parse, and equal to the old scheduler's committed digest."""
+    fulltext_dir = Path(__file__).resolve().parents[2] / "data" / "fulltext"
+    jobs = [
+        (i, (fulltext_dir / name).read_bytes(), "application/pdf")
+        for i, name in enumerate(_BYTE_IDENTITY_FILES)
+    ]
+    in_process = {
+        i: parse_and_segment(body, ct, ingest_full_text.THIN_TEXT_MIN_CHARS)
+        for i, body, ct in jobs
+    }
+    for workers in (1, 4):
+        results = _run_parse_jobs(
+            jobs, max_workers=workers, parse_timeout=300.0,
+            thin_min=ingest_full_text.THIN_TEXT_MIN_CHARS,
+            parse_fn=parse_and_segment,
+        )
+        assert results == in_process, f"workers={workers}"
+    assert [r["status"] for _, r in sorted(in_process.items())] == ["ok", "ok", "ok", "error"]
+    assert _results_digest(in_process) == _BYTE_IDENTITY_DIGEST
+
+
+def test_batch_handover_logged_per_round(conn: Connection) -> None:
+    """One ``ingest.batch_handover`` line per cascade round with the hand-over timings."""
+    task_id, run_id, scope_id = seed_small_corpus(conn)
+    with capture_logs() as logs:
+        run_ingest(conn, task_id, run_id, scope_id, max_workers=2, parse_fn=_ok_parse)
+    handovers = [e for e in logs if e["event"] == "ingest.batch_handover"]
+    assert handovers
+    assert [e["batch"] for e in handovers] == list(range(len(handovers)))
+    # round 0 hands over the 3 bodies that fetch (the 4th link is a 404)
+    assert handovers[0]["documents"] == 3
+    for e in handovers:
+        assert {"fetch_wall_s", "parse_wall_s", "idle_gap_s"} <= e.keys()
+        assert e["idle_gap_s"] >= 0
+
+
 def _socket_deny_parse(body: bytes, content_type: str, thin_min: int) -> dict[str, Any]:
     """Spawn-picklable wrapper: denies socket creation *inside the worker*, then
     parses for real — extends the zero-egress proof across the process boundary
@@ -427,11 +528,27 @@ def _deny_socket(*args: Any, **kwargs: Any) -> Any:
     raise AssertionError("socket creation attempted inside parse worker")
 
 
+_REAL_SOCKET = socket.socket
+
+
+def _deny_network_socket(family: int = -1, *args: Any, **kwargs: Any) -> Any:
+    """Parent-side guard: refuses every socket except a local Unix-domain one.
+
+    The parse workers' forkserver (task 056, N8) hands each job to its helper
+    process over a Unix-domain socket on this machine, which cannot reach the
+    network. Any other family (internet sockets included) is refused.
+    """
+    if family == socket.AF_UNIX:
+        return _REAL_SOCKET(family, *args, **kwargs)
+    raise AssertionError("network socket creation attempted in the ingest parent")
+
+
 def test_zero_egress_socket_deny(conn: Connection, monkeypatch: pytest.MonkeyPatch) -> None:
     """A fixture ingest with socket creation blocked completes green
     (adversarial finding 5) — the zero-egress claim proven at runtime, in the
-    parent (monkeypatch) and inside every spawned parse worker
-    (``_socket_deny_parse``, step-7 security finding).
+    parent (monkeypatch; only the forkserver's local Unix-domain socket is
+    allowed, task 056) and inside every parse worker, where every socket is
+    refused (``_socket_deny_parse``, step-7 security finding).
 
     Scoped, not autouse: the suite's own Postgres connection runs over a socket,
     so the guard patches socket.socket only around the ingest call, after the DB
@@ -443,7 +560,7 @@ def test_zero_egress_socket_deny(conn: Connection, monkeypatch: pytest.MonkeyPat
     """
     task_id, run_id, scope_id = seed_small_corpus(conn)
 
-    monkeypatch.setattr(socket, "socket", _deny_socket)
+    monkeypatch.setattr(socket, "socket", _deny_network_socket)
     summary = run_ingest(conn, task_id, run_id, scope_id, parse_fn=_socket_deny_parse)
     monkeypatch.undo()
     assert summary["ingested"] == 2
@@ -1714,3 +1831,34 @@ def test_javascript_wall_page_is_blocked_by_host_not_full_text() -> None:
         + b"</article></body></html>"
     )
     assert parse_and_segment(article, "text/html", thin_min=200)["status"] == "ok"
+
+
+def test_progress_ticks_carry_store_status_counts(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Task 056 (N9, S5): the fetch loop and the parse drain publish ``ingest``
+    ticks whose counts mirror the statuses the write pass stores, seeded with
+    the documents the store already holds as ``ingested``."""
+    ticks: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        ingest_full_text, "publish_current_tick", lambda **kwargs: ticks.append(kwargs)
+    )
+    task_id, run_id, scope_id = seed_small_corpus(conn)
+    first = run_ingest(conn, task_id, run_id, scope_id)
+    assert ticks
+    assert {tick["stage"] for tick in ticks} == {"ingest"}
+    assert {tick["total"] for tick in ticks} == {first["eligible"]} == {4}
+    for tick in ticks:
+        assert 0 <= tick["parsed"] <= tick["fetched"] <= tick["total"]
+        assert tick["note"]
+    assert [t["fetched"] for t in ticks] == sorted(t["fetched"] for t in ticks)
+    assert [t["parsed"] for t in ticks] == sorted(t["parsed"] for t in ticks)
+    # 3 of the 4 links fetch (the 4th is a 404); 2 parse to ``ingested``.
+    assert (ticks[-1]["fetched"], ticks[-1]["parsed"]) == (3, first["ingested"]) == (3, 2)
+
+    ticks.clear()
+    second = run_ingest(conn, task_id, seed_run(conn, task_id), scope_id)
+    assert second["already_ingested"] == 2
+    # The store's two ``ingested`` rows count as fetched and parsed from the start.
+    assert ticks and all(t["parsed"] >= 2 and t["fetched"] >= 2 for t in ticks)
+    assert ticks[-1]["parsed"] == 2

@@ -3,7 +3,7 @@
 ``longlist``, ``option_profile``, ``constrain`` and ``theme`` share this one
 backend (task 046, S20). Each call has one lead-authored prompt builder
 (:mod:`~policy_atlas.options_scoping.longlist.longlist_cluster_prompt`,
-:mod:`~policy_atlas.options_scoping.theme.longlist_theme_prompt`,
+:mod:`~policy_atlas.options_scoping.theme.theme_prompt`,
 :mod:`~policy_atlas.options_scoping.option_profile.lever_typing_prompt`,
 :mod:`~policy_atlas.options_scoping.constrain.constrain_prompt`):
 
@@ -65,6 +65,7 @@ from pydantic import BaseModel
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import resolve_openai_client, traced_parse
 from policy_atlas.core.usage import UsageResult
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 from policy_atlas.options_scoping.constrain.constrain_prompt import (
     AUTHORITY_MAX_OUTPUT_TOKENS,
     CONSTRAIN_MAX_OUTPUT_TOKENS,
@@ -139,7 +140,7 @@ from policy_atlas.options_scoping.shortlist.shortlist_prompt import (
     ShortlistWire,
 )
 from policy_atlas.options_scoping.text import fold_text
-from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
+from policy_atlas.options_scoping.theme.theme_prompt import (
     LONGLIST_THEME_PROMPT_VERSION,
     THEME_MAX_OUTPUT_TOKENS,
     ThemeAssignmentsResponse,
@@ -151,11 +152,12 @@ from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
 )
 from policy_atlas.runtime.agent_backend import _as_queue, _next
 
-#: The judgment model (discovery, themes, typing, the profile) and the small
-#: model (assignment, folding, place sentences) — contract § Model route.
-#: Both from the route file (task 053); see core/model_routes.py.
-LONGLIST_JUDGMENT_MODEL = route().model_for("longlist_judgment")
-LONGLIST_ASSIGNMENT_MODEL = route().model_for("longlist_assignment")
+#: The two models the run summaries stamp ("discovery" and "assignment" in each
+#: component's provenance). They are stamps only: every call site is its own
+#: step in the route file (task 056) and ``_call`` looks its model and effort
+#: up from the step, so these two just name the discover and assign steps.
+LONGLIST_JUDGMENT_MODEL = route().model_for("longlist_discover")
+LONGLIST_ASSIGNMENT_MODEL = route().model_for("longlist_assign")
 #: The output ceiling of one folding call (one short entry per distinct word).
 FOLDING_MAX_OUTPUT_TOKENS = 16_000
 
@@ -470,8 +472,11 @@ class OpenAILonglistBackend:
         langfuse_client: Langfuse | None = None,
         session_id: uuid.UUID | None = None,
     ) -> None:
+        # 60 s, not 300 (task 056, owner 2026-11-02): the longlist and profile calls take
+        # 5 to 20 s; a request that stalls at the provider is retried after a minute, not
+        # five (one stalled folding call held a scoping run for a quarter of an hour).
         self._client = resolve_openai_client(
-            api_key, backend_name="OpenAILonglistBackend", timeout=300.0, max_retries=2
+            api_key, backend_name="OpenAILonglistBackend", timeout=60.0, max_retries=2
         )
         self._langfuse_client = langfuse_client
         self._session_id = session_id
@@ -481,18 +486,22 @@ class OpenAILonglistBackend:
         messages: list[ChatCompletionMessageParam],
         *,
         response_format: type[T],
-        model: str,
         max_output_tokens: int,
         name: str,
         prompt_version: str,
         metadata: dict[str, str] | None = None,
     ) -> UsageResult[T]:
+        # The step is the trace name with ":" as "_" (``longlist:discover`` is the
+        # ``longlist_discover`` step), so each call site has its own model and effort.
+        step = name.replace(":", "_")
         return traced_parse(
             self._client,
             self._langfuse_client,
             messages=messages,
             response_format=response_format,
-            model=model,
+            model=route().model_for(step),
+            reasoning_effort=route().effort_for(step),
+            prompt_cache=cache_mode_for(step),
             max_output_tokens=max_output_tokens,
             usage_event=f"{name.replace(':', '.')}.usage",
             label=name,
@@ -525,7 +534,6 @@ class OpenAILonglistBackend:
                 residual=residual,
             ),
             response_format=OptionDiscoveryResponse,
-            model=LONGLIST_JUDGMENT_MODEL,
             max_output_tokens=DISCOVERY_MAX_OUTPUT_TOKENS,
             name="longlist:discover",
             prompt_version=LONGLIST_CLUSTER_PROMPT_VERSION,
@@ -538,7 +546,6 @@ class OpenAILonglistBackend:
         return self._call(
             build_longlist_assignment_messages(options=options, records=records),
             response_format=OptionAssignmentsResponse,
-            model=LONGLIST_ASSIGNMENT_MODEL,
             max_output_tokens=ASSIGNMENT_MAX_OUTPUT_TOKENS,
             name="longlist:assign",
             prompt_version=LONGLIST_CLUSTER_PROMPT_VERSION,
@@ -553,7 +560,6 @@ class OpenAILonglistBackend:
                 question=question, records=records, max_labels=max_labels
             ),
             response_format=ThemeDiscoveryResponse,
-            model=LONGLIST_JUDGMENT_MODEL,
             max_output_tokens=THEME_MAX_OUTPUT_TOKENS,
             name="longlist:themes",
             prompt_version=LONGLIST_THEME_PROMPT_VERSION,
@@ -566,7 +572,6 @@ class OpenAILonglistBackend:
         return self._call(
             build_theme_assignment_messages(themes=themes, records=records),
             response_format=ThemeAssignmentsResponse,
-            model=LONGLIST_JUDGMENT_MODEL,
             max_output_tokens=THEME_MAX_OUTPUT_TOKENS,
             name="longlist:assign_themes",
             prompt_version=LONGLIST_THEME_PROMPT_VERSION,
@@ -585,7 +590,6 @@ class OpenAILonglistBackend:
                 options=options, plan=plan, baseline_sections=baseline_sections
             ),
             response_format=LeverTypingResponse,
-            model=LONGLIST_JUDGMENT_MODEL,
             max_output_tokens=LEVER_TYPING_MAX_OUTPUT_TOKENS,
             name="longlist:type",
             prompt_version=LEVER_TYPING_PROMPT_VERSION,
@@ -614,7 +618,6 @@ class OpenAILonglistBackend:
             considerations=considerations,
         )
         settings: dict[str, Any] = {
-            "model": LONGLIST_JUDGMENT_MODEL,
             "max_output_tokens": OPTION_PROFILE_MAX_OUTPUT_TOKENS,
             "name": "option_profile:line",
             "prompt_version": OPTION_PROFILE_PROMPT_VERSION,
@@ -637,7 +640,6 @@ class OpenAILonglistBackend:
                 plan=plan, baseline_sections=baseline_sections, options=options
             ),
             response_format=PotentialImpactResponse,
-            model=LONGLIST_JUDGMENT_MODEL,
             max_output_tokens=OPTION_PROFILE_MAX_OUTPUT_TOKENS,
             name="option_profile:potential_impact",
             prompt_version=OPTION_PROFILE_PROMPT_VERSION,
@@ -656,7 +658,6 @@ class OpenAILonglistBackend:
                 plan=plan, baseline_sections=baseline_sections, options=options
             ),
             response_format=AmbitionResponse,
-            model=LONGLIST_JUDGMENT_MODEL,
             max_output_tokens=OPTION_PROFILE_MAX_OUTPUT_TOKENS,
             name="option_profile:ambition",
             prompt_version=OPTION_PROFILE_PROMPT_VERSION,
@@ -669,7 +670,6 @@ class OpenAILonglistBackend:
         return self._call(
             build_setting_messages(plan=plan, options=options),
             response_format=SettingResponse,
-            model=LONGLIST_JUDGMENT_MODEL,
             max_output_tokens=OPTION_PROFILE_MAX_OUTPUT_TOKENS,
             name="option_profile:setting",
             prompt_version=OPTION_PROFILE_PROMPT_VERSION,
@@ -685,7 +685,6 @@ class OpenAILonglistBackend:
         return self._call(
             build_folding_messages(facet=facet, plan=plan, words=words),
             response_format=FoldingResponse,
-            model=LONGLIST_ASSIGNMENT_MODEL,
             max_output_tokens=FOLDING_MAX_OUTPUT_TOKENS,
             name="option_profile:fold",
             prompt_version=FOLDING_PROMPT_VERSION,
@@ -706,7 +705,6 @@ class OpenAILonglistBackend:
                 option=option, plan=plan, vocabulary=vocabulary, places=places
             ),
             response_format=PlaceSentencesResponse,
-            model=LONGLIST_ASSIGNMENT_MODEL,
             max_output_tokens=PLACE_SENTENCES_MAX_OUTPUT_TOKENS,
             name="option_profile:place_sentences",
             prompt_version=PLACE_SENTENCES_PROMPT_VERSION,
@@ -731,7 +729,6 @@ class OpenAILonglistBackend:
                 options=options,
             ),
             response_format=ConstrainResponse,
-            model=LONGLIST_JUDGMENT_MODEL,
             max_output_tokens=CONSTRAIN_MAX_OUTPUT_TOKENS,
             name="longlist:constrain",
             prompt_version=CONSTRAIN_PROMPT_VERSION,
@@ -742,7 +739,6 @@ class OpenAILonglistBackend:
         return self._call(
             build_distinct_messages(options=options),
             response_format=DistinctResponse,
-            model=LONGLIST_JUDGMENT_MODEL,
             max_output_tokens=DISTINCT_MAX_OUTPUT_TOKENS,
             name="longlist:distinct",
             prompt_version=CONSTRAIN_PROMPT_VERSION,
@@ -755,7 +751,6 @@ class OpenAILonglistBackend:
         return self._call(
             build_authority_messages(considerations=considerations, options=options),
             response_format=AuthorityResponse,
-            model=LONGLIST_JUDGMENT_MODEL,
             max_output_tokens=AUTHORITY_MAX_OUTPUT_TOKENS,
             name="longlist:authority",
             prompt_version=CONSTRAIN_PROMPT_VERSION,
@@ -772,7 +767,6 @@ class OpenAILonglistBackend:
         return self._call(
             messages,
             response_format=ShortlistWire,
-            model=LONGLIST_JUDGMENT_MODEL,
             max_output_tokens=SHORTLIST_MAX_OUTPUT_TOKENS,
             name="longlist:shortlist",
             prompt_version=SHORTLIST_PROMPT_VERSION,

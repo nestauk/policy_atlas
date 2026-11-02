@@ -68,6 +68,7 @@ PlanStageKey = Literal[
     "screen",
     "classify",
     "appraise",
+    "ingest",
     "characterise",
     "select",
     "extract",

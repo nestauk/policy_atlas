@@ -15,16 +15,19 @@ from policy_atlas.core.openai_client import parse_structured, resolve_openai_cli
 from policy_atlas.core.prompt_fields import splice_guidance
 from policy_atlas.core.tags import has_control_character
 from policy_atlas.core.usage import UsageResult
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 
 log = structlog.get_logger()
 
 PROMPT_VERSION = "characterise_grouping_v1"
-DISCOVERY_MODEL = route().model_for("theme_discovery")
+DISCOVERY_MODEL = route().model_for("characterise_discover")
+DISCOVERY_EFFORT = route().effort_for("characterise_discover")
 # Plan pinned gpt-5-nano; flipped to gpt-5-mini on live evidence (2026-07-06): nano
 # emits an empty assignments list on realistic 25-doc batches at any reasoning effort
 # (16K reasoning tokens -> `{"assignments":[]}`), mini assigns 25/25 cleanly. Deviation
 # flagged in verification.md; the nano-class pin was plan-gate detail, not contract.
-ASSIGNMENT_MODEL = route().model_for("theme_assignment")
+ASSIGNMENT_MODEL = route().model_for("characterise_assign")
+ASSIGNMENT_EFFORT = route().effort_for("characterise_assign")
 BATCH_SIZE = 40
 MAX_CONCURRENT_BATCHES = 4
 DISCOVERY_RETRY_CAP = 1
@@ -373,6 +376,8 @@ class OpenAIThemeGroupingBackend:
             usage_event="grouping.discover.usage",
             label="discovery",
             model=DISCOVERY_MODEL,
+            reasoning_effort=DISCOVERY_EFFORT,
+            prompt_cache=cache_mode_for("characterise_discover"),
         )
         return (
             [
@@ -416,6 +421,8 @@ class OpenAIThemeGroupingBackend:
             usage_event="grouping.assign.usage",
             label="assignment",
             model=ASSIGNMENT_MODEL,
+            reasoning_effort=ASSIGNMENT_EFFORT,
+            prompt_cache=cache_mode_for("characterise_assign"),
         )
 
         assignments: dict[str, str] = {}

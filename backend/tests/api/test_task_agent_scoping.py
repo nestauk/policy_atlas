@@ -28,7 +28,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.deps import get_executor, get_task_agent_backend
 from policy_atlas.api.longlist_start import LonglistRefused
-from policy_atlas.api.readmodels import repository
+from policy_atlas.api.read_models import repository
 from policy_atlas.api.routers import task_agent as task_agent_router
 from policy_atlas.core.schema import (
     artefact,

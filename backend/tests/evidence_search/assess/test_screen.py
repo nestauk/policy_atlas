@@ -1250,6 +1250,7 @@ def test_criteria_key_handling_confined_to_screen_module() -> None:
         "evidence_search/sourcing/search_live.py",
         "evidence_search/sourcing/search_loop.py",
         "evidence_search/sourcing/search_prompts.py",
+        "evidence_search/synthesis/section_prompt.py",
         "evidence_search/synthesis/synthesis_backend.py",
         "evidence_search/synthesis/synthesis_tools.py",
         "evidence_search/synthesis/synthesise.py",

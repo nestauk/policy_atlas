@@ -428,6 +428,37 @@ def test_tick_frame_discriminates_and_has_no_sequence() -> None:
     assert not hasattr(model, "sequence")
 
 
+def test_tick_frame_counts_are_optional_typed_ints() -> None:
+    """Task 056 (S5): `fetched`, `parsed`, `total` are optional ints on a tick."""
+    with_counts = _adapter().validate_python(
+        {
+            "type": "tick",
+            "stage": "ingest",
+            "occurred_at": _now().isoformat(),
+            "note": "1 of 4 read, 2 fetched.",
+            "fetched": 2,
+            "parsed": 1,
+            "total": 4,
+        }
+    )
+    assert isinstance(with_counts, TickFrame)
+    assert (with_counts.fetched, with_counts.parsed, with_counts.total) == (2, 1, 4)
+    bare = _adapter().validate_python(
+        {"type": "tick", "occurred_at": _now().isoformat(), "note": "still working…"}
+    )
+    assert isinstance(bare, TickFrame)
+    assert (bare.fetched, bare.parsed, bare.total) == (None, None, None)
+    with pytest.raises(ValidationError):
+        _adapter().validate_python(
+            {
+                "type": "tick",
+                "occurred_at": _now().isoformat(),
+                "note": "n",
+                "parsed": "many",
+            }
+        )
+
+
 def test_sse_frame_unknown_type_rejected() -> None:
     """An unknown `type` discriminator fails validation."""
     with pytest.raises(ValidationError):

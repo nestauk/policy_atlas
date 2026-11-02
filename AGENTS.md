@@ -47,5 +47,7 @@ command makes it redundant.
   concept ids: do not rename them.
 - Codex jobs: `scripts/codex_job.sh wait <job-id>`. Never hand-roll a status poll
   (`docs/agentic-ops/failure-log.md`, 2026-07-07).
-- Parallel test lanes that share one Postgres break migration round-trips
-  (`docs/deferred.md` § Codebase health). Run the full gate serially.
+- Test lanes that share one Postgres database break migration round-trips
+  (`docs/deferred.md` § Codebase health). `make test` gives each worker its own copy
+  (`tests/conftest.py`, task 056); a second suite on the same Postgres still needs its own
+  `DATABASE_URL` name.

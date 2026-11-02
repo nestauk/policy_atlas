@@ -91,6 +91,7 @@ describe("runningCard helpers", () => {
       "screen",
       "classify",
       "appraise",
+      "ingest",
       "characterise",
       "select",
       "synthesise",

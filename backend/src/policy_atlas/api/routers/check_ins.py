@@ -16,7 +16,7 @@ from sqlalchemy.engine import Connection, Engine
 from policy_atlas.api import continuation
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
-from policy_atlas.api.checkin_read import _check_in
+from policy_atlas.api.check_ins_read import _check_in
 from policy_atlas.api.contract import CheckInOut, CheckInResponse, FreeTextCompileOut
 from policy_atlas.api.contract.common import PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX, Page, PageMeta
 from policy_atlas.api.deps import (
@@ -31,7 +31,7 @@ from policy_atlas.api.longlist_start import (
     open_longlist_walk,
     plan_row_of_walk,
 )
-from policy_atlas.api.routers._access import accessible_task
+from policy_atlas.api.routers.access import accessible_task
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.core import events, tracing
 from policy_atlas.core.schema import capability_run

@@ -66,10 +66,6 @@ from policy_atlas.options_scoping.longlist.longlist import (
     discovery_bounds,
     longlist_scope,
 )
-from policy_atlas.options_scoping.longlist.longlist_backend import (
-    STUB_DISCOVERED_LABEL,
-    StubLonglistBackend,
-)
 from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     NOT_AN_OPTION_LABEL,
     DiscoveredOptionWire,
@@ -82,7 +78,11 @@ from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
     LeverTypingResponse,
     LeverTypingWire,
 )
-from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
+from policy_atlas.options_scoping.scoping_backend import (
+    STUB_DISCOVERED_LABEL,
+    StubLonglistBackend,
+)
+from policy_atlas.options_scoping.theme.theme_prompt import (
     ThemeAssignmentsResponse,
     ThemeAssignmentWire,
     ThemeDiscoveryResponse,

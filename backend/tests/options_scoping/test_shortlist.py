@@ -21,11 +21,11 @@ import pytest
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.readmodels.card_text import CardText
+from policy_atlas.api.read_models.card_text import CardText
 from policy_atlas.core import events
 from policy_atlas.core.schema import evidence_scope, longlist_result, option
 from policy_atlas.options_scoping.context import ScopeContext
-from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
+from policy_atlas.options_scoping.scoping_backend import StubLonglistBackend
 from policy_atlas.options_scoping.shortlist import shortlist as shortlist_module
 from policy_atlas.options_scoping.shortlist.shortlist import (
     PLACES_TARGET,

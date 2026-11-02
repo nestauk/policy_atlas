@@ -32,8 +32,10 @@ the same count once; a document without a DOI counts as itself.
 
 **Labels.** Unknown and Non-evidence are their own evidence-type buckets
 (they are classification results); a document with no label (the resolver's
-``absent``) is ``not rated``; an inherited label counts as its type and tier,
-and ``inherited_labels`` says how many documents' labels came through a link.
+``absent``) is ``not rated``; an Unrated appraisal (no score, task 056) is its
+own tier bucket, ``Unrated``, never folded into ``not rated`` or a score; an
+inherited label counts as its type and tier, and ``inherited_labels`` says how
+many documents' labels came through a link.
 """
 
 from __future__ import annotations
@@ -47,6 +49,7 @@ from typing import Any
 
 import structlog
 
+from policy_atlas.evidence_search.assess.appraise import appraisal_tier
 from policy_atlas.options_scoping.labels import DocumentLabels
 from policy_atlas.options_scoping.longlist.where_tried import (
     ABBREVIATIONS,
@@ -412,7 +415,9 @@ def _pick_label(candidates: list[DocumentLabels]) -> DocumentLabels | None:
         label
         for label in candidates
         if label.provenance != "absent"
-        and (label.evidence_type is not None or label.quality_score is not None)
+        and (
+            label.evidence_type is not None or label.quality_score is not None or label.unrated
+        )
     ]
     if not resolved:
         return candidates[0] if candidates else None
@@ -420,7 +425,7 @@ def _pick_label(candidates: list[DocumentLabels]) -> DocumentLabels | None:
         enumerate(resolved),
         key=lambda item: (
             item[1].provenance != "own",
-            item[1].quality_score is None,
+            item[1].quality_score is None and not item[1].unrated,
             item[1].evidence_type is None,
             item[0],
         ),
@@ -662,7 +667,7 @@ def option_coverage(
             tier[NOT_RATED] += 1
         else:
             evidence_type[label.evidence_type or NOT_RATED] += 1
-            tier[str(label.quality_score) if label.quality_score is not None else NOT_RATED] += 1
+            tier[appraisal_tier(label.quality_score, unrated=label.unrated) or NOT_RATED] += 1
             inherited_labels += int(label.provenance == "inherited")
         for role_key in {m.role for m in doc_members if m.role in role}:
             role[role_key] += 1

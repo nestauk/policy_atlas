@@ -53,6 +53,18 @@ tooling. Not part of the runtime package.
 
 from __future__ import annotations
 
+import argparse
+import collections
+import csv
+import hashlib
+import json
+import math
+import re
+import time
+from datetime import UTC, date, datetime
+from pathlib import Path
+from typing import Any
+
 import _bootstrap  # noqa: F401
 from baseline_recall import (
     cache_path,
@@ -70,18 +82,7 @@ from evals_search_utils import (
     record_key,
     select_items,
 )
-
-import argparse
-import collections
-import csv
-import hashlib
-import json
-import math
-import re
-import time
-from datetime import UTC, date, datetime
-from pathlib import Path
-from typing import Any
+from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.core import tracing
 from policy_atlas.evidence_search.sourcing import search_generation, search_prompts
@@ -100,7 +101,6 @@ from policy_atlas.evidence_search.sourcing.search_prompts import (
     SearchQueriesWire,
     validated_queries,
 )
-from pydantic import BaseModel, ConfigDict, Field
 
 ARM = "openalex-snowball"
 SEED_ARM = "openalex-raw"
@@ -400,6 +400,7 @@ def generated_queries(
                 },
             ],
             model=model,
+            reasoning_effort="medium",  # task 056: every call states its effort
             response_format=ConceptBlocksWire,
             prompt_version="openalex_concepts_exp",
             usage_event="search_generation.queries.usage",

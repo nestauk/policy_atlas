@@ -25,7 +25,7 @@ from policy_atlas.options_scoping.longlist.where_tried import (
     countries_named,
     document_where,
 )
-from tests.options_scoping.test_longlist_coverage_046 import _member as coverage_member
+from tests.options_scoping.test_coverage import _member as coverage_member
 
 _SRC = Path(__file__).resolve().parents[2] / "src" / "policy_atlas"
 

@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { beatSentence, FINISHED_NOTICE, finishedNotice, runFinishedSignpost, runningCardCopy, walkKind } from "./runProgress";
+import type { StageEntry } from "../../store";
+import {
+  beatSentence,
+  collapsedStatusLine,
+  FINISHED_NOTICE,
+  finishedNotice,
+  rowLabel,
+  runFinishedSignpost,
+  runningCardCopy,
+  stageRows,
+  walkKind,
+} from "./runProgress";
 
 describe("beatSentence", () => {
   it("suggest: counts suggestions, appends the from-report clause when positive", () => {
@@ -84,6 +95,49 @@ describe("beatSentence", () => {
 
   it("never returns a beat for an unknown stage", () => {
     expect(beatSentence("some_future_stage", { total: 5 })).toBeNull();
+  });
+});
+
+describe("full-text reading progress (task 056, S5)", () => {
+  it("beatSentence ingest: read count once any is read, fetched before, else the label alone", () => {
+    expect(beatSentence("ingest", { fetched: 5, parsed: 3, total: 10 })).toBe(
+      "Reading the full texts: 3 of 10 read",
+    );
+    expect(beatSentence("ingest", { fetched: 4, parsed: 0, total: 10 })).toBe(
+      "Reading the full texts: 4 fetched",
+    );
+    expect(beatSentence("ingest", { fetched: 0, parsed: 0, total: 10 })).toBeNull();
+    expect(beatSentence("ingest", {})).toBeNull();
+    expect(beatSentence("ingest", undefined)).toBeNull();
+    // The completed frame's own summary carries no live counts.
+    expect(beatSentence("ingest", { eligible: 10, ingested: 7 })).toBeNull();
+  });
+
+  const started: StageEntry = { stage: "ingest", label: "Reading the full texts", status: "started" };
+
+  it("an in-flight ingest row reads as its live counts, on the row and the collapsed line", () => {
+    const rows = stageRows([started], null, {
+      ingest: { note: "3 of 10 read, 5 fetched.", occurredAt: "2026-11-02T10:00:00Z", fetched: 5, parsed: 3, total: 10 },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].label).toBe("Reading the full texts");
+    expect(rowLabel(rows[0])).toBe("Reading the full texts: 3 of 10 read");
+    expect(collapsedStatusLine("running", rows, "1m")).toBe(
+      "RUNNING · Reading the full texts: 3 of 10 read · 1m",
+    );
+  });
+
+  it("without counts, or once finished, the row reads as its label", () => {
+    const noCounts = stageRows([started], null, {
+      ingest: { note: "n", occurredAt: "2026-11-02T10:00:00Z" },
+    });
+    expect(rowLabel(noCounts[0])).toBe("Reading the full texts");
+    expect(rowLabel(stageRows([started], null)[0])).toBe("Reading the full texts");
+    const done = stageRows([{ ...started, status: "completed", summary: { eligible: 10 } }], null, {
+      ingest: { note: "n", occurredAt: "2026-11-02T10:00:00Z", fetched: 10, parsed: 8, total: 10 },
+    });
+    expect(done[0].summary).toEqual({ eligible: 10 });
+    expect(rowLabel(done[0])).toBe("Reading the full texts");
   });
 });
 

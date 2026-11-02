@@ -33,6 +33,7 @@ from policy_atlas.core.schema import (
     source_snapshot,
     task_source_snapshot,
 )
+from policy_atlas.evidence_search.assess.appraise import appraisal_tier
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 from policy_atlas.evidence_search.synthesis.synthesis_backend import SynthesisBackend
 from policy_atlas.evidence_search.synthesis.synthesis_tools import priority_counts_by_group
@@ -579,6 +580,7 @@ def _doc_metadata(
             source_snapshot.c.source_locator,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
+            source_appraisal_result.c.unrated,
         )
         .select_from(
             task_source_snapshot.join(
@@ -615,7 +617,8 @@ def _doc_metadata(
         result[str(row.task_source_snapshot_id)] = {
             "title": title,
             "evidence_type": row.primary_evidence_type,
-            "quality_tier": (str(row.quality_score) if row.quality_score is not None else None),
+            # "4", or "Unrated" for an appraisal with no score (task 056).
+            "quality_tier": appraisal_tier(row.quality_score, unrated=bool(row.unrated)),
             "full_text_status": row.full_text_status,
         }
     return result

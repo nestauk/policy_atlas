@@ -66,11 +66,11 @@ from policy_atlas.api.longlist_turns import (
     is_longlist_state,
     read_longlist_surface,
 )
-from policy_atlas.api.routers._access import accessible_task
-from policy_atlas.api.routers._common import (
+from policy_atlas.api.routers.access import accessible_task
+from policy_atlas.api.routers.check_ins import execute_claimed
+from policy_atlas.api.routers.common import (
     active_parentless_walk,
 )
-from policy_atlas.api.routers.check_ins import execute_claimed
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import (

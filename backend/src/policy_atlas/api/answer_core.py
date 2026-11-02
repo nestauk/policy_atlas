@@ -143,10 +143,12 @@ def apply_appraisal_labels(citations: list[dict[str, Any]]) -> list[dict[str, An
     Returns:
         The same citations with ``appraisal_label`` set from
         ``appraisal_score`` (via ``SCORE_LABELS``) wherever a score is
-        present and known; ``appraisal_score`` itself is not re-exposed —
-        the frontend contract has only ever carried the label.
+        present and known, or to "Unrated" where the citation persisted
+        ``appraisal_unrated`` (an appraisal with no score, task 056);
+        neither persisted key is re-exposed — the frontend contract has only
+        ever carried the label.
     """
-    from policy_atlas.evidence_search.assess.appraise import SCORE_LABELS
+    from policy_atlas.evidence_search.assess.appraise import appraisal_label
 
     labelled: list[dict[str, Any]] = []
     for citation in citations:
@@ -154,12 +156,14 @@ def apply_appraisal_labels(citations: list[dict[str, Any]]) -> list[dict[str, An
             labelled.append(citation)
             continue
         score = citation.get("appraisal_score")
-        if score is None:
+        unrated = citation.get("appraisal_unrated") is True
+        if score is None and not unrated:
             labelled.append(citation)
             continue
         merged = dict(citation)
         merged.pop("appraisal_score", None)
-        label = SCORE_LABELS.get(score)
+        merged.pop("appraisal_unrated", None)
+        label = appraisal_label(score, unrated=unrated)
         if label is not None:
             merged["appraisal_label"] = label
         labelled.append(merged)
@@ -331,7 +335,11 @@ def _resolve_citation_sources(
         source_id = source_facts.get("source_id")
         if source_id is not None:
             label = labels.get(uuid.UUID(source_id))
-            if label is not None and label.quality_score is not None:
+            if label is not None and label.unrated:
+                # No score to persist: the flag persists instead, and
+                # apply_appraisal_labels reads it as "Unrated" (task 056).
+                merged["appraisal_unrated"] = True
+            elif label is not None and label.quality_score is not None:
                 # The score, not the label, persists (evidence_search.assess.appraise's
                 # read-time-copy pin) — apply_appraisal_labels derives the label
                 # fresh on every read from this score.

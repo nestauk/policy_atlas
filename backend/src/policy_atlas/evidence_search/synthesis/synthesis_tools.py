@@ -5,7 +5,7 @@ plan-pinned constants, the three read-only scoped tools (``search_chunks`` /
 ``query_findings`` / ``lookup``), the staged retrieval pipeline behind the
 ``retrieve`` seam's first increment, the bounded loop runner, and the
 fail-closed ``context["synthesis"]`` directive parser. The prompt-bearing
-surfaces live in :mod:`policy_atlas.evidence_search.synthesis.synthesis_backend` and
+surfaces live in :mod:`policy_atlas.evidence_search.synthesis.section_prompt` and
 :mod:`policy_atlas.evidence_search.synthesis.grounding_judge`; nothing in this module
 composes prose.
 
@@ -61,13 +61,15 @@ from policy_atlas.core.schema import (
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.tags import has_control_character
 from policy_atlas.core.usage import UsageAccumulator, UsageResult
+from policy_atlas.evidence_search.assess.appraise import appraisal_tier
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 from policy_atlas.evidence_search.extract.extract import record_ids_by_profile
 from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.evidence_search.extract.quote_verify import QuoteMatcher, build_basis
 
 if TYPE_CHECKING:
-    from policy_atlas.evidence_search.synthesis.synthesis_backend import SectionProseWire
+    from policy_atlas.evidence_search.synthesis.section_prompt import SectionProseWire
 
 # --- Plan-pinned constants (plan.md rev 2 — binding; the caps-bind test
 # asserts these module constants are the values enforced on the live path,
@@ -462,6 +464,9 @@ class SectionLoopResult(TypedDict):
     # and were salvaged away (backend per-claim salvage) — counted, never
     # silent; the component lands them in claims_rejected_structural.
     malformed_claims: int
+    # Further tool calls a forced final turn carried beyond the emission that
+    # was taken (task 056 D10: parallel tool calls stay on for that turn).
+    extra_tool_calls_ignored: int
     usage_totals: dict[str, int]
 
 
@@ -471,6 +476,7 @@ class LoopTurn(TypedDict):
     emission: Any | None
     tool_calls: list[dict[str, Any]]
     malformed: int
+    extra_ignored: NotRequired[int]
 
 
 class ToolLoopResult(TypedDict):
@@ -483,6 +489,7 @@ class ToolLoopResult(TypedDict):
     rejected_tool_calls: int
     turn_cap_hit: bool
     malformed_claims: int
+    extra_tool_calls_ignored: int
     usage_totals: dict[str, int]
 
 
@@ -1133,7 +1140,11 @@ def _doc_record(row: Any, selected_tss_ids: set[uuid.UUID]) -> dict[str, Any]:
         "origin": row.origin,
         "primary_evidence_type": row.primary_evidence_type,
         "text_basis": row.text_basis,
-        "appraisal_tier": str(row.quality_score) if row.quality_score is not None else None,
+        # "4" for a scored row, "Unrated" for a row with no score (task 056); None
+        # only when the document has no appraisal row, which keeps it uncitable.
+        "appraisal_tier": appraisal_tier(
+            row.quality_score, unrated=bool(getattr(row, "unrated", False))
+        ),
         "tags": [],
         "selected": cast("uuid.UUID", row.tss_id) in selected_tss_ids,
         "screen_confidence": row.screen_decision_confidence,
@@ -1273,6 +1284,7 @@ def build_retrieval_scope(
             source_snapshot.c.text_basis,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
+            source_appraisal_result.c.unrated,
             ranked.c.screen_decision_confidence,
             ranked.c.screen_stage,
         )
@@ -1458,6 +1470,186 @@ def _sorted_json(value: Any) -> Any:
     if isinstance(value, list):
         return [_sorted_json(item) for item in value]
     return value
+
+
+def oversized_chunk_window(
+    content_length: int, anchor_start: int, anchor_end: int
+) -> tuple[int, int] | None:
+    """Return the window an oversized chunk is cut to, or ``None`` to send it whole.
+
+    The one window rule for every place that hands chunk text to the section
+    writer: the ``search_chunks`` tool return (anchored on the winning
+    embedding unit) and the repair's dependency chunks (anchored on the cited
+    quote, task 056 N5). A chunk at or under ``UNIT_CHAR_BUDGET`` characters is
+    never windowed. An oversized one becomes the anchor stretch widened by
+    ``OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS`` on each side, clipped to the chunk.
+    The caller marks the cut record with ``window_start`` / ``window_end``.
+
+    Args:
+        content_length: The full chunk's length in characters.
+        anchor_start: Chunk-local start of the stretch to keep (inclusive).
+        anchor_end: Chunk-local end of the stretch to keep (exclusive).
+
+    Returns:
+        ``(window_start, window_end)`` for an oversized chunk; ``None`` otherwise.
+
+    Raises:
+        ValueError: If an oversized chunk's anchor lies outside the chunk.
+    """
+    if content_length <= UNIT_CHAR_BUDGET:
+        return None
+    if anchor_start < 0 or anchor_end < anchor_start or anchor_end > content_length:
+        raise ValueError("matched retrieval unit offsets are required for windows")
+    return (
+        max(0, anchor_start - OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS),
+        min(content_length, anchor_end + OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS),
+    )
+
+
+def _longest_shared_stretch(haystack: str, needle: str) -> tuple[int, int] | None:
+    """Return ``(position in haystack, length)`` of the longest piece of ``needle``.
+
+    Deterministic: the longest length wins; among equal lengths, the earliest
+    start in ``needle``, then its first occurrence in ``haystack``. ``None``
+    when the two share no character at all.
+    """
+
+    def first_hit(length: int) -> int | None:
+        for start in range(len(needle) - length + 1):
+            position = haystack.find(needle[start : start + length])
+            if position != -1:
+                return position
+        return None
+
+    # A shared piece of length L contains one of every shorter length, so the
+    # longest length is found by bisection.
+    low, high, best = 1, len(needle), None
+    while low <= high:
+        middle = (low + high) // 2
+        position = first_hit(middle)
+        if position is None:
+            high = middle - 1
+        else:
+            best = (position, middle)
+            low = middle + 1
+    return best
+
+
+def _quote_anchor(content: str, quote: str) -> tuple[tuple[int, int], bool] | None:
+    """Locate ``quote`` in ``content``: ``((start, end), found)`` or ``None``.
+
+    The quote is matched the way verification matches it (the qv_v1
+    normalisation of :class:`QuoteMatcher`). When it is not there, the anchor
+    is the longest stretch of the normalised quote that is (``found`` False).
+    ``None`` when the quote shares nothing with the chunk.
+    """
+    basis = build_basis([(None, content)])
+    match = QuoteMatcher(basis).find(quote)
+    if match.spans:
+        return (match.spans[0].start, match.spans[-1].end), True
+    normalised_quote = build_basis([(None, quote)]).normalised
+    stretch = _longest_shared_stretch(basis.normalised, normalised_quote)
+    if stretch is None:
+        return None
+    position, length = stretch
+    return (basis.raw_start[position], basis.raw_end[position + length - 1]), False
+
+
+def _repair_chunk_anchor(
+    content: str, cited_quotes: Sequence[str], grounding_quotes: Sequence[str]
+) -> tuple[int, int] | None:
+    """The stretch of a repair dependency chunk its window is cut around.
+
+    Quotes cited on this chunk all count (found, or their longest matching
+    stretch). Finding grounding quotes are not bound to one chunk, so only the
+    ones found here count, else the single longest stretch among them. The
+    anchor is the span covering every counted stretch; ``None`` when there is
+    nothing to anchor on (the chunk is then sent whole).
+    """
+    stretches: list[tuple[int, int]] = []
+    for quote in cited_quotes:
+        anchor = _quote_anchor(content, quote)
+        if anchor is not None:
+            stretches.append(anchor[0])
+    grounding = [
+        anchor for quote in grounding_quotes if (anchor := _quote_anchor(content, quote))
+    ]
+    found = [span for span, was_found in grounding if was_found]
+    if found:
+        stretches.extend(found)
+    elif grounding:
+        stretches.append(max((span for span, _ in grounding), key=lambda s: s[1] - s[0]))
+    if not stretches:
+        return None
+    return min(start for start, _ in stretches), max(end for _, end in stretches)
+
+
+def window_repair_dependency_chunks(failing: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Cut each failing claim's oversized dependency chunks to a window (task 056 N5).
+
+    Each dependency chunk over the oversized threshold goes through
+    :func:`oversized_chunk_window`, anchored on the claim's citation quote for
+    that chunk (a finding claim's anchor chunks: its findings' grounding
+    quotes), and carries the same ``window_start`` / ``window_end`` marker as a
+    windowed ``search_chunks`` return. Chunks at or under the threshold, chunks
+    already windowed by the tool return, and chunks with nothing to anchor on
+    are sent whole. The input records are not mutated.
+
+    Args:
+        failing: Dependency-complete failing-claim records for the repair.
+
+    Returns:
+        The records, with oversized dependency chunks windowed.
+    """
+    windowed: list[dict[str, Any]] = []
+    for record in failing:
+        dependencies = record.get("dependencies")
+        chunks = dependencies.get("chunks") if isinstance(dependencies, dict) else None
+        if not isinstance(dependencies, dict) or not isinstance(chunks, dict):
+            windowed.append(record)
+            continue
+        claim = record.get("claim")
+        citations = claim.get("citations") if isinstance(claim, dict) else None
+        cited: dict[str, list[str]] = {}
+        for citation in citations if isinstance(citations, list) else []:
+            if isinstance(citation, dict) and isinstance(citation.get("quote"), str):
+                chunk_id = str(citation.get("chunk_record_id") or "")
+                cited.setdefault(chunk_id, []).append(citation["quote"])
+        findings = dependencies.get("findings")
+        grounding_quotes = [
+            grounding["quote"]
+            for finding in (findings.values() if isinstance(findings, dict) else [])
+            if isinstance(finding, dict) and isinstance(finding.get("grounding"), list)
+            for grounding in finding["grounding"]
+            if isinstance(grounding, dict) and isinstance(grounding.get("quote"), str)
+        ]
+        new_chunks: dict[str, Any] = {}
+        for chunk_id, chunk_record in chunks.items():
+            content = chunk_record.get("content") if isinstance(chunk_record, dict) else None
+            window = None
+            if (
+                isinstance(chunk_record, dict)
+                and isinstance(content, str)
+                and "window_start" not in chunk_record
+                and len(content) > UNIT_CHAR_BUDGET
+            ):
+                anchor = _repair_chunk_anchor(
+                    content, cited.get(str(chunk_id), []), grounding_quotes
+                )
+                if anchor is not None:
+                    window = oversized_chunk_window(len(content), *anchor)
+            if window is None or not isinstance(content, str):
+                new_chunks[chunk_id] = chunk_record
+                continue
+            window_start, window_end = window
+            new_chunks[chunk_id] = {
+                **chunk_record,
+                "content": content[window_start:window_end],
+                "window_start": window_start,
+                "window_end": window_end,
+            }
+        windowed.append({**record, "dependencies": {**dependencies, "chunks": new_chunks}})
+    return windowed
 
 
 @dataclass(frozen=True)
@@ -1694,17 +1886,12 @@ class ChunkRetriever:
                 or isinstance(unit_end, bool)
                 or not isinstance(unit_start, int)
                 or not isinstance(unit_end, int)
-                or unit_start < 0
-                or unit_end < unit_start
-                or unit_end > len(frozen_content)
             ):
                 raise ValueError("matched retrieval unit offsets are required for windows")
-            window_start = max(0, unit_start - OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS)
-            window_end = min(
-                len(frozen_content),
-                unit_end + OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS,
-            )
-            content = frozen_content[window_start:window_end]
+            window = oversized_chunk_window(len(frozen_content), unit_start, unit_end)
+            if window is not None:
+                window_start, window_end = window
+                content = frozen_content[window_start:window_end]
         result: ChunkSearchResult = {
             "chunk_record_id": chunk_id,
             "tss_id": tss_id,
@@ -2040,9 +2227,11 @@ def _finding_record(row: Any) -> FindingRecord:
     evidence_type = getattr(row, "primary_evidence_type", None)
     if evidence_type is not None:
         record["evidence_type"] = cast("str", evidence_type)
-    quality_score = getattr(row, "quality_score", None)
-    if quality_score is not None:
-        record["appraisal_label"] = str(quality_score)
+    label = appraisal_tier(
+        getattr(row, "quality_score", None), unrated=bool(getattr(row, "unrated", False))
+    )
+    if label is not None:
+        record["appraisal_label"] = label
     venue = _metadata_venue(metadata)
     if venue is not None:
         record["venue"] = venue
@@ -2082,9 +2271,11 @@ def _icf_finding_record(row: Any) -> ICFFindingRecord:
     evidence_type = getattr(row, "primary_evidence_type", None)
     if evidence_type is not None:
         record["evidence_type"] = cast("str", evidence_type)
-    quality_score = getattr(row, "quality_score", None)
-    if quality_score is not None:
-        record["appraisal_label"] = str(quality_score)
+    label = appraisal_tier(
+        getattr(row, "quality_score", None), unrated=bool(getattr(row, "unrated", False))
+    )
+    if label is not None:
+        record["appraisal_label"] = label
     venue = _metadata_venue(metadata)
     if venue is not None:
         record["venue"] = venue
@@ -2126,6 +2317,7 @@ def _load_iof_finding_records(
             source_snapshot.c.metadata,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
+            source_appraisal_result.c.unrated,
         )
         .select_from(intervention_outcome_finding)
         .join(
@@ -2207,6 +2399,7 @@ def _load_icf_finding_records(
             source_snapshot.c.metadata,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
+            source_appraisal_result.c.unrated,
         )
         .select_from(implementation_context_finding)
         .join(
@@ -2787,6 +2980,50 @@ def _grouping_summary(groups_payload: Any) -> dict[str, Any]:
     }
 
 
+#: Lookup kinds that need a referenced upstream run; the reader below fails
+#: them (``"<kind> requires <stage>"``) when that run id is absent. Every
+#: other kind is always servable (it may return an empty or absent record).
+LOOKUP_KIND_REQUIRED_RUN: dict[str, str] = {
+    "selection_rationale": "selection",
+    "characterisation_summary": "characterisation",
+    "grouping_groups": "grouping",
+}
+
+
+def available_lookup_kinds(
+    *,
+    characterisation_run_id: uuid.UUID | None,
+    selection_run_id: uuid.UUID | None,
+    grouping_run_id: uuid.UUID | None,
+) -> list[str]:
+    """Return the lookup kinds a run can serve, in :data:`LOOKUP_QUERY_KINDS` order.
+
+    The same facts :func:`make_lookup_reader` checks before it reads: a kind in
+    :data:`LOOKUP_KIND_REQUIRED_RUN` is servable only when its upstream run id
+    is referenced. The section writer's ``lookup`` tool then offers only these
+    kinds (task 056 X3), so the model never spends a turn on a kind that can
+    only fail.
+
+    Args:
+        characterisation_run_id: The referenced characterisation run, if any.
+        selection_run_id: The referenced selection run, if any.
+        grouping_run_id: The referenced grouping run, if any.
+
+    Returns:
+        The servable kinds.
+    """
+    present = {
+        "characterisation": characterisation_run_id is not None,
+        "selection": selection_run_id is not None,
+        "grouping": grouping_run_id is not None,
+    }
+    return [
+        kind
+        for kind in LOOKUP_QUERY_KINDS
+        if kind not in LOOKUP_KIND_REQUIRED_RUN or present[LOOKUP_KIND_REQUIRED_RUN[kind]]
+    ]
+
+
 def make_lookup_reader(
     conn: Connection,
     *,
@@ -2841,6 +3078,7 @@ def make_lookup_reader(
                     sa_select(
                         source_appraisal_result.c.quality_score,
                         source_appraisal_result.c.rubric_version,
+                        source_appraisal_result.c.unrated,
                     )
                     .where(source_appraisal_result.c.task_id == task_id)
                     .where(source_appraisal_result.c.evidence_scope_id.in_(scope_ids))
@@ -2861,6 +3099,10 @@ def make_lookup_reader(
                         "rubric_version": row.rubric_version,
                     }
                 )
+                if row is not None and row.unrated:
+                    # Only on an Unrated row (no score, task 056), so a scored
+                    # row's result is unchanged.
+                    result["unrated"] = True
             elif kind == "classification_by_doc":
                 row = conn.execute(
                     sa_select(source_classification_result.c.primary_evidence_type)
@@ -3159,6 +3401,7 @@ def run_tool_loop(
     tool_call_counts: dict[str, int] = {}
     rejected_tool_calls = 0
     malformed_claims = 0
+    extra_tool_calls_ignored = 0
     usage_totals = UsageAccumulator()
 
     for turn in range(1, turn_cap + 1):
@@ -3181,6 +3424,7 @@ def run_tool_loop(
         emission = result.get("emission")
         tool_calls = result.get("tool_calls", [])
         malformed_claims += int(result.get("malformed", 0))
+        extra_tool_calls_ignored += int(result.get("extra_ignored", 0))
         if emission is not None:
             return {
                 "emission": emission,
@@ -3190,6 +3434,7 @@ def run_tool_loop(
                 "rejected_tool_calls": rejected_tool_calls,
                 "turn_cap_hit": force_emit,
                 "malformed_claims": malformed_claims,
+                "extra_tool_calls_ignored": extra_tool_calls_ignored,
                 "usage_totals": usage_totals.payload(),
             }
         if force_emit and tool_calls:
@@ -3292,6 +3537,7 @@ def run_section_loop(
             "emission": result.get("claims"),
             "tool_calls": result.get("tool_calls", []),
             "malformed": int(result.get("malformed_claims", 0)),
+            "extra_ignored": int(result.get("extra_tool_calls_ignored", 0)),
         }, usage
 
     result = run_tool_loop(
@@ -3309,6 +3555,7 @@ def run_section_loop(
         "rejected_tool_calls": result["rejected_tool_calls"],
         "turn_cap_hit": result["turn_cap_hit"],
         "malformed_claims": result["malformed_claims"],
+        "extra_tool_calls_ignored": result["extra_tool_calls_ignored"],
         "usage_totals": result["usage_totals"],
     }
 

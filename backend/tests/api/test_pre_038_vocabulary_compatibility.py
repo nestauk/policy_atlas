@@ -15,9 +15,9 @@ import uuid
 
 from sqlalchemy.engine import Connection
 
-from policy_atlas.api import checkin_read
+from policy_atlas.api import check_ins_read
 from policy_atlas.api.lifecycle import both_generations
-from policy_atlas.api.readmodels.repository import _source_reason_maps, decisions_page
+from policy_atlas.api.read_models.repository import _source_reason_maps, decisions_page
 from policy_atlas.api.routers import sse
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run, event_log
@@ -161,7 +161,7 @@ def test_a_stored_plan_with_the_old_steer_point_id_still_validates() -> None:
 
 def test_a_pause_record_with_the_old_steer_point_id_still_projects_its_bundle() -> None:
     """The pause-record reader shares the plan's map, so the P2 bundle survives."""
-    check_in = checkin_read._check_in(
+    check_in = check_ins_read._check_in(
         {
             "event_id": uuid.uuid4(),
             "occurred_at": now(),

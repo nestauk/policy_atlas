@@ -21,7 +21,7 @@ from policy_atlas.core.schema import chunk_embedding, task_source_snapshot
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.evidence_search.synthesis import synthesis_tools
-from policy_atlas.evidence_search.synthesis.synthesis_backend import SectionProseWire
+from policy_atlas.evidence_search.synthesis.section_prompt import SectionProseWire
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     BOOST_CLAMP_MAX,
     BOOST_CLAMP_MIN,
@@ -1459,7 +1459,7 @@ def test_loop_runner_malformed_emission_consumes_turn_and_recovers() -> None:
     """A MalformedEmissionError is a turn-consuming error exchange (the model
     reads the bounded error as data and re-emits); on the forced final turn it
     is a structural failure, never an extension."""
-    from policy_atlas.evidence_search.synthesis.synthesis_backend import SectionProseWire
+    from policy_atlas.evidence_search.synthesis.section_prompt import SectionProseWire
     from policy_atlas.evidence_search.synthesis.synthesis_tools import (
         MalformedEmissionError,
         run_section_loop,
@@ -1750,6 +1750,20 @@ def test_search_chunks_result_carries_default_metadata_set_present_and_absent(
         conn, snapshot_id=bare_snap, content="bare subsidy evidence appears here."
     )
 
+    # Unrated doc (task 056, D7): an appraisal row with no score.
+    unrated_tss = seed_select_doc(
+        conn, task_id, run_id, scope_id, title="Unrated doc",
+        evidence_type="Unknown / Insufficient information", unrated=True,
+    )
+    unrated_snap = conn.execute(
+        select(task_source_snapshot.c.source_snapshot_id).where(
+            task_source_snapshot.c.task_source_snapshot_id == unrated_tss
+        )
+    ).scalar_one()
+    unrated_chunk = _seed_chunk_and_embed(
+        conn, snapshot_id=unrated_snap, content="unrated subsidy evidence appears here."
+    )
+
     scope = build_retrieval_scope(
         conn, task_id=task_id, scope_id=scope_id, selected_tss_ids=set()
     )
@@ -1768,6 +1782,12 @@ def test_search_chunks_result_carries_default_metadata_set_present_and_absent(
         chunk["chunk_record_id"]: chunk
         for chunk in tools["search_chunks"]({"query": "subsidy"})["chunks"]
     }
+
+    unrated = results[str(unrated_chunk)]
+    assert unrated["appraisal_label"] == "Unrated"
+    assert unrated["evidence_type"] == "Unknown / Insufficient information"
+    assert unrated["appraised"] is True
+    assert results[str(bare_chunk)]["appraised"] is False
 
     rich = results[str(rich_chunk)]
     assert rich["year"] == 2024

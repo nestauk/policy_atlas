@@ -1,74 +1,112 @@
-# Which AI model each part of the app uses.
+# Which AI model each part of the app uses, and how hard it thinks.
 #
 # This file is the only place model names live. The code asks for a model by
-# step name (for example "screen" or "synthesis"); this file says which model
-# that step gets on the selected route. Pick a route with the environment
-# variable POLICY_ATLAS_MODEL_ROUTE. When it is unset, "openai-direct" is used:
-# OpenAI called directly, with the owner's model choice of 2026-10-22.
+# step name; one step is one named model call site (for example
+# "classify_document" or "synthesise_section_turn"). This file says which model
+# that step gets on the selected route and which reasoning effort it sends.
+# Pick a route with the environment variable POLICY_ATLAS_MODEL_ROUTE. When it
+# is unset, "openai-direct" is used: OpenAI called directly.
 #
 # Three layers:
-#   [steps]            every step, once, with its default tier
-#   [routes.<name>]    the model for each tier, provider knobs, embeddings,
-#                      and the search-queries backend
+#   [steps]            every step, once: its default tier and its reasoning
+#                      effort ("none", "low", "medium", "high" or "xhigh";
+#                      "none" means the model does not think before answering)
+#   [routes.<name>]    the model for each tier, embeddings, and the
+#                      search-queries backend
 #   [routes.<name>.steps]  optional: a step that should not follow its default
-#                      tier on this route (a tier name, or a specific model id)
+#                      on this route. A bare string is a tier name or a model
+#                      id. A table may carry `model` (tier name or model id)
+#                      and/or `reasoning_effort`.
+#
+# Reasoning effort is per step (task 056, D4). "medium" is the provider's own
+# default, written out so every step says what it sends. Terra-class models
+# refuse function tools unless the effort is "none", so the tool-bearing
+# writer and chat steps carry "none". Sol-class models refuse "none"; their
+# lowest accepted value is "low".
 #
 # To try models without editing this file, point an env variable
 # POLICY_ATLAS_MODEL_ROUTE_FILE at a second file with its own [routes.*] tables;
 # they replace or add routes by name. [steps] always comes from this file.
 #
-# Design: docs/tasks/053-bedrock-local-route/contract.md (D3) and ADR 0041.
+# Design: docs/tasks/053-bedrock-local-route/contract.md (D3), ADR 0041, and
+# docs/tasks/056-cost-latency/contract.md (D2, D4, D9), ADR 0042.
 
 [steps]
-# Cheap, high-volume steps: one small model for all of them
-screen = "fast"
-search_queries = "fast"
-search_reformulate = "fast"
-search_suggest = "fast"
-classify = "fast"
-extract = "fast"
-icf_extract = "fast"
-finding_vetter = "fast"
-icf_finding_vetter = "fast"
-relevance = "fast"
-rerank = "fast"
-theme_discovery = "fast"
-theme_assignment = "fast"
-group_clustering = "fast"
-grounding_judge = "fast"
-mrs_note = "fast"
-full_report_intro = "fast"
-agent_triage = "fast"
-# Options scoping (tasks 044 to 046): the small calls.
-extract_interventions = "fast"
-longlist_assignment = "fast"
-# Writing, conversation, planning and the agent's routing decisions (owner,
-# 2026-10-22: the Task Agent and the agent moved from gpt-5.5 to Terra).
-synthesis = "standard"
-case_studies = "standard"
-chat = "standard"
-task_agent = "standard"
-agent = "standard"
-# The options-scoping judgment calls run on the strongest tier (Sol).
-task_agent_scoping = "frontier"
-longlist_judgment = "frontier"
+# --- Evidence search: assess ---------------------------------------------
+classify_document = { tier = "fast", reasoning_effort = "medium" }   # was high; medium measured within noise, 19% cheaper (task 056 P5)
+screen_abstract = { tier = "fast", reasoning_effort = "medium" }
+screen_full = { tier = "fast", reasoning_effort = "medium" }
+# --- Evidence search: corpus, group ---------------------------------------
+select_rerank = { tier = "fast", reasoning_effort = "medium" }
+characterise_discover = { tier = "fast", reasoning_effort = "medium" }
+characterise_assign = { tier = "fast", reasoning_effort = "medium" }
+group_discover = { tier = "fast", reasoning_effort = "medium" }
+group_assign = { tier = "fast", reasoning_effort = "medium" }
+# --- Evidence search: extract ----------------------------------------------
+extract_iof_findings = { tier = "fast", reasoning_effort = "medium" }
+extract_icf_findings = { tier = "fast", reasoning_effort = "medium" }
+extract_interventions = { tier = "fast", reasoning_effort = "medium" }
+extract_vet_iof_findings = { tier = "fast", reasoning_effort = "medium" }
+extract_vet_icf_findings = { tier = "fast", reasoning_effort = "medium" }
+extract_annotate_relevance = { tier = "fast", reasoning_effort = "high" }   # no stored calls to measure (task 056 P5); stays high
+# --- Evidence search: search ------------------------------------------------
+search_generate_queries = { tier = "fast", reasoning_effort = "medium" }
+search_reformulate = { tier = "fast", reasoning_effort = "medium" }
+search_suggest = { tier = "fast", reasoning_effort = "medium" }
+search_queries_v2_openalex = { tier = "fast", reasoning_effort = "medium" }
+search_queries_v2_overton = { tier = "fast", reasoning_effort = "medium" }
+search_reformulate_v2_openalex = { tier = "fast", reasoning_effort = "medium" }
+search_reformulate_v2_overton = { tier = "fast", reasoning_effort = "medium" }
+# --- Evidence search: synthesise (the writer; Terra needs "none" for tools) --
+synthesise_propose_sections = { tier = "standard", reasoning_effort = "none" }
+synthesise_write_block_summary = { tier = "standard", reasoning_effort = "none" }
+synthesise_write_artefact_summary = { tier = "standard", reasoning_effort = "none" }
+synthesise_judge_summary = { tier = "standard", reasoning_effort = "none" }
+synthesise_section_turn = { tier = "standard", reasoning_effort = "none" }   # section turns and the repair share this step (D10)
+synthesise_write_key_findings = { tier = "standard", reasoning_effort = "none" }
+synthesise_write_case_studies = { tier = "standard", reasoning_effort = "none" }
+synthesise_write_source_note = { tier = "fast", reasoning_effort = "medium" }
+synthesise_write_intro = { tier = "fast", reasoning_effort = "medium" }
+judge_grounding = { tier = "fast", reasoning_effort = "medium" }
+# --- Conversation and agents -----------------------------------------------
+chat = { tier = "standard", reasoning_effort = "none" }   # the tool turn, the prose stream and the final parse share this step
+agent_route = { tier = "standard", reasoning_effort = "medium" }
+agent_triage = { tier = "fast", reasoning_effort = "medium" }
+agent_decide = { tier = "standard", reasoning_effort = "medium" }
+agent_gate_sort = { tier = "fast", reasoning_effort = "medium" }
+agent_longlist_sort = { tier = "fast", reasoning_effort = "medium" }
+agent_option_design = { tier = "standard", reasoning_effort = "medium" }
+agent_suggest = { tier = "standard", reasoning_effort = "medium" }
+task_agent_turn = { tier = "standard", reasoning_effort = "medium" }
+# --- Options scoping (the judgment calls run on the strongest tier) ----------
+task_agent_scoping_turn = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_discover = { tier = "frontier", reasoning_effort = "low" }
+longlist_assign = { tier = "fast", reasoning_effort = "medium" }
+longlist_themes = { tier = "standard", reasoning_effort = "medium" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_assign_themes = { tier = "fast", reasoning_effort = "medium" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_type = { tier = "fast", reasoning_effort = "medium" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_constrain = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_distinct = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_authority = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_shortlist = { tier = "frontier", reasoning_effort = "low" }
+option_profile_line = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_potential_impact = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_ambition = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_setting = { tier = "standard", reasoning_effort = "high" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_fold = { tier = "fast", reasoning_effort = "medium" }
+option_profile_place_sentences = { tier = "fast", reasoning_effort = "medium" }
 
 # ---------------------------------------------------------------------------
 [routes.openai-direct]
-# OpenAI called directly. The default when nothing is set. Until 2026-10-22 this
-# route reproduced the pre-053 models exactly (gpt-5.4-mini for the cheap steps,
-# gpt-5.5 for the agents); it now carries the owner's three-tier choice.
+# OpenAI called directly. The default when nothing is set. The three GPT-6
+# models since task 056 (owner, 2026-10-29 and 2026-10-30, D2).
 openai_base_url = "https://api.openai.com/v1"   # stated so no stray env var can move it
 api_key_env = "OPENAI_API_KEY"                  # which variable holds this route's key
 
 [routes.openai-direct.text]
-fast = "gpt-5.6-luna"
-standard = "gpt-5.6-terra"
-frontier = "gpt-5.6-sol"
-
-[routes.openai-direct.knobs.reasoning_effort]
-# Terra refuses function tools unless reasoning effort is "none" (task 029).
-"gpt-5.6-terra" = "none"
+fast = "gpt-6-luna"
+standard = "gpt-6.1-terra"
+frontier = "gpt-6.1-sol"
 
 [routes.openai-direct.embeddings]
 backend = "openai"
@@ -77,27 +115,24 @@ profile = "openai_text_embedding_3_small_v1"
 
 [routes.openai-direct.search_queries]
 # Which code path writes the search queries (the one step with two
-# implementations). "openai": the OpenAI client, on the search_queries step's
-# tier like every other step. "claude": Claude through boto3 (Claude does not
-# accept the OpenAI request format), which needs a model line beside it.
+# implementations). "openai": the OpenAI client, on the step's tier like every
+# other step. "claude": Claude through boto3 (Claude does not accept the OpenAI
+# request format), which needs a model line beside it.
 backend = "openai"
 
 # ---------------------------------------------------------------------------
 [routes.bedrock]
 # Every call goes to Amazon Bedrock's London endpoint. OpenAI models are reached
 # through Bedrock's global routing (the only way from London); embeddings use
-# Cohere through EU-only routing. The same three models as openai-direct, under
-# Bedrock's global profile names.
+# Cohere through EU-only routing. The same three GPT-6 models as openai-direct,
+# under Bedrock's global profile names.
 openai_base_url = "https://bedrock-runtime.eu-west-2.amazonaws.com/openai/v1"
 api_key_env = "AWS_BEARER_TOKEN_BEDROCK"       # the Bedrock key; boto3 reads the same variable
 
 [routes.bedrock.text]
-fast = "global.openai.gpt-5.6-luna"
-standard = "global.openai.gpt-5.6-terra"
-frontier = "global.openai.gpt-5.6-sol"
-
-[routes.bedrock.knobs.reasoning_effort]
-"global.openai.gpt-5.6-terra" = "none"
+fast = "global.openai.gpt-6-luna"
+standard = "global.openai.gpt-6.1-terra"
+frontier = "global.openai.gpt-6.1-sol"
 
 [routes.bedrock.embeddings]
 backend = "cohere"
@@ -118,12 +153,9 @@ openai_base_url = "https://bedrock-runtime.eu-west-2.amazonaws.com/openai/v1"
 api_key_env = "AWS_BEARER_TOKEN_BEDROCK"
 
 [routes.bedrock-claude.text]
-fast = "global.openai.gpt-5.6-luna"
-standard = "global.openai.gpt-5.6-terra"
-frontier = "global.openai.gpt-5.6-sol"
-
-[routes.bedrock-claude.knobs.reasoning_effort]
-"global.openai.gpt-5.6-terra" = "none"
+fast = "global.openai.gpt-6-luna"
+standard = "global.openai.gpt-6.1-terra"
+frontier = "global.openai.gpt-6.1-sol"
 
 [routes.bedrock-claude.embeddings]
 backend = "cohere"
