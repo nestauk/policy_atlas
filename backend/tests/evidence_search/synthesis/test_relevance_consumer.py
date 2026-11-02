@@ -10,6 +10,7 @@ pure-helper cases need no DB; the reader/loader cases ride the ``conn`` fixture.
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
@@ -58,8 +59,9 @@ def _seed() -> dict[str, Any]:
 # --- 1. Version + conditional block ------------------------------------------
 
 
-def test_section_prompt_version_is_v10() -> None:
-    assert SECTION_PROMPT_VERSION == "synthesise_section_v10"
+def test_section_prompt_version_is_v11() -> None:
+    # v11 (task 056 D8/D10/X3): request-shape bump; the prompt text is unchanged.
+    assert SECTION_PROMPT_VERSION == "synthesise_section_v11"
 
 
 def test_block_absent_when_not_active() -> None:
@@ -91,7 +93,9 @@ def test_priority_flag_never_enters_data_payload() -> None:
     seed = {**_seed(), "priority_block_active": True}
     messages = build_section_messages(seed, [], force_emit=False)
     for message in messages[1:]:
-        assert "priority_block_active" not in message["content"]
+        # The run message is a content-part list (task 056 D8): serialise so the
+        # check reads its text, not list membership.
+        assert "priority_block_active" not in json.dumps(message["content"])
 
 
 # --- 2. _relevance_annotations reader ----------------------------------------

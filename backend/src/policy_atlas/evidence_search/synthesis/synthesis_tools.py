@@ -462,6 +462,9 @@ class SectionLoopResult(TypedDict):
     # and were salvaged away (backend per-claim salvage) — counted, never
     # silent; the component lands them in claims_rejected_structural.
     malformed_claims: int
+    # Further tool calls a forced final turn carried beyond the emission that
+    # was taken (task 056 D10: parallel tool calls stay on for that turn).
+    extra_tool_calls_ignored: int
     usage_totals: dict[str, int]
 
 
@@ -471,6 +474,7 @@ class LoopTurn(TypedDict):
     emission: Any | None
     tool_calls: list[dict[str, Any]]
     malformed: int
+    extra_ignored: NotRequired[int]
 
 
 class ToolLoopResult(TypedDict):
@@ -483,6 +487,7 @@ class ToolLoopResult(TypedDict):
     rejected_tool_calls: int
     turn_cap_hit: bool
     malformed_claims: int
+    extra_tool_calls_ignored: int
     usage_totals: dict[str, int]
 
 
@@ -2787,6 +2792,50 @@ def _grouping_summary(groups_payload: Any) -> dict[str, Any]:
     }
 
 
+#: Lookup kinds that need a referenced upstream run; the reader below fails
+#: them (``"<kind> requires <stage>"``) when that run id is absent. Every
+#: other kind is always servable (it may return an empty or absent record).
+LOOKUP_KIND_REQUIRED_RUN: dict[str, str] = {
+    "selection_rationale": "selection",
+    "characterisation_summary": "characterisation",
+    "grouping_groups": "grouping",
+}
+
+
+def available_lookup_kinds(
+    *,
+    characterisation_run_id: uuid.UUID | None,
+    selection_run_id: uuid.UUID | None,
+    grouping_run_id: uuid.UUID | None,
+) -> list[str]:
+    """Return the lookup kinds a run can serve, in :data:`LOOKUP_QUERY_KINDS` order.
+
+    The same facts :func:`make_lookup_reader` checks before it reads: a kind in
+    :data:`LOOKUP_KIND_REQUIRED_RUN` is servable only when its upstream run id
+    is referenced. The section writer's ``lookup`` tool then offers only these
+    kinds (task 056 X3), so the model never spends a turn on a kind that can
+    only fail.
+
+    Args:
+        characterisation_run_id: The referenced characterisation run, if any.
+        selection_run_id: The referenced selection run, if any.
+        grouping_run_id: The referenced grouping run, if any.
+
+    Returns:
+        The servable kinds.
+    """
+    present = {
+        "characterisation": characterisation_run_id is not None,
+        "selection": selection_run_id is not None,
+        "grouping": grouping_run_id is not None,
+    }
+    return [
+        kind
+        for kind in LOOKUP_QUERY_KINDS
+        if kind not in LOOKUP_KIND_REQUIRED_RUN or present[LOOKUP_KIND_REQUIRED_RUN[kind]]
+    ]
+
+
 def make_lookup_reader(
     conn: Connection,
     *,
@@ -3159,6 +3208,7 @@ def run_tool_loop(
     tool_call_counts: dict[str, int] = {}
     rejected_tool_calls = 0
     malformed_claims = 0
+    extra_tool_calls_ignored = 0
     usage_totals = UsageAccumulator()
 
     for turn in range(1, turn_cap + 1):
@@ -3181,6 +3231,7 @@ def run_tool_loop(
         emission = result.get("emission")
         tool_calls = result.get("tool_calls", [])
         malformed_claims += int(result.get("malformed", 0))
+        extra_tool_calls_ignored += int(result.get("extra_ignored", 0))
         if emission is not None:
             return {
                 "emission": emission,
@@ -3190,6 +3241,7 @@ def run_tool_loop(
                 "rejected_tool_calls": rejected_tool_calls,
                 "turn_cap_hit": force_emit,
                 "malformed_claims": malformed_claims,
+                "extra_tool_calls_ignored": extra_tool_calls_ignored,
                 "usage_totals": usage_totals.payload(),
             }
         if force_emit and tool_calls:
@@ -3292,6 +3344,7 @@ def run_section_loop(
             "emission": result.get("claims"),
             "tool_calls": result.get("tool_calls", []),
             "malformed": int(result.get("malformed_claims", 0)),
+            "extra_ignored": int(result.get("extra_tool_calls_ignored", 0)),
         }, usage
 
     result = run_tool_loop(
@@ -3309,6 +3362,7 @@ def run_section_loop(
         "rejected_tool_calls": result["rejected_tool_calls"],
         "turn_cap_hit": result["turn_cap_hit"],
         "malformed_claims": result["malformed_claims"],
+        "extra_tool_calls_ignored": result["extra_tool_calls_ignored"],
         "usage_totals": result["usage_totals"],
     }
 

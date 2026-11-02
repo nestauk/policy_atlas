@@ -135,6 +135,7 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     RetrievalUnitCapError,
     SynthesisDirectiveError,
     ToolExchange,
+    available_lookup_kinds,
     build_retrieval_scope,
     build_section_tools,
     chunk_text_basis_case,
@@ -6061,6 +6062,12 @@ def synthesise_scope(
         grouping_run_id=refs.grouping_run_id,
     )
 
+    lookup_kinds = available_lookup_kinds(
+        characterisation_run_id=refs.characterisation_run_id,
+        selection_run_id=refs.selection_run_id,
+        grouping_run_id=refs.grouping_run_id,
+    )
+
     available_claim_types = available_claim_types_for_substrate(substrate)
     all_claims: list[ClaimDraft] = []
     # Per-section (spec, surviving claims) for the key-findings ledger, and the
@@ -6108,6 +6115,11 @@ def synthesise_scope(
                 )
             ],
             "available_claim_types": sorted(available_claim_types),
+            # Task 056 X3: run-stable, so every section's request prefix is
+            # identical. Read by section_prompt.section_request_tools to offer
+            # only the lookup kinds the reader above can serve; a control field
+            # on the seed, never part of the run message's data payload.
+            "available_lookup_kinds": lookup_kinds,
             "member_findings": member_findings,
             "computed_spread": _computed_spread(section, substrate),
             "ledger": build_ledger(all_claims),

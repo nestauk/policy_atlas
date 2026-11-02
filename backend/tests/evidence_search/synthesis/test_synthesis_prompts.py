@@ -28,6 +28,7 @@ from policy_atlas.evidence_search.synthesis.section_prompt import (
     NAV_LABEL_MAX,
     QUERY_FINDINGS_TOOL_SCHEMA,
     SECTION_PROMPT_VERSION,
+    SECTION_REPAIR_PROMPT_VERSION,
     SECTION_SYSTEM_PROMPT,
     SECTION_TOOL_SCHEMAS,
     SECTIONS_PROMPT_VERSION,
@@ -60,7 +61,8 @@ from policy_atlas.evidence_search.synthesis.voice_prompt import VOICE_PRINCIPLES
 
 def test_prompt_versions_are_distinct_constants() -> None:
     assert SECTIONS_PROMPT_VERSION == "synthesise_sections_v5"
-    assert SECTION_PROMPT_VERSION == "synthesise_section_v10"
+    assert SECTION_PROMPT_VERSION == "synthesise_section_v11"
+    assert SECTION_REPAIR_PROMPT_VERSION == "synthesise_repair_v2"
     assert JUDGE_PROMPT_VERSION == "grounding_judge_v2"
     assert ENVELOPE_VERSION == "synthesis_envelope_v2"
     assert CASE_STUDIES_PROMPT_VERSION == "synthesise_case_studies_v1"
@@ -230,7 +232,8 @@ def test_section_repair_is_loop_free_and_reword_down() -> None:
             }
         ],
     )
-    assert [message["role"] for message in messages] == ["system", "user", "user"]
+    # Task 056 D10: system, run and section task (the section prefix), then the repair.
+    assert [message["role"] for message in messages] == ["system", "user", "user", "user"]
     repair = messages[-1]["content"]
     assert "you cannot make tool calls" in repair
     assert "Reword each claim DOWN" in " ".join(repair.split())

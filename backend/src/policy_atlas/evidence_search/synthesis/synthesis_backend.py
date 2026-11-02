@@ -59,8 +59,9 @@ from policy_atlas.core.usage import (
 from policy_atlas.evidence_search.group.facet_values import FORBIDDEN_GROUP_LABELS
 from policy_atlas.evidence_search.synthesis.section_prompt import (
     CASE_STUDIES_PROMPT_VERSION,
-    EMIT_REPAIRS_TOOL_SCHEMA,
     EMIT_SECTION_TOOL_SCHEMA,
+    FORCE_EMIT_REPAIRS_TOOL_CHOICE,
+    FORCE_EMIT_SECTION_TOOL_CHOICE,
     FULL_REPORT_INTRO_PROMPT_VERSION,
     FULL_REPORT_INTRO_SYSTEM_PROMPT,
     FULL_REPORT_INTRO_USER_TEMPLATE,
@@ -69,8 +70,9 @@ from policy_atlas.evidence_search.synthesis.section_prompt import (
     MRS_NOTE_SYSTEM_PROMPT,
     MRS_NOTE_USER_TEMPLATE,
     SECTION_PROMPT_VERSION,
+    SECTION_REPAIR_PROMPT_VERSION,
     SECTION_TITLE_PROPOSAL_MAX,
-    SECTION_TOOL_SCHEMAS,
+    SECTION_TURN_TOOL_CHOICE,
     SECTIONS_PROMPT_VERSION,
     CaseStudyCardWire,
     CaseStudyClaimWire,
@@ -97,6 +99,7 @@ from policy_atlas.evidence_search.synthesis.section_prompt import (
     build_section_repair_messages,
     build_sections_messages,
     build_summary_judge_messages,
+    section_request_tools,
 )
 from policy_atlas.evidence_search.synthesis.summary_prompts import (
     SUMMARISER_PROMPT_VERSION,
@@ -174,13 +177,17 @@ class SectionTurn(TypedDict):
     ``malformed_claims`` counts claim objects a live emission carried that
     failed structural validation and were salvaged away (per-claim, never a
     whole-emission failure) — surfaced into ``claims_rejected_structural``.
-    The ``claims`` field name is kept for the wire shape ``SectionProseWire``
+    ``extra_tool_calls_ignored`` counts the further tool calls a forced
+    final turn carried beyond the ``emit_section`` call that was taken (task
+    056 D10: parallel tool calls stay on for the forced turn so it reads the
+    cache). The ``claims`` field name is kept for the wire shape ``SectionProseWire``
     (prose + claims) to bound the diff.
     """
 
     tool_calls: list[ToolCallRequest]
     claims: SectionProseWire | None
     malformed_claims: NotRequired[int]
+    extra_tool_calls_ignored: NotRequired[int]
 
 
 # --- The backend seam ---
@@ -602,6 +609,53 @@ def _first_theme_reference(
     return None
 
 
+def _first_named_tool_call(
+    response: Any, *, name: str, label: str
+) -> tuple[Any, list[str]]:
+    """Return a forced response's first ``name`` call and the ignored calls' names.
+
+    The forced final section turn and the repair keep ``parallel_tool_calls``
+    on (task 056 D10, so their request matches the cached prefix), so the
+    provider may return more than one call. The first call named ``name`` is
+    taken; every other call is ignored, logged
+    (``synthesise.extra_tool_calls_ignored``) and counted by the caller. When
+    no call carries ``name`` the first call is returned, so the caller's own
+    protocol check still fires.
+
+    Args:
+        response: A chat-completions ``create`` response.
+        name: The forced function's name.
+        label: Human-readable call label for error messages and the log.
+
+    Returns:
+        The taken tool call and the names of the ignored ones, in order.
+
+    Raises:
+        RuntimeError: If the response has no choices or no tool call.
+    """
+    if not response.choices:
+        raise RuntimeError(f"OpenAI {label} response had no choices.")
+    tool_calls = response.choices[0].message.tool_calls or []
+    if not tool_calls:
+        raise RuntimeError(f"OpenAI {label} response had no tool call.")
+    taken_index = next(
+        (index for index, call in enumerate(tool_calls) if call.function.name == name), 0
+    )
+    ignored = [
+        str(call.function.name)
+        for index, call in enumerate(tool_calls)
+        if index != taken_index
+    ]
+    if ignored:
+        log.warning(
+            "synthesise.extra_tool_calls_ignored",
+            call=label,
+            count=len(ignored),
+            names=ignored,
+        )
+    return tool_calls[taken_index], ignored
+
+
 def _turn_output(turn: SectionTurn) -> dict[str, Any]:
     claims = turn["claims"]
     return {
@@ -842,19 +896,22 @@ class OpenAISynthesisBackend:
         messages: list[dict[str, Any]],
         *,
         force_emit: bool,
+        tools: list[dict[str, Any]] | None = None,
     ) -> UsageResult[SectionTurn]:
-        tool_choice: str | dict[str, dict[str, str] | str]
-        if force_emit:
-            tool_choice = {"type": "function", "function": {"name": "emit_section"}}
-        else:
-            tool_choice = "required"
+        # Task 056 D10: every turn sends the same five tools and parallel tool
+        # calls, so the request prefix matches the cache; tool_choice alone
+        # differs (allowed_tools over the four section tools, or emit_section
+        # by name on the forced final turn). ``tools`` defaults to the full
+        # lookup vocabulary when a caller has no seed to derive it from.
         completions: Any = self._client.chat.completions
         response = completions.create(
             **_step_kwargs("synthesise_section_turn"),
             messages=messages,
-            tools=SECTION_TOOL_SCHEMAS,
-            parallel_tool_calls=not force_emit,
-            tool_choice=tool_choice,
+            tools=tools if tools is not None else section_request_tools({}),
+            parallel_tool_calls=True,
+            tool_choice=(
+                FORCE_EMIT_SECTION_TOOL_CHOICE if force_emit else SECTION_TURN_TOOL_CHOICE
+            ),
         )
         log_usage("synthesis.section_turn.usage", response.usage)
 
@@ -872,18 +929,21 @@ class OpenAISynthesisBackend:
             }, token_usage_from_provider(response.usage)
 
         if force_emit:
-            function = require_single_tool_call(
-                response, label="synthesis section turn"
-            ).function
-            name = function.name
-            arguments = function.arguments
+            taken, ignored = _first_named_tool_call(
+                response, name="emit_section", label="synthesis section turn"
+            )
+            name = taken.function.name
+            arguments = taken.function.arguments
             if not isinstance(name, str) or not name:
                 raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
             if not isinstance(arguments, str):
                 arguments = "{}"
-            if name == "emit_section":
-                return _emit_turn(arguments)
-            return _read_turn(name, arguments)
+            forced_turn = _emit_turn(arguments) if name == "emit_section" else _read_turn(
+                name, arguments
+            )
+            if ignored:
+                forced_turn[0]["extra_tool_calls_ignored"] = len(ignored)
+            return forced_turn
 
         if not response.choices:
             raise RuntimeError("OpenAI synthesis section turn response had no choices.")
@@ -948,6 +1008,7 @@ class OpenAISynthesisBackend:
             RuntimeError: If the provider response violates the one-tool-call protocol.
         """
         messages = self._section_messages(seed, transcript, force_emit=force_emit)
+        tools = section_request_tools(seed)
         turn_index = self._next_turn_index() if self._langfuse_client is not None else 0
 
         def _update(span: Any, result: UsageResult[SectionTurn]) -> None:
@@ -962,6 +1023,7 @@ class OpenAISynthesisBackend:
                     "force_emit": force_emit,
                     "transcript_length": len(transcript),
                     "turn_index": turn_index,
+                    "extra_tool_calls_ignored": int(turn.get("extra_tool_calls_ignored", 0)),
                     **usage_metadata(usage),
                 },
             )
@@ -970,7 +1032,9 @@ class OpenAISynthesisBackend:
             self._langfuse_client,
             name="synthesise:section_turn",
             as_type="generation",
-            call=lambda: self._create_section_turn_once(messages, force_emit=force_emit),
+            call=lambda: self._create_section_turn_once(
+                messages, force_emit=force_emit, tools=tools
+            ),
             update=_update,
         )
         return turn, usage
@@ -978,16 +1042,26 @@ class OpenAISynthesisBackend:
     def _repair_once(
         self,
         messages: list[dict[str, Any]],
-    ) -> UsageResult[SectionRepairWire]:
+        *,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> tuple[SectionRepairWire, Any, int]:
+        """Send the repair request; return the repairs, usage and ignored-call count."""
+        # Task 056 D10: the same five tools and parallel tool calls as the
+        # section turns, so the repair reads the section's cached prefix;
+        # emit_repairs is forced by name.
         completions: Any = self._client.chat.completions
         response = completions.create(
             **_step_kwargs("synthesise_section_turn"),
             messages=messages,
-            tools=[EMIT_REPAIRS_TOOL_SCHEMA],
-            tool_choice={"type": "function", "function": {"name": "emit_repairs"}},
+            tools=tools if tools is not None else section_request_tools({}),
+            parallel_tool_calls=True,
+            tool_choice=FORCE_EMIT_REPAIRS_TOOL_CHOICE,
         )
         log_usage("synthesis.repair.usage", response.usage)
-        function = require_single_tool_call(response, label="synthesis repair").function
+        taken, ignored = _first_named_tool_call(
+            response, name="emit_repairs", label="synthesis repair"
+        )
+        function = taken.function
         if function.name != "emit_repairs":
             raise RuntimeError("OpenAI synthesis repair response did not emit repairs.")
         arguments = function.arguments
@@ -998,7 +1072,7 @@ class OpenAISynthesisBackend:
         # failing claims per the exhaustion rules (soft-flag / the counted
         # exclusions), never a whole-component failure.
         repairs = _salvage_repairs(arguments)
-        return repairs, token_usage_from_provider(response.usage)
+        return repairs, token_usage_from_provider(response.usage), len(ignored)
 
     def repair_section(
         self,
@@ -1023,28 +1097,28 @@ class OpenAISynthesisBackend:
         """
         del transcript
         messages = build_section_repair_messages(seed, failing=failing)
+        tools = section_request_tools(seed)
 
-        def _update(
-            span: Any, result: UsageResult[SectionRepairWire]
-        ) -> None:
-            repairs, usage = result
+        def _update(span: Any, result: tuple[SectionRepairWire, Any, int]) -> None:
+            repairs, usage, ignored = result
             span.update(
                 usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=repairs.model_dump(),
                 model=route().model_for("synthesise_section_turn"),
                 metadata={
-                    "prompt_version": SECTION_PROMPT_VERSION,
+                    "prompt_version": SECTION_REPAIR_PROMPT_VERSION,
                     "failing_count": len(failing),
+                    "extra_tool_calls_ignored": ignored,
                     **usage_metadata(usage),
                 },
             )
 
-        repairs, usage = tracing.traced_call(
+        repairs, usage, _ignored = tracing.traced_call(
             self._langfuse_client,
             name="synthesise:repair_claims",
             as_type="generation",
-            call=lambda: self._repair_once(messages),
+            call=lambda: self._repair_once(messages, tools=tools),
             update=_update,
         )
         return repairs, usage

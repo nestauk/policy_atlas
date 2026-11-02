@@ -19,6 +19,7 @@ deliberate prompt work: bump the matching version string and re-pin the hash.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -47,7 +48,17 @@ SECTIONS_PROMPT_VERSION = "synthesise_sections_v5"
 # ban. The v8 priority-findings block is unchanged — it still renders
 # CONDITIONALLY via ``seed["priority_block_active"]``; provenance still
 # records that flag. The version tracks the surface, not the block.
-SECTION_PROMPT_VERSION = "synthesise_section_v10"
+# v11 (task 056 D8/D10/X3): the prompt text is unchanged; the request shape
+# changes. The run message is a text content part carrying an explicit cache
+# breakpoint; section turns send five tools (``emit_repairs`` appended) with an
+# ``allowed_tools`` choice over the four section tools and parallel tool calls
+# on every turn; the ``lookup`` tool offers only the kinds the run can serve.
+SECTION_PROMPT_VERSION = "synthesise_section_v11"
+# The repair surface's own version (task 056 D10). v1 was the unversioned repair
+# that rode SECTION_PROMPT_VERSION; v2 starts with the section's own first-turn
+# request (same tools, system, run and task messages) and appends the repair
+# instruction, forcing ``emit_repairs``.
+SECTION_REPAIR_PROMPT_VERSION = "synthesise_repair_v2"
 
 # The v8 additive priority-findings block (task 024 B2′ / ADR 0023) —
 # lead-authored text, rendered into the section system prompt ONLY when the
@@ -499,6 +510,117 @@ SECTION_TOOL_SCHEMAS: list[dict[str, Any]] = [
     LOOKUP_TOOL_SCHEMA,
     EMIT_SECTION_TOOL_SCHEMA,
 ]
+
+#: Every ``lookup`` kind the section writer can be offered, in canonical order
+#: (the order of the full schema's enum above).
+LOOKUP_TOOL_KINDS: tuple[str, ...] = tuple(
+    LOOKUP_TOOL_SCHEMA["function"]["parameters"]["properties"]["kind"]["enum"]
+)
+
+# Appended to the lookup description when the tool is offered for one run
+# (task 056 X3, lead words).
+LOOKUP_RUN_KINDS_SENTENCE = " Only the kinds listed here exist for this run."
+
+
+def lookup_tool_schema(available_kinds: Sequence[str]) -> dict[str, Any]:
+    """Return the ``lookup`` tool schema offering only this run's kinds (X3).
+
+    The ``kind`` enum keeps the canonical order of :data:`LOOKUP_TOOL_KINDS`
+    whatever order the caller passes; kinds outside that list (for example
+    ``screening_by_doc``, a reader kind the section writer is never offered)
+    are dropped. The description is the full schema's sentence followed by
+    :data:`LOOKUP_RUN_KINDS_SENTENCE`, on every run, so the shape is the same
+    whether or not a kind is missing. :data:`LOOKUP_TOOL_SCHEMA` itself is
+    never changed.
+
+    Args:
+        available_kinds: The lookup kinds this run can serve.
+
+    Returns:
+        A new schema dict.
+
+    Raises:
+        ValueError: If none of the given kinds is a section-writer kind.
+    """
+    wanted = set(available_kinds)
+    kinds = [kind for kind in LOOKUP_TOOL_KINDS if kind in wanted]
+    if not kinds:
+        raise ValueError("lookup_tool_schema needs at least one known lookup kind")
+    function = LOOKUP_TOOL_SCHEMA["function"]
+    parameters = function["parameters"]
+    properties = parameters["properties"]
+    return {
+        "type": LOOKUP_TOOL_SCHEMA["type"],
+        "function": {
+            **function,
+            "description": function["description"] + LOOKUP_RUN_KINDS_SENTENCE,
+            "parameters": {
+                **parameters,
+                "properties": {
+                    **properties,
+                    "kind": {**properties["kind"], "enum": kinds},
+                },
+            },
+        },
+    }
+
+
+#: The section-turn tools the ``allowed_tools`` choice permits (task 056 D10):
+#: the three read tools and ``emit_section``, never ``emit_repairs``.
+SECTION_TURN_TOOL_NAMES: tuple[str, ...] = tuple(
+    schema["function"]["name"] for schema in SECTION_TOOL_SCHEMAS
+)
+
+#: Normal section turns: any of the four section tools, at least one call.
+SECTION_TURN_TOOL_CHOICE: dict[str, Any] = {
+    "type": "allowed_tools",
+    "allowed_tools": {
+        "mode": "required",
+        "tools": [
+            {"type": "function", "function": {"name": name}}
+            for name in SECTION_TURN_TOOL_NAMES
+        ],
+    },
+}
+
+#: The forced final section turn: ``emit_section`` by name.
+FORCE_EMIT_SECTION_TOOL_CHOICE: dict[str, Any] = {
+    "type": "function",
+    "function": {"name": "emit_section"},
+}
+
+#: The repair: ``emit_repairs`` by name.
+FORCE_EMIT_REPAIRS_TOOL_CHOICE: dict[str, Any] = {
+    "type": "function",
+    "function": {"name": "emit_repairs"},
+}
+
+
+def section_request_tools(seed: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the tools every section turn and the repair send (task 056 D10, X3).
+
+    One list for both requests, so the provider's cached prefix (tools come
+    first) is the same for a section's turns and its repair: the four section
+    tools, with ``lookup`` restricted to the run's kinds, then
+    ``emit_repairs`` appended. The ``tool_choice`` of each request decides
+    which of them may be called.
+
+    Args:
+        seed: The section seed. ``available_lookup_kinds`` (run-stable, set by
+            ``synthesise``) names the lookup kinds this run can serve; when it
+            is absent every kind is offered.
+
+    Returns:
+        Five tool schemas in a fixed order.
+    """
+    kinds = seed.get("available_lookup_kinds")
+    return [
+        SEARCH_CHUNKS_TOOL_SCHEMA,
+        QUERY_FINDINGS_TOOL_SCHEMA,
+        lookup_tool_schema(LOOKUP_TOOL_KINDS if kinds is None else kinds),
+        EMIT_SECTION_TOOL_SCHEMA,
+        EMIT_REPAIRS_TOOL_SCHEMA,
+    ]
 
 
 # --- The section proposal prompt (synthesise_sections_v5) ---
@@ -1189,6 +1311,52 @@ def build_summary_judge_messages(
     ]
 
 
+def build_section_prefix(seed: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the common start of every section-turn and repair request (D8, D10).
+
+    Three messages: the system prompt, the run message and the section task
+    message. The run message is sent as one text content part carrying an
+    explicit cache breakpoint, so the provider stores the prompt up to the end
+    of the run message (tools + system + run) and a later section of the same
+    run reads it back. The section turns and the repair both start with these
+    exact bytes, so the repair reads the section's own cache too.
+
+    Args:
+        seed: Id-keyed section seed. Prompt-facing data is split into a
+            run-stable block (intent, substrate, corpus, tools and claim
+            types) and a section-stable block (section spec, member findings,
+            computed spread and opening ledger).
+
+    Returns:
+        The three prefix messages.
+    """
+    return [
+        {"role": "system", "content": _section_system_prompt(seed)},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": SECTION_RUN_TEMPLATE.format(
+                        run_json=json.dumps(
+                            _section_run_payload(seed), ensure_ascii=False, sort_keys=True
+                        )
+                    ),
+                    "prompt_cache_breakpoint": {"mode": "explicit"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": SECTION_TASK_TEMPLATE.format(
+                section_json=json.dumps(
+                    _section_task_payload(seed), ensure_ascii=False, sort_keys=True
+                )
+            ),
+        },
+    ]
+
+
 def build_section_messages(
     seed: dict[str, Any],
     transcript: list[ToolExchange],
@@ -1202,35 +1370,15 @@ def build_section_messages(
     with stable synthetic call ids), so backends stay stateless.
 
     Args:
-        seed: Id-keyed section seed. Prompt-facing data is split into a
-            run-stable block (intent, substrate, corpus, tools and claim
-            types) and a section-stable block (section spec, member findings,
-            computed spread and opening ledger).
+        seed: Id-keyed section seed (see :func:`build_section_prefix`).
         transcript: Executed tool exchanges so far, in order.
         force_emit: True on the final turn — appends the emit-now user message.
 
     Returns:
-        Chat messages ready for a tool-forced completion.
+        Chat messages ready for a tool-forced completion: the prefix, then the
+        transcript exchanges, then (when forced) the final-turn message.
     """
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": _section_system_prompt(seed)},
-        {
-            "role": "user",
-            "content": SECTION_RUN_TEMPLATE.format(
-                run_json=json.dumps(
-                    _section_run_payload(seed), ensure_ascii=False, sort_keys=True
-                )
-            ),
-        },
-        {
-            "role": "user",
-            "content": SECTION_TASK_TEMPLATE.format(
-                section_json=json.dumps(
-                    _section_task_payload(seed), ensure_ascii=False, sort_keys=True
-                )
-            ),
-        },
-    ]
+    messages = build_section_prefix(seed)
     for index, exchange in enumerate(transcript):
         call_id = f"call_{index}"
         messages.append(
@@ -1271,9 +1419,13 @@ def build_section_repair_messages(
 ) -> list[dict[str, Any]]:
     """Assemble the loop-free, transcript-free repair call.
 
+    The repair starts with the section's own first-turn request (the same
+    prefix from :func:`build_section_prefix`) so it reads the section's prompt
+    cache, then appends the repair instruction. The tool transcript is never
+    resent.
+
     Args:
-        seed: The section seed used by the original loop. Only the run-stable
-            block is sent.
+        seed: The section seed used by the original loop.
         failing: Dependency-complete failing-claim records assembled by the
             caller.
 
@@ -1281,15 +1433,7 @@ def build_section_repair_messages(
         Chat messages ready for an emit-forced completion.
     """
     return [
-        {"role": "system", "content": _section_system_prompt(seed)},
-        {
-            "role": "user",
-            "content": SECTION_RUN_TEMPLATE.format(
-                run_json=json.dumps(
-                    _section_run_payload(seed), ensure_ascii=False, sort_keys=True
-                )
-            ),
-        },
+        *build_section_prefix(seed),
         {
             "role": "user",
             "content": SECTION_REPAIR_TEMPLATE.format(

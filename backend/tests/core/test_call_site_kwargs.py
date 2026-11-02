@@ -83,6 +83,7 @@ from policy_atlas.evidence_search.sourcing.search_prompts import (
     ReformulatePayload,
     SuggestPayload,
 )
+from policy_atlas.evidence_search.synthesis.cache_modes import CACHE_MODES
 from policy_atlas.evidence_search.synthesis.grounding_judge import (
     OpenAIGroundingJudgeBackend,
 )
@@ -114,6 +115,7 @@ _NAMED_KEYS = frozenset(
         "parallel_tool_calls",
         "max_completion_tokens",
         "stream",
+        "extra_body",
         "messages",
     }
 )
@@ -812,6 +814,22 @@ def _json_value(value: Any) -> Any:
     return json.loads(json.dumps(value, sort_keys=True, default=str))
 
 
+def _system_shape(messages: Any) -> str | None:
+    """How the first system message is sent: plain text, or content parts with a breakpoint."""
+    for message in messages or []:
+        if message.get("role") != "system":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            return "text"
+        if isinstance(content, list) and any(
+            isinstance(part, dict) and "prompt_cache_breakpoint" in part for part in content
+        ):
+            return "parts+breakpoint"
+        return "parts"
+    return None
+
+
 def _serialise(site: _Site, kwargs: dict[str, Any], trace_name: str | None) -> dict[str, Any]:
     response_format = kwargs.get("response_format")
     tools = kwargs.get("tools")
@@ -829,6 +847,8 @@ def _serialise(site: _Site, kwargs: dict[str, Any], trace_name: str | None) -> d
         "parallel_tool_calls": kwargs.get("parallel_tool_calls"),
         "max_completion_tokens": kwargs.get("max_completion_tokens"),
         "stream": kwargs.get("stream"),
+        "extra_body": _json_value(kwargs["extra_body"]) if "extra_body" in kwargs else None,
+        "system_shape": _system_shape(kwargs.get("messages")),
         "other_keys": sorted(set(kwargs) - _NAMED_KEYS),
     }
 
@@ -962,3 +982,26 @@ def test_direct_create_sites(site: _Site, monkeypatch: pytest.MonkeyPatch) -> No
 @pytest.mark.parametrize("site", _sites_on(_TP), ids=lambda site: site.step)
 def test_traced_parse_sites(site: _Site, monkeypatch: pytest.MonkeyPatch) -> None:
     _assert_matches_fixture(site, monkeypatch)
+
+
+def test_every_step_has_a_cache_mode_and_sends_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Contract D3: the cache-mode table covers the route file, and each site sends its mode.
+
+    A site key is its route step, or ``step/part`` where one step has several
+    requests. ``auto`` sends no ``extra_body`` and a plain-text system message (a
+    driver that passes no system message records ``None``); ``off`` sends the
+    body that turns caching off; ``breakpoint`` sends the first system message
+    as content parts carrying the breakpoint.
+    """
+    assert sorted(CACHE_MODES) == sorted(model_routes.route().steps)
+    expected_by_mode: dict[str, tuple[Any, set[str | None]]] = {
+        "auto": (None, {"text", None}),
+        "off": ({"prompt_cache_options": {"mode": "explicit"}}, {"text", None}),
+        "breakpoint": (None, {"parts+breakpoint"}),
+    }
+    for site in SITES:
+        mode = CACHE_MODES[site.step.split("/")[0]]
+        captured = _capture(site, monkeypatch)
+        extra_body, shapes = expected_by_mode[mode]
+        assert captured["extra_body"] == extra_body, (site.step, mode)
+        assert captured["system_shape"] in shapes, (site.step, mode)
