@@ -472,8 +472,11 @@ class OpenAILonglistBackend:
         langfuse_client: Langfuse | None = None,
         session_id: uuid.UUID | None = None,
     ) -> None:
+        # 60 s, not 300 (task 056, owner 2026-11-02): the longlist and profile calls take
+        # 5 to 20 s; a request that stalls at the provider is retried after a minute, not
+        # five (one stalled folding call held a scoping run for a quarter of an hour).
         self._client = resolve_openai_client(
-            api_key, backend_name="OpenAILonglistBackend", timeout=300.0, max_retries=2
+            api_key, backend_name="OpenAILonglistBackend", timeout=60.0, max_retries=2
         )
         self._langfuse_client = langfuse_client
         self._session_id = session_id
