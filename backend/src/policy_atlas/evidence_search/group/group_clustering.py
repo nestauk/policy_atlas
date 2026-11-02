@@ -48,7 +48,14 @@ GROUP_CLUSTERING_PROMPT_VERSION = "group_cluster_v1"
 
 # The contracted model floor (the 009 nano lesson is binding); clustering
 # quality on real reference sets is eval territory, not asserted by the build.
-GROUP_CLUSTERING_MODEL = route().model_for("group_clustering")
+GROUP_CLUSTERING_MODEL = route().model_for("group_discover")
+GROUP_ASSIGN_MODEL = route().model_for("group_assign")
+# Each stage is its own step: its own model and effort.
+_STAGE_MODEL = {"discover": GROUP_CLUSTERING_MODEL, "assign": GROUP_ASSIGN_MODEL}
+_STAGE_EFFORT = {
+    "discover": route().effort_for("group_discover"),
+    "assign": route().effort_for("group_assign"),
+}
 
 # The residual sentinel the group component counts as its honest ungrouped
 # bucket. The assignment prompt asks for the plain word "ungroupable"; the
@@ -399,7 +406,8 @@ class _OpenAIGroupFacetBackend:
             response_format=response_format,
             usage_event=usage_event,
             label=f"group clustering {stage}",
-            model=GROUP_CLUSTERING_MODEL,
+            model=_STAGE_MODEL[stage],
+            reasoning_effort=_STAGE_EFFORT[stage],
         )
 
     def _call(
@@ -424,7 +432,7 @@ class _OpenAIGroupFacetBackend:
                 usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=result.model_dump(),
-                model=GROUP_CLUSTERING_MODEL,
+                model=_STAGE_MODEL[stage],
                 metadata={
                     "prompt_version": GROUP_CLUSTERING_PROMPT_VERSION,
                     "facet": self._facet,

@@ -27,8 +27,8 @@ from policy_atlas.evidence_search.assess.classification_backend import (
 )
 from policy_atlas.evidence_search.assess.classify import ClassifyContext, classify_sources
 from policy_atlas.evidence_search.assess.classify_prompt import (
+    CLASSIFY_EFFORT,
     CLASSIFY_MODEL,
-    CLASSIFY_REASONING_EFFORT,
     TAG_MAX_CHARS,
     TAGS_MAX_PER_DOC,
     ClassifyEnvelopePayload,
@@ -674,13 +674,12 @@ def test_classify_backend_passes_model_and_reasoning_effort() -> None:
     [kwargs] = fake_client.chat.completions.calls
     assert kwargs["model"] == CLASSIFY_MODEL
     assert kwargs["reasoning_effort"] == "high"
-    assert kwargs["reasoning_effort"] == CLASSIFY_REASONING_EFFORT
+    assert kwargs["reasoning_effort"] == CLASSIFY_EFFORT
 
 
-def test_openai_kwargs_omits_reasoning_effort_when_none() -> None:
-    kwargs = openai_kwargs("gpt-5.4-mini")
-    assert kwargs == {"model": "gpt-5.4-mini"}
-    assert "reasoning_effort" not in kwargs
+def test_openai_kwargs_always_sends_reasoning_effort() -> None:
+    kwargs = openai_kwargs("gpt-5.4-mini", reasoning_effort="medium")
+    assert kwargs == {"model": "gpt-5.4-mini", "reasoning_effort": "medium"}
 
 
 def test_openai_kwargs_includes_reasoning_effort_when_set() -> None:

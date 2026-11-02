@@ -31,7 +31,7 @@ from langfuse import Langfuse
 
 from policy_atlas.core import tracing
 from policy_atlas.core.model_routes import route
-from policy_atlas.core.openai_client import openai_kwargs, parse_structured, resolve_openai_client
+from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.extract.relevance_prompt import (
     FINDING_RELEVANCE_PROMPT_VERSION,
@@ -44,11 +44,10 @@ from policy_atlas.evidence_search.extract.relevance_prompt import (
 )
 
 # Model from the route file (task 053); see core/model_routes.py.
-RELEVANCE_ANNOTATOR_MODEL = route().model_for("relevance")
+RELEVANCE_ANNOTATOR_MODEL = route().model_for("extract_annotate_relevance")
 # Effort per the vetter precedent (xhigh exhausts completion caps on 5.4-mini
-# judgment calls); the marking task is lighter than vetting, but the ceiling is
-# shared for consistency.
-RELEVANCE_ANNOTATOR_REASONING_EFFORT = "high"
+# judgment calls); the route file says high for this step.
+RELEVANCE_ANNOTATOR_EFFORT = route().effort_for("extract_annotate_relevance")
 
 
 class RelevanceAnnotatorBackend(Protocol):
@@ -160,10 +159,8 @@ class OpenAIRelevanceAnnotatorBackend:
                 response_format=RelevanceAnnotationWire,
                 usage_event="relevance_annotator.annotate.usage",
                 label="relevance annotator",
-                **openai_kwargs(
-                    RELEVANCE_ANNOTATOR_MODEL,
-                    reasoning_effort=RELEVANCE_ANNOTATOR_REASONING_EFFORT,
-                ),
+                model=RELEVANCE_ANNOTATOR_MODEL,
+                reasoning_effort=RELEVANCE_ANNOTATOR_EFFORT,
                 max_completion_tokens=RELEVANCE_ANNOTATOR_MAX_OUTPUT_TOKENS,
             )
 

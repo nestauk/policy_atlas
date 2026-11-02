@@ -16,12 +16,14 @@ from policy_atlas.core.openai_client import parse_structured, resolve_openai_cli
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.extract.icf_prompt import (
     ICF_EXTRACT_MAX_OUTPUT_TOKENS,
+    ICF_EXTRACTION_EFFORT,
     ICF_EXTRACTION_MODEL,
     ICF_PROMPT_VERSION,
     build_icf_extract_messages,
 )
 from policy_atlas.evidence_search.extract.icf_records import ICFExtractionResponse
 from policy_atlas.evidence_search.extract.interventions_prompt import (
+    INTERVENTIONS_EFFORT,
     INTERVENTIONS_MAX_OUTPUT_TOKENS,
     INTERVENTIONS_MODEL,
     build_interventions_messages,
@@ -35,6 +37,7 @@ from policy_atlas.evidence_search.extract.interventions_records import (
 )
 from policy_atlas.evidence_search.extract.iof_prompt import (
     EXTRACT_MAX_OUTPUT_TOKENS,
+    EXTRACTION_EFFORT,
     EXTRACTION_MODEL,
     PROMPT_VERSION,
     build_extract_messages,
@@ -144,6 +147,7 @@ class OpenAIExtractionBackend:
             usage_event="extraction.extract.usage",
             label="extraction",
             model=EXTRACTION_MODEL,
+            reasoning_effort=EXTRACTION_EFFORT,
             max_completion_tokens=EXTRACT_MAX_OUTPUT_TOKENS,
         )
 
@@ -228,6 +232,7 @@ class OpenAIICFExtractionBackend:
             usage_event="extraction.extract_icf.usage",
             label="ICF extraction",
             model=ICF_EXTRACTION_MODEL,
+            reasoning_effort=ICF_EXTRACTION_EFFORT,
             max_completion_tokens=ICF_EXTRACT_MAX_OUTPUT_TOKENS,
         )
 
@@ -510,6 +515,7 @@ class OpenAIInterventionsBackend:
                 usage_event="extraction.extract_interventions.usage",
                 label="intervention profile",
                 model=INTERVENTIONS_MODEL,
+                reasoning_effort=INTERVENTIONS_EFFORT,
                 max_completion_tokens=INTERVENTIONS_MAX_OUTPUT_TOKENS,
             ),
             update=_update,

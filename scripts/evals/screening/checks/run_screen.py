@@ -33,11 +33,14 @@ from typing import Any
 
 import _bootstrap  # noqa: F401
 import pandas as pd
+from adapter import MISSING_ABSTRACT, SIZES, dataset_manifest, load_and_adapt_dataset
+from metrics import PRICE_AS_OF, PRICE_PER_MILLION, calculate_metrics, cost_usd
+from targets import TARGETS_JSON, select_targets
+from vote import combine_adaptive, combine_reps
+
 import policy_atlas.evidence_search.assess.screen as product_screen
 import policy_atlas.evidence_search.assess.screen_prompt as product_prompt
 import policy_atlas.evidence_search.assess.screening_backend as product_backend
-from adapter import MISSING_ABSTRACT, SIZES, dataset_manifest, load_and_adapt_dataset
-from metrics import PRICE_AS_OF, PRICE_PER_MILLION, calculate_metrics, cost_usd
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import CallBudget
 from policy_atlas.core.usage import UsageAccumulator
@@ -45,8 +48,8 @@ from policy_atlas.evidence_search.assess.screen import (
     MAX_CONCURRENT_STAGE1,
     SCREEN_RETRY_CAP,
     _RepOutcome,
-    _Stage1Doc,
     _run_stage1_calls,
+    _Stage1Doc,
 )
 from policy_atlas.evidence_search.assess.screen_prompt import (
     SCREEN_MODEL,
@@ -57,8 +60,6 @@ from policy_atlas.evidence_search.assess.screening_backend import (
     OpenAIScreeningBackend,
     ScreeningBackend,
 )
-from targets import TARGETS_JSON, select_targets
-from vote import combine_adaptive, combine_reps
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,7 @@ def use_settings(
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
         label = f"{system_prompt.stem}@{digest}"
     product_backend.SCREEN_MODEL = model
+    product_backend.SCREEN_FULL_MODEL = model  # task 056: the full-text stage is its own step
     product_backend.parse_structured = _PRODUCTION["parse"]
     if effort is not None:
         product_backend.parse_structured = functools.partial(

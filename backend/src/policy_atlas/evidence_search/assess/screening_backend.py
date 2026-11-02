@@ -15,6 +15,9 @@ from policy_atlas.core.openai_client import parse_structured, resolve_openai_cli
 from policy_atlas.core.prompt_fields import confidence_is_valid, scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.assess.screen_prompt import (
+    SCREEN_EFFORT,
+    SCREEN_FULL_EFFORT,
+    SCREEN_FULL_MODEL,
     SCREEN_FULLTEXT_PROMPT_VERSION,
     SCREEN_MAX_OUTPUT_TOKENS,
     SCREEN_MODEL,
@@ -114,6 +117,8 @@ class OpenAIScreeningBackend:
         *,
         messages: list[ChatCompletionMessageParam],
         usage_event: str,
+        model: str,
+        reasoning_effort: str,
     ) -> UsageResult[ScreenRepWire]:
         parsed, usage = parse_structured(
             self._client,
@@ -121,7 +126,8 @@ class OpenAIScreeningBackend:
             response_format=ScreenRepWire,
             usage_event=usage_event,
             label="screening",
-            model=SCREEN_MODEL,
+            model=model,
+            reasoning_effort=reasoning_effort,
             max_completion_tokens=SCREEN_MAX_OUTPUT_TOKENS,
         )
         return _scrub_rep(parsed), usage
@@ -191,6 +197,8 @@ class OpenAIScreeningBackend:
             call=lambda: self._parse_once(
                 messages=messages,
                 usage_event="screening.screen.usage",
+                model=SCREEN_MODEL,
+                reasoning_effort=SCREEN_EFFORT,
             ),
             update=_update,
             after=_score_trace,
@@ -228,7 +236,7 @@ class OpenAIScreeningBackend:
                 usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=rep.model_dump(),
-                model=SCREEN_MODEL,
+                model=SCREEN_FULL_MODEL,
                 metadata={
                     "prompt_version": SCREEN_FULLTEXT_PROMPT_VERSION,
                     "tss_id": payload.tss_id,
@@ -263,6 +271,8 @@ class OpenAIScreeningBackend:
             call=lambda: self._parse_once(
                 messages=messages,
                 usage_event="screening.screen.usage",
+                model=SCREEN_FULL_MODEL,
+                reasoning_effort=SCREEN_FULL_EFFORT,
             ),
             update=_update,
             after=_score_trace,

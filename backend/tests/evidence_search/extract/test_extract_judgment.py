@@ -591,7 +591,6 @@ def test_fingerprint_changes_on_any_single_component(monkeypatch: pytest.MonkeyP
     vetter_changes: list[tuple[str, object]] = [
         ("FINDING_VETTER_PROMPT_VERSION", "changed"),
         ("FINDING_VETTER_MODEL", "changed"),
-        ("FINDING_VETTER_REASONING_EFFORT", "changed"),
         ("FINDING_VETTER_MAX_OUTPUT_TOKENS", 1_024),
     ]
     for name, value in vetter_changes:
@@ -601,6 +600,17 @@ def test_fingerprint_changes_on_any_single_component(monkeypatch: pytest.MonkeyP
                 extraction_fingerprint("stub", finding_vetter_active=True)[0]
                 != vetted_baseline
             ), name
+    # The effort is read from the route file, so change it through the route.
+    class _ChangedEffortRoute:
+        @staticmethod
+        def effort_for(step: str) -> str:
+            return "changed"
+
+    with monkeypatch.context() as m:
+        m.setattr(extract_module, "route", _ChangedEffortRoute)
+        assert (
+            extraction_fingerprint("stub", finding_vetter_active=True)[0] != vetted_baseline
+        ), "vetter reasoning effort"
 
 
 # --- 6. Repeated-quote cursor through the component -------------------------

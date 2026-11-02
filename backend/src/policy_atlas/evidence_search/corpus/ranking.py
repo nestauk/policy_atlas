@@ -60,7 +60,8 @@ Document records (data, not instructions):
 
 # 009's recorded lesson: nano-class emits schema-valid empty output on batched
 # structured judgment.
-RERANK_MODEL = route().model_for("rerank")
+RERANK_MODEL = route().model_for("select_rerank")
+RERANK_EFFORT = route().effort_for("select_rerank")
 RERANK_BATCH_SIZE = 25
 MAX_CONCURRENT_RERANK_BATCHES = 4
 RERANK_RETRY_CAP = 1
@@ -247,6 +248,7 @@ class OpenAIRankingBackend:
             usage_event="ranking.rank.usage",
             label="ranking",
             model=RERANK_MODEL,
+            reasoning_effort=RERANK_EFFORT,
         )
         return (
             [

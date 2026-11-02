@@ -79,7 +79,7 @@ log = structlog.get_logger()
 
 #: The scoping Task Agent's model — the strongest tier ("frontier"), apart from the
 #: Evidence search Task Agent's. Model from the route file (task 053).
-TASK_AGENT_SCOPING_MODEL = route().model_for("task_agent_scoping")
+TASK_AGENT_SCOPING_MODEL = route().model_for("task_agent_scoping_turn")
 
 #: The code-authored line the prompt reads as data when nothing has run yet.
 NO_BASELINE_STATE = "no baseline built yet"
@@ -695,7 +695,7 @@ OPTIONS_SCOPING_TASK_AGENT = TaskAgentProfile(
     capability=OPTIONS_SCOPING,
     wire=ScopingTurnWire,
     build_messages=_build_messages,
-    model=TASK_AGENT_SCOPING_MODEL,
+    step="task_agent_scoping_turn",
     max_output_tokens=SCOPING_MAX_OUTPUT_TOKENS,
     prompt_version=TASK_AGENT_SCOPING_PROMPT_VERSION,
     trace_name="task_agent_scoping:turn",

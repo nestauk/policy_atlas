@@ -930,7 +930,16 @@ def _sites_on(path: str) -> list[_Site]:
 
 
 def _assert_matches_fixture(site: _Site, monkeypatch: pytest.MonkeyPatch) -> None:
-    expected = _load_fixture()["call_sites"][site.step]
+    """Today's kwargs equal the fixture, with one allowed change (task 056, D4).
+
+    The fixture captured the tree before task 056. A site that sent no
+    ``reasoning_effort`` then now sends the route file's explicit ``"medium"``
+    (the provider default, probed 2026-11-02), so ``None`` in the fixture reads
+    as ``"medium"``. Any other difference is a behaviour change and fails here.
+    """
+    expected = dict(_load_fixture()["call_sites"][site.step])
+    if expected.get("reasoning_effort") is None:
+        expected["reasoning_effort"] = "medium"
     assert _capture(site, monkeypatch) == expected
 
 

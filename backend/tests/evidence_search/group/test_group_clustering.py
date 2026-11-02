@@ -48,7 +48,7 @@ def _claim_unit(unit_id: str = "c1") -> ClusterUnit:
 def test_version_constants() -> None:
     assert GROUP_CLUSTERING_PROMPT_VERSION == "group_cluster_v1"
     assert GROUP_PROMPT_VERSION == GROUP_CLUSTERING_PROMPT_VERSION
-    assert route().model_for("group_clustering") == GROUP_CLUSTERING_MODEL
+    assert route().model_for("group_discover") == GROUP_CLUSTERING_MODEL
 
 
 def test_records_json_gates_context_and_drops_redundant_text() -> None:

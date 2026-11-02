@@ -81,16 +81,18 @@ def resolve_openai_client(
     )
 
 
-def openai_kwargs(model: str, *, reasoning_effort: str | None = None) -> dict[str, Any]:
-    """Request kwargs shared by OpenAI chat-completions call sites.
+def openai_kwargs(model: str, *, reasoning_effort: str) -> dict[str, Any]:
+    """Request kwargs shared by every OpenAI chat-completions call site.
 
-    Omits reasoning_effort when None so non-reasoning call sites are byte-identical.
-    Provider-neutral by shape: a future Bedrock backend maps or ignores the string.
+    Every call site states its reasoning effort (task 056, D4): the value comes
+    from the route file (``route().effort_for(step)``), never from a literal in
+    code. ``"none"`` is sent as the string the provider expects.
+
+    Args:
+        model: The model id for this call site's route step.
+        reasoning_effort: One of the route file's effort values.
     """
-    kwargs: dict[str, Any] = {"model": model}
-    if reasoning_effort is not None:
-        kwargs["reasoning_effort"] = reasoning_effort
-    return kwargs
+    return {"model": model, "reasoning_effort": reasoning_effort}
 
 
 def require_parsed(response: Any, *, label: str) -> Any:
@@ -121,6 +123,8 @@ def parse_structured[T: BaseModel](
     response_format: type[T],
     usage_event: str,
     label: str,
+    model: str,
+    reasoning_effort: str,
     **parse_kwargs: Any,
 ) -> UsageResult[T]:
     """Run one ``chat.completions.parse`` call and apply the shared guards.
@@ -136,9 +140,10 @@ def parse_structured[T: BaseModel](
         response_format: The pydantic wire type to parse into.
         usage_event: structlog event name for usage logging.
         label: Human-readable call label used in guard error messages.
+        model: The model id for this call site's route step.
+        reasoning_effort: The step's effort (``route().effort_for(step)``).
         **parse_kwargs: Additional keyword arguments forwarded to
-            ``chat.completions.parse`` (``model``, ``max_completion_tokens``,
-            ``reasoning_effort``, ...).
+            ``chat.completions.parse`` (``max_completion_tokens``, ...).
 
     Returns:
         The parsed structured output plus provider-neutral token usage.
@@ -149,6 +154,7 @@ def parse_structured[T: BaseModel](
     response = client.chat.completions.parse(
         messages=messages,
         response_format=response_format,
+        **openai_kwargs(model, reasoning_effort=reasoning_effort),
         **parse_kwargs,
     )
     log_usage(usage_event, response.usage)
@@ -163,6 +169,7 @@ def traced_parse[T: BaseModel](
     messages: list[Any],
     response_format: type[T],
     model: str,
+    reasoning_effort: str,
     max_output_tokens: int,
     usage_event: str,
     label: str,
@@ -184,6 +191,7 @@ def traced_parse[T: BaseModel](
         messages: Chat messages for the call.
         response_format: The pydantic wire type to parse into.
         model: Model id.
+        reasoning_effort: The step's effort (``route().effort_for(step)``).
         max_output_tokens: Completion token cap.
         usage_event: structlog event name for usage logging.
         label: Call label used in guard error messages.
@@ -211,6 +219,7 @@ def traced_parse[T: BaseModel](
             usage_event=usage_event,
             label=label,
             model=model,
+            reasoning_effort=reasoning_effort,
             max_completion_tokens=max_output_tokens,
         )
         return (clean(parsed) if clean is not None else parsed), usage
@@ -224,6 +233,7 @@ def traced_parse[T: BaseModel](
             model=model,
             metadata={
                 "prompt_version": prompt_version,
+                "reasoning_effort": reasoning_effort,
                 **(metadata or {}),
                 **usage_metadata(usage),
             },

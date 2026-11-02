@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict
 
 from policy_atlas.core import tracing
 from policy_atlas.core.model_routes import route
-from policy_atlas.core.openai_client import require_parsed, resolve_openai_client
+from policy_atlas.core.openai_client import openai_kwargs, require_parsed, resolve_openai_client
 from policy_atlas.core.usage import (
     UsageResult,
     log_usage,
@@ -39,7 +39,8 @@ ENVELOPE_VERSION = "synthesis_envelope_v2"
 
 # The contracted model floor; judge calibration is eval-workstream territory —
 # this slice's bar is mechanism correctness.
-JUDGE_MODEL = route().model_for("grounding_judge")
+JUDGE_MODEL = route().model_for("judge_grounding")
+JUDGE_EFFORT = route().effort_for("judge_grounding")
 
 VERDICTS = ("tier_1", "tier_2", "tier_3", "tier_4", "unsupported_mis_cited")
 
@@ -326,7 +327,7 @@ class OpenAIGroundingJudgeBackend:
     ) -> UsageResult[JudgeResponseWire]:
         completions: Any = self._client.chat.completions
         response = completions.parse(
-            model=JUDGE_MODEL,
+            **openai_kwargs(JUDGE_MODEL, reasoning_effort=JUDGE_EFFORT),
             messages=messages,
             response_format=JudgeResponseWire,
         )

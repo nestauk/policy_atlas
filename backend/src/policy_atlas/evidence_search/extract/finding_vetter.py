@@ -39,17 +39,17 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from policy_atlas.core import tracing
 from policy_atlas.core.model_routes import route
-from policy_atlas.core.openai_client import openai_kwargs, parse_structured, resolve_openai_client
+from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 
 # --- IOF (intervention-outcome) vetter surface --------------------------------
 
 FINDING_VETTER_PROMPT_VERSION = "extract_finding_vetter_v3"
-FINDING_VETTER_MODEL = route().model_for("finding_vetter")
-# effort per the 018 C2 classify A/B evidence — xhigh exhausts completion caps
-# on 5.4-mini judgment calls
-FINDING_VETTER_REASONING_EFFORT = "high"
+FINDING_VETTER_MODEL = route().model_for("extract_vet_iof_findings")
+# Effort lives in the route file (per the 018 C2 classify A/B evidence: xhigh
+# exhausts completion caps on 5.4-mini judgment calls, so the step says high).
+FINDING_VETTER_EFFORT = route().effort_for("extract_vet_iof_findings")
 # Sized for reasoning + output together (reasoning-model-output-cap concept):
 # a 73-finding batch at effort=high hit >16K on reasoning volume alone (018
 # step-9 replay, run 8650f28e — fail-open fired); a successful pass on the same
@@ -214,8 +214,8 @@ def validate_verdict_coverage(
 # --- ICF (implementation-context) vetter surface ------------------------------
 
 ICF_FINDING_VETTER_PROMPT_VERSION = "extract_icf_vetter_v2"
-ICF_FINDING_VETTER_MODEL = route().model_for("icf_finding_vetter")
-ICF_FINDING_VETTER_REASONING_EFFORT = "high"
+ICF_FINDING_VETTER_MODEL = route().model_for("extract_vet_icf_findings")
+ICF_FINDING_VETTER_EFFORT = route().effort_for("extract_vet_icf_findings")
 ICF_FINDING_VETTER_MAX_OUTPUT_TOKENS = 32_768
 
 ICFFlagClass = Literal[
@@ -465,7 +465,8 @@ def _judge_via_openai[T: (FindingVetterResponse, ICFFindingVetterResponse)](
             response_format=response_format,
             usage_event=usage_event,
             label=parse_label,
-            **openai_kwargs(model, reasoning_effort=reasoning_effort),
+            model=model,
+            reasoning_effort=reasoning_effort,
             max_completion_tokens=max_output_tokens,
         )
         return _scrub_judge_response(parsed), usage
@@ -543,7 +544,7 @@ class OpenAIFindingVetterBackend:
             build_messages=build_judge_messages,
             response_format=FindingVetterResponse,
             model=FINDING_VETTER_MODEL,
-            reasoning_effort=FINDING_VETTER_REASONING_EFFORT,
+            reasoning_effort=FINDING_VETTER_EFFORT,
             max_output_tokens=FINDING_VETTER_MAX_OUTPUT_TOKENS,
             prompt_version=FINDING_VETTER_PROMPT_VERSION,
             usage_event="finding_vetter.judge.usage",
@@ -633,7 +634,7 @@ class OpenAIICFFindingVetterBackend:
             build_messages=build_icf_judge_messages,
             response_format=ICFFindingVetterResponse,
             model=ICF_FINDING_VETTER_MODEL,
-            reasoning_effort=ICF_FINDING_VETTER_REASONING_EFFORT,
+            reasoning_effort=ICF_FINDING_VETTER_EFFORT,
             max_output_tokens=ICF_FINDING_VETTER_MAX_OUTPUT_TOKENS,
             prompt_version=ICF_FINDING_VETTER_PROMPT_VERSION,
             usage_event="icf_finding_vetter.judge.usage",

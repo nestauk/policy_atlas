@@ -64,9 +64,21 @@ SEARCH_SUGGEST_PROMPT_VERSION = "search_suggest_v1"
 
 # All three are volume surfaces; mini is the 009-lesson floor (plan-pinned;
 # a queries-model swap-up is an eval-seam question).
-SEARCH_QUERIES_MODEL = route().model_for("search_queries")
+SEARCH_QUERIES_MODEL = route().model_for("search_generate_queries")
+SEARCH_QUERIES_EFFORT = route().effort_for("search_generate_queries")
 SEARCH_REFORMULATE_MODEL = route().model_for("search_reformulate")
+SEARCH_REFORMULATE_EFFORT = route().effort_for("search_reformulate")
 SEARCH_SUGGEST_MODEL = route().model_for("search_suggest")
+SEARCH_SUGGEST_EFFORT = route().effort_for("search_suggest")
+# The two-prompt (v2) backend makes four more calls; each has its own step.
+SEARCH_QUERIES_V2_OPENALEX_MODEL = route().model_for("search_queries_v2_openalex")
+SEARCH_QUERIES_V2_OPENALEX_EFFORT = route().effort_for("search_queries_v2_openalex")
+SEARCH_QUERIES_V2_OVERTON_MODEL = route().model_for("search_queries_v2_overton")
+SEARCH_QUERIES_V2_OVERTON_EFFORT = route().effort_for("search_queries_v2_overton")
+SEARCH_REFORMULATE_V2_OPENALEX_MODEL = route().model_for("search_reformulate_v2_openalex")
+SEARCH_REFORMULATE_V2_OPENALEX_EFFORT = route().effort_for("search_reformulate_v2_openalex")
+SEARCH_REFORMULATE_V2_OVERTON_MODEL = route().model_for("search_reformulate_v2_overton")
+SEARCH_REFORMULATE_V2_OVERTON_EFFORT = route().effort_for("search_reformulate_v2_overton")
 
 # Reasoning model: the cap covers reasoning + output tokens (extract's 011
 # lesson). All three outputs are small lists; 8K leaves ample headroom.

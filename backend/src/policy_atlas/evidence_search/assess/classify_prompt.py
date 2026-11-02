@@ -47,8 +47,8 @@ CLASSIFY_PROMPT_VERSION = "classify_v2"
 # (LengthFinishReasonError on a 2.2K-token doc) before emitting an answer;
 # at high, all 26 pinned-task docs completed with 4/26 plausible boundary
 # flips vs the recorded gpt-5.5 labels (evidence: 018 C2 classify A/B).
-CLASSIFY_MODEL = route().model_for("classify")
-CLASSIFY_REASONING_EFFORT = "high"
+CLASSIFY_MODEL = route().model_for("classify_document")
+CLASSIFY_EFFORT = route().effort_for("classify_document")
 
 # Reasoning model: the cap covers reasoning + output tokens (extract's 011
 # lesson). Classify output is small; 16K leaves ample reasoning headroom for

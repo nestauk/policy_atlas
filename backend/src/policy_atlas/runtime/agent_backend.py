@@ -104,7 +104,9 @@ log = structlog.get_logger()
 
 # Model from the route file (task 053); see core/model_routes.py. route/decide are
 # judgment-class, triage is mini-class (contract decision 3 of task 024).
-AGENT_MODEL = route().model_for("agent")
+# ``AGENT_MODEL`` is the decide step's model (the one the discretion profile
+# stamps); each call site below is its own step with its own model and effort.
+AGENT_MODEL = route().model_for("agent_decide")
 AGENT_TRIAGE_MODEL = route().model_for("agent_triage")
 
 
@@ -414,7 +416,7 @@ class OpenAIAgentBackend:
         parsed = self._parse(
             messages,
             response_format=RouterCompileTransport,
-            model=AGENT_MODEL,
+            step="agent_route",
             max_output_tokens=ROUTER_MAX_OUTPUT_TOKENS,
             usage_event="agent.route.usage",
             label="agent-route",
@@ -440,7 +442,7 @@ class OpenAIAgentBackend:
         parsed = self._parse(
             messages,
             response_format=WatchTriageWire,
-            model=AGENT_TRIAGE_MODEL,
+            step="agent_triage",
             max_output_tokens=WATCH_TRIAGE_MAX_OUTPUT_TOKENS,
             usage_event="agent.triage.usage",
             label="agent-triage",
@@ -467,7 +469,7 @@ class OpenAIAgentBackend:
         parsed = self._parse(
             messages,
             response_format=WatchDecisionTransport,
-            model=AGENT_MODEL,
+            step="agent_decide",
             max_output_tokens=WATCH_DECISION_MAX_OUTPUT_TOKENS,
             usage_event="agent.decide.usage",
             label="agent-decide",
@@ -490,7 +492,7 @@ class OpenAIAgentBackend:
         parsed = self._parse(
             messages,
             response_format=GateSortWire,
-            model=AGENT_TRIAGE_MODEL,
+            step="agent_gate_sort",
             max_output_tokens=GATE_SORT_MAX_OUTPUT_TOKENS,
             usage_event="agent.gate_sort.usage",
             label="agent-gate-sort",
@@ -513,7 +515,7 @@ class OpenAIAgentBackend:
         parsed = self._parse(
             messages,
             response_format=LonglistVerbWire,
-            model=AGENT_TRIAGE_MODEL,
+            step="agent_longlist_sort",
             max_output_tokens=LONGLIST_VERBS_MAX_OUTPUT_TOKENS,
             usage_event="agent.longlist_sort.usage",
             label="agent-longlist-sort",
@@ -539,7 +541,7 @@ class OpenAIAgentBackend:
         return self._parse(
             messages,
             response_format=OptionDesignWire,
-            model=AGENT_MODEL,
+            step="agent_option_design",
             max_output_tokens=OPTION_DESIGN_MAX_OUTPUT_TOKENS,
             usage_event="agent.option_design.usage",
             label="agent-option-design",
@@ -567,7 +569,7 @@ class OpenAIAgentBackend:
         return self._parse(
             messages,
             response_format=SuggestResponse,
-            model=AGENT_MODEL,
+            step="agent_suggest",
             max_output_tokens=SUGGEST_MAX_OUTPUT_TOKENS,
             usage_event="agent.suggest.usage",
             label="agent-suggest",
@@ -581,7 +583,7 @@ class OpenAIAgentBackend:
         messages: list[ChatCompletionMessageParam],
         *,
         response_format: type[T],
-        model: str,
+        step: str,
         max_output_tokens: int,
         usage_event: str,
         label: str,
@@ -595,7 +597,8 @@ class OpenAIAgentBackend:
             self._langfuse_client,
             messages=messages,
             response_format=response_format,
-            model=model,
+            model=route().model_for(step),
+            reasoning_effort=route().effort_for(step),
             max_output_tokens=max_output_tokens,
             usage_event=usage_event,
             label=label,

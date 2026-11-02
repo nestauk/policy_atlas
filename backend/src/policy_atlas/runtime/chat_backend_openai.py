@@ -26,8 +26,8 @@ _CHAT_READ_TOOL_SCHEMAS = [
 
 
 def _chat_kwargs() -> dict[str, Any]:
-    """Model kwargs for every live chat call: the chat model plus its route knob."""
-    return openai_kwargs(CHAT_MODEL, reasoning_effort=route().reasoning_effort_for(CHAT_MODEL))
+    """Model kwargs for every live chat call (the one shared ``chat`` step)."""
+    return openai_kwargs(CHAT_MODEL, reasoning_effort=route().effort_for("chat"))
 
 
 class OpenAIChatBackend(ChatBackend):

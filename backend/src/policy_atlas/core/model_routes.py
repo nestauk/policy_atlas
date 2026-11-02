@@ -1,19 +1,22 @@
 """Which AI model each step of the app uses, read from one committed file.
 
 The file is ``model_routes.toml`` at the package root. It names every step once
-with a default tier, and for each named *route* says which model each tier is,
-plus provider knobs, the embedding model, the search-queries backend and which
-environment variable holds the route's API key (so one secret can hold both the
-OpenAI key and a Bedrock key, and switching route never edits the secret). One
-environment variable, ``POLICY_ATLAS_MODEL_ROUTE``, picks the route; unset means
-``openai-direct``, which reproduces the pre-053 behaviour exactly. An optional
-second file named by ``POLICY_ATLAS_MODEL_ROUTE_FILE`` can replace or add routes
-by name without touching the committed file (for evaluations).
+(one step is one named model call site) with a default tier and a reasoning
+effort, and for each named *route* says which model each tier is, plus the
+embedding model, the search-queries backend and which environment variable
+holds the route's API key (so one secret can hold both the OpenAI key and a
+Bedrock key, and switching route never edits the secret). One environment
+variable, ``POLICY_ATLAS_MODEL_ROUTE``, picks the route; unset means
+``openai-direct``. An optional second file named by
+``POLICY_ATLAS_MODEL_ROUTE_FILE`` can replace or add routes by name without
+touching the committed file (for evaluations).
 
-Design: task 053 contract D3 and ADR 0041. Every lookup fails loud: an unknown
-route, step, tier or backend name, or a file of the wrong shape, raises at import
-rather than falling back to anything. One value is taken as written: a step
-exception that is not a tier name is sent to the provider as a model id.
+Design: task 053 contract D3 and ADR 0041; task 056 contract D4 and D9 and
+ADR 0042 (one step per call site, reasoning effort per step). Every lookup
+fails loud: an unknown route, step, tier, effort or backend name, a stray key,
+or a file of the wrong shape, raises at import rather than falling back to
+anything. One value is taken as written: a step exception's model that is not
+a tier name is sent to the provider as a model id.
 """
 
 from __future__ import annotations
@@ -35,6 +38,9 @@ DEFAULT_ROUTE = "openai-direct"
 EMBEDDING_BACKENDS = ("openai", "cohere")
 SEARCH_QUERIES_BACKENDS = ("openai", "claude")
 API_KEY_ENVS = ("OPENAI_API_KEY", "AWS_BEARER_TOKEN_BEDROCK")
+#: The ``reasoning_effort`` values the providers accept. ``none`` means the model
+#: answers without thinking first; Sol-class models refuse it.
+REASONING_EFFORTS = ("none", "low", "medium", "high", "xhigh")
 ROUTE_ENV = "POLICY_ATLAS_MODEL_ROUTE"
 OVERLAY_ENV = "POLICY_ATLAS_MODEL_ROUTE_FILE"
 
@@ -56,6 +62,33 @@ RETIRED_ENV = (
     "POLICY_ATLAS_LONGLIST_JUDGMENT_MODEL",
     "POLICY_ATLAS_LONGLIST_ASSIGNMENT_MODEL",
 )
+
+
+@dataclass(frozen=True)
+class Step:
+    """One step's defaults from the committed ``[steps]`` table.
+
+    Args:
+        tier: The tier name the step follows unless a route says otherwise.
+        reasoning_effort: The ``reasoning_effort`` the step sends unless a
+            route says otherwise.
+    """
+
+    tier: str
+    reasoning_effort: str
+
+
+@dataclass(frozen=True)
+class StepException:
+    """One route's override for one step (``[routes.<name>.steps]``).
+
+    Args:
+        model: A tier name or a model id, or ``None`` to keep the step's tier.
+        reasoning_effort: An effort value, or ``None`` to keep the step's effort.
+    """
+
+    model: str | None
+    reasoning_effort: str | None
 
 
 @dataclass(frozen=True)
@@ -86,9 +119,8 @@ class Route:
             The OpenAI client and the live-mode switch read it; ``boto3`` always
             reads ``AWS_BEARER_TOKEN_BEDROCK`` on its own.
         tiers: Tier name to model id.
-        steps: Step name to default tier (from the committed ``[steps]`` table).
-        step_exceptions: Step name to a tier name or a model id, for this route.
-        reasoning_effort: Model id to the ``reasoning_effort`` value it needs.
+        steps: Step name to its defaults (from the committed ``[steps]`` table).
+        step_exceptions: Step name to this route's override.
         embeddings: The embedding section.
         search_queries: The search-queries section.
     """
@@ -97,11 +129,15 @@ class Route:
     openai_base_url: str
     api_key_env: str
     tiers: Mapping[str, str]
-    steps: Mapping[str, str]
-    step_exceptions: Mapping[str, str]
-    reasoning_effort: Mapping[str, str]
+    steps: Mapping[str, Step]
+    step_exceptions: Mapping[str, StepException]
     embeddings: Embeddings
     search_queries: SearchQueries
+
+    def _step(self, step: str) -> Step:
+        if step not in self.steps:
+            raise RuntimeError(f"{ROUTE_FILE}: step {step!r} is not in the [steps] table")
+        return self.steps[step]
 
     def model_for(self, step: str) -> str:
         """Return the model id for a step on this route.
@@ -118,14 +154,29 @@ class Route:
         Raises:
             RuntimeError: If the step is not in the ``[steps]`` table.
         """
-        if step not in self.steps:
-            raise RuntimeError(f"{ROUTE_FILE}: step {step!r} is not in the [steps] table")
-        value = self.step_exceptions.get(step, self.steps[step])
+        default = self._step(step)
+        exception = self.step_exceptions.get(step)
+        value = exception.model if exception is not None and exception.model else default.tier
         return self.tiers.get(value, value)
 
-    def reasoning_effort_for(self, model: str) -> str | None:
-        """Return the ``reasoning_effort`` a model needs on this route, or ``None``."""
-        return self.reasoning_effort.get(model)
+    def effort_for(self, step: str) -> str:
+        """Return the ``reasoning_effort`` a step sends on this route.
+
+        Args:
+            step: A step name from the ``[steps]`` table.
+
+        Returns:
+            One of :data:`REASONING_EFFORTS`; never ``None`` (every step says
+            what it sends, task 056 D4).
+
+        Raises:
+            RuntimeError: If the step is not in the ``[steps]`` table.
+        """
+        default = self._step(step)
+        exception = self.step_exceptions.get(step)
+        if exception is not None and exception.reasoning_effort:
+            return exception.reasoning_effort
+        return default.reasoning_effort
 
 
 def _require(table: Mapping[str, Any], key: str, where: str) -> Any:
@@ -146,6 +197,52 @@ def _choice(table: Mapping[str, Any], key: str, where: str, allowed: tuple[str, 
     if value not in allowed:
         raise RuntimeError(f"{where}: {key!r} is {value!r}, not one of {list(allowed)}")
     return str(value)
+
+
+def _no_stray_keys(table: Mapping[str, Any], allowed: tuple[str, ...], where: str) -> None:
+    stray = sorted(set(table) - set(allowed))
+    if stray:
+        raise RuntimeError(f"{where}: unknown key(s) {stray}; allowed: {list(allowed)}")
+
+
+def _parse_steps(raw: Mapping[str, Any], where: str) -> dict[str, Step]:
+    steps: dict[str, Step] = {}
+    for name, value in raw.items():
+        if not isinstance(value, Mapping):
+            raise RuntimeError(
+                f"{where}: step {name!r} must be a table with tier and reasoning_effort, "
+                f"not {type(value).__name__}"
+            )
+        here = f"{where} step {name!r}"
+        _no_stray_keys(value, ("tier", "reasoning_effort"), here)
+        steps[name] = Step(
+            tier=str(_require(value, "tier", here)),
+            reasoning_effort=_choice(value, "reasoning_effort", here, REASONING_EFFORTS),
+        )
+    return steps
+
+
+def _parse_exception(name: str, value: Any, where: str) -> StepException:
+    if isinstance(value, str):
+        return StepException(model=value, reasoning_effort=None)
+    if not isinstance(value, Mapping):
+        raise RuntimeError(
+            f"{where}: step {name!r} must be a string or a table, not {type(value).__name__}"
+        )
+    here = f"{where} step {name!r}"
+    _no_stray_keys(value, ("model", "reasoning_effort"), here)
+    if not value:
+        raise RuntimeError(f"{here}: an empty table changes nothing; remove it")
+    effort = value.get("reasoning_effort")
+    if effort is not None and effort not in REASONING_EFFORTS:
+        raise RuntimeError(
+            f"{here}: 'reasoning_effort' is {effort!r}, not one of {list(REASONING_EFFORTS)}"
+        )
+    model = value.get("model")
+    return StepException(
+        model=str(model) if model is not None else None,
+        reasoning_effort=str(effort) if effort is not None else None,
+    )
 
 
 def _read_toml(path: Path) -> dict[str, Any]:
@@ -181,13 +278,15 @@ def load_route(
 
     Raises:
         RuntimeError: On a missing or malformed file, a section that is not a
-            table, an unknown route, a route missing a section, a step default
-            naming an undefined tier, a step exception naming an unknown step, a
-            backend name the code does not implement, or an overlay that tries to
-            change ``[steps]``.
+            table, an unknown route, a route missing a section, a step without a
+            tier or effort, an effort value the providers do not accept, a step
+            default naming an undefined tier, a step exception naming an unknown
+            step or carrying a stray key, a leftover ``knobs`` table (retired by
+            task 056), a backend name the code does not implement, or an overlay
+            that tries to change ``[steps]``.
     """
     data = _read_toml(path)
-    steps: dict[str, str] = dict(_table(data, "steps", str(path)))
+    steps = _parse_steps(_table(data, "steps", str(path)), f"{path} [steps]")
     routes: dict[str, Any] = dict(_table(data, "routes", str(path)))
     source = dict.fromkeys(routes, path)
 
@@ -203,14 +302,21 @@ def load_route(
         raise RuntimeError(f"{path}: route {name!r} is not defined (known: {sorted(routes)})")
     where = f"{source[name]} [routes.{name}]"
     table = _table(routes, name, f"{source[name]} [routes]")
+    if "knobs" in table:
+        raise RuntimeError(
+            f"{where}: 'knobs' was retired by task 056; reasoning effort lives per step "
+            "in [steps] and [routes.<name>.steps]"
+        )
     tiers = dict(_table(table, "text", where))
-    for step, tier in steps.items():
-        if tier not in tiers:
-            raise RuntimeError(f"{where}: step {step!r} needs tier {tier!r}, not defined")
-    exceptions = dict(_table(table, "steps", where)) if "steps" in table else {}
-    for step in exceptions:
-        if step not in steps:
-            raise RuntimeError(f"{where}.steps: unknown step {step!r}")
+    for step_name, step in steps.items():
+        if step.tier not in tiers:
+            raise RuntimeError(f"{where}: step {step_name!r} needs tier {step.tier!r}, not defined")
+    raw_exceptions = dict(_table(table, "steps", where)) if "steps" in table else {}
+    exceptions: dict[str, StepException] = {}
+    for step_name, value in raw_exceptions.items():
+        if step_name not in steps:
+            raise RuntimeError(f"{where}.steps: unknown step {step_name!r}")
+        exceptions[step_name] = _parse_exception(step_name, value, f"{where}.steps")
     embeddings_table = _table(table, "embeddings", where)
     search_table = _table(table, "search_queries", where)
     search_backend = _choice(
@@ -218,13 +324,6 @@ def load_route(
     )
     if search_backend == "claude":
         _require(search_table, "model", f"{where}.search_queries")
-
-    knobs = _table(table, "knobs", where) if "knobs" in table else {}
-    reasoning_effort = (
-        dict(_table(knobs, "reasoning_effort", f"{where}.knobs"))
-        if "reasoning_effort" in knobs
-        else {}
-    )
 
     retired = sorted(key for key in RETIRED_ENV if environ.get(key))
     if retired:
@@ -241,7 +340,6 @@ def load_route(
         tiers=tiers,
         steps=steps,
         step_exceptions=exceptions,
-        reasoning_effort=reasoning_effort,
         embeddings=Embeddings(
             backend=_choice(embeddings_table, "backend", f"{where}.embeddings", EMBEDDING_BACKENDS),
             model=_require(embeddings_table, "model", f"{where}.embeddings"),

@@ -16,40 +16,84 @@ import pytest
 from policy_atlas.core import model_routes
 from policy_atlas.core.model_routes import ROUTE_FILE, Route, load_route
 
-# The owner's model choice for the default route (2026-10-22: three tiers; the
-# cheap steps on Luna, the writers and agents on Terra, the scoping judgment on
-# Sol). Until then the default route reproduced the pre-053 literals.
-DEFAULT_ROUTE_MODELS = {
-    "screen": "gpt-5.6-luna",
-    "search_queries": "gpt-5.6-luna",
-    "search_reformulate": "gpt-5.6-luna",
-    "search_suggest": "gpt-5.6-luna",
-    "classify": "gpt-5.6-luna",
-    "extract": "gpt-5.6-luna",
-    "icf_extract": "gpt-5.6-luna",
-    "finding_vetter": "gpt-5.6-luna",
-    "icf_finding_vetter": "gpt-5.6-luna",
-    "relevance": "gpt-5.6-luna",
-    "rerank": "gpt-5.6-luna",
-    "theme_discovery": "gpt-5.6-luna",
-    "theme_assignment": "gpt-5.6-luna",
-    "group_clustering": "gpt-5.6-luna",
-    "grounding_judge": "gpt-5.6-luna",
-    "mrs_note": "gpt-5.6-luna",
-    "full_report_intro": "gpt-5.6-luna",
-    "agent_triage": "gpt-5.6-luna",
-    "synthesis": "gpt-5.6-terra",
-    "case_studies": "gpt-5.6-terra",
-    "chat": "gpt-5.6-terra",
-    "task_agent": "gpt-5.6-terra",
-    "agent": "gpt-5.6-terra",
-    # Options scoping (tasks 044 to 046), as merged into 053.
-    "task_agent_scoping": "gpt-5.6-sol",
-    "longlist_judgment": "gpt-5.6-sol",
-    "longlist_assignment": "gpt-5.6-luna",
-    "extract_interventions": "gpt-5.6-luna",
+# Today's model and reasoning effort per step (task 056, D4 and D9): the tier the
+# step follows and the effort it sends. "medium" is written where nothing was sent
+# before (the provider default, probed 2026-11-02); "none" where the route knob gave
+# it to Terra; "high" where a module hard-coded it. Changing a value here is a
+# deliberate behaviour change, never a side effect.
+STEP_TIER_AND_EFFORT: dict[str, tuple[str, str]] = {
+    "screen_abstract": ("fast", "medium"),
+    "screen_full": ("fast", "medium"),
+    "select_rerank": ("fast", "medium"),
+    "characterise_discover": ("fast", "medium"),
+    "characterise_assign": ("fast", "medium"),
+    "group_discover": ("fast", "medium"),
+    "group_assign": ("fast", "medium"),
+    "extract_iof_findings": ("fast", "medium"),
+    "extract_icf_findings": ("fast", "medium"),
+    "extract_interventions": ("fast", "medium"),
+    "search_generate_queries": ("fast", "medium"),
+    "search_reformulate": ("fast", "medium"),
+    "search_suggest": ("fast", "medium"),
+    "search_queries_v2_openalex": ("fast", "medium"),
+    "search_queries_v2_overton": ("fast", "medium"),
+    "search_reformulate_v2_openalex": ("fast", "medium"),
+    "search_reformulate_v2_overton": ("fast", "medium"),
+    "synthesise_write_source_note": ("fast", "medium"),
+    "synthesise_write_intro": ("fast", "medium"),
+    "judge_grounding": ("fast", "medium"),
+    "agent_triage": ("fast", "medium"),
+    "agent_gate_sort": ("fast", "medium"),
+    "agent_longlist_sort": ("fast", "medium"),
+    "longlist_assign": ("fast", "medium"),
+    "option_profile_fold": ("fast", "medium"),
+    "option_profile_place_sentences": ("fast", "medium"),
+    "classify_document": ("fast", "high"),
+    "extract_vet_iof_findings": ("fast", "high"),
+    "extract_vet_icf_findings": ("fast", "high"),
+    "extract_annotate_relevance": ("fast", "high"),
+    "synthesise_propose_sections": ("standard", "none"),
+    "synthesise_write_block_summary": ("standard", "none"),
+    "synthesise_write_artefact_summary": ("standard", "none"),
+    "synthesise_judge_summary": ("standard", "none"),
+    "synthesise_section_turn": ("standard", "none"),
+    "synthesise_write_key_findings": ("standard", "none"),
+    "synthesise_write_case_studies": ("standard", "none"),
+    "chat": ("standard", "none"),
+    "agent_route": ("standard", "medium"),
+    "agent_decide": ("standard", "medium"),
+    "agent_option_design": ("standard", "medium"),
+    "agent_suggest": ("standard", "medium"),
+    "task_agent_turn": ("standard", "medium"),
+    "task_agent_scoping_turn": ("frontier", "medium"),
+    "longlist_discover": ("frontier", "medium"),
+    "longlist_themes": ("frontier", "medium"),
+    "longlist_assign_themes": ("frontier", "medium"),
+    "longlist_type": ("frontier", "medium"),
+    "longlist_constrain": ("frontier", "medium"),
+    "longlist_distinct": ("frontier", "medium"),
+    "longlist_authority": ("frontier", "medium"),
+    "longlist_shortlist": ("frontier", "medium"),
+    "option_profile_line": ("frontier", "medium"),
+    "option_profile_potential_impact": ("frontier", "medium"),
+    "option_profile_ambition": ("frontier", "medium"),
+    "option_profile_setting": ("frontier", "medium"),
 }
 
+# Which model each tier names today, per route.
+TIER_MODELS = {
+    "openai-direct": {
+        "fast": "gpt-5.6-luna",
+        "standard": "gpt-5.6-terra",
+        "frontier": "gpt-5.6-sol",
+    },
+    "bedrock": {
+        "fast": "global.openai.gpt-5.6-luna",
+        "standard": "global.openai.gpt-5.6-terra",
+        "frontier": "global.openai.gpt-5.6-sol",
+    },
+}
+TIER_MODELS["bedrock-claude"] = TIER_MODELS["bedrock"]
 
 def _default() -> Route:
     return load_route(ROUTE_FILE, "openai-direct", {})
@@ -60,37 +104,44 @@ def test_route_file_ships_inside_the_package() -> None:
     assert "src/policy_atlas" in str(ROUTE_FILE)
 
 
+@pytest.mark.parametrize("name", ["openai-direct", "bedrock", "bedrock-claude"])
+def test_every_step_resolves_todays_model_and_effort_on_every_route(name: str) -> None:
+    """Task 056 D4/D9: 56 steps, each with today's model and effort, on all three routes."""
+    route = load_route(ROUTE_FILE, name, {})
+    assert set(route.steps) == set(STEP_TIER_AND_EFFORT)
+    assert len(route.steps) == 56
+    for step, (tier, effort) in STEP_TIER_AND_EFFORT.items():
+        assert route.model_for(step) == TIER_MODELS[name][tier], step
+        assert route.effort_for(step) == effort, step
+    assert route.step_exceptions == {}
+
+
 def test_default_route_names_the_owners_model_choice() -> None:
     route = _default()
-    assert set(route.steps) == set(DEFAULT_ROUTE_MODELS)
-    for step, model in DEFAULT_ROUTE_MODELS.items():
-        assert route.model_for(step) == model, step
     assert route.openai_base_url == "https://api.openai.com/v1"
     assert route.api_key_env == "OPENAI_API_KEY"
     assert route.embeddings.backend == "openai"
     assert route.embeddings.model == "text-embedding-3-small"
     assert route.embeddings.profile == "openai_text_embedding_3_small_v1"
     assert route.search_queries.backend == "openai"
-    assert route.reasoning_effort_for("gpt-5.6-terra") == "none"
-    assert route.reasoning_effort_for("gpt-5.6-sol") is None
+    assert not hasattr(route, "reasoning_effort_for")  # retired by task 056: effort is per step
 
 
 def test_bedrock_names_bedrock_models_and_cohere() -> None:
     route = load_route(ROUTE_FILE, "bedrock", {})
     assert route.openai_base_url.startswith("https://bedrock-runtime.eu-west-2.")
     assert route.api_key_env == "AWS_BEARER_TOKEN_BEDROCK"
-    assert route.model_for("classify") == "global.openai.gpt-5.6-luna"
-    assert route.model_for("screen") == "global.openai.gpt-5.6-luna"
-    assert route.model_for("synthesis") == "global.openai.gpt-5.6-terra"
-    assert route.model_for("task_agent") == "global.openai.gpt-5.6-terra"
-    assert route.model_for("task_agent_scoping") == "global.openai.gpt-5.6-sol"
-    assert route.model_for("longlist_assignment") == "global.openai.gpt-5.6-luna"
-    assert route.model_for("agent") == "global.openai.gpt-5.6-terra"
+    assert route.model_for("classify_document") == "global.openai.gpt-5.6-luna"
+    assert route.model_for("screen_abstract") == "global.openai.gpt-5.6-luna"
+    assert route.model_for("synthesise_section_turn") == "global.openai.gpt-5.6-terra"
+    assert route.model_for("task_agent_turn") == "global.openai.gpt-5.6-terra"
+    assert route.model_for("task_agent_scoping_turn") == "global.openai.gpt-5.6-sol"
+    assert route.model_for("longlist_assign") == "global.openai.gpt-5.6-luna"
+    assert route.model_for("agent_decide") == "global.openai.gpt-5.6-terra"
     assert route.embeddings.backend == "cohere"
     assert route.embeddings.model == "eu.cohere.embed-v4:0"
     assert route.embeddings.profile == "cohere_embed_v4_1536_v1"
     assert route.search_queries.backend == "openai"
-    assert route.reasoning_effort_for("global.openai.gpt-5.6-terra") == "none"
 
 
 def test_bedrock_claude_switches_only_query_generation() -> None:
@@ -98,8 +149,9 @@ def test_bedrock_claude_switches_only_query_generation() -> None:
     claude = load_route(ROUTE_FILE, "bedrock-claude", {})
     assert claude.search_queries.backend == "claude"
     assert claude.search_queries.model == "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
-    for step in DEFAULT_ROUTE_MODELS:
+    for step in STEP_TIER_AND_EFFORT:
         assert claude.model_for(step) == plain.model_for(step), step
+        assert claude.effort_for(step) == plain.effort_for(step), step
     assert claude.embeddings == plain.embeddings
 
 
@@ -111,8 +163,8 @@ def _write(tmp_path: Path, name: str, text: str) -> Path:
 
 MINIMAL = """\
 [steps]
-screen = "mini"
-synthesis = "standard"
+screen = { tier = "mini", reasoning_effort = "medium" }
+synthesis = { tier = "standard", reasoning_effort = "none" }
 
 [routes.r]
 openai_base_url = "https://example.test/v1"
@@ -138,6 +190,50 @@ def test_step_exception_may_name_a_tier_or_a_model(tmp_path: Path) -> None:
     route = load_route(path, "r", {})
     assert route.model_for("screen") == "m-std"
     assert route.model_for("synthesis") == "exact-model"
+    # A bare string changes the model only; the effort stays the step's default.
+    assert route.effort_for("screen") == "medium"
+    assert route.effort_for("synthesis") == "none"
+
+
+def test_step_exception_table_form_sets_model_and_or_effort(tmp_path: Path) -> None:
+    """Task 056 D4: a route may override a step's effort, its model, or both."""
+    path = _write(
+        tmp_path,
+        "r.toml",
+        MINIMAL
+        + "[routes.r.steps]\n"
+        + 'screen = { reasoning_effort = "high" }\n'
+        + 'synthesis = { model = "mini", reasoning_effort = "low" }\n',
+    )
+    route = load_route(path, "r", {})
+    assert route.model_for("screen") == "m-mini"
+    assert route.effort_for("screen") == "high"
+    assert route.model_for("synthesis") == "m-mini"
+    assert route.effort_for("synthesis") == "low"
+
+
+@pytest.mark.parametrize(
+    ("text", "match"),
+    [
+        (MINIMAL.replace('reasoning_effort = "medium"', 'reasoning_effort = "max"'), "not one of"),
+        (MINIMAL.replace(', reasoning_effort = "medium"', ""), "missing key 'reasoning_effort'"),
+        (
+            MINIMAL.replace(
+                'screen = { tier = "mini", reasoning_effort = "medium" }', 'screen = "mini"'
+            ),
+            "must be a table",
+        ),
+        (MINIMAL.replace('tier = "mini",', 'tier = "mini", temperature = 1,'), "unknown key"),
+        (MINIMAL + '[routes.r.steps]\nscreen = { reasoning_effort = "max" }\n', "not one of"),
+        (MINIMAL + '[routes.r.steps]\nscreen = { model = "mini", extra = 1 }\n', "unknown key"),
+        (MINIMAL + '[routes.r.steps]\nscreen = {}\n', "empty table"),
+        (MINIMAL + '[routes.r.knobs]\nreasoning_effort = "none"\n', "'knobs' was retired"),
+    ],
+)
+def test_effort_shapes_fail_loud(tmp_path: Path, text: str, match: str) -> None:
+    path = _write(tmp_path, "bad.toml", text)
+    with pytest.raises(RuntimeError, match=match):
+        load_route(path, "r", {})
 
 
 @pytest.mark.parametrize(
@@ -255,11 +351,7 @@ def test_retired_variables_change_nothing_and_are_named(tmp_path: Path) -> None:
                 'api_key_env = "OPENAI_API_KEY"\n',
                 'api_key_env = "OPENAI_API_KEY"\nknobs = "none"\n',
             ),
-            "'knobs' must be a table, not str",
-        ),
-        (
-            MINIMAL + '[routes.r.knobs]\nreasoning_effort = "none"\n',
-            "knobs: 'reasoning_effort' must be a table, not str",
+            "'knobs' was retired",
         ),
     ],
 )
@@ -387,7 +479,7 @@ def _resolve_in_subprocess(env_extra: dict[str, str]) -> list[str]:
     code = (
         "from policy_atlas.core.model_routes import route\n"
         "r = route()\n"
-        "print(r.model_for('search_queries'))\n"
+        "print(r.model_for('search_generate_queries'))\n"
         "print(r.embeddings.profile)\n"
     )
     env = {k: v for k, v in os.environ.items() if not k.startswith("POLICY_ATLAS_MODEL_ROUTE")}

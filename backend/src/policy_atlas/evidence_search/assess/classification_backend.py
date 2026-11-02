@@ -8,14 +8,14 @@ from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
 
 from policy_atlas.core import tracing
-from policy_atlas.core.openai_client import openai_kwargs, parse_structured, resolve_openai_client
+from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import confidence_is_valid, scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.assess.classify_prompt import (
+    CLASSIFY_EFFORT,
     CLASSIFY_MAX_OUTPUT_TOKENS,
     CLASSIFY_MODEL,
     CLASSIFY_PROMPT_VERSION,
-    CLASSIFY_REASONING_EFFORT,
     ClassifyEnvelopePayload,
     ClassifyWire,
     EvidenceType,
@@ -99,7 +99,8 @@ class OpenAIClassificationBackend:
             usage_event="classification.classify.usage",
             label="classification",
             max_completion_tokens=CLASSIFY_MAX_OUTPUT_TOKENS,
-            **openai_kwargs(CLASSIFY_MODEL, reasoning_effort=CLASSIFY_REASONING_EFFORT),
+            model=CLASSIFY_MODEL,
+            reasoning_effort=CLASSIFY_EFFORT,
         )
         return _scrub_classification(parsed), usage
 

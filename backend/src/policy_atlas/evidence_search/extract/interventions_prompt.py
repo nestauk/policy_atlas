@@ -53,6 +53,7 @@ PROMPT_VERSION = "extract_interventions_v4"
 # tokens per document, one call per screened-in document. From the route file
 # (task 053); see core/model_routes.py.
 INTERVENTIONS_MODEL = route().model_for("extract_interventions")
+INTERVENTIONS_EFFORT = route().effort_for("extract_interventions")
 # A reasoning model: the cap covers reasoning and output. An abstract yields a
 # handful of records; 8K leaves room for a review naming a dozen.
 INTERVENTIONS_MAX_OUTPUT_TOKENS = 8_192

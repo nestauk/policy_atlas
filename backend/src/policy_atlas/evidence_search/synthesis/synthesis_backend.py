@@ -114,28 +114,31 @@ log = structlog.get_logger()
 
 # The contracted model floor (the 009 nano lesson is binding); section/prose
 # quality on real corpora is eval territory, not asserted by the build.
-# Model from the route file (task 053); see core/model_routes.py.
-SYNTHESIS_MODEL = route().model_for("synthesis")
-# Model from the route file (task 053); see core/model_routes.py.
-CASE_STUDIES_MODEL = route().model_for("case_studies")
-# Models from the route file (task 053); the matching prompts live in section_prompt.py.
-MRS_NOTE_MODEL = route().model_for("mrs_note")
-FULL_REPORT_INTRO_MODEL = route().model_for("full_report_intro")
+# Models from the route file (task 053); see core/model_routes.py. Every call
+# site below is its own step (task 056): its own model and its own effort.
+# ``SYNTHESIS_MODEL`` is the section-turn step's model, the one the run's
+# provenance stamps as "the synthesis model".
+SYNTHESIS_MODEL = route().model_for("synthesise_section_turn")
+CASE_STUDIES_MODEL = route().model_for("synthesise_write_case_studies")
+# The matching prompts live in section_prompt.py.
+MRS_NOTE_MODEL = route().model_for("synthesise_write_source_note")
+FULL_REPORT_INTRO_MODEL = route().model_for("synthesise_write_intro")
 
 
-def _synthesis_openai_kwargs() -> dict[str, Any]:
-    """Return model kwargs for every live synthesis OpenAI call.
+def _step_kwargs(step: str) -> dict[str, Any]:
+    """Return the model and reasoning effort for one synthesis call site.
 
-    The ``reasoning_effort`` pin comes from the route file (task 053): Terra
-    needs ``"none"`` or tool-bearing and structured-parse calls return 400
-    (029); a model with no entry omits the field and keeps the provider
-    default.
+    Both come from the route file (task 056): Terra needs ``"none"`` or
+    tool-bearing and structured-parse calls return 400 (029), and the route
+    file says so on the writer steps.
+
+    Args:
+        step: A step name from the route file's ``[steps]`` table.
 
     Returns:
         Kwargs suitable for ``chat.completions.create`` / ``parse``.
     """
-    effort = route().reasoning_effort_for(SYNTHESIS_MODEL)
-    return openai_kwargs(SYNTHESIS_MODEL, reasoning_effort=effort)
+    return openai_kwargs(route().model_for(step), reasoning_effort=route().effort_for(step))
 
 # Read-path ceiling for section titles (artefacts minted before task 034); the
 # proposal bounds the prompt states live in section_prompt.py.
@@ -672,7 +675,7 @@ class OpenAISynthesisBackend:
     ) -> UsageResult[SectionProposalWire]:
         completions: Any = self._client.chat.completions
         response = completions.parse(
-            **_synthesis_openai_kwargs(),
+            **_step_kwargs("synthesise_propose_sections"),
             messages=messages,
             response_format=SectionProposalWire,
         )
@@ -719,7 +722,7 @@ class OpenAISynthesisBackend:
                 usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=proposal.model_dump(),
-                model=SYNTHESIS_MODEL,
+                model=route().model_for("synthesise_propose_sections"),
                 metadata={
                     "prompt_version": SECTIONS_PROMPT_VERSION,
                     **usage_metadata(usage),
@@ -736,11 +739,11 @@ class OpenAISynthesisBackend:
         return proposal, usage
 
     def _write_summary_once(
-        self, messages: list[dict[str, Any]]
+        self, messages: list[dict[str, Any]], *, step: str
     ) -> UsageResult[SummaryWire]:
         completions: Any = self._client.chat.completions
         response = completions.parse(
-            **_synthesis_openai_kwargs(),
+            **_step_kwargs(step),
             messages=messages,
             response_format=SummaryWire,
         )
@@ -757,9 +760,15 @@ class OpenAISynthesisBackend:
         Returns:
             Structurally parsed summary plus provider usage.
         """
+        is_artefact = seed.get("kind") == "artefact"
+        step = (
+            "synthesise_write_artefact_summary"
+            if is_artefact
+            else "synthesise_write_block_summary"
+        )
         messages = (
             build_artefact_summary_messages(seed)
-            if seed.get("kind") == "artefact"
+            if is_artefact
             else build_block_summary_messages(seed)
         )
 
@@ -769,7 +778,7 @@ class OpenAISynthesisBackend:
                 usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=summary.model_dump(),
-                model=SYNTHESIS_MODEL,
+                model=route().model_for(step),
                 metadata={"prompt_version": SUMMARISER_PROMPT_VERSION, **usage_metadata(usage)},
             )
 
@@ -781,7 +790,7 @@ class OpenAISynthesisBackend:
                 else "synthesise:write_block_summary"
             ),
             as_type="generation",
-            call=lambda: self._write_summary_once(messages),
+            call=lambda: self._write_summary_once(messages, step=step),
             update=_update,
         )
 
@@ -802,7 +811,7 @@ class OpenAISynthesisBackend:
         def _call() -> UsageResult[SummaryJudgeWire]:
             completions: Any = self._client.chat.completions
             response = completions.parse(
-                **_synthesis_openai_kwargs(),
+                **_step_kwargs("synthesise_judge_summary"),
                 messages=messages,
                 response_format=SummaryJudgeWire,
             )
@@ -816,7 +825,7 @@ class OpenAISynthesisBackend:
                 usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=verdict.model_dump(),
-                model=SYNTHESIS_MODEL,
+                model=route().model_for("synthesise_judge_summary"),
                 metadata={"prompt_version": SUMMARY_JUDGE_PROMPT_VERSION, **usage_metadata(usage)},
             )
 
@@ -841,7 +850,7 @@ class OpenAISynthesisBackend:
             tool_choice = "required"
         completions: Any = self._client.chat.completions
         response = completions.create(
-            **_synthesis_openai_kwargs(),
+            **_step_kwargs("synthesise_section_turn"),
             messages=messages,
             tools=SECTION_TOOL_SCHEMAS,
             parallel_tool_calls=not force_emit,
@@ -947,7 +956,7 @@ class OpenAISynthesisBackend:
                 usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=_turn_output(turn),
-                model=SYNTHESIS_MODEL,
+                model=route().model_for("synthesise_section_turn"),
                 metadata={
                     "prompt_version": self._section_prompt_version,
                     "force_emit": force_emit,
@@ -972,7 +981,7 @@ class OpenAISynthesisBackend:
     ) -> UsageResult[SectionRepairWire]:
         completions: Any = self._client.chat.completions
         response = completions.create(
-            **_synthesis_openai_kwargs(),
+            **_step_kwargs("synthesise_section_turn"),
             messages=messages,
             tools=[EMIT_REPAIRS_TOOL_SCHEMA],
             tool_choice={"type": "function", "function": {"name": "emit_repairs"}},
@@ -1023,7 +1032,7 @@ class OpenAISynthesisBackend:
                 usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=repairs.model_dump(),
-                model=SYNTHESIS_MODEL,
+                model=route().model_for("synthesise_section_turn"),
                 metadata={
                     "prompt_version": SECTION_PROMPT_VERSION,
                     "failing_count": len(failing),
@@ -1046,7 +1055,7 @@ class OpenAISynthesisBackend:
     ) -> UsageResult[SectionProseWire]:
         completions: Any = self._client.chat.completions
         response = completions.create(
-            **_synthesis_openai_kwargs(),
+            **_step_kwargs("synthesise_write_key_findings"),
             messages=messages,
             tools=[EMIT_SECTION_TOOL_SCHEMA],
             tool_choice={"type": "function", "function": {"name": "emit_section"}},
@@ -1094,7 +1103,7 @@ class OpenAISynthesisBackend:
                 usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=section.model_dump(),
-                model=SYNTHESIS_MODEL,
+                model=route().model_for("synthesise_write_key_findings"),
                 metadata={
                     "prompt_version": KEY_FINDINGS_PROMPT_VERSION,
                     **usage_metadata(usage),
@@ -1115,12 +1124,8 @@ class OpenAISynthesisBackend:
         messages: list[dict[str, Any]],
     ) -> UsageResult[CaseStudyWire]:
         completions: Any = self._client.chat.completions
-        cs_kwargs = openai_kwargs(
-            CASE_STUDIES_MODEL,
-            reasoning_effort=route().reasoning_effort_for(CASE_STUDIES_MODEL),
-        )
         response = completions.parse(
-            **cs_kwargs,
+            **_step_kwargs("synthesise_write_case_studies"),
             messages=messages,
             response_format=CaseStudyWire,
         )
@@ -1193,7 +1198,7 @@ class OpenAISynthesisBackend:
         def _call() -> UsageResult[NoteWire]:
             completions: Any = client.chat.completions
             response = completions.parse(
-                model=MRS_NOTE_MODEL,
+                **_step_kwargs("synthesise_write_source_note"),
                 messages=messages,
                 response_format=NoteWire,
             )
@@ -1253,7 +1258,7 @@ class OpenAISynthesisBackend:
         def _call() -> UsageResult[IntroWire]:
             completions: Any = client.chat.completions
             response = completions.parse(
-                model=FULL_REPORT_INTRO_MODEL,
+                **_step_kwargs("synthesise_write_intro"),
                 messages=messages,
                 response_format=IntroWire,
             )

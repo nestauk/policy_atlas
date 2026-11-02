@@ -57,8 +57,9 @@ DEFAULT_BASE_URL = "http://localhost:8000"
 #: One HTTP request can include a live Task Agent model call, so be patient.
 REQUEST_TIMEOUT = 600
 FOLLOW_UP = (
-    "Please go ahead with your recommended choices for everything you asked about, "
-    "and make the plan ready to start."
+    "Please go ahead with your recommended choices for everything you asked about. "
+    "Where a choice has no recommendation, such as depth, use standard depth (the fuller "
+    "path). Then make the plan ready to start."
 )
 
 
@@ -293,9 +294,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Task Agent messages per task before giving up (default 3)",
     )
     parser.add_argument(
+        "--only",
+        action="append",
+        choices=[q.key for q in QUESTIONS],
+        help="start only this question (repeatable); default: all four",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", help="print the requests without sending them"
     )
     args = parser.parse_args(argv)
+    chosen = [q for q in QUESTIONS if not args.only or q.key in args.only]
 
     token = args.token
     if token is None and not args.dry_run:
@@ -303,7 +311,7 @@ def main(argv: list[str] | None = None) -> int:
     api = Api(args.base_url, token, args.dry_run)
     results = []
     failed = False
-    for q in QUESTIONS:
+    for q in chosen:
         if args.dry_run:
             print(f"[{q.key}] {q.capability}")
         try:

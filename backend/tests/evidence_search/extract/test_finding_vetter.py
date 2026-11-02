@@ -23,10 +23,10 @@ from policy_atlas.evidence_search.extract.extract import (
     extraction_fingerprint,
 )
 from policy_atlas.evidence_search.extract.finding_vetter import (
+    FINDING_VETTER_EFFORT,
     FINDING_VETTER_MAX_OUTPUT_TOKENS,
     FINDING_VETTER_MODEL,
     FINDING_VETTER_PROMPT_VERSION,
-    FINDING_VETTER_REASONING_EFFORT,
     FINDING_VETTER_SYSTEM_PROMPT,
     FindingVetterResponse,
     OpenAIFindingVetterBackend,
@@ -422,7 +422,7 @@ def test_vetted_out_excluded_from_persistence_and_accounted(conn: Connection) ->
     assert profile_provenance(summary)["finding_vetter"] == {
         "prompt": FINDING_VETTER_PROMPT_VERSION,
         "model": FINDING_VETTER_MODEL,
-        "reasoning_effort": FINDING_VETTER_REASONING_EFFORT,
+        "reasoning_effort": FINDING_VETTER_EFFORT,
         "max_output_tokens": FINDING_VETTER_MAX_OUTPUT_TOKENS,
     }
 
@@ -766,4 +766,4 @@ def test_openai_junk_judge_backend_passes_model_and_reasoning_effort() -> None:
     [kwargs] = fake_client.chat.completions.calls
     assert kwargs["model"] == FINDING_VETTER_MODEL
     assert kwargs["reasoning_effort"] == "high"
-    assert kwargs["reasoning_effort"] == FINDING_VETTER_REASONING_EFFORT
+    assert kwargs["reasoning_effort"] == FINDING_VETTER_EFFORT

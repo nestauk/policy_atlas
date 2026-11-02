@@ -13,6 +13,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.evidence_search.synthesis.grounding_judge import (
     StubGroundingJudgeBackend,
     build_envelope,
@@ -299,10 +300,8 @@ def test_live_section_turn_parses_two_read_tool_calls_in_order() -> None:
     assert kwargs["tool_choice"] == "required"
     assert kwargs["model"] == SYNTHESIS_MODEL
     # Pin regression: gpt-5.6-terra 400s on function tools without this (029).
-    if SYNTHESIS_MODEL == "gpt-5.6-terra":
-        assert kwargs["reasoning_effort"] == "none"
-    else:
-        assert "reasoning_effort" not in kwargs
+    assert kwargs["reasoning_effort"] == route().effort_for("synthesise_section_turn")
+    assert kwargs["reasoning_effort"] == "none"
 
 
 def test_live_section_turn_drops_emit_section_alongside_reads() -> None:
@@ -322,18 +321,17 @@ def test_live_section_turn_drops_emit_section_alongside_reads() -> None:
     assert any(entry["event"] == "synthesis.emit_with_reads_deferred" for entry in logs)
 
 
-def test_synthesis_openai_kwargs_omit_effort_on_gpt_55(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """gpt-5.5 keeps the provider default; do not force terra's effort pin."""
+def test_step_kwargs_send_the_steps_model_and_effort() -> None:
+    """Each synthesis call site's kwargs come from its own route-file step."""
     from policy_atlas.evidence_search.synthesis import synthesis_backend as sb
 
-    monkeypatch.setattr(sb, "SYNTHESIS_MODEL", "gpt-5.5")
-    assert sb._synthesis_openai_kwargs() == {"model": "gpt-5.5"}
-    monkeypatch.setattr(sb, "SYNTHESIS_MODEL", "gpt-5.6-terra")
-    assert sb._synthesis_openai_kwargs() == {
-        "model": "gpt-5.6-terra",
+    assert sb._step_kwargs("synthesise_section_turn") == {
+        "model": route().model_for("synthesise_section_turn"),
         "reasoning_effort": "none",
+    }
+    assert sb._step_kwargs("synthesise_write_source_note") == {
+        "model": route().model_for("synthesise_write_source_note"),
+        "reasoning_effort": "medium",
     }
 
 

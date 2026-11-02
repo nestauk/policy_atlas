@@ -45,7 +45,8 @@ PROMPT_VERSION = "extract_iof_v7"
 
 # The contracted model floor (the 009 nano lesson is binding); a step-up is a
 # recorded option, not a silent switch.
-EXTRACTION_MODEL = route().model_for("extract")
+EXTRACTION_MODEL = route().model_for("extract_iof_findings")
+EXTRACTION_EFFORT = route().effort_for("extract_iof_findings")
 UNCLASSIFIED_EVIDENCE_TYPE = "Unclassified"
 # Explicit cap — V2's uncapped calls truncated mid-JSON and silently emptied
 # stages. 32K, not the plan's initial 8192: gpt-5.4-mini is a reasoning model, so

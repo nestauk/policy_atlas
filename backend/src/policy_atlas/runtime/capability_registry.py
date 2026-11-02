@@ -83,7 +83,8 @@ class TaskAgentProfile:
         wire: The structured-output turn model the model fills.
         build_messages: ``(turns, previous_draft, inputs)`` → chat messages,
             from the capability's hash-pinned prompt module.
-        model: Model id.
+        step: The model route file step this profile's turn call uses (it
+            names the model and the reasoning effort).
         max_output_tokens: Completion token cap.
         prompt_version: Recorded on every trace.
         trace_name: Static Langfuse observation name.
@@ -112,7 +113,7 @@ class TaskAgentProfile:
     capability: str
     wire: type[BaseModel]
     build_messages: Callable[[list[dict[str, str]], dict[str, object] | None, Any], list[Any]]
-    model: str
+    step: str
     max_output_tokens: int
     prompt_version: str
     trace_name: str
