@@ -232,6 +232,8 @@ def test_step_exception_table_form_sets_model_and_or_effort(tmp_path: Path) -> N
         (MINIMAL + '[routes.r.steps]\nscreen = { reasoning_effort = "max" }\n', "not one of"),
         (MINIMAL + '[routes.r.steps]\nscreen = { model = "mini", extra = 1 }\n', "unknown key"),
         (MINIMAL + '[routes.r.steps]\nscreen = {}\n', "empty table"),
+        (MINIMAL + '[routes.r.steps]\nscreen = ""\n', "empty model"),
+        (MINIMAL + '[routes.r.steps]\nscreen = { model = "" }\n', "'model' is empty"),
         (MINIMAL + '[routes.r.knobs]\nreasoning_effort = "none"\n', "'knobs' was retired"),
     ],
 )

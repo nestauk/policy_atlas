@@ -815,15 +815,21 @@ def test_the_ingest_slots_are_all_returned() -> None:
 # --- the parent's end cleans up its children (A2, A6, A11) -------------------
 
 
-def _stuck_until(release: threading.Event, engine: Engine) -> Callable[..., None]:
+def _stuck_until(
+    release: threading.Event, engine: Engine, opened: threading.Event | None = None
+) -> Callable[..., None]:
     """A child that opens its row as the runner does, then waits to be released.
 
     Like the runner it ends itself at once when abandoned before its row
     existed; released, it finishes ``succeeded`` through ``_finish_run``.
+    ``opened`` (when given) is set once the row exists, for a test that must
+    not race the pool: a child cancelled before it starts never opens a row.
     """
 
     def child(*args: Any, **kwargs: Any) -> None:
         _open_row(engine, kwargs)
+        if opened is not None:
+            opened.set()
         if option_search.end_if_abandoned(
             engine, task_id=kwargs["task_id"], child_id=kwargs["capability_run_id"]
         ):
@@ -949,17 +955,24 @@ def test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent(
     names it) is still ended."""
     task_id: uuid.UUID | None = None
     release = threading.Event()
+    opened = threading.Event()
     sent: list[uuid.UUID] = []
     original = option_search.run_option_search
 
     def second_breaks(*args: Any, **kwargs: Any) -> uuid.UUID:
         if sent:
+            # Let the first child open its row before the fan-out raises: a child
+            # the pool has not started yet is cancelled and leaves no row to end
+            # (that path is the join's own test). Under a loaded suite the pool
+            # thread can lag the raise by seconds, which read as a flake at 10 s
+            # and again at 30 s.
+            assert opened.wait(timeout=30), "the first child never opened its row"
             raise RuntimeError("the second dispatch broke")
         sent.append(original(*args, **kwargs))
         return sent[-1]
 
     try:
-        child_run_plan(_stuck_until(release, engine))
+        child_run_plan(_stuck_until(release, engine, opened))
         monkeypatch.setattr(option_search, "run_option_search", second_breaks)
         plan = _longlist_plan()
         task_id, scope_id, plan_id = _seed_longlist(engine, plan)

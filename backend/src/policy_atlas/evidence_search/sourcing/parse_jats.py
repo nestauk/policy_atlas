@@ -43,6 +43,11 @@ import xml.etree.ElementTree as ET
 from typing import Any
 from xml.parsers import expat
 
+# The parser leans on expat's entity-amplification limit (added in 2.4.1) against
+# entity bombs; fail at import, where the service starts, not inside a parse worker.
+if expat.version_info < (2, 4, 1):
+    raise RuntimeError(f"parse_jats needs expat >= 2.4.1, found {expat.version_info}")
+
 JATS_PARSE_PROFILE = "jats_expat_v1"
 JATS_SEGMENTATION_POLICY = "jats_struct_v1"
 

@@ -80,8 +80,8 @@ def test_openai_kwargs_auto_adds_nothing() -> None:
     }
 
 
-def test_openai_kwargs_defaults_to_auto() -> None:
-    assert "extra_body" not in openai_kwargs("m", reasoning_effort="low")
+def test_openai_kwargs_auto_sends_no_extra_body() -> None:
+    assert "extra_body" not in openai_kwargs("m", reasoning_effort="low", prompt_cache="auto")
 
 
 def test_with_system_breakpoint_rewrites_only_the_first_system_message() -> None:
@@ -109,6 +109,14 @@ def test_with_system_breakpoint_without_a_system_message_is_a_copy() -> None:
     rewritten = with_system_breakpoint(messages)
     assert rewritten == messages
     assert rewritten is not messages
+
+
+def test_with_system_breakpoint_refuses_a_content_part_system_message() -> None:
+    """A parts-list system message would be nested inside a text part and the
+    provider would reject the request; fail here instead (review of task 056)."""
+    messages = [{"role": "system", "content": [{"type": "text", "text": "parts"}]}]
+    with pytest.raises(TypeError, match="plain string"):
+        with_system_breakpoint(messages)
 
 
 def test_parse_structured_breakpoint_sends_the_rewritten_messages() -> None:

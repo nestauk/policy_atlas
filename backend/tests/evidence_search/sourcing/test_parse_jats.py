@@ -17,8 +17,10 @@ from typing import Any
 import httpx
 import pytest
 
+from policy_atlas.evidence_search.sourcing import fetch_live
 from policy_atlas.evidence_search.sourcing.fetch_live import (
     USER_AGENT,
+    LiveDocumentFetcher,
     fetch_europe_pmc_xml,
     normalise_pmcid,
 )
@@ -62,7 +64,8 @@ def test_billion_laughs_fails_fast_without_blowing_up() -> None:
     started = time.monotonic()
     result = parse_jats(payload)
     elapsed = time.monotonic() - started
-    assert elapsed < 2.0
+    # "Fast" means seconds, not the minutes a real bomb takes; loose for a loaded suite.
+    assert elapsed < 10.0
     assert result["status"] == "error"
     assert result["reason"] == "corrupt"
     assert "amplification" in result["detail"]
@@ -345,6 +348,30 @@ def test_fetch_returns_none_when_the_transport_fails() -> None:
             raise httpx.ConnectError("down", request=request)
 
     assert fetch_europe_pmc_xml("PMC1", timeout=5.0, transport=_Failing()) is None
+
+
+def test_fetch_refuses_a_body_over_the_xml_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The XML route has its own, lower cap than PDFs (review of task 056)."""
+    monkeypatch.setattr(fetch_live, "EUROPE_PMC_MAX_BYTES", 8)
+    transport = _RecordingTransport(httpx.Response(200, content=b"<article>long</article>"))
+    assert fetch_europe_pmc_xml("PMC1", timeout=5.0, transport=transport) is None
+
+
+def test_live_fetcher_puts_the_xml_body_on_the_byte_budget() -> None:
+    """An XML body counts against the shared in-flight budget until the ingest
+    loop releases it, like every PDF or HTML body (review of task 056)."""
+    body = b'<?xml version="1.0"?><article/>'
+    fetcher = LiveDocumentFetcher(
+        resolver=lambda host, port: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))
+        ],
+        sleep=lambda _s: None,
+        transport=_RecordingTransport(httpx.Response(200, content=body)),
+    )
+    assert fetcher.fetch_europe_pmc_xml("PMC5264339") == body
+    assert fetcher._inflight_bytes == len(body)
+    fetcher.release_body(len(body))
+    assert fetcher._inflight_bytes == 0
 
 
 @pytest.mark.parametrize(

@@ -123,17 +123,19 @@ describe("mostRelevantSources", () => {
         blocks: [
           {
             claims: [
-              { citations: [{ source_id: "z-low", source_title: "Zeta report", appraisal_label: "low" }] },
-              { citations: [{ source_id: "a-high", source_title: "Alpha report", appraisal_label: "high" }] },
-              // Same tier as z-low ("low"), so this pair breaks on title.
-              { citations: [{ source_id: "b-low", source_title: "Beta report", appraisal_label: "low" }] },
+              { citations: [{ source_id: "z-low", source_title: "Zeta report", appraisal_label: "Weak" }] },
+              { citations: [{ source_id: "a-high", source_title: "Alpha report", appraisal_label: "Very strong" }] },
+              // Same tier as z-low ("Weak"), so this pair breaks on title.
+              { citations: [{ source_id: "b-low", source_title: "Beta report", appraisal_label: "Weak" }] },
+              // Unrated (task 056) sorts after every scored label, so it drops off a top three.
+              { citations: [{ source_id: "0-unrated", source_title: "Aardvark report", appraisal_label: "Unrated" }] },
             ],
           },
         ],
       },
     ];
     const result = mostRelevantSources(sections);
-    // All three have citationCount 1: high tier first, then low-tier ties broken A→Z.
+    // All four have citationCount 1: strongest tier first, then Weak ties broken A→Z, Unrated last.
     expect(result.map((s) => s.sourceId)).toEqual(["a-high", "b-low", "z-low"]);
   });
 
@@ -146,7 +148,7 @@ describe("mostRelevantSources", () => {
             claims: [
               { citations: [{ source_id: "unknown-tier", source_title: "Unknown tier", appraisal_label: "not_a_real_tier" }] },
               { citations: [{ source_id: "no-tier", source_title: "No tier at all" }] },
-              { citations: [{ source_id: "high-tier", source_title: "High tier", appraisal_label: "high" }] },
+              { citations: [{ source_id: "high-tier", source_title: "High tier", appraisal_label: "Strong" }] },
             ],
           },
         ],

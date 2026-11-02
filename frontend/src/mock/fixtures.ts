@@ -353,7 +353,7 @@ export const mockArtefactSectionProse: Record<number, string> = {
  *
  * `role` is `"standard"` throughout because that is what the read model
  * returns: the Sources block is written with role `"sources"` and coerced
- * (`api/readmodels/repository.py`). The section ORDER is what puts Sources
+ * (`api/read_models/repository.py`). The section ORDER is what puts Sources
  * last, not its role.
  */
 export const mockBaselineArtefact: components["schemas"]["ArtefactOut"] = {

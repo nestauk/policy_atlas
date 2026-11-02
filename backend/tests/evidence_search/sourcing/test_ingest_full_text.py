@@ -414,31 +414,40 @@ def test_timeout_does_not_swallow_completed_sibling() -> None:
     assert not multiprocessing.active_children(), "worker processes leaked"
 
 
-def _short_sleep_by_marker_parse(
+def _release_by_marker_parse(
     body: bytes, content_type: str, thin_min: int  # noqa: ARG001
 ) -> dict[str, Any]:
-    """Picklable double: the marked body takes ten seconds, others are instant.
+    """Picklable double: ``slow:<dir>`` returns once ``a``, ``b`` and ``c`` have run.
 
-    Ten, not four: under a parallel test run plus a live run on the same machine the
-    forkserver's per-job start took over a second a job, and the third quick job
-    landed after the slow one (task 056 gate, 2026-11-02). The margin keeps the
-    completion-order assertion honest without weakening it.
+    The body is ``<kind>:<dir>``. A quick job touches ``<dir>/done-<kind>`` and
+    returns; the slow job waits for all three sentinels, then a second more so their
+    results reach the parent first. No fixed sleep: a 4 s and then a 10 s sleep both
+    lost to the forkserver's per-job start under a loaded suite (task 056, 2026-11-02,
+    four times), and the property is the order, not a duration.
     """
-    if body == b"slow":
-        time.sleep(10)
-    return {"status": "ok", "chunks": [{"content": body.decode(), "locator": {}}],
+    kind, _, folder = body.decode().partition(":")
+    if kind == "slow":
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            if all((Path(folder) / f"done-{quick}").exists() for quick in "abc"):
+                break
+            time.sleep(0.05)
+        time.sleep(1.0)
+    else:
+        (Path(folder) / f"done-{kind}").touch()
+    return {"status": "ok", "chunks": [{"content": kind, "locator": {}}],
             "parse_profile": "p", "segmentation_policy": "s"}
 
 
-def test_slow_first_job_does_not_delay_later_jobs() -> None:
+def test_slow_first_job_does_not_delay_later_jobs(tmp_path: Path) -> None:
     """Any-free-slot draining (task 056, N8): a slow job at the head of the queue
     holds only its own slot; the jobs behind it finish first, through the other
     slot, from the preloaded forkserver."""
     assert ingest_full_text._parse_process_context().get_start_method() == "forkserver"
+    marked = [(0, "slow"), (1, "a"), (2, "b"), (3, "c")]
     results = _run_parse_jobs(
-        [(0, b"slow", "text/plain"), (1, b"a", "text/plain"),
-         (2, b"b", "text/plain"), (3, b"c", "text/plain")],
-        max_workers=2, parse_timeout=60.0, thin_min=0, parse_fn=_short_sleep_by_marker_parse,
+        [(i, f"{kind}:{tmp_path}".encode(), "text/plain") for i, kind in marked],
+        max_workers=2, parse_timeout=60.0, thin_min=0, parse_fn=_release_by_marker_parse,
     )
     # results come back in completion order
     assert list(results) == [1, 2, 3, 0]

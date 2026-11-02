@@ -59,7 +59,7 @@ test: reset-test-db
 # Inner-loop convenience: everything except the ingest integration tests (~11 real
 # document-ingest runs, minutes). Full `make test` / `make verify` remain the gate.
 test-fast: reset-test-db
-	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest -n auto --ignore=tests/test_ingest_full_text.py
+	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest -n auto --ignore=tests/evidence_search/sourcing/test_ingest_full_text.py
 
 typecheck:
 	uv run mypy src tests

@@ -28,7 +28,8 @@ from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 
 # v1 -> v2 (task 056, D7): the two unscored types now get an Unrated row instead of
 # no row. The scores themselves did not change; the bump records that the rubric's
-# reach did, so an inherited v1 appraisal is re-appraised (labels.py rubric rule).
+# reach did. v1 scores stay valid (labels.py COMPATIBLE_RUBRIC_VERSIONS), so nothing
+# is re-appraised.
 DEFAULT_RUBRIC_VERSION = "v2-hierarchy-v2"
 
 # The v3.0 default rubric: primary_evidence_type → quality_score (5 = strongest),

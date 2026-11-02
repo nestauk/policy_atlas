@@ -107,7 +107,7 @@ def resolve_openai_client(
 
 
 def openai_kwargs(
-    model: str, *, reasoning_effort: str, prompt_cache: PromptCache = "auto"
+    model: str, *, reasoning_effort: str, prompt_cache: PromptCache
 ) -> dict[str, Any]:
     """Request kwargs shared by every OpenAI chat-completions call site.
 
@@ -150,6 +150,11 @@ def with_system_breakpoint(messages: list[Any]) -> list[Any]:
     rewritten = list(messages)
     for index, message in enumerate(rewritten):
         if isinstance(message, Mapping) and message.get("role") == "system":
+            if not isinstance(message.get("content"), str):
+                raise TypeError(
+                    "with_system_breakpoint: the first system message must hold its text "
+                    f"as a plain string, not {type(message.get('content')).__name__}"
+                )
             rewritten[index] = {
                 "role": "system",
                 "content": [
@@ -194,7 +199,7 @@ def parse_structured[T: BaseModel](
     label: str,
     model: str,
     reasoning_effort: str,
-    prompt_cache: PromptCache = "auto",
+    prompt_cache: PromptCache,
     **parse_kwargs: Any,
 ) -> UsageResult[T]:
     """Run one ``chat.completions.parse`` call and apply the shared guards.
@@ -251,7 +256,7 @@ def traced_parse[T: BaseModel](
     session_id: uuid.UUID | None = None,
     metadata: Mapping[str, Any] | None = None,
     clean: Callable[[T], T] | None = None,
-    prompt_cache: PromptCache = "auto",
+    prompt_cache: PromptCache,
 ) -> UsageResult[T]:
     """Run :func:`parse_structured` under one Langfuse generation.
 

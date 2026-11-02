@@ -314,8 +314,10 @@ async def _api_session(
         sse_heartbeat_seconds=heartbeat_seconds,
     )
     other_id = f"other-{uuid.uuid4()}"
-    owner = mint_token(owner_id, settings.oidc_issuer, settings.oidc_client_id, 60, key_dir)
-    other = mint_token(other_id, settings.oidc_issuer, settings.oidc_client_id, 60, key_dir)
+    # Ten minutes, not one: the replay test outlived a 60 s token under a loaded
+    # eight-worker suite and read a 401 as its failure (task 056 review).
+    owner = mint_token(owner_id, settings.oidc_issuer, settings.oidc_client_id, 600, key_dir)
+    other = mint_token(other_id, settings.oidc_issuer, settings.oidc_client_id, 600, key_dir)
     app = create_app(settings=settings)
     async with app.router.lifespan_context(app), httpx.AsyncClient(
         transport=_StreamingAsgiTransport(app), base_url="http://testserver"

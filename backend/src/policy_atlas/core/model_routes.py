@@ -224,6 +224,8 @@ def _parse_steps(raw: Mapping[str, Any], where: str) -> dict[str, Step]:
 
 def _parse_exception(name: str, value: Any, where: str) -> StepException:
     if isinstance(value, str):
+        if not value:
+            raise RuntimeError(f"{where}: step {name!r} names an empty model; remove it")
         return StepException(model=value, reasoning_effort=None)
     if not isinstance(value, Mapping):
         raise RuntimeError(
@@ -239,6 +241,8 @@ def _parse_exception(name: str, value: Any, where: str) -> StepException:
             f"{here}: 'reasoning_effort' is {effort!r}, not one of {list(REASONING_EFFORTS)}"
         )
     model = value.get("model")
+    if model is not None and not model:
+        raise RuntimeError(f"{here}: 'model' is empty; name a tier or a model id, or drop the key")
     return StepException(
         model=str(model) if model is not None else None,
         reasoning_effort=str(effort) if effort is not None else None,

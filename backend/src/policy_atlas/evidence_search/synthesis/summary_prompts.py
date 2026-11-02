@@ -139,3 +139,13 @@ Rules:
   rule they break and what the detail says instead, so the writer can fix it. On "pass",
   say "faithful" in a few words.
 """
+
+#: What the writer is told when a summary fails a format check rather than the judge:
+#: sent as ``previous_attempt.judge_reason`` on the retry (task 056, X2), so it is
+#: model-facing text and lives here under the hash guard.
+SUMMARY_FORMAT_RETRY_REASON = {
+    "over_length": "The summary was over the length limit; write one shorter sentence.",
+    "citation_markers": (
+        "The summary carried citation markers like [3]; a summary carries no citations."
+    ),
+}

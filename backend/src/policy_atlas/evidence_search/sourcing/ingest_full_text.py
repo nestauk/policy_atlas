@@ -1216,7 +1216,6 @@ class _FetchRoundResult:
     body: bytes | None
     content_type: str
     bytes_fetched: int
-    releasable: bool = True  # False for Europe PMC XML: not on the live byte budget
 
 
 def _maybe_discover_url(doc: _DocState, *, body: bytes, url: str, content_type: str) -> None:
@@ -1309,7 +1308,6 @@ def _fetch_doc_for_round(doc: _DocState, fetcher: DocumentFetcher) -> _FetchRoun
                 body=xml,
                 content_type=EUROPE_PMC_XML_CONTENT_TYPE,
                 bytes_fetched=bytes_fetched,
-                releasable=False,
             )
         fetch_result = _safe_fetch(fetcher, url, tss_id=doc.tss_id)
         if fetch_result.status == "ok":
@@ -1584,8 +1582,7 @@ def ingest_full_text_sources(
                         if outcome.body is None:
                             continue
                         handed += 1
-                        # 0 = nothing to release (release_body ignores it).
-                        body_lengths[i] = len(outcome.body) if outcome.releasable else 0
+                        body_lengths[i] = len(outcome.body)
                         progress.fetched_docs.add(i)
                         fetched_now = True
                         scheduler.submit(i, outcome.body, outcome.content_type)

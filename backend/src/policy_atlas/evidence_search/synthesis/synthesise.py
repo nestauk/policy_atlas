@@ -111,6 +111,7 @@ from policy_atlas.evidence_search.synthesis.section_prompt import (
 )
 from policy_atlas.evidence_search.synthesis.summary_prompts import (
     SUMMARISER_PROMPT_VERSION,
+    SUMMARY_FORMAT_RETRY_REASON,
     SUMMARY_JUDGE_PROMPT_VERSION,
 )
 from policy_atlas.evidence_search.synthesis.synthesis_backend import (
@@ -6964,16 +6965,6 @@ def _summary_format_violation(summary: str, *, seed: dict[str, Any]) -> str | No
     return None
 
 
-# Plain sentences sent back to the writer when its last summary failed the
-# deterministic format floor (task 056 X2: the retry carries the reason).
-_SUMMARY_FORMAT_RETRY_REASON = {
-    "over_length": "The summary was over the length limit; write one shorter sentence.",
-    "citation_markers": (
-        "The summary carried citation markers like [3]; a summary carries no citations."
-    ),
-}
-
-
 def _write_and_judge_summary(
     *,
     synthesis_backend: SynthesisBackend,
@@ -7010,7 +7001,7 @@ def _write_and_judge_summary(
                 if attempt < SUMMARY_REGENERATE_CAP:
                     previous_attempt = {
                         "summary": emitted.summary,
-                        "judge_reason": _SUMMARY_FORMAT_RETRY_REASON.get(
+                        "judge_reason": SUMMARY_FORMAT_RETRY_REASON.get(
                             format_reason, format_reason
                         ),
                     }

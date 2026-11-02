@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import http.cookiejar
 import ipaddress
-import re
 import select
 import socket
 import ssl
@@ -38,6 +37,9 @@ log = structlog.get_logger()
 FETCH_TIMEOUT_S = 30.0
 REDIRECT_HOP_CAP = 5
 MAX_DOCUMENT_BYTES = 25_000_000
+# JATS articles are small (well under 5 MB); a lower cap bounds how far expat's
+# entity expansion (a ratio, not an absolute) can grow inside a parse worker.
+EUROPE_PMC_MAX_BYTES = 10_000_000
 RETRY_BACKOFF_S = 2.0
 FETCH_MAX_CONCURRENCY = 10
 PER_HOST_MAX_CONCURRENCY = 2
@@ -56,7 +58,6 @@ PAYWALL_MARKERS = (
 )
 
 USER_AGENT = "policy-atlas/0.1 (+research; contact via repo)"
-_PMCID_RE = re.compile(r"PMC[0-9]{1,12}")
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
@@ -369,7 +370,13 @@ class LiveDocumentFetcher:
             else _PinnedIPTransport(self._resolver)
         )
         with self._global_semaphore, self._host_slot(EUROPE_PMC_HOST):
-            return fetch_europe_pmc_xml(pmcid, timeout=FETCH_TIMEOUT_S, transport=transport)
+            body = fetch_europe_pmc_xml(pmcid, timeout=FETCH_TIMEOUT_S, transport=transport)
+        if body is not None:
+            # On the shared in-flight byte budget like every other body; the ingest
+            # loop releases it through ``release_body`` once the parser has it.
+            self._account_bytes(len(body))
+            self._register_body_lease(len(body), 1)
+        return body
 
     def release_body(self, n_bytes: int) -> None:
         """Release byte-budget accounting for a returned successful body.
@@ -828,8 +835,8 @@ def fetch_europe_pmc_xml(
     section headings and tables that a PDF loses. The request goes to
     ``www.ebi.ac.uk`` only and carries nothing but the id in the address: no
     query string, no cookies, no other headers than the product's user agent.
-    Redirects are not followed and the body is capped at ``MAX_DOCUMENT_BYTES``,
-    as for every other document fetch.
+    Redirects are not followed and the body is capped at ``EUROPE_PMC_MAX_BYTES``
+    (lower than the PDF cap: JATS files are small).
 
     Args:
         pmcid: PubMed Central id in ``PMC<digits>`` form (see ``normalise_pmcid``).
@@ -844,7 +851,7 @@ def fetch_europe_pmc_xml(
         full text for it (404 and other non-200 answers), the answer is not XML,
         it is too large, or the request fails. Never raises for these outcomes.
     """
-    if not isinstance(pmcid, str) or _PMCID_RE.fullmatch(pmcid) is None:
+    if not isinstance(pmcid, str) or normalise_pmcid(pmcid) != pmcid:
         log.warning("europe_pmc.invalid_pmcid")
         return None
     url = EUROPE_PMC_FULL_TEXT_URL.format(pmcid=pmcid)
@@ -875,7 +882,7 @@ def fetch_europe_pmc_xml(
 def _read_capped(response: httpx.Response) -> bytes | None:
     body = bytearray()
     for chunk in response.iter_bytes():
-        if len(body) + len(chunk) > MAX_DOCUMENT_BYTES:
+        if len(body) + len(chunk) > EUROPE_PMC_MAX_BYTES:
             return None
         body.extend(chunk)
     return bytes(body)

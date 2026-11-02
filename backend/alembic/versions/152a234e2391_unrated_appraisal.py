@@ -1,6 +1,6 @@
 """task 056 — Unrated appraisals: a row with no score and a flag that says so
 
-The slice's one revision (contract D7 and S3; plan P6). Documents the
+The slice's one revision (contract D7 and S3; plan Phase 3). Documents the
 classifier typed ``Unknown / Insufficient information`` or ``Other
 (Non-evidence documents)`` used to get no appraisal row at all, which made
 them uncitable. From this revision they get a row with no score and
