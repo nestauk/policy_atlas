@@ -735,7 +735,10 @@ def test_option_searches_run_at_width_four(engine: Engine, child_run_plan: Any) 
             session_id=task_id,
         )
         assert len(children) == 8
-        deadline = time.monotonic() + 10
+        # 30 s, not 10 (task 056, 2026-11-02): under the eight-worker suite the child
+        # runs' rows and statuses arrive later than on an idle core; the assertions below
+        # are unchanged, only the wait is longer.
+        deadline = time.monotonic() + 30
         while time.monotonic() < deadline and not all(
             option_search._ended(child, None) for child in children
         ):
@@ -841,7 +844,8 @@ def _stuck_until(release: threading.Event, engine: Engine) -> Callable[..., None
 def _await_statuses(
     engine: Engine, task_id: uuid.UUID, children: list[uuid.UUID], want: str
 ) -> dict[uuid.UUID, str]:
-    deadline = time.monotonic() + 10.0
+    # 30 s, not 10: see test_option_searches_run_at_width_four (the parallel suite).
+    deadline = time.monotonic() + 30.0
     found: dict[uuid.UUID, str] = {}
     while time.monotonic() < deadline:
         with engine.connect() as conn:
