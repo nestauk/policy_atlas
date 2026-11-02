@@ -79,33 +79,34 @@ agent_option_design = { tier = "standard", reasoning_effort = "medium" }
 agent_suggest = { tier = "standard", reasoning_effort = "medium" }
 task_agent_turn = { tier = "standard", reasoning_effort = "medium" }
 # --- Options scoping (the judgment calls run on the strongest tier) ----------
-task_agent_scoping_turn = { tier = "frontier", reasoning_effort = "medium" }
-longlist_discover = { tier = "frontier", reasoning_effort = "medium" }
+task_agent_scoping_turn = { tier = "frontier", reasoning_effort = "low" }
+longlist_discover = { tier = "frontier", reasoning_effort = "low" }
 longlist_assign = { tier = "fast", reasoning_effort = "medium" }
-longlist_themes = { tier = "frontier", reasoning_effort = "medium" }
-longlist_assign_themes = { tier = "frontier", reasoning_effort = "medium" }
-longlist_type = { tier = "frontier", reasoning_effort = "medium" }
-longlist_constrain = { tier = "frontier", reasoning_effort = "medium" }
-longlist_distinct = { tier = "frontier", reasoning_effort = "medium" }
-longlist_authority = { tier = "frontier", reasoning_effort = "medium" }
-longlist_shortlist = { tier = "frontier", reasoning_effort = "medium" }
-option_profile_line = { tier = "frontier", reasoning_effort = "medium" }
-option_profile_potential_impact = { tier = "frontier", reasoning_effort = "medium" }
-option_profile_ambition = { tier = "frontier", reasoning_effort = "medium" }
-option_profile_setting = { tier = "frontier", reasoning_effort = "medium" }
+longlist_themes = { tier = "frontier", reasoning_effort = "low" }
+longlist_assign_themes = { tier = "frontier", reasoning_effort = "low" }
+longlist_type = { tier = "frontier", reasoning_effort = "low" }
+longlist_constrain = { tier = "frontier", reasoning_effort = "low" }
+longlist_distinct = { tier = "frontier", reasoning_effort = "low" }
+longlist_authority = { tier = "frontier", reasoning_effort = "low" }
+longlist_shortlist = { tier = "frontier", reasoning_effort = "low" }
+option_profile_line = { tier = "frontier", reasoning_effort = "low" }
+option_profile_potential_impact = { tier = "frontier", reasoning_effort = "low" }
+option_profile_ambition = { tier = "frontier", reasoning_effort = "low" }
+option_profile_setting = { tier = "frontier", reasoning_effort = "low" }
 option_profile_fold = { tier = "fast", reasoning_effort = "medium" }
 option_profile_place_sentences = { tier = "fast", reasoning_effort = "medium" }
 
 # ---------------------------------------------------------------------------
 [routes.openai-direct]
-# OpenAI called directly. The default when nothing is set.
+# OpenAI called directly. The default when nothing is set. The three GPT-6
+# models since task 056 (owner, 2026-10-29 and 2026-10-30, D2).
 openai_base_url = "https://api.openai.com/v1"   # stated so no stray env var can move it
 api_key_env = "OPENAI_API_KEY"                  # which variable holds this route's key
 
 [routes.openai-direct.text]
-fast = "gpt-5.6-luna"
-standard = "gpt-5.6-terra"
-frontier = "gpt-5.6-sol"
+fast = "gpt-6-luna"
+standard = "gpt-6.1-terra"
+frontier = "gpt-6.1-sol"
 
 [routes.openai-direct.embeddings]
 backend = "openai"
@@ -123,15 +124,15 @@ backend = "openai"
 [routes.bedrock]
 # Every call goes to Amazon Bedrock's London endpoint. OpenAI models are reached
 # through Bedrock's global routing (the only way from London); embeddings use
-# Cohere through EU-only routing. The same three models as openai-direct, under
-# Bedrock's global profile names.
+# Cohere through EU-only routing. The same three GPT-6 models as openai-direct,
+# under Bedrock's global profile names.
 openai_base_url = "https://bedrock-runtime.eu-west-2.amazonaws.com/openai/v1"
 api_key_env = "AWS_BEARER_TOKEN_BEDROCK"       # the Bedrock key; boto3 reads the same variable
 
 [routes.bedrock.text]
-fast = "global.openai.gpt-5.6-luna"
-standard = "global.openai.gpt-5.6-terra"
-frontier = "global.openai.gpt-5.6-sol"
+fast = "global.openai.gpt-6-luna"
+standard = "global.openai.gpt-6.1-terra"
+frontier = "global.openai.gpt-6.1-sol"
 
 [routes.bedrock.embeddings]
 backend = "cohere"
@@ -152,9 +153,9 @@ openai_base_url = "https://bedrock-runtime.eu-west-2.amazonaws.com/openai/v1"
 api_key_env = "AWS_BEARER_TOKEN_BEDROCK"
 
 [routes.bedrock-claude.text]
-fast = "global.openai.gpt-5.6-luna"
-standard = "global.openai.gpt-5.6-terra"
-frontier = "global.openai.gpt-5.6-sol"
+fast = "global.openai.gpt-6-luna"
+standard = "global.openai.gpt-6.1-terra"
+frontier = "global.openai.gpt-6.1-sol"
 
 [routes.bedrock-claude.embeddings]
 backend = "cohere"

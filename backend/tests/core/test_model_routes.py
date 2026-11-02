@@ -16,10 +16,11 @@ import pytest
 from policy_atlas.core import model_routes
 from policy_atlas.core.model_routes import ROUTE_FILE, Route, load_route
 
-# Today's model and reasoning effort per step (task 056, D4 and D9): the tier the
+# The model and reasoning effort per step after the task 056 switch (D2, D4, D9): the tier the
 # step follows and the effort it sends. "medium" is written where nothing was sent
 # before (the provider default, probed 2026-11-02); "none" where the route knob gave
-# it to Terra; "high" where a module hard-coded it. Changing a value here is a
+# it to Terra; "high" where a module hard-coded it; "low" on the frontier steps because
+# gpt-6.1-sol refuses "none" (owner, 2026-11-01). Changing a value here is a
 # deliberate behaviour change, never a side effect.
 STEP_TIER_AND_EFFORT: dict[str, tuple[str, str]] = {
     "screen_abstract": ("fast", "medium"),
@@ -65,32 +66,32 @@ STEP_TIER_AND_EFFORT: dict[str, tuple[str, str]] = {
     "agent_option_design": ("standard", "medium"),
     "agent_suggest": ("standard", "medium"),
     "task_agent_turn": ("standard", "medium"),
-    "task_agent_scoping_turn": ("frontier", "medium"),
-    "longlist_discover": ("frontier", "medium"),
-    "longlist_themes": ("frontier", "medium"),
-    "longlist_assign_themes": ("frontier", "medium"),
-    "longlist_type": ("frontier", "medium"),
-    "longlist_constrain": ("frontier", "medium"),
-    "longlist_distinct": ("frontier", "medium"),
-    "longlist_authority": ("frontier", "medium"),
-    "longlist_shortlist": ("frontier", "medium"),
-    "option_profile_line": ("frontier", "medium"),
-    "option_profile_potential_impact": ("frontier", "medium"),
-    "option_profile_ambition": ("frontier", "medium"),
-    "option_profile_setting": ("frontier", "medium"),
+    "task_agent_scoping_turn": ("frontier", "low"),
+    "longlist_discover": ("frontier", "low"),
+    "longlist_themes": ("frontier", "low"),
+    "longlist_assign_themes": ("frontier", "low"),
+    "longlist_type": ("frontier", "low"),
+    "longlist_constrain": ("frontier", "low"),
+    "longlist_distinct": ("frontier", "low"),
+    "longlist_authority": ("frontier", "low"),
+    "longlist_shortlist": ("frontier", "low"),
+    "option_profile_line": ("frontier", "low"),
+    "option_profile_potential_impact": ("frontier", "low"),
+    "option_profile_ambition": ("frontier", "low"),
+    "option_profile_setting": ("frontier", "low"),
 }
 
-# Which model each tier names today, per route.
+# Which model each tier names after the switch, per route (gpt-6 family, D2).
 TIER_MODELS = {
     "openai-direct": {
-        "fast": "gpt-5.6-luna",
-        "standard": "gpt-5.6-terra",
-        "frontier": "gpt-5.6-sol",
+        "fast": "gpt-6-luna",
+        "standard": "gpt-6.1-terra",
+        "frontier": "gpt-6.1-sol",
     },
     "bedrock": {
-        "fast": "global.openai.gpt-5.6-luna",
-        "standard": "global.openai.gpt-5.6-terra",
-        "frontier": "global.openai.gpt-5.6-sol",
+        "fast": "global.openai.gpt-6-luna",
+        "standard": "global.openai.gpt-6.1-terra",
+        "frontier": "global.openai.gpt-6.1-sol",
     },
 }
 TIER_MODELS["bedrock-claude"] = TIER_MODELS["bedrock"]
@@ -131,13 +132,13 @@ def test_bedrock_names_bedrock_models_and_cohere() -> None:
     route = load_route(ROUTE_FILE, "bedrock", {})
     assert route.openai_base_url.startswith("https://bedrock-runtime.eu-west-2.")
     assert route.api_key_env == "AWS_BEARER_TOKEN_BEDROCK"
-    assert route.model_for("classify_document") == "global.openai.gpt-5.6-luna"
-    assert route.model_for("screen_abstract") == "global.openai.gpt-5.6-luna"
-    assert route.model_for("synthesise_section_turn") == "global.openai.gpt-5.6-terra"
-    assert route.model_for("task_agent_turn") == "global.openai.gpt-5.6-terra"
-    assert route.model_for("task_agent_scoping_turn") == "global.openai.gpt-5.6-sol"
-    assert route.model_for("longlist_assign") == "global.openai.gpt-5.6-luna"
-    assert route.model_for("agent_decide") == "global.openai.gpt-5.6-terra"
+    assert route.model_for("classify_document") == "global.openai.gpt-6-luna"
+    assert route.model_for("screen_abstract") == "global.openai.gpt-6-luna"
+    assert route.model_for("synthesise_section_turn") == "global.openai.gpt-6.1-terra"
+    assert route.model_for("task_agent_turn") == "global.openai.gpt-6.1-terra"
+    assert route.model_for("task_agent_scoping_turn") == "global.openai.gpt-6.1-sol"
+    assert route.model_for("longlist_assign") == "global.openai.gpt-6-luna"
+    assert route.model_for("agent_decide") == "global.openai.gpt-6.1-terra"
     assert route.embeddings.backend == "cohere"
     assert route.embeddings.model == "eu.cohere.embed-v4:0"
     assert route.embeddings.profile == "cohere_embed_v4_1536_v1"
@@ -437,7 +438,7 @@ def test_every_module_constant_equals_the_default_route() -> None:
     from policy_atlas.options_scoping import scoping_backend
     from policy_atlas.runtime import agent_backend, chat_prompt, task_agent, task_agent_scoping
 
-    luna, terra, sol = "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"
+    luna, terra, sol = "gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol"
     expected = {
         (classify_prompt, "CLASSIFY_MODEL"): luna,
         (screen_prompt, "SCREEN_MODEL"): luna,
@@ -494,9 +495,9 @@ def _resolve_in_subprocess(env_extra: dict[str, str]) -> list[str]:
 
 
 def test_import_time_selection_follows_the_variable() -> None:
-    assert _resolve_in_subprocess({}) == ["gpt-5.6-luna", "openai_text_embedding_3_small_v1"]
+    assert _resolve_in_subprocess({}) == ["gpt-6-luna", "openai_text_embedding_3_small_v1"]
     assert _resolve_in_subprocess({"POLICY_ATLAS_MODEL_ROUTE": "bedrock"}) == [
-        "global.openai.gpt-5.6-luna",
+        "global.openai.gpt-6-luna",
         "cohere_embed_v4_1536_v1",
     ]
 
