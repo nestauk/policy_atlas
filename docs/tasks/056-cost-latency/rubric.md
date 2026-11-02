@@ -36,8 +36,10 @@ Instrument and tidy (P0)
 12. [ ] D2a: Bedrock London quotas for the three GPT-6 ids recorded.
 
 Switch and prompts (P1)
-13. [ ] D2: both routes name gpt-6-luna, gpt-6.1-terra and gpt-6.1-sol with the stated knobs; the
-        two scoping judgment steps are `standard` step exceptions; no step uses `frontier`.
+13. [ ] D2: both routes name gpt-6-luna, gpt-6.1-terra and gpt-6.1-sol with the stated knobs; each
+        former frontier step carries the tier and effort the owner chose from the frontier replay
+        (owner, 2026-11-01 and 2026-11-02: `longlist_shortlist` and `longlist_discover` stay on
+        `frontier`, gpt-6.1-sol at `low`; the other eleven move to `standard` or `fast`).
 14. [ ] D9 and D4: every model call site has its own route step; the inventory records today's
         model and effort per step including "not sent"; a test pins the resolved model and effort
         for every step on the committed routes to today's values; the four effort constants are
