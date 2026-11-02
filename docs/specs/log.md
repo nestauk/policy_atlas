@@ -15,6 +15,7 @@ Contract: `docs/tasks/056-cost-latency/contract.md`; decisions in ADR 0042.
   dependency-complete id-carrying call that starts with the section's own first-turn request so
   it reads the section's prompt cache, never a resend of the tool transcript.
 * S5 (the full-text reading stage and the typed progress counts) is applied with Phase 6.
+* **Update** (S5 wording, review of task 056, owner 2026-11-02): [web-api](system/web-api.md) — a `tick`'s three counts `fetched`, `parsed` and `total` are sent as null when absent (were "omitted"), so the wire matches the generated contract, which lists them as always present and nullable.
 
 ## 2026-10-12
 Task 046 (the longlist refinement), contract § Spec changes, applied at the step-7 review on the

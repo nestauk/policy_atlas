@@ -134,7 +134,7 @@ class OpenAIExtractionBackend:
             # 60 s, not 300 (task 056, owner 2026-11-02): the median extract call is 5 s and
             # the pre-GPT-6 tail 18 s; a request that stalls at the provider is retried after
             # a minute instead of five, so one stall no longer parks a worker for ten minutes.
-            timeout=60.0,
+            timeout=120.0,  # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
             max_retries=2,
         )
         self._langfuse_client = langfuse_client
@@ -223,7 +223,7 @@ class OpenAIICFExtractionBackend:
             # 60 s, not 300 (task 056, owner 2026-11-02): the median extract call is 5 s and
             # the pre-GPT-6 tail 18 s; a request that stalls at the provider is retried after
             # a minute instead of five, so one stall no longer parks a worker for ten minutes.
-            timeout=60.0,
+            timeout=120.0,  # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
             max_retries=2,
         )
         self._langfuse_client = langfuse_client

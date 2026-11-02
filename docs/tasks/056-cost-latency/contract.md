@@ -233,7 +233,11 @@ supersedes most of N8 on staging.
 rewrite (synthesis refinement task). No Flex or batch tiers. No stripping of Bedrock
 prefixes in tracing. No Langfuse version change. No cross-task reuse of parsed text (S6
 out). No faster parse profile (S8 out). No spec edits beyond S1 to S3, S5 and S7 as the
-owner accepted them. No change to timeouts, pool sizes or fetch threads.
+owner accepted them. No change to timeouts, pool sizes or fetch threads. *Amended as built
+(owner, 2026-11-02, review decision items 1 and 2): twelve model-client timeouts moved to
+60 s and `MAX_CONCURRENT_EXTRACT` 4 → 8 on the owner's build-time rulings; the IOF and ICF
+extractors and the two finding vetters (long-output steps, stored tail 67 to 71 s) sit at
+120 s.*
 
 **D7. Unrated appraisal as a flag plus label. Decided (owner, 2026-10-30, route b after
 finding 1).** Documents the classifier typed as `Unknown / Insufficient information` or
@@ -411,7 +415,11 @@ in-or-out line for every entry in § System-level cost and latency.
   or effort lines change for D4 and D9 (code-only diffs); P2 `section_prompt.py` (D8
   message shape, D10 request shape, X3's tool description); caching modes live in one
   committed table module keyed by call name, so no other pinned file changes for D3; P3 `section_prompt.py` only if D7's
-  sentence is added. Any re-pin not on this list stops the slice.
+  sentence is added. Any re-pin not on this list stops the slice. *Amended (owner,
+  2026-11-02, review decision item 4): the stop condition applies to prompt-text changes
+  only; a code-only re-pin (an import, a lookup line, a timeout) is recorded with its diff
+  and does not stop the slice. The nine code-only re-pins listed in verification.md § Review
+  findings are accepted as built.*
 - **Tests stay offline.** Stubs return the usage shape with cache-write and reasoning
   counts.
 

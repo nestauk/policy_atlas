@@ -46,6 +46,7 @@ file; *Langfuse* is the tracing tool that records every model call and its token
 | 7b | Review fixes applied (the code changes in § Review findings) | `make verify` | backend 3,888 passed, **1 failed**: `test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent` (the test Gates 1, 6i and 6j hit) — `_await_statuses` returned `{}` at 30 s. Root cause, not a deadline: the test submits a child and raises on the second dispatch; `_interrupt_children` cancels a child the pool has not started, which then never opens a row, so there is nothing to mark `interrupted`; under load the pool thread lags the raise. Fixed in the test: the child signals an `opened` event after its row exists and the second dispatch waits for it before raising (deterministic; passes 3 of 3 alone). Six loaded eight-worker runs of the three thread-heavy files then showed a second order-dependent test: `test_slow_first_job_does_not_delay_later_jobs` (the one the build widened 4 → 10 s) lost twice more when the forkserver's per-job start outlasted the slow job's sleep. Rewritten without a sleep: the slow job returns when the three quick jobs' sentinel files exist (plus one second for their results to land). |
 | 7c | Both test rewrites in, machine load average 150 (the owner's other apps and sessions; no test process of ours) | `make verify` | backend took 1,557 s (three times the usual) and **2 failed** of 3,888: `test_sse_replay_idempotence_and_cursor_suffix` (a 401: the test's token is minted with a 60 s life and the test outlived it) and `test_sse_backlog_to_tail_has_no_duplicate_or_missing_mapped_sequences` (an asyncio timeout). The file alone: 21 of 21 in 53 s. The token life in the SSE fixture went 60 → 600 s (no assertion touched); the two rewritten tests of row 7b passed. |
 | 7d | Review exit, final tree (load average 119 at the start, 51 at the end) | `make verify` | **green** (exit 0): backend 3,889 passed, 1 skipped (558 s on 8 workers); infra 95; mypy 439 files; okf-validate 192 concepts; audit-paths 202 files; prompt-guard 41 unchanged after the `summary_prompts.py` re-pin; font-guard, drift-check OK; frontend 943 tests in 88 files. |
+| 8 | The owner's rulings applied (120 s on the four long-output clients, tick counts as null, contract and spec amendments), load average 10 at the start | `make verify` | **green** (exit 0) in about 8 minutes: backend 3,889 passed, 1 skipped (408 s on 8 workers); infra 95; mypy 439 files; okf-validate 192; prompt-guard 41 unchanged after the `finding_vetter.py` timeout re-pin (`review-finding_vetter-timeout-repin.patch`); drift-check OK; frontend 943 tests. |
 
 Per-phase commits on `task/056-cost-latency`:
 
@@ -970,7 +971,15 @@ the scheduler order test; both assertions unchanged); the three test calls that 
 `prompt_cache="auto"` assert the same kwargs; the ranking test now covers four labels and
 Unrated; `make verify` on the final tree is the gate (row 7c).
 
-**Decision items for the owner (unapplied; the code stays as built until ruled):**
+**Decision items for the owner.** Ruled 2026-11-02 (the owner's words in brackets after each
+item; applied in commit "Task 056 review: the owner's rulings"): 1 accepted ("fine"; contract D6
+amended as built); 2 the four long-output clients raised to 120 s ("raise to 120"; a code-only
+re-pin of `finding_vetter.py`); 3 accepted; 4 accepted, and the contract's stop condition now
+covers prompt-text re-pins only ("yes accept and drop condition for code only changes");
+5 the implications were asked for and answered in the review conversation (recorded below the
+list); 6 the counts are sent as null and spec S5 reworded ("accept your recommendation");
+7 the deleted tree guard stays deleted ("I don't think this test is needed anymore"); 8 accepted;
+9 deferred ("I take your recommendation"). The items as put:
 
 1. **Contract D6 as built.** D6 says no change to timeouts or pool sizes; the build moved twelve
    model-client timeouts to 60 s and `MAX_CONCURRENT_EXTRACT` 4 → 8 on your rulings of 2026-11-02.
@@ -1009,6 +1018,16 @@ Unrated; `make verify` on the final tree is the gate (row 7c).
 9. **Worker databases after a hard kill.** `conftest.py` drops its database at interpreter exit;
    a kill leaves `policy_atlas_test_gw<N>_<pid>` behind. Deferred with a cleanup command, or a
    sweep of dead-pid names at suite start. Recommended: defer.
+
+*Item 5, the implications as answered for the owner.* As built, when the writer answers a forced
+turn with two `emit_section` calls, or the repair with two `emit_repairs` calls, the first is
+used and the rest are dropped and counted. For a section the first call is a whole section, so
+nothing coherent is lost. For the repair, a repair that arrives in the dropped call leaves its
+claim unsupported, and an unsupported claim is excluded from the report: the reader never sees a
+false claim, but can lose a true one. A reject-and-retry would add one call per occurrence and a
+prompt rule. The count on the span (`extra_tool_calls_ignored`) was 0 on all 434 forced and
+repair calls of 2026-11-02, and the deferred seam says to merge or retry if it ever goes
+non-zero. Recommended: keep as built.
 
 ## Rubric status
 

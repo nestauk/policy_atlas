@@ -450,14 +450,17 @@ def test_tick_with_counts_serialises_them() -> None:
     assert data["note"] == "3 of 10 read, 5 fetched."
 
 
-def test_tick_without_counts_omits_them() -> None:
-    """A tick with no counts serialises exactly as before: no count keys at all."""
+def test_tick_without_counts_sends_them_as_null() -> None:
+    """A tick with no counts carries the three keys as null, matching the generated
+    contract (`fetched: number | null`, always present; owner ruling 2026-11-02)."""
     tick = Tick(stage="acquire", note="Searching a source database.", occurred_at=datetime.now(UTC))
     data = _tick_data(_encode_tick(tick))
-    assert set(data) == {"type", "ephemeral", "stage", "note", "occurred_at"}
+    assert set(data) == {
+        "type", "ephemeral", "stage", "note", "occurred_at", "fetched", "parsed", "total"
+    }
+    assert (data["fetched"], data["parsed"], data["total"]) == (None, None, None)
     stageless = _tick_data(_encode_tick(Tick(stage=None, note="n", occurred_at=datetime.now(UTC))))
     assert stageless["stage"] is None
-    assert not {"fetched", "parsed", "total"} & set(stageless)
 
 
 def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path) -> None:
