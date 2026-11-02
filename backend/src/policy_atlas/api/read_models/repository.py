@@ -116,7 +116,7 @@ from policy_atlas.core.schema import (
     task_source_snapshot,
     tss_owns_snapshot,
 )
-from policy_atlas.evidence_search.assess.appraise import SCORE_LABELS
+from policy_atlas.evidence_search.assess.appraise import UNRATED_LABEL, appraisal_label
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 from policy_atlas.evidence_search.extract.extract import record_ids_by_profile
 from policy_atlas.evidence_search.extract.interventions_records import (
@@ -1109,7 +1109,7 @@ def evidence_page(
         quality_score = label.quality_score if label is not None else None
         item_origin = _origin(row.origin, metadata)
         evidence_type_value = label.evidence_type if label is not None else None
-        tier = SCORE_LABELS.get(quality_score) if quality_score is not None else None
+        tier = appraisal_label(quality_score, unrated=label is not None and label.unrated)
         year_value = _year(metadata)
         if origin is not None and item_origin != origin:
             continue
@@ -1210,11 +1210,19 @@ def _compare_evidence_sort(
     sort: Literal["title", "year", "type", "strength", "status", "relevance"],
     direction: Literal["asc", "desc"],
 ) -> int:
-    """Compare two already-projected evidence rows with nulls always last."""
+    """Compare two already-projected evidence rows with nulls always last.
+
+    Sorting by strength, an Unrated row (no score, task 056) comes after every
+    scored row in both directions, and before a row with no appraisal at all.
+    """
     left_item, left_score = left
     right_item, right_score = right
     left_value: str | int | float | None
     right_value: str | int | float | None
+    if sort == "strength" and left_score is None and right_score is None:
+        left_unrated = left_item.appraisal_tier == UNRATED_LABEL
+        right_unrated = right_item.appraisal_tier == UNRATED_LABEL
+        return 0 if left_unrated == right_unrated else (-1 if left_unrated else 1)
     if sort == "title":
         left_value, right_value = left_item.title.casefold(), right_item.title.casefold()
     elif sort == "year":
@@ -1882,8 +1890,8 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                     grounding_rationale=cast(str, payload.get("rationale"))
                     if isinstance(payload.get("rationale"), str)
                     else None,
-                    appraisal_label=SCORE_LABELS.get(label.quality_score)
-                    if label is not None and label.quality_score is not None
+                    appraisal_label=appraisal_label(label.quality_score, unrated=label.unrated)
+                    if label is not None
                     else None,
                     evidence_type=label.evidence_type if label is not None else None,
                     text_basis=text_basis_by_snapshot.get(snapshot_id),
@@ -2793,8 +2801,8 @@ def source_dossier_out(
         status=cast(Any, status),
         status_reason=reason,
         evidence_type=label.evidence_type if label is not None else None,
-        appraisal_tier=SCORE_LABELS.get(label.quality_score)
-        if label is not None and label.quality_score is not None
+        appraisal_tier=appraisal_label(label.quality_score, unrated=label.unrated)
+        if label is not None
         else None,
         cited=cited,
         url=_url(metadata, row["source_locator"]),
@@ -4191,8 +4199,7 @@ def _design_out(row: Any) -> OptionDesignOut:
 def _label_fields(label: DocumentLabels | None) -> tuple[str | None, str | None]:
     if label is None or label.provenance == "absent":
         return None, None
-    tier = SCORE_LABELS.get(label.quality_score) if label.quality_score is not None else None
-    return label.evidence_type, tier
+    return label.evidence_type, appraisal_label(label.quality_score, unrated=label.unrated)
 
 
 def _option_documents(

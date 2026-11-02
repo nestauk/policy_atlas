@@ -61,6 +61,7 @@ from policy_atlas.core.schema import (
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.tags import has_control_character
 from policy_atlas.core.usage import UsageAccumulator, UsageResult
+from policy_atlas.evidence_search.assess.appraise import appraisal_tier
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 from policy_atlas.evidence_search.extract.extract import record_ids_by_profile
 from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
@@ -1138,7 +1139,11 @@ def _doc_record(row: Any, selected_tss_ids: set[uuid.UUID]) -> dict[str, Any]:
         "origin": row.origin,
         "primary_evidence_type": row.primary_evidence_type,
         "text_basis": row.text_basis,
-        "appraisal_tier": str(row.quality_score) if row.quality_score is not None else None,
+        # "4" for a scored row, "Unrated" for a row with no score (task 056); None
+        # only when the document has no appraisal row, which keeps it uncitable.
+        "appraisal_tier": appraisal_tier(
+            row.quality_score, unrated=bool(getattr(row, "unrated", False))
+        ),
         "tags": [],
         "selected": cast("uuid.UUID", row.tss_id) in selected_tss_ids,
         "screen_confidence": row.screen_decision_confidence,
@@ -1278,6 +1283,7 @@ def build_retrieval_scope(
             source_snapshot.c.text_basis,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
+            source_appraisal_result.c.unrated,
             ranked.c.screen_decision_confidence,
             ranked.c.screen_stage,
         )
@@ -2045,9 +2051,11 @@ def _finding_record(row: Any) -> FindingRecord:
     evidence_type = getattr(row, "primary_evidence_type", None)
     if evidence_type is not None:
         record["evidence_type"] = cast("str", evidence_type)
-    quality_score = getattr(row, "quality_score", None)
-    if quality_score is not None:
-        record["appraisal_label"] = str(quality_score)
+    label = appraisal_tier(
+        getattr(row, "quality_score", None), unrated=bool(getattr(row, "unrated", False))
+    )
+    if label is not None:
+        record["appraisal_label"] = label
     venue = _metadata_venue(metadata)
     if venue is not None:
         record["venue"] = venue
@@ -2087,9 +2095,11 @@ def _icf_finding_record(row: Any) -> ICFFindingRecord:
     evidence_type = getattr(row, "primary_evidence_type", None)
     if evidence_type is not None:
         record["evidence_type"] = cast("str", evidence_type)
-    quality_score = getattr(row, "quality_score", None)
-    if quality_score is not None:
-        record["appraisal_label"] = str(quality_score)
+    label = appraisal_tier(
+        getattr(row, "quality_score", None), unrated=bool(getattr(row, "unrated", False))
+    )
+    if label is not None:
+        record["appraisal_label"] = label
     venue = _metadata_venue(metadata)
     if venue is not None:
         record["venue"] = venue
@@ -2131,6 +2141,7 @@ def _load_iof_finding_records(
             source_snapshot.c.metadata,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
+            source_appraisal_result.c.unrated,
         )
         .select_from(intervention_outcome_finding)
         .join(
@@ -2212,6 +2223,7 @@ def _load_icf_finding_records(
             source_snapshot.c.metadata,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
+            source_appraisal_result.c.unrated,
         )
         .select_from(implementation_context_finding)
         .join(
@@ -2890,6 +2902,7 @@ def make_lookup_reader(
                     sa_select(
                         source_appraisal_result.c.quality_score,
                         source_appraisal_result.c.rubric_version,
+                        source_appraisal_result.c.unrated,
                     )
                     .where(source_appraisal_result.c.task_id == task_id)
                     .where(source_appraisal_result.c.evidence_scope_id.in_(scope_ids))
@@ -2910,6 +2923,10 @@ def make_lookup_reader(
                         "rubric_version": row.rubric_version,
                     }
                 )
+                if row is not None and row.unrated:
+                    # Only on an Unrated row (no score, task 056), so a scored
+                    # row's result is unchanged.
+                    result["unrated"] = True
             elif kind == "classification_by_doc":
                 row = conn.execute(
                     sa_select(source_classification_result.c.primary_evidence_type)

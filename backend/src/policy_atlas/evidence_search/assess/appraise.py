@@ -26,14 +26,18 @@ from policy_atlas.core.schema import (
 from policy_atlas.evidence_search.assess.classify import SKIP_TSS_KEY, parse_skip_ids
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 
-DEFAULT_RUBRIC_VERSION = "v2-hierarchy-v1"
+# v1 -> v2 (task 056, D7): the two unscored types now get an Unrated row instead of
+# no row. The scores themselves did not change; the bump records that the rubric's
+# reach did, so an inherited v1 appraisal is re-appraised (labels.py rubric rule).
+DEFAULT_RUBRIC_VERSION = "v2-hierarchy-v2"
 
 # The v3.0 default rubric: primary_evidence_type → quality_score (5 = strongest),
 # v2's expert-calibrated five-point evidence-hierarchy rating carried forward.
-# Its domain defines appraisability: types absent from it (Other/Non-evidence,
-# Unknown) are skipped-and-counted, never scored. Keys come from EVIDENCE_TYPES
-# (schema.py); a test enforces the domain is exactly EVIDENCE_TYPES minus the two
-# non-appraisable types.
+# Types absent from it (Other/Non-evidence, Unknown) are never scored: since task
+# 056 (D7) they are appraised as Unrated — a row with no score and
+# ``unrated = true`` — so they are citable and shown as "Unrated". Keys come from
+# EVIDENCE_TYPES (schema.py); a test enforces the domain is exactly EVIDENCE_TYPES
+# minus the two Unrated types.
 DEFAULT_RUBRIC: dict[str, int] = {
     "Systematic Review and Meta-Analysis":   5,
     "RCTs and Quasi-Experimental Studies":   4,
@@ -55,8 +59,54 @@ SCORE_LABELS: dict[int, str] = {
     1: "Weak",
 }
 
+# The reader-facing label of an Unrated appraisal (task 056, D7). Kept apart from
+# SCORE_LABELS because an Unrated row has no score, and a dict keyed by score cannot
+# hold a "no score" key (wording deviation from the contract, owner 2026-11-01).
+UNRATED_LABEL = "Unrated"
+
 _NON_EVIDENCE_TYPE = "Other (Non-evidence documents)"
 _UNKNOWN_TYPE = "Unknown / Insufficient information"
+
+#: The types appraised as Unrated (no score) unless a rubric override scores them.
+UNRATED_TYPES: frozenset[str] = frozenset({_NON_EVIDENCE_TYPE, _UNKNOWN_TYPE})
+
+
+def appraisal_label(quality_score: int | None, *, unrated: bool = False) -> str | None:
+    """Return the reader-facing strength label for one appraisal.
+
+    The single place that turns a stored appraisal into words, so every
+    surface says "Unrated" the same way.
+
+    Args:
+        quality_score: The stored score (1 to 5), or ``None``.
+        unrated: The row's ``unrated`` flag.
+
+    Returns:
+        ``UNRATED_LABEL`` for an Unrated row, the ``SCORE_LABELS`` word for a
+        scored row, or ``None`` when there is no appraisal at all.
+    """
+    if unrated:
+        return UNRATED_LABEL
+    return SCORE_LABELS.get(quality_score) if quality_score is not None else None
+
+
+def appraisal_tier(quality_score: int | None, *, unrated: bool = False) -> str | None:
+    """Return the short tier string the writer and the chat context carry.
+
+    The tier is the score as text (``"4"``) for a scored row and
+    ``UNRATED_LABEL`` for an Unrated row; ``None`` means "not appraised", which
+    is what keeps a document uncitable.
+
+    Args:
+        quality_score: The stored score (1 to 5), or ``None``.
+        unrated: The row's ``unrated`` flag.
+
+    Returns:
+        The tier string, or ``None`` when there is no appraisal.
+    """
+    if unrated:
+        return UNRATED_LABEL
+    return str(quality_score) if quality_score is not None else None
 
 
 class AppraiseDirectiveError(Exception):
@@ -188,14 +238,18 @@ class AppraiseResult:
     """One document's appraisal outcome.
 
     Attributes:
-        quality_score: 1..5, 5 = strongest (v2 evidence-hierarchy rating).
+        quality_score: 1..5, 5 = strongest (v2 evidence-hierarchy rating);
+            ``None`` for an Unrated document.
         rubric_version: Rubric that produced the score; ``DEFAULT_RUBRIC_VERSION``
             unless a scope-context ``appraisal.rubric`` override is in effect (D1),
             in which case it is the derived ``f"{base}+{hash8}"`` version.
+        unrated: ``True`` for a document typed Unknown or Other (Non-evidence):
+            it has no score and reads as "Unrated" (task 056, D7).
     """
 
-    quality_score: int
+    quality_score: int | None
     rubric_version: str
+    unrated: bool = False
 
 
 def appraise_sources(
@@ -209,9 +263,11 @@ def appraise_sources(
 
     Reads source_classification_result rows for the scope; for each whose
     primary_evidence_type is in the effective rubric's domain, inserts one
-    source_appraisal_result row and emits a source.appraised event. Types
-    outside the effective rubric's domain are skipped and counted, never
-    scored. Already-appraised rows are skipped (idempotent).
+    source_appraisal_result row and emits a source.appraised event. The two
+    Unrated types (``UNRATED_TYPES``) that the effective rubric does not score
+    get a row too, with no score and ``unrated = true`` (task 056, D7), so
+    they are citable and read as "Unrated". Already-appraised rows are
+    skipped (idempotent).
 
     D1 steering: ``context.context["appraisal"]`` may carry
     ``{"rubric": {evidence_type: tier}}``, a partial override parsed
@@ -237,21 +293,31 @@ def appraise_sources(
         AppraiseDirectiveError: If ``context.context["appraisal"]`` is malformed.
 
     Returns:
-        Counts: ``appraised`` (rows inserted this call), ``by_score`` (sparse,
-        int-keyed), ``skipped_non_evidence`` / ``skipped_unknown`` /
+        Counts: ``appraised`` (scored rows inserted this call), ``by_score``
+        (sparse, int-keyed), ``appraised_unrated`` (Unrated rows inserted this
+        call), ``skipped_non_evidence`` / ``skipped_unknown`` /
         ``unclassified`` (recomputed from current state every call),
-        ``skipped_demoted`` (rubric-domain classifications whose doc is no
-        longer effective-relevant, e.g. stage-2 demoted — never appraised),
-        and ``already_appraised`` (pre-existing appraisal rows for the scope).
-        Invariant: appraised + already_appraised + skipped_non_evidence +
-        skipped_unknown + skipped_demoted = classification rows for the scope
-        (+ ``resolved_elsewhere``, present only under a task 045 skip
-        directive: documents whose tier a linked task already answers).
+        ``skipped_demoted`` (scored- or Unrated-domain classifications whose
+        doc is no longer effective-relevant, e.g. stage-2 demoted — never
+        appraised), and ``already_appraised`` (pre-existing appraisal rows for
+        the scope). Since task 056 the two skipped counts read 0 under the
+        default rubric, because those types are appraised as Unrated; the keys
+        are kept so the summary keeps its shape and a type outside both
+        domains would still be counted, never lost.
+        Invariant: appraised + appraised_unrated + already_appraised +
+        skipped_non_evidence + skipped_unknown + skipped_demoted =
+        classification rows for the scope (+ ``resolved_elsewhere``, present
+        only under a task 045 skip directive: documents whose tier a linked
+        task already answers).
     """
     rubric_override = _parse_appraisal_directive(context.context.get("appraisal"))
     skip = _parse_appraisal_skip(context.context.get("appraisal"))
     effective_rubric: dict[str, int] = {**DEFAULT_RUBRIC, **rubric_override}
     rubric_version = _derive_rubric_version(rubric_override)
+    # An override that scores an Unrated type wins: that type is scored this run.
+    unrated_types = UNRATED_TYPES - set(effective_rubric)
+    # Every type that gets a row this run, scored or Unrated.
+    appraisable_types = [*effective_rubric, *sorted(unrated_types)]
 
     scoped_classifications = (
         (source_classification_result.c.evidence_scope_id == context.scope_id)
@@ -274,7 +340,7 @@ def appraise_sources(
             select(source_classification_result.c.primary_evidence_type, func.count())
             .where(scoped_classifications)
             .where(source_classification_result.c.primary_evidence_type.not_in(
-                list(effective_rubric)
+                appraisable_types
             ))
             .group_by(source_classification_result.c.primary_evidence_type)
         ).fetchall()
@@ -329,7 +395,7 @@ def appraise_sources(
         .where(effective.c.evidence_scope_id == context.scope_id)
         .where(effective.c.status == "relevant")
         .where(scoped_classifications)
-        .where(source_classification_result.c.primary_evidence_type.in_(list(effective_rubric)))
+        .where(source_classification_result.c.primary_evidence_type.in_(appraisable_types))
         .where(
             ~exists().where(
                 (source_appraisal_result.c.evidence_scope_id == context.scope_id)
@@ -353,7 +419,7 @@ def appraise_sources(
         select(func.count())
         .select_from(source_classification_result)
         .where(scoped_classifications)
-        .where(source_classification_result.c.primary_evidence_type.in_(list(effective_rubric)))
+        .where(source_classification_result.c.primary_evidence_type.in_(appraisable_types))
         .where(
             ~exists()
             .where(effective.c.evidence_scope_id == context.scope_id)
@@ -375,12 +441,15 @@ def appraise_sources(
     ).scalar_one()
 
     by_score: dict[int, int] = {}
+    appraised_unrated = 0
     appraisal_rows: list[dict[str, Any]] = []
 
     for tss_id, snap_id, evidence_type in appraisable_rows:
+        unrated = evidence_type in unrated_types
         result = AppraiseResult(
-            quality_score=effective_rubric[evidence_type],
+            quality_score=None if unrated else effective_rubric[evidence_type],
             rubric_version=rubric_version,
+            unrated=unrated,
         )
 
         appraisal_rows.append(
@@ -391,26 +460,34 @@ def appraise_sources(
                 "task_id": task_id,
                 "appraised_by_run_id": run_id,
                 "quality_score": result.quality_score,
+                "unrated": result.unrated,
                 "rubric_version": result.rubric_version,
                 "appraised_at": datetime.now(UTC),
             }
         )
 
+        payload: dict[str, Any] = {
+            "source_snapshot_id": str(snap_id),
+            "task_source_snapshot_id": str(tss_id),
+            "evidence_scope_id": str(context.scope_id),
+            "quality_score": result.quality_score,
+            "rubric_version": result.rubric_version,
+        }
+        if result.unrated:
+            # Only on Unrated rows, so a scored row's event is unchanged.
+            payload["unrated"] = True
         events.append(
             conn,
             task_id=task_id,
             run_id=run_id,
             event_type="source.appraised",
-            payload={
-                "source_snapshot_id": str(snap_id),
-                "task_source_snapshot_id": str(tss_id),
-                "evidence_scope_id": str(context.scope_id),
-                "quality_score": result.quality_score,
-                "rubric_version": result.rubric_version,
-            },
+            payload=payload,
         )
 
-        by_score[result.quality_score] = by_score.get(result.quality_score, 0) + 1
+        if result.quality_score is None:
+            appraised_unrated += 1
+        else:
+            by_score[result.quality_score] = by_score.get(result.quality_score, 0) + 1
 
     # One bulk INSERT for all appraisal rows (deterministic rubric lookup, no
     # per-row DB round trip needed); event-log appends stay per-row above for
@@ -420,8 +497,9 @@ def appraise_sources(
         conn.execute(source_appraisal_result.insert(), appraisal_rows)
 
     summary: dict[str, Any] = {
-        "appraised": len(appraisable_rows),
+        "appraised": len(appraisable_rows) - appraised_unrated,
         "by_score": by_score,
+        "appraised_unrated": appraised_unrated,
         "skipped_non_evidence": skip_counts.get(_NON_EVIDENCE_TYPE, 0),
         "skipped_unknown": skip_counts.get(_UNKNOWN_TYPE, 0),
         "skipped_demoted": skipped_demoted,

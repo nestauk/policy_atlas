@@ -94,7 +94,7 @@ def evidence(
     origin: Annotated[Literal["OpenAlex", "Overton", "Uploaded"] | None, Query()] = None,
     evidence_type: Annotated[str | None, Query(max_length=200)] = None,
     strength: Annotated[
-        Literal["Very strong", "Strong", "Moderate", "Limited", "Weak"] | None, Query()
+        Literal["Very strong", "Strong", "Moderate", "Limited", "Weak", "Unrated"] | None, Query()
     ] = None,
     year_from: Annotated[int | None, Query(ge=1000, le=3000)] = None,
     year_to: Annotated[int | None, Query(ge=1000, le=3000)] = None,

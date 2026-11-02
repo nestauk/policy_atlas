@@ -6570,7 +6570,7 @@ export interface operations {
                 theme?: string | null;
                 origin?: ("OpenAlex" | "Overton" | "Uploaded") | null;
                 evidence_type?: string | null;
-                strength?: ("Very strong" | "Strong" | "Moderate" | "Limited" | "Weak") | null;
+                strength?: ("Very strong" | "Strong" | "Moderate" | "Limited" | "Weak" | "Unrated") | null;
                 year_from?: number | null;
                 year_to?: number | null;
             };

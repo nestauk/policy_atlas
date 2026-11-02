@@ -97,9 +97,10 @@ def _appraise(
     conn: Connection,
     owner: _Task,
     tss_id: uuid.UUID,
-    score: int,
+    score: int | None,
     rubric: str = DEFAULT_RUBRIC_VERSION,
 ) -> None:
+    """Appraise one document; ``score=None`` writes an Unrated row (task 056)."""
     conn.execute(
         source_appraisal_result.insert().values(
             source_appraisal_result_id=uuid.uuid4(),
@@ -108,6 +109,7 @@ def _appraise(
             task_id=owner.task_id,
             appraised_by_run_id=owner.run_id,
             quality_score=score,
+            unrated=score is None,
             rubric_version=rubric,
             appraised_at=now(),
         )
@@ -204,6 +206,27 @@ def test_an_inherited_appraisal_under_another_rubric_is_withheld(conn: Connectio
     # Classification is read as is (D23): only the tier waits for re-appraisal.
     assert label.evidence_type == RCT
     assert label.provenance == "inherited"
+
+
+def test_own_and_inherited_unrated_appraisals_resolve_as_unrated(conn: Connection) -> None:
+    """Task 056, D7: an Unrated row is a resolved tier with no score."""
+    unknown = "Unknown / Insufficient information"
+    source = _task(conn)
+    snapshot_id, source_tss = seed_source(conn, source.task_id)
+    _classify(conn, source, source_tss, unknown)
+    _appraise(conn, source, source_tss, None)
+    own = labels_for_snapshots(conn, task_id=source.task_id, tss_ids=[source_tss])[source_tss]
+    assert (own.evidence_type, own.quality_score, own.unrated, own.provenance) == (
+        unknown, None, True, "own"
+    )
+
+    target = _task(conn)
+    tss_id = _share(conn, target, snapshot_id)
+    _link(conn, source, target, _walk(conn, source))
+    label = labels_for_snapshots(conn, task_id=target.task_id, tss_ids=[tss_id])[tss_id]
+    assert (label.quality_score, label.unrated, label.tier_inherited) == (None, True, True)
+    assert label.provenance == "inherited"
+    assert label.stale_rubric is False
 
 
 def test_a_re_appraised_document_keeps_its_inherited_type_and_its_own_tier(

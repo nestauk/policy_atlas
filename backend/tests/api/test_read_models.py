@@ -2550,3 +2550,33 @@ def test_decisions_name_the_walk_of_their_event_run(engine: Engine) -> None:
     finally:
         with engine.begin() as conn:
             delete_task_data(conn, task_id)
+
+
+def test_strength_sort_puts_unrated_after_scored_and_before_unappraised() -> None:
+    """Task 056, D7: Unrated (no score) sorts after every scored row, in both
+    directions, and before a row with no appraisal at all."""
+    from functools import cmp_to_key, partial
+    from typing import Literal
+
+    from policy_atlas.api.contract.read_models import EvidenceItemOut
+    from policy_atlas.api.read_models.repository import _compare_evidence_sort
+
+    def _row(tier: str | None, score: int | None) -> tuple[EvidenceItemOut, int | None]:
+        item = EvidenceItemOut(
+            source_id=uuid.uuid4(),
+            title=tier or "none",
+            origin="OpenAlex",
+            status="relevant",
+            appraisal_tier=tier,
+            cited=False,
+        )
+        return item, score
+
+    rows = [_row(None, None), _row("Unrated", None), _row("Weak", 1), _row("Very strong", 5)]
+    directions: tuple[Literal["asc", "desc"], ...] = ("asc", "desc")
+    for direction in directions:
+        compare = partial(_compare_evidence_sort, sort="strength", direction=direction)
+        ordered = sorted(rows, key=cmp_to_key(compare))
+        tiers = [item.appraisal_tier for item, _score in ordered]
+        scored = ["Weak", "Very strong"] if direction == "asc" else ["Very strong", "Weak"]
+        assert tiers == [*scored, "Unrated", None]

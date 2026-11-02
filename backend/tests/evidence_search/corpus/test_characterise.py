@@ -311,9 +311,10 @@ def test_coverage_distributions_match_hand_computed(conn: Connection) -> None:
         "Other (Non-evidence documents)": 1,
     }
     assert distributions["quality"] == {
-        "4 (v2-hierarchy-v1)": 1,
-        "2 (v2-hierarchy-v1)": 1,
-        "unappraised": 1,
+        "4 (v2-hierarchy-v2)": 1,
+        "2 (v2-hierarchy-v2)": 1,
+        # Task 056 (D7): the Non-evidence doc is appraised as Unrated, its own bucket.
+        "Unrated (v2-hierarchy-v2)": 1,
     }
     assert distributions["screen_basis"] == {"title_abstract": 3}
     assert distributions["screen_confidence_bands"] == {">=0.8": 3}

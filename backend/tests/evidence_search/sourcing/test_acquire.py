@@ -1001,7 +1001,9 @@ def test_full_chain_over_both_fixture_corpora(conn: Connection) -> None:
         context=AppraiseContext(scope_id=scope_id, intent="Test intent", context={}),
     )
     assert appraised["appraised"] == 0
-    assert appraised["skipped_unknown"] == classified["classified"]
+    # Task 056 (D7): Unknown documents are appraised as Unrated, not skipped.
+    assert appraised["appraised_unrated"] == classified["classified"]
+    assert appraised["skipped_unknown"] == 0
 
 
 # --- Cleanup helper ---

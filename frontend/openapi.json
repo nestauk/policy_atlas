@@ -10730,7 +10730,8 @@
                     "Strong",
                     "Moderate",
                     "Limited",
-                    "Weak"
+                    "Weak",
+                    "Unrated"
                   ],
                   "type": "string"
                 },

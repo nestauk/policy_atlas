@@ -54,7 +54,11 @@ from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.schema import citation as citation_table
 from policy_atlas.core.tags import has_control_character
 from policy_atlas.core.usage import UsageAccumulator
-from policy_atlas.evidence_search.assess.appraise import SCORE_LABELS
+from policy_atlas.evidence_search.assess.appraise import (
+    SCORE_LABELS,
+    UNRATED_LABEL,
+    appraisal_label,
+)
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 from policy_atlas.evidence_search.extract.extract import record_ids_by_profile
 from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
@@ -5091,6 +5095,7 @@ def _build_doc_meta(
         sa_select(
             source_appraisal_result.c.task_source_snapshot_id,
             source_appraisal_result.c.quality_score,
+            source_appraisal_result.c.unrated,
         ).where(
             source_appraisal_result.c.task_id == task_id,
             source_appraisal_result.c.task_source_snapshot_id.in_(
@@ -5098,10 +5103,11 @@ def _build_doc_meta(
             ),
         )
     ).fetchall()
-    appraisal_by_tss: dict[str, int] = {}
+    # Reader-facing label per document: a score word, or "Unrated" (task 056).
+    label_by_tss: dict[str, str | None] = {}
     for row in appraisal_rows:
         key = str(row.task_source_snapshot_id)
-        appraisal_by_tss[key] = row.quality_score
+        label_by_tss[key] = appraisal_label(row.quality_score, unrated=row.unrated)
 
     classification_rows = conn.execute(
         sa_select(
@@ -5137,8 +5143,7 @@ def _build_doc_meta(
 
     result: dict[str, dict[str, Any]] = {}
     for finding_id, info in all_findings.items():
-        score = appraisal_by_tss.get(info.tss_id)
-        label = SCORE_LABELS.get(score) if score is not None else None
+        label = label_by_tss.get(info.tss_id)
         evidence_type = classification_by_tss.get(info.tss_id)
         meta = metadata_by_snapshot.get(info.source_snapshot_id, {})
         year_val = meta.get("publication_year", meta.get("year"))
@@ -5552,7 +5557,11 @@ def _ranked_top_sources(
     Returns:
         List of dicts with source_id + metadata for note generation.
     """
-    appraisal_order = {"Very strong": 0, "Strong": 1, "Moderate": 2, "Limited": 3, "Weak": 4}
+    # Unrated (no score, task 056) ranks after every scored band; no label ranks last.
+    appraisal_order = {
+        "Very strong": 0, "Strong": 1, "Moderate": 2, "Limited": 3, "Weak": 4,
+        UNRATED_LABEL: 5,
+    }
 
     source_counts: dict[str, int] = {}
     source_claim_texts: dict[str, list[str]] = {}
@@ -5591,7 +5600,7 @@ def _ranked_top_sources(
     def _sort_key(item: tuple[str, int]) -> tuple[int, int, str]:
         sid, count = item
         meta = source_meta.get(sid, {})
-        rank = appraisal_order.get(meta.get("appraisal_label", ""), 5)
+        rank = appraisal_order.get(meta.get("appraisal_label") or "", 6)
         title = meta.get("title") or ""
         return (-count, rank, title)
 

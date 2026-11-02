@@ -1052,6 +1052,36 @@ def test_missing_signals_flag_not_block() -> None:
     assert outcome.provenance["signal_availability"]["origin"] == 0
 
 
+def test_unrated_row_reads_as_missing_quality_like_no_row(conn: Connection) -> None:
+    """Task 056, D7: an Unrated appraisal (no score) is handled exactly as no appraisal."""
+    pid, characterise_run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    unknown = "Unknown / Insufficient information"
+    unrated_doc = seed_select_doc(
+        conn, pid, characterise_run_id, scope_id,
+        title="unrated", evidence_type=unknown, unrated=True,
+    )
+    no_row_doc = seed_select_doc(
+        conn, pid, characterise_run_id, scope_id,
+        title="no row", evidence_type=unknown, quality=None,
+    )
+    seed_characterisation(
+        conn, pid, scope_id, characterise_run_id, themes={"A": [unrated_doc, no_row_doc]},
+    )
+
+    _summary, row, _ = run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 2}}
+    )
+
+    records = {record["tss_id"]: record for record in row._mapping["selected"]}
+    unrated_record, no_row_record = records[str(unrated_doc)], records[str(no_row_doc)]
+    assert unrated_record["signals"] == no_row_record["signals"]
+    assert unrated_record["signals"]["quality"] == 0.5
+    assert unrated_record["missing_signals"] == no_row_record["missing_signals"]
+    assert "quality" in unrated_record["missing_signals"]
+    assert unrated_record["composite"] == pytest.approx(no_row_record["composite"])
+
+
 def test_future_year_reads_as_missing_signal(conn: Connection) -> None:
     pid, characterise_run_id = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)

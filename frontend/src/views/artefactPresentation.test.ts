@@ -367,6 +367,22 @@ describe("cardEvidenceMeta", () => {
       }),
     ).toEqual(["Strong", "RCTs and Quasi-Experimental Studies"]);
   });
+
+  it("shows an Unrated citation's label as is (task 056)", () => {
+    expect(
+      cardEvidenceChipLabels({
+        strength: null,
+        design: null,
+        claims: [
+          {
+            citations: [
+              { appraisal_label: "Unrated", evidence_type: "Unknown / Insufficient information" },
+            ],
+          },
+        ],
+      }),
+    ).toEqual(["Unrated", "Unknown / Insufficient information"]);
+  });
 });
 
 describe("splitLeadColon", () => {

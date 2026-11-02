@@ -888,6 +888,52 @@ def test_finding_record_default_metadata_present_and_absent() -> None:
     assert bare["effect_basis"] is None
 
 
+def test_unrated_rows_carry_the_unrated_label_to_the_writer() -> None:
+    """Task 056, D7: an Unrated appraisal (no score) reads "Unrated", never absent."""
+    doc = _doc_record(
+        SimpleNamespace(
+            tss_id="33333333-3333-3333-3333-333333333333",
+            origin="acquired",
+            primary_evidence_type="Unknown / Insufficient information",
+            text_basis="full_text",
+            quality_score=None,
+            unrated=True,
+            screen_decision_confidence=0.8,
+            screen_stage=1,
+            metadata={"title": "Grey literature"},
+        ),
+        set(),
+    )
+    assert doc["appraisal_tier"] == "Unrated"
+    record = _finding_record(
+        SimpleNamespace(
+            finding_id="finding-3",
+            extraction_record_id="record-3",
+            task_source_snapshot_id="33333333-3333-3333-3333-333333333333",
+            intervention="A",
+            outcome="B",
+            unit=None,
+            setting=None,
+            comparator=None,
+            effect_direction="increase",
+            estimate_level=None,
+            study_design=None,
+            study_geography=None,
+            stratum_qualifiers=[],
+            statistics={},
+            causality_by_design=None,
+            effect_basis=None,
+            is_primary=None,
+            field_coverage={},
+            primary_evidence_type="Other (Non-evidence documents)",
+            quality_score=None,
+            unrated=True,
+            metadata={"title": "Grey literature"},
+        )
+    )
+    assert record["appraisal_label"] == "Unrated"
+
+
 # --- ADR 0015 §2 / B-B3: judge envelope v2 (intent + section_focus + finding
 # anchored chunk text) ---
 

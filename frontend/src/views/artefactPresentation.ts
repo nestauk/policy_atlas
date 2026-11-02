@@ -62,7 +62,7 @@ export type TopSource = {
  * unclassified source is a real state, and the ranking is a convenience, not
  * a place to fail.
  */
-const APPRAISAL_ORDER = ["high", "moderate", "low", "very_low"] as const;
+const APPRAISAL_ORDER = ["high", "moderate", "low", "very_low", "unrated"] as const;
 
 function appraisalRank(label: string | null): number {
   if (label === null) return APPRAISAL_ORDER.length;

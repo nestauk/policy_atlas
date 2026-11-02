@@ -106,7 +106,7 @@ export interface EvidenceQuery extends PageQuery {
   theme?: string;
   origin?: "OpenAlex" | "Overton" | "Uploaded";
   evidence_type?: string;
-  strength?: "Very strong" | "Strong" | "Moderate" | "Limited" | "Weak";
+  strength?: "Very strong" | "Strong" | "Moderate" | "Limited" | "Weak" | "Unrated";
   year_from?: number;
   year_to?: number;
 }
