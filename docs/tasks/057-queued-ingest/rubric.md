@@ -73,8 +73,9 @@ Infra, measurement and governance (N11, N12, D6, D9, G4, G7)
 23. [ ] N12, D9: before and after tables on the laptop (both routes, in-process) and on staging
         (queued, bedrock) with run ids; the ingest split per run; the owner's content read of
         one report per route recorded.
-24. [ ] D6, G4: tokens embedded per run recorded; the quota raise request and its state
-        recorded; the embedding floor computed and compared with the measured embedding time.
+24. [ ] D6, G4: requests, tokens and throttling sleeps per run recorded on staging; the
+        embedding wall compared with today's 457 s median; a quota raise requested only if
+        throttling at the token rate appears, with its state recorded.
 25. [ ] G7, N12: the data-flow note is committed; the retention rule is written; the DPIA
         addendum is named as the merge gate in the PR.
 26. [ ] S1 to S4 applied only as the owner accepted them, with a line in the spec log.

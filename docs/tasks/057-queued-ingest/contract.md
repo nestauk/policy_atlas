@@ -27,7 +27,7 @@ gitignored):
 
 | Stage | Median wall | Share | What binds it |
 |---|---|---|---|
-| ingest_full_text, bedrock route (10 runs) | 729 s | 41% | fetch and parse 281 s, then 457 s of serial embedding calls |
+| ingest_full_text, bedrock route (10 runs) | 729 s | 41% | fetch and parse 281 s, then 457 s of serial embedding calls (about 6 s each; latency, not quota) |
 | ingest_full_text, openai-direct route (2 runs) | 225 s | 12% | fetch and parse 164 s, embedding 61 s |
 | synthesise | 562 s | 31% | serial model calls (out of scope, sheet item 10) |
 | every other stage together | about 260 s | 15% | provider latency inside thread pools |
@@ -95,7 +95,7 @@ A pull request where:
 | **Queue** | One Amazon SQS standard queue. One message per document. A **dead-letter queue** receives a message after its second failed attempt. |
 | **Stage deadline** | How long the ingest stage waits for queued documents before it marks the rest not read and the run continues. 10 minutes (D4). |
 | **Function timeout** | The Lambda timeout, the per-document deadline: 3 minutes (D4). The parse step inside keeps its own 120 s kill. |
-| **Quota floor** | On the bedrock route every text embedding model in London is capped at 300,000 tokens per minute. A run's embedding time cannot go below its token count divided by that rate: about 7.7 minutes for 100 documents (2.3 million tokens). Only the Cohere Embed v4 cross-region token quota is adjustable. |
+| **Embedding quota** | On the bedrock route the Cohere Embed v4 cross-region quota is 2,000 requests per minute (not adjustable) and 300,000 tokens per minute (adjustable). AWS states that embedding models are throttled by requests per minute, not tokens per minute (Bedrock user guide, "Quotas", read 2026-11-02). A run needs 80 to 110 requests, so the request quota does not bind. The measured 2026-11-02 run embedded at about 320,000 tokens per minute with one throttling sleep, which agrees with the token figure not being enforced. The staging measurement settles it (D6). |
 | **Fixed questions** | The three Evidence search questions and one Options scoping question task 056 used (`docs/tasks/056-cost-latency/contract.md` O5), run fresh as new tasks before and after. |
 | **Parity** | The SQL retriever returns the same top-8 chunks in the same order as today's Python retriever for the 20 saved section queries of the feasibility study, and for the fixed questions' section queries replayed. |
 | **Decided / Leaning / Open** | Decided is settled. Leaning is the recommended choice unless the owner objects. Open means the owner chooses at the named gate. |
@@ -105,7 +105,7 @@ A pull request where:
 | Fact | Source | Consequence |
 |---|---|---|
 | Ingest is 684 s of a 1,790 s median run; on bedrock 457 s of it is embedding in serial calls of 96 units, about 6 s each; rate-limit sleeps were 0 to 105 s. | `latency-anatomy-2026-11-02/report.md` Tables 2 and 4 | N1 to N5 target fetch, parse and write; embedding is bound by the quota floor (D6). |
-| One measured run embedded 7,732 units, about 11 million characters, about 2.7 million tokens, in 513 s: about 320,000 tokens per minute. The serial loop already runs at the quota. | local DB query 2026-11-02 (this conversation); AWS quota page | Fan-out does not speed embedding on bedrock; the quota raise request is the lever (G4). |
+| One measured run embedded 7,732 units, about 11 million characters, about 2.7 million tokens, in 83 serial requests over 513 s (about 6 s per request, about 320,000 tokens per minute, one throttling sleep). AWS throttles embedding models by requests per minute; the cross-region request quota is 2,000 per minute. | local DB query 2026-11-02 (this conversation); AWS quota page; Bedrock user guide "Quotas" | Embedding is bound by per-request latency, not by quota, so per-document embedding in parallel functions should cut it from minutes to tens of seconds (D6). No quota request is needed before the build; G4 becomes a fallback. |
 | Live fetch took 100 to 250 s per run because the fetcher reserves 25 MB of a 100 MB budget per body, so at most 4 bodies download at once, and one slow host holds a slot. | `fetch_live.py` constants; report Table 4 handover columns | Fetch moves into the function (sheet item 2). |
 | Lambda: 15 min timeout, up to 10 GB memory, 10 GB container image, 6 MB synchronous payload, per-queue concurrency 2 to 1,000; London $0.0000167 per GB-second (x86). | `experiments/aws-limits-2026-11-02.md` | D4, D5, N11. |
 | A Lambda in the private subnets reaches Aurora by the VPC local route and the internet through the fck-nat instance; S3 is not needed when fetch and writes happen in the function. | `infra/infra/network_stack.py`; AWS docs in the limits note | No bucket, no new endpoints (D5). |
@@ -215,11 +215,15 @@ same kill, so a crashing PDF cannot take the handler down. Network sockets are d
 the parse subprocess as the tests require today; the handler process itself needs the network
 for fetch, the database and the embedding provider.
 
-**D6. Embedding. Decided (owner, sheet item 4).** Per document, inside the function, with the
-backoff that exists. On the bedrock route the quota floor binds (about 7.7 min for 100
-documents); the owner or the DevOps colleague requests a raise of the Cohere Embed v4
-cross-region tokens-per-minute quota before the staging measurement (G4). Switching embedding
-model is out: every London model has the same quota, and a switch re-embeds every stored chunk.
+**D6. Embedding. Decided (owner, sheet item 4), with the floor corrected 2026-11-02.** Per
+document, inside the function, with the backoff that exists. Today's 457 s on bedrock is 83
+serial requests of about 6 s each; with 50 functions in flight the same requests overlap, so
+the expected embedding wall for 100 documents is tens of seconds, inside the 2,000 requests
+per minute quota. The token-per-minute figure (300,000, adjustable) is listed but, per AWS,
+not the throttling mechanism for embedding models; the one measured run exceeded it with one
+sleep. The staging measurement records requests, tokens and throttling sleeps per run. If
+throttling appears at the token rate after all, G4 (a raise request) is the fallback and the
+owner decides then. Switching embedding model is out: a switch re-embeds every stored chunk.
 Embedding on OpenAI from the bedrock route is a route-file change the owner can make later
 without this slice.
 
@@ -301,9 +305,10 @@ Sheet items 1 to 15 as listed in the decision sheet: 1 yes; 2 yes; 3 yes; 4 yes;
 - **G2. Schema.** The D2 migration, approved at this contract. Tier 4.
 - **G3. Dependency.** `awslambdaric` in the `ops` group, approved at this contract. No other
   dependency; vectors are sent as text casts, not through a client library.
-- **G4. Quota request.** The Cohere Embed v4 cross-region tokens-per-minute raise is an
-  owner or DevOps action, requested before the staging measurement; the contract does not
-  depend on it being granted.
+- **G4. Quota request (fallback only).** If the staging measurement shows throttling at the
+  token rate, the owner or the DevOps colleague requests a raise of the Cohere Embed v4
+  cross-region tokens-per-minute quota (adjustable) in eu-west-2 through Service Quotas. Not
+  requested before the measurement; the contract does not depend on it.
 - **G5. Production config and CDK.** The resources in N11 and `ingest_mode` per environment,
   approved at this contract; `cdk diff` reviewed at the plan gate; production stays
   `in_process` until the staging measurement is read (Leaning).
