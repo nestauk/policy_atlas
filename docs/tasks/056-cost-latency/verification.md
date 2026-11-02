@@ -42,6 +42,10 @@ file; *Langfuse* is the tracing tool that records every model call and its token
 | 6j | Same tree, machine idle | `make verify` | the same test **failed again** (no child status within 10 s), so it is not a rare flake under the parallel suite; the two 10 s deadlines in `test_option_search.py` widened to 30 s, assertions unchanged. |
 | 6k | Step-6 exit, final tree = f08293c9 | `make verify` | **green** (exit 0) in 451 s: backend 3,884 passed, 1 skipped (359 s on 8 workers); prompt-guard 41 unchanged; drift-check OK; frontend 943. |
 | 4 | End of Phase 3 (schema), tree = Phase 2 A + the Phase 3 patch | `make verify` | **green**: 3,812 passed, 1 skipped (674 s); build, infra 95, audit-paths, prompt-guard, font-guard, drift-check OK; frontend 939 tests in 88 files. |
+| 7a | Review open, tree = f08293c9 (run while four review lanes read the tree) | `make verify` | backend 3,884 passed, 1 skipped (800 s); infra 95; **frontend 1 failed of 943**: `SourcesView.test.tsx` sortable-table cycle, vitest 5 s timeout under load; the file alone 26 of 26 passed. Load flake, same class as Gate 1. |
+| 7b | Review fixes applied (the code changes in § Review findings) | `make verify` | backend 3,888 passed, **1 failed**: `test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent` (the test Gates 1, 6i and 6j hit) — `_await_statuses` returned `{}` at 30 s. Root cause, not a deadline: the test submits a child and raises on the second dispatch; `_interrupt_children` cancels a child the pool has not started, which then never opens a row, so there is nothing to mark `interrupted`; under load the pool thread lags the raise. Fixed in the test: the child signals an `opened` event after its row exists and the second dispatch waits for it before raising (deterministic; passes 3 of 3 alone). Six loaded eight-worker runs of the three thread-heavy files then showed a second order-dependent test: `test_slow_first_job_does_not_delay_later_jobs` (the one the build widened 4 → 10 s) lost twice more when the forkserver's per-job start outlasted the slow job's sleep. Rewritten without a sleep: the slow job returns when the three quick jobs' sentinel files exist (plus one second for their results to land). |
+| 7c | Both test rewrites in, machine load average 150 (the owner's other apps and sessions; no test process of ours) | `make verify` | backend took 1,557 s (three times the usual) and **2 failed** of 3,888: `test_sse_replay_idempotence_and_cursor_suffix` (a 401: the test's token is minted with a 60 s life and the test outlived it) and `test_sse_backlog_to_tail_has_no_duplicate_or_missing_mapped_sequences` (an asyncio timeout). The file alone: 21 of 21 in 53 s. The token life in the SSE fixture went 60 → 600 s (no assertion touched); the two rewritten tests of row 7b passed. |
+| 7d | Review exit, final tree (load average 119 at the start, 51 at the end) | `make verify` | **green** (exit 0): backend 3,889 passed, 1 skipped (558 s on 8 workers); infra 95; mypy 439 files; okf-validate 192 concepts; audit-paths 202 files; prompt-guard 41 unchanged after the `summary_prompts.py` re-pin; font-guard, drift-check OK; frontend 943 tests in 88 files. |
 
 Per-phase commits on `task/056-cost-latency`:
 
@@ -424,7 +428,7 @@ costs more than the one read saves: `breakpoint`. Wiring (fast-worker, patch `p2
 every `parse_structured` and `traced_parse` site passes `prompt_cache=cache_mode_for(step)`; the
 direct `.parse`/`.create` sites in `synthesis_backend.py` go through `_cache_messages(step,
 messages)` and `_step_kwargs`; the grounding judge and the chat backend read the table; the
-enumerating test `test_every_step_has_a_cache_mode_and_sends_it` passes for all 62 captured sites,
+enumerating test `test_every_step_has_a_cache_mode_and_sends_it` passes for all 59 captured sites,
 the kwargs fixture re-captured (`extra_body` stays `None` everywhere; `system_shape` becomes
 `parts+breakpoint` at the 45 steps), and the extraction fingerprint is unchanged (no re-pin). Two
 test adaptations: the `longlist_shortlist` test driver now sends a system message (the real call
@@ -828,7 +832,10 @@ contract's vocabulary and listed here so the review sees them:
   `grounding_judge.py` (v3, the owner's prompt pass).
 - **Test margins widened:** the ingest scheduler's completion-order test sleeps its slow job 10 s,
   not 4; the option-search tests' two poll deadlines are 30 s, not 10 (that test failed twice under
-  the eight-worker suite, once on an idle machine). Assertions unchanged in both.
+  the eight-worker suite, once on an idle machine). Assertions unchanged in both. *Review
+  (2026-11-02): both failed again under the eight-worker suite and were races, not margins; the
+  fan-out test now waits for the child's row before raising and the order test uses sentinel
+  files instead of a sleep (gates table rows 7b, 7c).*
 - **Test pins that embed a model id or an effort** re-pinned at P1 B (nine) and P5 (two
   literal `"high"` asserts, two vetted extraction fingerprints).
 - **P2 A:** `extra_tool_calls_ignored` is counted on the loop result and span metadata, not
@@ -841,7 +848,7 @@ contract's vocabulary and listed here so the review sees them:
 - **P4:** the repair guard threshold (2,000 characters, ±300 margin) is a first value; the
   pass-rate check is on the final runs below.
 - **P5:** `extract_annotate_relevance` stays at `high` (no stored call exists to replay); the
-  thirteen frontier pins wait on the owner's side-by-side read.
+  thirteen frontier pins shipped at 67bc0ac7 on the owner's side-by-side read (rubric 13).
 - **P6:** the parent-side socket guard admits `AF_UNIX` only (a security-test change, see the
   phase section); N10 ships without reference extraction (left out by design).
 - **Process:** phases were built by agents in parallel worktrees and serialised at the lead's
@@ -855,14 +862,153 @@ contract's vocabulary and listed here so the review sees them:
 
 ## Review findings
 
-Added after the review stack (step 7, a fresh conversation):
+Step 7 ran on 2026-11-02 in a fresh conversation (the adjudicator did not write the code). The
+build was all Claude, so the family flip is the Codex pass; the Claude half of the pair is
+`/code-review medium`. Diff scoping excluded the two data fixtures, the JATS fixtures, the lock
+file, the generated frontend types, the deleted rename scripts and their tests, and the deleted
+v6 module. The three process-record files on the branch (`.claude/agents/builder.md`,
+`researcher.md`, `contract-verifier.md` and the `harness.md` rows) were read by the adjudicator:
+they are what they claim (agent pins and their routing rows), not slice code.
 
-- **Contract verifier:**
-- **`/code-review`:**
-- **`/security-review`:**
-- **Adversarial review:**
-- **`/simplify`:**
-- **`/okf validate`:**
+**Gates around the stack.** Open gate (tree f08293c9, run while the four lanes ran): backend
+3,884 passed, infra 95, **frontend 1 failed of 943** (`SourcesView.test.tsx` sortable-table
+cycle, vitest 5 s timeout under the load of five concurrent lanes); the file alone: 26 of 26
+passed. Fixed-tree gate: see the gates table (rows 7a, 7b).
+
+**What each lane caught, and the ruling.** Adopt = fixed on the branch in this phase; decline =
+not changed, reason recorded; defer = `docs/deferred.md` § Cost and latency (task 056 seams);
+owner = a numbered decision item below, unapplied.
+
+- **Contract verifier** (Opus, read-only, 29-item walk; 7 medium, 8 low). Adopted: M5 the two
+  format-retry sentences the writer receives (`_SUMMARY_FORMAT_RETRY_REASON`) were model-facing
+  text outside the hash guard → moved to `summary_prompts.py` (re-pinned; diff
+  `review-summary_prompts-repin.patch`, text unchanged); M6 `prompt_cache` defaulted to `"auto"` in
+  `openai_kwargs`, `parse_structured` and `traced_parse`, so a new call site could skip the mode
+  table unnoticed → required keyword like `reasoning_effort` (mypy found no product site without
+  it; three test calls updated); M7 `test_billion_laughs_fails_fast` asserted under 2 s and failed
+  once at load → 10 s, assertion kept; L2 ADR 0042 corrected on three points (re-pins "listed in
+  the contract", "parsing is 90% of ingest" against the bedrock measurement, the section writer
+  "takes breakpoint" while its table entry is `auto`); L3 this document corrected (the frontier pins
+  "await" a read that happened; "62 captured sites" → 59; the rubric-3 line that denied the
+  dependency and CI change); L4 the `appraise.py` comment said v1 rows are re-appraised (they are
+  compatible); L5 = security 2; L8 the migration docstring named plan P6 (it is Phase 3); the two
+  stale `api/readmodels` comments (`queries.ts`, `fixtures.ts`). Owner: M1 (D6: twelve timeouts
+  and the extract pool), M2 (dependencies and the parallel suite), M3 (re-pins outside the list,
+  contract line 414), M4 (D10 reject → take-first-and-count), L6 (the deleted tree guard), L7 (tick
+  wire vs contract), rubric 15 as built. Recorded: L1 (process files, read above); rubric 2 (Gate 1
+  was a load flake re-run alone; the first full green is Gate 2).
+- **`/code-review medium`** (Claude; 10 findings). Adopted: R1 Europe PMC XML bodies outside
+  the in-flight byte budget (`releasable=False`) → accounted and leased like every body, released
+  by the ingest loop (test); R2 `make test-fast` ignored a path that no longer exists (stale on
+  `dev`, the line was touched) → the real path; R4 the AGENTS.md landmine "run the full gate
+  serially" contradicted `-n auto` → rewritten; R7 `with_system_breakpoint` nested a parts-list
+  system message inside a text part → fails loud with a `TypeError` (test); R9 a second PMC id
+  regex beside `normalise_pmcid` → the one check. Declined: R5 (move `CACHE_MODES` into the route
+  file: a 56-entry refactor of `core`'s loader for a table a test already keeps in step; deferred
+  seam); R6 (scoping derives the step from the trace name: the kwargs fixture and the route test
+  catch a rename; deferred seam); R8 (`set_forkserver_preload` only applies before the forkserver
+  starts: ingest is the only forkserver user in `backend/src`; deferred note); R10 (the cost script
+  pages every trace to resolve a prefix: a dev script; deferred). Owner: R3 (= verifier L7).
+- **Security auditor** (Claude, Tier 3 lane; 0 critical, high or medium; 3 low, 3 info).
+  Adopted: S1 the XML route shared the 25 MB PDF cap while expat's entity guard is a ratio →
+  `EUROPE_PMC_MAX_BYTES = 10_000_000` (test); S2 = R1; info 1 the expat ≥ 2.4.1 check lived only in
+  a test → checked at import of `parse_jats.py`; info 2 = R7. Recorded: S3 timeout retries are
+  billed but untraced (converges with Codex H1, below). Declined: info 3 (`fixed_questions.py
+  --token` on argv: dev-only, localhost, four-hour dev token). Clean: the JATS parser's hostile
+  tests exercise the production path; the Europe PMC request carries only the validated id; the
+  socket guard change is a test instrument, the worker-side guard is unchanged; null scores reach
+  no reader as 0; no `prompt_cache_key` anywhere, so no cross-task cache path; the tick payload is
+  typed ints; `conftest.py` can only create and drop its own derived `*_test` names; `uv.lock`
+  moved exactly pytest-xdist, execnet and tornado.
+- **Codex adversarial pass** (GPT family, read-only; 2 high, 2 medium, 1 low, 3 approach
+  challenges). H1 a request that completes after the 60 s client timeout is billed, retried and
+  invisible to Langfuse and the cost script → recorded as a cost floor (§ Known unverified items);
+  the stall rate of 1 to 3% bounds the gap at a few percent of a run. H2 a forced turn or repair
+  returning two `emit_*` calls keeps the first and drops the rest → declined: 0 of 434 forced and
+  repair calls today ignored a call (trace lane), the dropped case is conservative (a repair not
+  received leaves its claim unsupported and excluded, nothing false is published), the count is on
+  the span; deferred seam and owner item M4. M1 `artefactPresentation.ts` ranked sources by the
+  old lowercase tier keys while the API sends "Very strong" … "Weak" and "Unrated", so adding
+  "unrated" put an Unrated source ahead of a Very strong one in a tie → adopted (the list now
+  mirrors `SCORE_LABELS`; test). M2 a route step exception with an empty model string fell back
+  to the default tier silently → adopted (the loader refuses it; two test rows). L1 a worker
+  database survives a hard kill of the suite → deferred with the cleanup command. Approach
+  challenges: 1 = H1; 2 (scope grew into timeouts, pool size, xdist, dependencies) and 3 (cache
+  modes by shape, three fixed-question sets, small replays) are the owner's recorded rulings,
+  carried into the decision items.
+- **Live-trace content read** (lead, Langfuse and the dev database, the final sessions): retries
+  carry the judge's reason (`previous_attempt` with the sentence in the request); extra tool calls
+  ignored = 0 on all 322 section turns and 112 repairs today; the final NEET run appraised 44 of
+  206 documents Unrated and cited 2 of them (26 citations, all verified); 0 of 13,994 appraisal rows
+  violate the null-score consistency; after the breakpoint fix `screen:full`, `judge_summary` and
+  `write_block_summary` write 0% (were 86 to 100%); 0 unservable lookups on every final session
+  (X3) read back from the saved table; the reading-stage ticks in the saved event stream carry
+  `fetched`, `parsed` and `total`. Found: on scoping task 809fe75c (a run the build did not count)
+  one block's three summary attempts oscillated — attempt 3 repeated attempt 1 word for word
+  because the writer sees only the latest failed attempt; the block ended `failed` with no summary
+  (the designed fallback) → deferred (carry every failed attempt). Measured for owner item 2: the
+  stored `extract:iof_findings` / `extract:icf_findings` calls (215 each, gpt-5.4-mini) have p95
+  28 / 32 s, p99 42 / 50 s, max 67 / 71 s with outputs up to 17.6k tokens; `extract:interventions`
+  on gpt-6-luna (300 sampled of 15,402) p99 19 s, max 22 s.
+- **`/simplify`:** skipped. `/code-review medium` ran its reuse, simplification and efficiency
+  angles (R2, R5, R9, R10 are those) and the adopted fixes landed; a second same-family cleanup
+  pass would duplicate it.
+- **OKF bundle:** `make okf-validate` inside the gates.
+
+**Convergent across families (high confidence):** the cost floor (Codex H1, security S3); the XML
+byte budget (code-review R1, security S2, verifier L5); the breakpoint content guard (code-review
+R7, security info 2); the AGENTS.md landmine (code-review R4, verifier M2). **Unique to one lane:**
+the ranking inversion and the empty-model fallback (Codex); the unpinned retry sentences, the
+cache-mode default and the timing assertion (verifier); the XML cap and the import-time expat
+check (security); the oscillating summary (trace lane).
+
+**Fake-done check on this phase's fixes:** no test deleted or skipped; one deadline widened
+(the billion-laughs 2 s → 10 s) with its assertion unchanged; two of the build's "deadline"
+flakes turned out to be races and were made deterministic rather than widened again (gates
+table rows 7b and 7c: an `opened` event in the fan-out test, sentinel files instead of a sleep in
+the scheduler order test; both assertions unchanged); the three test calls that gained
+`prompt_cache="auto"` assert the same kwargs; the ranking test now covers four labels and
+Unrated; `make verify` on the final tree is the gate (row 7c).
+
+**Decision items for the owner (unapplied; the code stays as built until ruled):**
+
+1. **Contract D6 as built.** D6 says no change to timeouts or pool sizes; the build moved twelve
+   model-client timeouts to 60 s and `MAX_CONCURRENT_EXTRACT` 4 → 8 on your rulings of 2026-11-02.
+   Accept the contract amendment in words. Recommended: accept.
+2. **The 60 s timeout on the long-output extraction steps.** The IOF and ICF extractors and the two
+   finding vetters allow up to 32,768 output tokens; the stored calls (older model) reached 67 to
+   71 s at the tail. A long but healthy call would time out three times in a row at 60 s and the
+   document would lose its findings. No fixed question runs them (standard depth has no extract
+   stage). Options: (a) raise those four clients to 120 s (recommended); (b) keep 60 s and measure
+   on the first deep-depth run.
+3. **Dependencies and the parallel suite as built.** `pytest-xdist` (+ `execnet`) in the dev
+   group, tornado 6.6, `make test -n auto` with one database per worker; CI inherits it through
+   `make verify` and has not yet run it (the branch is not pushed). Accept in words. Recommended:
+   accept; the first CI run at PR open is the check.
+4. **Re-pins outside the contract's list** (all code-only, string-compared by the verifier): P0
+   `lever_typing_prompt.py`, `suggest_prompt.py`; P2 A `section_prompt.py`; P2 B `ranking.py`,
+   `theme_grouping.py`, `finding_vetter.py`, `group_clustering.py`, `grounding_judge.py`; the
+   `finding_vetter.py` timeout line; and this phase's `summary_prompts.py` (two sentences moved
+   under the guard, unchanged). Contract line 414 says any re-pin off the list stops the slice.
+   Accept as built. Recommended: accept, and drop the stop condition's wording for code-only
+   re-pins in the next contract template.
+5. **D10's single-tool check.** The contract says the forced turn "rejects more than one tool
+   call"; the build takes the first `emit_*` call, drops the rest, logs and counts them. Zero
+   occurrences in 434 calls today. Accept as built (recommended) or build reject-and-retry.
+6. **The tick wire against the contract** (spec S5). The spec says the three counts are "omitted
+   when absent"; the generated contract (`types.ts`) says they are always present and nullable,
+   because FastAPI's response schema treats defaulted fields as required. The reducer copes. Either
+   send nulls and reword the spec to "null when absent" (recommended, a one-line code change plus
+   the spec line, which is yours to accept) or keep the omission and the mismatch.
+7. **The deleted tree guard.** `test_rename_044_sweep.py` checked the shipped tree for retired
+   names and the old route; it did not import the rename scripts but went with them under the
+   tidy-up ruling. Restore it as a standalone test? Recommended: restore.
+8. **Rubric 15 as built.** Three fixed-question sets (baseline, model-only, final) instead of one
+   per phase, and your read at the end instead of after each; the `openai-direct` run after P1
+   folded into the final set. Accept as built.
+9. **Worker databases after a hard kill.** `conftest.py` drops its database at interpreter exit;
+   a kill leaves `policy_atlas_test_gw<N>_<pid>` behind. Deferred with a cleanup command, or a
+   sweep of dead-pid names at suite start. Recommended: defer.
 
 ## Rubric status
 
@@ -875,17 +1021,23 @@ the reason; ✗ not satisfied, with the reason; ☐ belongs to a later step.
    The "after P1" full run did not happen at the P1 boundary (Gates A to C were `verify-fast` per
    the plan's gate map); the first full run containing P1 was Gate 4. `make prompt-guard` green at
    every commit.
-3. ✓ Only the approved changes: the GPT-6 model set, the D7 migration (`152a234e2391`), the S5 stage
-   key and payload, the Unrated label, the Europe PMC host. No production config, auth, CI or
-   dependency change.
+3. ◐ The contract's approved changes: the GPT-6 model set, the D7 migration (`152a234e2391`), the S5
+   stage key and payload, the Unrated label, the Europe PMC host. No production config or auth
+   change. Beyond the contract, on the owner's rulings in the build conversation (2026-11-02), not
+   at the plan gate: `pytest-xdist` (with `execnet`) in the dev dependency group and tornado
+   6.5.10 → 6.6; `make test` runs `-n auto`, which CI inherits through `make verify`; twelve
+   model-client timeouts to 60 s and `MAX_CONCURRENT_EXTRACT` 4 → 8 (contract D6 says none).
+   Each is a decision item for the owner at step 7 (§ Review findings).
 4. ✓ Generated frontend types regenerated (`drift-check` green); no secret or generated file edited by hand.
 5. ✓ The v6 test and the rename-script tests deleted by the owner's tidy-up decision (P0, recorded);
    P2 B adapted two tests to the content-part system message; the N8 socket-guard test now admits
    `AF_UNIX` only (recorded as an adjudication item). Nothing skipped or weakened without a note.
 6. ✓ This document, read from the saved results in the session scratchpad and the experiments folder.
-7. ◐ Gaps and seams are listed in § Known unverified items and § Deferred work; the `deferred.md`
-   entries themselves are written at step 8.
-8. ☐ The review stack runs at step 7 in a fresh conversation.
+7. ✓ Gaps and seams are listed in § Known unverified items and § Deferred work; the `deferred.md`
+   entries were written at step 8 (§ Cost and latency (task 056 seams), 2026-11-02).
+8. ✓ The review stack ran at step 7 in a fresh conversation (2026-11-02): contract verifier,
+   `/code-review medium`, security auditor, Codex adversarial pass, the lead's trace read; `/simplify`
+   skipped with the justification in § Review findings.
 9. ✓ N1: both buckets exclusive on every generation; a live generation priced the cache write
    (1.25× input); `cost_per_run.py` reproduces the baseline sessions (P0 fixture test).
 10. ✓ D11: `section_prompt.py` pinned; `finding_vetter.py` pinned; the v6 module, switch, test and hash entry gone.
@@ -966,6 +1118,11 @@ the reason; ✗ not satisfied, with the reason; ☐ belongs to a later step.
   first whole-run exercise; `longlist_constrain` and `longlist_distinct` moved on a measure that
   could not separate configurations (no "breaks", no duplicate in any stored output).
 - The 124 timed-out provider requests during the cache measurement (cause unknown; outside the slice).
+- **The cost figures are a floor** (review, Codex H1 and security S3, convergent): a request that
+  completes at the provider after the client's timeout is billed, retried by the SDK (up to twice)
+  and never reaches Langfuse, so `cost_per_run.py` prices only the attempt that returned. With 1 to
+  3% of calls stalling, the gap is a few percent of a run ($1.14 stays well under $2). Observable
+  retries (`max_retries=0` plus a traced retry of our own) are a deferred seam.
 - `make audit` (run because `pytest-xdist` was added) reported three CVEs on tornado 6.5.10, a
   transitive dev dependency of ipykernel locked before this task; the owner approved the bump and
   tornado moved to 6.6 (commit f08293c9; audit clean after it).
@@ -991,7 +1148,7 @@ only ids, names, timestamps, models and token counts (test-enforced). No report 
   ("The reports look fine"). Still open for the owner: N8 on staging after deploy.
 - **Adjudication items:** the re-pins without prompt-text change (P0, P2 A, P2 B); the
   session-total comparison basis; the wire models moving into the pinned prompt module;
-  unattended steering for the fixed questions; the frontier pins awaiting the owner's read (P5);
+  unattended steering for the fixed questions; the frontier pins (shipped on the owner's read, P5);
   the X3 contract figure (2.22 measured against "4 to 7"); the repair template wording (P2 A);
   N10 without reference extraction; `COMPATIBLE_RUBRIC_VERSIONS` (P3); the N8 socket-guard
   test change; `breakpoint` at the unmeasured one-shot sites by shape (P2 B); the per-phase
@@ -1052,8 +1209,11 @@ only ids, names, timestamps, models and token counts (test-enforced). No report 
 
 ## Deferred work
 
-Seams left open → [docs/deferred.md](../../deferred.md) at step 8: the dependency-direction
-knots the tidy-ups exposed (core importing a capability; scoping and API read models reaching
-into each other); the Claude-direct search path reads only `cacheReadInputTokens` (no cache-write
-capture; no route selects it); `baseline_prompt.py:14` comment still names `synthesis_backend.py`
-as the home of the shared core (pinned file; fix at the next deliberate re-pin).
+Written at step 8 (2026-11-02) as [docs/deferred.md](../../deferred.md) § Cost and latency (task
+056 seams): the cost floor from untraced timeout retries; the oscillating summary retry; the
+unpersisted summary failure reason; the cache-mode table beside the route file; the scoping step
+derived from the trace name; extra tool calls dropped rather than merged; the forkserver preload
+precondition; worker databases after a hard kill; the cost script's paging; the unmeasured second
+breakpoint and the `bedrock-claude` route; the Claude-direct cache-write gap; the X5 ledger
+overlap; the dependency-direction knots and the stale `baseline_prompt.py` comment; the owner
+items after deploy.

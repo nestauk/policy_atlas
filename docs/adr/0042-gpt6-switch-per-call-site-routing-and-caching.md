@@ -59,7 +59,8 @@ grey literature the owner wants citable.
    `auto` (the provider's default), `off` (explicit mode with no breakpoints, which removes
    the write charge from calls that never repeat), and `breakpoint` (an explicit breakpoint
    after a stable prefix, which lets a repeated prefix be read at the cached price). The
-   section writer takes `breakpoint` on its run message, and the repair request is built
+   section writer's step is `auto` in the mode table, with a breakpoint placed by hand on its
+   run message in `build_section_prefix`, and the repair request is built
    from the section's own first turn, with the same five tools, `allowed_tools` restricting
    the loop, and `parallel_tool_calls` identical on every turn, so repairs read the
    section's cache. The mode for each other site is chosen by measurement, since several
@@ -89,14 +90,17 @@ grey literature the owner wants citable.
   full-text reading, the longest stage of a run, which today has no progress row.
 - The section writer's prompt text moves into its own pinned module, and four more
   prompt-holding modules join the hash guard's include list; every re-pin in the slice is
-  listed in the contract and recorded with its diff.
+  recorded with its diff in verification.md (nine code-only re-pins fell outside the
+  contract's list and are decision items at review).
 - Rerankers, pointer citations and the emit-schema rewrite stay out: the design-time
   experiments showed reranking adds nothing on today's retrieval and pointers cut writer
   output by 43%, both routed to the synthesis refinement task.
-- The queued-parsing task that follows inherits the parse-stage facts: parsing is a third
-  of a run's wall time and 90% of the ingest stage, the in-process scheduler fix recovers
-  half of it on a laptop, and the quote failures the writer suffers are mostly parser
-  markup and interleaved headers, to be fixed where the text is made.
+- The queued-parsing task that follows inherits the parse-stage facts: on `openai-direct`
+  parsing dominates the ingest stage and the in-process scheduler fix recovers half of it on
+  a laptop; on `bedrock` the stage's wall clock is dominated by Cohere embedding with
+  rate-limit sleeps (final NEET run: fetch 180 s, parse 89 s, then minutes of embedding), so
+  the fix shows less there; the quote failures the writer suffers are mostly parser markup
+  and interleaved headers, to be fixed where the text is made.
 - Risks accepted by the owner: quality is guarded by the owner's read, not an eval set;
   per-step downgrades from the frontier tier rest on small replays and the owner's read,
   not on an eval set.

@@ -24,7 +24,9 @@ are done (spec-prep 2026-06-22; refreshed 2026-07-03); `[ ]` items are open gate
   (`docs/tasks/001`–`052` merged to `dev`, 044–046 the options scoping capability landing
   with PR #69 on 2026-10-15, 051 the single-pass search of ADR 0038; 053 the local Bedrock
   route of ADR 0041 landing with its PR on 2026-10-21; 055 (the shortlist) reviewed on
-  `task/055-scoping-shortlist` as of 2026-10-27 — system live at
+  `task/055-scoping-shortlist` as of 2026-10-27; 056 (cost and latency: GPT-6 on both
+  routes, one route step per call site, prompt caching, Unrated appraisal) reviewed on
+  `task/056-cost-latency` as of 2026-11-02 — system live at
   `v3.policyatlas.uk`; the next slice is the newest `docs/tasks/NNN-*/contract.md` and
   its `task/NNN-slug` branch).
 - [x] Verification plan for first implementation slices — per-task `verification.md` from
