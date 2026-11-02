@@ -42,6 +42,7 @@ from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
+from policy_atlas.evidence_search.synthesis.cache_modes import PromptCache, cache_mode_for
 
 # --- IOF (intervention-outcome) vetter surface --------------------------------
 
@@ -444,6 +445,7 @@ def _judge_via_openai[T: (FindingVetterResponse, ICFFindingVetterResponse)](
     response_format: type[T],
     model: str,
     reasoning_effort: str,
+    prompt_cache: PromptCache,
     max_output_tokens: int,
     prompt_version: str,
     usage_event: str,
@@ -467,6 +469,7 @@ def _judge_via_openai[T: (FindingVetterResponse, ICFFindingVetterResponse)](
             label=parse_label,
             model=model,
             reasoning_effort=reasoning_effort,
+            prompt_cache=prompt_cache,
             max_completion_tokens=max_output_tokens,
         )
         return _scrub_judge_response(parsed), usage
@@ -545,6 +548,7 @@ class OpenAIFindingVetterBackend:
             response_format=FindingVetterResponse,
             model=FINDING_VETTER_MODEL,
             reasoning_effort=FINDING_VETTER_EFFORT,
+            prompt_cache=cache_mode_for("extract_vet_iof_findings"),
             max_output_tokens=FINDING_VETTER_MAX_OUTPUT_TOKENS,
             prompt_version=FINDING_VETTER_PROMPT_VERSION,
             usage_event="finding_vetter.judge.usage",
@@ -635,6 +639,7 @@ class OpenAIICFFindingVetterBackend:
             response_format=ICFFindingVetterResponse,
             model=ICF_FINDING_VETTER_MODEL,
             reasoning_effort=ICF_FINDING_VETTER_EFFORT,
+            prompt_cache=cache_mode_for("extract_vet_icf_findings"),
             max_output_tokens=ICF_FINDING_VETTER_MAX_OUTPUT_TOKENS,
             prompt_version=ICF_FINDING_VETTER_PROMPT_VERSION,
             usage_event="icf_finding_vetter.judge.usage",

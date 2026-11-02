@@ -48,6 +48,7 @@ from policy_atlas.core.openai_client import (
     require_parsed,
     require_single_tool_call,
     resolve_openai_client,
+    with_system_breakpoint,
 )
 from policy_atlas.core.usage import (
     UsageResult,
@@ -57,6 +58,7 @@ from policy_atlas.core.usage import (
     usage_metadata,
 )
 from policy_atlas.evidence_search.group.facet_values import FORBIDDEN_GROUP_LABELS
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 from policy_atlas.evidence_search.synthesis.section_prompt import (
     CASE_STUDIES_PROMPT_VERSION,
     EMIT_SECTION_TOOL_SCHEMA,
@@ -141,7 +143,30 @@ def _step_kwargs(step: str) -> dict[str, Any]:
     Returns:
         Kwargs suitable for ``chat.completions.create`` / ``parse``.
     """
-    return openai_kwargs(route().model_for(step), reasoning_effort=route().effort_for(step))
+    return openai_kwargs(
+        route().model_for(step),
+        reasoning_effort=route().effort_for(step),
+        prompt_cache=cache_mode_for(step),
+    )
+
+
+def _cache_messages(step: str, messages: list[Any]) -> list[Any]:
+    """Return the messages as they should be sent for one synthesis call site.
+
+    For a ``"breakpoint"`` step the system message is sent as content parts that
+    mark the end of the part the provider may store and reuse. For every other
+    mode the messages are sent unchanged.
+
+    Args:
+        step: A step name from the route file's ``[steps]`` table.
+        messages: The chat messages built for the call.
+
+    Returns:
+        The messages to send.
+    """
+    if cache_mode_for(step) == "breakpoint":
+        return with_system_breakpoint(messages)
+    return messages
 
 # Read-path ceiling for section titles (artefacts minted before task 034); the
 # proposal bounds the prompt states live in section_prompt.py.
@@ -730,7 +755,7 @@ class OpenAISynthesisBackend:
         completions: Any = self._client.chat.completions
         response = completions.parse(
             **_step_kwargs("synthesise_propose_sections"),
-            messages=messages,
+            messages=_cache_messages("synthesise_propose_sections", messages),
             response_format=SectionProposalWire,
         )
         log_usage("synthesis.proposal.usage", response.usage)
@@ -798,7 +823,7 @@ class OpenAISynthesisBackend:
         completions: Any = self._client.chat.completions
         response = completions.parse(
             **_step_kwargs(step),
-            messages=messages,
+            messages=_cache_messages(step, messages),
             response_format=SummaryWire,
         )
         log_usage("synthesis.summary.usage", response.usage)
@@ -866,7 +891,7 @@ class OpenAISynthesisBackend:
             completions: Any = self._client.chat.completions
             response = completions.parse(
                 **_step_kwargs("synthesise_judge_summary"),
-                messages=messages,
+                messages=_cache_messages("synthesise_judge_summary", messages),
                 response_format=SummaryJudgeWire,
             )
             log_usage("synthesis.summary_judge.usage", response.usage)
@@ -1130,7 +1155,7 @@ class OpenAISynthesisBackend:
         completions: Any = self._client.chat.completions
         response = completions.create(
             **_step_kwargs("synthesise_write_key_findings"),
-            messages=messages,
+            messages=_cache_messages("synthesise_write_key_findings", messages),
             tools=[EMIT_SECTION_TOOL_SCHEMA],
             tool_choice={"type": "function", "function": {"name": "emit_section"}},
         )
@@ -1200,7 +1225,7 @@ class OpenAISynthesisBackend:
         completions: Any = self._client.chat.completions
         response = completions.parse(
             **_step_kwargs("synthesise_write_case_studies"),
-            messages=messages,
+            messages=_cache_messages("synthesise_write_case_studies", messages),
             response_format=CaseStudyWire,
         )
         log_usage("synthesis.case_studies.usage", response.usage)
@@ -1273,7 +1298,7 @@ class OpenAISynthesisBackend:
             completions: Any = client.chat.completions
             response = completions.parse(
                 **_step_kwargs("synthesise_write_source_note"),
-                messages=messages,
+                messages=_cache_messages("synthesise_write_source_note", messages),
                 response_format=NoteWire,
             )
             log_usage("synthesis.mrs_note.usage", response.usage)
@@ -1333,7 +1358,7 @@ class OpenAISynthesisBackend:
             completions: Any = client.chat.completions
             response = completions.parse(
                 **_step_kwargs("synthesise_write_intro"),
-                messages=messages,
+                messages=_cache_messages("synthesise_write_intro", messages),
                 response_format=IntroWire,
             )
             log_usage("synthesis.full_report_intro.usage", response.usage)

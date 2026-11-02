@@ -42,6 +42,7 @@ from policy_atlas.evidence_search.extract.relevance_prompt import (
 from policy_atlas.evidence_search.extract.relevance_prompt import (
     RELEVANCE_MAX_OUTPUT_TOKENS as RELEVANCE_ANNOTATOR_MAX_OUTPUT_TOKENS,
 )
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 
 # Model from the route file (task 053); see core/model_routes.py.
 RELEVANCE_ANNOTATOR_MODEL = route().model_for("extract_annotate_relevance")
@@ -161,6 +162,7 @@ class OpenAIRelevanceAnnotatorBackend:
                 label="relevance annotator",
                 model=RELEVANCE_ANNOTATOR_MODEL,
                 reasoning_effort=RELEVANCE_ANNOTATOR_EFFORT,
+                prompt_cache=cache_mode_for("extract_annotate_relevance"),
                 max_completion_tokens=RELEVANCE_ANNOTATOR_MAX_OUTPUT_TOKENS,
             )
 

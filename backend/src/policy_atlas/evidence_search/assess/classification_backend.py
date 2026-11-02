@@ -21,6 +21,7 @@ from policy_atlas.evidence_search.assess.classify_prompt import (
     EvidenceType,
     build_classify_messages,
 )
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 
 
 class ClassificationBackend(Protocol):
@@ -101,6 +102,7 @@ class OpenAIClassificationBackend:
             max_completion_tokens=CLASSIFY_MAX_OUTPUT_TOKENS,
             model=CLASSIFY_MODEL,
             reasoning_effort=CLASSIFY_EFFORT,
+            prompt_cache=cache_mode_for("classify_document"),
         )
         return _scrub_classification(parsed), usage
 

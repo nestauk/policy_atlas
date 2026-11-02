@@ -54,6 +54,7 @@ from pydantic import BaseModel
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import resolve_openai_client, traced_parse
 from policy_atlas.core.prompt_fields import scrub_nul
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 from policy_atlas.options_scoping.suggest.suggest_prompt import (
     SUGGEST_BOUND,
     SUGGEST_MAX_OUTPUT_TOKENS,
@@ -599,6 +600,7 @@ class OpenAIAgentBackend:
             response_format=response_format,
             model=route().model_for(step),
             reasoning_effort=route().effort_for(step),
+            prompt_cache=cache_mode_for(step),
             max_output_tokens=max_output_tokens,
             usage_event=usage_event,
             label=label,

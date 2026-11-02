@@ -25,7 +25,12 @@ from pydantic import BaseModel, ConfigDict
 
 from policy_atlas.core import tracing
 from policy_atlas.core.model_routes import route
-from policy_atlas.core.openai_client import openai_kwargs, require_parsed, resolve_openai_client
+from policy_atlas.core.openai_client import (
+    openai_kwargs,
+    require_parsed,
+    resolve_openai_client,
+    with_system_breakpoint,
+)
 from policy_atlas.core.usage import (
     UsageResult,
     log_usage,
@@ -33,6 +38,7 @@ from policy_atlas.core.usage import (
     usage_details,
     usage_metadata,
 )
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 
 JUDGE_PROMPT_VERSION = "grounding_judge_v2"
 ENVELOPE_VERSION = "synthesis_envelope_v2"
@@ -41,6 +47,7 @@ ENVELOPE_VERSION = "synthesis_envelope_v2"
 # this slice's bar is mechanism correctness.
 JUDGE_MODEL = route().model_for("judge_grounding")
 JUDGE_EFFORT = route().effort_for("judge_grounding")
+JUDGE_CACHE = cache_mode_for("judge_grounding")
 
 VERDICTS = ("tier_1", "tier_2", "tier_3", "tier_4", "unsupported_mis_cited")
 
@@ -327,8 +334,12 @@ class OpenAIGroundingJudgeBackend:
     ) -> UsageResult[JudgeResponseWire]:
         completions: Any = self._client.chat.completions
         response = completions.parse(
-            **openai_kwargs(JUDGE_MODEL, reasoning_effort=JUDGE_EFFORT),
-            messages=messages,
+            **openai_kwargs(
+                JUDGE_MODEL,
+                reasoning_effort=JUDGE_EFFORT,
+                prompt_cache=JUDGE_CACHE,
+            ),
+            messages=with_system_breakpoint(messages) if JUDGE_CACHE == "breakpoint" else messages,
             response_format=JudgeResponseWire,
         )
         log_usage("grounding_judge.judge.usage", response.usage)

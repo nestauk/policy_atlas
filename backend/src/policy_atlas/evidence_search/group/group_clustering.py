@@ -43,6 +43,7 @@ from policy_atlas.core.openai_client import parse_structured, resolve_openai_cli
 from policy_atlas.core.prompt_fields import splice_guidance
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.group.facet_values import DESCRIPTION_MAX, LABEL_MAX
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 
 GROUP_CLUSTERING_PROMPT_VERSION = "group_cluster_v1"
 
@@ -55,6 +56,10 @@ _STAGE_MODEL = {"discover": GROUP_CLUSTERING_MODEL, "assign": GROUP_ASSIGN_MODEL
 _STAGE_EFFORT = {
     "discover": route().effort_for("group_discover"),
     "assign": route().effort_for("group_assign"),
+}
+_STAGE_CACHE = {
+    "discover": cache_mode_for("group_discover"),
+    "assign": cache_mode_for("group_assign"),
 }
 
 # The residual sentinel the group component counts as its honest ungrouped
@@ -408,6 +413,7 @@ class _OpenAIGroupFacetBackend:
             label=f"group clustering {stage}",
             model=_STAGE_MODEL[stage],
             reasoning_effort=_STAGE_EFFORT[stage],
+            prompt_cache=_STAGE_CACHE[stage],
         )
 
     def _call(

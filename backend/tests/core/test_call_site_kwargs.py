@@ -578,7 +578,12 @@ def _longlist_authority(lf: Any) -> object:
 
 
 def _longlist_shortlist(lf: Any) -> object:
-    return _longlist(lf).propose_shortlist(messages=[{"role": "user", "content": "Propose."}])
+    return _longlist(lf).propose_shortlist(
+        messages=[
+            {"role": "system", "content": "You propose the shortlist."},
+            {"role": "user", "content": "Propose."},
+        ]
+    )
 
 
 def _profile_line(lf: Any) -> object:

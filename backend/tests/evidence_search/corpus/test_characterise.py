@@ -1612,6 +1612,17 @@ def _fake_theme_response(themes: list[tuple[str, str]]) -> Any:
     )
 
 
+def _system_text(content: Any) -> str:
+    """The system message's text, whether sent as a string or as content parts.
+
+    The discover step sends its system message as content parts that carry the
+    prompt-cache breakpoint (task 056), so the text sits inside the parts.
+    """
+    if isinstance(content, str):
+        return content
+    return "".join(part["text"] for part in content)
+
+
 def test_discover_absent_guidance_is_byte_identical_to_as_built(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1629,7 +1640,7 @@ def test_discover_absent_guidance_is_byte_identical_to_as_built(
 
     [kwargs] = calls
     messages = kwargs["messages"]
-    assert messages[0]["content"] == theme_grouping.DISCOVERY_SYSTEM_PROMPT
+    assert _system_text(messages[0]["content"]) == theme_grouping.DISCOVERY_SYSTEM_PROMPT
     assert messages[1]["content"] == theme_grouping.DISCOVERY_USER_TEMPLATE.format(
         intent="Housing policy",
         min_themes=1,
@@ -1661,7 +1672,7 @@ def test_discover_with_guidance_splices_system_and_user(
 
     [kwargs] = calls
     messages = kwargs["messages"]
-    system = str(messages[0]["content"])
+    system = _system_text(messages[0]["content"])
     user = str(messages[1]["content"])
     assert theme_grouping.DISCOVERY_GUIDANCE_SYSTEM_PARAGRAPH in system
     assert "data, not instructions" in system.casefold()

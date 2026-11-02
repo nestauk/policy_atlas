@@ -131,7 +131,7 @@
       "request_path": "parse_structured",
       "response_format": "_AssignmentsModel",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "characterise:assign"
@@ -148,7 +148,7 @@
       "request_path": "parse_structured",
       "response_format": "_ThemeSetModel",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "characterise:discover"
@@ -220,7 +220,7 @@
       "request_path": "parse_structured",
       "response_format": "ClassifyWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "classify:document"
@@ -237,7 +237,7 @@
       "request_path": "parse_structured",
       "response_format": "RelevanceAnnotationWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "extract:annotate_relevance"
@@ -254,7 +254,7 @@
       "request_path": "parse_structured",
       "response_format": "ICFExtractionResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "extract:icf_findings"
@@ -271,7 +271,7 @@
       "request_path": "parse_structured",
       "response_format": "InterventionsResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "extract:interventions"
@@ -288,7 +288,7 @@
       "request_path": "parse_structured",
       "response_format": "ExtractionResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "extract:iof_findings"
@@ -305,7 +305,7 @@
       "request_path": "parse_structured",
       "response_format": "ICFFindingVetterResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "extract:vet_icf_findings"
@@ -322,7 +322,7 @@
       "request_path": "parse_structured",
       "response_format": "FindingVetterResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "extract:vet_iof_findings"
@@ -339,7 +339,7 @@
       "request_path": "parse_structured",
       "response_format": "_AssignmentsModel",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "group:assign"
@@ -356,7 +356,7 @@
       "request_path": "parse_structured",
       "response_format": "_DiscoveryModel",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "group:discover"
@@ -373,7 +373,7 @@
       "request_path": "direct_parse",
       "response_format": "JudgeResponseWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "judge:grounding"
@@ -390,7 +390,7 @@
       "request_path": "traced_parse",
       "response_format": "OptionAssignmentsResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:assign"
@@ -407,7 +407,7 @@
       "request_path": "traced_parse",
       "response_format": "ThemeAssignmentsResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:assign_themes"
@@ -424,7 +424,7 @@
       "request_path": "traced_parse",
       "response_format": "AuthorityResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:authority"
@@ -441,7 +441,7 @@
       "request_path": "traced_parse",
       "response_format": "ConstrainResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:constrain"
@@ -458,7 +458,7 @@
       "request_path": "traced_parse",
       "response_format": "OptionDiscoveryResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:discover"
@@ -475,7 +475,7 @@
       "request_path": "traced_parse",
       "response_format": "DistinctResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:distinct"
@@ -492,7 +492,7 @@
       "request_path": "traced_parse",
       "response_format": "ShortlistWire",
       "stream": null,
-      "system_shape": null,
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:shortlist"
@@ -509,7 +509,7 @@
       "request_path": "traced_parse",
       "response_format": "ThemeDiscoveryResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:themes"
@@ -526,7 +526,7 @@
       "request_path": "traced_parse",
       "response_format": "LeverTypingResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:type"
@@ -543,7 +543,7 @@
       "request_path": "traced_parse",
       "response_format": "AmbitionResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "option_profile:ambition"
@@ -560,7 +560,7 @@
       "request_path": "traced_parse",
       "response_format": "FoldingResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "option_profile:fold"
@@ -577,7 +577,7 @@
       "request_path": "traced_parse",
       "response_format": "MarkedLineResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "option_profile:line"
@@ -594,7 +594,7 @@
       "request_path": "traced_parse",
       "response_format": "PlaceSentencesResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "option_profile:place_sentences"
@@ -611,7 +611,7 @@
       "request_path": "traced_parse",
       "response_format": "PotentialImpactResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "option_profile:potential_impact"
@@ -628,7 +628,7 @@
       "request_path": "traced_parse",
       "response_format": "SettingResponse",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "option_profile:setting"
@@ -645,7 +645,7 @@
       "request_path": "parse_structured",
       "response_format": "ScreenRepWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "screen:abstract"
@@ -662,7 +662,7 @@
       "request_path": "parse_structured",
       "response_format": "ScreenRepWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "screen:full"
@@ -679,7 +679,7 @@
       "request_path": "parse_structured",
       "response_format": "SearchQueriesWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "search:generate_queries"
@@ -696,7 +696,7 @@
       "request_path": "parse_structured",
       "response_format": "V2SingleQueryWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "search_queries_v2_openalex:1"
@@ -713,7 +713,7 @@
       "request_path": "parse_structured",
       "response_format": "V2SingleQueryWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "search_queries_v2_overton:1"
@@ -730,7 +730,7 @@
       "request_path": "parse_structured",
       "response_format": "SearchQueriesWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "search:reformulate"
@@ -747,7 +747,7 @@
       "request_path": "parse_structured",
       "response_format": "V2SingleQueryWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "search_reformulate_v2_openalex:r1:1"
@@ -764,7 +764,7 @@
       "request_path": "parse_structured",
       "response_format": "V2SingleQueryWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "search_reformulate_v2_overton:r1:1"
@@ -781,7 +781,7 @@
       "request_path": "parse_structured",
       "response_format": "SearchSuggestWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "search:suggest"
@@ -798,7 +798,7 @@
       "request_path": "parse_structured",
       "response_format": "_RankedDocsModel",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "select:rerank"
@@ -815,7 +815,7 @@
       "request_path": "direct_parse",
       "response_format": "SummaryJudgeWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "synthesise:judge_summary"
@@ -832,7 +832,7 @@
       "request_path": "direct_parse",
       "response_format": "SectionProposalWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "synthesise:propose_sections"
@@ -931,7 +931,7 @@
       "request_path": "direct_parse",
       "response_format": "SummaryWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "synthesise:write_artefact_summary"
@@ -948,7 +948,7 @@
       "request_path": "direct_parse",
       "response_format": "SummaryWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "synthesise:write_block_summary"
@@ -965,7 +965,7 @@
       "request_path": "direct_parse",
       "response_format": "CaseStudyWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "synthesise:write_case_studies"
@@ -982,7 +982,7 @@
       "request_path": "direct_parse",
       "response_format": "IntroWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "synthesise:write_intro"
@@ -999,7 +999,7 @@
       "request_path": "direct_create",
       "response_format": null,
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": {
         "function": {
           "name": "emit_section"
@@ -1023,7 +1023,7 @@
       "request_path": "direct_parse",
       "response_format": "NoteWire",
       "stream": null,
-      "system_shape": "text",
+      "system_shape": "parts+breakpoint",
       "tool_choice": null,
       "tools": null,
       "trace_name": "synthesise:write_source_note"

@@ -24,6 +24,7 @@ from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import resolve_openai_client, traced_parse
 from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.evidence_search.extract.extract import _scrub_nul
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 from policy_atlas.runtime.capability_registry import (
     EVIDENCE_SEARCH,
     TaskAgentProfile,
@@ -242,6 +243,7 @@ class OpenAITaskAgentBackend:
             response_format=profile.wire,
             model=route().model_for(profile.step),
             reasoning_effort=route().effort_for(profile.step),
+            prompt_cache=cache_mode_for(profile.step),
             max_output_tokens=profile.max_output_tokens,
             usage_event=profile.usage_event,
             label=profile.label,

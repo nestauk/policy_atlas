@@ -15,6 +15,7 @@ from policy_atlas.core.openai_client import parse_structured, resolve_openai_cli
 from policy_atlas.core.prompt_fields import splice_guidance
 from policy_atlas.core.tags import has_control_character
 from policy_atlas.core.usage import UsageResult
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 
 log = structlog.get_logger()
 
@@ -376,6 +377,7 @@ class OpenAIThemeGroupingBackend:
             label="discovery",
             model=DISCOVERY_MODEL,
             reasoning_effort=DISCOVERY_EFFORT,
+            prompt_cache=cache_mode_for("characterise_discover"),
         )
         return (
             [
@@ -420,6 +422,7 @@ class OpenAIThemeGroupingBackend:
             label="assignment",
             model=ASSIGNMENT_MODEL,
             reasoning_effort=ASSIGNMENT_EFFORT,
+            prompt_cache=cache_mode_for("characterise_assign"),
         )
 
         assignments: dict[str, str] = {}

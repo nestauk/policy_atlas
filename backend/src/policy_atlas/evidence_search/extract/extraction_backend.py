@@ -46,6 +46,7 @@ from policy_atlas.evidence_search.extract.iof_records import (
     ExtractionResponse,
     ExtractionWindowPayload,
 )
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 
 log = structlog.get_logger()
 
@@ -148,6 +149,7 @@ class OpenAIExtractionBackend:
             label="extraction",
             model=EXTRACTION_MODEL,
             reasoning_effort=EXTRACTION_EFFORT,
+            prompt_cache=cache_mode_for("extract_iof_findings"),
             max_completion_tokens=EXTRACT_MAX_OUTPUT_TOKENS,
         )
 
@@ -233,6 +235,7 @@ class OpenAIICFExtractionBackend:
             label="ICF extraction",
             model=ICF_EXTRACTION_MODEL,
             reasoning_effort=ICF_EXTRACTION_EFFORT,
+            prompt_cache=cache_mode_for("extract_icf_findings"),
             max_completion_tokens=ICF_EXTRACT_MAX_OUTPUT_TOKENS,
         )
 
@@ -516,6 +519,7 @@ class OpenAIInterventionsBackend:
                 label="intervention profile",
                 model=INTERVENTIONS_MODEL,
                 reasoning_effort=INTERVENTIONS_EFFORT,
+                prompt_cache=cache_mode_for("extract_interventions"),
                 max_completion_tokens=INTERVENTIONS_MAX_OUTPUT_TOKENS,
             ),
             update=_update,

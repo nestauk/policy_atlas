@@ -9,6 +9,7 @@ from typing import Any
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import openai_kwargs, require_parsed, resolve_openai_client
 from policy_atlas.core.usage import UsageResult, token_usage_from_provider
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 from policy_atlas.evidence_search.synthesis.section_prompt import (
     LOOKUP_TOOL_SCHEMA,
     QUERY_FINDINGS_TOOL_SCHEMA,
@@ -27,7 +28,11 @@ _CHAT_READ_TOOL_SCHEMAS = [
 
 def _chat_kwargs() -> dict[str, Any]:
     """Model kwargs for every live chat call (the one shared ``chat`` step)."""
-    return openai_kwargs(CHAT_MODEL, reasoning_effort=route().effort_for("chat"))
+    return openai_kwargs(
+        CHAT_MODEL,
+        reasoning_effort=route().effort_for("chat"),
+        prompt_cache=cache_mode_for("chat"),
+    )
 
 
 class OpenAIChatBackend(ChatBackend):

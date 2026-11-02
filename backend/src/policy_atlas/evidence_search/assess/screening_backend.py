@@ -28,6 +28,7 @@ from policy_atlas.evidence_search.assess.screen_prompt import (
     build_screen_fulltext_messages,
     build_screen_messages,
 )
+from policy_atlas.evidence_search.synthesis.cache_modes import PromptCache, cache_mode_for
 
 
 class ScreeningBackend(Protocol):
@@ -119,6 +120,7 @@ class OpenAIScreeningBackend:
         usage_event: str,
         model: str,
         reasoning_effort: str,
+        prompt_cache: PromptCache,
     ) -> UsageResult[ScreenRepWire]:
         parsed, usage = parse_structured(
             self._client,
@@ -128,6 +130,7 @@ class OpenAIScreeningBackend:
             label="screening",
             model=model,
             reasoning_effort=reasoning_effort,
+            prompt_cache=prompt_cache,
             max_completion_tokens=SCREEN_MAX_OUTPUT_TOKENS,
         )
         return _scrub_rep(parsed), usage
@@ -199,6 +202,7 @@ class OpenAIScreeningBackend:
                 usage_event="screening.screen.usage",
                 model=SCREEN_MODEL,
                 reasoning_effort=SCREEN_EFFORT,
+                prompt_cache=cache_mode_for("screen_abstract"),
             ),
             update=_update,
             after=_score_trace,
@@ -273,6 +277,7 @@ class OpenAIScreeningBackend:
                 usage_event="screening.screen.usage",
                 model=SCREEN_FULL_MODEL,
                 reasoning_effort=SCREEN_FULL_EFFORT,
+                prompt_cache=cache_mode_for("screen_full"),
             ),
             update=_update,
             after=_score_trace,

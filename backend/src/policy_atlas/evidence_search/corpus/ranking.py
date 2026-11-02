@@ -17,6 +17,7 @@ from policy_atlas.core.openai_client import parse_structured, resolve_openai_cli
 from policy_atlas.core.tags import has_control_character
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.corpus.theme_grouping import GroupingDoc, records_json
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 
 log = structlog.get_logger()
 
@@ -249,6 +250,7 @@ class OpenAIRankingBackend:
             label="ranking",
             model=RERANK_MODEL,
             reasoning_effort=RERANK_EFFORT,
+            prompt_cache=cache_mode_for("select_rerank"),
         )
         return (
             [
