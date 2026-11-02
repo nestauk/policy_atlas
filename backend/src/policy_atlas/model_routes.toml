@@ -79,20 +79,20 @@ agent_option_design = { tier = "standard", reasoning_effort = "medium" }
 agent_suggest = { tier = "standard", reasoning_effort = "medium" }
 task_agent_turn = { tier = "standard", reasoning_effort = "medium" }
 # --- Options scoping (the judgment calls run on the strongest tier) ----------
-task_agent_scoping_turn = { tier = "frontier", reasoning_effort = "low" }
+task_agent_scoping_turn = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 longlist_discover = { tier = "frontier", reasoning_effort = "low" }
 longlist_assign = { tier = "fast", reasoning_effort = "medium" }
-longlist_themes = { tier = "frontier", reasoning_effort = "low" }
-longlist_assign_themes = { tier = "frontier", reasoning_effort = "low" }
-longlist_type = { tier = "frontier", reasoning_effort = "low" }
-longlist_constrain = { tier = "frontier", reasoning_effort = "low" }
-longlist_distinct = { tier = "frontier", reasoning_effort = "low" }
-longlist_authority = { tier = "frontier", reasoning_effort = "low" }
+longlist_themes = { tier = "standard", reasoning_effort = "medium" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_assign_themes = { tier = "fast", reasoning_effort = "medium" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_type = { tier = "fast", reasoning_effort = "medium" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_constrain = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_distinct = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_authority = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 longlist_shortlist = { tier = "frontier", reasoning_effort = "low" }
-option_profile_line = { tier = "frontier", reasoning_effort = "low" }
-option_profile_potential_impact = { tier = "frontier", reasoning_effort = "low" }
-option_profile_ambition = { tier = "frontier", reasoning_effort = "low" }
-option_profile_setting = { tier = "frontier", reasoning_effort = "low" }
+option_profile_line = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_potential_impact = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_ambition = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_setting = { tier = "standard", reasoning_effort = "high" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 option_profile_fold = { tier = "fast", reasoning_effort = "medium" }
 option_profile_place_sentences = { tier = "fast", reasoning_effort = "medium" }
 

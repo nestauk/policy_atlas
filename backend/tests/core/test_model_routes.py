@@ -20,9 +20,11 @@ from policy_atlas.core.model_routes import ROUTE_FILE, Route, load_route
 # step follows and the effort it sends. "medium" is written where nothing was sent
 # before (the provider default, probed 2026-11-02); "none" where the route knob gave
 # it to Terra; "high" where a module hard-coded it (classify and the two finding vetters
-# moved to "medium" in Phase 5 on replay evidence); "low" on the frontier steps because
-# gpt-6.1-sol refuses "none" (owner, 2026-11-01). Changing a value here is a
-# deliberate behaviour change, never a side effect.
+# moved to "medium" in Phase 5 on replay evidence); "low" on the two steps still on the
+# frontier tier (longlist_shortlist, longlist_discover) because gpt-6.1-sol refuses
+# "none" (owner, 2026-11-01); the other eleven former frontier steps carry the tier and
+# effort the owner chose from the frontier replay on 2026-11-02 (Phase 5 step 1b).
+# Changing a value here is a deliberate behaviour change, never a side effect.
 STEP_TIER_AND_EFFORT: dict[str, tuple[str, str]] = {
     "screen_abstract": ("fast", "medium"),
     "screen_full": ("fast", "medium"),
@@ -67,19 +69,19 @@ STEP_TIER_AND_EFFORT: dict[str, tuple[str, str]] = {
     "agent_option_design": ("standard", "medium"),
     "agent_suggest": ("standard", "medium"),
     "task_agent_turn": ("standard", "medium"),
-    "task_agent_scoping_turn": ("frontier", "low"),
+    "task_agent_scoping_turn": ("standard", "none"),
     "longlist_discover": ("frontier", "low"),
-    "longlist_themes": ("frontier", "low"),
-    "longlist_assign_themes": ("frontier", "low"),
-    "longlist_type": ("frontier", "low"),
-    "longlist_constrain": ("frontier", "low"),
-    "longlist_distinct": ("frontier", "low"),
-    "longlist_authority": ("frontier", "low"),
+    "longlist_themes": ("standard", "medium"),
+    "longlist_assign_themes": ("fast", "medium"),
+    "longlist_type": ("fast", "medium"),
+    "longlist_constrain": ("standard", "none"),
+    "longlist_distinct": ("standard", "none"),
+    "longlist_authority": ("standard", "none"),
     "longlist_shortlist": ("frontier", "low"),
-    "option_profile_line": ("frontier", "low"),
-    "option_profile_potential_impact": ("frontier", "low"),
-    "option_profile_ambition": ("frontier", "low"),
-    "option_profile_setting": ("frontier", "low"),
+    "option_profile_line": ("standard", "none"),
+    "option_profile_potential_impact": ("standard", "none"),
+    "option_profile_ambition": ("standard", "none"),
+    "option_profile_setting": ("standard", "high"),
 }
 
 # Which model each tier names after the switch, per route (gpt-6 family, D2).
@@ -137,7 +139,8 @@ def test_bedrock_names_bedrock_models_and_cohere() -> None:
     assert route.model_for("screen_abstract") == "global.openai.gpt-6-luna"
     assert route.model_for("synthesise_section_turn") == "global.openai.gpt-6.1-terra"
     assert route.model_for("task_agent_turn") == "global.openai.gpt-6.1-terra"
-    assert route.model_for("task_agent_scoping_turn") == "global.openai.gpt-6.1-sol"
+    assert route.model_for("task_agent_scoping_turn") == "global.openai.gpt-6.1-terra"
+    assert route.model_for("longlist_shortlist") == "global.openai.gpt-6.1-sol"
     assert route.model_for("longlist_assign") == "global.openai.gpt-6-luna"
     assert route.model_for("agent_decide") == "global.openai.gpt-6.1-terra"
     assert route.embeddings.backend == "cohere"
@@ -464,7 +467,7 @@ def test_every_module_constant_equals_the_default_route() -> None:
         (agent_backend, "AGENT_TRIAGE_MODEL"): luna,
         (chat_prompt, "CHAT_MODEL"): terra,
         (task_agent, "TASK_AGENT_MODEL"): terra,
-        (task_agent_scoping, "TASK_AGENT_SCOPING_MODEL"): sol,
+        (task_agent_scoping, "TASK_AGENT_SCOPING_MODEL"): terra,  # task 056 P5 1b (owner)
         (scoping_backend, "LONGLIST_JUDGMENT_MODEL"): sol,
         (scoping_backend, "LONGLIST_ASSIGNMENT_MODEL"): luna,
         (interventions_prompt, "INTERVENTIONS_MODEL"): luna,
