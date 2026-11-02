@@ -34,7 +34,7 @@ from sqlalchemy import select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.api import longlist_actions
-from policy_atlas.api.readmodels import repository
+from policy_atlas.api.read_models import repository
 from policy_atlas.core.schema import longlist_result, option, option_relation, task_source_snapshot
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.options_scoping.constrain import constrain as constrain_module
@@ -70,7 +70,6 @@ from policy_atlas.options_scoping.constrain.in_scope import (
     in_scope_evidence,
 )
 from policy_atlas.options_scoping.context import ScopeContext
-from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
 from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     DiscoveredOptionWire,
     OptionDiscoveryResponse,
@@ -78,6 +77,7 @@ from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
 from policy_atlas.options_scoping.option_profile.option_profile import (
     option_profile_scope,
 )
+from policy_atlas.options_scoping.scoping_backend import StubLonglistBackend
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, find_default
 from tests.helpers import now
 from tests.options_scoping.test_longlist import _Walk

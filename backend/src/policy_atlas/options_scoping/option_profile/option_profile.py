@@ -56,7 +56,7 @@ into the row's ``coverage``.
 **The place sentences (task 046, amendment 4, R80; S31).** A second wave,
 after the first pool has returned and before any write: per option on the
 stored coverage that has evaluating documents, one call on the mini model
-(:meth:`~policy_atlas.options_scoping.longlist.longlist_backend.LonglistBackend.place_sentences`),
+(:meth:`~policy_atlas.options_scoping.scoping_backend.LonglistBackend.place_sentences`),
 the calls in a pool of :data:`OPTION_PROFILE_MAX_CONCURRENT`, each tried once
 more. The input, the template and the trace check are code
 (:mod:`.place_sentences`). A failed call, a sentence over the ceiling or one
@@ -100,17 +100,11 @@ from policy_atlas.options_scoping.longlist.coverage import (
     distinct_words,
     fold_programme_names,
 )
-from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPE_KEYS, TAXONOMY_VERSION
 from policy_atlas.options_scoping.longlist.longlist import (
     MembershipRead,
     _seeds,
     latest_longlist,
     read_membership,
-)
-from policy_atlas.options_scoping.longlist.longlist_backend import (
-    LONGLIST_ASSIGNMENT_MODEL,
-    LONGLIST_JUDGMENT_MODEL,
-    LonglistBackend,
 )
 from policy_atlas.options_scoping.longlist.where_tried import resolve_country
 from policy_atlas.options_scoping.longlist_intent import (
@@ -122,6 +116,10 @@ from policy_atlas.options_scoping.option_profile.folding_prompt import (
     FOLDING_PROMPT_VERSION,
     Facet,
     FoldingResponse,
+)
+from policy_atlas.options_scoping.option_profile.lever_types import (
+    LEVER_TYPE_KEYS,
+    TAXONOMY_VERSION,
 )
 from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
     LEVER_TYPING_BATCH_SIZE,
@@ -154,6 +152,11 @@ from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
     PLACE_SENTENCE_MAX_CHARS,
     PLACE_SENTENCES_PROMPT_VERSION,
     PlaceSentencesResponse,
+)
+from policy_atlas.options_scoping.scoping_backend import (
+    LONGLIST_ASSIGNMENT_MODEL,
+    LONGLIST_JUDGMENT_MODEL,
+    LonglistBackend,
 )
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.options_scoping.text import clean_text, fold_text

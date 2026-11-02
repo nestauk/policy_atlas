@@ -21,7 +21,7 @@ from policy_atlas.core.schema import chunk_embedding, task_source_snapshot
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.evidence_search.synthesis import synthesis_tools
-from policy_atlas.evidence_search.synthesis.synthesis_backend import SectionProseWire
+from policy_atlas.evidence_search.synthesis.section_prompt import SectionProseWire
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     BOOST_CLAMP_MAX,
     BOOST_CLAMP_MIN,
@@ -1459,7 +1459,7 @@ def test_loop_runner_malformed_emission_consumes_turn_and_recovers() -> None:
     """A MalformedEmissionError is a turn-consuming error exchange (the model
     reads the bounded error as data and re-emits); on the forced final turn it
     is a structural failure, never an extension."""
-    from policy_atlas.evidence_search.synthesis.synthesis_backend import SectionProseWire
+    from policy_atlas.evidence_search.synthesis.section_prompt import SectionProseWire
     from policy_atlas.evidence_search.synthesis.synthesis_tools import (
         MalformedEmissionError,
         run_section_loop,

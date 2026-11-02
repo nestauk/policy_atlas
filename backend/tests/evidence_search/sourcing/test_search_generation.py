@@ -112,6 +112,8 @@ def test_v2_generate_queries_uses_split_prompt_versions_and_aggregates_usage(
         completion=(N_QUERIES + MAX_PARAPHRASES) * 2,
         total=(N_QUERIES + MAX_PARAPHRASES) * 3,
         cached=0,
+        cache_write=0,
+        reasoning=0,
     )
     assert len(calls) == N_QUERIES + MAX_PARAPHRASES
 

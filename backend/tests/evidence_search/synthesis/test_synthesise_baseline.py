@@ -43,7 +43,7 @@ from policy_atlas.evidence_search.synthesis.baseline_prompt import (
     required_titles,
 )
 from policy_atlas.evidence_search.synthesis.grounding_judge import StubGroundingJudgeBackend
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     CaseStudyWire,
     ClaimWire,
     GapPayloadWire,
@@ -51,8 +51,10 @@ from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     NoteWire,
     SectionProposalWire,
     SectionProseWire,
-    SectionTurn,
     SectionWire,
+)
+from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+    SectionTurn,
     StubSynthesisBackend,
 )
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (

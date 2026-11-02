@@ -34,14 +34,14 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import intervention_profile_record
 from policy_atlas.core.usage import UsageResult
-from policy_atlas.evidence_search.extract.extract_interventions_prompt import (
+from policy_atlas.evidence_search.extract.extraction_backend import InterventionsBackend
+from policy_atlas.evidence_search.extract.interventions_prompt import (
     INTERVENTIONS_MAX_OUTPUT_TOKENS,
     INTERVENTIONS_MODEL,
 )
-from policy_atlas.evidence_search.extract.extract_interventions_prompt import (
+from policy_atlas.evidence_search.extract.interventions_prompt import (
     PROMPT_VERSION as INTERVENTIONS_PROMPT_VERSION,
 )
-from policy_atlas.evidence_search.extract.extraction_backend import InterventionsBackend
 from policy_atlas.evidence_search.extract.interventions_records import (
     INTERVENTIONS_FIELD_RULES_VERSION,
     PROFILE_ID,

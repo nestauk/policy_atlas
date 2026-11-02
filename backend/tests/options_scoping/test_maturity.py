@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from policy_atlas.api.readmodels.repository import _year
+from policy_atlas.api.read_models.repository import _year
 from policy_atlas.core.schema import EVIDENCE_TYPES
 from policy_atlas.options_scoping.labels import DocumentLabels
 from policy_atlas.options_scoping.longlist.coverage import (

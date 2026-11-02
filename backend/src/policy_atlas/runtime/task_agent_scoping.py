@@ -21,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine, RowMapping
 
 from policy_atlas.api.contract import PlanStep, ScopingPlanDraft
-from policy_atlas.api.routers._common import ACTIVE_WALK_STATUSES, parentless_walk
+from policy_atlas.api.routers.common import ACTIVE_WALK_STATUSES, parentless_walk
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.schema import (
     artefact,

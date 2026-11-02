@@ -11,11 +11,11 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.core.schema import artefact, block, synthesis_result
 from policy_atlas.evidence_search.synthesis import synthesise as synthesise_module
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
-    StubSynthesisBackend,
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     SummaryJudgeWire,
     SummaryWire,
 )
+from policy_atlas.evidence_search.synthesis.synthesis_backend import StubSynthesisBackend
 from policy_atlas.evidence_search.synthesis.synthesise import (
     SUMMARY_REGENERATE_CAP,
     write_summaries_after_commit,

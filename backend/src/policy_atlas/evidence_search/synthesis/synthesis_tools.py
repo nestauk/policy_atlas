@@ -5,7 +5,7 @@ plan-pinned constants, the three read-only scoped tools (``search_chunks`` /
 ``query_findings`` / ``lookup``), the staged retrieval pipeline behind the
 ``retrieve`` seam's first increment, the bounded loop runner, and the
 fail-closed ``context["synthesis"]`` directive parser. The prompt-bearing
-surfaces live in :mod:`policy_atlas.evidence_search.synthesis.synthesis_backend` and
+surfaces live in :mod:`policy_atlas.evidence_search.synthesis.section_prompt` and
 :mod:`policy_atlas.evidence_search.synthesis.grounding_judge`; nothing in this module
 composes prose.
 
@@ -67,7 +67,7 @@ from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_P
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
 
 if TYPE_CHECKING:
-    from policy_atlas.evidence_search.synthesis.synthesis_backend import SectionProseWire
+    from policy_atlas.evidence_search.synthesis.section_prompt import SectionProseWire
 
 # --- Plan-pinned constants (plan.md rev 2 — binding; the caps-bind test
 # asserts these module constants are the values enforced on the live path,

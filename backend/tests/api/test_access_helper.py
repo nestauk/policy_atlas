@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException
 from sqlalchemy import event, select, update
 from sqlalchemy.engine import Connection
 
-from policy_atlas.api.routers._access import (
+from policy_atlas.api.routers.access import (
     FORBIDDEN_DETAIL,
     NOT_FOUND_DETAIL,
     _read_legs,

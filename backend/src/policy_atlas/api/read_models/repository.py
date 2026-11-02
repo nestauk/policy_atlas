@@ -137,11 +137,6 @@ from policy_atlas.options_scoping.longlist.coverage import (
     plan_outcome_named,
     stored_folds,
 )
-from policy_atlas.options_scoping.longlist.lever_types import (
-    LEVER_TYPE_KEYS,
-    LEVER_TYPES,
-    TAXONOMY_VERSION,
-)
 from policy_atlas.options_scoping.longlist.maturity import maturity_of
 from policy_atlas.options_scoping.longlist.where_tried import (
     NOT_STATED,
@@ -150,6 +145,11 @@ from policy_atlas.options_scoping.longlist.where_tried import (
     resolve_country,
 )
 from policy_atlas.options_scoping.longlist_intent import longlist_plan_data
+from policy_atlas.options_scoping.option_profile.lever_types import (
+    LEVER_TYPE_KEYS,
+    LEVER_TYPES,
+    TAXONOMY_VERSION,
+)
 from policy_atlas.options_scoping.option_profile.option_profile import PLACE_SENTENCES_KEY
 from policy_atlas.options_scoping.option_profile.place_sentences import (
     PlaceDocument,

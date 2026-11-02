@@ -513,6 +513,8 @@ def test_parallel_vetter_multi_doc_outcomes_and_usage(conn: Connection) -> None:
         "completion": 6,
         "total": 16,
         "cached": 2,
+        "cache_write": 0,
+        "reasoning": 0,
     }
     rows = _findings_with_tss(conn, task_id)
     assert len(rows) == 1
@@ -596,6 +598,8 @@ def test_parallel_vetter_failure_isolates_to_one_doc(conn: Connection) -> None:
         "completion": 3,
         "total": 8,
         "cached": 1,
+        "cache_write": 0,
+        "reasoning": 0,
     }
     assert {
         row.task_source_snapshot_id for row in _findings_with_tss(conn, task_id)

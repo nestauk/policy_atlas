@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.api.readmodels.repository import (
+from policy_atlas.api.read_models.repository import (
     evidence_page,
     landscape_out,
     source_dossier_out,

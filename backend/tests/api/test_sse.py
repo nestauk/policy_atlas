@@ -23,7 +23,7 @@ from structlog.testing import capture_logs
 from policy_atlas.api import continuation
 from policy_atlas.api.app import create_app
 from policy_atlas.api.dev_issuer import init, mint_token
-from policy_atlas.api.routers import _access, sse
+from policy_atlas.api.routers import access, sse
 from policy_atlas.api.routers.sse import _summary, _tail
 from policy_atlas.api.settings import Settings
 from policy_atlas.api.stage_vocabulary import stage_for_payload
@@ -1051,7 +1051,7 @@ def test_a_batch_read_after_the_grade_check_discloses_nothing_once_access_is_gon
     monkeypatch.setattr(
         sse,
         "may_read_task",
-        lambda *_args, **_kwargs: _access.ReadCheck(allowed=True, via_admin=False),
+        lambda *_args, **_kwargs: access.ReadCheck(allowed=True, via_admin=False),
     )
     with seeded(engine) as conn:
         conn.execute(
@@ -1121,7 +1121,7 @@ def test_sse_reauthorisation_resolves_through_the_same_legs_as_the_snapshot(
 ) -> None:
     """The tail asks the same question the snapshot did, whatever the legs are.
 
-    The admin read leg is a third disjunct inside `_access._read_legs` — the
+    The admin read leg is a third disjunct inside `access._read_legs` — the
     single function `_snapshot`'s `accessible_task` resolves through. This
     pins that the **tail** resolves through that same function and honours
     whatever it returns, which is why phase 8 widened the live stream at the
@@ -1138,14 +1138,14 @@ def test_sse_reauthorisation_resolves_through_the_same_legs_as_the_snapshot(
     that flipping only that function's verdict is enough to end the stream.
     """
     calls: list[tuple[str, str]] = []
-    real = _access._read_legs
+    real = access._read_legs
     state = {"revoked": False}
 
     def recording(table: Table, user_id: str) -> ColumnElement[bool]:
         calls.append((table.name, user_id))
         return false() if state["revoked"] else real(table, user_id)
 
-    monkeypatch.setattr(_access, "_read_legs", recording)
+    monkeypatch.setattr(access, "_read_legs", recording)
 
     async def exercise() -> None:
         async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
@@ -1271,11 +1271,11 @@ def test_sse_administrator_stream_traces_the_subscribe_and_every_reauthorisation
     """
 
     carried: list[str] = []
-    real = _access.may_read_task
+    real = access.may_read_task
 
     def recording(
         conn: Connection, *, task_id: uuid.UUID, user_id: str
-    ) -> _access.ReadCheck:
+    ) -> access.ReadCheck:
         check = real(conn, task_id=task_id, user_id=user_id)
         if check.allowed and check.via_admin:
             carried.append(user_id)

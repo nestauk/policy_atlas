@@ -46,7 +46,7 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     StubGroundingJudgeBackend,
     UnspannedAssertionWire,
 )
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     NAV_LABEL_MAX,
     SECTION_TITLE_PROPOSAL_MAX,
     CaseStudyWire,
@@ -60,11 +60,13 @@ from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     SectionProposalWire,
     SectionProseWire,
     SectionRepairWire,
-    SectionTurn,
     SectionWire,
+    ThemePayloadWire,
+)
+from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+    SectionTurn,
     StubSynthesisBackend,
     SynthesisBackend,
-    ThemePayloadWire,
 )
 from policy_atlas.evidence_search.synthesis.synthesis_tools import SECTION_CAP, ToolExchange
 from policy_atlas.evidence_search.synthesis.synthesise import (

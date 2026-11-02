@@ -3,7 +3,7 @@
 ``longlist``, ``option_profile``, ``constrain`` and ``theme`` share this one
 backend (task 046, S20). Each call has one lead-authored prompt builder
 (:mod:`~policy_atlas.options_scoping.longlist.longlist_cluster_prompt`,
-:mod:`~policy_atlas.options_scoping.theme.longlist_theme_prompt`,
+:mod:`~policy_atlas.options_scoping.theme.theme_prompt`,
 :mod:`~policy_atlas.options_scoping.option_profile.lever_typing_prompt`,
 :mod:`~policy_atlas.options_scoping.constrain.constrain_prompt`):
 
@@ -139,7 +139,7 @@ from policy_atlas.options_scoping.shortlist.shortlist_prompt import (
     ShortlistWire,
 )
 from policy_atlas.options_scoping.text import fold_text
-from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
+from policy_atlas.options_scoping.theme.theme_prompt import (
     LONGLIST_THEME_PROMPT_VERSION,
     THEME_MAX_OUTPUT_TOKENS,
     ThemeAssignmentsResponse,

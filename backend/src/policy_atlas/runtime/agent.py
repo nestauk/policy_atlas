@@ -61,7 +61,7 @@ from policy_atlas.evidence_search.sourcing.fetch_live import LiveDocumentFetcher
 from policy_atlas.evidence_search.sourcing.ingest_upload import ingest_upload
 from policy_atlas.evidence_search.synthesis.grounding_judge import OpenAIGroundingJudgeBackend
 from policy_atlas.evidence_search.synthesis.synthesis_backend import OpenAISynthesisBackend
-from policy_atlas.options_scoping.longlist.longlist_backend import OpenAILonglistBackend
+from policy_atlas.options_scoping.scoping_backend import OpenAILonglistBackend
 from policy_atlas.runtime.agent_backend import (
     AgentBackend,
     OpenAIAgentBackend,

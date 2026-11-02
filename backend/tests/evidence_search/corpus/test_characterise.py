@@ -2113,7 +2113,14 @@ def test_characterise_stub_summary_matches_pinned_fixture(conn: Connection) -> N
             "themes": "standard",
             "guidance": None,
         },
-        "usage_totals": {"prompt": 0, "completion": 0, "total": 0, "cached": 0},
+        "usage_totals": {
+            "prompt": 0,
+            "completion": 0,
+            "total": 0,
+            "cached": 0,
+            "cache_write": 0,
+            "reasoning": 0,
+        },
     }
 
 

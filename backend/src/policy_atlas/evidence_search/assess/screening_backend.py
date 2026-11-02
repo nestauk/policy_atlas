@@ -1,4 +1,7 @@
-"""Screening backend seam for the screen_v2 and screen_fulltext_v1 calls."""
+"""Screening backend seam for the abstract-screen and full-text-screen calls.
+
+Prompt versions live in screen_prompt.py.
+"""
 
 from __future__ import annotations
 

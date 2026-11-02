@@ -11,6 +11,17 @@ import structlog
 from sqlalchemy import exists, func, select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.core.clustering_engine import (
+    AssignmentOutput,
+    ClusteringBackend,
+    ClusteringFailure,
+    ClusteringPolicy,
+    ClusteringResult,
+    ClusterLabel,
+    ClusterUnit,
+    call_budget_for_unit_count,
+    cluster_units,
+)
 from policy_atlas.core.embeddings import EMBEDDING_PROFILE, UNIT_POLICY
 from policy_atlas.core.prompt_fields import parse_guidance_channel
 from policy_atlas.core.schema import (
@@ -28,19 +39,8 @@ from policy_atlas.core.schema import (
     chunk as chunk_table,
 )
 from policy_atlas.core.tags import insert_source_tags
-from policy_atlas.core.usage import UsageResult
+from policy_atlas.core.usage import UsageAccumulator, UsageResult
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
-from policy_atlas.evidence_search.clustering_engine import (
-    AssignmentOutput,
-    ClusteringBackend,
-    ClusteringFailure,
-    ClusteringPolicy,
-    ClusteringResult,
-    ClusterLabel,
-    ClusterUnit,
-    call_budget_for_unit_count,
-    cluster_units,
-)
 from policy_atlas.evidence_search.corpus import theme_grouping
 from policy_atlas.evidence_search.corpus.theme_grouping import (
     UNCLUSTERED,
@@ -818,7 +818,7 @@ def characterise_scope(
     discovery_retries_used = 0
     discovery_rejections: list[str] = []
     repair_calls_used = 0
-    usage_totals = {"prompt": 0, "completion": 0, "total": 0, "cached": 0}
+    usage_totals = UsageAccumulator().payload()
 
     if n == 0:
         flags.append("empty_scope")

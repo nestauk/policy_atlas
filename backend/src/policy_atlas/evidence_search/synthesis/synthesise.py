@@ -85,27 +85,18 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     GroundingJudgeBackend,
     build_envelope,
 )
-from policy_atlas.evidence_search.synthesis.summary_prompts import (
-    SUMMARISER_PROMPT_VERSION,
-    SUMMARY_JUDGE_PROMPT_VERSION,
-)
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
-    CASE_STUDIES_MODEL,
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     CASE_STUDIES_PROMPT_VERSION,
-    FORBIDDEN_SECTION_TITLES,
-    FULL_REPORT_INTRO_MODEL,
     FULL_REPORT_INTRO_PROMPT_VERSION,
     KEY_FINDINGS_GAP_MAX,
     KEY_FINDINGS_PROMPT_VERSION,
     MOST_RELEVANT_NOTE_PROMPT_VERSION,
-    MRS_NOTE_MODEL,
     NAV_LABEL_MAX,
     SECTION_FOCUS_MAX,
     SECTION_PROMPT_VERSION,
     SECTION_TITLE_PROPOSAL_MAX,
     SECTION_TOOL_SCHEMAS,
     SECTIONS_PROMPT_VERSION,
-    SYNTHESIS_MODEL,
     CaseStudyCardWire,
     CaseStudyWire,
     ClaimWire,
@@ -113,6 +104,17 @@ from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     SectionProposalWire,
     SectionProseWire,
     SectionRepairWire,
+)
+from policy_atlas.evidence_search.synthesis.summary_prompts import (
+    SUMMARISER_PROMPT_VERSION,
+    SUMMARY_JUDGE_PROMPT_VERSION,
+)
+from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+    CASE_STUDIES_MODEL,
+    FORBIDDEN_SECTION_TITLES,
+    FULL_REPORT_INTRO_MODEL,
+    MRS_NOTE_MODEL,
+    SYNTHESIS_MODEL,
     SynthesisBackend,
     _chunk_content_by_id,
 )
@@ -6111,7 +6113,7 @@ def synthesise_scope(
             "ledger": build_ledger(all_claims),
             # B2′ (024): gates the v8 priority-findings block into the section
             # system prompt (a control flag on the seed, never a data-payload
-            # field — see synthesis_backend._section_system_prompt).
+            # field — see section_prompt._section_system_prompt).
             "priority_block_active": priority_block_active,
             # Output kind (task 044): selects the section writer's preamble.
             # ``None`` is the Evidence search report — today's prompt, unchanged.

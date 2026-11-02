@@ -538,7 +538,14 @@ def test_harness_classify_component(conn: Connection) -> None:
     assert {"classified", "by_type", "skipped"} <= set(summary.keys())
     assert summary["classified"] == 1
     assert summary["skipped"] == 1
-    assert summary["usage_totals"] == {"prompt": 11, "completion": 7, "total": 18, "cached": 0}
+    assert summary["usage_totals"] == {
+        "prompt": 11,
+        "completion": 7,
+        "total": 18,
+        "cached": 0,
+        "cache_write": 0,
+        "reasoning": 0,
+    }
 
     # Run ended as succeeded
     run_row = conn.execute(select(runs).where(runs.c.run_id == rid_classify)).one()

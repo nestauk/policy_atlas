@@ -333,16 +333,16 @@ def test_every_module_constant_equals_the_default_route() -> None:
     from policy_atlas.evidence_search.assess import classify_prompt, screen_prompt
     from policy_atlas.evidence_search.corpus import ranking, theme_grouping
     from policy_atlas.evidence_search.extract import (
-        extract_interventions_prompt,
         finding_vetter,
         icf_prompt,
+        interventions_prompt,
         iof_prompt,
         relevance_annotator,
     )
     from policy_atlas.evidence_search.group import group_clustering
     from policy_atlas.evidence_search.sourcing import search_prompts
     from policy_atlas.evidence_search.synthesis import grounding_judge, synthesis_backend
-    from policy_atlas.options_scoping.longlist import longlist_backend
+    from policy_atlas.options_scoping import scoping_backend
     from policy_atlas.runtime import agent_backend, chat_prompt, task_agent, task_agent_scoping
 
     luna, terra, sol = "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"
@@ -371,9 +371,9 @@ def test_every_module_constant_equals_the_default_route() -> None:
         (chat_prompt, "CHAT_MODEL"): terra,
         (task_agent, "TASK_AGENT_MODEL"): terra,
         (task_agent_scoping, "TASK_AGENT_SCOPING_MODEL"): sol,
-        (longlist_backend, "LONGLIST_JUDGMENT_MODEL"): sol,
-        (longlist_backend, "LONGLIST_ASSIGNMENT_MODEL"): luna,
-        (extract_interventions_prompt, "INTERVENTIONS_MODEL"): luna,
+        (scoping_backend, "LONGLIST_JUDGMENT_MODEL"): sol,
+        (scoping_backend, "LONGLIST_ASSIGNMENT_MODEL"): luna,
+        (interventions_prompt, "INTERVENTIONS_MODEL"): luna,
         (embeddings, "EMBEDDING_MODEL"): "text-embedding-3-small",
         (embeddings, "EMBEDDING_PROFILE"): "openai_text_embedding_3_small_v1",
     }

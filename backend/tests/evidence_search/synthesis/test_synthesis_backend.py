@@ -17,21 +17,23 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     StubGroundingJudgeBackend,
     build_envelope,
 )
+from policy_atlas.evidence_search.synthesis.section_prompt import (
+    ClaimWire,
+    GapPayloadWire,
+    RepairItemWire,
+    SectionProposalWire,
+    SectionRepairWire,
+    build_section_messages,
+    build_section_repair_messages,
+)
 from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     CLAIM_TEXT_MAX,
     EMISSION_CLAIMS_MAX,
     SYNTHESIS_MODEL,
-    ClaimWire,
-    GapPayloadWire,
     OpenAISynthesisBackend,
-    RepairItemWire,
-    SectionProposalWire,
-    SectionRepairWire,
     SectionTurn,
     StubSynthesisBackend,
     _salvage_section,
-    build_section_messages,
-    build_section_repair_messages,
 )
 from policy_atlas.evidence_search.synthesis.synthesis_tools import ToolExchange, run_section_loop
 

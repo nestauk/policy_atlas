@@ -44,7 +44,7 @@ from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.core.schema import event_log, longlist_result, option
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.longlist.longlist import latest_longlist
-from policy_atlas.options_scoping.longlist.longlist_backend import (
+from policy_atlas.options_scoping.scoping_backend import (
     LONGLIST_JUDGMENT_MODEL,
     LonglistBackend,
 )

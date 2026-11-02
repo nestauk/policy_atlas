@@ -1,7 +1,7 @@
 """Extraction backend seams for the IOF and ICF extraction calls and the
 intervention profile (see ``iof_prompt.PROMPT_VERSION``,
 ``icf_prompt.ICF_PROMPT_VERSION`` and
-``extract_interventions_prompt.PROMPT_VERSION`` for the live prompt
+``interventions_prompt.PROMPT_VERSION`` for the live prompt
 versions)."""
 
 from __future__ import annotations
@@ -14,14 +14,6 @@ from langfuse import Langfuse
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
-from policy_atlas.evidence_search.extract.extract_interventions_prompt import (
-    INTERVENTIONS_MAX_OUTPUT_TOKENS,
-    INTERVENTIONS_MODEL,
-    build_interventions_messages,
-)
-from policy_atlas.evidence_search.extract.extract_interventions_prompt import (
-    PROMPT_VERSION as INTERVENTIONS_PROMPT_VERSION,
-)
 from policy_atlas.evidence_search.extract.icf_prompt import (
     ICF_EXTRACT_MAX_OUTPUT_TOKENS,
     ICF_EXTRACTION_MODEL,
@@ -29,6 +21,14 @@ from policy_atlas.evidence_search.extract.icf_prompt import (
     build_icf_extract_messages,
 )
 from policy_atlas.evidence_search.extract.icf_records import ICFExtractionResponse
+from policy_atlas.evidence_search.extract.interventions_prompt import (
+    INTERVENTIONS_MAX_OUTPUT_TOKENS,
+    INTERVENTIONS_MODEL,
+    build_interventions_messages,
+)
+from policy_atlas.evidence_search.extract.interventions_prompt import (
+    PROMPT_VERSION as INTERVENTIONS_PROMPT_VERSION,
+)
 from policy_atlas.evidence_search.extract.interventions_records import (
     InterventionsResponse,
     TaggingContext,

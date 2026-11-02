@@ -25,7 +25,7 @@ from policy_atlas.api.contract import (
 from policy_atlas.api.deps import get_conn, get_current_user, get_optional_user
 from policy_atlas.api.identity import owner_display_for
 from policy_atlas.api.lifecycle import archive_task, rename_task
-from policy_atlas.api.routers._access import (
+from policy_atlas.api.routers.access import (
     OWNER_EMAIL_MAX,
     accessible_task,
     assignable_project,
@@ -35,7 +35,7 @@ from policy_atlas.api.routers._access import (
     readable_or_public_task,
     trace_admin_listing,
 )
-from policy_atlas.api.routers._common import (
+from policy_atlas.api.routers.common import (
     links_for_tasks,
     memberships_for_tasks,
     task_out,
@@ -315,7 +315,7 @@ def _write_task_links(
     3.  **Same project.** The source must share at least one project with the
         new task *as just assigned*. This is the create-time invariant; a pair
         that later stops sharing one is flagged on read, never broken
-        (:func:`_common.links_for_tasks`).
+        (:func:`common.links_for_tasks`).
     4.  **Finished walk.** The source's latest walk must be ``succeeded`` or
         ``degraded``, and its id is pinned onto the row. A running, paused or
         failed source has nothing stable to inherit.

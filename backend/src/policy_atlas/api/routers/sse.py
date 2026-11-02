@@ -18,7 +18,7 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.sql.elements import ColumnElement
 
 from policy_atlas.api.auth import AuthenticatedUser
-from policy_atlas.api.checkin_read import _check_in
+from policy_atlas.api.check_ins_read import _check_in
 from policy_atlas.api.contract import (
     ArtefactSectionCompletedFrame,
     ArtefactSectionStartedFrame,
@@ -37,8 +37,8 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_settings
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
-from policy_atlas.api.readmodels.repository import walks_of_event_runs
-from policy_atlas.api.routers._access import (
+from policy_atlas.api.read_models.repository import walks_of_event_runs
+from policy_atlas.api.routers.access import (
     accessible_task,
     may_read_task,
     readable_task_exists,
@@ -124,14 +124,14 @@ def _tail(
     first and reading second is two statements, and a revocation committing
     between them was still worth one batch of frames to the caller who had just
     lost access. So the event read is gated by
-    :func:`_access.readable_task_exists` — the same legs, expressed as a
+    :func:`access.readable_task_exists` — the same legs, expressed as a
     predicate rather than a value — and the two do different jobs: the gate
     makes the batch empty, ``may_read_task`` ends the response. Neither
     alone is the fix; the reason both exist is that the response must *close*,
     not merely go quiet.
 
     **The fourth revocation event is now real.** The re-check resolves through
-    `_access._read_legs`, which carries the admin leg, so clearing `is_admin`
+    `access._read_legs`, which carries the admin leg, so clearing `is_admin`
     on a streaming administrator closes their stream on the next batch — no
     second tenancy predicate here, and no edit to this function when the leg
     landed.

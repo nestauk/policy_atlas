@@ -64,7 +64,7 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
     write_summaries_after_commit,
 )
 from policy_atlas.options_scoping.labels import labels_for_snapshots
-from policy_atlas.options_scoping.longlist.longlist_backend import LonglistBackend
+from policy_atlas.options_scoping.scoping_backend import LonglistBackend
 from policy_atlas.options_scoping.suggest.suggest import SuggestBackend
 from policy_atlas.runtime import option_search, steering_events
 from policy_atlas.runtime.agent_backend import (
@@ -6227,6 +6227,8 @@ def _usage_totals(
         "completion": usage["completion"] if isinstance(usage.get("completion"), int) else 0,
         "total": usage["total"] if isinstance(usage.get("total"), int) else 0,
         "cached": usage["cached"] if isinstance(usage.get("cached"), int) else 0,
+        "cache_write": usage["cache_write"] if isinstance(usage.get("cache_write"), int) else 0,
+        "reasoning": usage["reasoning"] if isinstance(usage.get("reasoning"), int) else 0,
     }
 
 

@@ -55,8 +55,8 @@ from policy_atlas.api.longlist_start import (
     open_shortlist_walk,
     opened_run,
 )
-from policy_atlas.api.readmodels import repository
-from policy_atlas.api.routers._access import NOT_FOUND_DETAIL, accessible_task
+from policy_atlas.api.read_models import repository
+from policy_atlas.api.routers.access import NOT_FOUND_DETAIL, accessible_task
 from policy_atlas.api.routers.read_models import _readable
 from policy_atlas.core import tracing
 from policy_atlas.runtime.agent_backend import AgentBackend

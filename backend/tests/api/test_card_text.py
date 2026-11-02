@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 
 from policy_atlas.api.contract.read_models import OptionOut
-from policy_atlas.api.readmodels.card_text import CardText, fit_cards, option_card_text
+from policy_atlas.api.read_models.card_text import CardText, fit_cards, option_card_text
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "option_out_full.json"
 

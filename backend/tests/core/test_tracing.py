@@ -9,6 +9,15 @@ from types import SimpleNamespace
 from typing import Any, Literal, cast
 
 from policy_atlas.core import tracing
+from policy_atlas.core.clustering_engine import (
+    CallBudget,
+    ClusteringPolicy,
+    ClusterLabel,
+    ClusterUnit,
+)
+from policy_atlas.core.clustering_engine import (
+    run_first_assignment_round as engine_run_first_assignment_round,
+)
 from policy_atlas.core.usage import TokenUsage, UsageResult
 from policy_atlas.evidence_search.assess.classify import _ClassifyDoc, _run_classification_calls
 from policy_atlas.evidence_search.assess.classify_prompt import (
@@ -24,15 +33,6 @@ from policy_atlas.evidence_search.assess.screen_prompt import (
     ScreenEnvelopePayload,
     ScreenFullTextPayload,
     ScreenRepWire,
-)
-from policy_atlas.evidence_search.clustering_engine import (
-    CallBudget,
-    ClusteringPolicy,
-    ClusterLabel,
-    ClusterUnit,
-)
-from policy_atlas.evidence_search.clustering_engine import (
-    run_first_assignment_round as engine_run_first_assignment_round,
 )
 from policy_atlas.evidence_search.corpus.ranking import RankedDoc
 from policy_atlas.evidence_search.corpus.select import SelectionCandidate, _rerank_infos, _SignalDoc

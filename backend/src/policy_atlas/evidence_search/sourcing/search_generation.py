@@ -453,6 +453,8 @@ class V2SearchGenerationBackend(OpenAISearchGenerationBackend):
             completion=totals["completion"],
             total=totals["total"],
             cached=totals["cached"],
+            cache_write=totals["cache_write"],
+            reasoning=totals["reasoning"],
         )
 
     @staticmethod

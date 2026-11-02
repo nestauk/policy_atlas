@@ -5,8 +5,8 @@ from __future__ import annotations
 import inspect
 import json
 
+from policy_atlas.core.clustering_engine import ClusterLabel, ClusterUnit
 from policy_atlas.core.model_routes import route
-from policy_atlas.evidence_search.clustering_engine import ClusterLabel, ClusterUnit
 from policy_atlas.evidence_search.group.group import GROUP_PROMPT_VERSION, GROUP_RESIDUAL_LABEL
 from policy_atlas.evidence_search.group.group_clustering import (
     DISCOVERY_GUIDANCE_SYSTEM_PARAGRAPH,

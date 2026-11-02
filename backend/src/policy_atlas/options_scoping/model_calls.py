@@ -51,7 +51,8 @@ def call_with_retry[R, T](
         call: Makes the call.
         check: The checked value of an answer, or ``None`` when it is malformed.
         final_check: When given, checks the LAST attempt in place of ``check``
-            (an answer refused once and accepted on the retry).
+            (a looser test: an answer ``check`` would refuse is still kept if
+            ``final_check`` accepts it on the final attempt).
         event: The log event prefix (``"<event>.call_failed"``,
             ``"<event>.call_malformed"``).
 

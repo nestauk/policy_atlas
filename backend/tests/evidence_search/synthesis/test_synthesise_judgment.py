@@ -34,14 +34,16 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     JudgeResponseWire,
     StubGroundingJudgeBackend,
 )
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     ChunkCitationWire,
     ClaimWire,
     GapPayloadWire,
     SectionProposalWire,
     SectionRepairWire,
-    SectionTurn,
     SectionWire,
+)
+from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+    SectionTurn,
     StubSynthesisBackend,
     SynthesisBackend,
 )

@@ -32,16 +32,16 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict
 
 from policy_atlas.core import tracing
-from policy_atlas.core.model_routes import route
-from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
-from policy_atlas.core.prompt_fields import splice_guidance
-from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
-from policy_atlas.evidence_search.clustering_engine import (
+from policy_atlas.core.clustering_engine import (
     ClusterAssignment,
     ClusteringBackend,
     ClusterLabel,
     ClusterUnit,
 )
+from policy_atlas.core.model_routes import route
+from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
+from policy_atlas.core.prompt_fields import splice_guidance
+from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.group.facet_values import DESCRIPTION_MAX, LABEL_MAX
 
 GROUP_CLUSTERING_PROMPT_VERSION = "group_cluster_v1"

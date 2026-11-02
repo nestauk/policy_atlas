@@ -10,7 +10,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.contract import AuthorshipOut
 from policy_atlas.api.contract.read_models import ClaimOut
-from policy_atlas.api.readmodels import repository
+from policy_atlas.api.read_models import repository
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
     addressable_unit,

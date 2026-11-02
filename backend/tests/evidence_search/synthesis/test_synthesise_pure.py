@@ -14,7 +14,7 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     build_envelope,
     build_judge_messages,
 )
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     KEY_FINDINGS_GAP_MAX,
     ClaimWire,
     GapPayloadWire,
@@ -25,9 +25,9 @@ from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     SectionRepairWire,
     SectionWire,
     SparsitySignalWire,
-    StubSynthesisBackend,
     ThemePayloadWire,
 )
+from policy_atlas.evidence_search.synthesis.synthesis_backend import StubSynthesisBackend
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     ARTEFACT_TITLE_MAX,
     REASONING_CLAIMS_MAX,
@@ -1684,7 +1684,7 @@ def test_key_findings_gap_restatement_caps_at_two() -> None:
 
 def test_validate_case_study_cards_drops_bad_ordinal() -> None:
     """A card with result_ordinal out of range is dropped."""
-    from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+    from policy_atlas.evidence_search.synthesis.section_prompt import (
         CaseStudyCardWire,
         CaseStudyClaimWire,
         CaseStudyWire,

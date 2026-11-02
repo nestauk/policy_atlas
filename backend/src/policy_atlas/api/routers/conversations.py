@@ -57,7 +57,7 @@ from policy_atlas.api.deps import (
     get_engine,
     get_grounding_judge_backend,
 )
-from policy_atlas.api.routers._access import (
+from policy_atlas.api.routers.access import (
     accessible_task,
     admin_read_leg,
     chat_mutable_task,
@@ -101,7 +101,7 @@ _PREVIEW_MAX_CHARS = 240
 #: Label :func:`_graded_conversation`'s read path carries beside the row: did
 #: the creator/owner grade match on its own? ``False`` means the admin leg is
 #: what resolved the row, which is what the trace records. Mirrors
-#: ``_access._OWN_LEG`` for the task/project helpers; kept as its own
+#: ``access._OWN_LEG`` for the task/project helpers; kept as its own
 #: constant because the predicate it labels is this router's, not the shared
 #: estate one.
 _OWN_GRADE = "own_grade_matched"
@@ -212,7 +212,7 @@ def _graded_conversation(
     if write:
         statement = statement.where(own_grade)
     else:
-        # COALESCEd for the same reason `_access._own_leg_column` is: every
+        # COALESCEd for the same reason `access._own_leg_column` is: every
         # disjunct of `own_grade` compares a **nullable** column to the
         # caller's subject (`task.owner_user_id`, `conversation.created_by`),
         # so on a task with no owner the predicate is SQL NULL rather than

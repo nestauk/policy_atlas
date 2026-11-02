@@ -15,15 +15,10 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     build_envelope,
     build_judge_messages,
 )
-from policy_atlas.evidence_search.synthesis.summary_prompts import (
-    ARTEFACT_SUMMARY_SYSTEM_PROMPT,
-    SUMMARISER_PROMPT_VERSION,
-)
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     CASE_STUDIES_PROMPT_VERSION,
     CASE_STUDIES_SYSTEM_PROMPT,
     EMIT_SECTION_TOOL_SCHEMA,
-    FORBIDDEN_SECTION_TITLES,
     FULL_REPORT_INTRO_PROMPT_VERSION,
     KEY_FINDINGS_GAP_MAX,
     KEY_FINDINGS_PROMPT_VERSION,
@@ -47,6 +42,11 @@ from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     build_section_repair_messages,
     build_sections_messages,
 )
+from policy_atlas.evidence_search.synthesis.summary_prompts import (
+    ARTEFACT_SUMMARY_SYSTEM_PROMPT,
+    SUMMARISER_PROMPT_VERSION,
+)
+from policy_atlas.evidence_search.synthesis.synthesis_backend import FORBIDDEN_SECTION_TITLES
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     REASONING_CLAIMS_MAX,
     SECTION_CAP,

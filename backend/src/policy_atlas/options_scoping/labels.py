@@ -189,7 +189,7 @@ def labels_for_snapshots(
         and its links hold no label for the document.
     """
     # Imported here: the read models import this module, so a module-level import cycles.
-    from policy_atlas.api.readmodels.repository import latest_row_by_id
+    from policy_atlas.api.read_models.repository import latest_row_by_id
 
     ids = set(tss_ids)
     if not ids:

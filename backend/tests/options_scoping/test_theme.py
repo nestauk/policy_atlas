@@ -25,7 +25,7 @@ from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTAT
 from policy_atlas.core import events
 from policy_atlas.core.schema import longlist_result, option
 from policy_atlas.options_scoping.context import ScopeContext
-from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
+from policy_atlas.options_scoping.scoping_backend import StubLonglistBackend
 from policy_atlas.options_scoping.theme.theme import (
     ThemeFailure,
     theme_ceiling,

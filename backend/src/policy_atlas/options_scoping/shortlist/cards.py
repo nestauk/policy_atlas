@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy.engine import Connection
 
 if TYPE_CHECKING:
-    from policy_atlas.api.readmodels.card_text import CardText
+    from policy_atlas.api.read_models.card_text import CardText
 
 
 def option_cards(
@@ -38,8 +38,8 @@ def option_cards(
         The card text by option id; an option the read model cannot find is
         left out.
     """
-    from policy_atlas.api.readmodels import repository
-    from policy_atlas.api.readmodels.card_text import option_card_text
+    from policy_atlas.api.read_models import repository
+    from policy_atlas.api.read_models.card_text import option_card_text
 
     cards: dict[uuid.UUID, CardText] = {}
     for option_id in option_ids:
@@ -50,7 +50,7 @@ def option_cards(
 
 
 def fit_option_cards(cards: Sequence[CardText], budget: int) -> tuple[list[str], int]:
-    """Fit the cards under the budget (:func:`~policy_atlas.api.readmodels.card_text.fit_cards`).
+    """Fit the cards under the budget (:func:`~policy_atlas.api.read_models.card_text.fit_cards`).
 
     Args:
         cards: The cards, in the order the request lists them.
@@ -59,6 +59,6 @@ def fit_option_cards(cards: Sequence[CardText], budget: int) -> tuple[list[str],
     Returns:
         The rendered cards and the number of document lines cut.
     """
-    from policy_atlas.api.readmodels.card_text import fit_cards
+    from policy_atlas.api.read_models.card_text import fit_cards
 
     return fit_cards(cards, budget)
