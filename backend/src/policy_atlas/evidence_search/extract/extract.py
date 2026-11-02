@@ -150,7 +150,9 @@ WINDOW_OVERLAP_CHUNKS = 1
 OVERSIZE_SUBSEGMENT_OVERLAP = 1_000
 OVERSIZE_POLICY = "char_split_v1"
 EXTRACT_RETRY_CAP = 1
-MAX_CONCURRENT_EXTRACT = 4
+#: Extraction and vetter calls in flight at once; 8, not 4 (task 056, owner 2026-11-02),
+#: so a request stalled at the provider holds an eighth of the pool, not a quarter.
+MAX_CONCURRENT_EXTRACT = 8
 EXTRACTION_PROFILE = PROFILE_ID
 #: The profiles an Evidence search extraction directive may name (the ES
 #: grammar; ``task_plan.EXTRACT_PROFILE_IDS`` pins it at import).

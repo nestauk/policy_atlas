@@ -131,7 +131,10 @@ class OpenAIExtractionBackend:
         self._client = resolve_openai_client(
             api_key,
             backend_name="OpenAIExtractionBackend",
-            timeout=300.0,
+            # 60 s, not 300 (task 056, owner 2026-11-02): the median extract call is 5 s and
+            # the pre-GPT-6 tail 18 s; a request that stalls at the provider is retried after
+            # a minute instead of five, so one stall no longer parks a worker for ten minutes.
+            timeout=60.0,
             max_retries=2,
         )
         self._langfuse_client = langfuse_client
@@ -217,7 +220,10 @@ class OpenAIICFExtractionBackend:
         self._client = resolve_openai_client(
             api_key,
             backend_name="OpenAIICFExtractionBackend",
-            timeout=300.0,
+            # 60 s, not 300 (task 056, owner 2026-11-02): the median extract call is 5 s and
+            # the pre-GPT-6 tail 18 s; a request that stalls at the provider is retried after
+            # a minute instead of five, so one stall no longer parks a worker for ten minutes.
+            timeout=60.0,
             max_retries=2,
         )
         self._langfuse_client = langfuse_client
@@ -461,7 +467,10 @@ class OpenAIInterventionsBackend:
         self._client = resolve_openai_client(
             api_key,
             backend_name="OpenAIInterventionsBackend",
-            timeout=300.0,
+            # 60 s, not 300 (task 056, owner 2026-11-02): the median extract call is 5 s and
+            # the pre-GPT-6 tail 18 s; a request that stalls at the provider is retried after
+            # a minute instead of five, so one stall no longer parks a worker for ten minutes.
+            timeout=60.0,
             max_retries=2,
         )
         self._langfuse_client = langfuse_client
