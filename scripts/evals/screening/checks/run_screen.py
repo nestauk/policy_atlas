@@ -128,7 +128,9 @@ def use_settings(
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
         label = f"{system_prompt.stem}@{digest}"
     product_backend.SCREEN_MODEL = model
-    product_backend.SCREEN_FULL_MODEL = model  # task 056: the full-text stage is its own step
+    product_backend.SCREEN_FULL_MODEL = (
+        model  # task 056: the full-text stage is its own step
+    )
     product_backend.parse_structured = _PRODUCTION["parse"]
     if effort is not None:
         product_backend.parse_structured = functools.partial(

@@ -323,10 +323,30 @@ def test_note_wire_shape() -> None:
 
 
 def test_summariser_prompt_carries_voice_and_bans_confidence() -> None:
-    assert SUMMARISER_PROMPT_VERSION == "summariser_v2"
+    assert SUMMARISER_PROMPT_VERSION == "summariser_v3"
     assert VOICE_PRINCIPLES in ARTEFACT_SUMMARY_SYSTEM_PROMPT
     assert "no confidence language" in ARTEFACT_SUMMARY_SYSTEM_PROMPT
     assert "In brief" in ARTEFACT_SUMMARY_SYSTEM_PROMPT
+
+
+def test_summariser_v3_and_judge_v2_carry_the_task_056_rules() -> None:
+    """Task 056 O3: gaps stay gaps, labels travel, the retry carries the judge's reason,
+    and the judge decides by "would a reader who never opens the detail be misled"."""
+    from policy_atlas.evidence_search.synthesis.summary_prompts import (
+        BLOCK_SUMMARY_SYSTEM_PROMPT,
+        SUMMARY_JUDGE_PROMPT_VERSION,
+        SUMMARY_JUDGE_SYSTEM_PROMPT,
+    )
+
+    for prompt in (BLOCK_SUMMARY_SYSTEM_PROMPT, ARTEFACT_SUMMARY_SYSTEM_PROMPT):
+        assert "Gaps stay gaps." in prompt
+        assert "Labels travel." in prompt
+        assert "`previous_attempt`" in prompt
+    assert SUMMARY_JUDGE_PROMPT_VERSION == "summary_judge_v2"
+    assert "would a reader who never" in SUMMARY_JUDGE_SYSTEM_PROMPT
+    assert "Omission alone is never a fault" in SUMMARY_JUDGE_SYSTEM_PROMPT
+    assert "Be strict" not in SUMMARY_JUDGE_SYSTEM_PROMPT
+    assert "quote the summary words at fault" in SUMMARY_JUDGE_SYSTEM_PROMPT
 
 
 # --- grounding_judge_v2 ---

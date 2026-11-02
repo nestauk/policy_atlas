@@ -6943,24 +6943,56 @@ def _summary_format_violation(summary: str, *, seed: dict[str, Any]) -> str | No
     return None
 
 
+# Plain sentences sent back to the writer when its last summary failed the
+# deterministic format floor (task 056 X2: the retry carries the reason).
+_SUMMARY_FORMAT_RETRY_REASON = {
+    "over_length": "The summary was over the length limit; write one shorter sentence.",
+    "citation_markers": (
+        "The summary carried citation markers like [3]; a summary carries no citations."
+    ),
+}
+
+
 def _write_and_judge_summary(
     *,
     synthesis_backend: SynthesisBackend,
     seed: dict[str, Any],
     detail: dict[str, Any],
 ) -> dict[str, Any]:
+    """Write a summary and judge it, retrying with the last failure's reason.
+
+    A retry sends the writer the original seed plus ``previous_attempt``: the
+    summary that failed and why (the judge's reason, or a plain sentence for a
+    format violation). Only the latest failed attempt is carried.
+    """
     totals = UsageAccumulator()
     writer_calls = 0
     judge_calls = 0
+    previous_attempt: dict[str, str] | None = None
     for attempt in range(SUMMARY_REGENERATE_CAP + 1):
+        if previous_attempt is not None:
+            log.info(
+                "synthesise.summary_retry",
+                attempt=attempt,
+                reason=previous_attempt["judge_reason"][:200],
+            )
+        writer_seed = (
+            seed if previous_attempt is None else {**seed, "previous_attempt": previous_attempt}
+        )
         try:
-            emitted, usage = synthesis_backend.write_block_summary(seed)
+            emitted, usage = synthesis_backend.write_block_summary(writer_seed)
             writer_calls += 1
             totals.add(usage)
             format_reason = _summary_format_violation(emitted.summary, seed=seed)
             if format_reason is not None:
                 log.warning("synthesise.summary_format_violation", reason=format_reason)
                 if attempt < SUMMARY_REGENERATE_CAP:
+                    previous_attempt = {
+                        "summary": emitted.summary,
+                        "judge_reason": _SUMMARY_FORMAT_RETRY_REASON.get(
+                            format_reason, format_reason
+                        ),
+                    }
                     continue
                 return {
                     "status": "failed",
@@ -6998,6 +7030,7 @@ def _write_and_judge_summary(
                 "usage_totals": totals.payload(),
             }
         if attempt < SUMMARY_REGENERATE_CAP:
+            previous_attempt = {"summary": emitted.summary, "judge_reason": verdict.reason}
             continue
         return {
             "status": "failed",

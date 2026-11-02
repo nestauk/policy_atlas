@@ -20,12 +20,18 @@ file; *Langfuse* is the tracing tool that records every model call and its token
 |---|---|---|---|
 | 1 | Build open, HEAD c17da9eb (run while five agents edited the tree) | `make verify` | backend 3,804 passed, **1 failed**: `tests/runtime/test_option_search.py::test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent` (`_await_statuses` 10 s poll deadline exceeded under load). Re-run alone on the same DB: 1 passed in 2.75 s. Load-induced timing flake, not a code red. Later stages did not run (make stops at the first red); Gate 2 is the first full green run. |
 | 2 | End of Phase 0, tree at d14d3f33 | `make verify` | **green**: okf-validate pass; backend 3,754 passed, 1 skipped (642 s); infra 95 passed; audit-paths, prompt-guard (41 files), font-guard, drift-check pass; frontend 938 tests in 88 files pass. |
+| A | Phase 1 commit A (steps, effort plumbing) | `make verify-fast` + prompt-guard | 3,764 passed, **1 failed** (`test_bedrock_names_bedrock_models_and_cohere`: six stale old-step names in the lead's own loader test); fixed, that file + the kwargs test re-run: 100 passed; typecheck and lint clean; prompt-guard 41 unchanged after the re-pin. |
+| B | Phase 1 commit B (the switch) | `make verify-fast` + prompt-guard | 3,759 passed, **9 failed**: four extraction-fingerprint pins (iof/icf × stub/live), four intervention-profile fingerprint pins and one `kwargs["model"] == "gpt-5.6-luna"` assert — every one a value that embeds the model id, which the switch changes by design; re-pinned, those three files re-run: 60 passed. Prompt-guard unchanged (no prompt file touched). |
+| C | Phase 1 commit C (O3 prompts, X2) | `make verify-fast` + prompt-guard | backend tests all passed, typecheck and lint clean; **`eval-check` red** on `ruff format --check scripts/evals/screening` (one comment line from commit A's `run_screen.py` edit; the A and B gates stopped before `eval-check` ran); formatted, `make eval-check` re-run: exit 0. Prompt-guard 41 unchanged after the `summary_prompts.py` re-pin. |
 
 Per-phase commits on `task/056-cost-latency`:
 
 | Phase | Commit | Gate |
 |---|---|---|
 | 0 | d14d3f33 | 2 (full) |
+| 1 A | 3a2b5ba3 | A (verify-fast) |
+| 1 B | 7561a822 | B (verify-fast) |
+| 1 C | (see git log) | C (verify-fast) |
 
 ## Phase 0 — instrument, baseline, tidy (N1, D11, D2a, tidy-ups)
 
@@ -173,6 +179,80 @@ sub-sites); 0 disagreements with the plan's § Steps table; identical when captu
 selects it). The chat entries have no trace name (the span opens in `api/answer_core.py`).
 Extraction fingerprints pinned: `extraction_fingerprint('live', finding_vetter_active=True)` =
 `e2ded5c8…7400c`, ICF `95b9b1c0…abc3b8`.
+
+## Phase 1 — steps, effort plumbing, the switch, the prompt loop (N2, N6, D2, D4, D9, O3, X1, X2, X4)
+
+### Commit A (3a2b5ba3): one route step per call site, effort from the route file (D4, D9)
+
+- `model_routes.toml`: `[steps]` now lists 56 steps (one per model call site; section turns +
+  repair share `synthesise_section_turn` and the three chat calls share `chat`, by contract),
+  each `{ tier, reasoning_effort }`. The model-keyed `knobs.reasoning_effort` table is gone.
+  Today's efforts written out: `high` on classify, the two finding vetters and the relevance
+  annotator (the four deleted constants); `none` on the eight Terra sites that read the knob;
+  `medium` on every step that sent nothing (the provider default, probe b).
+- `core/model_routes.py`: `Route.effort_for(step)`; a step exception is a bare tier/model id
+  or a table with `model` and/or `reasoning_effort`; fail loud on stray keys, unknown effort
+  values, an empty table and a leftover `knobs` table.
+- `core/openai_client.py`: `openai_kwargs(model, *, reasoning_effort)`, `parse_structured` and
+  `traced_parse` take the effort (required keyword) and record it in the span metadata.
+- The 58 call sites (fast-worker sweep from the lead's table): every site passes
+  `route().effort_for(<its step>)`; `_synthesis_openai_kwargs()` became per-step
+  `_step_kwargs(step)`; the summary judge has its own kwargs; the source-note and intro sites
+  now send `medium` explicitly; `scoping_backend._call` derives the step from the trace name
+  (`longlist:discover` → `longlist_discover`); the Task Agent profiles carry `step`.
+- Safety net: `test_call_site_kwargs.py` re-captures every site's kwargs against the Phase 0
+  fixture — the only difference was `reasoning_effort: null → "medium"` on the 44 sites that
+  sent nothing (44 of 44 diffs, nothing else); `test_model_routes.py` pins (model, effort) per
+  step on all three routes; the extraction fingerprint kept its value (`e2ded5c8…`).
+- Code-only re-pins (11 pinned modules, diffs saved as `p1-commitA-repin-diffs.patch` in the
+  scratchpad and summarised here): `classify_prompt.py`, `screen_prompt.py`, `ranking.py`,
+  `theme_grouping.py`, `finding_vetter.py`, `icf_prompt.py`, `interventions_prompt.py`,
+  `iof_prompt.py`, `group_clustering.py`, `search_prompts.py`, `grounding_judge.py` — model
+  and effort lookup lines, imports, one closing brace; no prompt text changed (checked line by
+  line).
+- Two eval scripts updated for the new signatures (`scripts/evals/search/experiments/snowball_recall.py`,
+  `scripts/evals/screening/checks/run_screen.py`).
+
+### Commit B (7561a822): the switch (D2)
+
+Tiers on all three routes: `fast` gpt-6-luna, `standard` gpt-6.1-terra, `frontier` gpt-6.1-sol;
+the thirteen frontier steps' effort `medium → low` (Sol refuses `none`; owner 2026-11-01). The
+kwargs fixture re-captured: the diff is exactly 59 model ids, 44 efforts (31 `medium`, 13 `low`)
+and the two extraction fingerprints (they embed the extraction model id: `708e0aed…` /
+`4baac912…` live-vetted). Nine model-bearing test pins re-pinned (listed in the gates table).
+
+### O3: the summary judge and the two summariser prompts (lead, prompt-bearing), with X2
+
+Replays on gpt-6.1-terra at `none`, 90 labelled items (45 should pass, 45 corrupted should fail)
+plus the 20 adjudicated: `experiments/summary-judge-v2-replay-2026-11-02.md` (round 1) and
+`summary-judge-v2b-replay-2026-11-02.md` (round 2).
+
+| Judge | True pass | False fail | True fail | False pass |
+|---|---|---|---|---|
+| `summary_judge_v1` (today) | 27 | 18 | 45 | 0 |
+| draft A | 21 | 24 | 45 | 0 |
+| **`summary_judge_v2` (draft B, shipped)** | **28** | **17** | **45** | **0** (both passes; repeat agreement 43/45) |
+
+Round 1 showed draft A coherent with its own standard (19 of 24 failed positives were the
+summariser's gap wording). Draft B fails only wording that asserts a fact about the world,
+lets scope words drop when the shorter gap stays true, treats an assumption's content as carried
+unless asserted as fact, and makes "would a reader who never opens the detail be misled" the
+deciding question with omission never a fault. Adjudicated items under v2: UNSUPPORTED 7/7 fail;
+FAITHFUL 2/4 pass (pos-15 read as widening a neighbourhood-scoped gap; pos-35 as the reasoning
+label stated as fact — both defensible strict readings, owner's read); BORDERLINE 4/9 pass. Every
+fail reason quotes the summary words at fault (69/69 vs 6/63 under v1).
+
+Writer `summariser_v3` (gaps stay gaps; labels travel; a `previous_attempt` rule) regenerating
+the 45 positives, judged by v2: first attempt **42/45** vs 37/45 for today's writer; both 45/45
+after one retry carrying the judge's reason. Length: mean 170 chars (v2 165), 4/45 over 200
+(ceiling 300). Cost: +262 input tokens per judge call (+6.5%), latency unchanged.
+
+X2 (deep-reasoner): `_write_and_judge_summary` sends `{**seed, "previous_attempt": {"summary",
+"judge_reason"}}` on a retry (judge reason, or a plain sentence for `over_length` /
+`citation_markers`), only the latest attempt, first attempt unchanged; one `synthesise.summary_retry`
+log per retry; three tests in `test_summary_runtime.py`. Re-pin: `summary_prompts.py` (the
+diff is the three summariser rules in both prompts, the judge's rules block, the version bumps
+and the module docstring; saved as `p1-commitC-summary_prompts.patch`).
 
 ## Checks beyond the build
 
