@@ -37,7 +37,10 @@ file; *Langfuse* is the tracing tool that records every model call and its token
 | 6e | Step-6 exit re-run, tree = 8d841e2d (longlist client timeout 60 s) | `make verify` | **green** (exit 0) in 475 s: backend 3,884 passed, 1 skipped (381 s on 8 workers); frontend 943; every other step OK. |
 | 6f | Seven client timeouts to 60 s + worker-database names with the process id | `make verify` | backend 3,883 passed, **1 failed**: `test_slow_first_job_does_not_delay_later_jobs` (completion order `[1, 2, 0, 3]`) under eight workers plus the live scoping run; alone 3 of 3 passes; the slow job's sleep widened 4 s → 10 s (assertion unchanged). |
 | 6g | Same tree + the test margin | `make verify` | backend 3,884 passed (423 s), mypy clean; **prompt-guard red**: `finding_vetter.py` drifted on its timeout line (a pinned prompt surface; diff `p-timeouts-repin-diffs.patch`); re-pinned. |
-| 6h | Step-6 exit, final tree = c8a3bfff | `make verify` | **green** (exit 0) in 462 s: backend 3,884 passed, 1 skipped (367 s on 8 workers); mypy 439 files; prompt-guard 41 unchanged; drift-check OK; frontend 943 tests. |
+| 6h | Seven timeouts tree = c8a3bfff | `make verify` | **green** (exit 0) in 462 s: backend 3,884 passed, 1 skipped (367 s on 8 workers); mypy 439 files; prompt-guard 41 unchanged; drift-check OK; frontend 943 tests. |
+| 6i | tornado 6.6 in the lock file | `make verify` (with `make audit` alongside: clean) | backend 3,883 passed, **1 failed**: `test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent` (10 s poll deadline; the same test as Gate 1's flake) under eight workers plus the audit's install; alone 2 of 2. |
+| 6j | Same tree, machine idle | `make verify` | the same test **failed again** (no child status within 10 s), so it is not a rare flake under the parallel suite; the two 10 s deadlines in `test_option_search.py` widened to 30 s, assertions unchanged. |
+| 6k | Step-6 exit, final tree = f08293c9 | `make verify` | **green** (exit 0) in 451 s: backend 3,884 passed, 1 skipped (359 s on 8 workers); prompt-guard 41 unchanged; drift-check OK; frontend 943. |
 | 4 | End of Phase 3 (schema), tree = Phase 2 A + the Phase 3 patch | `make verify` | **green**: 3,812 passed, 1 skipped (674 s); build, infra 95, audit-paths, prompt-guard, font-guard, drift-check OK; frontend 939 tests in 88 files. |
 
 Per-phase commits on `task/056-cost-latency`:
@@ -61,6 +64,7 @@ Per-phase commits on `task/056-cost-latency`:
 | suite on every core | c34ec5e7 | 6d (full) |
 | longlist timeout | 8d841e2d | 6e (full) |
 | seven timeouts, worker-db pid, test margin | c8a3bfff | 6h (full) |
+| tornado 6.6, option-search waits | f08293c9 | 6k (full) |
 
 ## Phase 0 — instrument, baseline, tidy (N1, D11, D2a, tidy-ups)
 
@@ -822,8 +826,9 @@ contract's vocabulary and listed here so the review sees them:
   (`p2-commitB-repin-diffs.patch`); `finding_vetter.py` for its timeout line
   (`p-timeouts-repin-diffs.patch`). Deliberate prompt changes: P1 C `summary_prompts.py` (O3) and
   `grounding_judge.py` (v3, the owner's prompt pass).
-- **A test margin widened:** the ingest scheduler's completion-order test sleeps its slow job 10 s,
-  not 4, after a load-induced red under the parallel suite; the assertion is unchanged.
+- **Test margins widened:** the ingest scheduler's completion-order test sleeps its slow job 10 s,
+  not 4; the option-search tests' two poll deadlines are 30 s, not 10 (that test failed twice under
+  the eight-worker suite, once on an idle machine). Assertions unchanged in both.
 - **Test pins that embed a model id or an effort** re-pinned at P1 B (nine) and P5 (two
   literal `"high"` asserts, two vetted extraction fingerprints).
 - **P2 A:** `extra_tool_calls_ignored` is counted on the loop result and span metadata, not
@@ -894,7 +899,8 @@ the reason; ✗ not satisfied, with the reason; ☐ belongs to a later step.
 15. ◐ Fixed questions ran after the model-only switch (costs and session ids recorded) and at the
     end (the final set, twice for NEET, four times for scoping as the fixes landed), with NEET on
     `openai-direct` twice; the set "after the prompt loop" was collapsed into the final set
-    (recorded deviation). The owner's reads of the reports are not yet recorded (owner item).
+    (recorded deviation). The owner read the final reports at the end of the build ("The reports
+    look fine"); the intermediate reads were not taken separately.
 16. ✓ O3 and N6: judge v2 and writer v3 refined together; 0 of 45 corrupted summaries pass; the 20
     adjudicated items re-run; first-attempt pass rate on the fixed questions not lower (above); X2
     retries carry the judge's reason; re-pins recorded.
@@ -906,14 +912,14 @@ the reason; ✗ not satisfied, with the reason; ☐ belongs to a later step.
     explicit-mode gap found on the first final run and fixed (12c31228).
 20. ◐ D8 and D10 built and tested; read and write shares per call name recorded before and after
     (section turns from 62% written to 66 to 73% read; one-shot sites from 86 to 100% written to 0%).
-    The owner's read is not yet recorded.
+    The owner's read of the final reports: fine.
 21. ✓ X3: the `lookup` tool offers only servable kinds; unservable lookups before = 2.22
     `characterisation_summary` per older scoping session (the contract's "4 to 7" overstated) and
     8, 5 and 9 `grouping_groups` on the three baseline Evidence search runs; after = 0 on every
     final session (eight sessions), with total lookups per run down from 16 to 24 to 2 to 9.
 22. ◐ D7 and S1 to S3 built as listed (null score + `unrated`, check untouched, consistency check,
     steering filter, citable, "Unrated" to writer and reader, coverage bucket, rubric version bumped
-    with a compatibility set, specs amended). The owner's read is not yet recorded.
+    with a compatibility set, specs amended). The owner's read of the final reports: fine.
 23. ✓ N5: windowing through the existing helper; repair input per call before and after recorded;
     pass rate not lower.
 24. ✓ N7: classify and the two vetters at `medium` on replay evidence with tokens, reasoning tokens
@@ -931,8 +937,8 @@ the reason; ✗ not satisfied, with the reason; ☐ belongs to a later step.
     (33% on obesity, 1 to 9% on NEET, 0 on zonal); chunk quality read on the three JATS fixtures only,
     not on the live runs.
 29. ◐ O1: the final Evidence search median ($1.14 against the $2 target) and the scoping run on
-    the finished tree ($1.08, 24.6 min) are recorded with the per-phase path; the owner's reads of
-    the reports and the longlist are the open part.
+    the finished tree ($1.08, 24.6 min) are recorded with the per-phase path; the owner read the
+    final reports and the longlist: fine.
 
 ## Intent & assumptions
 
@@ -950,9 +956,9 @@ the reason; ✗ not satisfied, with the reason; ☐ belongs to a later step.
 
 ## Known unverified items
 
-- The owner's reads of the fixed-question reports and the pinned longlist (contract: after P1 twice,
-  P2, P3; the quality guard for O1) are not yet recorded; the counts in § Final fixed-question set
-  are the build's only quality evidence.
+- The owner read the final reports and the final longlist at the end of the build conversation
+  (2026-11-02): "The reports look fine." Recorded as the O1 quality read for the final tree; the
+  contract's intermediate reads (after P1 twice, P2, P3) were not taken separately.
 - The `breakpoint` content part on the `bedrock-claude` route (unmeasured; no route selects it today).
 - N8 on staging (2 CPUs): parse wall time measured on a laptop only.
 - Chunk quality of the XML route on live documents (fixtures only).
@@ -960,10 +966,9 @@ the reason; ✗ not satisfied, with the reason; ☐ belongs to a later step.
   first whole-run exercise; `longlist_constrain` and `longlist_distinct` moved on a measure that
   could not separate configurations (no "breaks", no duplicate in any stored output).
 - The 124 timed-out provider requests during the cache measurement (cause unknown; outside the slice).
-- `make audit` (run because `pytest-xdist` was added) reports three CVEs on tornado 6.5.10 (fix
-  6.6), a transitive dev dependency of ipykernel locked before this task; the xdist change adds only
-  pytest-xdist 3.8.0 and execnet 2.1.2. The bump is a dependency change for the owner to approve;
-  `make audit` is not part of `make verify`.
+- `make audit` (run because `pytest-xdist` was added) reported three CVEs on tornado 6.5.10, a
+  transitive dev dependency of ipykernel locked before this task; the owner approved the bump and
+  tornado moved to 6.6 (commit f08293c9; audit clean after it).
 
 ## Public safety
 
@@ -979,10 +984,11 @@ only ids, names, timestamps, models and token counts (test-enforced). No report 
   repair threshold, the effort pins kept at `high` and `fast`, references left out of the JATS
   parse and the Europe PMC rate, the socket-guard test change, ignored extra tool calls not
   persisted, embedding dominating ingest on bedrock) and ratified every one; rubric item 13 was
-  rewritten on the owner's instruction to carry the frontier rulings. Still open for the owner:
-  the reads of the final reports and the longlist; N8 on staging after deploy; whether the
-  N8 on staging after deploy. The owner also asked for the two prompt passes (X1, X4) in this
-  slice: the judge pass shipped, the extractor pass did not beat the incumbent (§ Prompt pass).
+  rewritten on the owner's instruction to carry the frontier rulings. The owner also asked for
+  the two prompt passes (X1, X4) in this slice (the judge pass shipped, the extractor pass did not
+  beat the incumbent, § Prompt pass), reviewed the client timeouts, chose the parallel test suite,
+  approved the tornado bump, and read the final reports and the longlist at the end of the build
+  ("The reports look fine"). Still open for the owner: N8 on staging after deploy.
 - **Adjudication items:** the re-pins without prompt-text change (P0, P2 A, P2 B); the
   session-total comparison basis; the wire models moving into the pinned prompt module;
   unattended steering for the fixed questions; the frontier pins awaiting the owner's read (P5);
@@ -1034,6 +1040,8 @@ only ids, names, timestamps, models and token counts (test-enforced). No report 
     succeed on retry, on both routes and both model generations; the per-client timeout, not the
     model, sets what a stall costs (a 300 s timeout on a 5 s call parks a worker for ten minutes).
     Size timeouts to the call's real tail and keep the retry.
+  - A test that polls with a fixed deadline sized for one core fails under a parallel suite; the
+    fix is the deadline, not the assertion (two tests widened today, both after re-runs alone passed).
   - Two pytest-xdist suites on one Postgres collide, because their workers share the names
     gw0, gw1, ...: a per-worker database name needs the process id as well.
   - The healthy tail of a model call, not the model, should set a client's timeout: 60 s covered
