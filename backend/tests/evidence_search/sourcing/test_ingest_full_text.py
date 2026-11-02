@@ -417,9 +417,15 @@ def test_timeout_does_not_swallow_completed_sibling() -> None:
 def _short_sleep_by_marker_parse(
     body: bytes, content_type: str, thin_min: int  # noqa: ARG001
 ) -> dict[str, Any]:
-    """Picklable double: the marked body takes a few seconds, others are instant."""
+    """Picklable double: the marked body takes ten seconds, others are instant.
+
+    Ten, not four: under a parallel test run plus a live run on the same machine the
+    forkserver's per-job start took over a second a job, and the third quick job
+    landed after the slow one (task 056 gate, 2026-11-02). The margin keeps the
+    completion-order assertion honest without weakening it.
+    """
     if body == b"slow":
-        time.sleep(4)
+        time.sleep(10)
     return {"status": "ok", "chunks": [{"content": body.decode(), "locator": {}}],
             "parse_profile": "p", "segmentation_policy": "s"}
 

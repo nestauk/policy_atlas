@@ -53,8 +53,8 @@ os.environ.setdefault("POLICY_ATLAS_FIXTURE_CORPUS", str(Path(__file__).parent /
 # One test database per pytest-xdist worker (task 056, owner 2026-11-02). `make test`
 # runs the suite on every core; the workers would otherwise share one Postgres
 # database and trip over each other's rows. Each worker takes the database named in
-# DATABASE_URL, appends its worker id (``policy_atlas_test_gw3``), creates that
-# database fresh, and rewrites DATABASE_URL for its own process, so every later
+# DATABASE_URL, appends its worker id and process id (``policy_atlas_test_gw3_8123``),
+# creates that database fresh, and rewrites DATABASE_URL for its own process, so every later
 # reader of the variable (the engine fixture, the migration and API tests) sees the
 # worker's copy. The engine fixture then runs the migrations on it as before. The
 # copies are dropped when the worker finishes. A run without xdist (``-p no:xdist``,
@@ -68,7 +68,9 @@ if _WORKER and os.environ.get("DATABASE_URL"):
     _name, _, _query = _name.partition("?")
     if not _name.lower().endswith("_test"):
         raise RuntimeError(f"refusing to copy a test database not named *_test: {_name!r}")
-    _worker_name = f"{_name}_{_WORKER}"
+    # The process id keeps two suites running at once on one Postgres apart (their
+    # workers share the names gw0, gw1, ...).
+    _worker_name = f"{_name}_{_WORKER}_{os.getpid()}"
     # psycopg wants the plain scheme, not SQLAlchemy's "postgresql+psycopg".
     _base_dsn = _base_url.replace("postgresql+psycopg://", "postgresql://", 1)
     # The base database already exists (make reset-test-db); connect to it in

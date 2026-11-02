@@ -523,7 +523,7 @@ class OpenAIFindingVetterBackend:
         self._client = resolve_openai_client(
             api_key,
             backend_name="OpenAIFindingVetterBackend",
-            timeout=180.0,
+            timeout=60.0,
             max_retries=2,
         )
         self._langfuse_client = langfuse_client
@@ -614,7 +614,7 @@ class OpenAIICFFindingVetterBackend:
         self._client = resolve_openai_client(
             api_key,
             backend_name="OpenAIICFFindingVetterBackend",
-            timeout=180.0,
+            timeout=60.0,
             max_retries=2,
         )
         self._langfuse_client = langfuse_client

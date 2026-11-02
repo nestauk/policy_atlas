@@ -158,7 +158,7 @@ class OpenAISearchGenerationBackend:
         self._client = resolve_openai_client(
             api_key,
             backend_name="OpenAISearchGenerationBackend",
-            timeout=120.0,
+            timeout=60.0,
             max_retries=2,
         )
         self._langfuse_client = langfuse_client
