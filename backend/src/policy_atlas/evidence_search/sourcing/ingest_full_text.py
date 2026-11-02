@@ -5,7 +5,7 @@ provider fields task 007 retained, fetch through the ``DocumentFetcher`` seam
 (current build: fixture replay of committed real, openly-licensed documents — zero
 runtime egress until the live-fetcher slice opens that gate; live fetching is
 v3.0-required, see docs/deferred.md), parse structure-aware (PDF via pymupdf4llm,
-HTML via trafilatura), segment
+HTML via trafilatura, Europe PMC JATS XML via ``parse_jats``), segment
 under named versioned policies, and attach the resulting immutable ``full_text``
 snapshot to the corpus document via ``task_source_snapshot.full_text_snapshot_id``
 (ADR 0003).
@@ -26,6 +26,7 @@ import functools
 import json
 import os
 import re
+import threading
 import time
 import uuid
 from collections import deque
@@ -34,6 +35,7 @@ from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from multiprocessing import get_context
+from multiprocessing.connection import wait as mp_wait
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import quote, unquote, urljoin, urlsplit
@@ -52,6 +54,7 @@ from policy_atlas.core.embeddings import (
     embed_pending_chunks,
 )
 from policy_atlas.core.hashing import content_hash
+from policy_atlas.core.liveness import publish_current_tick
 from policy_atlas.core.schema import (
     chunk as chunk_table,
 )
@@ -60,6 +63,7 @@ from policy_atlas.core.schema import (
     source_snapshot,
     task_source_snapshot,
 )
+from policy_atlas.evidence_search.sourcing.parse_jats import parse_jats
 
 log = structlog.get_logger()
 
@@ -100,12 +104,14 @@ FETCH_BYTE_CAP = 100 * 1024 * 1024  # generous guard, never a scissor (decision 
 PARSE_TIMEOUT_SECONDS = 120.0  # hard per-document parse timeout; worker is terminated
 # (120s: user-set 2026-07-05 — generous for a 200+-page report; fan-out absorbs the tail)
 THIN_TEXT_MIN_CHARS = 200  # below this, parsed text is a failure, never "ok" (decision 7)
-# Parse workers are spawned processes doing CPU-bound work, so the width follows
+# Parse workers are separate processes doing CPU-bound work, so the width follows
 # the cores: 4 on the 2-vCPU staging task, up to 8 on a developer machine
 # (task 044 phase 8, owner 2026-09-17). Fetch threads are LIVE_FETCH_WORKERS.
 DEFAULT_MAX_WORKERS = max(4, min(8, os.cpu_count() or 4))
 # LiveDocumentFetcher has the actual global/per-host semaphores; this pool only supplies threads.
 LIVE_FETCH_WORKERS = 10
+# How often the ingest loop looks at finished fetches while parse jobs run.
+_FETCH_POLL_SECONDS = 0.05
 
 PDF_PARSE_PROFILE = "pymupdf4llm_v1"
 HTML_PARSE_PROFILE = "trafilatura_v1"
@@ -113,6 +119,24 @@ PLAIN_PARSE_PROFILE = "plain_v1"
 PDF_SEGMENTATION_POLICY = "pymupdf4llm_struct_v1"
 HTML_SEGMENTATION_POLICY = "trafilatura_para_v1"
 PLAIN_SEGMENTATION_POLICY = "plain_para_v1"
+
+# Europe PMC JATS XML (task 056, N10/S7). The live fetcher never labels a body
+# with an XML type (it sniffs PDF / HTML / plain), so only the Europe PMC
+# candidate reaches the JATS branch of ``parse_and_segment``.
+EUROPE_PMC_XML_CONTENT_TYPE = "application/xml"
+_JATS_CONTENT_TYPES = frozenset({"application/xml", "text/xml"})
+# Which route served an ingested document (stored as ``source_kind`` on the
+# full-text snapshot's metadata; counted as ``by_route`` in the run summary).
+ROUTE_EUROPE_PMC_XML = "europe_pmc_xml"
+# Europe PMC full-text XML endpoint (task 056 S7, egress approved 2026-11-01): the only
+# thing sent is the PubMed Central id, in the path.
+EUROPE_PMC_HOST = "www.ebi.ac.uk"
+EUROPE_PMC_FULL_TEXT_URL = (
+    f"https://{EUROPE_PMC_HOST}/europepmc/webservices/rest/{{pmcid}}/fullTextXML"
+)
+# OpenAlex stores the id as a link whose last part is the number, with or without
+# the "PMC" prefix (e.g. ``https://www.ncbi.nlm.nih.gov/pmc/articles/5264339``).
+_PMCID_LOOSE_RE = re.compile(r"(?:^|/)(?:PMC)?([0-9]{1,12})/?$", re.IGNORECASE)
 
 # Closed failure-reason vocabulary (contract decision 3). Presence on failure is
 # CHECK-enforced (ck_tss_full_text_error_presence); the values are code-enforced so
@@ -504,6 +528,60 @@ def candidate_urls(metadata: dict[str, Any]) -> list[str]:
     return urls
 
 
+def normalise_pmcid(value: object) -> str | None:
+    """Turn a stored PubMed Central id into the ``PMC<digits>`` form Europe PMC wants.
+
+    OpenAlex keeps the id as a web link (``https://www.ncbi.nlm.nih.gov/pmc/articles/5264339``),
+    sometimes with the ``PMC`` prefix and sometimes without; other sources give
+    ``PMC5264339`` or the bare number.
+
+    Args:
+        value: The stored id in any of those forms.
+
+    Returns:
+        ``"PMC5264339"``-style id, or ``None`` when the value is not a PubMed
+        Central id.
+    """
+    if not isinstance(value, str):
+        return None
+    match = _PMCID_LOOSE_RE.search(value.strip())
+    if match is None:
+        return None
+    return f"PMC{match.group(1)}"
+
+
+def europe_pmc_candidate(metadata: dict[str, Any]) -> tuple[str, str] | None:
+    """Return the Europe PMC XML candidate for a document carrying a PubMed Central id.
+
+    The id is read from ``provider_fields.ids.pmcid`` (OpenAlex keeps it as a
+    link ending in the number) and normalised to ``PMC<digits>``.
+
+    Args:
+        metadata: The envelope snapshot's metadata JSONB.
+
+    Returns:
+        ``(pmcid, europe_pmc_full_text_url)``, or ``None`` when no valid id is stored.
+    """
+    fields = metadata.get("provider_fields")
+    ids = fields.get("ids") if isinstance(fields, dict) else None
+    pmcid = normalise_pmcid(ids.get("pmcid")) if isinstance(ids, dict) else None
+    if pmcid is None:
+        return None
+    return pmcid, EUROPE_PMC_FULL_TEXT_URL.format(pmcid=pmcid)
+
+
+def _route_of(fetched_from: str | None, xml_url: str | None, content_type: str | None) -> str:
+    """Name the route that served a document: Europe PMC XML, PDF, HTML or plain text."""
+    if xml_url is not None and fetched_from == xml_url:
+        return ROUTE_EUROPE_PMC_XML
+    base_type = _base_content_type(content_type)
+    if base_type == "application/pdf":
+        return "pdf"
+    if base_type == "text/html":
+        return "html"
+    return "plain"
+
+
 _ANCHOR_SCAN_CAP = 2000  # bounds worst-case anchor scan cost on huge landing pages
 
 
@@ -734,12 +812,13 @@ def parse_and_segment(body: bytes, content_type: str, thin_min: int) -> dict[str
     """Parse document bytes and segment them under the named policy for their type.
 
     Pure function over primitives — no DB, no network, no shared state — so it can
-    run in a spawned worker process (decision 8). Never raises for per-document
+    run in a separate worker process (decision 8). Never raises for per-document
     outcomes.
 
     Args:
         body: Raw document bytes.
-        content_type: ``"application/pdf"`` | ``"text/html"`` | ``"text/plain"``.
+        content_type: ``"application/pdf"`` | ``"text/html"`` | ``"text/plain"`` |
+            ``"application/xml"`` / ``"text/xml"`` (Europe PMC JATS, task 056).
         thin_min: Minimum total parsed characters; below it → ``thin_text``.
 
     Returns:
@@ -753,6 +832,21 @@ def parse_and_segment(body: bytes, content_type: str, thin_min: int) -> dict[str
         result = _parse_pdf(body)
     elif base_type == "text/html":
         result = _parse_html(body)
+    elif base_type in _JATS_CONTENT_TYPES:
+        # JATS XML: one pseudo-page of heading-marked text, cut by the same
+        # segmenter as the PDF branch (locators keep the parser's ``pages: [1]``;
+        # nothing reads the page of an XML chunk). A ``corrupt`` / ``empty``
+        # parse is an ordinary parse failure: the cascade moves on to the next
+        # candidate (the PDF) when one remains.
+        jats = parse_jats(body)
+        if jats["status"] != "ok":
+            return jats
+        result = {
+            "status": "ok",
+            "chunks": _segment_markdown_pages(jats["pages"]),
+            "parse_profile": jats["parse_profile"],
+            "segmentation_policy": jats["segmentation_policy"],
+        }
     else:
         result = _parse_plain(body)
     if result["status"] != "ok":
@@ -782,13 +876,200 @@ def _worker_entry(
     content_type: str,
     thin_min: int,
 ) -> None:
-    """Worker-process entrypoint: parse, send the result, exit. Top-level for spawn."""
+    """Worker-process entrypoint: parse, send the result, exit. Top-level so it pickles."""
     try:
         result = parse_fn(body, content_type, thin_min)
     except Exception as exc:  # defensive: an unexpected parser crash is a corrupt parse
         result = {"status": "error", "reason": "corrupt", "detail": str(exc)[:500]}
     send_conn.send(result)
     send_conn.close()
+
+
+def _parse_process_context() -> Any:
+    """Return the start-method context for parse workers (task 056, N8).
+
+    A ``forkserver`` context whose helper ("server") process imports this module
+    once, and with it pymupdf4llm, trafilatura and the determinism patch above.
+    Each parse job is still its own process, forked from that already-loaded
+    server, so it starts in milliseconds instead of re-importing the parsers
+    (1 to 2 s per document under ``spawn``), and a stuck job can still be
+    terminated on its own. The server is started fresh (not forked from this
+    threaded process), so the fork-with-threads hazard does not apply.
+
+    Returns:
+        The process-wide forkserver context (the preload list is set once).
+    """
+    with _PARSE_CONTEXT_LOCK:
+        global _PARSE_CONTEXT
+        if _PARSE_CONTEXT is None:
+            ctx = get_context("forkserver")
+            ctx.set_forkserver_preload([__name__])
+            _PARSE_CONTEXT = ctx
+        return _PARSE_CONTEXT
+
+
+_PARSE_CONTEXT: Any = None
+_PARSE_CONTEXT_LOCK = threading.Lock()
+
+
+class _ParseScheduler:
+    """Any-free-slot pool of per-document parse processes (task 056, N8).
+
+    Jobs wait in a queue; up to ``max_workers`` run at once, each in its own
+    process with its own deadline. ``collect`` waits on every running job's pipe
+    at once and takes whichever finishes first, so a slow document never holds
+    back the slots behind it (the previous loop waited on the oldest job). A pipe
+    becomes readable when the worker sends its result or dies (end of file), so a
+    child blocked sending a large payload is collected, never misread as a
+    timeout (adversarial finding 7). A job past its deadline with nothing to read
+    is terminated through ``_drain_parse_job`` (finding 6).
+
+    Each running job holds one of the process-wide ingest slots (task 045, S2),
+    so every walk in the process shares one budget of parse workers.
+
+    It also keeps the timing for the ``ingest.batch_handover`` log: when the
+    first job started, when the last result came back, and ``idle_slot_s``, the
+    slot-seconds a slot stood free while a fetched document waited in the queue
+    (this includes waits for a process-wide slot held by another walk).
+    """
+
+    def __init__(
+        self,
+        *,
+        max_workers: int,
+        parse_timeout: float,
+        thin_min: int,
+        parse_fn: Callable[[bytes, str, int], dict[str, Any]],
+    ) -> None:
+        """Set up an empty pool. No process starts until ``start``.
+
+        Args:
+            max_workers: Live-process bound.
+            parse_timeout: Per-document seconds, measured from that worker's start.
+            thin_min: Passed through to ``parse_fn``.
+            parse_fn: Top-level parse callable (test seam; the worker imports it
+                by reference, so it must be picklable).
+        """
+        self._max_workers = max_workers
+        self._parse_timeout = parse_timeout
+        self._thin_min = thin_min
+        self._parse_fn = parse_fn
+        self._ctx = _parse_process_context()
+        self._queue: deque[tuple[int, bytes, str]] = deque()
+        self._live: dict[Any, tuple[int, Any, float]] = {}  # recv pipe -> (idx, proc, started)
+        self._mark = time.monotonic()
+        self.idle_slot_s = 0.0
+        self.first_start: float | None = None
+        self.last_collect: float | None = None
+
+    @property
+    def busy(self) -> bool:
+        """True while any job is queued or running."""
+        return bool(self._queue or self._live)
+
+    @property
+    def live(self) -> bool:
+        """True while any job is running."""
+        return bool(self._live)
+
+    def _account(self) -> None:
+        now = time.monotonic()
+        free = self._max_workers - len(self._live)
+        self.idle_slot_s += (now - self._mark) * max(0, min(free, len(self._queue)))
+        self._mark = now
+
+    def submit(self, idx: int, body: bytes, content_type: str) -> None:
+        """Queue one job; ``start`` hands it to the next free slot."""
+        self._account()
+        self._queue.append((idx, body, content_type))
+
+    def start(self) -> None:
+        """Start queued jobs until every slot is busy or the queue is empty."""
+        # Imported here, not at module level: the slots module sizes itself
+        # from this module's constant.
+        from policy_atlas.runtime.walk_pool import INGEST_SLOTS
+
+        self._account()
+        while self._queue and len(self._live) < self._max_workers:
+            # Block for a slot only with nothing of our own in flight: a walk
+            # holding slots must drain its own jobs rather than wait on another
+            # walk that may be waiting on it.
+            if not INGEST_SLOTS.acquire(blocking=not self._live):
+                break
+            try:
+                idx, body, content_type = self._queue.popleft()
+                recv_conn, send_conn = self._ctx.Pipe(duplex=False)
+                proc = self._ctx.Process(
+                    target=_worker_entry,
+                    args=(send_conn, self._parse_fn, body, content_type, self._thin_min),
+                )
+                proc.start()
+            except BaseException:
+                INGEST_SLOTS.release()
+                raise
+            send_conn.close()  # parent keeps only the receive end
+            started = time.monotonic()
+            self._live[recv_conn] = (idx, proc, started)
+            if self.first_start is None:
+                self.first_start = started
+        self._mark = time.monotonic()
+
+    def collect(self, timeout: float | None) -> dict[int, dict[str, Any]]:
+        """Collect every job that finished, died or ran out of time.
+
+        Waits until any running job's pipe is readable, the earliest deadline
+        passes, or ``timeout`` seconds pass, whichever comes first.
+
+        Args:
+            timeout: Longest wait in seconds; ``None`` waits for the next job.
+
+        Returns:
+            index -> parse result (ok / error / ``timeout``) for each collected job.
+        """
+        from policy_atlas.runtime.walk_pool import INGEST_SLOTS
+
+        if not self._live:
+            return {}
+        self._account()
+        next_deadline = min(started for _, _, started in self._live.values()) + self._parse_timeout
+        wait_for = next_deadline - time.monotonic()
+        if timeout is not None:
+            wait_for = min(wait_for, timeout)
+        ready = set(mp_wait(list(self._live), timeout=max(wait_for, 0.0)))
+        self._account()
+        now = time.monotonic()
+        expired = [
+            conn
+            for conn, (_, _, started) in self._live.items()
+            if conn not in ready and now - started >= self._parse_timeout
+        ]
+        results: dict[int, dict[str, Any]] = {}
+        for conn in [*ready, *expired]:
+            idx, proc, started = self._live.pop(conn)
+            try:
+                results[idx] = _drain_parse_job(proc, conn, started, self._parse_timeout)
+            finally:
+                INGEST_SLOTS.release()
+        if results:
+            self.last_collect = time.monotonic()
+        return results
+
+    def close(self) -> None:
+        """Stop any job still running and give its slot back.
+
+        An exception mid-drain leaves live jobs holding slots: without this the
+        process-wide budget would shrink for good.
+        """
+        from policy_atlas.runtime.walk_pool import INGEST_SLOTS
+
+        self._queue.clear()
+        while self._live:
+            conn, (_idx, proc, _started) = self._live.popitem()
+            if proc.is_alive():
+                proc.kill()
+            proc.join()
+            conn.close()
+            INGEST_SLOTS.release()
 
 
 def _run_parse_jobs(
@@ -801,12 +1082,11 @@ def _run_parse_jobs(
 ) -> dict[int, dict[str, Any]]:
     """Run parse jobs over a bounded pool of per-document worker processes.
 
-    Each job runs in its own spawned ``multiprocessing.Process`` so a timeout can
-    genuinely ``terminate()`` it (``ProcessPoolExecutor.cancel()`` cannot kill a
-    running task — adversarial finding 6). Results are drained in submission order
-    before joining, so a child blocked sending a large payload is never misread as
-    a timeout (finding 7); the reorder buffer is the ≤ ``max_workers`` live pipes.
-    Workers receive primitives only (finding 7 — spawn requires picklable args).
+    Each job runs in its own ``multiprocessing.Process`` (forked from the
+    preloaded forkserver) so a timeout can genuinely ``terminate()`` it
+    (``ProcessPoolExecutor.cancel()`` cannot kill a running task — adversarial
+    finding 6). Whichever running job finishes first frees its slot for the next
+    job (``_ParseScheduler``). Workers receive primitives only (finding 7).
 
     Args:
         jobs: ``(index, body, content_type)`` triples.
@@ -814,58 +1094,23 @@ def _run_parse_jobs(
         parse_timeout: Per-document seconds, measured from that worker's start.
         thin_min: Passed through to ``parse_fn``.
         parse_fn: Top-level parse callable (test seam for the timeout property —
-            spawned children import it by reference, so it must be picklable).
+            workers import it by reference, so it must be picklable).
 
     Returns:
-        index → parse result (ok / error / ``timeout``).
+        index → parse result (ok / error / ``timeout``), in completion order.
     """
-    # The process-wide ingest slots (task 045, S2): each live parse process
-    # holds one, so every walk in the process shares one budget of parse
-    # workers. Imported here, not at module level: the slots module sizes
-    # itself from this module's constant.
-    from policy_atlas.runtime.walk_pool import INGEST_SLOTS
-
-    ctx = get_context("spawn")  # deterministic cross-platform; fork is unsafe with threads
+    scheduler = _ParseScheduler(
+        max_workers=max_workers, parse_timeout=parse_timeout, thin_min=thin_min, parse_fn=parse_fn
+    )
     results: dict[int, dict[str, Any]] = {}
-    pending = deque(jobs)
-    live: deque[tuple[int, Any, Any, float]] = deque()
-
     try:
-        while pending or live:
-            while pending and len(live) < max_workers:
-                # Block for a slot only with nothing of our own in flight: a
-                # walk holding slots must drain its own jobs rather than wait
-                # on another walk that may be waiting on it.
-                if not INGEST_SLOTS.acquire(blocking=not live):
-                    break
-                try:
-                    idx, body, content_type = pending.popleft()
-                    recv_conn, send_conn = ctx.Pipe(duplex=False)
-                    proc = ctx.Process(
-                        target=_worker_entry,
-                        args=(send_conn, parse_fn, body, content_type, thin_min),
-                    )
-                    proc.start()
-                except BaseException:
-                    INGEST_SLOTS.release()
-                    raise
-                send_conn.close()  # parent keeps only the receive end
-                live.append((idx, proc, recv_conn, time.monotonic()))
-
-            idx, proc, recv_conn, started = live.popleft()
-            try:
-                results[idx] = _drain_parse_job(proc, recv_conn, started, parse_timeout)
-            finally:
-                INGEST_SLOTS.release()
+        for idx, body, content_type in jobs:
+            scheduler.submit(idx, body, content_type)
+        while scheduler.busy:
+            scheduler.start()
+            results.update(scheduler.collect(None))
     finally:
-        # An exception mid-drain leaves live jobs holding slots: stop them and
-        # give the slots back, or the process-wide budget shrinks for good.
-        for _idx, proc, recv_conn, _started in live:
-            if proc.is_alive():
-                proc.kill()
-            proc.join()
-            recv_conn.close()
-            INGEST_SLOTS.release()
+        scheduler.close()
     return results
 
 
@@ -917,6 +1162,8 @@ class _DocState:
     envelope_snapshot_id: uuid.UUID
     metadata: dict[str, Any]
     urls: list[str]
+    xml_pmcid: str | None = None  # set when ``urls[0]`` is the Europe PMC candidate
+    xml_url: str | None = None
     next_url: int = 0
     attempts: list[str] = field(default_factory=list)
     fetch_failure_reasons: list[str] = field(default_factory=list)
@@ -928,6 +1175,40 @@ class _DocState:
     content_type: str | None = None
 
 
+@dataclass
+class _IngestProgress:
+    """In-memory mirror of the run's ``full_text_status`` values, for progress ticks.
+
+    The store's statuses are written in one pass at the end (eligible-set order),
+    so the live counts are kept here as each outcome lands: documents already
+    ``ingested`` in the store count as fetched and parsed from the start; a
+    document counts as fetched once a body for it is in hand, and as parsed once
+    its parse resolves it to ``ingested`` (the status the write pass stores).
+    No database read per document (task 056, N9).
+
+    Args:
+        total: The eligible set's size (the stage's denominator).
+        already_ingested: Eligible documents already ``ingested`` in the store.
+    """
+
+    total: int
+    already_ingested: int
+    fetched_docs: set[int] = field(default_factory=set)
+    parsed_docs: set[int] = field(default_factory=set)
+
+    def publish(self) -> None:
+        """Publish one ``ingest`` tick carrying the current counts."""
+        fetched = self.already_ingested + len(self.fetched_docs)
+        parsed = self.already_ingested + len(self.parsed_docs)
+        publish_current_tick(
+            stage="ingest",
+            note=f"{parsed} of {self.total} read, {fetched} fetched.",
+            fetched=fetched,
+            parsed=parsed,
+            total=self.total,
+        )
+
+
 @dataclass(frozen=True)
 class _FetchRoundResult:
     """Parent-thread result for one document's fetch walk in a cascade round."""
@@ -935,6 +1216,7 @@ class _FetchRoundResult:
     body: bytes | None
     content_type: str
     bytes_fetched: int
+    releasable: bool = True  # False for Europe PMC XML: not on the live byte budget
 
 
 def _maybe_discover_url(doc: _DocState, *, body: bytes, url: str, content_type: str) -> None:
@@ -979,11 +1261,56 @@ def _apply_oa_cross_check(doc: _DocState) -> None:
         )
 
 
+def _safe_fetch_xml(fetcher: DocumentFetcher, pmcid: str, *, tss_id: uuid.UUID) -> bytes | None:
+    """Call the fetcher's Europe PMC hook; an escaped raise counts as no XML."""
+    try:
+        body: bytes | None = getattr(fetcher, "fetch_europe_pmc_xml")(pmcid)  # noqa: B009
+    except Exception as exc:
+        log.warning(
+            "fulltext.fetcher_escaped",
+            tss_id=str(tss_id),
+            url="europe_pmc_xml",
+            exc_type=type(exc).__name__,
+        )
+        return None
+    return body
+
+
 def _fetch_doc_for_round(doc: _DocState, fetcher: DocumentFetcher) -> _FetchRoundResult:
     bytes_fetched = 0
     while doc.next_url < len(doc.urls):
         url = doc.urls[doc.next_url]
         doc.next_url += 1
+        if doc.xml_pmcid is not None and url == doc.xml_url:
+            xml = _safe_fetch_xml(fetcher, doc.xml_pmcid, tss_id=doc.tss_id)
+            if xml is None:
+                # No XML from Europe PMC: fall through to the next candidate,
+                # exactly as a failed URL does.
+                doc.attempts.append(f"{_redact_url(url)}: not_found")
+                doc.fetch_failure_reasons.append("not_found")
+                doc.reason = _highest_priority_fetch_reason(doc.fetch_failure_reasons)
+                log.info(
+                    "fulltext.fetch_attempt",
+                    tss_id=str(doc.tss_id),
+                    url=_redact_url(url),
+                    outcome="not_found",
+                )
+                continue
+            bytes_fetched += len(xml)
+            doc.fetched_from = url
+            doc.content_type = EUROPE_PMC_XML_CONTENT_TYPE
+            log.info(
+                "fulltext.fetch_attempt",
+                tss_id=str(doc.tss_id),
+                url=_redact_url(url),
+                outcome="ok",
+            )
+            return _FetchRoundResult(
+                body=xml,
+                content_type=EUROPE_PMC_XML_CONTENT_TYPE,
+                bytes_fetched=bytes_fetched,
+                releasable=False,
+            )
         fetch_result = _safe_fetch(fetcher, url, tss_id=doc.tss_id)
         if fetch_result.status == "ok":
             fetched = fetch_result.body or b""
@@ -1033,62 +1360,48 @@ def _fetch_doc_for_round(doc: _DocState, fetcher: DocumentFetcher) -> _FetchRoun
 
 
 def _drain_ready_parse_jobs(
+    scheduler: _ParseScheduler,
     *,
-    ready_jobs: list[tuple[int, bytes, str]],
-    ready_body_lengths: dict[int, int],
+    timeout: float | None,
+    body_lengths: dict[int, int],
     docs: list[_DocState],
     fetcher: DocumentFetcher,
-    max_workers: int,
-    parse_timeout: float,
-    thin_min: int,
-    parse_fn: Callable[[bytes, str, int], dict[str, Any]],
+    progress: _IngestProgress,
 ) -> bool:
-    if not ready_jobs:
-        return False
-    jobs = sorted(ready_jobs, key=lambda job: job[0])
-    body_lengths = dict(ready_body_lengths)
-    ready_jobs.clear()
-    ready_body_lengths.clear()
-    released: set[int] = set()
-    try:
-        results = _run_parse_jobs(
-            jobs,
-            max_workers=max_workers,
-            parse_timeout=parse_timeout,
-            thin_min=thin_min,
-            parse_fn=parse_fn,
+    """Collect the parse jobs that finish within ``timeout`` and record them.
+
+    Each collected document's fetched body is released (``release_body``) and
+    removed from ``body_lengths``; the caller releases whatever is left there if
+    the round stops early. When any result is recorded, one ``ingest`` progress
+    tick is published with the updated counts.
+
+    Returns:
+        True if any parse result was recorded.
+    """
+    results = scheduler.collect(timeout)
+    for i, result in results.items():
+        _release_fetch_body(fetcher, body_lengths.pop(i))
+        doc = docs[i]
+        if result["status"] == "ok":
+            doc.resolution = "ingested"
+            doc.parsed = result
+            progress.parsed_docs.add(i)
+            continue
+        doc.attempts.append(f"{_redact_url(doc.fetched_from)}: {result['reason']}")
+        doc.reason = result["reason"]
+        log.info(
+            "fulltext.parse_failed",
+            tss_id=str(doc.tss_id),
+            url=_redact_url(doc.fetched_from),
+            reason=result["reason"],
+            detail=result.get("detail"),
         )
-    except Exception:
-        for idx, n_bytes in body_lengths.items():
-            if idx not in released:
-                _release_fetch_body(fetcher, n_bytes)
-        raise
-    try:
-        for i, result in results.items():
-            _release_fetch_body(fetcher, body_lengths[i])
-            released.add(i)
-            doc = docs[i]
-            if result["status"] == "ok":
-                doc.resolution = "ingested"
-                doc.parsed = result
-                continue
-            doc.attempts.append(f"{_redact_url(doc.fetched_from)}: {result['reason']}")
-            doc.reason = result["reason"]
-            log.info(
-                "fulltext.parse_failed",
-                tss_id=str(doc.tss_id),
-                url=_redact_url(doc.fetched_from),
-                reason=result["reason"],
-                detail=result.get("detail"),
-            )
-            if doc.next_url >= len(doc.urls):
-                doc.resolution = "parse_failed"
-            # else: unresolved — next round fetches the next candidate
-    finally:
-        for idx, n_bytes in body_lengths.items():
-            if idx not in released:
-                _release_fetch_body(fetcher, n_bytes)
-    return True
+        if doc.next_url >= len(doc.urls):
+            doc.resolution = "parse_failed"
+        # else: unresolved — next round fetches the next candidate
+    if results:
+        progress.publish()
+    return bool(results)
 
 
 def ingest_full_text_sources(
@@ -1131,7 +1444,9 @@ def ingest_full_text_sources(
     Returns:
         Counts dict: ``eligible``, ``attempted``, ``ingested``,
         ``already_ingested``, ``fetch_failed``, ``parse_failed``,
-        ``by_reason``, ``bytes_fetched``, ``wall_clock_s``, ``embed``
+        ``by_reason``, ``by_route`` (this run's ingested documents by serving
+        route: ``europe_pmc_xml`` | ``pdf`` | ``html`` | ``plain``),
+        ``bytes_fetched``, ``wall_clock_s``, ``embed``
         (invariant:
         ``eligible == ingested + already_ingested + fetch_failed + parse_failed``).
     """
@@ -1178,16 +1493,27 @@ def ingest_full_text_sources(
     ).fetchall()
 
     already_ingested = sum(1 for row in eligible_rows if row.full_text_status == "ingested")
-    docs: list[_DocState] = [
-        _DocState(
+    # Europe PMC XML first (task 056, N10/S7) for documents with a PubMed Central
+    # id, then the PDF-first URL cascade unchanged; only when the fetcher offers
+    # the Europe PMC hook (the live fetcher does; fixture replay stays zero-egress).
+    xml_capable = callable(getattr(fetcher, "fetch_europe_pmc_xml", None))
+    docs: list[_DocState] = []
+    for row in eligible_rows:
+        if row.full_text_status == "ingested":
+            continue
+        doc = _DocState(
             tss_id=row.task_source_snapshot_id,
             envelope_snapshot_id=row.source_snapshot_id,
             metadata=dict(row.metadata),
             urls=candidate_urls(row.metadata),
         )
-        for row in eligible_rows
-        if row.full_text_status != "ingested"
-    ]
+        xml = europe_pmc_candidate(doc.metadata) if xml_capable else None
+        if xml is not None:
+            doc.xml_pmcid, doc.xml_url = xml
+            doc.urls = [doc.xml_url, *(u for u in doc.urls if u != doc.xml_url)]
+        docs.append(doc)
+
+    progress = _IngestProgress(total=len(eligible_rows), already_ingested=already_ingested)
 
     for doc in docs:
         if not doc.urls:
@@ -1197,7 +1523,13 @@ def ingest_full_text_sources(
 
     # Cascade rounds: fetch in the parent, parse in workers; a parse failure with
     # candidates remaining re-enters the next round on its next URL (decision 4).
+    # Within a round the hand-over is continuous (task 056, N8): each fetched body
+    # joins the parse queue as soon as its fetch finishes and takes the next free
+    # parse slot. (Before, bodies were handed over in batches of ``max_workers``
+    # and each batch was parsed to completion before the next was collected, so
+    # slots sat idle on a batch's slowest document while fetched bodies waited.)
     bytes_fetched = 0
+    round_index = 0
     while True:
         unresolved = [
             (i, doc)
@@ -1206,70 +1538,79 @@ def ingest_full_text_sources(
         ]
         if not unresolved:
             break
+        round_started = time.monotonic()
+        fetch_done_at = round_started
         parsed_any = False
-        ready_jobs: list[tuple[int, bytes, str]] = []
-        ready_body_lengths: dict[int, int] = {}
-        serial_fixture_fetch = resolved_fetch_workers == 1 and fetcher.mode != "live"
-
+        handed = 0  # fetched bodies handed to parse this round
+        body_lengths: dict[int, int] = {}  # handed to parse, body not yet released
+        scheduler = _ParseScheduler(
+            max_workers=max_workers,
+            parse_timeout=parse_timeout,
+            thin_min=thin_min,
+            parse_fn=parse_fn,
+        )
         with ThreadPoolExecutor(max_workers=resolved_fetch_workers) as executor:
             future_to_index: dict[Future[_FetchRoundResult], int] = {
                 executor.submit(_fetch_doc_for_round, doc, fetcher): i
                 for i, doc in unresolved
             }
             pending = set(future_to_index)
-            while pending:
-                timeout = None if serial_fixture_fetch else 0.1 if ready_jobs else None
-                done, pending = wait(pending, timeout=timeout, return_when=FIRST_COMPLETED)
-                if not done:
-                    parsed_any = (
-                        _drain_ready_parse_jobs(
-                            ready_jobs=ready_jobs,
-                            ready_body_lengths=ready_body_lengths,
-                            docs=docs,
-                            fetcher=fetcher,
-                            max_workers=max_workers,
-                            parse_timeout=parse_timeout,
-                            thin_min=thin_min,
-                            parse_fn=parse_fn,
+            try:
+                while pending or scheduler.busy:
+                    scheduler.start()
+                    if scheduler.live:
+                        # Wake for a finished parse at once; look at fetches at
+                        # least every poll interval while any are in flight.
+                        parsed_any = (
+                            _drain_ready_parse_jobs(
+                                scheduler,
+                                timeout=_FETCH_POLL_SECONDS if pending else None,
+                                body_lengths=body_lengths,
+                                docs=docs,
+                                fetcher=fetcher,
+                                progress=progress,
+                            )
+                            or parsed_any
                         )
-                        or parsed_any
-                    )
-                    continue
-                for future in done:
-                    i = future_to_index[future]
-                    outcome = future.result()
-                    bytes_fetched += outcome.bytes_fetched
-                    if outcome.body is None:
-                        continue
-                    ready_jobs.append((i, outcome.body, outcome.content_type))
-                    ready_body_lengths[i] = len(outcome.body)
-                if not serial_fixture_fetch and len(ready_jobs) >= max_workers:
-                    parsed_any = (
-                        _drain_ready_parse_jobs(
-                            ready_jobs=ready_jobs,
-                            ready_body_lengths=ready_body_lengths,
-                            docs=docs,
-                            fetcher=fetcher,
-                            max_workers=max_workers,
-                            parse_timeout=parse_timeout,
-                            thin_min=thin_min,
-                            parse_fn=parse_fn,
-                        )
-                        or parsed_any
-                    )
-            parsed_any = (
-                _drain_ready_parse_jobs(
-                    ready_jobs=ready_jobs,
-                    ready_body_lengths=ready_body_lengths,
-                    docs=docs,
-                    fetcher=fetcher,
-                    max_workers=max_workers,
-                    parse_timeout=parse_timeout,
-                    thin_min=thin_min,
-                    parse_fn=parse_fn,
-                )
-                or parsed_any
-            )
+                        done = {future for future in pending if future.done()}
+                    else:
+                        done, _ = wait(pending, return_when=FIRST_COMPLETED)
+                    pending -= done
+                    fetched_now = False
+                    for future in done:
+                        i = future_to_index[future]
+                        outcome = future.result()
+                        bytes_fetched += outcome.bytes_fetched
+                        if outcome.body is None:
+                            continue
+                        handed += 1
+                        # 0 = nothing to release (release_body ignores it).
+                        body_lengths[i] = len(outcome.body) if outcome.releasable else 0
+                        progress.fetched_docs.add(i)
+                        fetched_now = True
+                        scheduler.submit(i, outcome.body, outcome.content_type)
+                    if fetched_now:
+                        progress.publish()
+                    if done and not pending:
+                        fetch_done_at = time.monotonic()
+            finally:
+                scheduler.close()
+                for n_bytes in body_lengths.values():
+                    _release_fetch_body(fetcher, n_bytes)
+                body_lengths.clear()
+        # One line per round (owner, 2026-11-01): fetch wall = round start to the
+        # last fetch; parse wall = first parse start to the last result; idle gap =
+        # slot-seconds a parse slot stood free while a fetched body waited.
+        parse_started = scheduler.first_start or round_started
+        log.info(
+            "ingest.batch_handover",
+            batch=round_index,
+            documents=handed,
+            fetch_wall_s=round(fetch_done_at - round_started, 3),
+            parse_wall_s=round((scheduler.last_collect or parse_started) - parse_started, 3),
+            idle_gap_s=round(scheduler.idle_slot_s, 3),
+        )
+        round_index += 1
         if not parsed_any:
             break
 
@@ -1278,11 +1619,13 @@ def ingest_full_text_sources(
     now = datetime.now(UTC)
     counts = {"ingested": 0, "fetch_failed": 0, "parse_failed": 0}
     by_reason: dict[str, int] = {}
+    by_route: dict[str, int] = {}
     for doc in docs:
         assert doc.resolution is not None  # every doc lands in exactly one bucket
         if doc.resolution == "ingested":
             assert doc.parsed is not None
             chunks = doc.parsed["chunks"]
+            route = _route_of(doc.fetched_from, doc.xml_url, doc.content_type)
             snapshot_id = uuid.uuid4()
             conn.execute(
                 source_snapshot.insert().values(
@@ -1297,6 +1640,7 @@ def ingest_full_text_sources(
                         "segmentation_policy": doc.parsed["segmentation_policy"],
                         "fetched_from": doc.fetched_from,
                         "content_type": doc.content_type,
+                        "source_kind": route,
                         "envelope_source_snapshot_id": str(doc.envelope_snapshot_id),
                         "ingested_by_run_id": str(run_id),
                     },
@@ -1326,6 +1670,7 @@ def ingest_full_text_sources(
                 )
             )
             counts["ingested"] += 1
+            by_route[route] = by_route.get(route, 0) + 1
             log.info(
                 "fulltext.ingested", tss_id=str(doc.tss_id), url=_redact_url(doc.fetched_from),
                 chunk_count=len(chunks),
@@ -1367,6 +1712,7 @@ def ingest_full_text_sources(
         "already_ingested": already_ingested,
         **counts,
         "by_reason": by_reason,
+        "by_route": by_route,
         "bytes_fetched": bytes_fetched,
         "wall_clock_s": round(time.monotonic() - started_at, 2),
         "embed": embed_counts,

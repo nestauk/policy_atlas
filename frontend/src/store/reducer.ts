@@ -5,6 +5,7 @@ import {
   type ResolvedDecision,
   type RunStreamState,
   type StageEntry,
+  type StageLiveness,
 } from "./types";
 
 /**
@@ -34,10 +35,12 @@ export function isOtherRunsStage(state: RunStreamState, runId: string | null): b
 export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): RunStreamState {
   if (frame.type === "tick") {
     const key = frame.stage ?? GLOBAL_LIVENESS_KEY;
-    return {
-      ...state,
-      liveness: { ...state.liveness, [key]: { note: frame.note, occurredAt: frame.occurred_at } },
-    };
+    const entry: StageLiveness = { note: frame.note, occurredAt: frame.occurred_at };
+    // The counts are omitted from the wire when a tick carries none.
+    if (typeof frame.fetched === "number") entry.fetched = frame.fetched;
+    if (typeof frame.parsed === "number") entry.parsed = frame.parsed;
+    if (typeof frame.total === "number") entry.total = frame.total;
+    return { ...state, liveness: { ...state.liveness, [key]: entry } };
   }
 
   if (frame.sequence < state.lastSequence) {

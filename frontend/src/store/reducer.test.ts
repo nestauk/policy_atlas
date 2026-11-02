@@ -220,6 +220,9 @@ describe("reduceRunStreamFrame — new-run reset", () => {
       stage: "acquire",
       occurred_at: "2026-07-21T10:00:02Z",
       ephemeral: true,
+      fetched: null,
+      parsed: null,
+      total: null,
     });
     // The run is interrupted before finishing.
     state = reduceRunStreamFrame(state, {
@@ -526,6 +529,9 @@ describe("reduceRunStreamFrame — tick transience", () => {
       stage: "screen",
       occurred_at: "2026-07-21T10:02:00Z",
       ephemeral: true,
+      fetched: null,
+      parsed: null,
+      total: null,
     });
 
     expect(withTick.liveness.screen).toEqual({
@@ -536,6 +542,35 @@ describe("reduceRunStreamFrame — tick transience", () => {
     expect({ ...withTick, liveness: {} }).toEqual({ ...base, liveness: {} });
   });
 
+  it("an ingest tick's document counts are kept beside its note (task 056)", () => {
+    const withCounts = reduceRunStreamFrame(createInitialRunStreamState(), {
+      type: "tick",
+      note: "3 of 10 read, 5 fetched.",
+      stage: "ingest",
+      occurred_at: "2026-11-02T10:00:00Z",
+      ephemeral: true,
+      fetched: 5,
+      parsed: 3,
+      total: 10,
+    });
+    expect(withCounts.liveness.ingest).toEqual({
+      note: "3 of 10 read, 5 fetched.",
+      occurredAt: "2026-11-02T10:00:00Z",
+      fetched: 5,
+      parsed: 3,
+      total: 10,
+    });
+    // The wire omits absent counts; the slice then has no count keys.
+    const bare = reduceRunStreamFrame(createInitialRunStreamState(), {
+      type: "tick",
+      note: "n",
+      stage: "ingest",
+      occurred_at: "2026-11-02T10:00:00Z",
+      ephemeral: true,
+    } as unknown as Parameters<typeof reduceRunStreamFrame>[1]);
+    expect(bare.liveness.ingest).toEqual({ note: "n", occurredAt: "2026-11-02T10:00:00Z" });
+  });
+
   it("a stage-less tick lands under the global liveness key", () => {
     const withTick = reduceRunStreamFrame(createInitialRunStreamState(), {
       type: "tick",
@@ -543,6 +578,9 @@ describe("reduceRunStreamFrame — tick transience", () => {
       stage: null,
       occurred_at: "2026-07-21T10:00:00Z",
       ephemeral: true,
+      fetched: null,
+      parsed: null,
+      total: null,
     });
 
     expect(withTick.liveness._global).toEqual({
@@ -559,6 +597,9 @@ describe("reduceRunStreamFrame — tick transience", () => {
       stage: "extract",
       occurred_at: "2026-07-21T10:00:00Z",
       ephemeral: true,
+      fetched: null,
+      parsed: null,
+      total: null,
     });
     state = reduceRunStreamFrame(state, {
       type: "tick",
@@ -566,6 +607,9 @@ describe("reduceRunStreamFrame — tick transience", () => {
       stage: "extract",
       occurred_at: "2026-07-21T10:00:05Z",
       ephemeral: true,
+      fetched: null,
+      parsed: null,
+      total: null,
     });
 
     expect(Object.keys(state.liveness)).toEqual(["extract"]);

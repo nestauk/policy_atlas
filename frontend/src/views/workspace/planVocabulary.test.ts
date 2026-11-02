@@ -160,7 +160,15 @@ describe("stepsForAnalysisDepth", () => {
     const landscape = stepsForAnalysisDepth("landscape").map((step) => step.stage);
     const standard = stepsForAnalysisDepth("standard").map((step) => step.stage);
     const deep = stepsForAnalysisDepth("deep").map((step) => step.stage);
-    expect(landscape).toEqual(["acquire", "screen", "classify", "appraise", "characterise", "synthesise"]);
+    expect(landscape).toEqual([
+      "acquire",
+      "screen",
+      "classify",
+      "appraise",
+      "ingest",
+      "characterise",
+      "synthesise",
+    ]);
     expect(standard).toContain("select");
     expect(standard).not.toContain("extract");
     expect(deep).toEqual([
@@ -168,6 +176,7 @@ describe("stepsForAnalysisDepth", () => {
       "screen",
       "classify",
       "appraise",
+      "ingest",
       "characterise",
       "select",
       "extract",

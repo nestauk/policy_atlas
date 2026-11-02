@@ -5547,6 +5547,7 @@
               "screen",
               "classify",
               "appraise",
+              "ingest",
               "characterise",
               "select",
               "extract",
@@ -7379,6 +7380,7 @@
               "screen",
               "classify",
               "appraise",
+              "ingest",
               "characterise",
               "select",
               "extract",
@@ -7473,6 +7475,7 @@
               "screen",
               "classify",
               "appraise",
+              "ingest",
               "characterise",
               "select",
               "extract",
@@ -7548,6 +7551,7 @@
               "screen",
               "classify",
               "appraise",
+              "ingest",
               "characterise",
               "select",
               "extract",
@@ -8468,6 +8472,18 @@
             "title": "Ephemeral",
             "type": "boolean"
           },
+          "fetched": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fetched"
+          },
           "note": {
             "title": "Note",
             "type": "string"
@@ -8477,6 +8493,18 @@
             "title": "Occurred At",
             "type": "string"
           },
+          "parsed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parsed"
+          },
           "stage": {
             "anyOf": [
               {
@@ -8485,6 +8513,7 @@
                   "screen",
                   "classify",
                   "appraise",
+                  "ingest",
                   "characterise",
                   "select",
                   "extract",
@@ -8508,6 +8537,18 @@
             ],
             "default": null,
             "title": "Stage"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
           },
           "type": {
             "const": "tick",

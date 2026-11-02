@@ -597,11 +597,24 @@ def _encode_frame(frame: dict[str, Any]) -> str:
     return f"id: {frame['sequence']}\nevent: {frame['type']}\ndata: {payload}\n\n"
 
 
+_TICK_COUNTS = ("fetched", "parsed", "total")
+
+
 def _encode_tick(tick: Tick) -> str:
     """Serialize a validated ephemeral frame without an SSE id line."""
     stage = cast(StageKey | None, tick.stage) if tick.stage in _STAGE_PRESENTATION else None
-    frame = TickFrame(type="tick", stage=stage, note=tick.note, occurred_at=tick.occurred_at)
-    return f"event: tick\ndata: {frame.model_dump_json()}\n\n"
+    frame = TickFrame(
+        type="tick",
+        stage=stage,
+        note=tick.note,
+        fetched=tick.fetched,
+        parsed=tick.parsed,
+        total=tick.total,
+        occurred_at=tick.occurred_at,
+    )
+    # The optional counts are omitted when absent; ``stage`` keeps its null.
+    absent = {name for name in _TICK_COUNTS if getattr(frame, name) is None}
+    return f"event: tick\ndata: {frame.model_dump_json(exclude=absent)}\n\n"
 
 
 @router.get("/{task_id}/events")

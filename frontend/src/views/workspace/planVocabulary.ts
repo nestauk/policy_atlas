@@ -143,6 +143,11 @@ const ALWAYS_STEPS: readonly PlanStepPreview[] = [
   { stage: "screen", label: "Screening", blurb: "Checking title and abstract against your criteria." },
   { stage: "classify", label: "Sorting by evidence type", blurb: "Labelling each document by its evidence type." },
   { stage: "appraise", label: "Appraising", blurb: "Calculating evidence strength scores." },
+  {
+    stage: "ingest",
+    label: "Reading the full texts",
+    blurb: "Fetching each selected document's full text and reading it into sections.",
+  },
 ];
 
 const CHARACTERISE_STEP: PlanStepPreview = {

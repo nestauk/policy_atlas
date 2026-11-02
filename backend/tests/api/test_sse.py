@@ -10,6 +10,7 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -24,11 +25,11 @@ from policy_atlas.api import continuation
 from policy_atlas.api.app import create_app
 from policy_atlas.api.dev_issuer import init, mint_token
 from policy_atlas.api.routers import access, sse
-from policy_atlas.api.routers.sse import _summary, _tail
+from policy_atlas.api.routers.sse import _encode_tick, _summary, _tail
 from policy_atlas.api.settings import Settings
 from policy_atlas.api.stage_vocabulary import stage_for_payload
 from policy_atlas.core import events
-from policy_atlas.core.liveness import tick_hub
+from policy_atlas.core.liveness import Tick, tick_hub
 from policy_atlas.core.schema import (
     app_user,
     event_log,
@@ -423,6 +424,40 @@ def test_stage_completed_summary_flattens_nested_round_index() -> None:
     assert "component" not in summary
 
 
+def _tick_data(encoded: str) -> dict[str, Any]:
+    lines = encoded.strip().split("\n")
+    assert lines[0] == "event: tick"
+    assert not any(line.startswith("id:") for line in lines)
+    data: dict[str, Any] = json.loads(lines[1].removeprefix("data: "))
+    return data
+
+
+def test_tick_with_counts_serialises_them() -> None:
+    """Task 056 (S5): an ``ingest`` tick carries its typed counts on the wire."""
+    tick = Tick(
+        stage="ingest",
+        note="3 of 10 read, 5 fetched.",
+        occurred_at=datetime.now(UTC),
+        fetched=5,
+        parsed=3,
+        total=10,
+    )
+    data = _tick_data(_encode_tick(tick))
+    assert data["stage"] == "ingest"
+    assert (data["fetched"], data["parsed"], data["total"]) == (5, 3, 10)
+    assert data["note"] == "3 of 10 read, 5 fetched."
+
+
+def test_tick_without_counts_omits_them() -> None:
+    """A tick with no counts serialises exactly as before: no count keys at all."""
+    tick = Tick(stage="acquire", note="Searching a source database.", occurred_at=datetime.now(UTC))
+    data = _tick_data(_encode_tick(tick))
+    assert set(data) == {"type", "ephemeral", "stage", "note", "occurred_at"}
+    stageless = _tick_data(_encode_tick(Tick(stage=None, note="n", occurred_at=datetime.now(UTC))))
+    assert stageless["stage"] is None
+    assert not {"fetched", "parsed", "total"} & set(stageless)
+
+
 def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path) -> None:
     """Replay rebuilds the same durable narrative and cursors select its exact suffix."""
 
@@ -459,8 +494,9 @@ def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path
                         and stage_for_payload(event["payload"]) is not None
                         for event in events.read(conn, task_id)
                     )
-                # ingest_full_text (and screen_full) still write run.started but
-                # are not public stages, so the counts match the mapped subset.
+                # screen_full still writes run.started but is not a public
+                # stage, so the counts match the mapped subset (ingest_full_text
+                # maps to ``ingest`` since task 056).
                 assert sum(item.event == "stage.started" for item in first) == started
 
                 cursor = first[len(first) // 2].sequence

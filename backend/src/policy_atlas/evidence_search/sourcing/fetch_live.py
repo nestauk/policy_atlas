@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.cookiejar
 import ipaddress
+import re
 import select
 import socket
 import ssl
@@ -21,10 +22,15 @@ import structlog
 
 from policy_atlas.core.liveness import publish_current_tick
 from policy_atlas.evidence_search.sourcing.ingest_full_text import (
+    EUROPE_PMC_FULL_TEXT_URL,
+    EUROPE_PMC_HOST,
     DocumentFetcher,
     FetchResult,
     FixtureFetcher,
     _redact_url,
+)
+from policy_atlas.evidence_search.sourcing.ingest_full_text import (
+    normalise_pmcid as normalise_pmcid,  # re-exported: callers import it from here
 )
 
 log = structlog.get_logger()
@@ -50,6 +56,7 @@ PAYWALL_MARKERS = (
 )
 
 USER_AGENT = "policy-atlas/0.1 (+research; contact via repo)"
+_PMCID_RE = re.compile(r"PMC[0-9]{1,12}")
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
@@ -278,6 +285,7 @@ class LiveDocumentFetcher:
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         self._resolver = resolver or _default_resolver
+        self._transport = transport
         self._clock = clock
         self._sleep = sleep
         cookie_jar = http.cookiejar.CookieJar(
@@ -334,6 +342,34 @@ class LiveDocumentFetcher:
             )
             publish_current_tick(stage="acquire", note="A source could not be fetched — recorded.")
             return FetchResult(status="error", error="fetch_error")
+
+    def fetch_europe_pmc_xml(self, pmcid: str) -> bytes | None:
+        """Download one article's JATS XML from Europe PMC under this fetcher's limits.
+
+        The request takes a slot from the same overall limit as every other
+        document fetch and a per-host slot for ``www.ebi.ac.uk`` (at most
+        ``PER_HOST_MAX_CONCURRENCY`` at once, starts at least
+        ``PER_HOST_MIN_INTERVAL_S`` apart), with the usual ``FETCH_TIMEOUT_S``.
+        The ingest pipeline finds this method by duck typing: the fixture
+        fetcher has none, so fixture replay never contacts Europe PMC.
+
+        Args:
+            pmcid: PubMed Central id in ``PMC<digits>`` form.
+
+        Returns:
+            The XML bytes, or ``None`` when Europe PMC has no usable full text
+            (see ``fetch_europe_pmc_xml``).
+        """
+        # A fresh pinned-IP transport per call: the client below closes its
+        # transport on exit, so the pooled one behind ``self._client`` must not
+        # be handed over. A test transport is passed through (zero egress).
+        transport = (
+            self._transport
+            if self._transport is not None
+            else _PinnedIPTransport(self._resolver)
+        )
+        with self._global_semaphore, self._host_slot(EUROPE_PMC_HOST):
+            return fetch_europe_pmc_xml(pmcid, timeout=FETCH_TIMEOUT_S, transport=transport)
 
     def release_body(self, n_bytes: int) -> None:
         """Release byte-budget accounting for a returned successful body.
@@ -776,3 +812,75 @@ def select_document_fetcher(live: bool) -> DocumentFetcher:
         assert fetcher.mode == "live"
         return fetcher
     return FixtureFetcher()
+
+
+
+
+def fetch_europe_pmc_xml(
+    pmcid: str,
+    *,
+    timeout: float,
+    transport: httpx.BaseTransport | None = None,
+) -> bytes | None:
+    """Download one article's full text as JATS XML from Europe PMC.
+
+    JATS is the XML format journals use to deposit articles; it keeps the
+    section headings and tables that a PDF loses. The request goes to
+    ``www.ebi.ac.uk`` only and carries nothing but the id in the address: no
+    query string, no cookies, no other headers than the product's user agent.
+    Redirects are not followed and the body is capped at ``MAX_DOCUMENT_BYTES``,
+    as for every other document fetch.
+
+    Args:
+        pmcid: PubMed Central id in ``PMC<digits>`` form (see ``normalise_pmcid``).
+            Anything else is refused before any request is made.
+        timeout: Seconds allowed for connecting and for each read.
+        transport: Optional httpx transport, for tests that must make no
+            network call. The default is the same guarded transport the live
+            document fetcher uses (it refuses private and local addresses).
+
+    Returns:
+        The XML bytes, or ``None`` when the id is invalid, Europe PMC has no
+        full text for it (404 and other non-200 answers), the answer is not XML,
+        it is too large, or the request fails. Never raises for these outcomes.
+    """
+    if not isinstance(pmcid, str) or _PMCID_RE.fullmatch(pmcid) is None:
+        log.warning("europe_pmc.invalid_pmcid")
+        return None
+    url = EUROPE_PMC_FULL_TEXT_URL.format(pmcid=pmcid)
+    try:
+        with httpx.Client(
+            transport=transport if transport is not None else _PinnedIPTransport(),
+            timeout=httpx.Timeout(timeout),
+            follow_redirects=False,
+            trust_env=False,
+            headers={"User-Agent": USER_AGENT, "Accept": "application/xml"},
+        ) as client, client.stream("GET", url) as response:
+            if response.status_code != 200:
+                log.info("europe_pmc.no_full_text", pmcid=pmcid, status_code=response.status_code)
+                return None
+            body = _read_capped(response)
+    except Exception as exc:  # network failures are per-document outcomes, not crashes
+        log.warning("europe_pmc.fetch_error", pmcid=pmcid, exc_type=type(exc).__name__)
+        return None
+    if body is None:
+        log.warning("europe_pmc.too_large", pmcid=pmcid)
+        return None
+    if not _looks_like_xml(body):
+        log.info("europe_pmc.not_xml", pmcid=pmcid)
+        return None
+    return body
+
+
+def _read_capped(response: httpx.Response) -> bytes | None:
+    body = bytearray()
+    for chunk in response.iter_bytes():
+        if len(body) + len(chunk) > MAX_DOCUMENT_BYTES:
+            return None
+        body.extend(chunk)
+    return bytes(body)
+
+
+def _looks_like_xml(body: bytes) -> bool:
+    head = body[:512].lstrip(b"\xef\xbb\xbf \t\r\n")
+    return head.startswith(b"<") and not head.lower().startswith((b"<html", b"<!doctype html"))

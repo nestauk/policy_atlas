@@ -19,11 +19,18 @@ from datetime import UTC, datetime
 
 @dataclass(frozen=True, slots=True)
 class Tick:
-    """One ephemeral progress note delivered to a task's live subscribers."""
+    """One ephemeral progress note delivered to a task's live subscribers.
+
+    ``fetched``, ``parsed`` and ``total`` are optional progress counts (the
+    full-text reading stage fills them, task 056); ``None`` means not given.
+    """
 
     stage: str | None
     note: str
     occurred_at: datetime
+    fetched: int | None = None
+    parsed: int | None = None
+    total: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,9 +67,25 @@ class TickHub:
         if not subscribers:
             self._subscribers.pop(task_id, None)
 
-    def publish(self, task_id: uuid.UUID, *, stage: str | None, note: str) -> None:
+    def publish(
+        self,
+        task_id: uuid.UUID,
+        *,
+        stage: str | None,
+        note: str,
+        fetched: int | None = None,
+        parsed: int | None = None,
+        total: int | None = None,
+    ) -> None:
         """Best-effort fan-out without blocking the publishing worker thread."""
-        tick = Tick(stage=stage, note=note, occurred_at=datetime.now(UTC))
+        tick = Tick(
+            stage=stage,
+            note=note,
+            occurred_at=datetime.now(UTC),
+            fetched=fetched,
+            parsed=parsed,
+            total=total,
+        )
         for subscriber in tuple(self._subscribers.get(task_id, ())):
             try:
                 subscriber.loop.call_soon_threadsafe(_offer, subscriber.queue, tick)
@@ -95,8 +118,25 @@ def task_liveness(task_id: uuid.UUID) -> Iterator[None]:
         _task_id.reset(token)
 
 
-def publish_current_tick(*, stage: str | None, note: str) -> None:
-    """Publish for the currently executing task, if one is bound."""
+def publish_current_tick(
+    *,
+    stage: str | None,
+    note: str,
+    fetched: int | None = None,
+    parsed: int | None = None,
+    total: int | None = None,
+) -> None:
+    """Publish for the currently executing task, if one is bound.
+
+    Args:
+        stage: Public stage key the note belongs to, or ``None``.
+        note: Free-text progress note.
+        fetched: Optional count of documents fetched so far.
+        parsed: Optional count of documents parsed so far.
+        total: Optional count of documents in the stage's eligible set.
+    """
     task_id = _task_id.get()
     if task_id is not None:
-        tick_hub.publish(task_id, stage=stage, note=note)
+        tick_hub.publish(
+            task_id, stage=stage, note=note, fetched=fetched, parsed=parsed, total=total
+        )

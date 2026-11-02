@@ -11,6 +11,7 @@ export type {
   RunStatus,
   RunStreamState,
   StageEntry,
+  StageLiveness,
   StageStatus,
 } from "./types";
 export type { OptimisticTaskAgentTurn } from "./transcript";
