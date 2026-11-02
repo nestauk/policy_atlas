@@ -1,15 +1,17 @@
 # Implementation plan: 056-cost-latency
 
-> Status: draft 2, 2026-11-01. Plan-stage adversarial review adjudicated
+> Status: **approved by the owner 2026-11-02** (Shabeer Rauf). Draft 2, 2026-11-01. Plan-stage adversarial review adjudicated
 > ([adversarial-review-plan.md](adversarial-review-plan.md), 24 findings, all folded; the
 > owner took the lead's recommendation on the seven gate items). Contract:
 > [contract.md](contract.md) (approved 2026-10-30, revision 2, gate items 2026-11-01). Rubric:
 > [rubric.md](rubric.md). ADR: [0042](../../adr/0042-gpt6-switch-per-call-site-routing-and-caching.md),
-> Proposed until this plan is approved. Terms, needs (N1 to N10), decisions (D1 to D11) and
+> Accepted 2026-11-02. Terms, needs (N1 to N10), decisions (D1 to D11) and
 > owner items (O, S, X) are defined in the contract and not restated here. Codex is
 > unavailable this slice (workspace spend cap), so judgment-bearing implementation goes to
 > `deep-reasoner` per the recorded fallback; the substitution is logged in `verification.md`.
-> **Awaiting the owner's approval.**
+> The build runs in a fresh conversation with task-cycle-build, opening on Phase 0. The
+> frontier-step replay (`experiments/frontier-steps-replay.md`) was still running at approval;
+> its results are folded into Phase 5 step 1b as a plan amendment when they land.
 
 ## Context
 

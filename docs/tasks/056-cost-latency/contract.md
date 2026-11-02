@@ -18,8 +18,9 @@ One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); spe
 > pins approved; typed count fields on the progress tick (S5); the S3 label wording deviation
 > recorded; the N8 batch hand-over fix in; Europe PMC egress approved (host `www.ebi.ac.uk`,
 > data sent: a PubMed Central id only); the `components.md` § 9 repair wording accepted as
-> spec item S9. Plan approved (before implementation): _pending_ · ADR: 0042 (Proposed until
-> plan approval) · Branch: `task/056-cost-latency`.
+> spec item S9. **Plan approved (before implementation): 2026-11-02 · Shabeer Rauf (owner).** ADR:
+> [0042](../../adr/0042-gpt6-switch-per-call-site-routing-and-caching.md), Accepted
+> 2026-11-02 · Branch: `task/056-cost-latency`.
 
 ## Goal
 

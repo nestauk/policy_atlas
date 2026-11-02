@@ -1,8 +1,7 @@
 # ADR 0042 — The GPT-6 generation, one route step per model call, deliberate caching, and an Unrated appraisal
 
-- **Status:** Proposed — awaiting the task 056 plan gate (owner sign-off recorded here on
-  approval).
-- **Date:** 2026-10-30
+- **Status:** Accepted — 2026-11-02 (Shabeer Rauf, owner, task 056 plan gate).
+- **Date:** 2026-10-30; accepted 2026-11-02
 - **Task:** [056-cost-latency](../tasks/056-cost-latency/contract.md)
 - **Builds on:** [ADR 0041](0041-bedrock-inference-route-and-model-route-file.md) (the
   route file and its three layers) · [ADR 0015](0015-prose-first-section-emission.md)
@@ -37,8 +36,9 @@ grey literature the owner wants citable.
 
 1. **The model set moves to the GPT-6 generation on both routes**, by editing the route
    file only: `fast` = gpt-6-luna, `standard` = gpt-6.1-terra, `frontier` = gpt-6.1-sol
-   (defined, used by no step). The two Options scoping judgment steps move from the
-   frontier tier to `standard`, since no record showed they need Sol. No prompt text
+   at `low`, which serves the thirteen Options scoping call sites that run on the frontier
+   tier today). Those thirteen are moved down per step only after small-scale replays at
+   several effort levels, read side by side by the owner (owner, 2026-11-01). No prompt text
    changes with the switch: it is the same model family, so prompting rule 12 does not fire.
    The judge and summariser prompts are refined afterwards, together, because the new writer
    model reads their rules more literally (measured), and that refinement is deliberate
@@ -98,5 +98,5 @@ grey literature the owner wants citable.
   half of it on a laptop, and the quote failures the writer suffers are mostly parser
   markup and interleaved headers, to be fixed where the text is made.
 - Risks accepted by the owner: quality is guarded by the owner's read, not an eval set;
-  the frontier tier is left unused on the expectation that Terra suffices for the scoping
-  judgment calls, with a one-line step-up if the read says otherwise.
+  per-step downgrades from the frontier tier rest on small replays and the owner's read,
+  not on an eval set.
