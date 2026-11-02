@@ -41,7 +41,11 @@ from policy_atlas.core.usage import (
 #:   read a stored prefix.
 #: - ``"breakpoint"``: store and read only the stable prefix (the system message).
 #:   For sites whose system prompt repeats across calls but whose user message
-#:   never does.
+#:   never does. It sends the same request body as ``"off"`` (explicit mode, so the
+#:   provider stores nothing on its own) plus one breakpoint on the system message
+#:   (the one place it may store). Without explicit mode the provider would still
+#:   store every whole request at 1.25x, which is what the per-site measurement
+#:   (``experiments/cache-modes-per-site-2026-11-02``) was careful not to send.
 #:
 #: The per-step table is ``evidence_search.synthesis.cache_modes.CACHE_MODES``,
 #: which re-exports this type (it lives here so ``core`` never imports
@@ -115,12 +119,13 @@ def openai_kwargs(
         model: The model id for this call site's route step.
         reasoning_effort: One of the route file's effort values.
         prompt_cache: The step's prompt-cache mode (:data:`PromptCache`).
-            ``"off"`` adds the request body that turns automatic caching off;
-            ``"auto"`` and ``"breakpoint"`` add nothing here (a breakpoint is
-            set on the messages, see :func:`with_system_breakpoint`).
+            ``"off"`` and ``"breakpoint"`` add the request body that turns
+            automatic storing off (``"breakpoint"`` then stores only at the
+            breakpoint set on the messages, see :func:`with_system_breakpoint`);
+            ``"auto"`` adds nothing.
     """
     kwargs: dict[str, Any] = {"model": model, "reasoning_effort": reasoning_effort}
-    if prompt_cache == "off":
+    if prompt_cache in ("off", "breakpoint"):
         kwargs["extra_body"] = {"prompt_cache_options": {"mode": "explicit"}}
     return kwargs
 

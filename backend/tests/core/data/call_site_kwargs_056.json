@@ -120,7 +120,11 @@
       "trace_name": "agent:triage"
     },
     "characterise_assign": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIThemeGroupingBackend.assign",
       "max_completion_tokens": null,
       "model": "gpt-6-luna",
@@ -137,7 +141,11 @@
       "trace_name": "characterise:assign"
     },
     "characterise_discover": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIThemeGroupingBackend.discover",
       "max_completion_tokens": null,
       "model": "gpt-6-luna",
@@ -209,7 +217,11 @@
       "trace_name": null
     },
     "classify_document": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIClassificationBackend.classify",
       "max_completion_tokens": 16384,
       "model": "gpt-6-luna",
@@ -226,7 +238,11 @@
       "trace_name": "classify:document"
     },
     "extract_annotate_relevance": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIRelevanceAnnotatorBackend.annotate",
       "max_completion_tokens": 4096,
       "model": "gpt-6-luna",
@@ -243,7 +259,11 @@
       "trace_name": "extract:annotate_relevance"
     },
     "extract_icf_findings": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIICFExtractionBackend.extract",
       "max_completion_tokens": 32768,
       "model": "gpt-6-luna",
@@ -260,7 +280,11 @@
       "trace_name": "extract:icf_findings"
     },
     "extract_interventions": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIInterventionsBackend.extract",
       "max_completion_tokens": 8192,
       "model": "gpt-6-luna",
@@ -277,7 +301,11 @@
       "trace_name": "extract:interventions"
     },
     "extract_iof_findings": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIExtractionBackend.extract",
       "max_completion_tokens": 32768,
       "model": "gpt-6-luna",
@@ -294,7 +322,11 @@
       "trace_name": "extract:iof_findings"
     },
     "extract_vet_icf_findings": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIICFFindingVetterBackend.judge",
       "max_completion_tokens": 32768,
       "model": "gpt-6-luna",
@@ -311,7 +343,11 @@
       "trace_name": "extract:vet_icf_findings"
     },
     "extract_vet_iof_findings": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIFindingVetterBackend.judge",
       "max_completion_tokens": 32768,
       "model": "gpt-6-luna",
@@ -328,7 +364,11 @@
       "trace_name": "extract:vet_iof_findings"
     },
     "group_assign": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIGroupClusteringBackendFactory.for_facet().assign",
       "max_completion_tokens": null,
       "model": "gpt-6-luna",
@@ -345,7 +385,11 @@
       "trace_name": "group:assign"
     },
     "group_discover": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIGroupClusteringBackendFactory.for_facet().discover",
       "max_completion_tokens": null,
       "model": "gpt-6-luna",
@@ -362,7 +406,11 @@
       "trace_name": "group:discover"
     },
     "judge_grounding": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIGroundingJudgeBackend.judge_block",
       "max_completion_tokens": null,
       "model": "gpt-6-luna",
@@ -379,7 +427,11 @@
       "trace_name": "judge:grounding"
     },
     "longlist_assign": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.assign",
       "max_completion_tokens": 16384,
       "model": "gpt-6-luna",
@@ -396,7 +448,11 @@
       "trace_name": "longlist:assign"
     },
     "longlist_assign_themes": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.assign_themes",
       "max_completion_tokens": 8192,
       "model": "gpt-6.1-sol",
@@ -413,7 +469,11 @@
       "trace_name": "longlist:assign_themes"
     },
     "longlist_authority": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.authority",
       "max_completion_tokens": 16384,
       "model": "gpt-6.1-sol",
@@ -430,7 +490,11 @@
       "trace_name": "longlist:authority"
     },
     "longlist_constrain": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.constrain",
       "max_completion_tokens": 16384,
       "model": "gpt-6.1-sol",
@@ -447,7 +511,11 @@
       "trace_name": "longlist:constrain"
     },
     "longlist_discover": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.discover",
       "max_completion_tokens": 16384,
       "model": "gpt-6.1-sol",
@@ -464,7 +532,11 @@
       "trace_name": "longlist:discover"
     },
     "longlist_distinct": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.distinct",
       "max_completion_tokens": 16384,
       "model": "gpt-6.1-sol",
@@ -481,7 +553,11 @@
       "trace_name": "longlist:distinct"
     },
     "longlist_shortlist": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.propose_shortlist",
       "max_completion_tokens": 4096,
       "model": "gpt-6.1-sol",
@@ -498,7 +574,11 @@
       "trace_name": "longlist:shortlist"
     },
     "longlist_themes": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.discover_themes",
       "max_completion_tokens": 8192,
       "model": "gpt-6.1-sol",
@@ -515,7 +595,11 @@
       "trace_name": "longlist:themes"
     },
     "longlist_type": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.type_options",
       "max_completion_tokens": 16384,
       "model": "gpt-6.1-sol",
@@ -532,7 +616,11 @@
       "trace_name": "longlist:type"
     },
     "option_profile_ambition": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.profile_ambition",
       "max_completion_tokens": 16384,
       "model": "gpt-6.1-sol",
@@ -549,7 +637,11 @@
       "trace_name": "option_profile:ambition"
     },
     "option_profile_fold": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.fold",
       "max_completion_tokens": 16000,
       "model": "gpt-6-luna",
@@ -566,7 +658,11 @@
       "trace_name": "option_profile:fold"
     },
     "option_profile_line": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.profile_line",
       "max_completion_tokens": 16384,
       "model": "gpt-6.1-sol",
@@ -583,7 +679,11 @@
       "trace_name": "option_profile:line"
     },
     "option_profile_place_sentences": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.place_sentences",
       "max_completion_tokens": 8192,
       "model": "gpt-6-luna",
@@ -600,7 +700,11 @@
       "trace_name": "option_profile:place_sentences"
     },
     "option_profile_potential_impact": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.profile_potential_impact",
       "max_completion_tokens": 16384,
       "model": "gpt-6.1-sol",
@@ -617,7 +721,11 @@
       "trace_name": "option_profile:potential_impact"
     },
     "option_profile_setting": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAILonglistBackend.profile_setting",
       "max_completion_tokens": 16384,
       "model": "gpt-6.1-sol",
@@ -634,7 +742,11 @@
       "trace_name": "option_profile:setting"
     },
     "screen_abstract": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIScreeningBackend.screen_envelope",
       "max_completion_tokens": 8192,
       "model": "gpt-6-luna",
@@ -651,7 +763,11 @@
       "trace_name": "screen:abstract"
     },
     "screen_full": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIScreeningBackend.screen_fulltext",
       "max_completion_tokens": 8192,
       "model": "gpt-6-luna",
@@ -668,7 +784,11 @@
       "trace_name": "screen:full"
     },
     "search_generate_queries": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAISearchGenerationBackend.generate_queries",
       "max_completion_tokens": 8192,
       "model": "gpt-6-luna",
@@ -685,7 +805,11 @@
       "trace_name": "search:generate_queries"
     },
     "search_queries_v2_openalex": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "V2SearchGenerationBackend.generate_queries",
       "max_completion_tokens": 8192,
       "model": "gpt-6-luna",
@@ -702,7 +826,11 @@
       "trace_name": "search_queries_v2_openalex:1"
     },
     "search_queries_v2_overton": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "V2SearchGenerationBackend.generate_queries",
       "max_completion_tokens": 8192,
       "model": "gpt-6-luna",
@@ -719,7 +847,11 @@
       "trace_name": "search_queries_v2_overton:1"
     },
     "search_reformulate": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAISearchGenerationBackend.reformulate",
       "max_completion_tokens": 8192,
       "model": "gpt-6-luna",
@@ -736,7 +868,11 @@
       "trace_name": "search:reformulate"
     },
     "search_reformulate_v2_openalex": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "V2SearchGenerationBackend.reformulate",
       "max_completion_tokens": 8192,
       "model": "gpt-6-luna",
@@ -753,7 +889,11 @@
       "trace_name": "search_reformulate_v2_openalex:r1:1"
     },
     "search_reformulate_v2_overton": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "V2SearchGenerationBackend.reformulate",
       "max_completion_tokens": 8192,
       "model": "gpt-6-luna",
@@ -770,7 +910,11 @@
       "trace_name": "search_reformulate_v2_overton:r1:1"
     },
     "search_suggest": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAISearchGenerationBackend.suggest",
       "max_completion_tokens": 8192,
       "model": "gpt-6-luna",
@@ -787,7 +931,11 @@
       "trace_name": "search:suggest"
     },
     "select_rerank": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAIRankingBackend.rank",
       "max_completion_tokens": null,
       "model": "gpt-6-luna",
@@ -804,7 +952,11 @@
       "trace_name": "select:rerank"
     },
     "synthesise_judge_summary": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAISynthesisBackend.judge_summary",
       "max_completion_tokens": null,
       "model": "gpt-6.1-terra",
@@ -821,7 +973,11 @@
       "trace_name": "synthesise:judge_summary"
     },
     "synthesise_propose_sections": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAISynthesisBackend.propose_sections",
       "max_completion_tokens": null,
       "model": "gpt-6.1-terra",
@@ -920,7 +1076,11 @@
       "trace_name": "synthesise:section_turn"
     },
     "synthesise_write_artefact_summary": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAISynthesisBackend.write_block_summary",
       "max_completion_tokens": null,
       "model": "gpt-6.1-terra",
@@ -937,7 +1097,11 @@
       "trace_name": "synthesise:write_artefact_summary"
     },
     "synthesise_write_block_summary": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAISynthesisBackend.write_block_summary",
       "max_completion_tokens": null,
       "model": "gpt-6.1-terra",
@@ -954,7 +1118,11 @@
       "trace_name": "synthesise:write_block_summary"
     },
     "synthesise_write_case_studies": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAISynthesisBackend.write_case_studies",
       "max_completion_tokens": null,
       "model": "gpt-6.1-terra",
@@ -971,7 +1139,11 @@
       "trace_name": "synthesise:write_case_studies"
     },
     "synthesise_write_intro": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAISynthesisBackend.write_full_report_intro",
       "max_completion_tokens": null,
       "model": "gpt-6-luna",
@@ -988,7 +1160,11 @@
       "trace_name": "synthesise:write_intro"
     },
     "synthesise_write_key_findings": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAISynthesisBackend.write_key_findings",
       "max_completion_tokens": null,
       "model": "gpt-6.1-terra",
@@ -1012,7 +1188,11 @@
       "trace_name": "synthesise:write_key_findings"
     },
     "synthesise_write_source_note": {
-      "extra_body": null,
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
       "function": "OpenAISynthesisBackend.write_source_note",
       "max_completion_tokens": null,
       "model": "gpt-6-luna",

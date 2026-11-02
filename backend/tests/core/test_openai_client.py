@@ -64,9 +64,17 @@ def test_openai_kwargs_off_adds_the_extra_body() -> None:
     }
 
 
-@pytest.mark.parametrize("mode", ["auto", "breakpoint"])
-def test_openai_kwargs_auto_and_breakpoint_add_nothing(mode: Any) -> None:
-    assert openai_kwargs("m", reasoning_effort="low", prompt_cache=mode) == {
+def test_openai_kwargs_breakpoint_adds_the_extra_body_too() -> None:
+    """A breakpoint only limits what the provider stores if its own storing is off."""
+    assert openai_kwargs("m", reasoning_effort="low", prompt_cache="breakpoint") == {
+        "model": "m",
+        "reasoning_effort": "low",
+        "extra_body": _OFF_BODY,
+    }
+
+
+def test_openai_kwargs_auto_adds_nothing() -> None:
+    assert openai_kwargs("m", reasoning_effort="low", prompt_cache="auto") == {
         "model": "m",
         "reasoning_effort": "low",
     }
@@ -106,7 +114,7 @@ def test_with_system_breakpoint_without_a_system_message_is_a_copy() -> None:
 def test_parse_structured_breakpoint_sends_the_rewritten_messages() -> None:
     kwargs = _parse("breakpoint")
     assert kwargs["messages"] == with_system_breakpoint(_MESSAGES)
-    assert "extra_body" not in kwargs
+    assert kwargs["extra_body"] == _OFF_BODY
     assert _MESSAGES[1] == {"role": "system", "content": "stable system prompt"}
 
 

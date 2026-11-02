@@ -995,14 +995,14 @@ def test_every_step_has_a_cache_mode_and_sends_it(monkeypatch: pytest.MonkeyPatc
     A site key is its route step, or ``step/part`` where one step has several
     requests. ``auto`` sends no ``extra_body`` and a plain-text system message (a
     driver that passes no system message records ``None``); ``off`` sends the
-    body that turns caching off; ``breakpoint`` sends the first system message
-    as content parts carrying the breakpoint.
+    body that turns caching off; ``breakpoint`` sends that same body and the first
+    system message as content parts carrying the breakpoint.
     """
     assert sorted(CACHE_MODES) == sorted(model_routes.route().steps)
     expected_by_mode: dict[str, tuple[Any, set[str | None]]] = {
         "auto": (None, {"text", None}),
         "off": ({"prompt_cache_options": {"mode": "explicit"}}, {"text", None}),
-        "breakpoint": (None, {"parts+breakpoint"}),
+        "breakpoint": ({"prompt_cache_options": {"mode": "explicit"}}, {"parts+breakpoint"}),
     }
     for site in SITES:
         mode = CACHE_MODES[site.step.split("/")[0]]
