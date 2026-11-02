@@ -24,6 +24,8 @@ file; *Langfuse* is the tracing tool that records every model call and its token
 | B | Phase 1 commit B (the switch) | `make verify-fast` + prompt-guard | 3,759 passed, **9 failed**: four extraction-fingerprint pins (iof/icf × stub/live), four intervention-profile fingerprint pins and one `kwargs["model"] == "gpt-5.6-luna"` assert — every one a value that embeds the model id, which the switch changes by design; re-pinned, those three files re-run: 60 passed. Prompt-guard unchanged (no prompt file touched). |
 | C | Phase 1 commit C (O3 prompts, X2) | `make verify-fast` + prompt-guard | backend tests all passed, typecheck and lint clean; **`eval-check` red** on `ruff format --check scripts/evals/screening` (one comment line from commit A's `run_screen.py` edit; the A and B gates stopped before `eval-check` ran); formatted, `make eval-check` re-run: exit 0. Prompt-guard 41 unchanged after the `summary_prompts.py` re-pin. |
 | P2 A | Phase 2 commit A (caching plumbing, D8/D10, X3) | `make verify-fast` + prompt-guard | **green**: 3,796 passed, 1 skipped (803 s); typecheck, lint, eval-check clean; prompt-guard 41 unchanged after the `section_prompt.py` re-pin. |
+| P4 | Phase 4 (repair guard) | `make verify-fast` + prompt-guard | **green**: 3,822 passed, 1 skipped (667 s); typecheck, lint, eval-check clean; prompt-guard 41 unchanged after the re-pin. |
+| 5 | End of Phase 6 (ingest-adjacent), tree = Phase 4 + the Phase 6 patch | `make verify` | **green**: 3,884 passed, 1 skipped (766 s); okf-validate 182 concepts; build, infra, audit-paths, prompt-guard, font-guard, drift-check OK; frontend 943 tests. |
 | 4 | End of Phase 3 (schema), tree = Phase 2 A + the Phase 3 patch | `make verify` | **green**: 3,812 passed, 1 skipped (674 s); build, infra 95, audit-paths, prompt-guard, font-guard, drift-check OK; frontend 939 tests in 88 files. |
 
 Per-phase commits on `task/056-cost-latency`:
@@ -36,6 +38,8 @@ Per-phase commits on `task/056-cost-latency`:
 | 1 C | 35c92e59 | C (verify-fast) |
 | 2 A | 43bf7a34 | P2 A (verify-fast) |
 | 3 | 3bcd3044 | 4 (full) |
+| 4 | ae9a720b | P4 (verify-fast) |
+| 6 | a4fb1bb2 | 5 (full) |
 
 ## Phase 0 — instrument, baseline, tidy (N1, D11, D2a, tidy-ups)
 
@@ -200,7 +204,7 @@ recommendation. Session totals from `cost_per_run.py` (run totals in brackets):
 | zonal pricing | a57ff6ec | $2.10 | $2.05 | synthesise 68% ($1.43); section turns 62% of input as cache WRITE, repair 99%, summary judge 87% |
 | childhood obesity | e99d1502 | $3.01 | $2.98 | synthesise 70% ($2.11) |
 | **ES standard median** | | **$2.68** | **$2.62** | first runs with the write bucket visible: writes were ~57% of all input tokens in zonal |
-| scoping (AI and the labour market) | cabaa778 | pending | | the longlist walk's option-profile calls take ~5 min each on gpt-5.6-sol |
+| scoping (AI and the labour market) | cabaa778 | $3.25 | $3.09 | option_profile 33% ($1.08), synthesise 27% ($0.86), extract_interventions 14% ($0.45, 99% of its input written to the cache: 1.18M write tokens); the option-profile calls took ~5 min each on gpt-5.6-sol; the walk ran 2 h |
 
 ### X1 — grounding judge replay on gpt-6-luna (builder; `experiments/grounding-judge-replay-2026-11-02.md`)
 
@@ -394,6 +398,89 @@ call). Synthetic payload: the repair message falls from 15,551 to 3,052 characte
 case (a 104,890-character chunk, quote absent) 0.087 s. Ten tests. Lead decision: keep the 2,000
 threshold and judge it on the repair pass rate of the post-Phase-4 fixed questions; raise to
 10,000 as a recorded change if the rate falls.
+
+## Phase 5 — effort per step (N7, O2)
+
+Replay (builder; `experiments/effort-high-steps-2026-11-02-*`, 160 calls, $0.46) for the three
+steps still at `high`. The stored vetter calls (214 since 2026-09-01) all ran on gpt-5.4-mini, so
+the noise floor is that model's own repeat and a gpt-6-luna `high` repeat was added.
+
+| Step | luna `high` vs stored (verdict) | luna `medium` vs stored | noise floor | medium vs high | medium: reasoning tokens / latency / cost | Pin |
+|---|---|---|---|---|---|---|
+| `extract_vet_iof_findings` (30 items, 453 findings) | 0.951 | 0.947 | 0.937 (mini), 0.921 (luna repeat) | 0.987 | −37% / −25% / −15% | **medium** |
+| `extract_vet_icf_findings` (30 items, 619 findings) | 0.950 | 0.961 | 0.952 / 0.952 | 0.963 | −56% / −35% / −24% | **medium** |
+| `extract_annotate_relevance` | — | — | — | — | no stored call exists at any date (runs only with a user relevance emphasis) | **high** (cannot tell) |
+| `classify_document` | contract fact (`classify-effort-sweep.md`): `medium` within noise, 19% cheaper, 22% faster | | | | | **medium** |
+
+The differences between `medium` and `high` go both ways on borderline findings; the one
+repeated lean is ICF `medium` flagging "aims to / seeks to" mechanism statements as aspiration.
+Pinned in `model_routes.toml` (the per-step pin test and the kwargs fixture re-captured: exactly
+the three efforts and the two vetted extraction fingerprints, which embed the vetter effort). The
+thirteen frontier steps stay on `frontier` (gpt-6.1-sol at `low`): the plan's 2026-11-02 amendment
+makes any downgrade conditional on the owner reading
+`experiments/frontier-steps-replay-samples.md` side by side — an owner gate this build cannot pass
+on its own, recorded as open.
+
+## Phase 6 — ingest scheduler, progress stage, XML route (N8, N9/S5, N10/S7) — commit a4fb1bb2, Gate 5 full verify
+
+Built by three deep-reasoners in their own worktrees (N8; N9 on N8; N10 parser + the wiring on
+both), patches `p6-n8.patch`, `p6-n8n9.patch`, `p6-n10.patch`, `p6-all.patch`.
+
+**N8.** `_ParseScheduler`: any-free-slot draining (`multiprocessing.connection.wait` over every
+running worker's pipe; the first finished job frees its slot) and a `forkserver` context that
+preloads the parser modules so each job forks a warm helper; `_drain_parse_job` / `_worker_entry`
+reused; the per-document deadline, hard-kill, corrupt-on-death and the task-045 shared ingest
+slots unchanged; worker count, timeouts, pool sizes and fetch threads unchanged (D6). The batch
+hand-over inside a cascade round is now continuous (a fetched body enters the queue as it lands);
+one `ingest.batch_handover` log per round (`batch`, `documents`, `fetch_wall_s`, `parse_wall_s`,
+`idle_gap_s`). Measured on the saved 52-document corpus (replayed fetch times, pool 8): old wall
+152.1 s with 713 idle slot-seconds → new 56.9 s with 9.3 (product log `idle_gap_s` 0.27);
+`ingest-scheduler-n8-verify.py`: pool 8 49.4 s, pool 4 61.6 s, 747 chunks, digest
+`35e8ebb3bba09ba5` = the prototype's reference, 0 mismatches. Committed corpus
+(`tests/data/fulltext`: three CC-BY-4.0 PDFs + a CC0 corrupt file): digest `15f69fc2…078b9`
+identical for the old scheduler (workers 1 and 4), the new one (1 and 4) and a same-process
+parse; pinned by `test_scheduler_output_is_byte_identical_workers_1_vs_4`. **Security note for
+the review:** the parent-side guard in `test_zero_egress_socket_deny` now allows `AF_UNIX` only
+(the forkserver's local socket); the worker-side guard still refuses every socket. Not yet run on
+the 2-CPU staging container (plan step 4).
+
+**N9 / S5.** `StageKey` gains `ingest` after `appraise`; `STAGE_BY_REGISTRY["ingest_full_text"]
+= "ingest"` so the harness's events produce the row; `TickFrame` gains optional typed `fetched`,
+`parsed`, `total` (omitted when absent, so a tick without counts is byte-identical to before);
+`publish_current_tick` carries them; an in-memory `_IngestProgress` mirrors the `full_text_status`
+values the end-of-run write pass stores (total = eligible set; already-ingested rows count as
+fetched and parsed; fetched on body arrival; parsed on `ingested`), ticked after each finished
+fetch batch and each drain. Words (lead): label "Reading the full texts", blurb "Fetching each
+selected document's full text and reading it into sections.", beat "Reading the full texts:
+{parsed} of {total} read" (or "{fetched} fetched" before any is read). The plan panel lists the
+stage after appraise (server plan steps and `planVocabulary.ts`), and ticks are now shown: the
+running card takes `liveness` and shows the beat on the in-progress row. Spec `web-api.md` § SSE
+amended (S5). Live check (the stage with counts on a fixed-question run): pending.
+
+**N10 / S7.** `sourcing/parse_jats.py`: the stdlib expat parser driven directly
+(`SetParamEntityParsing NEVER`, `ExternalEntityRefHandler` raises → `corrupt`, skipped entities →
+U+FFFD), about 75 undefined JATS named entities replaced before parsing; output = the segmenter's
+page shape (`#` title, `##` Abstract and sections nested to `######`, pipe tables with their
+captions, figure captions, TeX formulas; reference lists left out — lead accepts, owner item);
+hostile input: billion laughs refused in 0.30 s, quadratic blow-up in 0.06 s, `file://` and
+`http` external entities refused with zero socket calls and a loopback listener that never
+receives a connection; `pyexpat` 2.6.3 locally with a test that asserts ≥ 2.4.1 (the production
+`python:3.12-slim` image is unchecked). `fetch_europe_pmc_xml(pmcid)`: `PMC[0-9]{1,12}` full match
+before any request; `https://www.ebi.ac.uk/europepmc/webservices/rest/{id}/fullTextXML` through
+the pinned-IP transport, product user agent, no redirects, body cap; only the id is logged;
+under the live fetcher's global semaphore and per-host slot (≤ 2 concurrent, starts ≥ 1 s apart;
+Europe PMC's published guidance is believed to allow about 10 requests/s — to confirm at review).
+Wiring: a document whose OpenAlex metadata carries `provider_fields.ids.pmcid` (a link with the
+number; `normalise_pmcid`) tries the XML first, then today's PDF-first candidates; a missing,
+empty or corrupt XML falls through to the next candidate by the existing cascade rule; fixture
+replay never contacts Europe PMC (the hook exists only on the live fetcher); `source_kind` stored
+per document (`europe_pmc_xml | pdf | html | plain`) and `by_route` counts in the run summary.
+Three CC BY 4.0 JATS fixtures (PMC11210863, PMC5264339, PMC11218303; digests pinned). Fresh
+acquisitions (read-only SQL on the three 2026-11-02 ES tasks): 100 of 599 OpenAlex rows carry a
+pmcid (16.7%); of the rows screened relevant, 3 of 96, 0 of 144 and 74 of 164 — so the XML share
+depends on the question (about 45% on obesity, near 0 on NEET and zonal pricing); Overton rows
+carry no ids. No `acquire.py` change was needed. Live share and chunk quality on the fixed
+questions: pending.
 
 ## Checks beyond the build
 

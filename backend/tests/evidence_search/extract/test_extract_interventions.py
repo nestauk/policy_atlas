@@ -518,8 +518,8 @@ def test_an_es_directive_cannot_name_the_intervention_profile() -> None:
         ),
         (
             "stub", True,
-            "3ca0a591ae9a20e88b9e450f499910bb8c46b8adb93a9a05b488feb0eca00ec7",
-            "7f3a2432a0f225cbb945afd4b833e21f89cdf182e429336f80721d3cb78b9454",
+            "1acf7d0c2311c163c6266d22e84fa8b5bcd0e24beb0b68559e781ef47b62bf2d",
+            "ce17835bf91394acde9d2a39a7823e3ea36e79d500b315edf9720fbb6e3f0a1c",
         ),
         (
             "live", False,
@@ -528,8 +528,8 @@ def test_an_es_directive_cannot_name_the_intervention_profile() -> None:
         ),
         (
             "live", True,
-            "708e0aed1cca7dc3db39cbcbef3720d41f77c5986920f147d59a6d65851aa1a3",
-            "4baac9125f1dd2e831138038754bad7563833bf43430fdb199ea483952fd2c15",
+            "d3d8308957d22d6f330ef088c9f390b19b1c7b12c01134ca108eae32e16cf421",
+            "c33fb48c32ecae44e9686a0913826c954f06cc89a22a95ede955f2ad08ee24c2",
         ),
     ],
 )
@@ -545,7 +545,8 @@ def test_the_iof_and_icf_fingerprints_are_pinned(
     is the only moved component. A moved key means stored extractions are not reused
     under the new model; the next run re-extracts. Re-pinned again on 2026-11-02 when
     task 056 moved the fast tier to gpt-6-luna (the digest shows the model as the only
-    moved component; the vetter effort stays "high").
+    moved component; the vetter effort stays "high"); and once more in Phase 5 when the
+    two finding vetters moved from "high" to "medium" (the digest embeds the vetter effort).
     """
     assert extraction_fingerprint(mode, finding_vetter_active=vetted)[0] == iof
     assert icf_extraction_fingerprint(mode, finding_vetter_active=vetted)[0] == icf

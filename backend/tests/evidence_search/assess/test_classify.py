@@ -673,7 +673,7 @@ def test_classify_backend_passes_model_and_reasoning_effort() -> None:
     assert usage is None
     [kwargs] = fake_client.chat.completions.calls
     assert kwargs["model"] == CLASSIFY_MODEL
-    assert kwargs["reasoning_effort"] == "high"
+    assert kwargs["reasoning_effort"] == "medium"  # task 056 P5: medium
     assert kwargs["reasoning_effort"] == CLASSIFY_EFFORT
 
 

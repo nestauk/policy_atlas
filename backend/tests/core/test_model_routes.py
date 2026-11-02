@@ -19,7 +19,8 @@ from policy_atlas.core.model_routes import ROUTE_FILE, Route, load_route
 # The model and reasoning effort per step after the task 056 switch (D2, D4, D9): the tier the
 # step follows and the effort it sends. "medium" is written where nothing was sent
 # before (the provider default, probed 2026-11-02); "none" where the route knob gave
-# it to Terra; "high" where a module hard-coded it; "low" on the frontier steps because
+# it to Terra; "high" where a module hard-coded it (classify and the two finding vetters
+# moved to "medium" in Phase 5 on replay evidence); "low" on the frontier steps because
 # gpt-6.1-sol refuses "none" (owner, 2026-11-01). Changing a value here is a
 # deliberate behaviour change, never a side effect.
 STEP_TIER_AND_EFFORT: dict[str, tuple[str, str]] = {
@@ -49,9 +50,9 @@ STEP_TIER_AND_EFFORT: dict[str, tuple[str, str]] = {
     "longlist_assign": ("fast", "medium"),
     "option_profile_fold": ("fast", "medium"),
     "option_profile_place_sentences": ("fast", "medium"),
-    "classify_document": ("fast", "high"),
-    "extract_vet_iof_findings": ("fast", "high"),
-    "extract_vet_icf_findings": ("fast", "high"),
+    "classify_document": ("fast", "medium"),
+    "extract_vet_iof_findings": ("fast", "medium"),
+    "extract_vet_icf_findings": ("fast", "medium"),
     "extract_annotate_relevance": ("fast", "high"),
     "synthesise_propose_sections": ("standard", "none"),
     "synthesise_write_block_summary": ("standard", "none"),

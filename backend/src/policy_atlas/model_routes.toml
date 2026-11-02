@@ -33,7 +33,7 @@
 
 [steps]
 # --- Evidence search: assess ---------------------------------------------
-classify_document = { tier = "fast", reasoning_effort = "high" }
+classify_document = { tier = "fast", reasoning_effort = "medium" }   # was high; medium measured within noise, 19% cheaper (task 056 P5)
 screen_abstract = { tier = "fast", reasoning_effort = "medium" }
 screen_full = { tier = "fast", reasoning_effort = "medium" }
 # --- Evidence search: corpus, group ---------------------------------------
@@ -46,9 +46,9 @@ group_assign = { tier = "fast", reasoning_effort = "medium" }
 extract_iof_findings = { tier = "fast", reasoning_effort = "medium" }
 extract_icf_findings = { tier = "fast", reasoning_effort = "medium" }
 extract_interventions = { tier = "fast", reasoning_effort = "medium" }
-extract_vet_iof_findings = { tier = "fast", reasoning_effort = "high" }
-extract_vet_icf_findings = { tier = "fast", reasoning_effort = "high" }
-extract_annotate_relevance = { tier = "fast", reasoning_effort = "high" }
+extract_vet_iof_findings = { tier = "fast", reasoning_effort = "medium" }
+extract_vet_icf_findings = { tier = "fast", reasoning_effort = "medium" }
+extract_annotate_relevance = { tier = "fast", reasoning_effort = "high" }   # no stored calls to measure (task 056 P5); stays high
 # --- Evidence search: search ------------------------------------------------
 search_generate_queries = { tier = "fast", reasoning_effort = "medium" }
 search_reformulate = { tier = "fast", reasoning_effort = "medium" }

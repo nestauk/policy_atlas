@@ -216,7 +216,7 @@
       "module": "policy_atlas.evidence_search.assess.classification_backend",
       "other_keys": [],
       "parallel_tool_calls": null,
-      "reasoning_effort": "high",
+      "reasoning_effort": "medium",
       "request_path": "parse_structured",
       "response_format": "ClassifyWire",
       "stream": null,
@@ -301,7 +301,7 @@
       "module": "policy_atlas.evidence_search.extract.finding_vetter",
       "other_keys": [],
       "parallel_tool_calls": null,
-      "reasoning_effort": "high",
+      "reasoning_effort": "medium",
       "request_path": "parse_structured",
       "response_format": "ICFFindingVetterResponse",
       "stream": null,
@@ -318,7 +318,7 @@
       "module": "policy_atlas.evidence_search.extract.finding_vetter",
       "other_keys": [],
       "parallel_tool_calls": null,
-      "reasoning_effort": "high",
+      "reasoning_effort": "medium",
       "request_path": "parse_structured",
       "response_format": "FindingVetterResponse",
       "stream": null,
@@ -1064,12 +1064,12 @@
     }
   },
   "captured_at": "2026-11-02",
-  "extraction_fingerprint": "708e0aed1cca7dc3db39cbcbef3720d41f77c5986920f147d59a6d65851aa1a3",
+  "extraction_fingerprint": "d3d8308957d22d6f330ef088c9f390b19b1c7b12c01134ca108eae32e16cf421",
   "extraction_fingerprint_source": {
     "extraction_fingerprint": "policy_atlas.evidence_search.extract.extract.extraction_fingerprint('live', finding_vetter_active=True)",
     "icf_extraction_fingerprint": "policy_atlas.evidence_search.extract.extract.icf_extraction_fingerprint('live', finding_vetter_active=True)"
   },
-  "icf_extraction_fingerprint": "4baac9125f1dd2e831138038754bad7563833bf43430fdb199ea483952fd2c15",
+  "icf_extraction_fingerprint": "c33fb48c32ecae44e9686a0913826c954f06cc89a22a95ede955f2ad08ee24c2",
   "route": "openai-direct",
   "uncaptured": {
     "claude_search_generate_queries": "Inventory row 20, ClaudeSearchGenerationBackend.generate_queries: a boto3 Bedrock `converse` call, not the OpenAI client; it has no route step and no row in the plan's Steps table, and no route selects it (route search_queries.backend is never 'claude')."
