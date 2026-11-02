@@ -225,8 +225,9 @@ not the throttling mechanism for embedding models; the one measured run exceeded
 sleep. The staging measurement records requests, tokens and throttling sleeps per run. If
 throttling appears at the token rate after all, G4 (a raise request) is the fallback and the
 owner decides then. Switching embedding model is out: a switch re-embeds every stored chunk.
-Embedding on OpenAI from the bedrock route is a route-file change the owner can make later
-without this slice.
+With `bedrock` the default route (D9), Cohere Embed v4 is the one embedding profile the store
+will hold going forward; the `vector(1536)` column is shared, and searches filter by profile
+as today, so legacy OpenAI vectors stay valid for their own snapshots.
 
 **D7. Retrieval parity. Decided (owner, sheet item 7).** The SQL leg for words uses the
 product's own score (share of query words found in the unit), not Postgres full-text ranking,
@@ -239,12 +240,16 @@ citations are untouched (spec: a parser upgrade applies to newly ingested snapsh
 The fallback parser (Textract or Bedrock Data Automation) is deferred to a later slice with
 the free trigger signals recorded in `deferred.md`.
 
-**D9. Measurement. Decided.** Before: the 2026-11-02 anatomy. After, on the laptop: the three
-fixed Evidence search questions in `in_process` mode on both routes, which measures N6 to N8;
-on staging: the same three in `queued` mode on bedrock, which measures N1 to N5, with the
-ingest split read from the function's logs and the embedding quota state recorded. The fixed
-scoping question before and after N10. The owner reads one report per route after N7 and N8
-for a content check (reports are not meant to change).
+**D9. Measurement. Decided; route narrowed 2026-11-02.** The owner ruled that `bedrock` is
+the app's default route from now on and `openai-direct` is legacy and unlikely to be used
+again. Every measurement in this slice runs on `bedrock`. Before: the 2026-11-02 anatomy
+(bedrock rows). After, on the laptop: the three fixed Evidence search questions in
+`in_process` mode, which measures N6 to N8 and N10c; on staging: the same three in `queued`
+mode, which measures N1 to N5, with the ingest split read from the function's logs and the
+embedding requests, tokens and sleeps recorded. The fixed scoping question before and after
+N10a and N10b. The owner reads one report after N7 and one after N8 for a content check
+(reports are not meant to change). `openai-direct` keeps working (the route file is
+untouched) but is not measured; one smoke run on it at the step-6 exit only if the owner asks.
 
 **D10. Out of scope, named.** Parallel report sections and the summary pass (sheet item 10;
 synthesis refinement task). Graviton (sheet item 11). Uploaded documents (sheet item 12).
@@ -275,6 +280,12 @@ Sheet items 1 to 15 as listed in the decision sheet: 1 yes; 2 yes; 3 yes; 4 yes;
 6 yes; 7 yes, and the in-app hybrid search is removed; 8 reuse on, no switch; 9 ok;
 10 report writing out; 11 Graviton out; 12 uploads out ("the app doesn't have that yet");
 13 yes; 14 ok, "ideally we'd get it as low as possible"; 15 yes.
+
+Later the same day: per-step synthesis timeouts added (N10c, D12); parallel section writing
+ruled out for coherence; `bedrock` is the default route going forward and `openai-direct` is
+legacy (D9). ❓ Open for the owner: `infra/pa_config.json` still names `openai-direct` for
+`prod`; flipping it is a production config change. Fold into this slice's config change
+(N11) or leave for a separate change?
 
 ## Spec items (proposed; the owner decides each)
 
