@@ -11,7 +11,7 @@
 > `deep-reasoner` per the recorded fallback; the substitution is logged in `verification.md`.
 > The build runs in a fresh conversation with task-cycle-build, opening on Phase 0. The
 > frontier-step replay (`experiments/frontier-steps-replay.md`) was still running at approval;
-> its results are folded into Phase 5 step 1b as a plan amendment when they land.
+> it landed on 2026-11-02 and is folded into Phase 5 step 1b as a plan amendment (below).
 
 ## Context
 
@@ -351,6 +351,47 @@ Each phase ends in a commit on `task/056-cost-latency`. Every `lead` mark carrie
    configuration within the noise floor, or keeps `frontier`. Each pinned downgrade is a step
    exception with its effort; the scoping fixed question runs again after the downgrades and
    the owner reads the longlist. — **lead** (model choice is judgment; the owner reads).
+
+   **Amendment 2026-11-02 (replay landed; no gate reopened).** The replay ran on **7 stored
+   inputs per step** (6 for authority), not the 12 to 20 the brief asked for: a one-input pilot
+   cost $0.815, so 12 inputs would not fit the $8 cap. Recorded spend was $7.36 at list prices;
+   with stopped calls and SDK retries after client timeouts the real bill may be up to $9.70.
+   Treat every row as a small-sample read. The builder's rule (a configuration holds when its
+   agreement is at least gpt-6.1-sol's minus the noise gap) was strict on label steps, because
+   two Sol runs on `longlist_type` gave identical labels, so the label noise gap came out at 0.
+   Other limits: the judge prompt for the free-text steps was written by the builder, so the
+   lead reviews it before relying on the grades; `longlist_authority` has no stored Sol output
+   (its calls ran on gpt-5.5); all seven `task_agent_scoping_turn` inputs were the final
+   "plan ready" turn; `longlist_constrain` (92 of 92 verdicts "passes") and `longlist_distinct`
+   (no duplicate named anywhere) cannot separate configurations. Cost per call is Sol low vs
+   the named configuration. What the replay says, per step:
+
+   | step | replay says | cost per call, Sol vs named ($) | note for the owner's read |
+   |---|---|---|---|
+   | `task_agent_scoping_turn` | gpt-6.1-terra at `none` | 0.0242 vs 0.0120 | closed fields 1.000 on every configuration; only final turns tested |
+   | `longlist_discover` | gpt-6.1-terra at `none` by the rule | 0.0190 vs 0.0089 | name overlap with stored is 0.036 for Sol and 0.000 for Terra, so the measure cannot separate; Terra proposes more options (2.6 to 3.3 a call vs 2.0); read the samples |
+   | `longlist_themes` | stay on Sol | 0.0103 vs 0.0057 (medium) | pair agreement 0.940 Sol; 0.935 to 0.924 Terra |
+   | `longlist_assign_themes` | stay on Sol by the strict rule | 0.0149 vs 0.0009 (luna medium) | Sol 0 of 146 differ; luna, Terra high and Terra none 1; Terra medium 2 |
+   | `longlist_type` | stay on Sol by the strict rule | 0.0222 vs 0.0018 (luna medium) | Sol 3 of 86 differ; luna 4; Terra medium and none 5; Terra high 7 |
+   | `longlist_constrain` | gpt-6-luna at `medium` by the rule | 0.0182 vs 0.0012 | not a real test: no configuration gave a "breaks" |
+   | `longlist_distinct` | gpt-6-luna at `medium` by the rule | 0.0064 vs 0.0004 | not a real test: no duplicate named by any output |
+   | `longlist_authority` | stay on Sol by the strict rule | 0.0305 vs 0.0023 (luna medium) | against gpt-5.5 labels: Sol 7 of 192 differ; Terra none and luna 9; Terra medium 10; Terra high 12; Terra medium agrees 0.984 with Sol |
+   | `longlist_shortlist` | stay on Sol | 0.0543 vs 0.0262 (none) | Sol keeps 0.771 of stored picks; Terra 0.629 to 0.686; this step's own noise floor not measured |
+   | `option_profile_line` | gpt-6-luna at `medium` | 0.0273 vs 0.0020 | judge 2.269 vs 2.293, inside the 0.432 judge floor; all within 25 words |
+   | `option_profile_potential_impact` | gpt-6.1-terra at `none` | 0.0362 vs 0.0175 | judge 2.354 vs 2.397; same-mark agreement 0.694 vs 0.763, the largest mark drop |
+   | `option_profile_ambition` | gpt-6.1-terra at `none` | 0.0283 vs 0.0128 | judge 2.526 vs 2.478 |
+   | `option_profile_setting` | stay on Sol | 0.0177 vs 0.0171 (high) | main setting 0.801 Sol; 0.753 Terra high; 0.671 Terra medium; 0.603 luna; 0.596 Terra none |
+
+   How the build uses this: the owner reads `experiments/frontier-steps-replay-samples.md`
+   side by side before any pin. Steps the replay marks "stay on Sol" stay on `frontier`.
+   Steps it marks as a downgrade become step exceptions only if the owner's read agrees; the
+   two steps whose measure could not separate configurations (`longlist_constrain`,
+   `longlist_distinct`) and `longlist_discover` need that read most. A pin to `none` is a
+   behaviour change under D4 and is recorded as one. If the owner wants more evidence, the
+   replay driver resumes: `run.py --n 12` in `experiments/frontier-steps-replay-scripts/`
+   brings each step to 12 inputs for roughly $5 more plus the noise, judge and theme runs.
+   Results, raw outputs, inputs and spend ledger sit beside the report
+   (`frontier-steps-replay-{results,raw,inputs,spend}.json`).
 2. Tokens, reasoning tokens and latency per step before and after (fixed questions for the
    steps that run at standard depth; replays for the rest). — **lead**.
 
