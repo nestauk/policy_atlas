@@ -23,6 +23,8 @@ file; *Langfuse* is the tracing tool that records every model call and its token
 | A | Phase 1 commit A (steps, effort plumbing) | `make verify-fast` + prompt-guard | 3,764 passed, **1 failed** (`test_bedrock_names_bedrock_models_and_cohere`: six stale old-step names in the lead's own loader test); fixed, that file + the kwargs test re-run: 100 passed; typecheck and lint clean; prompt-guard 41 unchanged after the re-pin. |
 | B | Phase 1 commit B (the switch) | `make verify-fast` + prompt-guard | 3,759 passed, **9 failed**: four extraction-fingerprint pins (iof/icf × stub/live), four intervention-profile fingerprint pins and one `kwargs["model"] == "gpt-5.6-luna"` assert — every one a value that embeds the model id, which the switch changes by design; re-pinned, those three files re-run: 60 passed. Prompt-guard unchanged (no prompt file touched). |
 | C | Phase 1 commit C (O3 prompts, X2) | `make verify-fast` + prompt-guard | backend tests all passed, typecheck and lint clean; **`eval-check` red** on `ruff format --check scripts/evals/screening` (one comment line from commit A's `run_screen.py` edit; the A and B gates stopped before `eval-check` ran); formatted, `make eval-check` re-run: exit 0. Prompt-guard 41 unchanged after the `summary_prompts.py` re-pin. |
+| P2 A | Phase 2 commit A (caching plumbing, D8/D10, X3) | `make verify-fast` + prompt-guard | **green**: 3,796 passed, 1 skipped (803 s); typecheck, lint, eval-check clean; prompt-guard 41 unchanged after the `section_prompt.py` re-pin. |
+| 4 | End of Phase 3 (schema), tree = Phase 2 A + the Phase 3 patch | `make verify` | **green**: 3,812 passed, 1 skipped (674 s); build, infra 95, audit-paths, prompt-guard, font-guard, drift-check OK; frontend 939 tests in 88 files. |
 
 Per-phase commits on `task/056-cost-latency`:
 
@@ -31,7 +33,9 @@ Per-phase commits on `task/056-cost-latency`:
 | 0 | d14d3f33 | 2 (full) |
 | 1 A | 3a2b5ba3 | A (verify-fast) |
 | 1 B | 7561a822 | B (verify-fast) |
-| 1 C | (see git log) | C (verify-fast) |
+| 1 C | 35c92e59 | C (verify-fast) |
+| 2 A | 43bf7a34 | P2 A (verify-fast) |
+| 3 | 3bcd3044 | 4 (full) |
 
 ## Phase 0 — instrument, baseline, tidy (N1, D11, D2a, tidy-ups)
 
@@ -182,6 +186,51 @@ Extraction fingerprints pinned: `extraction_fingerprint('live', finding_vetter_a
 
 ## Phase 1 — steps, effort plumbing, the switch, the prompt loop (N2, N6, D2, D4, D9, O3, X1, X2, X4)
 
+### Phase 0 baseline runs (step 9) — this build, `bedrock`, unattended, 2026-11-02
+
+Server: the Phase 0 commit (d14d3f33) in a detached worktree. `scripts/fixed_questions.py` needed
+two fixes on first live use: an `--only` flag (the executor admits two runs at once,
+`RUN_EXECUTOR_MAX=2`, so the third question got HTTP 409 "at capacity") and a follow-up message
+that names the depth, because the scoping Task Agent asks "shorter or fuller path" with no
+recommendation. Session totals from `cost_per_run.py` (run totals in brackets):
+
+| Question | Session (task id) | Session total | Run total | Notes |
+|---|---|---|---|---|
+| NEET | 19e974e7 | $2.68 | $2.62 | |
+| zonal pricing | a57ff6ec | $2.10 | $2.05 | synthesise 68% ($1.43); section turns 62% of input as cache WRITE, repair 99%, summary judge 87% |
+| childhood obesity | e99d1502 | $3.01 | $2.98 | synthesise 70% ($2.11) |
+| **ES standard median** | | **$2.68** | **$2.62** | first runs with the write bucket visible: writes were ~57% of all input tokens in zonal |
+| scoping (AI and the labour market) | cabaa778 | pending | | the longlist walk's option-profile calls take ~5 min each on gpt-5.6-sol |
+
+### X1 — grounding judge replay on gpt-6-luna (builder; `experiments/grounding-judge-replay-2026-11-02.md`)
+
+119 stored `judge:grounding` calls (all with today's `grounding_judge_v2` prompt; 113 older
+gpt-5.4-mini calls excluded), 587 claims: collapsed agreement 86.2% against the incumbent's own
+re-run noise floor of 95.4%; supported→unsupported flips 12.9% against 4.0% noise; one-directional
+(gpt-6-luna stricter: 19.8% unsupported vs 8.9% stored). Groups: 25 of 40 Tier-4 reasoning claims
+→ unsupported ("policy-specific framing not labelled as background reasoning"); 45 chunk claims
+on one detail (a dropped hedge, a date not in the cited text, scope widened); the 6 looser flips
+all correct wrong stored verdicts. Cost per call $0.00358 → $0.00198; clean latency median 15.6 →
+15.4 s. **Lead's read: no prompt change.** The chunk flips are the rubric as written; the
+reasoning flips are the prompt's own rule ("a reasoning claim that asserts policy-specific …
+content is unsupported_mis_cited") applied literally — the spec's intent (provenance-grounding:
+"must not escape into Tier 4"). Risk recorded: more repairs on "What is contested" / "Key
+assumption" sections; the post-switch fixed questions' repair and rejection counts and the owner's
+read of those sections are the check.
+
+### X4 — extract_interventions and fold replays (builder; `experiments/x4-replay-2026-11-02.md`)
+
+`extract:interventions` on gpt-6-luna vs stored (60 items from nine scoping sessions): fuzzy
+record F1 0.825 (0.846 on the 20 noise items) vs noise floor 0.921; categorical fields at or
+above noise; two systematic shifts — 7 of 91 matched records `described → mentioned`, and 4 of 60
+borderline governance/commentary papers marked "covers no intervention" (incumbent re-run 1 of
+20); cost −47% per call. `option_profile:fold` on gpt-6-luna (the like-for-like): same-group
+0.767 / ARI 0.649 vs noise 0.793 / 0.706 — within noise, no word id lost, cost −53%;
+gpt-6.1-terra 0.650 / 0.49 at 2.5× the cost, builds one large group — not warranted. **Lead's
+read:** fold stays on `fast`; the extract shifts are a stricter reading, no prompt work (X4's
+rule: only if it fails); the owner's read of the scoping longlist checks whether the extra "no
+intervention" calls matter.
+
 ### Commit A (3a2b5ba3): one route step per call site, effort from the route file (D4, D9)
 
 - `model_routes.toml`: `[steps]` now lists 56 steps (one per model call site; section turns +
@@ -253,6 +302,98 @@ X2 (deep-reasoner): `_write_and_judge_summary` sends `{**seed, "previous_attempt
 log per retry; three tests in `test_summary_runtime.py`. Re-pin: `summary_prompts.py` (the
 diff is the three summariser rules in both prompts, the judge's rules block, the version bumps
 and the module docstring; saved as `p1-commitC-summary_prompts.patch`).
+
+## Phase 2 — caching (N3, D3, D8, D10, X3)
+
+**Stop condition (step 1, builder, 183 calls, $0.85; `experiments/cache-breakpoint-gpt6-2026-11-02-*`):
+not hit.** gpt-6.1-terra and gpt-6-luna reproduce GPT-5.6 on both routes: implicit reads need no
+breakpoint (a request that starts with an earlier request reads it: 9,698 direct / 9,622 bedrock);
+the run-message breakpoint makes section 2's first turn read tools + system + run (terra 7,849 to
+7,851 / 7,767 to 7,771; luna 6,363 / 6,361), writing only the 809-token tail; all 69 cold calls over
+1,024 tokens wrote; the repair reads the section's first turn (about 9,570 / 9,490) only when the
+tools list and `parallel_tool_calls` are identical, 0 otherwise; the opt-out writes 0 on all 34
+calls; `allowed_tools` keeps the cache across turns and into the repair. Headline lever: today's
+forced final turn (`parallel_tool_calls=False`) reads nothing and costs $0.0155 in the mock against
+$0.0025 with the flag true. Bedrock caveat (GPT-5.6 behaves the same): `off` stops the write being
+reported but identical calls still read (terra 8,517 of 8,574); on OpenAI direct it is a true off.
+
+**Commit A (43bf7a34).** `core/openai_client.py`: `PromptCache = auto | off | breakpoint`
+(`off` → `extra_body={"prompt_cache_options": {"mode": "explicit"}}`; `breakpoint` → the first
+system message as a text content part with `prompt_cache_breakpoint`); `parse_structured` and
+`traced_parse` carry the mode and record it in the span. `synthesis/cache_modes.py`: one table
+keyed by step (56 entries, all `auto` until commit B), read by the sites; the enumerating test in
+`test_call_site_kwargs.py` checks every captured call site against it (the fixture gained
+`extra_body` and `system_shape` on every entry, nothing else). D8/D10 in `section_prompt.py` /
+`synthesis_backend.py`: one `build_section_prefix(seed)` (system; the run message as a breakpoint
+content part; the task message) shared byte-for-byte by section turns and the repair (test); the
+same five tools in the same order on both (`section_request_tools(seed)`); normal turns use
+`tool_choice = allowed_tools` over the four section tools, the forced turn forces `emit_section`,
+the repair forces `emit_repairs`; `parallel_tool_calls=True` everywhere including the forced turn
+and the repair; a second tool call on a forced turn or the repair takes the first `emit_*` call,
+logs `synthesise.extra_tool_calls_ignored` and is counted on the loop result and span metadata
+(not persisted provenance: lead's call). `synthesise_section_v11`; new
+`SECTION_REPAIR_PROMPT_VERSION = "synthesise_repair_v2"` on the repair span. X3: the `lookup`
+tool offers only the kinds the run can serve (`available_lookup_kinds` from the same run facts the
+reader checks: selection, characterisation, grouping runs; put on every section seed so the prefix
+is run-stable); the description gains the lead's sentence "Only the kinds listed here exist for
+this run." Prompt text unchanged (the byte-identity pin passes); `section_prompt.py` re-pinned for
+the message shape and the X3 sentence (diff saved as `p2-section_prompt.patch`). Owner item: the
+repair template still says "you cannot make tool calls" while five tools are offered with
+`emit_repairs` forced — true in effect; prompt text left unchanged by design.
+
+**Per-site modes (N3, commit B):** pending the measurement (`cache-modes-per-site-2026-11-02`).
+
+## Phase 3 — Unrated (N4, D7, S1 to S3) — commit 3bcd3044, Gate 4 full verify
+
+Built by a deep-reasoner in its own worktree (patch `p3-unrated.patch`, 40 files): migration
+`152a234e2391_unrated_appraisal` (revises `b33ffb8c3a16`): `quality_score` nullable, `unrated
+BOOLEAN NOT NULL DEFAULT false`, `ck_sar_unrated_consistent`; the 1 to 5 check untouched; downgrade
+deletes Unrated rows (documented as lossy); round-trip and admission tests (null score without the
+flag refused, score 3 with the flag refused, score 6 refused; an Unrated row, a score of 3 and a
+default row admitted). `appraise.py`: `UNRATED_LABEL`, `UNRATED_TYPES`, `appraisal_label()` /
+`appraisal_tier()`; Unknown and Non-evidence get a row with no score and `unrated = true`;
+`appraised_unrated` counted; `DEFAULT_RUBRIC_VERSION` `v2-hierarchy-v1 → v2-hierarchy-v2`; a
+rubric override that scores one of these types still wins. `steering_triggers.py` filters null
+scores (output unchanged with Unrated rows present: test); `select.py` unchanged (an Unrated row
+reads as missing, exactly as no row: test). Citability: the citation check keys on row existence,
+so Unrated documents are citable (test: accepted; a document with no row still rejected with
+`unappraised_doc_citation`); the writer records carry `appraisal_label` "Unrated" (`appraised:
+true`); `appraisal_order` "Unrated" last; characterise, coverage, place sentences, read models
+(strength sort: scored → Unrated → no appraisal), the `strength` Literal, `answer_core`,
+`chat_scope`, `steering_bundles` show "Unrated" as its own bucket. Frontend: regenerated types;
+`STRENGTH_FILTER_OPTIONS` + "Unrated" last; mocks and tests. Lead words: the two hints end "…;
+Unrated when the type is not scored."; the Unrated hover reads "Unrated — the document type (X) is
+not scored; the source can be cited but counts below the evidence bar."
+
+Unforeseen by the contract, lead decisions (owner items): (1) the rubric bump made every inherited
+appraisal "stale" in `options_scoping/labels.py` (a linked scoping task would re-classify every
+document) → `COMPATIBLE_RUBRIC_VERSIONS = {v2-hierarchy-v1, current}` for inherited rows, since
+the 1 to 5 scores did not change; (2) `runner.resolved_skip_ids` now skips classify and appraise
+only when the tier came through the link (else inherited untyped documents would never get a row);
+(3) `skipped_non_evidence` / `skipped_unknown` now always 0 under the default rubric, kept with a
+docstring; (4) frontend `artefactPresentation.APPRAISAL_ORDER` was already stale (old label names)
+— only "unrated" appended; deferred; (5) the synthesis boost vocabulary still lists tiers 1 to 5 —
+data, not prompt text, left.
+
+Live check (`unappraised_doc_citation` count before and after; the owner's read): pending the
+post-Phase-3 fixed-question runs.
+
+## Phase 4 — repair input guard (N5)
+
+Built by a deep-reasoner in its own worktree (patch `p4-repair-guard.patch`): the inline
+tool-return window rule became `oversized_chunk_window()` in `synthesis_tools.py`, used by the tool
+return and by the new `window_repair_dependency_chunks(failing)` that `build_section_repair_messages`
+applies before the JSON dump. Threshold: the existing oversized rule (`UNIT_CHAR_BUDGET`, 2,000
+characters; the contract's "oversized threshold"); window = anchor ± 300 characters, clipped; the
+anchor is the claim's citation quote(s) matched with `QuoteMatcher` (verification normalisation),
+else the longest shared stretch (deterministic); finding claims anchor on their dependency
+findings' grounding quotes (beyond the brief; accepted); already-windowed and unanchorable chunks
+pass unchanged; the window carries the same `window_start` / `window_end` marker as tool returns.
+Prompt text byte-identical; `section_prompt.py` re-pinned for builder code (import, docstring, the
+call). Synthetic payload: the repair message falls from 15,551 to 3,052 characters (−80%); worst
+case (a 104,890-character chunk, quote absent) 0.087 s. Ten tests. Lead decision: keep the 2,000
+threshold and judge it on the repair pass rate of the post-Phase-4 fixed questions; raise to
+10,000 as a recorded change if the rate falls.
 
 ## Checks beyond the build
 

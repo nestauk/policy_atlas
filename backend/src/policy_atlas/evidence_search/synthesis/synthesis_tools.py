@@ -66,6 +66,7 @@ from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 from policy_atlas.evidence_search.extract.extract import record_ids_by_profile
 from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.evidence_search.extract.quote_verify import QuoteMatcher, build_basis
 
 if TYPE_CHECKING:
     from policy_atlas.evidence_search.synthesis.section_prompt import SectionProseWire
@@ -1471,6 +1472,186 @@ def _sorted_json(value: Any) -> Any:
     return value
 
 
+def oversized_chunk_window(
+    content_length: int, anchor_start: int, anchor_end: int
+) -> tuple[int, int] | None:
+    """Return the window an oversized chunk is cut to, or ``None`` to send it whole.
+
+    The one window rule for every place that hands chunk text to the section
+    writer: the ``search_chunks`` tool return (anchored on the winning
+    embedding unit) and the repair's dependency chunks (anchored on the cited
+    quote, task 056 N5). A chunk at or under ``UNIT_CHAR_BUDGET`` characters is
+    never windowed. An oversized one becomes the anchor stretch widened by
+    ``OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS`` on each side, clipped to the chunk.
+    The caller marks the cut record with ``window_start`` / ``window_end``.
+
+    Args:
+        content_length: The full chunk's length in characters.
+        anchor_start: Chunk-local start of the stretch to keep (inclusive).
+        anchor_end: Chunk-local end of the stretch to keep (exclusive).
+
+    Returns:
+        ``(window_start, window_end)`` for an oversized chunk; ``None`` otherwise.
+
+    Raises:
+        ValueError: If an oversized chunk's anchor lies outside the chunk.
+    """
+    if content_length <= UNIT_CHAR_BUDGET:
+        return None
+    if anchor_start < 0 or anchor_end < anchor_start or anchor_end > content_length:
+        raise ValueError("matched retrieval unit offsets are required for windows")
+    return (
+        max(0, anchor_start - OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS),
+        min(content_length, anchor_end + OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS),
+    )
+
+
+def _longest_shared_stretch(haystack: str, needle: str) -> tuple[int, int] | None:
+    """Return ``(position in haystack, length)`` of the longest piece of ``needle``.
+
+    Deterministic: the longest length wins; among equal lengths, the earliest
+    start in ``needle``, then its first occurrence in ``haystack``. ``None``
+    when the two share no character at all.
+    """
+
+    def first_hit(length: int) -> int | None:
+        for start in range(len(needle) - length + 1):
+            position = haystack.find(needle[start : start + length])
+            if position != -1:
+                return position
+        return None
+
+    # A shared piece of length L contains one of every shorter length, so the
+    # longest length is found by bisection.
+    low, high, best = 1, len(needle), None
+    while low <= high:
+        middle = (low + high) // 2
+        position = first_hit(middle)
+        if position is None:
+            high = middle - 1
+        else:
+            best = (position, middle)
+            low = middle + 1
+    return best
+
+
+def _quote_anchor(content: str, quote: str) -> tuple[tuple[int, int], bool] | None:
+    """Locate ``quote`` in ``content``: ``((start, end), found)`` or ``None``.
+
+    The quote is matched the way verification matches it (the qv_v1
+    normalisation of :class:`QuoteMatcher`). When it is not there, the anchor
+    is the longest stretch of the normalised quote that is (``found`` False).
+    ``None`` when the quote shares nothing with the chunk.
+    """
+    basis = build_basis([(None, content)])
+    match = QuoteMatcher(basis).find(quote)
+    if match.spans:
+        return (match.spans[0].start, match.spans[-1].end), True
+    normalised_quote = build_basis([(None, quote)]).normalised
+    stretch = _longest_shared_stretch(basis.normalised, normalised_quote)
+    if stretch is None:
+        return None
+    position, length = stretch
+    return (basis.raw_start[position], basis.raw_end[position + length - 1]), False
+
+
+def _repair_chunk_anchor(
+    content: str, cited_quotes: Sequence[str], grounding_quotes: Sequence[str]
+) -> tuple[int, int] | None:
+    """The stretch of a repair dependency chunk its window is cut around.
+
+    Quotes cited on this chunk all count (found, or their longest matching
+    stretch). Finding grounding quotes are not bound to one chunk, so only the
+    ones found here count, else the single longest stretch among them. The
+    anchor is the span covering every counted stretch; ``None`` when there is
+    nothing to anchor on (the chunk is then sent whole).
+    """
+    stretches: list[tuple[int, int]] = []
+    for quote in cited_quotes:
+        anchor = _quote_anchor(content, quote)
+        if anchor is not None:
+            stretches.append(anchor[0])
+    grounding = [
+        anchor for quote in grounding_quotes if (anchor := _quote_anchor(content, quote))
+    ]
+    found = [span for span, was_found in grounding if was_found]
+    if found:
+        stretches.extend(found)
+    elif grounding:
+        stretches.append(max((span for span, _ in grounding), key=lambda s: s[1] - s[0]))
+    if not stretches:
+        return None
+    return min(start for start, _ in stretches), max(end for _, end in stretches)
+
+
+def window_repair_dependency_chunks(failing: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Cut each failing claim's oversized dependency chunks to a window (task 056 N5).
+
+    Each dependency chunk over the oversized threshold goes through
+    :func:`oversized_chunk_window`, anchored on the claim's citation quote for
+    that chunk (a finding claim's anchor chunks: its findings' grounding
+    quotes), and carries the same ``window_start`` / ``window_end`` marker as a
+    windowed ``search_chunks`` return. Chunks at or under the threshold, chunks
+    already windowed by the tool return, and chunks with nothing to anchor on
+    are sent whole. The input records are not mutated.
+
+    Args:
+        failing: Dependency-complete failing-claim records for the repair.
+
+    Returns:
+        The records, with oversized dependency chunks windowed.
+    """
+    windowed: list[dict[str, Any]] = []
+    for record in failing:
+        dependencies = record.get("dependencies")
+        chunks = dependencies.get("chunks") if isinstance(dependencies, dict) else None
+        if not isinstance(dependencies, dict) or not isinstance(chunks, dict):
+            windowed.append(record)
+            continue
+        claim = record.get("claim")
+        citations = claim.get("citations") if isinstance(claim, dict) else None
+        cited: dict[str, list[str]] = {}
+        for citation in citations if isinstance(citations, list) else []:
+            if isinstance(citation, dict) and isinstance(citation.get("quote"), str):
+                chunk_id = str(citation.get("chunk_record_id") or "")
+                cited.setdefault(chunk_id, []).append(citation["quote"])
+        findings = dependencies.get("findings")
+        grounding_quotes = [
+            grounding["quote"]
+            for finding in (findings.values() if isinstance(findings, dict) else [])
+            if isinstance(finding, dict) and isinstance(finding.get("grounding"), list)
+            for grounding in finding["grounding"]
+            if isinstance(grounding, dict) and isinstance(grounding.get("quote"), str)
+        ]
+        new_chunks: dict[str, Any] = {}
+        for chunk_id, chunk_record in chunks.items():
+            content = chunk_record.get("content") if isinstance(chunk_record, dict) else None
+            window = None
+            if (
+                isinstance(chunk_record, dict)
+                and isinstance(content, str)
+                and "window_start" not in chunk_record
+                and len(content) > UNIT_CHAR_BUDGET
+            ):
+                anchor = _repair_chunk_anchor(
+                    content, cited.get(str(chunk_id), []), grounding_quotes
+                )
+                if anchor is not None:
+                    window = oversized_chunk_window(len(content), *anchor)
+            if window is None or not isinstance(content, str):
+                new_chunks[chunk_id] = chunk_record
+                continue
+            window_start, window_end = window
+            new_chunks[chunk_id] = {
+                **chunk_record,
+                "content": content[window_start:window_end],
+                "window_start": window_start,
+                "window_end": window_end,
+            }
+        windowed.append({**record, "dependencies": {**dependencies, "chunks": new_chunks}})
+    return windowed
+
+
 @dataclass(frozen=True)
 class _ChunkScopeFilters:
     """Validated candidate-pool filters for ``search_chunks``."""
@@ -1705,17 +1886,12 @@ class ChunkRetriever:
                 or isinstance(unit_end, bool)
                 or not isinstance(unit_start, int)
                 or not isinstance(unit_end, int)
-                or unit_start < 0
-                or unit_end < unit_start
-                or unit_end > len(frozen_content)
             ):
                 raise ValueError("matched retrieval unit offsets are required for windows")
-            window_start = max(0, unit_start - OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS)
-            window_end = min(
-                len(frozen_content),
-                unit_end + OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS,
-            )
-            content = frozen_content[window_start:window_end]
+            window = oversized_chunk_window(len(frozen_content), unit_start, unit_end)
+            if window is not None:
+                window_start, window_end = window
+                content = frozen_content[window_start:window_end]
         result: ChunkSearchResult = {
             "chunk_record_id": chunk_id,
             "tss_id": tss_id,

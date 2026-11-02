@@ -35,6 +35,7 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     REASONING_CLAIMS_MAX,
     SECTION_CAP,
     ToolExchange,
+    window_repair_dependency_chunks,
 )
 from policy_atlas.evidence_search.synthesis.voice_prompt import VOICE_PRINCIPLES
 
@@ -1422,7 +1423,9 @@ def build_section_repair_messages(
     The repair starts with the section's own first-turn request (the same
     prefix from :func:`build_section_prefix`) so it reads the section's prompt
     cache, then appends the repair instruction. The tool transcript is never
-    resent.
+    resent. Oversized dependency chunks are cut to a window around the cited
+    quote (task 056 N5, :func:`window_repair_dependency_chunks`); the rest go
+    whole.
 
     Args:
         seed: The section seed used by the original loop.
@@ -1438,7 +1441,9 @@ def build_section_repair_messages(
             "role": "user",
             "content": SECTION_REPAIR_TEMPLATE.format(
                 repair_json=json.dumps(
-                    {"failing_claims": failing}, ensure_ascii=False, sort_keys=True
+                    {"failing_claims": window_repair_dependency_chunks(failing)},
+                    ensure_ascii=False,
+                    sort_keys=True,
                 )
             ),
         },
