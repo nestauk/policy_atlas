@@ -65,6 +65,10 @@ Scoping levers (N10)
         300 s on the fixed scoping question after the change.
 21. [ ] N10b: option-search width raised and measured; no new 429s in the logs; or the change
         reverted with the measurement recorded.
+21a. [ ] N10c, D12: the stall remedy chosen at the plan gate is built; on the fixed questions
+        no synthesis call exceeds its step's timeout plus a normal retry, the stage wall before
+        and after is recorded, stalled calls still succeed, and the owner's read finds the
+        reports unchanged in content. Section order and the ledger are untouched.
 
 Infra, measurement and governance (N11, N12, D6, D9, G4, G7)
 22. [ ] N11: staging deploys with the function, queue, dead-letter queue, alarm and
