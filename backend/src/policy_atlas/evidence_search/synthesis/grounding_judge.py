@@ -1,4 +1,4 @@
-"""The ``grounding_judge_v2`` prompt surface and judge seam (task 013).
+"""The ``grounding_judge_v3`` prompt surface and judge seam (task 013; v3 in task 056).
 
 The repo's seventh product prompt — lead-authored, versioned, recorded on every
 judged claim's annotation payload. Verification is **non-agentic** (contract
@@ -40,7 +40,7 @@ from policy_atlas.core.usage import (
 )
 from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 
-JUDGE_PROMPT_VERSION = "grounding_judge_v2"
+JUDGE_PROMPT_VERSION = "grounding_judge_v3"
 ENVELOPE_VERSION = "synthesis_envelope_v2"
 
 # The contracted model floor; judge calibration is eval-workstream territory —
@@ -131,10 +131,16 @@ Instructions:
   support the claim.
 - Reasoning claims (claim_type "reasoning") are strict-routed: they carry no
   citations by design and are legitimately "tier_4" ONLY while they stay
-  visibly-labelled background reasoning. A reasoning claim that asserts
-  policy-specific, empirical, causal, comparative or evaluative content — a
-  claim that would need evidence — is "unsupported_mis_cited": such content
-  must never escape into tier_4.
+  visibly-labelled background reasoning. The test is what the claim asserts
+  as settled, not what it is about. A reasoning claim that states, as
+  established, something that would need a citation — an empirical fact or
+  figure, a causal effect, a comparison between options, places or groups,
+  an evaluation of what works — is "unsupported_mis_cited": such content
+  must never escape into tier_4. A reasoning claim that visibly frames a
+  question, a hypothesis or an assumption to check, a dispute between the
+  sources, or a limit of what the cited evidence covers stays "tier_4" even
+  when it names the policy, the place, the population or the outcome:
+  naming the topic is not asserting a fact about it.
 - Set "weakly_grounded" true when a claim stands but is under-evidenced (a
   thin or cut-short tier_2/tier_3 — the claim holds, corroboration is
   needed). This flag is orthogonal to the verdict and is not a sixth lane.

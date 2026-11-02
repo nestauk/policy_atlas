@@ -63,7 +63,7 @@ def test_prompt_versions_are_distinct_constants() -> None:
     assert SECTIONS_PROMPT_VERSION == "synthesise_sections_v5"
     assert SECTION_PROMPT_VERSION == "synthesise_section_v11"
     assert SECTION_REPAIR_PROMPT_VERSION == "synthesise_repair_v2"
-    assert JUDGE_PROMPT_VERSION == "grounding_judge_v2"
+    assert JUDGE_PROMPT_VERSION == "grounding_judge_v3"
     assert ENVELOPE_VERSION == "synthesis_envelope_v2"
     assert CASE_STUDIES_PROMPT_VERSION == "synthesise_case_studies_v1"
     assert MOST_RELEVANT_NOTE_PROMPT_VERSION == "most_relevant_note_v1"
@@ -352,7 +352,7 @@ def test_summariser_v3_and_judge_v2_carry_the_task_056_rules() -> None:
     assert "quote the summary words at fault" in SUMMARY_JUDGE_SYSTEM_PROMPT
 
 
-# --- grounding_judge_v2 ---
+# --- grounding_judge_v3 ---
 
 
 def test_judge_prompt_negative_rules() -> None:
