@@ -1,14 +1,13 @@
 """Coverage for the cost-per-run script (`scripts/cost_per_run.py`, task 056 Phase 0).
 
-The fixture holds two sessions with only ids, names, timestamps, models and
-token counts (no prompts, answers or metadata):
-
-- the real Evidence search standard-depth session ``0e8f8431`` from the
-  2026-10-30 cost baseline, saved with ``--save-fixture`` (old usage shape:
-  input / cached / output / total only);
-- a hand-written synthetic session ``5e7e7e7e`` in the new shape, with cache
-  writes, reasoning tokens, GPT-6 models, a Bedrock model name, an embedding
-  priced on ``total``, a non-run trace and an unpriced model.
+The fixture holds one hand-written synthetic session ``5e7e7e7e`` with only ids,
+names, timestamps, models and token counts (no prompts, answers or metadata): cache
+writes, reasoning tokens, GPT-6 models, a Bedrock model name, an embedding priced on
+``total``, an observation in the old usage shape (input / cached / output / total
+only), a non-run trace and an unpriced model. The script's reproduction of the real
+2026-10-30 baseline session (``0e8f8431``, $1.99 to the cent) was a one-time check and
+is recorded in ``docs/tasks/056-cost-latency/verification.md``, not pinned here: the
+real session was 789 rows that pinned the price table of one day (owner, 2026-11-02).
 """
 
 from __future__ import annotations
@@ -24,7 +23,6 @@ import pytest
 
 _SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "cost_per_run.py"
 _FIXTURE = Path(__file__).resolve().parent / "data" / "cost_per_run_fixture.json"
-REAL = "0e8f8431-f0fa-404f-a860-d4a8d2de7364"
 SYNTHETIC = "5e7e7e7e-0056-4000-8000-000000000001"
 
 
@@ -44,33 +42,6 @@ def sessions() -> dict[str, Any]:
     return copy.deepcopy(json.loads(_FIXTURE.read_text(encoding="utf-8"))["sessions"])
 
 
-def test_real_session_matches_baseline_to_the_cent(sessions: dict[str, Any]) -> None:
-    # The baseline (cost-baseline-per-session-2026-10-30.txt) lists 0e8f8431 at
-    # $1.99. Its script priced GENERATION rows under run:* traces only; this
-    # script also prices EMBEDDING rows (embed:batch, about $0.015 here) and
-    # reports non-run traces (the planner turns) in the session total.
-    real = sessions[REAL]
-    generations_only = {
-        "traces": real["traces"],
-        "observations": [o for o in real["observations"] if o["type"] == "GENERATION"],
-    }
-    assert round(cpr.session_report(REAL, generations_only)["run_total_usd"], 2) == 1.99
-
-    full = cpr.session_report(REAL, real)
-    embed = next(r for r in full["by_call"] if r["name"] == "embed:batch")
-    assert embed["model"] == "text-embedding-3-small"
-    assert embed["cost_usd"] == pytest.approx(embed["input"] * 0.02 / 1e6, abs=1e-6)
-    assert full["run_total_usd"] == pytest.approx(
-        cpr.session_report(REAL, generations_only)["run_total_usd"] + embed["cost_usd"], abs=1e-5
-    )
-    planner = next(r for r in full["by_stage"] if r["stage"] == "planner:turn")
-    assert full["session_total_usd"] == pytest.approx(
-        full["run_total_usd"] + planner["cost_usd"], abs=1e-5
-    )
-    assert full["run_type"] == "ES standard"
-    assert full["date"] == "2026-10-22"
-
-
 def test_synthetic_session_total_by_hand(sessions: dict[str, Any]) -> None:
     # USD per million tokens; cache write = 1.25 x input, reasoning = output.
     screen_full = (
@@ -86,6 +57,12 @@ def test_synthetic_session_total_by_hand(sessions: dict[str, Any]) -> None:
     report = cpr.session_report(SYNTHETIC, sessions[SYNTHETIC])
     assert report["session_total_usd"] == pytest.approx(0.08915)
     assert report["run_total_usd"] == pytest.approx(0.08915 - task_agent)
+    assert report["run_type"] == "ES standard"
+    assert report["date"] == "2026-11-02"
+    # The embedding row carries no cost of its own beyond the "total" bucket, and the
+    # non-run trace (the Task Agent's turn) sits in the session total, not the run total.
+    embed_row = next(r for r in report["by_call"] if r["name"] == "embed:batch")
+    assert embed_row["cost_usd"] == pytest.approx(embed)
     assert report["unknown_models"] == {"mystery-model-1": {"calls": 1, "tokens": 110}}
     stages = {r["stage"]: r for r in report["by_stage"]}
     assert set(stages) == {"synthesise", "acquire", "task_agent:turn", "screen_full"}
@@ -136,9 +113,9 @@ def test_cache_shares_in_call_table(sessions: dict[str, Any]) -> None:
 
 
 def test_prefix_resolution_against_fixture() -> None:
-    picked = cpr.load_fixture(str(_FIXTURE), ["0e8f", "5e7e7e7e"])
-    assert list(picked) == [REAL, SYNTHETIC]
-    assert list(cpr.load_fixture(str(_FIXTURE), [REAL, "0e8f8431"])) == [REAL]
+    assert list(cpr.load_fixture(str(_FIXTURE), ["5e7e"])) == [SYNTHETIC]
+    # A full id and a prefix of the same session resolve to the one session.
+    assert list(cpr.load_fixture(str(_FIXTURE), [SYNTHETIC, "5e7e7e7e"])) == [SYNTHETIC]
     with pytest.raises(SystemExit, match="no session starts with"):
         cpr.load_fixture(str(_FIXTURE), ["ffff"])
     with pytest.raises(SystemExit, match="ambiguous"):
@@ -161,15 +138,15 @@ def test_run_type_classification() -> None:
 def test_json_output_round_trips(
     sessions: dict[str, Any], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert cpr.main(["0e8f", "5e7e", "--fixture", str(_FIXTURE), "--json"]) == 0
+    assert cpr.main(["5e7e", "--fixture", str(_FIXTURE), "--json"]) == 0
     out, err = capsys.readouterr()
     parsed = json.loads(out)
-    assert parsed == cpr.build_report({REAL: sessions[REAL], SYNTHETIC: sessions[SYNTHETIC]})
-    assert [s["session_id"] for s in parsed["sessions"]] == [REAL, SYNTHETIC]
-    assert {g["run_type"] for g in parsed["summary"]} == {"ES standard"}
+    assert parsed == cpr.build_report({SYNTHETIC: sessions[SYNTHETIC]})
+    assert [s["session_id"] for s in parsed["sessions"]] == [SYNTHETIC]
+    assert "summary" not in parsed  # the by-run-type summary needs two or more sessions
     assert "mystery-model-1" in err
     # Same input, same output.
-    assert cpr.main(["0e8f", "5e7e", "--fixture", str(_FIXTURE), "--json"]) == 0
+    assert cpr.main(["5e7e", "--fixture", str(_FIXTURE), "--json"]) == 0
     assert capsys.readouterr().out == out
 
 

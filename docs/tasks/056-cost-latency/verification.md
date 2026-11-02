@@ -46,7 +46,8 @@ file; *Langfuse* is the tracing tool that records every model call and its token
 | 7b | Review fixes applied (the code changes in § Review findings) | `make verify` | backend 3,888 passed, **1 failed**: `test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent` (the test Gates 1, 6i and 6j hit) — `_await_statuses` returned `{}` at 30 s. Root cause, not a deadline: the test submits a child and raises on the second dispatch; `_interrupt_children` cancels a child the pool has not started, which then never opens a row, so there is nothing to mark `interrupted`; under load the pool thread lags the raise. Fixed in the test: the child signals an `opened` event after its row exists and the second dispatch waits for it before raising (deterministic; passes 3 of 3 alone). Six loaded eight-worker runs of the three thread-heavy files then showed a second order-dependent test: `test_slow_first_job_does_not_delay_later_jobs` (the one the build widened 4 → 10 s) lost twice more when the forkserver's per-job start outlasted the slow job's sleep. Rewritten without a sleep: the slow job returns when the three quick jobs' sentinel files exist (plus one second for their results to land). |
 | 7c | Both test rewrites in, machine load average 150 (the owner's other apps and sessions; no test process of ours) | `make verify` | backend took 1,557 s (three times the usual) and **2 failed** of 3,888: `test_sse_replay_idempotence_and_cursor_suffix` (a 401: the test's token is minted with a 60 s life and the test outlived it) and `test_sse_backlog_to_tail_has_no_duplicate_or_missing_mapped_sequences` (an asyncio timeout). The file alone: 21 of 21 in 53 s. The token life in the SSE fixture went 60 → 600 s (no assertion touched); the two rewritten tests of row 7b passed. |
 | 7d | Review exit, final tree (load average 119 at the start, 51 at the end) | `make verify` | **green** (exit 0): backend 3,889 passed, 1 skipped (558 s on 8 workers); infra 95; mypy 439 files; okf-validate 192 concepts; audit-paths 202 files; prompt-guard 41 unchanged after the `summary_prompts.py` re-pin; font-guard, drift-check OK; frontend 943 tests in 88 files. |
-| 8 | The owner's rulings applied (120 s on the four long-output clients, tick counts as null, contract and spec amendments), load average 10 at the start | `make verify` | **green** (exit 0) in about 8 minutes: backend 3,889 passed, 1 skipped (408 s on 8 workers); infra 95; mypy 439 files; okf-validate 192; prompt-guard 41 unchanged after the `finding_vetter.py` timeout re-pin (`review-finding_vetter-timeout-repin.patch`); drift-check OK; frontend 943 tests. |
+| 8 | The owner's rulings applied (120 s on the four long-output clients, tick counts as null, contract and spec amendments), load average 10 at the start | `make verify` | **green** (exit 0) in about 8 minutes: backend 3,889 passed, 1 skipped (408 s on 8 workers); infra 95; mypy 439 files; okf-validate 192; prompt-guard 41 unchanged after the `finding_vetter.py` timeout re-pin (`review-finding_vetter-timeout-repin.patch`); drift-check OK; frontend 943 tests. CI on PR #109 (first run of the parallel suite on CI): all four checks green, verify 10 min 12 s. |
+| 9 | The real session dropped from the cost fixture (owner, 2026-11-02; 10,844 lines out), load average 8 | `make verify` | First run: backend 3,888 passed (one test fewer), then **typecheck red** on an import that is fine (`from policy_atlas.api.routers import sse`): a stale incremental mypy cache left by single-file `mypy <file>` runs earlier in the review; `rm -rf backend/.mypy_cache` and the full check is clean. Second run **green** (exit 0): backend 3,888 passed, 1 skipped (303 s); mypy 439 files; infra 95; frontend 943 tests; every other step OK. Lesson: run mypy only as `make typecheck` (whole tree), never on one file, or clear the cache after. |
 
 Per-phase commits on `task/056-cost-latency`:
 
@@ -107,7 +108,11 @@ table dated at the top), by stage and by call name; two totals per session — *
 Agent's planning turns and the option-profile calls too). Fixture
 `backend/tests/scripts/data/cost_per_run_fixture.json` (session 0e8f8431 stripped to ids, names,
 timestamps, model and `usageDetails` — no inputs or outputs, enforced by a test — plus one
-hand-made new-shape session); 8 tests.
+hand-made new-shape session); 8 tests. *At review (owner, 2026-11-02) the real session left the
+fixture: 789 rows that pinned one day's price table to the cent; the one-time check that the
+script reproduces the baseline's $1.99 for 0e8f8431 (generations under `run:*` traces, the old
+script's basis) passed on 2026-11-02 and is recorded here. The synthetic session carries the 7
+remaining tests.*
 
 **Live reproduction of the contract's § Goal table (2026-11-02, 20 sessions, 25 min):** every
 session matches `cost-baseline-per-session-2026-10-30.txt` to the cent on the baseline's own
@@ -979,7 +984,10 @@ covers prompt-text re-pins only ("yes accept and drop condition for code only ch
 5 the implications were asked for and answered in the review conversation (recorded below the
 list); 6 the counts are sent as null and spec S5 reworded ("accept your recommendation");
 7 the deleted tree guard stays deleted ("I don't think this test is needed anymore"); 8 accepted;
-9 deferred ("I take your recommendation"). The items as put:
+9 deferred ("I take your recommendation"). On reading the PR's size the owner also had the real
+baseline session dropped from the cost fixture ("Yes, drop the real session from the fixture
+now"): 10,800 lines that pinned one day's price table; the one-time reproduction stays recorded
+in § Phase 0. The items as put:
 
 1. **Contract D6 as built.** D6 says no change to timeouts or pool sizes; the build moved twelve
    model-client timeouts to 60 s and `MAX_CONCURRENT_EXTRACT` 4 → 8 on your rulings of 2026-11-02.
@@ -1058,7 +1066,8 @@ the reason; ✗ not satisfied, with the reason; ☐ belongs to a later step.
    `/code-review medium`, security auditor, Codex adversarial pass, the lead's trace read; `/simplify`
    skipped with the justification in § Review findings.
 9. ✓ N1: both buckets exclusive on every generation; a live generation priced the cache write
-   (1.25× input); `cost_per_run.py` reproduces the baseline sessions (P0 fixture test).
+   (1.25× input); `cost_per_run.py` reproduced the baseline session 0e8f8431 to the cent (a
+   one-time check at P0, recorded in § Phase 0; the committed fixture is synthetic since review).
 10. ✓ D11: `section_prompt.py` pinned; `finding_vetter.py` pinned; the v6 module, switch, test and hash entry gone.
 11. ✓ Tidy-ups with no behaviour change (Gate 2 green; imports updated; knowledge-note path fixed).
 12. ✓ D2a quotas recorded (the owner ran the read-only command).
