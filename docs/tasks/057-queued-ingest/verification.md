@@ -1092,6 +1092,70 @@ store reuse in (g) is real but one-off for a repeated question):**
 | (e) | SQL retrieval, JSON column gone | 2,158 | 1,210 | 652 | heaviest stalls |
 | (f) | per-document function | 1,639 | 754 | 468 | |
 | (g) | adaptive pool, embedding as documents land | 850 | 225 | 477 | 30 to 53 documents per run from the store |
+| (h) | the review's fixes and the owner-ruled timeouts (floor 15 s, multiples of 5 s) | 881 | 221 | 409 | 43 to 82 documents per run from the store; obesity lost one synthesise attempt (a judge call failed all three attempts) |
+
+### Measurement round (h): the reviewed commit `967f2212` (the review's 21 fixes; the owner-ruled timeouts; run at the review, step 7)
+
+Three runs, 2026-11-03 17:47 to 18:23 UTC, all `succeeded`; the obesity run lost one
+synthesise attempt and re-ran it. Run by a builder agent from `../policy_atlas-live` at the
+reviewed commit; every figure read back from `stage-walls-h.{md,json}`,
+`round-h-retry-outcomes.txt`, `round-h-cuts.txt`, `round-h-perdoc.txt`, `round-h-db.txt`,
+`round-h-pool.md`, `round-h-search-chunks.txt`, `round-h-quotes.txt` and
+`round-h-events.txt` (session scratchpad, `round-h/`). Load average 15.5 / 35.9 / 54.4 before
+the round, 4.3 / 5.9 / 14.7 after; no test suite ran beside it.
+
+| run | question | status | total | acquire | screen_abstract | classify | ingest_full_text | screen_full | characterise | select | synthesise | outside |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| c30c1a32 | NEET | succeeded | 787 | 97 | 37 | 15 | 221 | 59 | 20 | 23 | 310 | 4 |
+| 28724f1c | zonal pricing | succeeded | 881 | 75 | 21 | 18 | 233 | 48 | 28 | 44 | 409 | 4 |
+| 24b8fff3 | childhood obesity | succeeded | 1287 | 61 | 40 | 32 | 203 | 48 | 72 | 80 | 333 (failed attempt) + 414 | 3 |
+| median | | | 881 | 75 | 37 | 18 | 221 | 48 | 28 | 44 | 409 | 4 |
+
+**Ingest split and the pool:** ingest walls 220.5 / 232.7 / 203.1 s; first embed request
+6.4 / 17.1 / 3.2 s into the stage; last document landed 218.4 / 176.4 / 190.6 s; embedding
+after the last document 0.9 / 56.2 / 12.5 s; requests 40 / 47 / 121; throttle sleeps 0 /
+9 (44.3 s) / 0; pool max width 8 / 7 / 8; `already_in_store` 82 / 50 / 43 (eligible 202 /
+267 / 270). Not like-for-like with round (g): more store reuse (53 / 38 / 30 there), different
+eligible sets, and NEET and zonal overlapped on ingest (183 s) and synthesise (243 s).
+
+**Per-document outcomes:** ingested 122 / 93 / 100, fetch_failed 71 / 118 / 143, parse_failed
+9 / 56 / 27, retryable 9 / 48 / 17; `not_ready`, `send_failed`, `worker_error`, `late`,
+orphans, `embed.batch_failed` and `embed.batch_deferred` all 0; `already_in_store` agrees
+across the per-document records, `fulltext.summary` and the database (deviation 20 did not
+recur).
+
+**`search_chunks` inside synthesise:** NEET 34 calls / median 0.352 s / sum 15.2 s; zonal
+31 / 0.303 / 15.7; obesity 50 / 0.665 / 39.7 (both attempts).
+
+**Retries (the owner-ruled timeouts, served: the `[routes.bedrock.steps]` table of
+§ Owner rulings):** 79 retry lines; 73 calls reached attempt 2 (67 succeeded there), 6
+reached attempt 3 (4 succeeded, 2 failed). 72 attempts were cut at their timeout and 67
+recovered on the next attempt: `classify_document` 44 at 15 s (all recovered; **all 45
+classify retry lines fell in one 16 s window, 18:02:55 to 18:03:11**, with zonal's three
+summary cuts in the same stretch: a burst at the 48-wide step, the shape probe 3 measured);
+`select_rerank` 6 at 25 s (4 recovered); `judge_grounding` 5 at 80 s (2 recovered);
+`screen_abstract` 5 at 15 s, `synthesise_section_turn` 4 at 25 s, `characterise_assign` 3
+at 30 s, `synthesise_write_block_summary` 2 at 15 s, `screen_full`, `synthesise_judge_summary`
+and `task_agent_turn` 1 each (all recovered). Nine further attempts ended in a connection
+error; 72 + 9 = 81 = the Langfuse `ERROR` generations.
+
+**Component failures, the only two calls that failed all three attempts (both obesity):**
+
+1. `judge_grounding` call `11b9278adc0a`: a connection error after 26.9 s, then two cuts at
+   80.1 s; the synthesise component failed at 18:15:46 (the 333 s attempt) and the runner's
+   second attempt succeeded in 414 s.
+2. `select_rerank` call `7fd65fc0d37c`: cut at 25.1 s, a connection error at 16.0 s, cut at
+   25.1 s; select's own batch retry (25 documents) succeeded, so no component failed.
+
+**Rubric 22's clause "zero components retried because every attempt was cut" did not hold
+in substance** (one synthesise re-run). Strictly, no call was cut three times: each of the
+two calls had one connection error among its three attempts. The reading for the owner: the
+judge's failure (a dropped connection mid-call, then two 80 s hangs on the same call) is the
+stale-connection shape stall probe 2 would test; the burst cuts are connection setup at
+width 48 (probe 3) and all recover on attempt 2 at a cost of 15 s each.
+
+**Quotes (N7):** re-verified exact / normalised / failed 123 / 4 / 0, 148 / 4 / 0, 173 / 1 / 0;
+no quote failure had markup in its window.
 
 ## Phase 5: infra, config, documents
 
@@ -1537,7 +1601,10 @@ tightened; the token lifetime change affects no assertion.
    waited out; timeouts are 2 × the healthy p99 from at least 30 traced calls, floor 15 s,
    rounded up to 5 s". Not edited by the stack.
 9. **Stall probes 1 and 2** (`stall-probes.md`): probe 1 needs Bedrock invocation logging on
-   the account; probe 2 is four full runs (about $60). Probe 3 ran (below).
+   the account; probe 2 is four full runs (about $60). Probe 3 ran (below). Round (h)'s one
+   component failure (a judge call: a dropped connection, then two 80 s hangs on the same
+   call) is the shape probe 2 tests; the lead recommends running it before the prod route
+   flip.
 10. **Rubric 13's wording** ("Bedrock is reached through the function's role") predates D6;
     the function has no Bedrock grant, by design. Noted, not edited.
 
@@ -1609,9 +1676,11 @@ Caveat: the load average means the client-side figures are an upper bound. The b
 screen_abstract cuts at 7 s across the 48-wide pool are consistent with this: connection
 setup, not the model.
 
-### Gate after the fixes
+### Gate after the fixes and the closing measurement
 
-See § Commands run (the review-fix gate row).
+See § Commands run (the review-fix gate rows) and § Measurement round (h) (the reviewed
+commit on the fixed questions: walls at round (g)'s level, one synthesise re-run from a judge
+call that failed all three attempts, 72 cuts of which 67 recovered).
 
 ## Rubric status
 
@@ -1706,7 +1775,9 @@ ops account figures are in the gitignored notes, not in this record.
   task id; server logs per round in the session scratchpad (not committed).
 - **Stall probes:** [stall-probes.md](stall-probes.md), three Bedrock-only probes for the
   review conversation to run or schedule (the owner dropped the `openai-direct` comparison).
-- **Knowledge candidates** (one per durable-seeming lesson, however raw):
+- **Knowledge candidates** (one per durable-seeming lesson, however raw; *adjudicated at
+  step 8 on 2026-11-03: every one of the 22 is in one of seven new concepts or the extended
+  timeout concept, `docs/knowledge/log.md` § 2026-11-03 says which*):
   - zsh does not word-split an unquoted `$variable` holding several arguments; use `${=var}`.
   - The dev server caps concurrent walks at two (`RUN_EXECUTOR_MAX`); a third fixed-question
     run returns HTTP 409 and must start when a slot frees.
