@@ -78,6 +78,11 @@ if _WORKER and os.environ.get("DATABASE_URL"):
     with psycopg.connect(_base_dsn, autocommit=True) as _c:
         _c.execute(f'DROP DATABASE IF EXISTS "{_worker_name}" WITH (FORCE)')
         _c.execute(f'CREATE DATABASE "{_worker_name}"')
+    # Task 057: the chunk-retrieval query needs the pgvector extension in every database
+    # the tests use. The compose user is a superuser; harmless where it already exists.
+    _plain_head = _head.replace("postgresql+psycopg://", "postgresql://", 1)
+    with psycopg.connect(f"{_plain_head}/{_worker_name}", autocommit=True) as _c:
+        _c.execute("CREATE EXTENSION IF NOT EXISTS vector")
     os.environ["DATABASE_URL"] = f"{_head}/{_worker_name}" + (f"?{_query}" if _query else "")
 
     import atexit

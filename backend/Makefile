@@ -50,6 +50,9 @@ reset-test-db:
 		dropdb --force --if-exists -U policy_atlas $(TEST_DB_NAME); \
 	docker compose -f ../docker-compose.yml exec -T db \
 		createdb -U policy_atlas $(TEST_DB_NAME)
+	@# Task 057: the tests need the pgvector extension (vector search) in the fresh database.
+	@docker compose -f ../docker-compose.yml exec -T db \
+		psql -U policy_atlas -d $(TEST_DB_NAME) -X -c "CREATE EXTENSION IF NOT EXISTS vector"
 
 # -n auto: one pytest-xdist worker per core, each on its own copy of the test database
 # (tests/conftest.py makes the copies; task 056, owner 2026-11-02).

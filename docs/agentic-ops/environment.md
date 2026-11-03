@@ -138,7 +138,7 @@ make verify              # test (against policy_atlas_test) -> typecheck -> lint
 
 ## Required services
 
-- **Postgres 16** via Docker Compose (service `db`, plain `postgres:16` — **no pgvector** this slice).
+- **Postgres 17 with pgvector** via Docker Compose (service `db`, image `pgvector/pgvector:pg17` since task 057; it matches the Aurora engine and the chunk-retrieval query uses the `vector` type).
 - Published on **127.0.0.1:5432** only (not exposed beyond localhost).
 - User / password are `policy_atlas` (local dev only — not secrets). **Two databases** on the one
   container: `policy_atlas` (dev / smoke) and `policy_atlas_test` (tests; created by `make setup`).
