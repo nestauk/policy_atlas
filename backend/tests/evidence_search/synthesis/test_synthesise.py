@@ -1551,7 +1551,6 @@ def test_provenance_required_keys(conn: Connection) -> None:
         "SECTION_TURN_CAP",
         "SYNTH_CHUNK_TOP_K",
         "SYNTH_CHUNK_CHAR_BUDGET",
-        "RETRIEVAL_UNIT_CAP",
         "REPAIR_ROUND_CAP",
     }
 

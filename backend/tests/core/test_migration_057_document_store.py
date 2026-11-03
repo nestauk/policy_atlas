@@ -1,10 +1,14 @@
-"""Task 057 revisions ``a3d8f6c1e2b4`` (rev1, expand) and ``b7e2c4a9d1f3`` (rev2, backfill).
+"""Task 057 revisions ``a3d8f6c1e2b4`` (rev1, expand), ``b7e2c4a9d1f3`` (rev2, backfill)
+and ``0914321f8de4`` (rev3, drop the JSON ``vector`` column).
 
-Contract D2; plan P5. Covers: the upgrade and downgrade round trip; rerunning rev1
-on a database that already has it; rev2 resuming after a failure part-way through
-(a committed batch, then a crash, then ``upgrade head``); the frozen tokens SQL
-against ``core.tokens``; the ``queued`` status and its two consistency checks; and
-the ``Vector`` column type round-tripping 1,536 floats with no client library.
+Contract D2; plan P5. Covers: the upgrade and downgrade round trip through all three;
+rerunning rev1 on a database that already has it; rev2 resuming after a failure
+part-way through (a committed batch, then a crash, then ``upgrade``); rev3 filling
+rows the old code wrote after the pre-run, and refusing to drop the column while a
+row has no embedding (then succeeding once the row is fixed); the frozen tokens SQL
+(rev2's and rev3's copy) against ``core.tokens``; the ``queued`` status and its two
+consistency checks; and the ``Vector`` column type round-tripping 1,536 floats with
+no client library.
 
 The ``engine`` fixture is session-scoped and the worker's database shared, so the
 tests that move the chain always leave it at head and remove the rows they wrote.
@@ -26,7 +30,7 @@ import pytest
 from alembic import command
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import inspect, null, select, text
+from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 
@@ -39,6 +43,7 @@ from tests.helpers import delete_task_data, now, seed_source, seed_task_and_run
 PRE_REVISION = "152a234e2391"
 REV1 = "a3d8f6c1e2b4"
 REV2 = "b7e2c4a9d1f3"
+REV3 = "0914321f8de4"
 _VERSIONS = Path(__file__).resolve().parents[2] / "alembic" / "versions"
 
 
@@ -58,6 +63,21 @@ def _rev1() -> ModuleType:
 
 def _rev2() -> ModuleType:
     return _load("b7e2c4a9d1f3_chunk_embedding_backfill.py")
+
+
+def _rev3() -> ModuleType:
+    return _load("0914321f8de4_drop_json_vector.py")
+
+
+def _current_revision(conn: Connection) -> str:
+    return str(conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one())
+
+
+def _embedding_floats(conn: Connection, row_id: uuid.UUID) -> list[float] | None:
+    value: list[float] | None = conn.execute(
+        select(chunk_embedding.c.embedding).where(chunk_embedding.c.chunk_embedding_id == row_id)
+    ).scalar_one()
+    return value
 
 
 def _columns(conn: Connection, table: str) -> dict[str, dict[str, Any]]:
@@ -170,7 +190,7 @@ def test_the_revisions_round_trip(engine: Engine) -> None:
                 {"s": envelope},
             )
 
-        command.upgrade(cfg, "head")
+        command.upgrade(cfg, REV2)
         with engine.begin() as conn:
             snapshot = _columns(conn, "source_snapshot")
             assert {"body_hash", "parse_profile", "segmentation_policy"} <= set(snapshot)
@@ -221,12 +241,42 @@ def test_the_revisions_round_trip(engine: Engine) -> None:
                     unit_policy="embedding_unit_policy_v1",
                     unit_index=0,
                     unit_locator={"start": 0, "end": 12},
-                    vector=null(),
                     embedding=_vector(7),
                     tokens=["binary", "only"],
                     created_at=now(),
                 )
             )
+
+        # rev3 drops the JSON column; the binary-only row keeps its embedding.
+        command.upgrade(cfg, REV3)
+        with engine.begin() as conn:
+            assert "vector" not in _columns(conn, "chunk_embedding")
+            kept = _embedding_floats(conn, binary_only)
+            assert kept is not None
+            assert [_f32(v) for v in kept] == [_f32(v) for v in _vector(7)]
+
+        # rev3's downgrade rebuilds the JSON at float32 and restores NOT NULL.
+        command.downgrade(cfg, REV2)
+        with engine.begin() as conn:
+            embedding = _columns(conn, "chunk_embedding")
+            assert embedding["vector"]["nullable"] is False
+            assert {"embedding", "tokens"} <= set(embedding)
+            rebuilt = conn.execute(
+                text(
+                    "SELECT vector, embedding = (vector::text)::vector AS same "
+                    "FROM chunk_embedding WHERE chunk_embedding_id = :i"
+                ),
+                {"i": binary_only},
+            ).one()
+            assert [_f32(v) for v in rebuilt.vector] == [_f32(v) for v in _vector(7)]
+            assert rebuilt.same is True
+            # Every row got its JSON back, not only the test's.
+            assert not conn.execute(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM chunk_embedding "
+                    "WHERE jsonb_typeof(vector) IS DISTINCT FROM 'array')"
+                )
+            ).scalar_one()
 
         command.downgrade(cfg, PRE_REVISION)
         with engine.begin() as conn:
@@ -271,21 +321,24 @@ def test_the_revisions_round_trip(engine: Engine) -> None:
 
         command.upgrade(cfg, "head")
         with engine.begin() as conn:
-            assert {"embedding", "tokens"} <= set(_columns(conn, "chunk_embedding"))
+            assert _current_revision(conn) == REV3
+            columns = _columns(conn, "chunk_embedding")
+            assert {"embedding", "tokens"} <= set(columns)
+            assert "vector" not in columns
             assert _valid_indexes(conn) == {
                 "uq_source_snapshot_store_key",
                 "ix_chunk_embedding_tokens",
             }
-            # rev2 refilled the row the downgrade rebuilt as JSON.
-            filled = conn.execute(
-                text(
-                    "SELECT embedding = (vector::text)::vector AS same, tokens "
-                    "FROM chunk_embedding WHERE chunk_embedding_id = :i"
-                ),
-                {"i": binary_only},
-            ).one()
-            assert filled.same is True
-            assert filled.tokens == ["binary", "only"]
+            # rev2 refilled the row the downgrade rebuilt as JSON, before rev3 dropped it.
+            refilled = _embedding_floats(conn, binary_only)
+            assert refilled is not None
+            assert [_f32(v) for v in refilled] == [_f32(v) for v in _vector(7)]
+            tokens = conn.execute(
+                select(chunk_embedding.c.tokens).where(
+                    chunk_embedding.c.chunk_embedding_id == binary_only
+                )
+            ).scalar_one()
+            assert tokens == ["binary", "only"]
     finally:
         command.upgrade(cfg, "head")
         if task_id is not None:
@@ -294,38 +347,57 @@ def test_the_revisions_round_trip(engine: Engine) -> None:
 
 
 def test_rev1_runs_again_on_a_database_that_has_it(engine: Engine) -> None:
-    """Every rev1 statement is rerun-safe: running it twice changes nothing."""
-    command.upgrade(_alembic_cfg(), "head")
-    rev1 = _rev1()
-    with engine.connect() as conn:
-        context = MigrationContext.configure(conn)
-        with Operations.context(context), context.begin_transaction():
-            rev1.upgrade()
-    with engine.connect() as conn:
-        assert _valid_indexes(conn) == {"uq_source_snapshot_store_key", "ix_chunk_embedding_tokens"}
-        assert "'queued'" in _status_check(conn)
-        assert {"embedding", "tokens"} <= set(_columns(conn, "chunk_embedding"))
+    """Every rev1 statement is rerun-safe: running it twice changes nothing.
+
+    Run at rev2, the last revision that still has the JSON column rev1 alters.
+    """
+    cfg = _alembic_cfg()
+    try:
+        command.upgrade(cfg, "head")
+        command.downgrade(cfg, REV2)
+        rev1 = _rev1()
+        with engine.connect() as conn:
+            context = MigrationContext.configure(conn)
+            with Operations.context(context), context.begin_transaction():
+                rev1.upgrade()
+        with engine.connect() as conn:
+            assert _valid_indexes(conn) == {
+                "uq_source_snapshot_store_key",
+                "ix_chunk_embedding_tokens",
+            }
+            assert "'queued'" in _status_check(conn)
+            assert {"embedding", "tokens"} <= set(_columns(conn, "chunk_embedding"))
+    finally:
+        command.upgrade(cfg, "head")
 
 
 def test_rev1_rebuilds_an_index_a_crash_left_invalid(engine: Engine) -> None:
     """A CONCURRENTLY build that crashed leaves an INVALID index; the rerun replaces it."""
-    command.upgrade(_alembic_cfg(), "head")
-    with engine.connect() as conn:
-        conn.execute(
-            text(
-                "UPDATE pg_index SET indisvalid = false WHERE indexrelid = "
-                "'ix_chunk_embedding_tokens'::regclass"
+    cfg = _alembic_cfg()
+    try:
+        command.upgrade(cfg, "head")
+        command.downgrade(cfg, REV2)
+        with engine.connect() as conn:
+            conn.execute(
+                text(
+                    "UPDATE pg_index SET indisvalid = false WHERE indexrelid = "
+                    "'ix_chunk_embedding_tokens'::regclass"
+                )
             )
-        )
-        conn.commit()
-        assert "ix_chunk_embedding_tokens" not in _valid_indexes(conn)
-    rev1 = _rev1()
-    with engine.connect() as conn:
-        context = MigrationContext.configure(conn)
-        with Operations.context(context), context.begin_transaction():
-            rev1.upgrade()
-    with engine.connect() as conn:
-        assert _valid_indexes(conn) == {"uq_source_snapshot_store_key", "ix_chunk_embedding_tokens"}
+            conn.commit()
+            assert "ix_chunk_embedding_tokens" not in _valid_indexes(conn)
+        rev1 = _rev1()
+        with engine.connect() as conn:
+            context = MigrationContext.configure(conn)
+            with Operations.context(context), context.begin_transaction():
+                rev1.upgrade()
+        with engine.connect() as conn:
+            assert _valid_indexes(conn) == {
+                "uq_source_snapshot_store_key",
+                "ix_chunk_embedding_tokens",
+            }
+    finally:
+        command.upgrade(cfg, "head")
 
 
 # --- 2. Resume after a failure -------------------------------------------------------
@@ -416,7 +488,7 @@ def test_rev2_resumes_after_a_failure_part_way_through(engine: Engine) -> None:
             assert not any(filled[i] for i in list(expected)[2:])
 
         started = time.monotonic()
-        command.upgrade(cfg, "head")
+        command.upgrade(cfg, REV2)
         elapsed = time.monotonic() - started
         assert elapsed < 60
 
@@ -441,6 +513,138 @@ def test_rev2_resumes_after_a_failure_part_way_through(engine: Engine) -> None:
             kelvin_row = next(r for r in rows if "kelvin" in r.tokens)
             assert "stanbul" in kelvin_row.tokens and "istanbul" not in kelvin_row.tokens
     finally:
+        command.upgrade(cfg, "head")
+        if task_id is not None:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)
+
+
+# --- 2b. rev3: rows written after the pre-run, and the refusal to drop -------------
+
+
+def test_rev3_fills_rows_the_old_code_wrote_after_the_pre_run(engine: Engine) -> None:
+    """Rows with only the JSON column (old image, after rev2's pre-run) are filled first."""
+    cfg = _alembic_cfg()
+    task_id: uuid.UUID | None = None
+    expected: dict[uuid.UUID, tuple[list[float], list[str]]] = {}
+    try:
+        command.upgrade(cfg, "head")
+        command.downgrade(cfg, REV2)  # the pre-run is done: the database is at rev2
+        with engine.begin() as conn:
+            task_id, _ = seed_task_and_run(conn)
+            snapshot, _ = seed_source(conn, task_id)
+            for sequence, content in enumerate(
+                ["Written by the old image after the pre-run.", "Second LATE row, 2026."],
+                start=1,
+            ):
+                chunk_id = _insert_chunk(conn, snapshot, sequence, content)
+                row_id = uuid.uuid4()
+                vector = _vector(row_id.int % 10_000)
+                _insert_json_only_unit(conn, row_id, chunk_id, 0, 0, len(content), vector)
+                expected[row_id] = (vector, sorted(word_tokens(content)))
+            unfilled = conn.execute(
+                text(
+                    "SELECT count(*) FROM chunk_embedding "
+                    "WHERE chunk_embedding_id = ANY(:ids) AND embedding IS NULL"
+                ),
+                {"ids": list(expected)},
+            ).scalar_one()
+            assert unfilled == len(expected)
+
+        command.upgrade(cfg, REV3)
+        with engine.begin() as conn:
+            assert _current_revision(conn) == REV3
+            assert "vector" not in _columns(conn, "chunk_embedding")
+            rows = conn.execute(
+                select(
+                    chunk_embedding.c.chunk_embedding_id,
+                    chunk_embedding.c.embedding,
+                    chunk_embedding.c.tokens,
+                ).where(chunk_embedding.c.chunk_embedding_id.in_(list(expected)))
+            ).fetchall()
+            assert len(rows) == len(expected)
+            for row in rows:
+                vector, tokens = expected[row.chunk_embedding_id]
+                assert row.embedding is not None
+                assert [_f32(v) for v in row.embedding] == [_f32(v) for v in vector]
+                assert row.tokens == tokens
+    finally:
+        command.upgrade(cfg, "head")
+        if task_id is not None:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)
+
+
+@pytest.mark.parametrize(
+    ("bad_json", "label"),
+    [("null", "JSON null"), ('{"not": "a list"}', "non-array")],
+)
+def test_rev3_refuses_to_drop_while_a_row_has_no_embedding(
+    engine: Engine, bad_json: str, label: str
+) -> None:
+    """A row with no usable JSON and no embedding stops rev3; fixed, the rerun succeeds."""
+    cfg = _alembic_cfg()
+    task_id: uuid.UUID | None = None
+    bad_id = uuid.uuid4()
+    good_id = uuid.uuid4()
+    try:
+        command.upgrade(cfg, "head")
+        command.downgrade(cfg, REV2)
+        with engine.begin() as conn:
+            task_id, _ = seed_task_and_run(conn)
+            snapshot, _ = seed_source(conn, task_id)
+            chunk_id = _insert_chunk(conn, snapshot, 1, "A row nothing can fill.")
+            conn.execute(
+                text(
+                    "INSERT INTO chunk_embedding (chunk_embedding_id, chunk_id, "
+                    "embedding_profile, unit_policy, unit_index, unit_locator, vector, "
+                    "created_at) VALUES (:id, :chunk, 'test_profile_057', "
+                    "'embedding_unit_policy_v1', 0, jsonb_build_object('start', 0, 'end', 23), "
+                    "CAST(:bad AS jsonb), now())"
+                ),
+                {"id": bad_id, "chunk": chunk_id, "bad": bad_json},
+            )
+            # A fillable row next to it: the fill still runs and commits before the stop.
+            good_chunk = _insert_chunk(conn, snapshot, 2, "A row the fill reaches.")
+            _insert_json_only_unit(conn, good_id, good_chunk, 0, 0, 23, _vector(11))
+
+        with pytest.raises(RuntimeError) as failure:
+            command.upgrade(cfg, REV3)
+        message = str(failure.value)
+        assert "will not drop chunk_embedding.vector" in message
+        assert "1 rows have no embedding" in message
+        assert "0 still have a JSON vector" in message
+        assert "1 have a JSON null, SQL NULL or non-array vector" in message
+        assert "Nothing was dropped" in message, label
+
+        with engine.begin() as conn:
+            assert _current_revision(conn) == REV2
+            assert "vector" in _columns(conn, "chunk_embedding")
+            assert _embedding_floats(conn, bad_id) is None
+            assert _embedding_floats(conn, good_id) is not None  # committed batch kept
+            # Fix the row the way an operator could: give it a JSON vector to copy.
+            conn.execute(
+                text(
+                    "UPDATE chunk_embedding SET vector = CAST(:v AS jsonb) "
+                    "WHERE chunk_embedding_id = :i"
+                ),
+                {"i": bad_id, "v": "[" + ", ".join(repr(v) for v in _vector(12)) + "]"},
+            )
+
+        command.upgrade(cfg, REV3)
+        with engine.begin() as conn:
+            assert _current_revision(conn) == REV3
+            assert "vector" not in _columns(conn, "chunk_embedding")
+            fixed = _embedding_floats(conn, bad_id)
+            assert fixed is not None
+            assert [_f32(v) for v in fixed] == [_f32(v) for v in _vector(12)]
+    finally:
+        with engine.begin() as conn:
+            if "vector" in _columns(conn, "chunk_embedding"):
+                conn.execute(
+                    text("DELETE FROM chunk_embedding WHERE chunk_embedding_id = :i"),
+                    {"i": bad_id},
+                )
         command.upgrade(cfg, "head")
         if task_id is not None:
             with engine.begin() as conn:
@@ -483,12 +687,20 @@ _PARITY_STRINGS = [
 ]
 
 
-def test_the_frozen_tokens_sql_matches_core_tokens(conn: Connection) -> None:
+@pytest.mark.parametrize("load", [_rev2, _rev3], ids=["rev2", "rev3"])
+def test_the_frozen_tokens_sql_matches_core_tokens(conn: Connection, load: Any) -> None:
     assert len(_PARITY_STRINGS) == 30
-    rev2 = _rev2()
-    sql = text("SELECT " + rev2.TOKENS_SQL.format(unit="CAST(:s AS text)"))
+    module = load()
+    sql = text("SELECT " + module.TOKENS_SQL.format(unit="CAST(:s AS text)"))
     for value in _PARITY_STRINGS:
         assert conn.execute(sql, {"s": value}).scalar_one() == sorted(word_tokens(value)), value
+
+
+def test_rev3_copies_rev2_fill_unchanged() -> None:
+    """rev3 carries its own copy of rev2's fill; the two must say the same thing."""
+    rev2, rev3 = _rev2(), _rev3()
+    for name in ("TOKENS_SQL", "UNIT_TEXT_SQL", "_BATCH_SQL", "_REMAINING_SQL", "BATCH_SIZE"):
+        assert getattr(rev3, name) == getattr(rev2, name), name
 
 
 # --- 4. The queued status --------------------------------------------------------------
@@ -551,7 +763,6 @@ def test_the_vector_type_round_trips_1536_floats(conn: Connection) -> None:
         unit_policy="embedding_unit_policy_v1",
         unit_index=0,
         unit_locator={"start": 0, "end": 18},
-        vector=values,
         embedding=values,
         tokens=sorted(word_tokens("Vector round trip.")),
         created_at=now(),
@@ -568,14 +779,14 @@ def test_the_vector_type_round_trips_1536_floats(conn: Connection) -> None:
     assert stored.embedding is not None and len(stored.embedding) == 1536
     assert [_f32(v) for v in stored.embedding] == [_f32(v) for v in values]
     assert stored.tokens == ["round", "trip", "vector"]
-    # The database agrees the two columns hold the same vector.
+    # The database agrees the stored vector is the one sent.
     assert (
         conn.execute(
             text(
-                "SELECT embedding = (vector::text)::vector FROM chunk_embedding "
+                "SELECT embedding = CAST(:v AS vector(1536)) FROM chunk_embedding "
                 "WHERE chunk_embedding_id = :i"
             ),
-            {"i": row_id},
+            {"i": row_id, "v": "[" + ",".join(repr(v) for v in values) + "]"},
         ).scalar_one()
         is True
     )
@@ -589,7 +800,6 @@ def test_the_vector_type_round_trips_1536_floats(conn: Connection) -> None:
             unit_policy="embedding_unit_policy_v1",
             unit_index=1,
             unit_locator={"start": 0, "end": 18},
-            vector=values,
             embedding=None,
             created_at=now(),
         )

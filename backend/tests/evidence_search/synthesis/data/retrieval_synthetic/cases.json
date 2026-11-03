@@ -1,0 +1,40 @@
+{
+  "_about": "Search cases over corpus.json. scopes: primary first, then extra scopes. selection: document names (default: the corpus default_selection). filters: doc_ids / group_doc_ids / evidence_types / tags (document names for the first two). boosts: the synthesis directive's retrieval_boosts. pool: overrides CANDIDATE_POOL_PER_LEG for this case. vector: the stub query vector.",
+  "queries": {
+    "QH": {"text": "housing support for tenants", "vector": {"0": 1}},
+    "QHE": {"text": "employment support for tenants", "vector": {"2": 1, "0": 1}},
+    "QHealth": {"text": "health outcomes", "vector": {"1": 1}},
+    "QT": {"text": "teachers support pupils tenants", "vector": {"3": 1}},
+    "QE": {"text": "eviction", "vector": {"0": 1}},
+    "QZ": {"text": "housing support", "vector": {}},
+    "QN": {"text": "zebra quantum", "vector": {"0": 1, "1": 1}},
+    "QP": {"text": "?! ...", "vector": {"1": 1}}
+  },
+  "cases": [
+    {"id": "default_housing", "query": "QH", "scopes": ["S1"]},
+    {"id": "filter_doc_ids", "query": "QH", "scopes": ["S1"], "filters": {"doc_ids": ["dB", "dC", "dD"]}},
+    {"id": "filter_group_and_doc_ids", "query": "QH", "scopes": ["S1"], "filters": {"group_doc_ids": ["dA", "dD", "dE"], "doc_ids": ["dA", "dD"]}},
+    {"id": "filter_evidence_types", "query": "QHealth", "scopes": ["S1"], "filters": {"evidence_types": ["Systematic Review and Meta-Analysis", "Observational Research Studies"]}},
+    {"id": "filter_tags", "query": "QHealth", "scopes": ["S1"], "filters": {"tags": ["health"]}},
+    {"id": "filter_combined", "query": "QH", "scopes": ["S1"], "filters": {"evidence_types": ["RCTs and Quasi-Experimental Studies", "Policy Syntheses & Guidance Documents"], "tags": ["housing", "employment"]}},
+    {"id": "boost_columns", "query": "QH", "scopes": ["S1"], "boosts": {"columns": {"origin": {"acquired": 3}, "primary_evidence_type": {"Observational Research Studies": 0.5}, "text_basis": {"abstract": 2}}}},
+    {"id": "boost_tags", "query": "QH", "scopes": ["S1"], "boosts": {"tags": {"housing": 2.5, "trial": 0.4, "employment": 1.7}}},
+    {"id": "boost_appraisal_tiers", "query": "QHealth", "scopes": ["S1"], "boosts": {"appraisal_tier": {"5": 3, "Unrated": 0.3, "4": 1.5}}},
+    {"id": "boost_screen_confidence", "query": "QH", "scopes": ["S1"], "boosts": {"screen_confidence": {"lo": 0.5, "hi": 4.0}}},
+    {"id": "clamp_high", "query": "QH", "scopes": ["S1"], "boosts": {"columns": {"origin": {"uploaded": 10}}, "tags": {"housing": 10}}},
+    {"id": "clamp_low", "query": "QH", "scopes": ["S1"], "boosts": {"columns": {"origin": {"acquired": 0.1}}, "tags": {"health": 0.1}}},
+    {"id": "confidence_suppressed", "query": "QH", "scopes": ["S1"], "selection_reference_resolved": true},
+    {"id": "no_selection", "query": "QH", "scopes": ["S1"], "selection": []},
+    {"id": "zero_query_vector", "query": "QZ", "scopes": ["S1"]},
+    {"id": "no_word_overlap", "query": "QN", "scopes": ["S1"]},
+    {"id": "no_query_words", "query": "QP", "scopes": ["S1"]},
+    {"id": "multi_scope_primary_s1", "query": "QHE", "scopes": ["S1", "S2"], "boosts": {"columns": {"primary_evidence_type": {"Policy Syntheses & Guidance Documents": 3}}, "appraisal_tier": {"3": 0.5}}},
+    {"id": "multi_scope_primary_s2", "query": "QHE", "scopes": ["S2", "S1"], "boosts": {"columns": {"primary_evidence_type": {"Policy Syntheses & Guidance Documents": 3}}, "appraisal_tier": {"3": 0.5}}},
+    {"id": "multi_scope_filter_evidence_type", "query": "QHE", "scopes": ["S1", "S2"], "filters": {"evidence_types": ["Modelling & Simulation", "Expert Opinion and Commentary"]}},
+    {"id": "chunk_tie", "query": "QT", "scopes": ["S2"], "filters": {"doc_ids": ["dF"]}},
+    {"id": "unit_tie_window", "query": "QE", "scopes": ["S1"], "filters": {"doc_ids": ["dH"]}},
+    {"id": "eviction_unfiltered", "query": "QE", "scopes": ["S1"]},
+    {"id": "pool_cut", "query": "QH", "scopes": ["S1"], "pool": 3, "boosts": {"columns": {"origin": {"acquired": 10}}}},
+    {"id": "health_both_scopes", "query": "QHealth", "scopes": ["S1", "S2"], "selection": ["dF"]}
+  ]
+}

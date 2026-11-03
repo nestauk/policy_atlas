@@ -84,29 +84,29 @@ def _f32(value: float) -> float:
     return float(struct.unpack("f", struct.pack("f", value))[0])
 
 
-def _assert_three_columns_agree(conn: Connection, chunk_ids: list[uuid.UUID]) -> int:
-    """Assert ``vector``, ``embedding`` and ``tokens`` agree on every row of the chunks.
+def _assert_two_columns_agree(conn: Connection, chunk_ids: list[uuid.UUID]) -> int:
+    """Assert ``embedding`` and ``tokens`` are right on every row of the chunks.
 
-    Task 057 writes the JSON vector, the same floats in pgvector's binary column
-    and the unit's words; the database compares the two vectors itself and the
-    words are checked against ``core.tokens`` on the unit's text.
+    Task 057 writes the vector to pgvector's binary column only (the JSON column is
+    gone): it must hold the stub backend's floats for the unit's text at single
+    precision, and ``tokens`` the unit's words by ``core.tokens``.
     """
     rows = conn.execute(
         sa.text(
-            "SELECT ce.vector, ce.embedding, ce.tokens, ce.unit_locator, c.content, "
-            "ce.embedding = (ce.vector::text)::vector AS same_vector "
+            "SELECT ce.embedding, ce.tokens, ce.unit_locator, c.content "
             "FROM chunk_embedding ce JOIN chunk c ON c.chunk_id = ce.chunk_id "
             "WHERE ce.chunk_id = ANY(:ids)"
         ),
         {"ids": chunk_ids},
     ).fetchall()
     assert rows
+    stub = StubEmbeddingBackend()
     for row in rows:
-        assert row.same_vector is True
+        unit_text = row.content[row.unit_locator["start"] : row.unit_locator["end"]]
         assert row.embedding is not None
         stored = [float(v) for v in row.embedding.strip("[]").split(",")]
-        assert [_f32(v) for v in stored] == [_f32(v) for v in row.vector]
-        unit_text = row.content[row.unit_locator["start"] : row.unit_locator["end"]]
+        expected = stub.embed_texts([unit_text])[0]
+        assert [_f32(v) for v in stored] == [_f32(v) for v in expected]
         assert row.tokens == sorted(word_tokens(unit_text))
     return len(rows)
 
@@ -138,7 +138,7 @@ def test_uq_chunk_embedding_unit_rejects_duplicate(conn: Connection) -> None:
             unit_policy=UNIT_POLICY,
             unit_index=0,
             unit_locator={"start": 0, "end": 25},
-            vector=vector,
+            embedding=vector,
             created_at=now(),
         )
     )
@@ -151,7 +151,7 @@ def test_uq_chunk_embedding_unit_rejects_duplicate(conn: Connection) -> None:
                 unit_policy=UNIT_POLICY,
                 unit_index=0,
                 unit_locator={"start": 0, "end": 25},
-                vector=vector,
+                embedding=vector,
                 created_at=now(),
             )
         )
@@ -260,7 +260,7 @@ def test_embed_pending_chunks_idempotent_and_stamps_every_row(conn: Connection) 
     for row in rows:
         assert row.embedding_profile == EMBEDDING_PROFILE
         assert row.unit_policy == UNIT_POLICY
-    assert _assert_three_columns_agree(conn, chunk_ids) == 3
+    assert _assert_two_columns_agree(conn, chunk_ids) == 3
 
     # Canonical chunk content is untouched by the embed pass.
     for i, chunk_id in enumerate(chunk_ids, start=1):
@@ -784,7 +784,7 @@ def test_pending_chunks_with_old_profile_are_pending_for_cohere(
             unit_policy=UNIT_POLICY,
             unit_index=0,
             unit_locator={"start": 0, "end": 19},
-            vector=[0.0] * EMBEDDING_DIMENSIONS,
+            embedding=[0.0] * EMBEDDING_DIMENSIONS,
             created_at=now(),
         )
     )
@@ -869,7 +869,7 @@ def test_judgment_one_vector_per_unit_no_mean_pooling_path(conn: Connection) -> 
         select(
             chunk_embedding.c.unit_index,
             chunk_embedding.c.unit_locator,
-            chunk_embedding.c.vector,
+            chunk_embedding.c.embedding,
         )
         .where(chunk_embedding.c.chunk_id == chunk_id)
         .order_by(chunk_embedding.c.unit_index)
@@ -877,10 +877,8 @@ def test_judgment_one_vector_per_unit_no_mean_pooling_path(conn: Connection) -> 
     assert len(rows) == len(units)
 
     stub = StubEmbeddingBackend()
-    for row in rows:
-        unit_text = chunk_content[row.unit_locator["start"] : row.unit_locator["end"]]
-        assert row.vector == stub.embed_texts([unit_text])[0]
-    assert _assert_three_columns_agree(conn, [chunk_id]) == len(units)
+    # Each row holds the stub's floats for the text its locator points at.
+    assert _assert_two_columns_agree(conn, [chunk_id]) == len(units)
     # The ORM read of the binary column parses back to the stub's floats (float32).
     embeddings = conn.execute(
         select(chunk_embedding.c.embedding)

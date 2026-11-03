@@ -17,6 +17,7 @@ import re
 import threading
 import time
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, TypedDict
@@ -26,7 +27,7 @@ import structlog
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
-from sqlalchemy import exists, func, select, union
+from sqlalchemy import ColumnElement, exists, func, select, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
@@ -582,10 +583,9 @@ def _chunk_rows_for_insert(state: _ChunkState) -> list[dict[str, object]]:
             "unit_policy": UNIT_POLICY,
             "unit_index": unit.unit_index,
             "unit_locator": {"start": unit.start, "end": unit.end},
-            # Task 057: the same floats twice until Phase 3 drops the JSON column
-            # (``embedding`` goes as a ``'[...]'::vector`` text cast, schema.Vector),
-            # plus the unit's sorted distinct words for the word-overlap score.
-            "vector": state.vectors[unit.unit_index],
+            # Task 057: the floats go to pgvector's binary column as a
+            # ``'[...]'::vector`` text cast (schema.Vector), plus the unit's sorted
+            # distinct words for the word-overlap score.
             "embedding": state.vectors[unit.unit_index],
             "tokens": sorted(word_tokens(unit.text)),
             "created_at": now,
@@ -595,7 +595,11 @@ def _chunk_rows_for_insert(state: _ChunkState) -> list[dict[str, object]]:
 
 
 def _pending_chunks(
-    conn: Connection, task_id: uuid.UUID, *, max_hydrated: int
+    conn: Connection,
+    task_id: uuid.UUID,
+    *,
+    max_hydrated: int,
+    snapshot_ids: Collection[uuid.UUID] | None = None,
 ) -> tuple[int, int, list[_PendingChunk]]:
     eligible_snapshot_ids = union(
         select(
@@ -608,9 +612,13 @@ def _pending_chunks(
         .where(task_source_snapshot.c.full_text_snapshot_id.is_not(None)),
     ).subquery()
 
-    eligible_filter = chunk_table.c.source_snapshot_id.in_(
+    eligible_filter: ColumnElement[bool] = chunk_table.c.source_snapshot_id.in_(
         select(eligible_snapshot_ids.c.source_snapshot_id)
     )
+    if snapshot_ids is not None:
+        eligible_filter = eligible_filter & chunk_table.c.source_snapshot_id.in_(
+            list(snapshot_ids)
+        )
     pending_filter = ~exists().where(
         (chunk_embedding.c.chunk_id == chunk_table.c.chunk_id)
         & (chunk_embedding.c.embedding_profile == EMBEDDING_PROFILE)
@@ -690,6 +698,7 @@ def embed_pending_chunks(
     run_id: uuid.UUID,
     batch_size: int = API_BATCH_SIZE,
     max_chunks: int = DEFAULT_MAX_CHUNKS,
+    snapshot_ids: Collection[uuid.UUID] | None = None,
 ) -> dict[str, int]:
     """Embed eligible task chunks that lack rows for the active profile.
 
@@ -705,6 +714,9 @@ def embed_pending_chunks(
         run_id: Current run, used only for structured logs.
         batch_size: Maximum unit texts per backend call.
         max_chunks: Maximum embedding units allowed for this pass.
+        snapshot_ids: When given, only chunks of these snapshots (still within
+            the task's snapshots) are considered; the full-text stage passes the
+            snapshots its documents link (task 057).
 
     Returns:
         Counts for newly embedded chunks, already embedded eligible chunks, failed
@@ -720,7 +732,7 @@ def embed_pending_chunks(
         raise ValueError("max_chunks must be non-negative")
 
     eligible_count, pending_count, pending_chunks = _pending_chunks(
-        conn, task_id, max_hydrated=max_chunks
+        conn, task_id, max_hydrated=max_chunks, snapshot_ids=snapshot_ids
     )
     already_embedded = eligible_count - pending_count
     states, all_units, unitless_chunk_ids = _derive_unit_work(pending_chunks)

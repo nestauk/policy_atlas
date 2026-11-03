@@ -10,7 +10,8 @@ and opens a child walk with no parent that never closes the conversation;
 *exclude* records the reason; the buttons and the verbs write the same state
 and one History event each; a turn while a walk runs is ``run_active``; an
 Evidence search task's turns are unchanged; the ordinary chat resolves the
-longlist walk after it runs; ``RetrievalUnitCapError`` is answered honestly.
+longlist walk after it runs. (The retrieval unit cap and its honest reply went
+with task 057's SQL retrieval.)
 
 The longlist is the real component's, built by 6.1's fixture
 (``test_longlist_routes._build``) and committed.
@@ -57,7 +58,7 @@ from policy_atlas.core.schema import (
     task_source_snapshot,
 )
 from policy_atlas.evidence_search.assess.appraise import DEFAULT_RUBRIC_VERSION
-from policy_atlas.evidence_search.synthesis.synthesis_tools import RetrievalUnitCapError
+from policy_atlas.evidence_search.synthesis.synthesis_tools import _ChunkScopeFilters
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.runtime import option_search
 from policy_atlas.runtime.agent_backend import StubAgentBackend
@@ -479,8 +480,12 @@ def test_a_document_in_two_scopes_is_one_row_with_the_longlist_labels(
         docs = retriever._scope.docs  # noqa: SLF001 — the frozen retrieval substrate
         assert docs[str(both)]["primary_evidence_type"] == RCT
         assert docs[str(both)]["appraisal_tier"] == "5"
-        units = [u for u in retriever._scope.units if u["tss_id"] == str(both)]  # noqa: SLF001
-        assert len(units) == 2  # one row per document: its chunks are not doubled
+        # One row per document: its chunks are not doubled. The search runs on
+        # its own short connection, after build_chat_readers closed its own.
+        results = retriever.search(
+            "one two", filters=_ChunkScopeFilters(doc_ids=frozenset({str(both)}))
+        )
+        assert sorted(result["content"] for result in results) == ["One", "Two"]
         assert docs[str(pair)]["primary_evidence_type"] == RCT
         assert docs[str(pair)]["appraisal_tier"] == "3"
         assert lookup({"kind": "classification_by_doc", "doc_id": str(both)})["result"] == {
@@ -536,23 +541,6 @@ def test_the_ordinary_chat_resolves_the_longlist_walk_after_it_runs(
                 .values(status="aborted", ended_at=now())
             )
         assert resolve_terminal_run_components(engine, task_id=built.task_id) == before
-
-
-def test_a_retrieval_cap_is_answered_honestly(
-    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def _too_many(*_args: Any, **_kwargs: Any) -> Any:
-        raise RetrievalUnitCapError(unit_count=10, cap=1)
-
-    monkeypatch.setattr(longlist_turns, "answer_over_scope", _too_many)
-    agent = _agent(_sort("question"))
-    with tenancy_client(tmp_path, overrides=_overrides(agent)) as (client, (owner, colleague, _)):
-        built = _org_build(engine, owner, colleague, linked=False)
-        response = _turn(client, owner.headers, built.task_id, "What works?")
-        assert response.status_code == 200, response.text
-        assert response.json()["kind"] == "reply"
-        assert response.json()["reply"] == longlist_turns.TOO_MANY_DOCUMENTS_REPLY
-        assert _latest_row(engine, built.task_id).status == "completed"
 
 
 def test_other_with_nothing_pending_says_what_the_chat_can_do(

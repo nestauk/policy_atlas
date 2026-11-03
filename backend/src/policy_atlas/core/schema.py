@@ -786,13 +786,11 @@ chunk_embedding = Table(
     Column("unit_policy", Text, nullable=False),        # e.g. "embedding_unit_policy_v1"
     Column("unit_index", Integer, nullable=False),
     Column("unit_locator", JSONB, nullable=False),      # char offsets into the canonical chunk
-    # Vector as a JSONB float array — code-validated (array, expected dims, finite floats).
-    # Nullable from task 057 rev1 so a later image can stop writing it; written until
-    # the end of task 057 Phase 3, when a later revision drops it.
-    Column("vector", JSONB, nullable=True),
-    # Task 057 (N8): the same vector in pgvector's binary column (float32), and the
-    # unit's distinct words (core.tokens, sorted) for the word-overlap score. Null
-    # only on rows written before revision b7e2c4a9d1f3 backfilled them.
+    # Task 057 (N8): the vector in pgvector's binary column (float32), validated in
+    # code before the write (list, 1,536 dims, finite floats), and the unit's
+    # distinct words (core.tokens, sorted) for the word-overlap score. The JSON
+    # ``vector`` column these replaced was dropped by revision 0914321f8de4, which
+    # first checks that every row has an embedding; nullable only by history.
     Column("embedding", Vector(1536), nullable=True),
     Column("tokens", ARRAY(Text), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
