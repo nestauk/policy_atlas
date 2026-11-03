@@ -29,7 +29,12 @@ RUN uv sync --no-dev --no-group ops --frozen
 
 FROM python:3.12-slim
 
-RUN groupadd --system app && useradd --system --gid app --create-home --home-dir /app app
+# useradd makes the home directory private (mode 700). AWS Lambda runs a container image
+# as its own user, not the image's USER, so the ingest function could not enter /app and
+# never started (emulator check, task 057). chmod 755: world-readable, no write; the venv
+# and the source are read-only at runtime anyway.
+RUN groupadd --system app && useradd --system --gid app --create-home --home-dir /app app \
+    && chmod 755 /app
 
 WORKDIR /app
 

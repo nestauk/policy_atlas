@@ -315,10 +315,63 @@ retry): **`judge_grounding` is raised once, 40 → 80 s**, applied with the judg
 change in round (c), which re-measures it. Round (a)'s cut component was a different
 step (`synthesise_propose_sections`, kept at 120 s; no raise, n < 100).
 
-### N13, compiled bytecode — Dockerfile edited; cold-import measurement pending
+### N13, G8: compiled bytecode — measured
 
 One `RUN python -m compileall -q /app/.venv /app/src` line after the venv copy; the
-`.dockerignore` bytecode patterns gained `**/` so the laptop's `.pyc` files stay out.
+`.dockerignore` bytecode patterns gained `**/` so the laptop's `.pyc` files stay out (the
+"before" image carried 205 of the laptop's `cpython-313` files, useless to Python 3.12; the
+"after" image holds 6,731 `cpython-312` files of its own). Cold import of the parser stack
+in a fresh amd64 container, five containers each, on the laptop while a measurement round
+ran:
+
+| image | `ingest_full_text` import, five values (s) | median |
+|---|---|---|
+| before (`e0553f85`) | 21.19, 9.95, 9.76, 7.67, 12.06 | 9.95 |
+| after (this task) | 5.87, 3.86, 3.57, 2.97, 2.81 | 3.57 |
+| after, `ops.ingest_worker` (the handler) | 2.82, 3.17, 3.32, 7.23, 5.39 | 3.32 |
+
+An interleaved repeat (before and after alternating) gave medians 8.24 s and 3.79 s. Image
+size 697 → 846 MB listed (163 → 196 MB content). E4's laptop figure was 7.7 → 3.8 s.
+
+**Second Dockerfile change, outside G8's "one change" — flagged for the owner's ruling at
+the PR:** `chmod 755 /app` after `useradd`. `useradd --create-home` makes `/app` private
+(mode 700, owner `app`), and AWS Lambda runs a container image as its own user, not the
+image's `USER`; under the emulator as uid 1000 the function never started
+(`Runtime.InvalidEntrypoint`, `permission denied` on `python`, with or without a
+read-only root). Without this line the function fails on its first staging start. The
+line is one word of permission, reversible, and the API container is unaffected (it runs
+as `app`).
+
+### D5: the handler under the Lambda Runtime Interface Emulator (amd64)
+
+Image `pa-057-after` (the working tree) under `aws-lambda-rie` 1.38, read-only root,
+`/tmp` 512 MB, a stub Secrets Manager answering `GetSecretValue` once at cold start, a
+scratch database migrated to head, one `queued` link row:
+
+- **As the image's own user (uid 999):** the brief's local fixture server was refused (the
+  live fetcher blocks private addresses, as it should: `fetch_live.blocked`, the row ended
+  `fetch_failed` / `blocked`, no snapshot). With the committed fixture's public source (one
+  CC-BY PDF from PLOS, one public fetch) the first invocation returned
+  `{"batchItemFailures": []}`, the row became `ingested` with `full_text_snapshot_id` set,
+  `ingested_by_run_id` and `fetched_from` on the link row, the snapshot's `body_hash` equal
+  to the sha256 of the committed fixture file, `parse_profile = pymupdf4llm_v2`,
+  `segmentation_policy = pymupdf4llm_struct_v2`, metadata keys exactly `content_type`,
+  `parse_profile`, `segmentation_policy`, `source_kind`, 3 chunks (61,040 characters); the
+  parse process ran under the read-only root. The second delivery returned
+  `{"batchItemFailures": []}` and logged `fulltext.not_queued` (idempotent). Logs are JSON;
+  the redaction grep found no connection string, no `SecretString`, no query string (URLs
+  are scheme, host and path). Cold start 5.5 s with a blocked fetch (init 3.6 s); 21.0 s with
+  the real fetch and parse (15.7 s of it the parse of an amd64 image on this Mac under
+  contention, not representative of Lambda); warm invocation 46 to 79 ms.
+- **As uid 1000 (how Lambda runs it):** failed before the Dockerfile change above
+  (`Runtime.InvalidEntrypoint`); after it, with the same read-only root and `/tmp`, the
+  rebuilt image (`/app` now `drwxr-xr-x`) started, the first invocation ingested the same
+  PDF (3 chunks, `pymupdf4llm_v2`, the four metadata keys, the link row's breadcrumbs), the
+  second delivery was a no-op, the stub Secrets Manager was called once, the redaction grep
+  found nothing. Cold start 18.0 s (init 3.8 s; the parse 11.4 s of it on this Mac), warm
+  32 ms. The handler module's cold import on the rebuilt image: 2.45 s median (five
+  containers). Scratch database and containers cleaned up; the two images stay until the
+  step-6 exit.
 
 ## Phase 2: schema and the deploy waiter (D2, G9, G10, P5, P14, P17)
 
