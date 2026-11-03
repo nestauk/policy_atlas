@@ -191,6 +191,7 @@ Experiment folders are under `experiments/experiments-057-2026-11-02/` (gitignor
 | N12 | Measurement and governance: the fixed questions before and after on the laptop (`in_process`, bedrock) and on staging (`queued`, bedrock), the ingest split (fetch, parse, embed) and the embedding requests, tokens and throttling sleeps from logs, the quota's state, a one-page data-flow note, the retention rule. | none | In `verification.md`; the data-flow note committed under `docs/`. |
 | N13 | Compiled bytecode in the backend image (`python -m compileall` of the venv and `src` in the Dockerfile), so a cold function or API task does not recompile 6,500 files. | `backend/Dockerfile` ships no `.pyc`. | Cold import of the parser stack in a fresh container before and after (E4: 7.7 → 3.8 s on amd64). |
 | N14 | The quote matcher normalises markup out of the quote as well as the chunk, so quotes that copied `**` or `_` from old snapshots keep matching. | `quote_verify._normalise`. | A test with a markup-bearing quote against a plain chunk and the reverse; the funnel re-run on the fixed questions. |
+| N15 | The grounding judge's route step runs at `low` reasoning effort (D14). | `model_routes.toml` `[steps]` judge_grounding effort `medium`. | Judge wall per call and per run before and after on the fixed questions; the count of claims marked unsupported per report against the medium baseline's spread (26 vs 28 to 33 per 157 claims in E3); the owner's read of the reports. |
 
 ## Decisions
 
@@ -309,11 +310,16 @@ rather than giving up after 4 attempts (E1 saw a batch fail that way); a documen
 embedding does not finish is `parse_failed` with reason `embed_timeout`, retried next run, and
 never left with chunks but no vectors.
 
-**D14. The grounding judge is untouched. Decided (owner, 2026-11-03), low effort ❓ Open.**
-Splitting saves nothing (E3). Low effort would save 70 to 120 s per run (6% of a run after
-this slice) at a 2% risk of missing attribution catches in a 20-block sample; the owner is
-deciding whether to take it as an owner-ruled route value guarded only by the owner's read,
-or leave it to the synthesis refinement task with a labelled set (lead's lean).
+**D14. The grounding judge runs at `low` reasoning effort; its prompt, batching and place in
+the loop are untouched. Decided (owner, 2026-11-03).** Splitting saves nothing (E3). Low
+effort halves the judge's time (11.5 → 5.4 s per call, 70 to 120 s per run) at 0.8× its cost,
+with agreement to the medium judge at the judge's own noise floor (91.7%), while marking 26
+claims unsupported against 33 and 28 for two medium runs and missing 3 attribution catches in
+157 claims (E3). The owner takes that trade in this slice as a route-file value for the
+`judge_grounding` step only (one route step per call site), guarded by the owner's read of the
+fixed-question reports, and asks the synthesis refinement task to revisit it with a labelled
+set of disputed claims and raise it again if the leniency is real. Recorded in `deferred.md`
+with E3's numbers. No prompt text changes.
 
 ## Owner rulings
 
@@ -333,7 +339,8 @@ markup strip. Act on the leans: pool widths 12 → 48 measured; option-search wi
 measured; parse v2 markup rule only. Drop: the header, page-number and footnote rules; judge
 splitting; two-stage and deterministic judge; streaming watchdog; hedging; per-host
 coordination; rate-limit limiter; per-document hand-over into full-text screening. Low-effort
-judge: ❓ owner deciding (D14).
+judge: "Let's drop it to low in this task, but revisit in synthesis refinement to potentially
+increase again in that task" (D14).
 
 ❓ Still open for the owner: `infra/pa_config.json` names `openai-direct` for `prod`; fold the
 flip to `bedrock` into N11's config change, or leave it for a separate change?
@@ -408,8 +415,9 @@ experiment folders (gitignored).
 
 ## Model route
 
-No model or effort changes; the judge's effort is D14's open item. Every step gains a
-`timeout_s` in the route file. No prompt text changes; code-only re-pins for timeout lines in
+No model changes. One effort change: the `judge_grounding` step moves from `medium` to `low`
+on the bedrock route (D14), measured on the fixed questions (verdict counts and the owner's
+read). Every step gains a `timeout_s` in the route file. No prompt text changes; code-only re-pins for timeout lines in
 pinned modules are expected and recorded with their diffs.
 
 ## Disciplines binding this slice

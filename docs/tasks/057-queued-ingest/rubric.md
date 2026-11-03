@@ -1,7 +1,7 @@
 # Rubric: 057-queued-ingest
 
 Core completion criteria. The task is **done only if every box holds**, otherwise it is in
-progress. Item numbers point at [contract.md](contract.md) (revision 2): N1 to N14, D1 to
+progress. Item numbers point at [contract.md](contract.md) (revision 2): N1 to N15, D1 to
 D14, G1 to G8, S1 to S5. Terms are defined in the contract's § Terms.
 
 Core
@@ -95,5 +95,8 @@ Infra, image, measurement and governance (N11 to N13, D6, D9, G4, G7, G8)
         today's 457 s median.
 29. [ ] G7, N12: the data-flow note is committed; the retention rule is written; the DPIA
         addendum is named as the merge gate in the PR.
-30. [ ] S1 to S5 applied only as the owner accepted them, with a line in the spec log; D14's
-        open item resolved by the owner before the plan gate.
+30. [ ] S1 to S5 applied only as the owner accepted them, with a line in the spec log.
+31. [ ] N15, D14: the `judge_grounding` step runs at `low` on bedrock; judge wall per call and
+        per run before and after recorded; unsupported-claim counts per report compared with
+        the medium baseline's spread; the owner's read recorded; the revisit is written into
+        `deferred.md` for the synthesis refinement task with E3's numbers.
