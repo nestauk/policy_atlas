@@ -1025,7 +1025,11 @@ def test_adaptive_pool_converges_under_a_quota_and_never_splits_for_throttling(
     chunk_ids = [
         _insert_chunk(conn, snap_id, i + 1, f"Quota chunk {i} about housing.") for i in range(160)
     ]
-    backend = _QuotaFakeBackend(limit=3)
+    # hold_s 0.2: "in flight" is measured by the fake, so the requests of one pass must
+    # still overlap when the pool's threads start late (under a full parallel suite a
+    # 20 ms hold let the width climb past the allowance before any throttle; the
+    # task 057 exit gate caught it once in about ten runs).
+    backend = _QuotaFakeBackend(limit=3, hold_s=0.2)
     sleeps: list[float] = []
     pool = AdaptivePool(start=2, cap=8, clean_run=5, backoff=lambda _n: 0.5, sleep=sleeps.append)
 

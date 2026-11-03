@@ -15,6 +15,7 @@ Langfuse), both built in Phase 0 with offline tests under `backend/tests/scripts
 | End of Phase 2 (gate 4), 2026-11-03 | `make verify` on the tree holding Phase 2 plus Phase 3 in progress and the width constants | pass after one fix | backend 4,017 passed, 1 failed (`test_option_searches_run_at_width_four`: seeded 8 options against the new width of 10; generalised to the configured width + 2), 1 skipped (16 min 43 s under a concurrent backfill); infra 95; the fixed test re-run green on its own database |
 | End of Phases 3, 4a and the Phase 5 infra (gates 5 and 6), 2026-11-03 | `make verify` on the whole tree | pass | backend 4,058 passed, 1 skipped (10 min 29 s); infra 113 passed; frontend 943 passed; lint, typecheck, format, okf-validate, build green. One run gated the three commits because the phases were built in parallel in one tree. |
 | End of Phase 4b (gate 7), 2026-11-03 | `make verify` on the whole tree | pass | backend 4,086 passed, 1 skipped (11 min 14 s); infra 113; frontend 943; lint, typecheck, format, okf-validate, build, audit green |
+| Step-6 exit (gate 8), 2026-11-03 | `make verify` then `make audit` on the final tree | pass after one test-timing fix | first run: backend 1 failed (`test_adaptive_pool_converges_under_a_quota_and_never_splits_for_throttling`, timing-flaky fake; deviation 22), 4,085 passed; second run after the fix: backend 4,086 passed, 1 skipped (6 min 51 s); infra 113 passed; frontend 943 passed; lint, typecheck, okf-validate (192 concepts), build green; `make audit`: no known vulnerabilities |
 | End of Phase 0 and Phase 1 (gates 2 and 3), 2026-11-03 | `make verify` on the tree holding both phases | pass after one fix | backend 4,004 passed, 1 skipped (6 min 0 s); lint, typecheck, format green; infra: 1 failed (`test_dockerignore_covers_gitignored_backend_content`: the `**/` bytecode patterns no longer matched the gitignore lines literally; both forms kept), then `make -C infra test` 95 passed. One full run gated both commits because the two phases were built in parallel in one tree. |
 
 ## Phase 0: build-open, measurement tools, dev image
@@ -375,6 +376,76 @@ throttle lines; no Bedrock 429s (the 88 HTTP 429 lines are OpenAlex and publishe
 fetches). Saved: `stage-walls-phase1c*.{md,json}`, `phase1c-judge-calls.txt`,
 `phase1c-unsupported-claims.txt`, `phase1c-connections.txt`, `phase1c-retries.txt`.
 
+### Measurement round (d): the schema's binary vector writes (Phase 2 commit `a911aa4e` plus the widths and judge changes; dev database at rev2, so every unit wrote the JSON vector, `embedding` and `tokens`)
+
+Three runs, 2026-11-03 08:16 to 09:04 UTC. NEET and zonal `succeeded`; **obesity `failed`**.
+
+| run | question | status | total | acquire | screen_abstract | classify | ingest_full_text | screen_full | characterise | select | synthesise |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 7aa2dd57 | NEET | succeeded | 1537 | 69 | 19 | 14 | 931 | 43 | 20 | 19 | 360 |
+| 062f756a | zonal pricing | succeeded | 1263 | 54 | 18 | 10 | 767 | 33 | 148 | 21 | 208 |
+| 0ead0762 | childhood obesity | failed | 1479 | 64 | 10 | 17 | 718 | 51 | 46 | 28 | 257 + 285 (both attempts failed) |
+| median | | | 1479 | 64 | 18 | 14 | 767 | 43 | 46 | 21 | 360 |
+
+Fewer documents landed this round (92, 63 and 110 ingested; 6,715, 3,734 and 8,279 units
+against 8,334 to 9,490 in round (c)), so the ingest and total walls are not like-for-like.
+Ingest split: NEET 152 + 779 (73 sleeps, 326 s), zonal 186 + 580 (60 / 322 s), obesity
+171 + 546 (7 / 24 s).
+
+**The lever's own signal, the embedding loop's overhead** (B wall minus the summed
+request-to-response time minus the throttle sleeps; read from log timestamps with the same
+arithmetic on rounds (b), (c) and (d); rounds (b) and (c) wrote the JSON column only, (d)
+wrote all three columns):
+
+| round | per-run overhead (s) | median overhead (s) | median ms per unit | median gap response → next request (ms) |
+|---|---|---|---|---|
+| (b), JSON only | 60.4, 58.8, 51.0 | 58.8 | 7.8 | 533 |
+| (c), JSON only | 37.4, 34.9, 107.3 | 37.4 | 4.5 | 373 |
+| (d), JSON + binary + tokens | 39.8, 17.2, 36.9 | 36.9 | 4.6 | 328 |
+
+Read from the saved results: writing the two extra columns cost nothing measurable (4.5
+against 4.6 ms a unit); the spread between (b) and (c), with identical writes, is wider
+than any write effect. E10's 17 to 45 s of JSON write overhead per run sits inside the
+17 to 107 s range seen here; this loop timer is not a clean write timer (it absorbs the
+other run's contention in the same process). The JSON column's cost goes with rev3 (the
+column is dropped), measured in the next round.
+
+**The failed run (obesity):** first synthesise attempt: `judge_grounding` stalled to its
+80 s cut and its one retry stalled too (component failed at 08:58:39); the runner's
+second attempt: a judge stall recovered, then a `synthesise_section_turn` connection
+error whose retry stalled at 23 s (component failed at 09:03:24; run failed). Zonal's
+`characterise:assign` had two connection errors then two 60 s cuts and was saved by its
+caller's budget (characterise 148 s). Retries this round: 16 (classify 4, judge 3,
+section_turn 3, characterise_assign 3, propose_sections 2, screen_full 1; half of them
+connection errors). Across rounds (a) to (d), the judge stalled on 3 of about 45 calls per
+round at low effort (6%), and a stall-then-stall on one step cost a synthesise attempt in
+three of four rounds and a whole run in this one.
+
+**Deviation taken (D12, flagged for the review and the owner):** `MODEL_CALL_ATTEMPTS`
+2 → 3 (commit `f908e9f7`): the call and two traced retries instead of one, the attempt
+count the SDK gave before this task, now traced. At 4 to 6% stalls per call a single retry
+leaves about 0.3% of calls, and so about 5% of runs with 15 judge calls, to a failed
+component; a third attempt at the step's timeout (5 to 80 s) is cheap. Rounds (e) to (g)
+measure with it.
+
+**First-pass judge verdicts (rubric 31), read from the judge's trace outputs, counts
+only:**
+
+| round, effort | question | judge calls counted | claims judged | unsupported | share |
+|---|---|---|---|---|---|
+| (b) medium | NEET | 19 | 107 | 7 | 6.5% |
+| (b) medium | zonal | 11 | 100 | 0 | 0.0% |
+| (b) medium | obesity | 23 (incl. the failed first synthesise attempt's 42 claims, 4 unsupported) | 124 | 10 | 8.1% |
+| (c) low | NEET | 16 | 95 | 9 | 9.5% |
+| (c) low | zonal | 15 | 87 | 14 | 16.1% |
+| (c) low | obesity | 12 | 76 | 5 | 6.6% |
+
+Totals: medium 17 of 331 (5.1%; 13 of 289 without the failed attempt), low 28 of 258
+(10.9%). On these live runs the low-effort judge marked **more** claims unsupported than
+the medium one, the opposite of E3's lean (26 at low against 33 and 28 at medium per 157
+claims); the runs are not on the same claims, and the repair pass cleared all but one
+verdict in both rounds. **The owner's content read decides (D14); recorded as such.**
+
 ### N13, G8: compiled bytecode — measured
 
 One `RUN python -m compileall -q /app/.venv /app/src` line after the venv copy; the
@@ -586,6 +657,21 @@ quota is in the hundreds on both accounts, ample for a cap of 20.
   study's 600 to 900-unit scopes, the fixed questions carry 3,400 to 9,000 units, and the
   per-run cost of about 30 searches at 300 ms is seconds against the scope load it
   replaces (HNSW stays out by D7).
+- **Re-measured with no live run after rev3 (the JSON column gone; the laptop's load
+  average still 7 to 40 from finishing agents):** parity 68 of 68 again; search medians
+  272 ms (NEET, 3,415 units), 351 ms (zonal, 3,845) and 2,086 ms on the first pass over
+  the obesity scope (9,002 units), then 721, 451 and 624 ms on three warm passes. The
+  laptop's Docker Postgres has 128 MB of shared buffers against a 7.5 GB `chunk_embedding`
+  table, so each search of a large scope re-reads 50 MB of vectors from disk; a warm
+  scope costs about 450 to 700 ms at 9,000 units here. **The 100 ms figure is not met on
+  the dev corpus at these scope sizes.** Per run (about 30 searches) that is 10 to 20 s of
+  retrieval against the 2 to 11 s one-time scope load plus 40 to 140 ms searches the
+  Python path paid; the production writer's cache is larger (4 GB of RAM against this
+  Postgres's 128 MB buffers) but its table is 1.7 × bigger. The N8 lever's gains are the
+  cap removal, the JSON column and its 2 MB per batch of writes, and the Python scope
+  load; its per-search cost is higher. Adjudication item: whether an HNSW index (D7 says
+  no) or a bigger per-search budget is wanted; the synthesise wall in round (e) is the
+  round-trip measure.
 - Latency on the scratch corpus under heavy machine load (noisy): the statement alone 62 ms
   median on a 900-unit scope and 279 ms on a 5,000-unit scope; the scope load fell from
   2.1 s and 11.3 s (Python, units and vectors into memory) to 20 ms and 139 ms. The SQL
@@ -601,6 +687,70 @@ quota is in the hundreds on both accounts, ample for a cap of 20.
 - Carried into Phase 5 (spec item S4): `components.md` still names `RETRIEVAL_UNIT_CAP`.
 - Scratch database `policy_atlas_p3_bench_test` (about 260 MB) stays on the local Postgres
   until the step-6 exit cleanup.
+
+### Measurement round (e): retrieval in SQL, the JSON vector column gone (Phase 3 commit `2bd76a37` plus the judge and three-attempts commits; dev database at rev3)
+
+Three runs, 2026-11-03 09:27 to 10:36 UTC, all `succeeded` (the obesity run lost one
+synthesise attempt and re-ran it). Every figure read from `stage-walls-phase3e.{md,json}`,
+`phase3e-search-chunks.txt`, `phase3e-retries.txt`, `phase3e-langfuse-errors.txt` and
+the round (e) block of `phase2d-embed-overhead.txt`.
+
+| run | question | status | total | acquire | screen_abstract | classify | ingest_full_text | screen_full | characterise | select | synthesise | outside |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 403ff2e3 | NEET | succeeded | 2158 | 67 | 20 | 12 | 1305 | 54 | 21 | 20 | 652 | 7 |
+| 617a3e07 | zonal pricing | succeeded | 1749 | 56 | 24 | 15 | 1210 | 52 | 90 | 29 | 265 | 4 |
+| 186238ad | childhood obesity | succeeded | 2339 | 88 | 17 | 18 | 783 | 41 | 107 | 262 | 304 (failed attempt) + 591 | 127 |
+| median | | | 2158 | 67 | 20 | 15 | 1210 | 52 | 90 | 29 | 652 | 7 |
+
+Documents ingested 126, 73 and 98 (units embedded 8,065, 4,140 and 8,909). Ingest split
+A + B: NEET 463 + 840 (72 sleeps, 333 s), zonal 537 + 673 (58 / 285 s), obesity 264 +
+518 (12 / 32 s). Embedding-loop overhead 91.8, 34.7 and 43.7 s (median 43.7 s, 8.4 ms a
+unit, against 36.9 s and 4.6 ms in round (d)): the NEET run's loop absorbed the zonal
+run's two failed batches (a 61 s read timeout and a 28 s throttle, re-sent in halves) in
+the same process, so the JSON column's removal shows no gain this timer can see.
+
+**The lever's own signal, `search_chunks` inside `run:synthesise` (Langfuse tool spans,
+seconds):**
+
+| question | round (c), Python: calls / median / p99 / sum | round (e), SQL: calls / median / p99 / sum |
+|---|---|---|
+| NEET | 38 / 0.296 / 3.414 / 19.2 | 40 / 0.514 / 6.303 / 33.7 |
+| zonal | 29 / 0.114 / 0.431 / 4.8 | 30 / 0.247 / 1.111 / 9.7 |
+| obesity | 30 / 0.360 / 20.747 / 44.8 | 42 / 0.605 / 8.177 / 50.9 (7 in the failed attempt, 35 in the re-run) |
+
+Each SQL search is about twice the Python search's median (0.25 to 0.61 s against 0.11
+to 0.36 s), as the quiet-machine measurement above predicted; no search errored. The
+summed search time per run is 10 to 51 s, 5% of NEET's synthesise wall; the Python path's
+one-time scope load (2 to 11 s on these scopes) is no longer paid, and neither code
+version logs a scope-load event, so the net per run is read from the two sums only: NEET
++14 s, zonal +5 s, obesity +6 s. **Round-trip reading:** the median synthesise wall rose
+374 → 652 s and the median total 1,815 → 2,158 s, and retrieval does not account for it:
+NEET's synthesise took 652 s with 33.7 s of searches; the obesity run's 262 s select was
+nine `select_rerank` timeouts (60 s each, two calls to their third attempt, two
+`rerank_batch_failed` warnings, select still completed) and its 127 s outside any
+component is the failed attempt's hand-back. This round's model stalls (40 retries: judge
+10, rerank 7, screen_full 7, characterise_assign 4, classify 3, others 9; six calls to
+attempt 2, three of them to a third attempt) were the heaviest of any round, which
+dominates the walls. The SQL retriever's cost is the per-search figure in the table
+(adjudication item, as stated above); its latency gain is the cap removal and the scope
+load, not the search.
+
+**The third attempt (D12 deviation):** the obesity run's first synthesise attempt failed on
+three consecutive 80 s `judge_grounding` timeouts at 10:22:28, 10:23:50 and 10:25:11
+(`run.failed component=synthesise`, "APITimeoutError: Request timed out."); the runner's
+second attempt succeeded. The NEET judge call and the two `characterise_assign` calls that
+reached attempt 2 went through on attempt 3. So the third attempt saved two calls this
+round and did not save the one call that stalled three times.
+
+**Database check (read-only):** `chunk_embedding` at rev3 has `embedding` and `tokens` and
+no JSON column; 22,467 rows created 09:27 to 10:41, every one with both columns, no
+duplicate (chunk, profile, policy, index) key, 11,570 distinct chunks. The three
+`embed.summary` lines sum to 21,114 units; the 1,353-row difference (686 of them created
+at 09:28, before the first embedding request at 09:36) is not explained here and is a
+check for the review.
+
+Server-log counts: `model_call.retry` 40, `cohere_rate_limited` 142, `status_code=429`
+45, `component.failed` 0 (the failed attempt is logged as `run.failed`), `run.failed` 1.
 
 ## Phase 4a: parse profile v2, the per-document function, one stage path
 
@@ -692,6 +842,89 @@ quota is in the hundreds on both accounts, ample for a cap of 20.
   (4) `run_parse_worker` imports `runtime.walk_pool` for the slot bound, heavy for the
   function's cold start: Phase 4b decides.
 
+### Measurement round (f): the per-document function in process (Phase 4a commit `049e9429` plus the judge and three-attempts commits; dev database at rev3)
+
+Three runs, 2026-11-03 10:45 to 11:44 UTC, all `succeeded`, no component or run failure.
+Every figure read from `stage-walls-phase4f.{md,json}`, `phase4f-perdoc.txt`,
+`phase4f-db.txt`, `phase4f-search-chunks.txt`, `phase4f-retries.txt`,
+`phase4f-attempt3.txt`, `phase4f-langfuse-errors.txt` and the round (f) block of
+`phase2d-embed-overhead.txt`.
+
+| run | question | status | total | acquire | screen_abstract | classify | ingest_full_text | screen_full | characterise | select | synthesise | outside |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0b6005aa | NEET | succeeded | 2391 | 70 | 18 | 11 | 1417 | 69 | 383 | 20 | 398 | 5 |
+| 8f9e2a57 | zonal pricing | succeeded | 1574 | 90 | 23 | 23 | 689 | 36 | 28 | 210 | 468 | 5 |
+| 3c613457 | childhood obesity | succeeded | 1639 | 88 | 18 | 21 | 754 | 61 | 47 | 70 | 572 | 5 |
+| median | | | 1639 | 88 | 18 | 21 | 754 | 61 | 47 | 70 | 468 | 5 |
+
+**The first obesity launch failed before a run existed:** the task-agent turn timed out on
+all three 60 s attempts, the API logged `api.unhandled_exception` and returned HTTP 500
+(task 67997875, no run row); the orchestrator relaunched it. Flagged: a once-per-task step
+cut three times in a row surfaces to the user as a 500, not as a reason-coded failure.
+
+**The lever's own signal, the A split (fetch + parse) and the per-document outcomes:**
+
+| run | ingest wall | A fetch+parse | B embedding | C tail | embed requests | sleeps n / s | documents ingested | units embedded | eligible |
+|---|---|---|---|---|---|---|---|---|---|
+| NEET | 1417 | 375 | 1039 | 3 | 83 | 107 / 553 | 127 | 7,164 | 215 |
+| zonal | 689 | 311 | 378 | 1 | 38 | 30 / 141 | 68 | 3,605 | 226 |
+| obesity | 754 | 416 | 337 | 1 | 74 | 1 / 4 | 96 | 7,078 | 264 |
+
+Against round (e) (A 463 / 537 / 264 s on 231 / 255 / 258 eligible documents): the median
+A fell 463 → 375 s, two runs faster and one slower; the corpora differ (acquire returns
+different sets each round), so this is not like-for-like. Deviation 8's worry (fewer fetch
+threads) does not show as a slower A: the summed parse time across NEET's ingested documents
+was 2,038 s inside an A of 375 s, so the worker threads (by cores) keep the parse
+subprocesses busy. The median ingest 1,210 → 754 s and total 2,158 → 1,639 s are mostly B
+(the throttle sleeps: 553, 141 and 4 s) and fewer stalls, not this lever.
+
+Per-document outcomes (every failure written with its reason; `ingested + failed =
+attempted` in every run and the database statuses match the log; no `late`, `not_queued`,
+`not_ready`, `send_failed` or re-queued orphan):
+
+| run | ingested | of which `already_in_store` | fetch_failed | parse_failed | retryable |
+|---|---|---|---|---|---|
+| NEET | 127 | 1 | 79 (blocked_by_host 40, paywall 23, fetch_error 11, not_found 3, blocked 2) | 9 (empty 7, thin_text 1, timeout 1) | 11 |
+| zonal | 68 | 1 | 107 (fetch_error 50, blocked_by_host 35, paywall 10, blocked 8, not_found 4) | 51 (empty 51) | 50 |
+| obesity | 96 | 2 | 138 (paywall 54, blocked_by_host 49, fetch_error 14, not_found 13, blocked 5, timeout 2, too_large 1) | 30 (empty 25, blocked_by_host 2, thin_text 2, timeout 1) | 16 |
+
+Round (e), same query: ingested 126 / 73 / 98, parse_failed 8 / 65 / 28, fetch_failed 97 /
+117 / 132. The store (`source_snapshot`, key `body_hash` × `parse_profile` ×
+`segmentation_policy`): before this round every row had a null body hash (rev2 does not
+backfill it), so the four `already_in_store` hits were pairs of records in the same task
+that fetched identical bytes; new profile rows `jats_expat_v2` 45, `pymupdf4llm_v2` 168,
+`trafilatura_v2` 74 (287 snapshots for 291 ingested links). `fulltext.summary` reports
+`already_in_store=0` because it counts snapshots created before the stage started; the
+per-document records carry the four. Noted for the review (the two counts measure
+different things).
+
+Embedding-loop overhead: 28.7, 75.9 and 53.1 s (median 53.1 s, 7.9 ms a unit, gap 226 ms;
+round (e) 43.7 s, 8.4 ms, 272 ms); NEET's loop re-sent four throttled batches in halves.
+
+`search_chunks` inside synthesise: NEET 38 calls / median 1.507 s / p99 12.2 s / sum 80.2 s;
+zonal 26 / 0.682 / 4.9 / 30.1; obesity 29 / 0.540 / 6.6 / 39.9 (round (e): 0.514, 0.247,
+0.605 medians). No search errored. The two slower sessions overlapped another run's
+embedding-heavy ingest (zonal's synthesise ran under NEET's ingest, NEET's under obesity's);
+obesity's synthesise ran alone and matched round (e). The laptop's Postgres shares its 128
+MB of buffers with the writes, so the per-search figure under a concurrent ingest is the
+upper bound; not a lever of this round.
+
+Stalls: 47 retries (classify 11, rerank 7, screen_full 6, judge 6, characterise_assign 5,
+section_turn 4, screen_abstract 4, task_agent_turn 2, characterise_discover 2; 44 timeouts,
+3 connection errors); seven calls reached attempt 2. Outcomes: one NEET
+`characterise_assign` batch cut three times (`assignment_batch_failed`, batch of 40; its
+repair call succeeded on attempt 3 in 11.5 s; characterise 383 s), three zonal
+`select_rerank` batches cut three times each (`rerank_batch_failed`; select 210 s), one
+obesity judge call cut twice then succeeded in 7.2 s, and the failed launch above. Server-log
+counts: `model_call.retry` 47, `cohere_rate_limited` 146, `status_code=429` 42 (all OpenAlex
+and fetch retries), `component.failed` 0, `run.failed` 0.
+
+Database check: 17,847 distinct `chunk_embedding` rows under the three tasks' full texts in
+the round's window, equal to the summed `units_embedded`; 1,453 more rows in the window are
+not under these full texts (round (e) had 1,353 such rows). The lead's reading: the acquire
+stage's abstract (envelope) embeddings, written during acquire (round (e)'s 686 rows at
+09:28 fall inside acquire); round (g) checks the chunk kind.
+
 ## Phase 4b: adaptive embedding, SQS client, handler (N1 to N5, D1, D4, D5, D6)
 
 Built, targeted tests green (2,461 passed on the agent's database after the two judge-effort
@@ -756,6 +989,105 @@ and `make audit` green (the Linux-only `awslambdaric` pin audited separately wit
   adds `awslambdaric` 3.1.1, `simplejson` 4.2.0, `snapshot-restore-py` 1.0.0.
 - Open for staging: whether the forkserver parse subprocess runs inside Lambda (no
   `/dev/shm`); the emulator run below exercises it on the laptop.
+
+### Measurement round (g): the branch head with every lever (`f908e9f7`: the adaptive pool, the stage embedding as documents land; dev database at rev3)
+
+Three runs, 2026-11-03 11:59 to 12:36 UTC, all `succeeded` (the obesity run lost one
+synthesise attempt and re-ran it). Every figure read from `stage-walls-phase4g.{md,json}`,
+`phase4g-pool.md`, `phase4g-pool-width.tsv`, `phase4g-perdoc.txt`, `phase4g-db.txt`,
+`phase4g-search-chunks.txt`, `phase4g-retries.txt`, `phase4g-retry-outcomes.txt`,
+`phase4g-quotes.txt` and `phase4g-events.txt`.
+
+| run | question | status | total | acquire | screen_abstract | classify | ingest_full_text | screen_full | characterise | select | synthesise | outside |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| c6e72278 | NEET | succeeded | 850 | 61 | 29 | 10 | 191 | 45 | 16 | 18 | 477 | 3 |
+| a1aa2d44 | zonal pricing | succeeded | 680 | 65 | 18 | 11 | 225 | 35 | 25 | 23 | 273 | 4 |
+| 1f482579 | childhood obesity | succeeded | 1438 | 65 | 27 | 12 | 246 | 51 | 41 | 31 | 92 (failed attempt) + 745 | 129 |
+| median | | | 850 | 65 | 27 | 11 | 225 | 45 | 25 | 23 | 477 | 4 |
+
+**Not like-for-like with round (f) on ingest:** 53, 38 and 30 of the ingested documents
+(of 83, 73 and 109) were `already_in_store` from round (f)'s snapshots (the N9 store key
+in action: same bytes, same profile, no second parse), so far fewer units were embedded
+(1,773, 2,058 and 11,329 against 7,164, 3,605 and 7,078). The ingest wall of 191 to 246 s
+against 689 to 1,417 s is therefore the store reuse plus the pool, not the pool alone.
+
+**The lever's own signals (the pool and the overlap):**
+
+| run | ingest wall | first embed request (s into the stage) | last document landed | `embed.summary` | embedding after the last document | requests | throttle sleeps n / s | pool max width | time-weighted mean width | halvings / climbs | max requests in flight |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| NEET | 191 | 6.2 | 121.1 | 190.8 | 69.7 | 31 | 0 / 0 | 8 | 5.9 | 0 / 6 | 3 |
+| zonal | 225 | 3.1 | 134.3 | 225.3 | 91.0 | 48 | 11 / 70 | 5 | 1.9 | 4 / 5 | 3 |
+| obesity | 246 | 3.1 | 181.5 | 246.1 | 64.7 | 158 | 12 / 38 | 8 | 3.3 | 6 / 14 | 8 |
+
+Embedding now starts a few seconds into the stage and runs beside fetch and parse (the A
+split of earlier rounds is no longer a fetch-plus-parse measure; "last document landed" is).
+The pool climbed to 8 on NEET without a throttle (but never had more than 3 requests in
+flight: each pass held few batches), oscillated between 1 and 5 on zonal under 11 throttles,
+and on obesity (the only run embedding alone, 11,329 units) reached 8 twice and was halved
+six times by 12 throttles (38 s of sleeps against round (f)'s 1 / 4 s on a similar unit
+count with one request in flight): **at width 8 the pool finds the quota's edge on its own
+and backs off; the throttle count is the cost of probing it.** No `embed.batch_failed`.
+Idle time inside B (no request in flight, which now includes waiting for documents): 80, 134
+and 85 s. The 65 to 91 s of embedding after the last document is the tail the stage still
+waits for.
+
+Per-document outcomes (all written; no `late`, `not_queued`, `not_ready`, `send_failed`,
+orphan): ingested 83 / 73 / 109 (`already_in_store` 53 / 38 / 30), fetch_failed 71 / 113 /
+134, parse_failed 6 / 46 / 21, retryable 9 / 50 / 15 (reasons as in round (f):
+`blocked_by_host`, `paywall`, `fetch_error`, `empty` lead). The zonal `already_in_store`
+is 38 in the per-document records and 37 in `fulltext.summary` and the database (deviation
+20 again).
+
+`search_chunks` inside synthesise: NEET 24 calls / median 0.298 s / sum 9.5 s; zonal 23 /
+0.185 / 7.2; obesity 44 / 0.609 / 37.8 (4 in the failed attempt). With no concurrent ingest
+the SQL search medians are back at round (e)'s level or under (0.19 to 0.61 s), which
+supports the reading in round (f) that the 1.5 s medians there were the laptop's Postgres
+under a concurrent embedding write load.
+
+Stalls: 78 retries (screen_abstract 48, 47 of them in the obesity run at its 7 s timeout
+across the 48-wide pool; section_turn 10, judge 9, screen_full 6, key_findings 2, others
+3); 73 calls to attempt 2 (every one succeeded there except five), five to attempt 3, four
+of which succeeded. **The fifth, an obesity `synthesise_section_turn` call, was cut three
+times at 23.2, 23.2 and 23.1 s and failed the synthesise attempt** (component and run
+failed at 12:24:13; the runner's second attempt succeeded in 745 s). Three identical cuts
+at the limit say the call needed more than 23 s, not that it stalled: the 23 s is 2 × the
+healthy p99 from the Phase 0 sample, and this section was longer than that sample's. The
+obesity run's 129 s outside any component is one `propose_sections` attempt that hung to
+its 120 s cut, then succeeded in 4.4 s. Server-log counts: `model_call.retry` 78,
+`embedding.cohere_rate_limited` 23, `status_code=429` 39 (OpenAlex and fetch retries),
+`run.failed` 1.
+
+**N7 on the fixed questions (rubric 17):** the served code stores passing citations only,
+so the failed quotes were read from the repair-call inputs and the synthesise outputs in
+Langfuse and re-verified with the served `qv_v2`: verified 121 / 120 / 126 (exact plus
+normalised), failed 0 / 1 / 2 (a case-study card; two `quote_not_found` claims), **0 of 3
+with markup characters in the matched window**, and no markup in the failed quotes
+themselves. Persisted citations 100 / 102 / 113, all passing.
+
+**Database check:** 16,378 `chunk_embedding` rows in the window, 15,160 under the three
+tasks' full-text snapshots (equal to the summed `units_embedded`) and 1,218 on their
+`abstract_only` (envelope) snapshots, equal to acquire's units embedded (430 + 323 + 465).
+Acquire's units in rounds (e) and (f) were 1,353 and 1,453: exactly those rounds' surpluses.
+**Deviation 17 is explained**: the surplus rows are the acquire stage's abstract embeddings.
+
+**For the owner's content reads (rubric 28, N7 and N8):** NEET task `7c60d15e`, synthesise
+run `61e2c04b`, artefact `7796f163`; zonal task `0fb750d7`, run `9dd9f946`, artefact
+`c5961a67`; obesity task `1c1f7d04`, run `54759cda`, artefact `c3be6e81` (all round (g),
+HEAD; full ids in `phase4g-runtable.txt`).
+
+**Across the rounds (medians of three runs, seconds; each round's corpus differs, and the
+store reuse in (g) is real but one-off for a repeated question):**
+
+| round | lever added | total | ingest | synthesise | notes |
+|---|---|---|---|---|---|
+| baseline | none (like-for-like before) | 1,493 | 939 | 258 | obesity degraded on a characterise wire check |
+| (a) | step timeouts | 1,698 | 942 | 438 | |
+| (b) | widths 12 → 48, 4 → 10 | 1,757 | 872 | 494 | |
+| (c) | judge at low, 80 s | 1,815 | 1,164 | 374 | |
+| (d) | binary vector writes | 1,479 | 767 | 360 | obesity failed (two stalls) |
+| (e) | SQL retrieval, JSON column gone | 2,158 | 1,210 | 652 | heaviest stalls |
+| (f) | per-document function | 1,639 | 754 | 468 | |
+| (g) | adaptive pool, embedding as documents land | 850 | 225 | 477 | 30 to 53 documents per run from the store |
 
 ## Phase 5: infra, config, documents
 
@@ -835,15 +1167,159 @@ authored against the reviewed code); the candidates are listed under § Review h
 
 ## Checks beyond the build
 
-Filled per phase below.
+- **Deterministic tests (all in `make verify`; the named ones per phase above):** the
+  migration round trip through rev1, rev2 and rev3 with a resumed backfill and the float32
+  downgrade (`test_migration_057_document_store.py`); the synthetic retrieval corpus against
+  both retrievers (`test_retrieval_synthetic.py`); the fixture corpus giving the same
+  statuses inline and at 1 and 4 workers, the two real-connection races (store key, link
+  row), orphans re-queued, `already_in_store` across two tasks, the connection count within
+  the pool, the three fake-queue scenarios (`test_ingest_stage.py`); the 15 handler
+  decision-table tests with a fake event, context and Secrets Manager
+  (`tests/ops/test_ingest_worker.py`); the pool convergence under a fake quota
+  (`test_embeddings.py`); every call site passing its step and the exhaustion of three
+  attempts (`test_step_timeout_sites.py`, `test_traced_attempts.py`); the markup strip both
+  ways with the offset map (`test_markup.py`, `test_parse_profile_v2.py`); the retention
+  script's lock cases (`test_prune_unlinked_snapshots.py`); the deploy waiter's shell test
+  (`make deploy-migration-wait-test`, fake `aws` only); the 18 new CDK pins
+  (`infra/tests/unit/test_ingest_worker.py`).
+- **AI evals:** none. The grounding judge's first-pass verdict counts (rubric 31) are
+  counts read from traces, not a scored eval; the owner's content read decides.
+- **Manual, API and database:** seven live measurement rounds of the three fixed Evidence
+  search questions plus the fixed scoping question on the dev server (sections above, run
+  ids per round); the retrieval parity script on the runs' own queries (88 of 88, then 68 of
+  68 after rev3); the Lambda handler under the Runtime Interface Emulator on the built
+  image; the cold-import timing of the image before and after compiled bytecode; a
+  read-only `cdk diff` against staging; read-only checks of `chunk_embedding` after rev3.
 
 ## End-to-end command
 
-Filled at the step-6 exit.
+Every measurement round used the same thread. The commit under measurement is served from a
+second worktree so the main tree stays editable; the main tree's `backend/.env` is read by
+the server and by the scripts (`set -a; source backend/.env; set +a` in the shell, never
+printed).
+
+```bash
+# 1. serve the commit under measurement (two concurrent walks by default, RUN_EXECUTOR_MAX)
+git -C ../policy_atlas-live checkout --detach <commit>   # plus cherry-picks for lever isolation
+(cd ../policy_atlas-live/backend && uv sync && \
+ uv run --env-file /Users/shabeer.rauf/repos/policy_atlas/backend/.env \
+   uvicorn policy_atlas.api.app:create_app --factory --port 8000 > <scratchpad>/live-server-<round>.log 2>&1 &)
+
+# 2. the fixed questions as fresh tasks (the third starts when a slot frees; the scoping
+#    question in rounds (a) to (c))
+uv run --project backend python scripts/fixed_questions.py --only neet --only zonal
+uv run --project backend python scripts/fixed_questions.py --only obesity
+uv run --project backend python scripts/fixed_questions.py --only scoping
+
+# 3. the per-stage walls and the ingest split, read from the database and the server log
+uv run --project backend python scripts/stage_walls.py --run-id <id> --run-id <id> --run-id <id> \
+  --logs <scratchpad>/live-server-<round>.log --format md --out stage-walls-<round>.md
+
+# 4. the per-step timeouts from Langfuse (Phase 0; the cache holds timing fields only)
+uv run --project backend python scripts/step_timeouts.py --since 2026-11-02 --cache <scratchpad>/langfuse-obs.json --format toml
+
+# 5. retrieval parity on the runs' own queries (reference written once from the Python retriever)
+uv run --project backend python scripts/retrieval_parity.py <queries.json>
+```
+
+The step-6 exit gate: `make verify` then `make audit` on `HEAD` (results in § Commands run).
 
 ## Diff summary
 
-Filled at the step-6 exit.
+141 files, about +27,100 / −2,200 lines on `task/057-queued-ingest` (13 build commits after
+the design commits). About 9,000 of the added lines are the committed synthetic retrieval
+corpus, the trimmed CDK synth and the code-only re-pin diff (see § Review handoff for the
+review's diff-scoping exclusions).
+
+- **Phase 0 (`2c5071fc`):** `scripts/stage_walls.py` and `scripts/step_timeouts.py` with
+  offline tests; the dev and CI Postgres image `pgvector/pgvector:pg17`; the like-for-like
+  baseline runs.
+- **Phase 1 (`8bc43872`, widths `528250f7`, judge `d4b65aee`, attempts `f908e9f7`):** every
+  route step carries `timeout_s`, the bedrock route's nine overrides from 2 × healthy p99,
+  every model client at `max_retries=0` with the timeout per request, `tracing.traced_attempts`
+  (three traced attempts, each its own generation); the quote verifier `qv_v2` with
+  `core/markup.py`; the image compiles bytecode; screen stage 1 and classify 12 → 48,
+  option search 4 → 10; the grounding judge at low effort with an 80 s timeout on bedrock.
+- **Phase 2 (`a911aa4e`):** rev1 expand (document-store columns, `embedding` vector(1536),
+  `tokens`, `queued` status, indexes built concurrently), rev2 keyset backfill with the
+  product tokeniser (`core/tokens.py`), the deploy waiter (`scripts/deploy.sh`
+  `wait_for_migration_task`, `MIGRATION_WAIT_MAX_S`).
+- **Phase 3 (`2bd76a37`):** chunk retrieval as one SQL statement (two legs of 200 candidates,
+  reciprocal-rank fusion, best unit per snapshot), `RetrievalScope`, the Python scope load,
+  scoring and the 20,000-unit cap deleted, `scripts/retrieval_parity.py`, rev3 drops the
+  JSON vector column.
+- **Phase 4a (`049e9429`):** parse profile v2 (markup rule), `ingest_document` (one document,
+  one outcome record), one stage path over a queue client (`LocalQueueClient` for
+  in-process mode), the scheduler and batch hand-over deleted.
+- **Phase 4b (`def239a4`):** `AdaptivePool` in the stage's own embedder thread, `SqsQueueClient`,
+  the Lambda handler `ops/ingest_worker.handler` with its decision table, `not_ready` and
+  `send_failed` outside the access-failure vocabulary, `awslambdaric` (Linux only).
+- **Phase 5 (`69f044be`, `3d6029c7`, `dc7245d9`):** the CDK `IngestWorker` construct
+  (queue, dead-letter queue, function, alarms, role grants), `ingest_mode` per environment,
+  `scripts/prune_unlinked_snapshots.py` and the retention rule, the data-flow note, the
+  DEPLOYMENT sections, spec items S1 to S5 with the log entry, the deferred entries, the
+  `chmod 755 /app` line.
+
+**Flagged deviations and adjudication items (each is recorded in full in its phase section):**
+
+1. `qv_v2` changes the extraction fingerprint, so the next run on each already-extracted
+   document re-extracts once (Phase 1; not named in the contract).
+2. A quote that cuts through an emphasis pair fails under `qv_v2` (no `qv_v1` fallback);
+   a quote copied with its markup now grades `normalised` (Phase 1).
+3. The chat's outer `chat:call` observation is a span, with tokens on the inner generations
+   (Phase 1, within D12's vocabulary; a saved Langfuse view may need its filter changed).
+4. The tokens SQL follows the product rule, not plan P5's wording (Phase 2; parity is the
+   point).
+5. The pre-run of rev1 and rev2 before a deploy goes over the tunnel from a checkout of the
+   release commit, not through the ECS migration task (Phase 2, plan P14).
+6. Two documents sharing one snapshot were scored twice by the Python retriever; the SQL
+   retriever scores the snapshot once (Phase 3, an intended fix).
+7. **The contract's "under 100 ms a search on the dev corpus" is not met**: 250 to 600 ms
+   warm on the fixed questions' scopes, 2 s cold on the largest; about twice the Python
+   search; the per-run cost is 10 to 51 s against the scope load it replaces (Phase 3,
+   round (e); HNSW stays out by D7).
+8. In-process mode fetches on the parse worker threads (4 to 8), not 10 fetch threads
+   plus 4 parse processes (Phase 4a; round (f) measures it).
+9. Envelope (abstract) chunks are embedded by the acquire stage only, not again at ingest
+   (Phase 4a).
+10. `not_ready` and `send_failed` are still counted under `fetch_failed` by two status
+    tallies (`steering_bundles._full_text_status_counts`, characterise's reason counts)
+    (Phase 4b).
+11. The function reads the **database** secret, not plan P13's "app secret" (which holds
+    the model keys D6 forbids the function to hold) (Phase 5).
+12. No alarm has an action (the stacks had no notification topic); the VPC has three
+    fck-nat instances, not the one the stack comment and D5 describe (Phase 5).
+13. `MODEL_CALL_ATTEMPTS` 2 → 3 after round (d) lost a run to two consecutive judge stalls
+    (D12; `f908e9f7`).
+14. `chmod 755 /app`, a second Dockerfile change beyond G8's one line, without which the
+    function cannot start under Lambda's user (`dc7245d9`).
+15. The retention script also spares snapshots that citations or extraction records point
+    at, beyond D3's "no link row" wording (Phase 5).
+16. The low-effort judge marked more claims unsupported than the medium one on the live
+    runs (10.9% against 5.1%), the opposite of E3's lean; the owner's content read decides
+    (round (c), rubric 31).
+17. 1,353 `chunk_embedding` rows more than the three `embed.summary` lines account for in
+    round (e)'s window: explained in round (g) as the acquire stage's abstract embeddings
+    (equal counts in rounds (e), (f) and (g)); not a defect, kept for the record.
+18. The option-search width test was generalised to the configured width + 2 when the
+    width went 4 → 10 (gate 4).
+19. A once-per-task step (`task_agent_turn`) cut on all three attempts surfaces as an HTTP
+    500 from the task-creation API, not as a reason-coded failure (round (f), one launch).
+20. `fulltext.summary`'s `already_in_store` counts snapshots that predate the stage; the
+    per-document records also count same-run pairs of identical bytes (round (f): 0
+    against 4; round (g): 37 against 38). Two counts, two meanings.
+21. A `synthesise_section_turn` call was cut three times at its 23 s timeout and failed a
+    synthesise attempt (round (g)); three identical cuts at the limit read as a long section
+    beyond the Phase 0 sample's p99, not a stall. Rubric 22 allows one raise per too-tight
+    step; not raised in this build (one call in seven rounds), left to the review with the
+    obesity run's 47 `screen_abstract` cuts at 7 s across the 48-wide pool (all recovered
+    on attempt 2).
+22. The pool-convergence test (`test_adaptive_pool_converges_under_a_quota_and_never_splits_for_throttling`)
+    failed once at the exit gate (width climbed to 5 against an allowance of 3) and once in
+    five runs alone: its fake backend measures "in flight" by wall clock with a 20 ms hold,
+    so late thread starts let the width climb before any throttle. The hold is 0.2 s now
+    (ten of ten alone, about 9 s a run instead of 3.5 s); the pool code is unchanged. A
+    test-timing fix, not a weakening (rubric 5).
 
 ## Review findings
 
@@ -851,25 +1327,153 @@ Added after the review stack (step 7).
 
 ## Rubric status
 
-Filled at the step-6 exit.
+Read against [rubric.md](rubric.md). "Met" means the evidence is in this record; "open"
+names what is still outside the build's reach.
+
+| # | Item | Status |
+|---|---|---|
+| 1 | N1 to N15 | Met for N1 to N14 as recorded per phase; N15 met as built (judge at low) with the owner's content read open (item 31). |
+| 2 | `make verify` at the four gates, infra tests | Met: § Commands run (build-open, after Phase 2, after Phase 3, exit); `make -C infra test` 113. |
+| 3 | No approval-gated change beyond G1 to G10 | Met with one exception flagged: the second Dockerfile line (`chmod 755 /app`, deviation 14) awaits the owner's ruling at the PR; code-only re-pins recorded in [repin-phase1-timeouts.diff](repin-phase1-timeouts.diff); no prompt-text re-pin, no public-interface change. |
+| 4 | No generated files or secrets edited by hand | Met (`uv.lock` and the frontend bundle regenerated by their tools; `.env` never read). |
+| 5 | No tests deleted, skipped or weakened without justification | Met: the scheduler tests N6 deletes are listed in Phase 4a with the replacing behaviour; one test generalised (deviation 18); one test's fake timing widened (deviation 22). |
+| 6 | Evidence as the contract's § Verification evidence lists | Met for the laptop; staging tables, the staging migration timing and the embedding quota in force are post-merge (items 15, 28); `cdk diff` reviewed read-only (item 26). |
+| 7 | Deferred seams in `docs/deferred.md` | Met: the task 057 section carries every named seam (§ Deferred work). |
+| 8 | Tier 4 review stack, ADR Accepted, rollback written and downgrade tested | Open for step 7 (review stack); ADR 0043 Accepted 2026-11-03; the downgrade through all three revisions is tested on the test database; the rollback is in `infra/DEPLOYMENT.md`. |
+| 9 | N1 message shape | Met (Phase 4b tests pin the keys and that no value is a URL or user id). |
+| 10 | N2 handler statuses, store lookup first, Retry-After, guarded final write, races | Met (Phase 4a and 4b tests: fixture corpus parity, store hit before parse, Retry-After cases, redelivery and late write no-ops, the two real-connection races). |
+| 11 | N3 own transaction, visibility to the poll, orphans, counts invariant, `not_ready`, `fetched` null | Met (Phase 4a and 4b tests; `not_ready` outside the access-failure counts in the read models, with deviation 10 on two tallies). |
+| 12 | N4, N5 sizing, queue settings, alarm, drain command, connection arithmetic, quotas | Met: CDK pins (Phase 5); drain command in `infra/DEPLOYMENT.md`; connection budget in Phase 2 (scale words; figures in the gitignored notes); the Lambda quota likewise. |
+| 13 | D5 function shape, subprocess kill, no sockets, private subnets, secrets at runtime, Bedrock via role | Met: parse in a subprocess with the 120 s kill and the socket deny (`test_zero_egress_socket_deny`); private subnets, no S3, no new endpoints; the secret fetched at cold start; the function has no model client and no Bedrock statement (D6 forbids vectors in the function). |
+| 14 | D6 no vectors in the function, adaptive pool converges, no `embed_timeout` | Met (Phase 4b; `embed_timeout` has no occurrence). |
+| 15 | D6, G4 staging embedding evidence | **Open until after the merge** (staging deploys from dev); the PR names it as the one open item. |
+| 16 | N6 one path, per-document commits, digest across 1 and 4 workers, connection count | Met (Phase 4a tests). |
+| 17 | N7 markup chunks 186 → 0, no markup-caused quote failure, new names, old snapshots untouched | Met: the chunk count on the committed control fixtures, the names, and on the fixed questions 0 of 3 quote failures with markup as the cause (round (g)); old snapshots untouched (rev2 backfills vectors and tokens only). |
+| 18 | N14 `qv_v2` | Met (Phase 1). |
+| 19 | D2, G9, G10 image, migration round trip, resume, rev3 gate, waiter, float32 note | Met on dev and the test database (Phase 2; dev timings recorded); staging and prod row counts and the staging migration timing are post-merge. |
+| 20 | N8, D7 parity, frozen snapshot list, both callers, deletions, provenance factors, write time | Met (Phase 3; rounds (d) and (e) give the embedding write time before and after) with deviation 7 on the latency figure. |
+| 21 | N9, D3 one snapshot for the same bytes, no identifiers on the shared row, `already_in_store` | Met (Phase 4a tests; `test_source_snapshot_has_no_task_id_column`, `test_no_url_persisted`; `already_in_store` in the stored counts, hidden from the SSE summary). |
+| 22 | N10c, D12 timeouts on every step, 2 × p99 with counts, `max_retries = 0`, stalls caught, synthesise wall | Met (Phase 0 table, Phase 1, rounds (a) to (e)) with deviation 13 (three attempts, not one retry); the owner's read of the reports is open. |
+| 23 | N10a no scoping call over 300 s | Met (round (a)). |
+| 24 | N10b option-search width 4 → 10 | Met (round (b): the fan-out window 357 → 326 s; no Bedrock 429 in the round's log). |
+| 25 | N10d, D15 widths 12 → 48 | Met (round (b); the `openai-direct` note is in Phase 1). |
+| 26 | N11 CDK resources, `cdk diff` at the owner's checkpoint, staging deploy | Met in CDK with pins; the staging `cdk diff` was run read-only and its synth committed; the owner's checkpoint read and the staging deploy are post-build (**open**); prod stays `in_process`. |
+| 27 | N13, G8 compiled bytecode, cold import before and after | Met (Phase 1: 8.24 → 3.79 s). |
+| 28 | N12, D9 before and after tables per lever, ingest split, owner's content reads | Met for the laptop (rounds (a) to (g), the across-rounds table in round (g)); the staging tables are post-merge; the owner's two content reads are **open** (artefact ids named in round (g)). |
+| 29 | G7, N12 data-flow note, retention rule, DPIA addendum as the merge gate | Met for the note and the rule; the DPIA addendum is named in the PR body (step 9). |
+| 30 | S1 to S5 applied with a log line | Met (Phase 5). |
+| 31 | N15, D14 judge at low, walls, unsupported counts, owner's read, deferred revisit | Met for the override, walls and counts (round (c)); the owner's read is open; the revisit is in `docs/deferred.md`. |
 
 ## Intent & assumptions
 
+- Measurements are on the bedrock route only (D9); production still runs `openai-direct`,
+  which takes the widths and timeouts unmeasured (the prod route flip is deferred).
+- The laptop's Docker Postgres (128 MB shared buffers) stands in for the writer; the
+  per-search latency there is an upper bound for a warm production cache and nothing more.
+- One run per question per round: the medians are over three runs, and model stalls
+  (the heaviest in round (e)) move the walls more than any single lever.
+- The exact account figures (connection limits, quotas, instance sizes) stay in the
+  gitignored notes; this record uses scale words.
+
 ## Known unverified items
+
+- Whether the forkserver parse subprocess runs inside Lambda (no `/dev/shm`); the emulator
+  run on the laptop is the only evidence.
+- The first staging start of the function: the bare `python` command and the `awslambdaric`
+  import through the image's `PATH`.
+- The prod `cdk diff` (needs the `pa-prod` profile).
+- The staging migration timing, the backfill's pre-run over the tunnel, and the staging
+  embedding quota in force (items 15, 19, 28).
+- The deploy waiter against a real ECS task (shell test with a fake `aws` only).
+- The owner's content reads (reports unchanged under the timeouts; one report after N7 and
+  one after N8; the judge verdicts).
 
 ## Public safety
 
 Run ids, counts and timings only. No URLs, no report text, no keys. The Langfuse observation
-cache used for the timeout table holds timing fields only and stays in the scratchpad.
+cache used for the timeout table holds timing fields only and stays in the scratchpad. The
+committed synth is trimmed with placeholders for the account, VPC and subnet ids. The exact
+ops account figures are in the gitignored notes, not in this record.
 
 ## Review handoff (step-7/8 inputs)
 
-- **Knowledge candidates** (grown during the build):
-  - zsh does not word-split an unquoted `$variable` holding several arguments; use `${=var}`
-    (cost one failed script call in Phase 0).
+- **Adjudication items:** the 22 numbered deviations in § Diff summary; items 7, 13, 14, 16
+  and 21 need an owner ruling, the rest a reviewer's read.
+- **Executor provenance (family flip):** the lead wrote the seams, the route-file tables and
+  every owner-facing text; deep-reasoner agents built the judgment-bearing phases (schema and
+  backfill, the SQL retriever, the per-document function and stage, the pool, the handler,
+  the CDK construct); fast-worker agents did the mechanical sweeps (call sites, test
+  scaffolds, re-pins); builder agents ran every measurement round and probe. No Codex doer
+  in this phase, so the step-7 Codex lane is the first look from another model family.
+- **Diff-scoping exclusions for the review:**
+  `backend/tests/evidence_search/synthesis/data/retrieval_synthetic/` (generated corpus),
+  `docs/tasks/057-queued-ingest/cdk-synth-ingest.json`, `repin-phase1-timeouts.diff`,
+  `backend/uv.lock`, `infra/uv.lock`.
+- **Live-trace pointers:** run ids per round in the sections above; Langfuse session id =
+  task id; server logs per round in the session scratchpad (not committed).
+- **Knowledge candidates** (one per durable-seeming lesson, however raw):
+  - zsh does not word-split an unquoted `$variable` holding several arguments; use `${=var}`.
   - The dev server caps concurrent walks at two (`RUN_EXECUTOR_MAX`); a third fixed-question
-    run returns HTTP 409 "capacity" and must be started when a slot frees.
+    run returns HTTP 409 and must start when a slot frees.
+  - Serve the commit under measurement from a second worktree (detached, cherry-picks for
+    lever isolation) so agents can edit the main tree during a live round; `git
+    cherry-pick` of a commit already in the history aborts the sequence ("nothing to
+    commit"): `--quit` then re-pick the rest.
+  - A `MATERIALIZED` CTE for the scope's chunk list makes the planner scan the whole
+    `chunk_embedding` table (60 s a query on 7.5 GB); `NOT MATERIALIZED` keeps the probe by
+    chunk id. Written as a comment on the statement.
+  - Docker Postgres with 128 MB of shared buffers re-reads about 50 MB of vectors from disk
+    per large-scope search; "under 100 ms" measured on 600 to 900-unit scopes does not
+    carry to 9,000-unit scopes. Size the latency claim to the scope.
+  - AWS Lambda runs a container image as its own user, not the image's `USER`; a home
+    directory made by `useradd --create-home` is mode 700 and the function never starts.
+    The Runtime Interface Emulator as uid 1000 reproduces it on the laptop.
+  - The handler must not import the operator CLI: `mypy_boto3_cognito_idp` is absent from
+    the image and the import fails only in Lambda. A subprocess test that hides the package
+    catches it.
+  - `uv sync --no-group ops` must be on both sync lines of the Dockerfile; the second line
+    re-resolves and would reinstate the group.
+  - pgvector sums in float32: the SQL order can differ from the Python float64 order on
+    near-ties below 1e-6; fuse on ranks, not scores, and parity holds.
+  - The tokens rule "match `[0-9A-Za-z]+` then lower" and "lower then match `[0-9a-z]+`"
+    differ on the Kelvin sign and the dotted capital I; match first for parity.
+  - A step's timeout at 2 × healthy p99 catches a stall, but a stall-then-stall on one step
+    is common enough (4 to 6% per judge call at low effort) that one retry loses a
+    synthesise attempt in most rounds; three attempts at the step's timeout are cheap.
+  - The grounding judge at low effort marked more claims unsupported than at medium on live
+    runs, the opposite of the offline experiment; judge-effort decisions need the content
+    read, not the counts.
+  - The embedding-loop overhead timer absorbs the other concurrent run's contention in the
+    same process; two runs per round make it a noisy write timer.
+  - An agent's test database must be addressed as `127.0.0.1` (`localhost` resolves to
+    `::1` first and is refused) and the base `*_test` database must exist with the vector
+    extension before a worker-scoped copy can be made.
+  - Running the rev2 backfill on the dev database under concurrent test suites and Docker
+    I/O took about 49 minutes for 272,000 rows (20 minutes alone); the contended timing is not a planning figure.
+  - A cherry-pick conflict in `verification.md` is always resolved with `--theirs` on the
+    live worktree: the record lives in the main tree only.
+  - The planner's `EXPLAIN (ANALYZE, BUFFERS)` was the fastest way to see where a slow
+    retrieval statement spent its time (once per leg, 32,000 buffers from disk).
+  - When counting embedding rows per run, the acquire stage's abstract (envelope) embeddings
+    land in the same table during acquire; a window count over `chunk_embedding` without
+    the snapshot kind over-counts the ingest stage by about 1,200 to 1,500 rows per round.
+  - A measurement round on a repeated question after the body-hash store is live is not
+    like-for-like: 30 to 50 documents per run come from the store, and the ingest wall
+    drops with them. Measure the store's effect by naming the `already_in_store` count.
+  - An adaptive pool at its cap finds the quota's edge by being throttled; a run that embeds
+    alone sees more throttle sleeps than one request in flight did, and that is the probe's
+    cost, not a regression.
+  - The SQL search's per-call latency on the laptop doubles or triples under a concurrent
+    run's embedding writes (the 128 MB buffer pool is shared); compare search timings only
+    across sessions with the same overlap.
 
 ## Deferred work
 
-Seams left open → [docs/deferred.md](../../deferred.md). Listed at the step-6 exit.
+Seams left open → [docs/deferred.md](../../deferred.md) § "Queued ingest, document store,
+SQL retrieval, step timeouts (task 057 seams)": parse profile v2 is the markup rule only
+(header, page-number and footnote rules with E6's numbers, D8); the fallback-parser trigger
+signals; per-host coordination across functions (D11); the retention script's scheduling
+(D3); HNSW (D7); per-claim judge filtering with E9's numbers; the low-effort judge revisit
+with E3's numbers (D14); the prod route flip; alarm actions (a notification topic); the three
+NAT instances; a second retry on once-per-run steps. The 056 seam "timeout retries are billed
+but untraced" is closed by D12.
