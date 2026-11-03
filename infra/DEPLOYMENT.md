@@ -11,9 +11,9 @@ Four core CloudFormation stacks, plus a staging-only analytics stack:
 
 | Stack | Region | Contents |
 | --- | --- | --- |
-| `PaV3NetworkStack` | `eu-west-2` | VPC, fck-nat, shared ALB + wildcard ACM cert |
-| `PaV3DatabaseStack` | `eu-west-2` | Aurora Postgres cluster, generated credentials secret, `load_secret` Lambda, SSM jumpbox |
-| `PaV3AppStack` | `eu-west-2` | ECS Fargate API service + migration task, Cognito, S3 + CloudFront frontend, font bucket |
+| `PaV3NetworkStack` | `eu-west-2` | VPC, fck-nat, shared ALB + wildcard ACM cert, NAT traffic alarm |
+| `PaV3DatabaseStack` | `eu-west-2` | Aurora Postgres cluster, generated credentials secret, `load_secret` Lambda, SSM jumpbox, writer CPU-credit alarm |
+| `PaV3AppStack` | `eu-west-2` | ECS Fargate API service + migration task, document-ingest queue + Lambda function (§ 4, "The ingest function"), Cognito, S3 + CloudFront frontend, font bucket |
 | `PaV3CertStack` | `us-east-1` | CloudFront's ACM certificate (AWS requires this region for CloudFront certs) |
 | `PaV3AnalyticsStack` (staging only) | `eu-west-2` | Metabase Fargate service, dedicated RDS PostgreSQL application database, secrets, shared-ALB route + DNS |
 
@@ -556,6 +556,96 @@ bash scripts/deploy.sh update        # migrate → scale → publish on the fres
   replacing an SSM-exported resource; `--force` is a harmless belt-and-braces
   on that path and the Aurora encryption runbook above keeps it.
 
+### The ingest function (task 057)
+
+**What it is.** When a run needs the full text of its documents, the API can
+hand the reading out instead of doing it itself. It puts one message per
+document on a queue, and AWS starts a small worker for each message: the
+**ingest function** (`policy-atlas-v3-ingest`, an AWS Lambda function). The
+function downloads the document, parses it into passages and writes them to the
+database. It makes no AI calls and holds no AI key; the run embeds the passages
+itself once they land.
+
+The words, one line each:
+
+- **SQS queue** (Amazon Simple Queue Service): a managed to-do list of messages,
+  here `policy-atlas-v3-ingest`. Messages are kept 4 days, encrypted at rest.
+- **Visibility timeout** (210 s): once a worker takes a message, the message is
+  hidden from other workers for this long. If the worker has not finished by
+  then, the message reappears for another try. It is the function's 180 s time
+  limit plus 30 s.
+- **Dead-letter queue** (`policy-atlas-v3-ingest-dlq`): where a message goes
+  after its second failed try, so it stops being retried and a person can look
+  at it. Kept 14 days. The function writes the failure reason on the
+  document's row before giving up, so the run is not waiting on it.
+- **Event-source mapping**: the AWS-managed poller that reads the queue and
+  starts the function, one message per start, at most 20 at once (raise only
+  after a staging measurement: the database writer is a small burstable
+  instance).
+
+Sizing: 1,769 MB of memory (one full CPU core), 180 s time limit, 512 MB of
+scratch disk, in the private subnets with its own security group, which the
+database security group admits on port 5432. Its logs go to
+`/policy_atlas_v3/ingest`, kept 30 days. Its only environment variables are
+`POLICY_ATLAS_DB_SECRET_ARN` (where the database password lives; the function
+reads the secret itself at start-up, through its role), `POLICY_ATLAS_MODEL_ROUTE`
+and `LOG_FORMAT=json`. It runs the same container image as the API (built once
+per deploy), started with
+`python -m awslambdaric policy_atlas.ops.ingest_worker.handler` instead of the
+web server.
+
+**Which environments use it.** `backend.ingest_mode` in `pa_config.json`, per
+environment: `queued` sends documents to the function, `in_process` reads them
+inside the API task as before. Today staging is `queued` and production is
+`in_process`. The queue and function exist in both; in `in_process` mode nothing
+is sent to them. Changing the value is a config edit plus a deploy.
+
+**Alarms.** Three CloudWatch alarms watch this work. None sends a notification
+yet (the stacks have no alarm topic); check their state in the CloudWatch
+console, Alarms page.
+
+| Alarm | Stack | Fires when |
+| --- | --- | --- |
+| `policy-atlas-v3-ingest-dlq-depth` | app | at least 1 message in the dead-letter queue (5-minute check) |
+| `policy-atlas-v3-nat-network-out` | network | the busiest fck-nat instance sends over 1 GB per 5 minutes, 3 periods in a row (about 27 Mbit/s, near a `t4g.nano`'s 32 Mbit/s baseline). **A first guess: review on staging** after a few queued runs and adjust `NAT_NETWORK_OUT_ALARM_BYTES` in `network_stack.py`. |
+| `policy-atlas-v3-db-writer-cpu-credits` | database | the Aurora writer's CPU credit balance drops below 50 (at zero the writer is slowed to its baseline) |
+
+**Draining and inspecting the dead-letter queue.** A message there carries only
+two ids and a schema version (no URL, no user). The reason the document failed
+is on its row in the database (`task_source_snapshot.full_text_status` and its
+reason), so the message is mainly a pointer. With the environment's AWS profile
+logged in:
+
+```bash
+export AWS_PROFILE=<the environment's profile>   # e.g. the staging SSO profile
+DLQ_URL=$(aws sqs get-queue-url --queue-name policy-atlas-v3-ingest-dlq \
+  --query QueueUrl --output text)
+
+# How many are waiting:
+aws sqs get-queue-attributes --queue-url "$DLQ_URL" \
+  --attribute-names ApproximateNumberOfMessages
+
+# Look at up to 10 (they stay in the queue; each reappears after 60 s):
+aws sqs receive-message --queue-url "$DLQ_URL" --max-number-of-messages 10 \
+  --visibility-timeout 60 --attribute-names All
+
+# Remove one you have dealt with (ReceiptHandle from the receive above):
+aws sqs delete-message --queue-url "$DLQ_URL" --receipt-handle '<ReceiptHandle>'
+
+# Or empty the whole dead-letter queue (cannot be undone):
+aws sqs purge-queue --queue-url "$DLQ_URL"
+```
+
+Nothing needs re-sending by hand: the run has already recorded the document as
+not read and carried on without it.
+
+**Deploys and messages in flight.** On every deploy after the first,
+`cdk deploy` updates the function to the new image *before* `deploy.sh` runs the
+migration task. A message the new function picks up in that gap meets the old
+database schema, may fail twice and land in the dead-letter queue (the alarm
+fires). This is expected around a deploy: the run records the document as not
+read and carries on. Deploy in quiet windows, as for the API.
+
 ## 5. Env & secret map
 
 Generated from `settings.py`'s required/optional calls plus the direct
@@ -590,6 +680,8 @@ fixture corpus are intentionally omitted from the deployed task.
 | `OVERTON_API_KEY` | Secrets Manager field: `policy_atlas_v3/app` `OVERTON_API_KEY` | `api/deps.py`, `evidence_search/sourcing/search_live.py` |
 | `PA_BACKEND_MODE` | config value: `live` | `api/deps.py` |
 | `POLICY_ATLAS_MODEL_ROUTE` | config value: `backend.model_route` (`bedrock` on staging, `openai-direct` on production) | `core/model_routes.py` |
+| `POLICY_ATLAS_INGEST_MODE` | config value: `backend.ingest_mode` (`queued` on staging, `in_process` on production) | backend ingest stage (task 057) |
+| `POLICY_ATLAS_INGEST_QUEUE_URL` | stack value: the ingest queue's URL | backend ingest stage (task 057) |
 | `POLICY_ATLAS_FIXTURE_CORPUS` | omitted (development/test fixture override) | `evidence_search/sourcing/ingest_full_text.py` |
 | `POLICY_ATLAS_SEARCH_CACHE_TTL_S` | omitted (development tuning; application default) | `evidence_search/sourcing/search_live.py` |
 | `RUN_EXECUTOR_MAX` | config value: `backend.run_executor_max` | `api/settings.py` |

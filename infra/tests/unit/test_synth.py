@@ -2,16 +2,19 @@
 
 The stacks are synthesized once at module import.  The harness deliberately
 disables CDK bundling and substitutes the pending backend image asset so these
-tests require neither AWS credentials nor a Docker daemon.
+tests require neither AWS credentials nor a Docker daemon.  The backend image
+asset stays a real ``DockerImageAsset`` (the API, migration and ingest function
+must share it), pointed at a one-line stub Dockerfile instead of ``../backend``.
 """
 import json
 import os
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 import aws_cdk as cdk
 import pytest
-from aws_cdk import Environment, aws_ec2 as ec2, aws_ecs as ecs, aws_rds as rds
+from aws_cdk import Environment, aws_ec2 as ec2, aws_ecr_assets as ecr_assets, aws_ecs as ecs, aws_rds as rds
 from aws_cdk.assertions import Template
 
 from infra.components.nesta_db_jumpbox import NestaDBJumpbox
@@ -119,7 +122,24 @@ CERT_STACK = PaV3CertStack(
 DUMMY_IMAGE = ecs.ContainerImage.from_registry(
     "public.ecr.aws/docker/library/nginx:stable"
 )
-with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE):
+# Synth only hashes and copies an image asset's directory (nothing is built),
+# but ../backend is large; a stub directory keeps the asset real and synth fast.
+STUB_IMAGE_DIR = tempfile.mkdtemp(prefix="pa-infra-stub-image-")
+Path(STUB_IMAGE_DIR, "Dockerfile").write_text("FROM scratch\n")
+_REAL_DOCKER_IMAGE_ASSET = ecr_assets.DockerImageAsset
+BACKEND_IMAGE_ASSET_CALLS: list[dict] = []
+
+
+def _stub_backend_image_asset(scope, construct_id, **kwargs):
+    BACKEND_IMAGE_ASSET_CALLS.append(kwargs)
+    return _REAL_DOCKER_IMAGE_ASSET(
+        scope, construct_id, **{**kwargs, "directory": STUB_IMAGE_DIR}
+    )
+
+
+with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE), patch(
+    "aws_cdk.aws_ecr_assets.DockerImageAsset", side_effect=_stub_backend_image_asset
+):
     APP_STACK = PolicyAtlasStack(
         APP,
         "PaV3AppStack",
@@ -146,6 +166,19 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
             env_name=ENV_NAME,
             cross_region_references=True,
         )
+    # The same app stack with the other ingest mode (task 057), so the API
+    # task's environment is checked for both values whatever the config says.
+    in_process_config = json.loads(json.dumps(PA_CONFIG))
+    in_process_config["policy_atlas_config"]["backend"]["ingest_mode"] = "in_process"
+    IN_PROCESS_APP_STACK = PolicyAtlasStack(
+        APP,
+        "PaV3AppStackInProcess",
+        pa_config=in_process_config,
+        certificate=CERT_STACK.certificate,
+        env=ENV,
+        env_name=ENV_NAME,
+        cross_region_references=True,
+    )
     ANALYTICS_STACK = PaV3AnalyticsStack(
         APP,
         "PaV3AnalyticsStack",
@@ -165,6 +198,7 @@ TEMPLATES = {
 }
 BEDROCK_APP_TEMPLATE = Template.from_stack(ROUTE_APP_STACKS["bedrock"]).to_json()
 OPENAI_APP_TEMPLATE = Template.from_stack(ROUTE_APP_STACKS["openai-direct"]).to_json()
+IN_PROCESS_APP_TEMPLATE = Template.from_stack(IN_PROCESS_APP_STACK).to_json()
 RENDERED_TEMPLATES = {
     stack_name: json.dumps(template, sort_keys=True)
     for stack_name, template in TEMPLATES.items()
@@ -470,7 +504,7 @@ def test_aurora_security_group_has_only_expected_5432_ingress():
         "network": 0,
         "database": 2,
         "cert": 0,
-        "app": 1,
+        "app": 2,
         "analytics": 2,
     }
     database_rules = rules_by_stack["database"]
@@ -500,9 +534,11 @@ def test_aurora_security_group_has_only_expected_5432_ingress():
 
     # Consumer stacks reach the Aurora security group through its SSM export.
     aurora_reference = "SsmParameterValuepolicyatlasv3dbsecuritygroupid"
-    api_rule = app_rules[0]
-    assert aurora_reference in json.dumps(api_rule["GroupId"])
+    assert all(aurora_reference in json.dumps(rule["GroupId"]) for rule in app_rules)
+    api_rule = next(rule for rule in app_rules if "BackendSG" in json.dumps(rule))
+    ingest_rule = next(rule for rule in app_rules if "IngestSecurityGroup" in json.dumps(rule))
     assert "BackendSG" in json.dumps(api_rule["SourceSecurityGroupId"])
+    assert "IngestSecurityGroup" in json.dumps(ingest_rule["SourceSecurityGroupId"])
 
     # The analytics stack opens 5432 twice: once into its own Metabase
     # application database, once into Aurora for the future curated read
@@ -591,7 +627,9 @@ def test_backend_to_aurora_route_is_vpc_local_and_nat_independent():
         {"Fn::GetAtt": [backend_sg_id, "GroupId"]}
     ]
 
-    api_rule = _port_5432_ingress(TEMPLATES["app"])[0]
+    api_rule = next(
+        rule for rule in _port_5432_ingress(TEMPLATES["app"]) if "BackendSG" in json.dumps(rule)
+    )
     assert api_rule["SourceSecurityGroupId"] == {
         "Fn::GetAtt": [backend_sg_id, "GroupId"]
     }

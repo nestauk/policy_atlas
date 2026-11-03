@@ -11,6 +11,7 @@
                 "internal_port": 8000,
                 "secret_name": "policy_atlas_v3/app",
                 "model_route": "bedrock",
+                "ingest_mode": "queued",
                 "run_executor_max": 10,
                 "db_pool_size": 15,
                 "db_max_overflow": 10
@@ -30,6 +31,7 @@
                 "internal_port": 8000,
                 "secret_name": "policy_atlas_v3/app",
                 "model_route": "openai-direct",
+                "ingest_mode": "in_process",
                 "run_executor_max": 10,
                 "db_pool_size": 15,
                 "db_max_overflow": 10

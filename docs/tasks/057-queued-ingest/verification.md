@@ -12,6 +12,8 @@ Langfuse), both built in Phase 0 with offline tests under `backend/tests/scripts
 | Gate | Command | Result | Notes |
 |---|---|---:|---|
 | Build-open (gate 1), 2026-11-03 | `make verify` on `e0553f85` | pass | backend 3,888 passed, 1 skipped (7 min 6 s); infra 95 passed; frontend 943 passed; lint, typecheck, okf-validate, build green |
+| End of Phase 2 (gate 4), 2026-11-03 | `make verify` on the tree holding Phase 2 plus Phase 3 in progress and the width constants | pass after one fix | backend 4,017 passed, 1 failed (`test_option_searches_run_at_width_four`: seeded 8 options against the new width of 10; generalised to the configured width + 2), 1 skipped (16 min 43 s under a concurrent backfill); infra 95; the fixed test re-run green on its own database |
+| End of Phases 3, 4a and the Phase 5 infra (gates 5 and 6), 2026-11-03 | `make verify` on the whole tree | pass | backend 4,058 passed, 1 skipped (10 min 29 s); infra 113 passed; frontend 943 passed; lint, typecheck, format, okf-validate, build green. One run gated the three commits because the phases were built in parallel in one tree. |
 | End of Phase 0 and Phase 1 (gates 2 and 3), 2026-11-03 | `make verify` on the tree holding both phases | pass after one fix | backend 4,004 passed, 1 skipped (6 min 0 s); lint, typecheck, format green; infra: 1 failed (`test_dockerignore_covers_gitignored_backend_content`: the `**/` bytecode patterns no longer matched the gitignore lines literally; both forms kept), then `make -C infra test` 95 passed. One full run gated both commits because the two phases were built in parallel in one tree. |
 
 ## Phase 0: build-open, measurement tools, dev image
@@ -259,6 +261,59 @@ Read from the saved results:
 - Saved: `stage-walls-phase1a.{md,json}`, `phase1a-retries.txt` and the server log in the
   session scratchpad (the log holds publisher URLs; not committed).
 
+### Measurement round (b): pool widths (commit `8bc43872` plus the widths commit `528250f7`; judge at medium)
+
+Four runs, 2026-11-03 05:56 to 06:56 UTC: NEET and zonal together, obesity when zonal ended,
+the scoping question when NEET ended. All `succeeded`.
+
+| run | question | total | acquire | screen_abstract | classify | ingest_full_text | screen_full | characterise | select | synthesise |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 9f479f3d | NEET | 1757 | 64 | 28 | 21 | 1051 | 47 | 30 | 23 | 494 |
+| 2a09a491 | zonal pricing | 1495 | 55 | 25 | 20 | 872 | 46 | 27 | 22 | 371 |
+| 62f27acb | childhood obesity | 1987 | 72 | 30 | 22 | 689 | 48 | 33 | 25 | 403 + 649 |
+| median | | 1757 | 64 | 28 | 21 | 872 | 47 | 30 | 23 | 494 |
+
+Screen stage 1 and classify, the lever's stages, across the rounds (medians):
+
+| stage | baseline (width 12) | round (a) (width 12) | round (b) (width 48) |
+|---|---|---|---|
+| screen_abstract | 60 | 49 | 28 |
+| classify | 97 | 38 | 21 |
+
+Bedrock 429s: none. The 59 HTTP 429 lines in the log are 28 OpenAlex search retries (the
+width-4 logs of 2026-11-02 show 27 to 42 per scoping walk, so not new) and 31 publisher
+fetch retries (E5's finding; not this lever's). Ingest split: NEET 327 + 721, zonal
+275 + 595, obesity 280 + 406 (73, 55 and 16 throttle sleeps).
+
+**Options scoping (N10a, N10b), task 3840aabb:** baseline run 613 s, longlist walk 1,190 s,
+total 1,804 s; the option-search fan-out of 10 children ran in a 326 s window (child median
+322 s, max 326 s) against the anatomy's 357 s window at width 4 (10 children of about
+144 s in waves). The children ran about twice as long each at width 10 (they share the
+same provider and search backends), so the window gained 31 s, not the 3× the width
+promised. No scoping model call over 300 s (N10a confirmed: the longest was `agent:suggest`
+at 60.4 s, a step timeout; 1,171 generations in the session). **Peak database connections
+during the fan-out: not sampled** (the sampler followed the baseline run instead of the
+walk run); the Postgres log shows at least 13 distinct client connections writing inside
+the window, consistent with 1 + 10 per walk plus the API pool. Re-sampled in round (c),
+which carries the scoping question again with the sampler on the walk run.
+
+Retries (99, all attempt 1, all recovered except one): screen_abstract 29 (22 timeouts,
+7 connection errors), classify 18, extract_interventions 13, judge_grounding 10,
+longlist_assign 6, screen_full 4, three synthesis steps 3 each (section_turn also 3
+connection errors), option_profile_place_sentences 3, four others 1. At width 48 about
+5% of screen and classify calls hit their 7 s and 11 s cutoffs against about 1% at width
+12 (the p99 was measured at width 12); every one recovered on the retry, so by the
+contract's rule neither step is raised; noted for the review as the cost of the pair
+(about 2 × 5% of those calls).
+
+**Components that retried because every attempt was cut: 1 (obesity's first synthesise
+attempt, 403 s lost).** Read from the retry log inside that attempt's window: the last
+cut was `judge_grounding` at 06:44:28 (40 s), and the component failed 42 s later, so
+the judge's retry was also cut at 40 s. That is the contract's "too tight" signal (a slow
+retry): **`judge_grounding` is raised once, 40 → 80 s**, applied with the judge's effort
+change in round (c), which re-measures it. Round (a)'s cut component was a different
+step (`synthesise_propose_sections`, kept at 120 s; no raise, n < 100).
+
 ### N13, compiled bytecode — Dockerfile edited; cold-import measurement pending
 
 One `RUN python -m compileall -q /app/.venv /app/src` line after the venv copy; the
@@ -288,8 +343,29 @@ One `RUN python -m compileall -q /app/.venv /app/src` line after the venv copy; 
   frozen tokens SQL equals `core.tokens` on 30 strings; `queued` admitted, `queued` with a
   snapshot or an error refused; the vector type round-trips 1536 floats. Whole backend
   suite on the agent's own database: 4,013 passed, 1 skipped.
-- rev2 timing on a 10,000-unit scratch table: 11 s (about 1.1 ms per row); the dev corpus
-  timing is recorded below once measured.
+- rev2 timing on a 10,000-unit scratch table: 11 s (about 1.1 ms per row).
+- **Dev database (271,993 `chunk_embedding` rows, 2026-11-03 05:08 to 05:57 UTC):** rev1 1.3 s;
+  rev2 about 49 minutes under heavy contention (a full verify suite with eight workers and
+  two agents' test runs shared the laptop's Docker Postgres; the wait event was disk
+  reads). Measured alone it ran at about 14,000 rows a minute, so about 20 minutes
+  uncontended on this laptop. The production writer holds about 1.7 × these rows on
+  Aurora storage (figure in the gitignored ops note), which is why the online pre-run is
+  the recommended path. After rev2: 0 rows with a null `embedding`, 0 with null `tokens`.
+- **rev3 `0914321f8de4` (drop the JSON column) — built, tests green, not yet applied to the
+  dev database** (the Phase 1 measurement rounds serve older code that still writes the
+  JSON column; rev3 goes on the dev database at the SQL-retrieval round). It runs a frozen
+  copy of rev2's fill in autocommit batches, then in one transaction under an access
+  exclusive lock (10 s lock timeout) one more fill pass, the "no row without an embedding"
+  check (two counts: fillable rows the fill missed, and rows with JSON null / non-array,
+  each with its own message; nothing dropped on failure) and the drop. Downgrade re-adds
+  the column, rebuilds the JSON at float32 and sets it NOT NULL (a database downgraded to
+  rev2 is stricter than a fresh one there; harmless, since that code always wrote it).
+  `embedding` stays nullable (not in scope). Tests: the chain round-trips pre → rev2 →
+  rev3 → rev2 → pre → head; rows written by old code after the pre-run are filled before
+  the drop; a row with no embedding stops the drop with the counts in the message and the
+  rerun succeeds after the fix; the frozen copy is pinned identical to rev2's. The code
+  writes `embedding` and `tokens` only (no `vector` key); `schema.py` has no JSON column;
+  `DEPLOYMENT.md`'s release note gains the third revision in Phase 5.
 - **Flagged (minor, plan wording corrected):** the tokens SQL follows the product rule
   exactly (match `[0-9A-Za-z]+` on the original text, then lower-case each word, distinct,
   sorted), not plan P5's "lower then match `[0-9a-z]+`": the two differ on U+212A (Kelvin
@@ -331,6 +407,240 @@ connection each, held only for the store lookup and the one write) + the migrati
 which comes to under half the limit. If a later reading does not fit, `max_concurrency`
 on the event-source mapping drops first, then `OPTION_SEARCH_WIDTH`. The Lambda concurrency
 quota is in the hundreds on both accounts, ample for a cap of 20.
+
+## Phase 3: retrieval in SQL (N8, D7, P7)
+
+### The SQL retriever — built, synthetic parity green against both retrievers
+
+- `RetrievalScope` is now a frozen record (docs metadata, document → text snapshot, the
+  per-document text basis, a connection factory, `task_tags`, a unit count for
+  provenance); `build_retrieval_scope(..., connect=)` loads documents and snapshot ids
+  only. `ChunkRetriever.search` runs one statement (`CHUNK_SEARCH_SQL`): both legs cut to
+  `CANDIDATE_POOL_PER_LEG` with the Python tie-break (unit id; a uuid sorts like its text
+  form), reciprocal-rank fusion with `RRF_K`, best unit per chunk (vector-pool order first,
+  then word-pool order, as the Python dictionary fill did), joined to `chunk` for content,
+  sequence and the matched unit's offsets. Zero or negative cosines drop out (`distance <
+  1`; pgvector returns NaN for a zero vector, and NaN < 1 is false), matching the Python
+  `score > 0.0` rule. Python keeps the query embedding and cache, the filters (as the
+  allowed document set), the soft prior and clamp, the sort by (-score, chunk id), the
+  reranker seam, the cut to 8, windowing and provenance (prior factors for the returned
+  chunks only; owner ruling). Synthesis passes a factory that lends its component
+  connection; chat passes `engine.connect` (one short read per search). The in-memory
+  scope load, the Python scoring, `RETRIEVAL_UNIT_CAP`, `RetrievalUnitCapError` and the
+  three places that caught it (synthesise, chat scope, longlist turns with its
+  "too many documents" reply) are deleted.
+- **Committed synthetic corpus** (`tests/evidence_search/synthesis/data/retrieval_synthetic/`):
+  40 chunks, 44 units, 9 documents, 10 snapshots in 2 scopes, stub vectors chosen so no two
+  cosines are within 1e-6; 25 cases covering filters, every boost and the clamp, selection
+  on and off, empty legs, the multi-scope precedence rule, ties inside a leg, between
+  units of one chunk and between chunks, windowing of oversized chunks, and the pool cut.
+  The frozen expected output was generated from the Python retriever; the test was green
+  against both retrievers before the Python one was deleted, and three deliberate breaks
+  of the SQL (best-unit tie-break, leg tie-break direction, positive-cosine filter) each
+  failed it.
+- **Scratch parity:** on a scratch corpus (about 21,000 units, random vectors) the SQL
+  retriever matched the HEAD Python retriever on 40 of 40 queries, same top 8 in order.
+- **Recorded real-query parity on the dev corpus (`scripts/retrieval_parity.py`, read-only,
+  2026-11-03):** the Python retriever at `528250f7` (run from the gate worktree) against the
+  SQL retriever, on the same stored vectors (each fixed-question query embedded once with
+  the live Cohere backend and stored in the queries file, so both sides searched with the
+  same vector).
+
+  | query set | route / profile | queries | same top-8 in order |
+  |---|---|---|---|
+  | feasibility study, 3 scopes (601 to 899 units) | openai-direct, `openai_text_embedding_3_small_v1` | 20 | 20 of 20 against the HEAD Python retriever; 19 of 20 against the study's own saved reference, and the HEAD Python retriever misses the same one (the study put it down to a query-embedding difference), so the miss is in the study's reference |
+  | NEET baseline run 235b7f40 (3,415 units, 15 selected) | bedrock, `cohere_embed_v4_1536_v1` | 32 | 32 of 32 |
+  | zonal baseline run 9dbe27d7 (3,845 units, 15 selected) | bedrock | 23 | 23 of 23 |
+  | obesity baseline run b7755787 (9,002 units, no selection) | bedrock | 13 | 13 of 13 |
+
+  Every query came from the runs' own `search_chunks` tool calls (no filters were used);
+  the selection ids and boosts came from each run's stored `synthesis_provenance`.
+- **Dev-corpus latency (under load: the widths measurement round was running on the same
+  laptop and database, load average 30 to 49; Docker Postgres with 128 MB shared buffers
+  against a 6.2 GB `chunk_embedding` table):** pooled over the 68 fixed-question queries the
+  SQL search median was 272 ms and 343 ms in two runs, 0 of 68 under 100 ms; the HEAD
+  Python search (over an in-memory scope that took 2 to 11 s to load) was 39 to 141 ms
+  median. On the feasibility scopes: 118 to 136 ms pooled median, 8 or 9 of 20 under 100 ms.
+  One `EXPLAIN (ANALYZE, BUFFERS)` showed the scope's chunk list computed once per leg (a
+  scan of `chunk` in each) and the vector leg reading about 32,000 buffers from disk. The
+  scope list was tried as one `MATERIALIZED` pass: the planner then stopped probing
+  `chunk_embedding` by chunk id and scanned the 6 GB table (about 60 s a query on the same
+  13 queries), so the statement is back to the proven shape with a comment saying why
+  (synthetic parity green both times). **The contract's "under 100 ms on the dev corpus"
+  is not met as measured here**: a quiet-machine re-measurement follows at the SQL-retrieval round, and
+  the adjudication note for the review is that the 100 ms figure came from the feasibility
+  study's 600 to 900-unit scopes, the fixed questions carry 3,400 to 9,000 units, and the
+  per-run cost of about 30 searches at 300 ms is seconds against the scope load it
+  replaces (HNSW stays out by D7).
+- Latency on the scratch corpus under heavy machine load (noisy): the statement alone 62 ms
+  median on a 900-unit scope and 279 ms on a 5,000-unit scope; the scope load fell from
+  2.1 s and 11.3 s (Python, units and vectors into memory) to 20 ms and 139 ms. The SQL
+  search is slower per search than the in-memory Python search was; the run no longer pays
+  the scope load or hits the 20,000-unit cap.
+- **Flagged deviation (minor, an intended fix):** two documents sharing one text snapshot
+  (possible inside one task once the body-hash store key is live) were scored twice by the
+  Python retriever (both copies' rank terms added into one score). The SQL retriever
+  searches the snapshot once, under the smallest allowed document id. Not in the synthetic
+  corpus because the two retrievers differ there by design.
+- Precision: pgvector stores and sums in float32; the order can differ from the old
+  float64 order only on near-ties below about 1e-6; fused scores depend on ranks only.
+- Carried into Phase 5 (spec item S4): `components.md` still names `RETRIEVAL_UNIT_CAP`.
+- Scratch database `policy_atlas_p3_bench_test` (about 260 MB) stays on the local Postgres
+  until the step-6 exit cleanup.
+
+## Phase 4a: parse profile v2, the per-document function, one stage path
+
+### N7, D8: parse profile v2 — built, tests green
+
+- New names: PDF `pymupdf4llm_v2` / `pymupdf4llm_struct_v2`; HTML `trafilatura_v2` /
+  `trafilatura_para_v2`; JATS `jats_expat_v2` / `jats_struct_v2`; plain `plain_v2` /
+  `plain_para_v2`. The parser recognises headings and table rows on the raw line as v1
+  did, then applies `core.markup.strip_markup` (body lines; table rows with `table=True`
+  so a row stays one line; headings cleaned in the locator). `parse_profile_for(content_type)`
+  names the pair before parsing (raises `unsupported_type` for types the parser never
+  takes).
+- On the committed fixture corpus (13 documents): markup-bearing chunks 106 → 0 (v1 counted
+  by running the v1 code at `528250f7` and by the test's own switch-off of the rule; 106
+  on the PDF and JATS routes plus one HTML hit); chunk count, table chunks, pages and
+  heading paths unchanged. E6's 186 → 0 was on ten real control PDFs that are not kept;
+  the fixture corpus is the committed stand-in.
+- Test re-pins (values only): the byte-identical digest across worker counts 1 and 4
+  (`15f69fc2…` → `c84804da…`, same on two runs, old value kept in a comment); the v2 names in
+  three tests; one JATS test now expects the parser's escape backslashes removed from the
+  chunk text (the rendered markdown keeps them). `make prompt-guard` unchanged.
+- **Known limits of the owner-approved rule (one line each):** a reference-list URL with
+  paired underscores loses them (`Situation_report_-_the…` → `Situationreport-the…`), the
+  tag pattern removes `<b and c>` from `a<b and c>d`, `*p*` in statistics becomes `p`, and
+  a removed image can leave a double space. E6 measured the rule on PDFs only.
+
+### N2, N3 (in-process half), N6, N9, D3, D4: the per-document function and the one-path stage — built, tests green
+
+- `sourcing/ingest_document.py`: `ingest_document(connect, *, tss_id, run_id, fetcher, …,
+  deadline, on_retryable_failure)` → `DocumentOutcome` (resolution `ingested` /
+  `fetch_failed` / `parse_failed` / `late` / `not_queued`, reason, `already_in_store`,
+  `retryable`, `written`, route, bytes, redacted attempts). One short read of the link row
+  (returns `not_queued` unless `queued`), today's cascade moved not rewritten (Europe PMC
+  XML first, URL cascade, landing-page discovery, open-access cross-check, reason
+  priority), `Retry-After` on 429 and 503 (seconds or HTTP date, cap 30 s, malformed =
+  today's 2 s, a wait that would pass the deadline is not started), the store key
+  (`sha256(body)` × `parse_profile_for(content_type)`) looked up before parsing (a hit
+  links without parsing), one forkserver parse process per call with the 120 s kill and
+  denied sockets, then one short write transaction: snapshot `INSERT … ON CONFLICT (store
+  key) DO NOTHING RETURNING`, re-select on conflict, chunks only when this call inserted,
+  the link update guarded by `WHERE full_text_status = 'queued'` (rowcount 0 → `late`).
+  The deadline reaches the fetcher through a contextvar so the fetcher protocol is
+  unchanged.
+- The shared row: snapshot `metadata` holds exactly `parse_profile`, `segmentation_policy`,
+  `content_type`, `source_kind`; `fetched_from` and `ingested_by_run_id` live on the link
+  row; a test asserts the exact column set and JSON keys and that no task, run, link id or
+  URL is inside the JSON.
+- `sourcing/ingest_queue.py`: `IngestMessage` (`link_row_id`, `run_id`, `schema = 1`, nothing
+  else; a test pins the keys), `SendResult`, the `QueueClient` protocol, `LocalQueueClient`
+  (thread pool; `workers=0` runs inline on the caller's thread for the rolled-back
+  fixture), `build_queue_client` (`queued` raises until the SQS client lands in Phase 4b).
+- `ingest_full_text_sources` is one path: eligible set in order; in its own committed
+  transaction re-queue orphans (`ingest.orphans_requeued`), flip eligible rows to `queued`,
+  commit, send; poll every 3 s on the component connection with ticks (`fetched=None`,
+  `parsed` = ingested so far); rows the client could not send → `send_failed`; rows still
+  `queued` at the deadline (or, in process, after `send` returned) → `not_ready`; embed at
+  the end scoped to this run's full-text snapshots; counts gain `already_in_store` (a
+  subset of `ingested`, counted from the store: this run's ingested rows whose snapshot
+  predates the stage) and keep the invariant. The SSE summary hides `already_in_store`
+  (G6); the tick schema already accepts a null `fetched`.
+- Deleted: `_ParseScheduler`, `_run_parse_jobs`, `_drain_*`, `_IngestProgress`, the fetch
+  thread pool and its rounds; `run_parse_worker` (one process per call, the `INGEST_SLOTS`
+  bound kept) replaces them. Deleted tests and their replacements (rubric item 5):
+  fan-out determinism 1 vs 4 → the corpus test at workers 1, 4 and inline with identical
+  statuses, reasons and chunks; byte-identical scheduler output → the same digest
+  `c84804da…` serial and four threads; timeout-does-not-swallow-sibling → a hung parse
+  does not hold back a concurrent one; slow-first-job → a slow document holds only its own
+  thread; batch-handover log → `fetch_s`/`parse_s` on the per-document log lines;
+  parallel-fetch-matches-serial → the corpus test; progress ticks → rewritten for
+  `fetched=None`; the ingest-slots test → rewritten on `run_parse_worker`.
+- Plumbing: `POLICY_ATLAS_INGEST_MODE` in `api/settings.py` (`in_process` default,
+  `queued`, anything else a startup error); `RunnerBackends.queue` and `.connect`;
+  `with_ingest_queue` through the three construction paths (`deps.runner_backends_for`,
+  the startup re-execution, the CLI); `run_harness(ingest_queue=, ingest_connect=)`.
+- Tests (`test_ingest_stage.py`, own database with a real second connection): late write
+  after close (no-op; next run links by key with the parser asserted not called;
+  `not_queued` on a repeat call); two connections racing on the store key (one snapshot,
+  both links ingested) and on the link row (one `ingested`, one `late`); orphans re-queued;
+  one snapshot across two tasks; the connection count stays within a pool of 5 during a
+  4-worker run; the fake-queue deadline scenario (`not_ready`, `send_failed`, the
+  invariant); `Retry-After` cases. Whole targeted run: 2,349 passed, 1 skipped;
+  `make prompt-guard` unchanged.
+- **Flagged for the review:** (1) in-process mode now fetches on the parse worker threads
+  (4 to 8 by cores) instead of 10 fetch threads plus 4 parse processes, so a laptop's or
+  production's in-process ingest may fetch more slowly; the per-document round measures
+  it. (2) Envelope (abstract) chunks are no longer embedded at this stage, only the
+  run's full-text snapshots; the acquire stage embeds abstracts. (3) `not_ready` is not
+  yet special-cased by the read models' access-failure counts (S2, finding 5): Phase 4b.
+  (4) `run_parse_worker` imports `runtime.walk_pool` for the slot bound, heavy for the
+  function's cold start: Phase 4b decides.
+
+## Phase 5: infra, config, documents
+
+### N4, N5, N11, G5: CDK — built, `make -C infra test` 113 passed (18 new)
+
+- `infra/infra/components/ingest_worker.py` (`IngestWorker`): queue `policy-atlas-v3-ingest`
+  (retention 4 days, SQS-managed encryption, TLS-only policy, visibility timeout 210 s =
+  180 + 30, dead-letter after 2 receives), dead-letter queue (14 days, encrypted,
+  TLS-only), `DockerImageFunction` from the SAME backend image asset as the API and
+  migration tasks (one `DockerImageAsset`, one image hash in the assets file), command
+  `python -m awslambdaric policy_atlas.ops.ingest_worker.handler`, 1,769 MB, 180 s,
+  512 MB ephemeral storage, private subnets, own security group admitted to the database
+  group on 5432 only, environment exactly `POLICY_ATLAS_DB_SECRET_ARN`,
+  `POLICY_ATLAS_MODEL_ROUTE`, `LOG_FORMAT=json` (a test asserts no key-like variable),
+  `GetSecretValue`/`DescribeSecret` on the **database** secret only (the app secret holds
+  the model keys, which D6 forbids the function to hold; plan P13's "app secret" wording
+  was the error), no Bedrock statement, log group `/policy_atlas_v3/ingest` kept 30 days;
+  event-source mapping batch size 1, batching window 0, `MaximumConcurrency` 20,
+  `ReportBatchItemFailures`. The API task role may `SendMessage`/`GetQueueAttributes`/
+  `GetQueueUrl` on the queue only; its environment gains `POLICY_ATLAS_INGEST_MODE`
+  (`pa_config.json`: staging `queued`, prod `in_process`; an unknown value fails at synth)
+  and `POLICY_ATLAS_INGEST_QUEUE_URL`.
+- Alarms: dead-letter depth ≥ 1 (app stack); NAT `NetworkOut` above 1 GB per 5 min for 3
+  periods, the busiest of the three fck-nat groups (network stack; threshold documented as
+  "a first guess, review on staging"); writer `CPUCreditBalance` below 50 (database
+  stack). **No alarm has an action: the stacks had no SNS topic before this slice**; they
+  show state in the CloudWatch console only (deferred: a notification topic).
+- **For the owner (G5 checkpoint):** a read-only `cdk diff` against staging was run with
+  the already-signed-in `pa-staging` session (`--no-change-set`): cert stack unchanged;
+  network and database stacks one alarm each; app stack additions only (the 12 ingest
+  resources, the ingress rule, the task-role policy; the two task definitions replaced as
+  on every deploy for the new image hash and the two environment entries; the service
+  gains a `DependsOn`); nothing removed, nothing stateful replaced. The trimmed synth is
+  committed as [cdk-synth-ingest.json](cdk-synth-ingest.json) (placeholders for account,
+  VPC and subnet ids). The prod diff needs the `pa-prod` profile. **Owner information:**
+  the VPC has three fck-nat instances (one per availability zone), not the one the
+  network stack's comment and contract D5 describe.
+- `infra/DEPLOYMENT.md` gains the ingest-function section (plain-language terms, sizing,
+  `ingest_mode` per environment, the alarms table, the dead-letter drain-and-inspect
+  commands, the deploy-order note: the function updates before the migration runs).
+- Points carried into the backend: the handler is started with a bare `python` (Lambda
+  applies the image's `PATH`; if the first staging start cannot import `awslambdaric`,
+  switch the command to `/app/.venv/bin/python`); the secret ARN is the name-based ARN
+  without the 6-character suffix (`GetSecretValue` accepts it; the grant uses the
+  wildcard); the function pulls its image from the CDK bootstrap repository as CDK's own
+  image functions do.
+
+### D3, N12: the retention rule and its script — built, tests green
+
+**Retention rule (the text the data-flow note carries):** a full-text snapshot that no link
+row references (through `full_text_snapshot_id` or `source_snapshot_id`), that no
+citation quotes and that no extraction record names, is deleted with its chunks and
+embeddings once it is older than 90 days, by an operator running
+`scripts/prune_unlinked_snapshots.py --apply` by hand (dry run by default; no scheduler
+in this slice). Locking: each batch is one transaction that picks the oldest candidates,
+locks them `FOR UPDATE SKIP LOCKED` (a snapshot an ingest is linking at that moment holds
+the key lock and is skipped), re-checks in the same transaction that no link row points
+at each locked snapshot, then deletes and commits; a link attempted after the lock waits
+and, if the snapshot is then gone, fails its foreign key and the ingest retries. Tests
+(8): old unlinked goes; linked either way, young, envelope stay; dry run deletes nothing;
+a link committed between pick and lock is caught by the re-check; a link in flight at lock
+time is skipped; a link attempted after the lock blocks. The citation and extraction
+guards go beyond D3's "no link row" wording because both tables hold foreign keys to the
+snapshot (owner to note).
 
 ## Checks beyond the build
 

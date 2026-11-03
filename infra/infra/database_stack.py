@@ -11,11 +11,18 @@ from aws_cdk import (
     aws_ec2 as ec2,
     aws_ssm as ssm,
     aws_lambda as _lambda,
+    aws_cloudwatch as cloudwatch,
     triggers,
 )
 
 from .components.nesta_db_jumpbox import NestaDBJumpbox
 from .components.nesta_ssm_endpoints import SsmConnectivity
+
+WRITER_INSTANCE_IDENTIFIER = "policy-atlas-v3-db-writer"
+# A burstable (t3) writer earns CPU credits while idle and spends them when
+# busy; at zero it is throttled to its baseline. Task 057 adds up to 20 ingest
+# functions writing at once, so warn while credits remain (credits, not %).
+WRITER_CPU_CREDIT_ALARM_THRESHOLD = 50
 
 
 class DatabaseStack(Stack):
@@ -52,7 +59,7 @@ class DatabaseStack(Stack):
         writer = rds.ClusterInstance.provisioned(
             "PolicyAtlasDBWriterInstance",
             instance_type=ec2.InstanceType(db_config["writer_instance_size"]),
-            instance_identifier=f"policy-atlas-v3-db-writer",
+            instance_identifier=WRITER_INSTANCE_IDENTIFIER,
         )
 
         # Create the RDS Aurora cluster.
@@ -124,6 +131,25 @@ class DatabaseStack(Stack):
             local_mode=False,
             db_port=5432,
             local_port=15432,
+        )
+
+        # No action: the stacks have no alarm topic yet (state shows in CloudWatch).
+        cloudwatch.Alarm(self, "WriterCpuCreditAlarm",
+            alarm_name="policy-atlas-v3-db-writer-cpu-credits",
+            alarm_description=(
+                "The Aurora writer's CPU credit balance fell below 50; at zero it is "
+                "throttled. Check ingest concurrency (task 057, N5)."
+            ),
+            metric=cloudwatch.Metric(
+                namespace="AWS/RDS",
+                metric_name="CPUCreditBalance",
+                dimensions_map={"DBInstanceIdentifier": WRITER_INSTANCE_IDENTIFIER},
+                statistic="Minimum",
+                period=Duration.minutes(5),
+            ),
+            threshold=WRITER_CPU_CREDIT_ALARM_THRESHOLD,
+            evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
         )
 
         # --- SSM parameter exports ---
