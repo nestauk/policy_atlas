@@ -191,9 +191,9 @@ def test_a_failure_not_worth_retrying_raises_after_one_attempt(error: BaseExcept
     assert span.metadata()["attempt"] == 1
 
 
-def test_two_timeouts_raise_after_two_observations() -> None:
+def test_every_attempt_cut_raises_after_one_observation_each() -> None:
     langfuse = _FakeLangfuse()
-    call = _Script(_timeout(), _timeout())
+    call = _Script(*[_timeout() for _ in range(tracing.MODEL_CALL_ATTEMPTS)])
     waits: list[float] = []
     with pytest.raises(openai.APITimeoutError):
         tracing.traced_attempts(
@@ -203,11 +203,12 @@ def test_two_timeouts_raise_after_two_observations() -> None:
             call=call,
             sleep=waits.append,
         )
-    assert call.calls == 2
-    assert [span.metadata()["attempt"] for span in langfuse.spans] == [1, 2]
-    assert [span.field("level") for span in langfuse.spans] == ["ERROR", "ERROR"]
+    assert call.calls == tracing.MODEL_CALL_ATTEMPTS
+    attempts = list(range(1, tracing.MODEL_CALL_ATTEMPTS + 1))
+    assert [span.metadata()["attempt"] for span in langfuse.spans] == attempts
+    assert [span.field("level") for span in langfuse.spans] == ["ERROR"] * len(attempts)
     assert len({span.metadata()["logical_call_id"] for span in langfuse.spans}) == 1
-    assert waits == [tracing.DEFAULT_RETRY_WAIT_S]
+    assert waits == [tracing.DEFAULT_RETRY_WAIT_S] * (tracing.MODEL_CALL_ATTEMPTS - 1)
 
 
 @pytest.mark.parametrize(

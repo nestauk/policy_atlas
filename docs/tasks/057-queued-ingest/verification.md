@@ -315,6 +315,66 @@ retry): **`judge_grounding` is raised once, 40 → 80 s**, applied with the judg
 change in round (c), which re-measures it. Round (a)'s cut component was a different
 step (`synthesise_propose_sections`, kept at 120 s; no raise, n < 100).
 
+### Measurement round (c): the grounding judge at low effort, timeout 80 s (commit `c83c3d50` cherry-picked on Phase 1 plus widths)
+
+Five runs, 2026-11-03 07:13 to 08:11 UTC (NEET and zonal together, obesity when NEET ended,
+the scoping question when zonal ended). All `succeeded`; no degraded, failed or skipped
+events.
+
+| run | question | total | acquire | screen_abstract | classify | ingest_full_text | screen_full | characterise | select | synthesise |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 83e3fa3a | NEET | 1815 | 62 | 21 | 19 | 1235 | 56 | 26 | 23 | 374 |
+| 42e70520 | zonal pricing | 1852 | 60 | 22 | 20 | 1164 | 58 | 30 | 88 | 420 |
+| 11d3481c | childhood obesity | 1411 | 71 | 20 | 18 | 757 | 50 | 24 | 91 | 350 |
+| median | | 1815 | 62 | 21 | 19 | 1164 | 56 | 26 | 88 | 374 |
+
+Ingest split: NEET 281 + 952 (91 throttle sleeps, 450 s), zonal 403 + 759 (82 / 378 s),
+obesity 197 + 552 (0). The embedding allowance was again shared by the two concurrent runs;
+not this lever's. `select` ran 88 and 91 s on two runs (six `select_rerank` retries at 60
+s); provider noise at that hour, not a changed step.
+
+**The judge (N15, D14), `judge:grounding` generations from Langfuse:**
+
+| round, effort | session | calls | median s | p99 s | total s | cut at the timeout |
+|---|---|---|---|---|---|---|
+| (b) medium, 40 s | NEET | 20 | 9.2 | 36.2 | 226 | 1 |
+| (b) medium | zonal | 11 | 12.8 | 18.2 | 130 | 0 |
+| (b) medium | obesity | 30 | 11.6 | 40.3 | 502 | 7 |
+| (c) low, 80 s | NEET | 17 | 4.1 | 68.8 | 154 | 1 |
+| (c) low | zonal | 17 | 4.2 | 80.2 | 222 | 2 |
+| (c) low | obesity | 12 | 4.8 | 6.8 | 56 | 0 |
+
+Calls that did not stall: median 3.9 to 4.8 s at low against 8.9 to 12.8 s at medium (E3
+measured 11.5 → 5.4 s); the slowest healthy call 9.0 s against 19.4 s. Synthesise median
+494 → 374 s. The three calls cut at 80 s are stalls (a healthy low-effort call never
+exceeded 9 s), each recovered on the one retry, and no component failed this round. The 80
+s value is therefore loose rather than tight; once 100 traced low-effort calls exist the
+derivation would give about 2 × 9 = 18 s. Left at 80 s (the contract's "raise once"; a
+later re-derivation is a step-8 or owner item).
+
+**Unsupported-claim counts (rubric 31):** the database keeps only the verdicts after the
+one repair pass, and every report in rounds (b) and (c) ends with 0 unsupported claims
+there (claims judged: 107 / 100 / 77 in (b), 92 / 84 / 74 in (c)); sections that needed a
+repair were 5/11, 3/10, 3/10 in (b) and 5/10, 7/8, 3/9 in (c). The judge's first-pass
+verdicts live only in its trace outputs; their counts per session are being read (numbers
+only) and are recorded below against E3's spread (26 at low against 33 and 28 at medium per
+157 claims). **The owner's content read of one report after (c) is an owner item** (run ids
+above; the reports are in the app).
+
+**Options scoping (second run, for the connection peak):** baseline 429 s, walk 1,050 s
+(round (b): 613 and 1,190 s); 9 option-search children this time (suggest proposed 9) in a
+434 s window, child median 431 s. **Peak database connections during the fan-out: 12**
+(07:55:25 UTC, inside the window; every sample in the window read 11 or 12, with the
+obesity Evidence search run going at the same time; 3 to 6 outside the window). Within the
+budget's 1 + 10 per walk plus the API pool. Sampled every 7 s on the walk run.
+
+Retries this round: 121 (all attempt 1; screen_abstract 70 with 63 timeouts and 7
+connection errors, classify 9, extract_interventions 8, option_profile_line 7,
+select_rerank 6, screen_full 4, judge_grounding 4, eleven others 1 or 2); 173 Cohere
+throttle lines; no Bedrock 429s (the 88 HTTP 429 lines are OpenAlex and publisher
+fetches). Saved: `stage-walls-phase1c*.{md,json}`, `phase1c-judge-calls.txt`,
+`phase1c-unsupported-claims.txt`, `phase1c-connections.txt`, `phase1c-retries.txt`.
+
 ### N13, G8: compiled bytecode — measured
 
 One `RUN python -m compileall -q /app/.venv /app/src` line after the venv copy; the

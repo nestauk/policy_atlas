@@ -38,9 +38,12 @@ _ObservationType = Literal["embedding", "generation", "span", "tool"]
 
 log = structlog.get_logger()
 
-#: Attempts per model call under :func:`traced_attempts`: the call and one retry
-#: (task 057, D12). The OpenAI clients never retry on their own (``max_retries=0``).
-MODEL_CALL_ATTEMPTS = 2
+#: Attempts per model call under :func:`traced_attempts`: the call and two retries
+#: (task 057, D12; raised from one retry on 2026-11-03 after the fixed-question runs lost
+#: a whole run to two consecutive stalls on one step, measured at 4 to 6% stalls per
+#: call on Bedrock; three attempts is what the SDK gave before this task, now traced).
+#: The OpenAI clients never retry on their own (``max_retries=0``).
+MODEL_CALL_ATTEMPTS = 3
 #: The longest wait before the retry that a provider's ``Retry-After`` header can ask for.
 RETRY_AFTER_CAP_S = 30.0
 #: The wait before the retry when the provider names none.
