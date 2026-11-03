@@ -274,12 +274,18 @@ tokens) cannot finish in the time left after fetch and parse, and Lambda kills t
 forbids that). So the function fetches, parses and writes chunks, and **the stage embeds**
 pending chunks as documents land, with today's `embed_pending_chunks` scoped to the snapshots
 that have arrived. One request stream tops out at about 700,000 tokens per minute (a 96-unit
-request takes about 3.4 s), so the stage runs **a small pool of requests in flight, width =
-quota ÷ 700,000, a value in the route file** (1 today, 4 to 5 after the raise): the design
-scales to the raise without moving anything. The owner asked whether this would have to move
-into the function later: no, for that reason. A snapshot with chunks but no vectors is the same
-transitional state the code handles today. The JSONB write overhead (E10) goes with N8's
-binary column. Switching embedding model is out.
+request takes about 3.4 s), so above today's allowance the stage needs several requests in
+flight. **The number in flight is adaptive** (owner, 2026-11-03: build it so the raise needs
+no further change): start at 2; on a throttling response halve the number in flight (floor 1)
+and back off; after a run of successes add one, up to a cap in the route file (8). Under
+today's allowance it settles at 1 or 2; after the raise it climbs to 4 or 5 on its own; on a
+day when other runs share the allowance it falls back. E1 showed fixed widths above the
+allowance lose about a quarter of their throughput to throttling waits, which is why the
+width is not a fixed value. A test drives the pool with a fake backend that throttles above a
+set rate and asserts the width converges. The owner asked whether embedding would have to move
+into the function later: no, the allowance, not the place, sets the speed. A snapshot with
+chunks but no vectors is the same transitional state the code handles today. The JSONB write
+overhead (E10) goes with N8's binary column. Switching embedding model is out.
 
 **D7. Retrieval parity. Decided (owner, sheet item 7).** The SQL leg for words uses the
 product's own score (share of query words found in the unit), not Postgres full-text ranking,

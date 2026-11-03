@@ -55,8 +55,10 @@ Queue and function (N1 to N5, D1, D4, D5)
 
 Embedding in the stage (D6, G4)
 14. [ ] D6: the function writes no vectors; the stage embeds pending chunks as documents land
-        through a request pool whose width is a route-file value (1 today); a snapshot with
-        chunks but no vectors is handled as today; no `embed_timeout` state exists.
+        through an adaptive request pool (halve on throttling, add one after a run of
+        successes, cap from the route file) that converges in a test with a fake throttling
+        backend; a snapshot with chunks but no vectors is handled as today; no `embed_timeout`
+        state exists.
 15. [ ] D6, G4: embedding requests, tokens and throttling sleeps per run recorded on staging
         with the quota in force; the embedding wall compared with tokens ÷ quota and with
         today's 457 s median; the pool width re-derived if the quota changed.
