@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
+import botocore.exceptions
 import httpx
 import openai
 import pytest
@@ -164,8 +165,25 @@ def test_a_timeout_then_success_makes_two_traced_attempts() -> None:
         _status(500),
         _status(503),
         _rate_limited(None),
+        # task 057 review (code-review 1): the botocore failures of the Bedrock routes.
+        *(
+            botocore.exceptions.ClientError({"Error": {"Code": code}}, "Converse")
+            for code in (
+                "ThrottlingException",
+                "TooManyRequestsException",
+                "ServiceUnavailableException",
+                "ModelNotReadyException",
+            )
+        ),
+        botocore.exceptions.ReadTimeoutError(endpoint_url="https://bedrock"),
+        botocore.exceptions.ConnectTimeoutError(endpoint_url="https://bedrock"),
+        botocore.exceptions.EndpointConnectionError(endpoint_url="https://bedrock"),
     ],
-    ids=["connection", "500", "503", "429"],
+    ids=[
+        "connection", "500", "503", "429", "bedrock-throttling", "bedrock-too-many",
+        "bedrock-unavailable", "bedrock-not-ready", "bedrock-read-timeout",
+        "bedrock-connect-timeout", "bedrock-endpoint",
+    ],
 )
 def test_passing_failures_are_retried_once(error: BaseException) -> None:
     langfuse = _FakeLangfuse()
@@ -177,8 +195,13 @@ def test_passing_failures_are_retried_once(error: BaseException) -> None:
 
 @pytest.mark.parametrize(
     "error",
-    [_status(400), _status(401), RuntimeError("OpenAI ranking response was not parsed.")],
-    ids=["400", "401", "unparsed"],
+    [
+        _status(400),
+        _status(401),
+        RuntimeError("OpenAI ranking response was not parsed."),
+        botocore.exceptions.ClientError({"Error": {"Code": "ValidationException"}}, "Converse"),
+    ],
+    ids=["400", "401", "unparsed", "bedrock-validation"],
 )
 def test_a_failure_not_worth_retrying_raises_after_one_attempt(error: BaseException) -> None:
     langfuse = _FakeLangfuse()

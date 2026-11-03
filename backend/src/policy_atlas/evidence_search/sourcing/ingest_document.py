@@ -16,8 +16,14 @@ in-process thread pool calls it on the API's machine, and the cloud function
    without parsing again (N9);
 4. otherwise parses in its own process with the 120 s kill;
 5. writes the result in one short transaction whose link-row update is guarded on
-   ``full_text_status = 'queued'``, so a result that arrives after the stage closed
-   the row changes nothing on the row (the parsed snapshot still joins the store).
+   ``full_text_status = 'queued'`` and on the message's run, so a result that
+   arrives after the stage closed the row, or after a later run queued it again,
+   changes nothing on the row (the parsed snapshot still joins the store).
+
+``ingested_by_run_id`` is the run that last queued the row; it is stamped at
+queue time and required by the guarded writes (task 057 review, Codex 1 /
+security 8). A store hit whose snapshot the retention script deleted between the
+lookup and the write is parsed afresh and written again (Codex 7 / code-review 2).
 
 No connection is held while fetching or parsing. The shared snapshot row carries
 no task, user, run or URL key beyond the public document address in
@@ -37,6 +43,7 @@ from typing import Any, Literal
 import structlog
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.schema import chunk as chunk_table
@@ -45,6 +52,7 @@ from policy_atlas.evidence_search.sourcing.ingest_full_text import (
     DEADLINE_MARGIN_S,
     FAILURE_REASONS,
     FETCH_DEADLINE,
+    NOT_READ_YET_REASONS,
     PARSE_TIMEOUT_SECONDS,
     THIN_TEXT_MIN_CHARS,
     ConnectFactory,
@@ -68,6 +76,8 @@ Resolution = Literal["ingested", "fetch_failed", "parse_failed", "late", "not_qu
 
 # Fetch reasons that say the network, not the document, failed: worth a second try.
 _TRANSPORT_FETCH_REASONS = frozenset({"timeout", "fetch_error"})
+#: PostgreSQL's code for a foreign-key violation.
+_FOREIGN_KEY_VIOLATION = "23503"
 
 
 @dataclass(frozen=True)
@@ -80,8 +90,10 @@ class DocumentOutcome:
             ``late`` (the work finished but the row was no longer ``queued``, so
             nothing on the row changed) or ``not_queued`` (the row was not
             ``queued`` when the call began; nothing was done).
-        reason: The failure reason (closed vocabulary), else None. ``not_ready``
-            and ``send_failed`` are the stage's, never this function's.
+        reason: The failure reason (closed vocabulary), else None. The
+            not-read-yet reasons (``not_ready``, ``send_failed``,
+            ``worker_error``) are the stage's or the handler's, never this
+            function's.
         already_in_store: True when an existing snapshot was linked by store key
             and nothing was parsed.
         retryable: True for a transport-level fetch failure (``timeout``,
@@ -114,11 +126,17 @@ class _Parsed:
     chunks: list[dict[str, Any]]
 
 
-def _read_queued_row(connect: ConnectFactory, tss_id: uuid.UUID) -> dict[str, Any] | None:
-    """Return the envelope metadata of a ``queued`` link row, or None for any other row."""
+def _read_queued_row(
+    connect: ConnectFactory, tss_id: uuid.UUID, run_id: uuid.UUID
+) -> dict[str, Any] | None:
+    """Return the envelope metadata of a link row ``run_id`` queued, else None."""
     with connect() as conn:
         row = conn.execute(
-            select(task_source_snapshot.c.full_text_status, source_snapshot.c.metadata)
+            select(
+                task_source_snapshot.c.full_text_status,
+                task_source_snapshot.c.ingested_by_run_id,
+                source_snapshot.c.metadata,
+            )
             .select_from(
                 task_source_snapshot.join(
                     source_snapshot,
@@ -128,7 +146,9 @@ def _read_queued_row(connect: ConnectFactory, tss_id: uuid.UUID) -> dict[str, An
             )
             .where(task_source_snapshot.c.task_source_snapshot_id == tss_id)
         ).one_or_none()
-    if row is None or row.full_text_status != "queued":
+    # task 057 review (Codex 1 / security 8): a stale delivery from a run that no
+    # longer owns the row does no fetch at all.
+    if row is None or row.full_text_status != "queued" or row.ingested_by_run_id != run_id:
         return None
     return dict(row.metadata)
 
@@ -232,6 +252,8 @@ def _write_ingested(
             task_source_snapshot.update()
             .where(task_source_snapshot.c.task_source_snapshot_id == tss_id)
             .where(task_source_snapshot.c.full_text_status == "queued")
+            # task 057 review (Codex 1 / security 8): only the run that queued it.
+            .where(task_source_snapshot.c.ingested_by_run_id == run_id)
             .values(
                 full_text_snapshot_id=snapshot_id,
                 full_text_status="ingested",
@@ -244,14 +266,21 @@ def _write_ingested(
 
 
 def _write_failed(
-    connect: ConnectFactory, *, tss_id: uuid.UUID, resolution: str, reason: str
+    connect: ConnectFactory,
+    *,
+    tss_id: uuid.UUID,
+    run_id: uuid.UUID,
+    resolution: str,
+    reason: str,
 ) -> bool:
-    """Record a reason-coded failure on the link row, guarded on ``queued``."""
+    """Record a reason-coded failure on the link row, guarded on ``queued`` and the run."""
     with connect() as conn:
         updated = conn.execute(
             task_source_snapshot.update()
             .where(task_source_snapshot.c.task_source_snapshot_id == tss_id)
             .where(task_source_snapshot.c.full_text_status == "queued")
+            # task 057 review (Codex 1 / security 8): only the run that queued it.
+            .where(task_source_snapshot.c.ingested_by_run_id == run_id)
             .values(
                 full_text_snapshot_id=None,
                 full_text_status=resolution,
@@ -287,7 +316,8 @@ def ingest_document(
             for the first read, the store lookups and the final write; nothing is
             held while fetching or parsing.
         tss_id: The link row (``task_source_snapshot``) to ingest.
-        run_id: The run, recorded on the link row as ``ingested_by_run_id``.
+        run_id: The run; the row is touched only while it is ``queued`` by this
+            run (its ``ingested_by_run_id``).
         fetcher: The ``DocumentFetcher`` seam.
         parse_fn: Parse callable run in the worker process (a test seam).
         deadline: ``time.monotonic()`` value after which no wait or parse is
@@ -305,7 +335,7 @@ def ingest_document(
         FileNotFoundError: The fixture corpus is missing (a configuration error
             that must fail the run loudly).
     """
-    metadata = _read_queued_row(connect, tss_id)
+    metadata = _read_queued_row(connect, tss_id, run_id)
     if metadata is None:
         log.info("fulltext.not_queued", tss_id=str(tss_id))
         return DocumentOutcome(
@@ -332,6 +362,9 @@ def ingest_document(
     parse_s = 0.0
     deadline_cut = False
     parsed: _Parsed | None = None
+    # The body a store hit linked, kept for a fresh parse if its snapshot is
+    # pruned under the write (task 057 review, Codex 7 / code-review 2).
+    hit_body: tuple[bytes, str] | None = None
     token = FETCH_DEADLINE.set(deadline)
     try:
         while doc.resolution is None:
@@ -359,6 +392,7 @@ def ingest_document(
                     )
                     if hit is not None:
                         parsed = _Parsed(hit, body_hash, profile, policy, [])
+                        hit_body = (body, step.content_type)
                         doc.resolution = "ingested"
                         break
                     budget = parse_timeout
@@ -408,11 +442,50 @@ def ingest_document(
     if doc.resolution == "ingested":
         assert parsed is not None and doc.fetched_from is not None
         route = _route_of(doc.fetched_from, doc.xml_url, doc.content_type)
-        written = _write_ingested(
-            connect, tss_id=tss_id, run_id=run_id, parsed=parsed,
-            fetched_from=doc.fetched_from,
-            content_type=doc.content_type or "application/octet-stream", route=route,
-        )
+        try:
+            written = _write_ingested(
+                connect, tss_id=tss_id, run_id=run_id, parsed=parsed,
+                fetched_from=doc.fetched_from,
+                content_type=doc.content_type or "application/octet-stream", route=route,
+            )
+        except IntegrityError as exc:
+            # task 057 review (Codex 7 / code-review 2): the retention script
+            # deleted the store hit's snapshot between the lookup and the link
+            # write; parse the same bytes afresh and write again.
+            if hit_body is None or getattr(exc.orig, "sqlstate", None) != _FOREIGN_KEY_VIOLATION:
+                raise
+            log.warning("fulltext.snapshot_pruned_under_write", tss_id=str(tss_id))
+            body, content_type = hit_body
+            hit_body = None
+            budget = parse_timeout
+            left = _seconds_left(deadline)
+            if left is not None:
+                budget = min(budget, left)
+            result = (
+                run_parse_worker(parse_fn, body, content_type, thin_min=thin_min, timeout=budget)
+                if budget > 0
+                else {"status": "error", "reason": "timeout"}
+            )
+            del body
+            if result["status"] == "ok":
+                parsed = _Parsed(
+                    None, parsed.body_hash, result["parse_profile"],
+                    result["segmentation_policy"], result["chunks"],
+                )
+                written = _write_ingested(
+                    connect, tss_id=tss_id, run_id=run_id, parsed=parsed,
+                    fetched_from=doc.fetched_from,
+                    content_type=doc.content_type or "application/octet-stream", route=route,
+                )
+            elif result["reason"] == "timeout" and budget < parse_timeout:
+                deadline_cut = True
+                doc.resolution, doc.reason = "fetch_failed", "timeout"
+                doc.attempts.append("deadline: timeout")
+            else:
+                doc.resolution, doc.reason = "parse_failed", result["reason"]
+                doc.attempts.append(f"{_redact_url(doc.fetched_from)}: {result['reason']}")
+    if doc.resolution == "ingested":
+        assert parsed is not None and doc.fetched_from is not None
         log.info(
             "fulltext.ingested",
             tss_id=str(tss_id),
@@ -440,7 +513,8 @@ def ingest_document(
         _apply_oa_cross_check(doc)
     # failure ⟺ closed-vocabulary reason (the CHECK enforces presence; the
     # vocabulary is code-enforced here, as the FAILURE_REASONS comment claims)
-    assert doc.reason in FAILURE_REASONS and doc.reason not in ("not_ready", "send_failed"), (
+    # task 057 review (Codex 8): the not-read-yet reasons are never this function's.
+    assert doc.reason in FAILURE_REASONS and doc.reason not in NOT_READ_YET_REASONS, (
         doc.reason
     )
     retryable = deadline_cut or (
@@ -449,7 +523,8 @@ def ingest_document(
     written = False
     if not (retryable and on_retryable_failure == "leave_queued"):
         written = _write_failed(
-            connect, tss_id=tss_id, resolution=doc.resolution, reason=doc.reason
+            connect, tss_id=tss_id, run_id=run_id, resolution=doc.resolution,
+            reason=doc.reason,
         )
     log.info(
         "fulltext.failed",

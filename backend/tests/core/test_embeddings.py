@@ -1,5 +1,6 @@
 """Tests for the embeddings module — schema, unit derivation, embed pass, stubs."""
 
+import concurrent.futures
 import io
 import json
 import random
@@ -1072,9 +1073,39 @@ def test_adaptive_pool_climbs_to_its_cap_when_never_throttled() -> None:
     assert backend.peak <= 4 and backend.throttles == 0
 
 
-def test_adaptive_pool_gives_a_batch_up_after_its_throttle_budget() -> None:
-    """A batch throttled ``max_throttles`` times comes back as a failure (its
-    chunks stay pending for the next pass); the width never drops below 1."""
+def test_adaptive_pool_round_with_a_throttle_grants_no_clean_credit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """task 057 review (Codex 10): a round that completes one throttle and
+    ``clean_run`` successes together ends at the halved width; the successes do
+    not widen the pool again before the backoff sleep."""
+    # Every round waits for all its futures, so the first round completes all three.
+    monkeypatch.setattr(
+        embeddings_module, "wait",
+        lambda fs, return_when: concurrent.futures.wait(
+            fs, return_when=concurrent.futures.ALL_COMPLETED
+        ),
+    )
+    seen: set[int] = set()
+
+    def fn(job: int) -> int:
+        if job == 0 and job not in seen:
+            seen.add(job)
+            raise Throttled(provider="cohere")
+        return job
+
+    pool = AdaptivePool(start=3, cap=8, clean_run=2, sleep=lambda _s: None)
+    results = pool.run([0, 1, 2], fn)
+    first = next(results)  # the first round has been processed
+    assert pool.width == 1
+    assert sorted([first.index, *(r.index for r in results)]) == [0, 1, 2]
+
+
+def test_adaptive_pool_gives_a_batch_up_after_its_throttle_budget(conn: Connection) -> None:
+    """A batch throttled ``max_throttles`` times comes back as an error result;
+    ``embed_pending_chunks`` counts its chunks as ``deferred`` (not ``failed``),
+    writes no vector and leaves them pending for the next pass; the width never
+    drops below 1."""
     class _AlwaysThrottled:
         calls = 0
 
@@ -1091,6 +1122,27 @@ def test_adaptive_pool_gives_a_batch_up_after_its_throttle_budget() -> None:
     assert pool.width == 1
     # Retry-After is honoured, capped at the backoff cap.
     assert set(sleeps) == {embeddings_module.POOL_RETRY_AFTER_CAP_S}
+
+    # task 057 review (code-review 5): the pass reports the given-up batch as deferred.
+    class _ThrottlingBackend:
+        mode = "stub"
+
+        def embed_texts(
+            self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+        ) -> list[list[float]]:
+            raise Throttled(provider="cohere")
+
+    pid, rid = seed_task_and_run(conn)
+    snap_id, _tss_id = seed_source(conn, pid)
+    _insert_chunk(conn, snap_id, 1, "Deferred chunk about housing.")
+    with capture_logs() as logs:
+        result = embed_pending_chunks(
+            conn, embedder=_ThrottlingBackend(), task_id=pid, run_id=rid,
+            pool=AdaptivePool(start=1, cap=1, max_throttles=1, sleep=lambda _s: None),
+        )
+    assert (result["embedded"], result["failed"], result["deferred"]) == (0, 0, 1)
+    events = {e["event"] for e in logs}
+    assert "embed.batch_deferred" in events and "embed.batch_failed" not in events
 
 
 def test_throttling_is_never_split_by_failure_isolation() -> None:

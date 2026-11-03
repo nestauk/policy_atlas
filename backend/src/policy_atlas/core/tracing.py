@@ -18,6 +18,7 @@ from contextlib import AbstractContextManager, contextmanager
 from threading import Lock
 from typing import Any, Literal
 
+import botocore.exceptions
 import openai
 import structlog
 from langfuse import Langfuse, propagate_attributes
@@ -172,14 +173,37 @@ def traced_call[T](
         return result
 
 
+_RETRYABLE_BOTOCORE_CODES = frozenset(
+    {
+        "ThrottlingException",
+        "TooManyRequestsException",
+        "ServiceUnavailableException",
+        "ModelNotReadyException",
+    }
+)
+
+
 def _retryable(exc: BaseException) -> bool:
     """Whether a failed model request is worth one more try.
 
     The same failures the OpenAI SDK retried on its own before task 057: a
     timeout, a dropped connection, "too many requests" (429) and a server
     error (5xx). Anything else (a bad request, a refused key, an answer that
-    does not parse) would fail the same way again.
+    does not parse) would fail the same way again. On the Bedrock routes the
+    botocore equivalents count too: a throttle or not-ready error code, a read
+    or connect timeout and an unreachable endpoint.
     """
+    # task 057 review: code-review 1 - the bedrock-claude backend runs botocore
+    # with max_attempts=1, so its passing failures must be retried here.
+    if isinstance(exc, botocore.exceptions.ClientError):
+        return exc.response.get("Error", {}).get("Code") in _RETRYABLE_BOTOCORE_CODES
+    if isinstance(
+        exc,
+        botocore.exceptions.ReadTimeoutError
+        | botocore.exceptions.ConnectTimeoutError
+        | botocore.exceptions.EndpointConnectionError,
+    ):
+        return True
     if isinstance(exc, openai.APITimeoutError | openai.APIConnectionError | openai.RateLimitError):
         return True
     return isinstance(exc, openai.APIStatusError) and exc.status_code >= 500
@@ -214,15 +238,17 @@ def traced_attempts[T](
     after: Callable[[Any, T], None] | None = None,
     sleep: Callable[[float], None] = time.sleep,
 ) -> T:
-    """Run one model call with one traced retry, each attempt its own generation.
+    """Run one model call with traced retries, each attempt its own generation.
 
     In plain terms: the request is sent; if it times out or fails for a passing
-    reason (see :func:`_retryable`) it is sent once more after a short wait.
-    Every attempt opens its own Langfuse generation and, before the request
-    goes out, stamps it with the step name, the attempt number (1 or 2) and a
-    call id the two attempts share. A request that never comes back is
-    therefore still visible and countable. A failed attempt's generation is
-    marked ``ERROR`` with the error class and message. Task 057, contract D12.
+    reason (see :func:`_retryable`) it is sent again after a short wait, up to
+    :data:`MODEL_CALL_ATTEMPTS` attempts (three today; task 057 review:
+    code-review 9). Every attempt opens its own Langfuse generation and, before
+    the request goes out, stamps it with the step name, the attempt number
+    (1 to :data:`MODEL_CALL_ATTEMPTS`) and a call id the attempts share. A
+    request that never comes back is therefore still visible and countable. A
+    failed attempt's generation is marked ``ERROR`` with the error class and
+    message. Task 057, contract D12.
 
     Args:
         client: Langfuse client, or ``None`` to run the same attempts untraced.
@@ -245,7 +271,7 @@ def traced_attempts[T](
     Raises:
         Exception: Whatever the last attempt raised: a failure that is not
             worth retrying is raised at once; a retryable one is raised after
-            the second attempt also fails.
+            the last of the :data:`MODEL_CALL_ATTEMPTS` attempts also fails.
     """
     logical_call_id = uuid.uuid4().hex[:12]
     for attempt in range(1, MODEL_CALL_ATTEMPTS + 1):

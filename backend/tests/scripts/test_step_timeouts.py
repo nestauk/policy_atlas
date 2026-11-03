@@ -157,6 +157,22 @@ def test_min_n_and_floor_are_options(observations: list[dict[str, Any]]) -> None
     assert "n >= 30" in st.format_markdown(table, "2026-11-02")
 
 
+def test_round_to_rounds_up_before_the_floor(observations: list[dict[str, Any]]) -> None:
+    """task 057 review (contract verifier 5): --round-to 5 rounds 22 up to 25, leaves
+    an exact 25 at 25, and the floor is applied after the rounding."""
+    table = st.derive_table(observations, st.route_steps(), floor_s=7, round_to=5)
+    assert _row(table, "classify_document")["proposed_timeout_s"] == 25  # 22 -> 25
+    # ceil(2.56) rounds to 5, then the 7 s floor (rounding after it would give 10).
+    assert _row(table, "synthesise_write_intro")["proposed_timeout_s"] == 7
+    exact = [
+        {**observations[0], "id": f"x-{i}", "name": "classify:document",
+         "startTime": "2026-11-02T10:00:00.000Z", "endTime": "2026-11-02T10:00:12.500Z"}
+        for i in range(100)
+    ]  # p99 12.5 s, 2 x p99 = 25 exactly
+    table = st.derive_table(exact, st.route_steps(), round_to=5)
+    assert _row(table, "classify_document")["proposed_timeout_s"] == 25
+
+
 def test_small_steps_keep_today(table: dict[str, Any]) -> None:
     row = _row(table, "search_queries_v2_openalex")
     assert (row["n_healthy"], row["p99_s"], row["proposed_timeout_s"]) == (40, 3.0, None)

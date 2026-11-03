@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 import pytest
@@ -583,6 +583,27 @@ def test_retriever_selection_prior_reorders_without_excluding_unselected(
     assert seeded.name_list(results) == ["chunk-b", "chunk-a"]
     assert {chunk["origin"] for chunk in results} == {"selected", "unselected_screened"}
     assert retriever.provenance()["selection_prior"] == 2.0
+
+
+def test_shared_snapshot_is_searched_under_the_selected_document(conn: Connection) -> None:
+    """task 057 review (Codex 4): two scope documents share one snapshot; the
+    unselected one has the smaller id, yet the selected one carries the hit."""
+    seeded = _one_chunk_scope(conn, selected_b=True)
+    doc_a, doc_b = seeded.ids["doc-a"], seeded.ids["doc-b"]
+    assert doc_a < doc_b
+    snapshots = dict(seeded.scope.snapshot_by_tss)
+    snapshots[doc_b] = snapshots[doc_a]  # doc-b now holds doc-a's text
+    retriever = ChunkRetriever(
+        replace(seeded.scope, snapshot_by_tss=snapshots),
+        embedder=FakeEmbedder({"policy": _vector(1.0)}),
+        directive=SynthesisDirective(),
+        reranker=PassThroughChunkReranker(),
+    )
+    results = retriever.search("policy")
+    assert [(seeded.names[r["chunk_record_id"]], r["tss_id"]) for r in results] == [
+        ("chunk-a", doc_b)
+    ]
+    assert results[0]["origin"] == "selected"
 
 
 def test_retriever_search_results_expose_chunk_text_basis_values(conn: Connection) -> None:

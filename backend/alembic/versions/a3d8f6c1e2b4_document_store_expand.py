@@ -121,6 +121,11 @@ def upgrade() -> None:
     # Part 2, outside a transaction: each statement commits on its own, and none
     # blocks the app's reads or writes for long.
     with op.get_context().autocommit_block():
+        # task 057 review: Codex 13 - SET LOCAL ended with part 1's commit, so set
+        # the timeout for the session here and reset it when the block ends. A
+        # CONCURRENTLY build that hits it leaves an invalid index, which the
+        # rerun drops and rebuilds (below).
+        op.execute("SET lock_timeout = '10s'")
         # Checking existing rows against the new rule takes only a light lock.
         op.execute("ALTER TABLE task_source_snapshot VALIDATE CONSTRAINT ck_tss_full_text_status")
         # Snapshots are written once and never updated, so this touches no live row.
@@ -146,6 +151,7 @@ def upgrade() -> None:
             if invalid is not None:
                 op.execute(f"DROP INDEX CONCURRENTLY IF EXISTS {name}")
             op.execute(create_sql)
+        op.execute("RESET lock_timeout")
 
 
 def downgrade() -> None:

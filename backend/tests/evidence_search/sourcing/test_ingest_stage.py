@@ -18,7 +18,8 @@ from typing import Any
 
 import pytest
 import sqlalchemy as sa
-from botocore.exceptions import ClientError
+import structlog
+from botocore.exceptions import ClientError, ReadTimeoutError
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Connection, Engine
 from structlog.testing import capture_logs
@@ -98,12 +99,21 @@ def _seed_doc_task(
     return task_id, run_id, scope_id, tss_id
 
 
-def _set_status(engine: Engine, tss_id: uuid.UUID, status: str, error: str | None = None) -> None:
+def _set_status(
+    engine: Engine, tss_id: uuid.UUID, status: str, error: str | None = None,
+    *, run_id: uuid.UUID | None = None,
+) -> None:
+    """Set the row's status; ``run_id`` also stamps the run that queued it."""
+    values: dict[str, Any] = {
+        "full_text_status": status, "full_text_error": error, "full_text_snapshot_id": None,
+    }
+    if run_id is not None:
+        values["ingested_by_run_id"] = run_id
     with _committed(engine) as c:
         c.execute(
             task_source_snapshot.update()
             .where(task_source_snapshot.c.task_source_snapshot_id == tss_id)
-            .values(full_text_status=status, full_text_error=error, full_text_snapshot_id=None)
+            .values(**values)
         )
 
 
@@ -222,7 +232,7 @@ def test_late_write_leaves_the_row_and_keeps_the_snapshot_then_a_store_hit_skips
     body = _unique_body()
     task_id, run_id, _, tss_id = _seed_doc_task(engine, url)
     try:
-        _set_status(engine, tss_id, "queued")
+        _set_status(engine, tss_id, "queued", run_id=run_id)
         real_find = ingest_document_module.find_in_store
 
         def close_then_find(*args: Any, **kwargs: Any) -> Any:
@@ -253,8 +263,8 @@ def test_late_write_leaves_the_row_and_keeps_the_snapshot_then_a_store_hit_skips
             return real_parse(fn, b, *args, **kwargs)
 
         monkeypatch.setattr(ingest_document_module, "run_parse_worker", recording_parse)
-        _set_status(engine, tss_id, "queued")
         run_2 = seed_run_committed(engine, task_id)
+        _set_status(engine, tss_id, "queued", run_id=run_2)
         hit = ingest_document(
             engine.begin, tss_id=tss_id, run_id=run_2, fetcher=_fetcher_for(url, body),
             parse_fn=_plain_parse, deadline=None,
@@ -327,8 +337,8 @@ def test_two_connections_race_on_the_same_store_key(
     task_a, run_a, _, tss_a = _seed_doc_task(engine, url_a)
     task_b, run_b, _, tss_b = _seed_doc_task(engine, url_b)
     try:
-        _set_status(engine, tss_a, "queued")
-        _set_status(engine, tss_b, "queued")
+        _set_status(engine, tss_a, "queued", run_id=run_a)
+        _set_status(engine, tss_b, "queued", run_id=run_b)
         _barrier_lookup(monkeypatch, 2)
         outcomes = _run_together([
             lambda: ingest_document(
@@ -364,7 +374,7 @@ def test_two_connections_race_on_the_same_link_row(
     url = f"https://example.org/same-row-{uuid.uuid4()}.txt"
     task_id, run_id, _, tss_id = _seed_doc_task(engine, url)
     try:
-        _set_status(engine, tss_id, "queued")
+        _set_status(engine, tss_id, "queued", run_id=run_id)
         _barrier_lookup(monkeypatch, 2)
         call = lambda: ingest_document(  # noqa: E731
             engine.begin, tss_id=tss_id, run_id=run_id, fetcher=_fetcher_for(url, body),
@@ -390,7 +400,11 @@ def test_orphaned_queued_rows_are_queued_again_at_start(engine: Engine) -> None:
     task_id, run_id, scope_id, tss_id = _seed_doc_task(engine, url)
     try:
         _set_status(engine, tss_id, "queued")  # the dead run's leftover
-        with engine.connect() as c, capture_logs() as logs:
+        with (
+            engine.connect() as c,
+            capture_logs(processors=[structlog.contextvars.merge_contextvars]) as logs,
+            structlog.contextvars.bound_contextvars(run_id=str(run_id)),
+        ):
             summary = run_ingest(
                 c, task_id, run_id, scope_id,
                 queue=local_queue(engine, workers=1, fetcher=_fetcher_for(url, body),
@@ -400,15 +414,165 @@ def test_orphaned_queued_rows_are_queued_again_at_start(engine: Engine) -> None:
             c.commit()
         assert summary["attempted"] == 1 and summary["ingested"] == 1
         assert [e["count"] for e in logs if e["event"] == "ingest.orphans_requeued"] == [1]
+        # Task 057 review (code-review 3): the worker thread's line carries the
+        # caller's bound run (contextvars copied onto the sender and the pool).
+        [ingested] = [e for e in logs if e["event"] == "fulltext.ingested"]
+        assert ingested["run_id"] == str(run_id)
         assert _link(engine, tss_id).full_text_status == "ingested"
+    finally:
+        _cleanup(engine, [task_id], [body])
+
+
+def test_a_dead_runs_delivery_cannot_write_into_the_run_that_queued_the_row_again(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Task 057 review (Codex 1 / security 8): a row queued by run 1 and left
+    orphaned is queued again by run 2. Run 1's delivery that was mid-flight when
+    that happened finishes ``late`` and leaves run 2's row alone; one that
+    arrives afterwards does no fetch at all; run 2's own call ingests it."""
+    body = _unique_body()
+    url = f"https://example.org/stale-{uuid.uuid4()}.txt"
+    task_id, run_1, _, tss_id = _seed_doc_task(engine, url)
+    try:
+        _set_status(engine, tss_id, "queued", run_id=run_1)  # run 1 queued it, then died
+        run_2 = seed_run_committed(engine, task_id)
+        real_find = ingest_document_module.find_in_store
+
+        def requeue_then_find(*args: Any, **kwargs: Any) -> Any:
+            _set_status(engine, tss_id, "queued", run_id=run_2)  # run 2's stage, elsewhere
+            return real_find(*args, **kwargs)
+
+        monkeypatch.setattr(ingest_document_module, "find_in_store", requeue_then_find)
+        stale = ingest_document(
+            engine.begin, tss_id=tss_id, run_id=run_1, fetcher=_fetcher_for(url, body),
+            parse_fn=_plain_parse, deadline=None,
+        )
+        assert (stale.resolution, stale.written) == ("late", False)
+        row = _link(engine, tss_id)
+        assert (row.full_text_status, row.ingested_by_run_id) == ("queued", run_2)
+        assert row.full_text_snapshot_id is None
+
+        monkeypatch.setattr(ingest_document_module, "find_in_store", real_find)
+        fetcher = _fetcher_for(url, body)
+        after = ingest_document(
+            engine.begin, tss_id=tss_id, run_id=run_1, fetcher=fetcher,
+            parse_fn=_plain_parse, deadline=None,
+        )
+        assert after.resolution == "not_queued" and fetcher.calls == []
+        assert _link(engine, tss_id).ingested_by_run_id == run_2
+
+        own = ingest_document(
+            engine.begin, tss_id=tss_id, run_id=run_2, fetcher=_fetcher_for(url, body),
+            parse_fn=_plain_parse, deadline=None,
+        )
+        assert own.resolution == "ingested" and own.written
+        row = _link(engine, tss_id)
+        assert (row.full_text_status, row.ingested_by_run_id) == ("ingested", run_2)
+    finally:
+        _cleanup(engine, [task_id], [body])
+
+
+def test_a_store_hit_pruned_under_the_link_write_is_parsed_afresh(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Task 057 review (Codex 7 / code-review 2): the retention script deletes
+    the store hit's snapshot between the lookup and the link write. The write's
+    foreign-key failure is recovered inside ``ingest_document`` (both ingest
+    modes): the same bytes are parsed afresh and the row ends ``ingested``."""
+    body = _unique_body()
+    url_a = f"https://example.org/pruned-a-{uuid.uuid4()}.txt"
+    url_b = f"https://example.org/pruned-b-{uuid.uuid4()}.txt"
+    task_a, run_a, _, tss_a = _seed_doc_task(engine, url_a)
+    task_b, run_b, _, tss_b = _seed_doc_task(engine, url_b)
+    try:
+        _set_status(engine, tss_a, "queued", run_id=run_a)
+        ingest_document(
+            engine.begin, tss_id=tss_a, run_id=run_a, fetcher=_fetcher_for(url_a, body),
+            parse_fn=_plain_parse, deadline=None,
+        )
+        [old] = _snapshots_for(engine, body)
+        real_find = ingest_document_module.find_in_store
+
+        def find_then_prune(*args: Any, **kwargs: Any) -> Any:
+            found = real_find(*args, **kwargs)
+            assert found == old.source_snapshot_id
+            with _committed(engine) as c:  # the retention script, elsewhere
+                c.execute(
+                    task_source_snapshot.update()
+                    .where(task_source_snapshot.c.task_source_snapshot_id == tss_a)
+                    .values(full_text_snapshot_id=None, full_text_status="not_attempted")
+                )
+                c.execute(chunk_table.delete().where(chunk_table.c.source_snapshot_id == found))
+                c.execute(source_snapshot.delete().where(
+                    source_snapshot.c.source_snapshot_id == found
+                ))
+            return found
+
+        monkeypatch.setattr(ingest_document_module, "find_in_store", find_then_prune)
+        _set_status(engine, tss_b, "queued", run_id=run_b)
+        with capture_logs() as logs:
+            outcome = ingest_document(
+                engine.begin, tss_id=tss_b, run_id=run_b, fetcher=_fetcher_for(url_b, body),
+                parse_fn=_plain_parse, deadline=None,
+            )
+        assert (outcome.resolution, outcome.written, outcome.already_in_store) == (
+            "ingested", True, False
+        )
+        assert [e["event"] for e in logs].count("fulltext.snapshot_pruned_under_write") == 1
+        [fresh] = _snapshots_for(engine, body)
+        assert fresh.source_snapshot_id != old.source_snapshot_id
+        row = _link(engine, tss_b)
+        assert (row.full_text_status, row.full_text_snapshot_id) == (
+            "ingested", fresh.source_snapshot_id
+        )
+        with engine.connect() as c:
+            assert c.execute(
+                select(sa.func.count()).where(
+                    chunk_table.c.source_snapshot_id == fresh.source_snapshot_id
+                )
+            ).scalar_one() == 3
+    finally:
+        _cleanup(engine, [task_a, task_b], [body])
+
+
+def test_an_unrelated_integrity_error_on_the_link_write_still_raises(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only a foreign-key failure after a store hit is recovered; any other
+    integrity error (here a unique violation, 23505) raises."""
+    body = _unique_body()
+    url = f"https://example.org/unique-{uuid.uuid4()}.txt"
+    task_id, run_id, _, tss_id = _seed_doc_task(engine, url)
+    try:
+        _set_status(engine, tss_id, "queued", run_id=run_id)
+        ingest_document(
+            engine.begin, tss_id=tss_id, run_id=run_id, fetcher=_fetcher_for(url, body),
+            parse_fn=_plain_parse, deadline=None,
+        )
+        _set_status(engine, tss_id, "queued", run_id=run_id)  # a store hit next time
+
+        class _PgError(Exception):
+            sqlstate = "23505"
+
+        def unique_violation(*_args: Any, **_kwargs: Any) -> bool:
+            raise sa.exc.IntegrityError("INSERT", {}, _PgError())
+
+        monkeypatch.setattr(ingest_document_module, "_write_ingested", unique_violation)
+        with pytest.raises(sa.exc.IntegrityError):
+            ingest_document(
+                engine.begin, tss_id=tss_id, run_id=run_id, fetcher=_fetcher_for(url, body),
+                parse_fn=_plain_parse, deadline=None,
+            )
     finally:
         _cleanup(engine, [task_id], [body])
 
 
 def test_already_in_store_on_a_second_task_with_the_same_bytes(engine: Engine) -> None:
     """N9: the second task's document links the first task's snapshot without a
-    parse; one snapshot, two link rows, and the shared row carries no task, user,
-    run or URL key in any column or JSON field."""
+    parse; one snapshot, two link rows, and the shared row carries no task, user
+    or run key in any column or JSON field. The one URL on the shared row is
+    ``source_locator`` (the first fetcher's address, plan P5; task 057 review,
+    owner ruling 5 on its query string), which this test does not check."""
     body = _unique_body()
     url_a = f"https://example.org/shared-a-{uuid.uuid4()}.txt?token=SECRET"
     url_b = f"https://example.org/shared-b-{uuid.uuid4()}.txt"
@@ -679,16 +843,21 @@ class _FakeSqs:
     """Records ``SendMessageBatch`` calls; refuses some link rows; may fail one call."""
 
     def __init__(
-        self, *, refuse: frozenset[str] = frozenset(), fail_call: int | None = None
+        self, *, refuse: frozenset[str] = frozenset(), fail_call: int | None = None,
+        time_out_call: int | None = None,
     ) -> None:
         self.refuse = refuse
         self.fail_call = fail_call
+        self.time_out_call = time_out_call
         self.calls: list[tuple[str, list[dict[str, str]]]] = []
 
     def send_message_batch(
         self, *, QueueUrl: str, Entries: list[dict[str, str]]  # noqa: N803
     ) -> dict[str, Any]:
         self.calls.append((QueueUrl, Entries))
+        if self.time_out_call == len(self.calls):
+            # No answer: SQS may or may not have accepted the batch.
+            raise ReadTimeoutError(endpoint_url=QUEUE_URL)
         if self.fail_call == len(self.calls):
             raise ClientError(
                 {"Error": {"Code": "AWS.SimpleQueueService.NonExistentQueue", "Message": "x"}},
@@ -741,6 +910,38 @@ def test_sqs_client_reports_partial_and_whole_call_failures_with_the_reason() ->
     [refusal] = [e for e in logs if e["event"] == "ingest.queue_send_refused"]
     assert refusal["count"] == 12
     assert "MessageBody" not in repr(logs)
+
+    # Task 057 review (Codex 2): a call that ends without an answer (a botocore
+    # error, here a read timeout) leaves its batch neither sent nor failed; the
+    # stage's deadline closes those rows if no message arrives.
+    fake = _FakeSqs(time_out_call=2)
+    with capture_logs() as logs:
+        result = SqsQueueClient(QUEUE_URL, client=fake).send(messages)
+    unknown = {m["link_row_id"] for m in messages[10:20]}
+    assert result.failed == {}
+    assert set(result.sent) == {m["link_row_id"] for m in messages} - unknown
+    [warning] = [e for e in logs if e["event"] == "ingest.queue_send_unknown"]
+    assert (warning["count"], warning["error_type"]) == (10, "ReadTimeoutError")
+
+
+def test_the_sqs_client_is_built_once_per_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Task 057 review (code-review 6): one boto3 client, not one per request."""
+    import boto3
+
+    from policy_atlas.evidence_search.sourcing import ingest_queue
+
+    built: list[object] = []
+
+    def build(*_args: Any, **_kwargs: Any) -> object:
+        built.append(object())
+        return built[-1]
+
+    monkeypatch.setattr(boto3, "client", build)
+    ingest_queue.sqs_client.cache_clear()
+    try:
+        assert ingest_queue.sqs_client() is ingest_queue.sqs_client() and len(built) == 1
+    finally:
+        ingest_queue.sqs_client.cache_clear()
 
 
 def test_queued_mode_settings_fail_loud_without_the_queue_url(
@@ -911,7 +1112,7 @@ def test_queued_all_done_early_stops_at_once_and_embeds_on_its_own_thread(
     other_url = f"https://example.org/other-{uuid.uuid4()}.txt"
     other_task, other_run, _, other_tss = _seed_doc_task(engine, other_url)
     try:
-        _set_status(engine, other_tss, "queued")
+        _set_status(engine, other_tss, "queued", run_id=other_run)
         ingest_document(
             engine.begin, tss_id=other_tss, run_id=other_run,
             fetcher=_fetcher_for(other_url, bodies[0]), parse_fn=_plain_parse, deadline=None,

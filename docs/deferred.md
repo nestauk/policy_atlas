@@ -3395,7 +3395,8 @@ says what is true today and what the lever is. Experiment figures are from the g
   (E6 rules b, c, d) were dropped by the owner (D8): together they recovered 5 quotes of 941 on
   the control PDFs and only worked as a set; alone each added nothing. Lever: build the three
   together behind a profile bump if a later quote-failure measurement attributes failures to
-  page furniture. The v2 rule's own collateral (paired underscores in a URL, `<b and c>`, `*p*`)
+  page furniture. The v2 rule's own collateral (paired underscores in a URL; `<b disabled>`-style
+  one-letter tags with a bare attribute, after the review closed `<b and c>`; `*p*`)
   is recorded in task 057's verification.md.
 - **Fallback parser trigger signals.** Textract or Bedrock Data Automation stays deferred; the
   signals that would trigger it are the parse-failure reason counts per run (`parse_failed`
@@ -3434,8 +3435,36 @@ says what is true today and what the lever is. Experiment figures are from the g
 - **Three NAT instances.** The VPC runs one fck-nat instance per availability zone (three),
   not the single instance the network stack's comment and contract D5 describe; the NAT
   alarm takes the busiest. Lever: the owner's call on cost against zone resilience.
-- **A second traced retry on once-per-run steps.** On the fixed questions one synthesise
+- **Three attempts per model call, on every step.** On the fixed questions one synthesise
   component per round failed because a step's single retry also stalled
   (`synthesise_propose_sections` at its kept 120 s; `judge_grounding` at 40 s, since raised to
-  80 s), costing 250 to 400 s each time. Lever: two retries for steps that run once per
-  component, if the pattern holds on staging.
+  80 s), costing 250 to 400 s each time, so the build set `MODEL_CALL_ATTEMPTS = 3` for every
+  step (deviation 13, owner ruling open at the review). Lever: if the owner rules for one
+  retry, two retries only for the steps that run once per component.
+- **A failed attempt's generation carries no input** (review, trace lane). `traced_attempts`
+  stamps a failed attempt with its step, attempt number, call id and the error; the messages,
+  model and parameters are recorded by the caller's `update`, which runs only on success. A
+  call cut on every attempt (round (g): one `synthesise_section_turn` three times at 23 s)
+  cannot be diagnosed from Langfuse: long output, long reasoning or a stall look the same.
+  Lever: a `before` hook on `traced_attempts` that records the input before the request goes
+  out (24 call sites take it).
+- **The chat prose stream has no retry** (review, contract verifier). The streamed
+  `chat:call` is exempt from the step timeouts (D12) and the SDK's two silent retries are
+  gone with `max_retries=0`, so a connection error before the first token fails the turn
+  where it used to be retried. Lever: `traced_attempts` around the stream's opening request
+  only (nothing has been sent to the user yet).
+- **Three Retry-After parsers** (review, code review): `tracing._retry_wait_s`,
+  `embeddings._retry_after_s` and `fetch_live.retry_after_seconds`; only the last handles
+  the HTTP-date form. Model and embedding providers send seconds today. Lever: one parser in
+  `core`, used by all three.
+- **The pool convergence test measures the fake's timing** (review, Codex). `_QuotaFakeBackend`
+  models a concurrency ceiling with a 0.2 s hold; a virtual clock and token bucket would
+  test mixed batch sizes and a throttle-plus-success round deterministically. Lever: rewrite
+  the fake when the pool changes next.
+- **The staging inspection secret's password no longer matches the database** (ADR 0043
+  consequences; found at the build). Lever: rotate the inspection user's password and update
+  the secret at the next staging session.
+- **The function's security group allows all outbound** (review, security lane). The fetcher's
+  own guard refuses private addresses, so nothing reaches the VPC through it; any other code
+  in the image could. Lever: egress rules for 80 and 443 to the internet and 5432 to the
+  database group only (owner's call: publishers on other ports would be refused).

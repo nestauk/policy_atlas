@@ -28,8 +28,9 @@
 # timeout_s is how many seconds one request of the step may take before the app
 # gives up on it (task 057, D12). It is applied to each request, not to the
 # shared client. A request that is cut off, or that fails for a passing reason
-# (a dropped connection, "too many requests", a server error), is tried once
-# more, and each try is recorded as its own generation in Langfuse with the
+# (a dropped connection, "too many requests", a server error), is tried again,
+# up to MODEL_CALL_ATTEMPTS attempts (three today; task 057 review: code-review 9),
+# and each try is recorded as its own generation in Langfuse with the
 # step name and the try number. The values in [steps] are the timeouts each
 # call site had in code before task 057 (60, 120 or 30 seconds), so a route
 # that sets nothing keeps them. Streamed chat is the exception to the retry:

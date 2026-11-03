@@ -61,6 +61,7 @@ from policy_atlas.core.schema import (
     source_snapshot,
     source_tag,
     task_source_snapshot,
+    vector_literal,
 )
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.tags import has_control_character
@@ -1706,11 +1707,6 @@ JOIN chunk_embedding e ON e.chunk_embedding_id = b.unit_id
 """
 
 
-def _vector_literal(vector: Sequence[float]) -> str:
-    """Return pgvector's text form of a vector, ``'[a,b,...]'``."""
-    return "[" + ",".join(repr(float(value)) for value in vector) + "]"
-
-
 def _unit_offsets(locator: Any, content_length: int) -> tuple[int, int]:
     """Return a unit locator's ``(start, end)``, checked against its chunk.
 
@@ -1814,7 +1810,7 @@ class ChunkRetriever:
                             "tss_ids": tss_ids,
                             "embedding_profile": EMBEDDING_PROFILE,
                             "unit_policy": UNIT_POLICY,
-                            "query_vector": _vector_literal(query_vector),
+                            "query_vector": vector_literal(query_vector),
                             "query_words": query_words,
                             "query_word_count": max(1, len(query_words)),
                             "pool": CANDIDATE_POOL_PER_LEG,
@@ -1910,10 +1906,22 @@ class ChunkRetriever:
         """Return the snapshots this search may read, each with its document.
 
         A snapshot shared by two documents of the scope is searched once, under
-        the document whose id sorts first among those the filters allow.
+        one of the documents the filters allow, chosen by its priors: a selected
+        document before an unselected one, then an appraised one (an appraisal
+        tier or quality score) before one without, then the smaller id.
         """
+
+        # task 057 review: Codex 4 - the document that carries the boosts and the
+        # citation identity is chosen by priors, not by whichever id sorts first.
+        def priority(tss_id: str) -> tuple[bool, bool, str]:
+            doc = self._scope.docs[tss_id]
+            appraised = (
+                doc.get("appraisal_tier") is not None or doc.get("quality_score") is not None
+            )
+            return (not doc.get("selected"), not appraised, tss_id)
+
         tss_by_snapshot: dict[uuid.UUID, str] = {}
-        for tss_id in sorted(self._scope.docs):
+        for tss_id in sorted(self._scope.docs, key=priority):
             if self._doc_matches_filters(tss_id, filters):
                 tss_by_snapshot.setdefault(self._scope.snapshot_by_tss[tss_id], tss_id)
         snapshot_ids = sorted(tss_by_snapshot)

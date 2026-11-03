@@ -585,7 +585,11 @@ The words, one line each:
 - **Dead-letter queue** (`policy-atlas-v3-ingest-dlq`): where a message goes
   after its second failed try, so it stops being retried and a person can look
   at it. Kept 14 days. The function writes the failure reason on the
-  document's row before giving up, so the run is not waiting on it.
+  document's row before giving up (on its second try, an unexpected error is
+  written as `worker_error`), so the run is not waiting on it. The two cases
+  it cannot write are a platform kill at the 180 s limit and a database that
+  refuses the write; the run's own 600 s deadline then records the document
+  as `not_ready`.
 - **Event-source mapping**: the AWS-managed poller that reads the queue and
   starts the function, one message per start, at most 20 at once (raise only
   after a staging measurement: the database writer is a small burstable
@@ -832,6 +836,21 @@ in committable form — CI's font-guard stays green.
   b3c7d914e0a2` → deploy the pre-033 image → scale up. Do not do this on a
   database that has enrolled organisations without owner sign-off on the
   chat-exposure consequence above.
+- **Task 057 (queued ingest, document store, SQL retrieval):** two independent
+  rollbacks. *The reading stage:* set `backend.ingest_mode` to `in_process` in
+  `pa_config.json` and deploy; the queue and function stay but receive nothing.
+  Messages already in flight finish or dead-letter harmlessly (the row guard
+  ignores a result for a row the new run has re-queued). *Retrieval and the
+  store:* deploy the previous image, then (last resort, § 6 tunnel, API scaled to
+  zero) `uv run alembic downgrade 152a234e2391`, which drops the three task 057
+  revisions in order: the JSON vector column is rebuilt from the binary vectors
+  at float32 precision (the pre-057 JSON held float64; search order can differ on
+  near-ties), the backfilled `tokens` and `embedding` columns are dropped, the
+  `queued` status and the two link-row columns (`ingested_by_run_id`,
+  `fetched_from`) are dropped (rows in `queued` are set to `not_attempted`
+  first). Snapshots stored by the body-hash key stay valid rows for the old
+  code. Tested on the test database
+  (`tests/core/test_migration_057_document_store.py`); not rehearsed on staging.
 - **Each migration commits on its own (task 057):** Alembic now runs one transaction
   per revision. A downgrade that is refused part-way (a guard that stops it) leaves the
   revisions above the refusal already undone and committed; check `alembic current`

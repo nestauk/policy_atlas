@@ -20,6 +20,8 @@ Two clients implement :class:`QueueClient`:
 
 from __future__ import annotations
 
+import contextvars
+import functools
 import json
 import os
 import uuid
@@ -219,8 +221,13 @@ class LocalQueueClient:
             with ThreadPoolExecutor(
                 max_workers=self._workers, thread_name_prefix="policy-atlas-ingest"
             ) as pool:
+                # task 057 review (code-review 3): each document runs in a fresh
+                # copy of the caller's contextvars (structlog run binding, Langfuse).
                 futures: list[Future[DocumentOutcome]] = [
-                    pool.submit(self._handler, self._connect, message) for message in messages
+                    pool.submit(
+                        contextvars.copy_context().run, self._handler, self._connect, message
+                    )
+                    for message in messages
                 ]
             errors = [f.exception() for f in futures if f.exception() is not None]
             if errors:
@@ -246,11 +253,12 @@ class SqsClient(Protocol):
         ...
 
 
+@functools.cache  # task 057 review (code-review 6): one client per process (thread-safe)
 def sqs_client() -> SqsClient:
-    """Build the SQS client with :data:`SQS_CLIENT_CONFIG` (region from ``AWS_REGION``).
+    """Build the SQS client once with :data:`SQS_CLIENT_CONFIG` (region from ``AWS_REGION``).
 
     Returns:
-        The boto3 ``sqs`` client.
+        The boto3 ``sqs`` client, shared by every caller in the process.
     """
     client: SqsClient = boto3.client(
         "sqs",
@@ -267,8 +275,11 @@ class SqsQueueClient:
     message's JSON (two ids and the schema version, nothing else). A message the
     queue refuses comes back in :attr:`SendResult.failed` with the queue's reason,
     and the stage marks its row ``fetch_failed`` / ``send_failed``; a batch whose
-    whole call fails (after botocore's retries) is reported the same way, so one
-    bad call never fails the run.
+    whole call the queue refuses (a ``ClientError``, after botocore's retries) is
+    reported the same way, so one bad call never fails the run. A batch whose
+    call ended without an answer (a ``BotoCoreError``, such as a read timeout)
+    may have been accepted, so it is reported neither sent nor failed: the
+    stage's deadline closes those rows ``not_ready`` if no message arrives.
 
     Args:
         queue_url: The queue's URL (``POLICY_ATLAS_INGEST_QUEUE_URL``).
@@ -295,11 +306,13 @@ class SqsQueueClient:
 
         Returns:
             The link row ids the queue accepted, and the refused ones with the
-            queue's reason. ``outcomes`` is None: the function reports through
-            the link rows, not here.
+            queue's reason (a batch with an unknown fate is in neither).
+            ``outcomes`` is None: the function reports through the link rows,
+            not here.
         """
         sent: list[str] = []
         failed: dict[str, str] = {}
+        unknown = 0
         for start in range(0, len(messages), SQS_BATCH_SIZE):
             group = messages[start:start + SQS_BATCH_SIZE]
             # Entry ids only need to be unique within one call; positions are.
@@ -315,13 +328,18 @@ class SqsQueueClient:
                 response = self._client.send_message_batch(
                     QueueUrl=self.queue_url, Entries=entries
                 )
-            except (ClientError, BotoCoreError) as exc:
-                reason = (
-                    str(exc.response.get("Error", {}).get("Code") or "ClientError")
-                    if isinstance(exc, ClientError)
-                    else type(exc).__name__
-                )
+            except ClientError as exc:
+                reason = str(exc.response.get("Error", {}).get("Code") or "ClientError")
                 failed.update(dict.fromkeys(by_entry.values(), reason))
+                continue
+            except BotoCoreError as exc:
+                # task 057 review (Codex 2): no answer (e.g. a read timeout after
+                # SQS accepted the batch); closing the rows now would lose the
+                # document when its accepted message later no-ops.
+                unknown += len(group)
+                log.warning(
+                    "ingest.queue_send_unknown", count=len(group), error_type=type(exc).__name__
+                )
                 continue
             for entry in response.get("Successful", []):
                 sent.append(by_entry[entry["Id"]])
@@ -331,7 +349,7 @@ class SqsQueueClient:
             log.warning("ingest.queue_send_refused", count=len(failed), reasons=sorted(
                 set(failed.values())
             ))
-        log.info("ingest.queue_sent", sent=len(sent), failed=len(failed))
+        log.info("ingest.queue_sent", sent=len(sent), failed=len(failed), unknown=unknown)
         return SendResult(sent=sent, failed=failed)
 
 

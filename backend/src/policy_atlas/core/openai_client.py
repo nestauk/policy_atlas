@@ -80,8 +80,9 @@ def resolve_openai_client(api_key: str | None, *, backend_name: str) -> OpenAI:
 
     The client never retries on its own (``max_retries=0``) and carries no
     timeout of its own (task 057, D12). Each request sends its step's timeout
-    (``openai_kwargs(..., timeout_s=route().timeout_for(step))``), and the one
-    retry a model call gets is made by :func:`policy_atlas.core.tracing.traced_attempts`,
+    (``openai_kwargs(..., timeout_s=route().timeout_for(step))``), and the retries
+    a model call gets (up to ``MODEL_CALL_ATTEMPTS`` attempts, three today; task 057
+    review: code-review 9) are made by :func:`policy_atlas.core.tracing.traced_attempts`,
     so every attempt is its own Langfuse generation. Before task 057 the SDK
     retried up to twice, silently and untraced.
 
@@ -278,8 +279,9 @@ def traced_parse[T: BaseModel](
     """Run :func:`parse_structured` under Langfuse generations, one per attempt.
 
     The call runs under :func:`policy_atlas.core.tracing.traced_attempts`: a
-    timeout or a passing provider failure is tried once more, and each attempt
-    is its own generation carrying the step, the attempt number and a shared
+    timeout or a passing provider failure is tried again, up to
+    ``MODEL_CALL_ATTEMPTS`` attempts (three today; task 057 review: code-review 9),
+    and each attempt is its own generation carrying the step, the attempt number and a shared
     call id. The successful attempt's span records the messages, the parsed
     output, the model, the prompt version, any extra metadata and the token
     usage (``usage_details``, so Langfuse can price the call).

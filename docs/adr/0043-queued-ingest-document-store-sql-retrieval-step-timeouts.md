@@ -60,17 +60,25 @@ negative.
    quota rises. The function is sized for CPU (1,769 MB, one core), not for memory.
 
 3. **Chunk retrieval moves into Postgres.** `chunk_embedding` gains a binary `vector(1536)`
-   column and a token array, and one SQL statement computes both legs, the fusion, every
-   boost and the clamp before its limit, at parity with the Python retriever on a committed
-   synthetic corpus and on recorded real queries. The in-memory scope load, the Python scoring
+   column and a token array, and one SQL statement computes both legs (200 candidates
+   each), the reciprocal-rank fusion and the best unit per chunk; Python then applies the
+   priors and boosts, the rerank and the cut to that union of at most two pools, as it did
+   before. Parity with the Python retriever holds on a committed synthetic corpus and on
+   recorded real queries. (Wording corrected at the task 057 review, 2026-11-03: the first
+   text said the SQL applied the boosts and the clamp too.) The in-memory scope load, the Python scoring
    and the 20,000-unit ceiling are deleted. The migration is three resumable revisions
    (expand, data-only backfill, assert-and-drop), online-safe so the backfill can run before a
    deploy while the service is up.
 
 4. **Every model-call step carries its own client timeout in the route file,** applied per
-   request, set to twice the step's healthy 99th-percentile total where at least 100 traced
-   attempts exist and to today's value otherwise, with the SDK's silent retries replaced by one
-   traced retry so each attempt is its own generation. The grounding judge runs at `low`
+   request, set to twice the step's healthy 99th-percentile total where at least 30 traced
+   attempts exist (floor 15 s, rounded up to a multiple of 5 s; owner rulings of 2026-11-03
+   after the build, which replaced the plan's "at least 100, floor 5 s") and to today's value
+   otherwise, with the SDK's silent retries replaced by traced attempts of our own so each
+   attempt is its own generation. The build settled on three attempts per call (two traced
+   retries) after a stall-then-stall on one step lost a synthesise attempt in most measured
+   rounds under one retry; the owner's ruling on that count is open at the review (task 057
+   verification, deviation 13). The grounding judge runs at `low`
    reasoning effort under the bedrock route's override, to be revisited by the synthesis
    refinement task with a labelled set. Section order and the ledger are untouched.
 

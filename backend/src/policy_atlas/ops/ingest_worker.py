@@ -22,11 +22,13 @@ How one message is handled:
 - The handler's deadline is the time Lambda has left, less 10 s, so the result
   is written before Lambda stops the process.
 - ``ApproximateReceiveCount`` says which delivery this is. On the first, a
-  failure worth retrying (the network, the deadline, a snapshot deleted under
-  the write) leaves the row ``queued`` and reports the record in
-  ``batchItemFailures`` so SQS delivers it again. On the second, the handler
-  writes the reason on the row and reports success, so the row never sits
-  ``queued`` waiting for the stage's deadline.
+  failure worth retrying (the network, the deadline) or an unexpected error
+  leaves the row ``queued`` and reports the record in ``batchItemFailures`` so
+  SQS delivers it again. On the second, the handler writes the reason on the
+  row and reports success, so the row never sits ``queued`` waiting for the
+  stage's deadline; an unexpected error there writes ``fetch_failed`` /
+  ``worker_error`` and raises an error that names only the error's type (no
+  SQL, parameters or URLs reach the logs).
 
 Start-up ("cold start", once per Lambda container): the database address is read
 from Secrets Manager (``POLICY_ATLAS_DB_SECRET_ARN``, field
@@ -58,13 +60,13 @@ import structlog
 from botocore.config import Config
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import NullPool
 
 from policy_atlas.core.logging import configure_logging
 from policy_atlas.evidence_search.sourcing.fetch_live import LiveDocumentFetcher
 from policy_atlas.evidence_search.sourcing.ingest_document import (
     DocumentOutcome,
+    _write_failed,
     ingest_document,
 )
 from policy_atlas.evidence_search.sourcing.ingest_full_text import (
@@ -86,8 +88,6 @@ DB_SECRET_FIELD = "db_connection_string"
 SECRETS_CLIENT_CONFIG = Config(
     connect_timeout=5, read_timeout=10, retries={"mode": "standard", "max_attempts": 3}
 )
-#: PostgreSQL's code for a foreign-key violation.
-_FOREIGN_KEY_VIOLATION = "23503"
 _MESSAGE_KEYS = frozenset({"link_row_id", "run_id", "schema"})
 _URL_RE = re.compile(r"https?://[^\s\"'<>]+")
 _TRAILING_PUNCTUATION = ":,.;)]"
@@ -175,6 +175,8 @@ def _redact_urls_in(value: Any) -> Any:
         return _URL_RE.sub(_redact_match, value)
     if isinstance(value, list):
         return [_redact_urls_in(item) for item in value]
+    if isinstance(value, dict):  # task 057 review (security 3): nested values too
+        return {key: _redact_urls_in(item) for key, item in value.items()}
     return value
 
 
@@ -250,34 +252,20 @@ def parse_message(body: str) -> tuple[uuid.UUID, uuid.UUID]:
         raise MalformedMessage("an id is not a uuid") from exc
 
 
-def _is_foreign_key_violation(exc: IntegrityError) -> bool:
-    return getattr(exc.orig, "sqlstate", None) == _FOREIGN_KEY_VIOLATION
-
-
 def _ingest(
     worker: _Worker, *, tss_id: uuid.UUID, run_id: uuid.UUID, deadline: float, attempt: int
-) -> DocumentOutcome | None:
-    """Run ``ingest_document``; None when the link write hit a deleted snapshot.
-
-    A store hit links an existing snapshot by id; if the retention script
-    deleted that snapshot between the lookup and the write, the write fails on
-    the foreign key. That is worth a retry (the next try parses afresh), so it
-    is reported like any other retryable failure.
-    """
-    try:
-        return ingest_document(
-            worker.engine.begin,
-            tss_id=tss_id,
-            run_id=run_id,
-            fetcher=worker.fetcher,
-            deadline=deadline,
-            on_retryable_failure="leave_queued" if attempt == 1 else "write",
-        )
-    except IntegrityError as exc:
-        if not _is_foreign_key_violation(exc):
-            raise
-        log.warning("ingest_worker.snapshot_pruned_under_write", attempt=attempt)
-        return None
+) -> DocumentOutcome:
+    """Run ``ingest_document`` for one message (it recovers a pruned store hit itself)."""
+    # task 057 review (Codex 7 / code-review 2): the prune-race recovery moved
+    # into ``ingest_document``, so both ingest modes share it.
+    return ingest_document(
+        worker.engine.begin,
+        tss_id=tss_id,
+        run_id=run_id,
+        fetcher=worker.fetcher,
+        deadline=deadline,
+        on_retryable_failure="leave_queued" if attempt == 1 else "write",
+    )
 
 
 def handler(event: Mapping[str, Any], context: LambdaContext) -> BatchResponse:
@@ -289,11 +277,13 @@ def handler(event: Mapping[str, Any], context: LambdaContext) -> BatchResponse:
 
     Returns:
         ``{"batchItemFailures": [...]}``: the record when SQS should deliver it
-        again (a malformed body, or a retryable failure on the first delivery),
-        else an empty list.
+        again (a malformed body, or a retryable failure or unexpected error on
+        the first delivery), else an empty list.
 
     Raises:
         ValueError: The event does not carry exactly one record.
+        RuntimeError: An unexpected error on the last delivery (after the row
+            is marked ``worker_error``); it names only the error's type.
     """
     records = event.get("Records")
     if not isinstance(records, list) or len(records) != 1:
@@ -316,27 +306,41 @@ def handler(event: Mapping[str, Any], context: LambdaContext) -> BatchResponse:
             return retry_record
 
         with structlog.contextvars.bound_contextvars(tss_id=str(tss_id), run_id=str(run_id)):
-            outcome = _ingest(
-                worker, tss_id=tss_id, run_id=run_id, deadline=deadline, attempt=attempt
-            )
-            if outcome is None and attempt > 1:
-                # The second delivery: try once more now (the deleted snapshot is
-                # no longer found by key, so this parses afresh) rather than
-                # leave the row for the stage's deadline.
+            try:
                 outcome = _ingest(
                     worker, tss_id=tss_id, run_id=run_id, deadline=deadline, attempt=attempt
                 )
-            if outcome is None:
-                retry = True
-            else:
-                retry = attempt == 1 and outcome.retryable and not outcome.written
+            except Exception as exc:
+                # task 057 review (Codex 8 / security 3): never let an unexpected
+                # error's text (SQL, parameters, URLs) reach the logs, and on the
+                # last delivery (the queue's maxReceiveCount is 2) write a
+                # reason-coded status before giving up (contract N2).
+                if attempt < 2:
+                    log.error("ingest_worker.error", error_type=type(exc).__name__)
+                    return retry_record
+                try:
+                    _write_failed(
+                        worker.engine.begin, tss_id=tss_id, run_id=run_id,
+                        resolution="fetch_failed", reason="worker_error",
+                    )
+                except Exception as write_exc:  # best effort: the stage's deadline still closes it
+                    log.error(
+                        "ingest_worker.failed_write_failed",
+                        error_type=type(write_exc).__name__,
+                    )
+                # The type only, no traceback: an escaped database error's text
+                # carries SQL and parameters (chunk text, the full URL); the row's
+                # reason and the dead-letter message are the diagnostics.
+                log.error("ingest_worker.failed", error_type=type(exc).__name__)
+                raise RuntimeError(f"ingest worker failed: {type(exc).__name__}") from None
+            retry = attempt == 1 and outcome.retryable and not outcome.written
             log.info(
                 "ingest_worker.done",
-                resolution=None if outcome is None else outcome.resolution,
-                reason=None if outcome is None else outcome.reason,
-                retryable=True if outcome is None else outcome.retryable,
-                written=False if outcome is None else outcome.written,
-                already_in_store=None if outcome is None else outcome.already_in_store,
+                resolution=outcome.resolution,
+                reason=outcome.reason,
+                retryable=outcome.retryable,
+                written=outcome.written,
+                already_in_store=outcome.already_in_store,
                 redeliver=retry,
             )
     return retry_record if retry else {"batchItemFailures": []}

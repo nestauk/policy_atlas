@@ -17,6 +17,9 @@ Langfuse), both built in Phase 0 with offline tests under `backend/tests/scripts
 | End of Phase 4b (gate 7), 2026-11-03 | `make verify` on the whole tree | pass | backend 4,086 passed, 1 skipped (11 min 14 s); infra 113; frontend 943; lint, typecheck, format, okf-validate, build, audit green |
 | Step-6 exit (gate 8), 2026-11-03 | `make verify` then `make audit` on the final tree | pass after one test-timing fix | first run: backend 1 failed (`test_adaptive_pool_converges_under_a_quota_and_never_splits_for_throttling`, timing-flaky fake; deviation 22), 4,085 passed; second run after the fix: backend 4,086 passed, 1 skipped (6 min 51 s); infra 113 passed; frontend 943 passed; lint, typecheck, okf-validate (192 concepts), build green; `make audit`: no known vulnerabilities |
 | Owner rulings after the exit (gate 8 again), 2026-11-03 | `make verify` on the tree with the timeouts at n ≥ 30 / floor 15, the markup rules and the probe brief | pass after one re-pin | first run: backend 1 failed (`test_parse_worker_output_is_byte_identical_serial_and_concurrent`: the digest moved on a significance-star line; the rule fixed and the digest re-pinned, § Owner rulings), 4,092 passed; second run: backend 4,095 passed, 1 skipped (11 min 28 s); infra 113; frontend 943; lint, typecheck, okf-validate, build green |
+| Review open (step 7), 2026-11-03 | `make verify` on `fb06cd72` (the `--round-to` commit had no gate row) | pass after one re-run | backend 1 failed (`test_the_invariant_holds_after_every_operation_in_a_deterministic_walk`: a 401 at step 67, the walk's 60 s bearer tokens expired in a 29-minute run at a load average of 110 to 195 beside probe 3 and four reviewer agents), 4,094 passed, 1 skipped; alone the walk passes in 9.8 s (F21 raises the test tokens to 600 s); infra 113; frontend 943; lint, typecheck, okf-validate (192), build green |
+| Review fixes, first run, 2026-11-03 | `make verify` on the tree with F1 to F21 | fail, two findings | backend 2 failed: `test_acquire_module_has_no_http_client` (the package-wide import guard, which F6's `import socket` tripped; the guard now allows that one import and the module's own guard forbids constructing a socket) and `test_hung_parse_does_not_hold_back_a_concurrent_one` (timing; passed alone in 17 s; the run's load average was 85 to 145), 4,115 passed, 1 skipped (11 min 53 s) |
+| Review fixes, second run (the step-7 exit), 2026-11-03 | `make verify` on the final reviewed tree, then `make audit` | pass with one lane re-run | backend 4,117 passed, 1 skipped (14 min 53 s); infra 113; typecheck (459 files), lint, okf-validate (199 concepts), eval-check, audit-paths (211 files), prompt-guard, font-guard, drift-check green; frontend: one test timed out at 5 s under a load spike (`SourcesView.test.tsx`, "keeps Origin a plain, non-sortable header", unchanged on this branch), the lane re-run alone (`make frontend-verify`): 88 files, 943 passed, build green; `make audit`: no known vulnerabilities |
 | End of Phase 0 and Phase 1 (gates 2 and 3), 2026-11-03 | `make verify` on the tree holding both phases | pass after one fix | backend 4,004 passed, 1 skipped (6 min 0 s); lint, typecheck, format green; infra: 1 failed (`test_dockerignore_covers_gitignored_backend_content`: the `**/` bytecode patterns no longer matched the gitignore lines literally; both forms kept), then `make -C infra test` 95 passed. One full run gated both commits because the two phases were built in parallel in one tree. |
 
 ## Phase 0: build-open, measurement tools, dev image
@@ -1382,20 +1385,233 @@ review's diff-scoping exclusions).
     beyond the Phase 0 sample's p99, not a stall. Rubric 22 allows one raise per too-tight
     step; not raised in this build (one call in seven rounds), left to the review with the
     obesity run's 47 `screen_abstract` cuts at 7 s across the 48-wide pool (all recovered
-    on attempt 2).
-23. The markup rule's stray-marker pattern deleted significance stars after numbers
-    (`0.50**`, `0.54***`) in statistics tables, an E6 limit nobody had listed; fixed with
-    the owner's two markup rulings (§ Owner rulings after the exit), digest re-pinned.
+    on attempt 2). *Review:* the owner's rounding ruling moved the step to 25 s; the trace
+    cannot say what the call needed (§ Review findings, trace lane); the 7 s cuts are
+    connection setup at width 48, not the model (probe 3).
 22. The pool-convergence test (`test_adaptive_pool_converges_under_a_quota_and_never_splits_for_throttling`)
     failed once at the exit gate (width climbed to 5 against an allowance of 3) and once in
     five runs alone: its fake backend measures "in flight" by wall clock with a 20 ms hold,
     so late thread starts let the width climb before any throttle. The hold is 0.2 s now
     (ten of ten alone, about 9 s a run instead of 3.5 s); the pool code is unchanged. A
     test-timing fix, not a weakening (rubric 5).
+23. The markup rule's stray-marker pattern deleted significance stars after numbers
+    (`0.50**`, `0.54***`) in statistics tables, an E6 limit nobody had listed; fixed with
+    the owner's two markup rulings (§ Owner rulings after the exit), digest re-pinned.
+    *Review:* two more content losses closed (`\*literal\*`, `a<b and c>d`; F13, F14);
+    `<b disabled>` is the recorded remaining one.
+24. *(Found at the review, contract verifier 11.)* The streamed chat prose call has no retry
+    at all: it is exempt from the step timeouts (D12) and the SDK's two silent retries went
+    with `max_retries=0`, so a connection error before the first token fails the turn where
+    it used to be retried. Recorded as a deferred seam.
+25. *(Found at the review, three lanes.)* The shared `source_snapshot` row's `source_locator`
+    holds the first fetcher's final URL with its query string (plan P5's "the public document
+    URL", owner item 4), while contract N9 says no URL breadcrumb on the shared row; the N9
+    test checks columns and JSON keys but not that column. Owner ruling 5 in § Review
+    findings.
 
 ## Review findings
 
-Added after the review stack (step 7).
+The review stack ran on 2026-11-03 in a fresh conversation (step 7), on `fb06cd72` with the
+bulk data files excluded by pathspec (§ Review handoff). Five lanes: the contract verifier
+(Opus, read-only), `/code-review medium` (the Claude half of the heterogeneous pair), one
+security lane (`security-auditor`), the Codex adversarial pass (read-only, the first look
+from another model family: every line of the build is Claude-family work), and the lead's
+trace lane (Langfuse and the build's saved round artefacts) with stall probe 3 run by a
+builder agent. The data files got their own check: a grep of the synthetic corpus, the two
+script fixtures and the trimmed synth for URLs, keys, account ids and emails found none (the
+12-digit matches are score decimals; the synth carries placeholders).
+
+### What each lane caught
+
+| lane | findings | adopted | owner ruling | declined or deferred |
+|---|---|---|---|---|
+| contract verifier | 13 | 9 (records, tests, markup, rollback plan) | 2 (rubric 22's zero-retry clause; S5 wording) | 2 |
+| `/code-review medium` | 9 | 6 | 1 (deviation 8, the 2-vCPU thread count) | 2 (deferred seams) |
+| security auditor | 4 low, 5 info | 5 | 2 (`source_locator`; the function's egress rules) | 2 |
+| Codex adversarial | 14 | 8 | 4 (deviations 7, 13; `source_locator`; deviation 8) | 2 |
+| trace lane (lead) | 3 | 1 (recorded) + probe 3 run | 1 (deviation 16 content read) | 1 (deferred seam) |
+
+Convergent across families (high confidence): a dead run's late delivery could write into a
+row a later run had re-queued (Codex 1, security 8); the prune-race recovery lived only in the
+Lambda wrapper (Codex 7, code review 2); the fetched URL with its query string on the shared
+snapshot row (Codex 3, security 7, contract verifier 2, three lanes). Unique to one lane and
+worth that lane: the lost `lock_timeout` in the migration's autocommit block (Codex),
+`\*literal\*` losing its stars (Codex), the socket denial being test-only (security), the
+slow-drip body outliving the deadline (security), the lost contextvars on worker threads
+(code review), rubric 22 marked Met with a failed clause (contract verifier), failed attempts
+carrying no input in Langfuse (trace lane).
+
+### Adopted: code changes in this phase (each marked `# task 057 review:` at the site)
+
+| # | finding (lane) | change | test |
+|---|---|---|---|
+| F1 | A dead run's delivery writes into a re-queued row; the writes guard on `queued` only (Codex 1, security 8) | the stage stamps `ingested_by_run_id` when it queues a row (`ingest_full_text.py` `_run_stage`); `_read_queued_row`, `_write_ingested`, `_write_failed` and `_close_queued` require that run (`ingest_document.py`, `ingest_full_text.py`) | `test_a_dead_runs_delivery_cannot_write_into_the_run_that_queued_the_row_again` |
+| F2 | A `BotoCoreError` on `send_message_batch` (a read timeout after SQS accepted the batch) closed rows `send_failed`; the accepted message then no-ops and the document is lost for the run (Codex 2) | the batch is reported neither sent nor failed (`ingest.queue_send_unknown`); the stage deadline closes the rows `not_ready` if no message arrives (`ingest_queue.py`) | `test_sqs_client_reports_partial_and_whole_call_failures_with_the_reason` (new case) |
+| F3 | The prune-race recovery (FK failure on a store hit's link write) lived only in the Lambda wrapper; in process (production's mode) the component failed (Codex 7, code review 2) | moved into `ingest_document`: the store hit's bytes are kept, parsed afresh once and written again; the wrapper calls `ingest_document` directly | `test_a_store_hit_pruned_under_the_link_write_is_parsed_afresh`, `test_an_unrelated_integrity_error_on_the_link_write_still_raises` |
+| F4 | The handler had no final exception path: an unexpected error on delivery 2 dead-lettered with the row still `queued` (contract N2), and an escaped SQLAlchemy error's text (SQL, parameters, URL) reached CloudWatch (Codex 8, security 3) | on the last delivery the handler writes `fetch_failed` / `worker_error` (new closed-vocabulary reason, in `NOT_READ_YET_REASONS`), logs the error type only and raises a `RuntimeError` naming the type; `_redact_urls_in` recurses into dicts (`ops/ingest_worker.py`) | `test_an_unexpected_error_is_retried_then_written_as_worker_error`, `test_an_unrelated_integrity_error_is_not_swallowed`, nested-dict redaction case |
+| F5 | Deviation 10: `not_ready` / `send_failed` counted as `fetch_failed` by the steering tally (Codex 9) | `NOT_READ_YET_REASONS` defined once in `ingest_full_text.py`, re-exported by the read models; the steering tally counts them as `not_read_yet`; characterise's reason histogram unchanged (reasons are honest there) | `test_full_text_tally_counts_not_read_yet_rows_apart_from_access_failures` |
+| F6 | The parse worker's socket denial was a test fixture, not runtime code (security 1) | `_worker_entry` installs `_refuse_socket` before parsing; the module guard now forbids constructing a socket rather than naming the module | `test_the_parse_worker_refuses_sockets_on_its_own`, `test_ingest_module_has_no_http_client` (tightened) |
+| F7 | The per-document deadline was not checked while a body streamed (security 2) | `_read_capped_body` returns `timeout` once past `FETCH_DEADLINE` (`fetch_live.py`) | `test_a_slow_drip_body_stops_at_the_deadline` |
+| F8 | The sender thread and the local queue's workers dropped the caller's contextvars (code review 3) | `contextvars.copy_context().run` on both | `test_orphaned_queued_rows_are_queued_again_at_start` (asserts the worker's log line carries `run_id`) |
+| F9 | A boto3 SQS client per request (code review 6) | `functools.cache` on `sqs_client()` | `test_the_sqs_client_is_built_once_per_process` |
+| F10 | The pool granted clean credits in a completion round that also throttled (Codex 10) | no clean credit in a round with a throttle (`embeddings.py`) | `test_adaptive_pool_round_with_a_throttle_grants_no_clean_credit` (fails without the fix) |
+| F11 | A batch given up for throttling counted as `failed` while the comment said "stays pending" (code review 5) | `deferred` count and `embed.batch_deferred` event; `failed` is real failures; the stage summary carries `deferred` | `test_adaptive_pool_gives_a_batch_up_after_its_throttle_budget` |
+| F12 | `SET LOCAL lock_timeout` ended with part 1's commit, so the autocommit block ran unbounded (Codex 13) | session `SET lock_timeout` inside the block, `RESET` at its end (rev1) | `test_migration_057_document_store.py` (round trip) |
+| F13 | `\*literal\*` → `\literal\`: content deletion the test blessed (Codex 12) | an escaped marker neither opens nor closes emphasis (`_EMPH_RE`, `_STRAY_EMPH_RE`); result `*literal*`; digest unchanged (the fixtures carry no escaped markers) | `test_strip_markup_examples` (the "quirk" line now requires the stars) |
+| F14 | `a<b and c>d` → `ad`: one-letter tag names took free text as attributes, contradicting the owner-ruling note that the content-deleting cases were closed (contract verifier 5) | a one-letter name is a tag only before `>` or with an `=` attribute; `<b disabled>` is the recorded remaining loss | `test_one_letter_tag_names_need_a_tag_shape` |
+| F15 | `_retryable` knew only `openai` errors while the `bedrock-claude` backend (route not in use) runs botocore at one attempt (code review 1) | botocore throttle / not-ready codes and timeouts count as retryable (`tracing.py`) | eight new cases in `test_traced_attempts.py` |
+| F16 | A shared snapshot was searched under the lexicographically first document, so the boosts and citation identity were arbitrary (Codex 4) | chosen by priors: selected, then appraised, then the smaller id (`synthesis_tools.py`) | `test_shared_snapshot_is_searched_under_the_selected_document` (fails on the old sort) |
+| F17 | `_vector_literal` duplicated `Vector.bind_processor`'s formatting (code review 7) | one `schema.vector_literal` for both | parity suite unchanged (17 passed) |
+| F18 | Docstrings said one retry / attempts 1 or 2 (code review 9, contract verifier 9) | `tracing`, `openai_client`, the route-file comment and `call-sites.md` say up to `MODEL_CALL_ATTEMPTS` (three today) | none (text) |
+| F19 | `--round-to` had no test and the script's docstring still said `max(5, …)` with n ≥ 100 (contract verifier 5) | docstring describes the three flags; `test_round_to_rounds_up_before_the_floor` | that test |
+| F20 | No test pinned the two Dockerfile lines (contract verifier 12) | `tests/ops/test_dockerfile_lines.py` | two tests |
+| F21 | The visibility walk's bearer tokens lived 60 s; the HEAD gate (29 min under a load average of 110 to 195) pushed the walk past a minute and it failed with a 401 at step 67 (the gate's one failure; alone it runs in 10 s) | `tests/api/org_support.py` mints 600 s tokens | the walk test |
+
+Fake-done check on the fixes: no test was deleted or loosened. One test was removed and
+replaced by two stronger ones (the handler-level pruned-snapshot test became a shared-path
+test plus an "unrelated integrity error still raises" test); the markup "quirk" assertion was
+tightened; the token lifetime change affects no assertion.
+
+### Adopted: records only
+
+- Data-flow note: URLs in logs are scheme, host and path (not "host only"); the shared row's
+  `source_locator` is the first fetcher's final URL with its query string (contract verifier 3,
+  security 7).
+- `infra/DEPLOYMENT.md` § 8: the task 057 rollback entry (both halves; read back against the
+  three downgrade functions) and the handler's "writes before giving up" caveats (contract
+  verifier 6, 7).
+- ADR 0043 decision 3 said the SQL applied every boost and the clamp; the statement returns the
+  fused candidates and Python applies the priors, rerank and cut. Decision 4 now carries the
+  owner's post-build thresholds (n ≥ 30, floor 15 s, multiples of 5 s) and names the open
+  attempts ruling (contract verifier 4).
+- `docs/deferred.md`: the stale "second traced retry" entry rewritten as built; six new seams
+  (failed attempts carry no input; the chat stream has no retry; three Retry-After parsers; the
+  pool fake's timing; the staging inspection secret named by the ADR; the function's egress
+  rules); the markup collateral line names `<b disabled>` instead of the closed `<b and c>`
+  (contract verifier 4, 5, 9; trace lane; code review 7; Codex 11; security 4).
+- Rubric status rows corrected below: 22 (the zero-components-retried clause did not hold in
+  rounds (a), (b), (d), (e) and (g)), 21 (the test does not check `source_locator`), 25 and
+  21's citations, 3's gate map, 5's six unlisted removed tests (contract verifier 1, 2, 8, 10,
+  13).
+
+### Owner rulings (the stack escalates; nothing changed in code)
+
+1. **Deviation 7 / Codex 14 / contract verifier 1:** N8's "under 100 ms a search on the dev
+   corpus" is not met (250 to 600 ms warm on the fixed questions' scopes). Codex reads it as a
+   contract change needing approval, not a minor deviation; the per-run cost is 10 to 51 s
+   against the scope load it replaces. Options: accept the measured figure and reword N8;
+   keep the Python retriever until an indexed plan meets 100 ms (D7's HNSW).
+2. **Deviation 13 / Codex 6:** three attempts per call against the contract's one traced
+   retry. Codex argues for two attempts plus a raise on the too-tight steps. The build's
+   evidence: a stall-then-stall on one step (4 to 6% per judge call at low effort) lost a
+   synthesise attempt in most rounds under one retry, 250 to 400 s each time; the third
+   attempt costs at most one more timeout. The lead recommends keeping three.
+3. **Deviation 14:** the `chmod 755 /app` Dockerfile line (unapproved second line; now pinned
+   by a test).
+4. **Deviation 16 / rubric 31:** the trace lane's content read of the low-effort judge's
+   first-pass verdicts (NEET, round (c): 9 of 104 unsupported): four of the five read flag the
+   writer's own hedge ("does not establish a causal effect", "remains unclear") as an
+   unsupported claim, not a mis-citation; the repair pass then removes the caution. The
+   extra verdicts at low effort make reports less hedged, not more wrong. The owner's reads
+   of `7796f163`, `c5961a67` and `c3be6e81` decide.
+5. **`source_locator` on the shared row (Codex 3, security 7, contract verifier 2):** plan
+   P5 and owner item 4 accepted "the public document URL" on the shared row; contract N9's
+   wording says no URL breadcrumb; the column holds the first task's final URL with its query
+   string, which a signed link would carry, and every later task that reuses the bytes reads
+   it (the API joins the envelope snapshot for the user-facing URL, so it is not shown).
+   Options: strip the query string and fragment on the shared row only (one line; the task's
+   own `fetched_from` keeps the full URL; a `?sequence=1`-style path would lose its query);
+   accept as-is and reword N9. The test's docstring claim ("no URL key in any column") is
+   corrected either way.
+6. **Deviation 8 / code review 4:** in-process threads are `max(4, min(8, cores))`, so 4 on
+   the 2-vCPU production task that stays `in_process`; before 057, 10 fetch threads fed 4
+   parse processes. Round (f) measured 8 threads on the laptop. Recommend 10 threads in
+   process (the parse processes stay bounded by the walk pool); a measured-config change.
+7. **Security 4:** the function's security group allows all outbound; recommend 80 and 443
+   to the internet plus 5432 to the database group (publishers on other ports would be
+   refused). Infra gate.
+8. **Spec S5 wording** (`docs/specs/system/prompting.md`, contract verifier 4): "retried
+   once", "at least 100 traced calls, floor 5 s" no longer match the code (three attempts;
+   n ≥ 30, floor 15 s, multiples of 5 s). Proposed replacement: "each attempt is its own trace
+   generation (SDK retries off) and a stalled call is retried, up to three attempts, never
+   waited out; timeouts are 2 × the healthy p99 from at least 30 traced calls, floor 15 s,
+   rounded up to 5 s". Not edited by the stack.
+9. **Stall probes 1 and 2** (`stall-probes.md`): probe 1 needs Bedrock invocation logging on
+   the account; probe 2 is four full runs (about $60). Probe 3 ran (below).
+10. **Rubric 13's wording** ("Bedrock is reached through the function's role") predates D6;
+    the function has no Bedrock grant, by design. Noted, not edited.
+
+### Declined (with the reason)
+
+- Codex 5 (the call budget reserves once per logical call while three provider requests may
+  run inside): parity with the pre-057 SDK, whose `max_retries=2` made the same three requests
+  per slot; the budget counts logical calls by design.
+- Codex 11 (the pool test fake "fixed by slowing"): the hold-time change loosened no
+  assertion; a virtual-clock fake is a deferred seam.
+- Security 5 (match the FK by constraint name): no other FK on the write today; a comment
+  would be the only change.
+- Security 6 (provider error text in Langfuse `status_message`): no new data class (prompts
+  are already on the success input) and the message is the diagnostic.
+- Security 9 (digest-pin the dev Postgres image): dev only.
+- Code review 8 (the runner's inline-queue default branch): works; a refactor beyond the
+  slice.
+- Code review 7 (three Retry-After parsers): providers send seconds; deferred seam.
+- A separate `/simplify` pass: `/code-review medium` already ran the reuse, simplification and
+  efficiency angles (findings 5 to 9) and their fixes were applied (F9, F11, F17); a second
+  same-family pass would duplicate it.
+
+### Trace lane (lead)
+
+- **Deviation 21 (the obesity `synthesise_section_turn` cut three times at 23 s, round (g)):**
+  Langfuse session `1c1f7d04`, trace `5095919e`: logical call `92f71d5b85ec`, attempts 1 to 3
+  `ERROR` at 23.2 / 23.2 / 23.1 s, the second turn of the first section (the turn before it
+  took 1.9 s). The successful retry's 20 section turns: tool-request turns 1.8 to 2.5 s (136 to
+  218 output tokens), writing turns 7.6 to 10.9 s (1,232 to 2,057 output tokens). **A failed
+  attempt's generation carries no input, model or parameters** (`traced_attempts` stamps the
+  step, attempt, call id and error; the caller's `update` sets the input on success only), so
+  the build's reading ("a long section, not a stall") can be neither confirmed nor refuted
+  from the trace. Three consecutive hangs on one call at a 1 to 3% hang rate is about 1 in
+  100,000, so "the input needed more than 23 s" is the likelier reading; whether that is long
+  output or long reasoning is unknowable. Recorded as a deferred seam (a `before` hook on
+  `traced_attempts`, 24 call sites). The owner's rounding has since moved the step to 25 s.
+- **Deviation 19 (HTTP 500 on a task-agent turn, round (f)):** the server log shows two
+  `model_call.retry` lines at 60 s then `api.unhandled_exception` from
+  `create_task_agent_turn`; confirmed as described (no handler for a provider timeout after
+  the last attempt). Carried as the known user-facing gap it is (a reason-coded failure would
+  need a response shape for that route; out of this slice).
+- **Deviation 16:** see owner ruling 4.
+- **Round (g) retry outcomes, read back from the build's artefact:** 78 retries; 73 reached
+  attempt 2 and all but five succeeded there; four of the five succeeded on attempt 3; the
+  fifth is deviation 21. 47 of the 48 `screen_abstract` cuts were the obesity run at 7.0 to
+  7.1 s with attempt 2 at 0.5 to 3.3 s: a burst, not stalls (probe 3 below).
+
+### Stall probe 3 (burst shape at width 48; run by a builder agent, 183 calls, read back from `probe3-summary.md`)
+
+Route `bedrock`, the shipped client, the real `screen_abstract` prompt over 22 real abstracts
+× 10 intents, timeout 300 s, no retry, no Langfuse; three bursts at width 48 then three at
+width 12, 60 s apart; the laptop's load average was 110 to 195 throughout (the gate ran
+beside it).
+
+| measure | width 48 | width 12 |
+|---|---|---|
+| requests, all succeeded | 144 | 36 |
+| p50 / p90 / p99 / max s | 4.75 / 6.18 / 7.32 / 7.66 | 1.58 / 2.61 / 3.10 / 3.20 |
+| server wait (request sent to headers) p50 / p99 s | 0.91 / 3.61 | 1.06 / 2.83 |
+| TCP + TLS setup p50 / max s | 3.05 / 4.07 | 0.23 / 0.26 |
+| requests over 7 s / over 15 s | 4 / 0 | 0 / 0 |
+
+Reading: the width-48 p99 (7.32 s) sits under the brief's 7.5 s line, so the owner's 15 s
+floor holds, and the slowdown at width 48 is on the client (48 TLS handshakes at once in one
+process on a loaded laptop, 3 s each) rather than queueing at the endpoint (the server wait
+is the same at both widths). Every request opened a new connection (60 s between bursts is
+past the 5 s keep-alive expiry), so the stale-connection question (probe 2) is untested.
+Caveat: the load average means the client-side figures are an upper bound. The build's
+screen_abstract cuts at 7 s across the 48-wide pool are consistent with this: connection
+setup, not the model.
+
+### Gate after the fixes
+
+See § Commands run (the review-fix gate row).
 
 ## Rubric status
 
@@ -1406,9 +1622,9 @@ names what is still outside the build's reach.
 |---|---|---|
 | 1 | N1 to N15 | Met for N1 to N14 as recorded per phase; N15 met as built (judge at low) with the owner's content read open (item 31). |
 | 2 | `make verify` at the four gates, infra tests | Met: § Commands run (build-open, after Phase 2, after Phase 3, exit); `make -C infra test` 113. |
-| 3 | No approval-gated change beyond G1 to G10 | Met with one exception flagged: the second Dockerfile line (`chmod 755 /app`, deviation 14) awaits the owner's ruling at the PR; code-only re-pins recorded in [repin-phase1-timeouts.diff](repin-phase1-timeouts.diff); no prompt-text re-pin, no public-interface change. |
+| 3 | No approval-gated change beyond G1 to G10 | Met with one exception flagged: the second Dockerfile line (`chmod 755 /app`, deviation 14) awaits the owner's ruling at the PR; code-only re-pins recorded in [repin-phase1-timeouts.diff](repin-phase1-timeouts.diff); no prompt-text re-pin, no public-interface change. *Review (contract verifier 13):* two further changes sit under G10 by extension, not by name: `deploy.sh`'s test-harness mode (`PA_DEPLOY_MIGRATION_WAIT_ONLY`) and the root Makefile prerequisite that runs the waiter's shell test in CI; they are the waiter's own test seam. |
 | 4 | No generated files or secrets edited by hand | Met (`uv.lock` and the frontend bundle regenerated by their tools; `.env` never read). |
-| 5 | No tests deleted, skipped or weakened without justification | Met: the scheduler tests N6 deletes are listed in Phase 4a with the replacing behaviour; one test generalised (deviation 18); one test's fake timing widened (deviation 22). |
+| 5 | No tests deleted, skipped or weakened without justification | Met: the scheduler tests N6 deletes are listed in Phase 4a with the replacing behaviour; one test generalised (deviation 18); one test's fake timing widened (deviation 22). *Review (contract verifier 8), six removals not listed at the build:* the four embedding throttle-retry tests (`test_openai_embedding_backend_rate_limit_backoff_then_success`, `…_rate_limit_exhaustion_fails_loudly`, `test_cohere_embedding_backend_retries_throttling_then_succeeds`, `…_stops_after_repeated_throttling`) tested the per-backend backoff loops that D6 moved into the pool; their replacements are `test_openai_embedding_backend_raises_throttled_at_once_on_429`, `test_embed_with_retry_waits_out_throttling_then_succeeds`, `test_embed_with_retry_gives_up_after_the_last_attempt`, `test_cohere_embedding_backend_raises_throttled_after_one_call` and the four pool tests. `test_retrieval_unit_cap_error_names_cap` and `test_a_retrieval_cap_is_answered_honestly` tested the 20,000-unit cap N8 deletes. The `envelope_source_snapshot_id` assertion in `test_governance_chain` checked a metadata key N9 moved off the shared row (it is now the link row's column, asserted by `test_already_in_store_on_a_second_task_with_the_same_bytes`). At the review: one handler test replaced by two shared-path tests (F3, F4); no test loosened. |
 | 6 | Evidence as the contract's § Verification evidence lists | Met for the laptop; staging tables, the staging migration timing and the embedding quota in force are post-merge (items 15, 28); `cdk diff` reviewed read-only (item 26). |
 | 7 | Deferred seams in `docs/deferred.md` | Met: the task 057 section carries every named seam (§ Deferred work). |
 | 8 | Tier 4 review stack, ADR Accepted, rollback written and downgrade tested | Open for step 7 (review stack); ADR 0043 Accepted 2026-11-03; the downgrade through all three revisions is tested on the test database; the rollback is in `infra/DEPLOYMENT.md`. |
@@ -1416,7 +1632,7 @@ names what is still outside the build's reach.
 | 10 | N2 handler statuses, store lookup first, Retry-After, guarded final write, races | Met (Phase 4a and 4b tests: fixture corpus parity, store hit before parse, Retry-After cases, redelivery and late write no-ops, the two real-connection races). |
 | 11 | N3 own transaction, visibility to the poll, orphans, counts invariant, `not_ready`, `fetched` null | Met (Phase 4a and 4b tests; `not_ready` outside the access-failure counts in the read models, with deviation 10 on two tallies). |
 | 12 | N4, N5 sizing, queue settings, alarm, drain command, connection arithmetic, quotas | Met: CDK pins (Phase 5); drain command in `infra/DEPLOYMENT.md`; connection budget in Phase 2 (scale words; figures in the gitignored notes); the Lambda quota likewise. |
-| 13 | D5 function shape, subprocess kill, no sockets, private subnets, secrets at runtime, Bedrock via role | Met: parse in a subprocess with the 120 s kill and the socket deny (`test_zero_egress_socket_deny`); private subnets, no S3, no new endpoints; the secret fetched at cold start; the function has no model client and no Bedrock statement (D6 forbids vectors in the function). |
+| 13 | D5 function shape, subprocess kill, no sockets, private subnets, secrets at runtime, Bedrock via role | Met: parse in a subprocess with the 120 s kill; the socket deny was a test fixture at the build (contract revision 4 says "as the tests require") and is runtime code since the review (F6, `test_the_parse_worker_refuses_sockets_on_its_own`); private subnets, no S3, no new endpoints; the secret fetched at cold start; the function has no model client and no Bedrock statement (D6 forbids vectors in the function; the rubric's "Bedrock via role" wording predates D6). |
 | 14 | D6 no vectors in the function, adaptive pool converges, no `embed_timeout` | Met (Phase 4b; `embed_timeout` has no occurrence). |
 | 15 | D6, G4 staging embedding evidence | **Open until after the merge** (staging deploys from dev); the PR names it as the one open item. |
 | 16 | N6 one path, per-document commits, digest across 1 and 4 workers, connection count | Met (Phase 4a tests). |
@@ -1424,11 +1640,11 @@ names what is still outside the build's reach.
 | 18 | N14 `qv_v2` | Met (Phase 1). |
 | 19 | D2, G9, G10 image, migration round trip, resume, rev3 gate, waiter, float32 note | Met on dev and the test database (Phase 2; dev timings recorded); staging and prod row counts and the staging migration timing are post-merge. |
 | 20 | N8, D7 parity, frozen snapshot list, both callers, deletions, provenance factors, write time | Met (Phase 3; rounds (d) and (e) give the embedding write time before and after) with deviation 7 on the latency figure. |
-| 21 | N9, D3 one snapshot for the same bytes, no identifiers on the shared row, `already_in_store` | Met (Phase 4a tests; `test_source_snapshot_has_no_task_id_column`, `test_no_url_persisted`; `already_in_store` in the stored counts, hidden from the SSE summary). |
-| 22 | N10c, D12 timeouts on every step, 2 × p99 with counts, `max_retries = 0`, stalls caught, synthesise wall | Met (Phase 0 table, Phase 1, rounds (a) to (e)) with deviation 13 (three attempts, not one retry); the owner's read of the reports is open. |
+| 21 | N9, D3 one snapshot for the same bytes, no identifiers on the shared row, `already_in_store` | Met for task, user and run keys (`test_already_in_store_on_a_second_task_with_the_same_bytes` checks every column and JSON key of the shared row; the earlier citations of `test_no_url_persisted` and `test_source_snapshot_has_no_task_id_column` were wrong: the first tests a document with no URL, the second predates the task). **Partial for the URL:** the shared row's `source_locator` holds the first fetcher's URL (deviation 25, owner ruling 5). `already_in_store` in the stored counts, hidden from the SSE summary. |
+| 22 | N10c, D12 timeouts on every step, 2 × p99 with counts, `max_retries = 0`, stalls caught, synthesise wall | Met for the seam, the derivation, `max_retries = 0`, the per-step stall counts and the walls (Phase 0 table, Phase 1, rounds (a) to (g)). **Not met: "zero components retried because every attempt was cut"** failed in rounds (a), (b), (d), (e) and (g) (one component per round at most, each a stall-then-stall or the deviation 21 call); the owner-ruled timeouts (floor 15 s, multiples of 5 s) were not measured live at the build and are measured at the review (round (h), § Measurement round (h)). Deviation 13 (three attempts) is owner ruling 2; the owner's read of the reports is open. |
 | 23 | N10a no scoping call over 300 s | Met (round (a)). |
 | 24 | N10b option-search width 4 → 10 | Met (round (b): the fan-out window 357 → 326 s; no Bedrock 429 in the round's log). |
-| 25 | N10d, D15 widths 12 → 48 | Met (round (b); the `openai-direct` note is in Phase 1). |
+| 25 | N10d, D15 widths 12 → 48 | Met (round (b); the `openai-direct` note is in § Intent & assumptions). |
 | 26 | N11 CDK resources, `cdk diff` at the owner's checkpoint, staging deploy | Met in CDK with pins; the staging `cdk diff` was run read-only and its synth committed; the owner's checkpoint read and the staging deploy are post-build (**open**); prod stays `in_process`. |
 | 27 | N13, G8 compiled bytecode, cold import before and after | Met (Phase 1: 8.24 → 3.79 s). |
 | 28 | N12, D9 before and after tables per lever, ingest split, owner's content reads | Met for the laptop (rounds (a) to (g), the across-rounds table in round (g)); the staging tables are post-merge; the owner's two content reads are **open** (artefact ids named in round (g)). |
@@ -1459,6 +1675,10 @@ names what is still outside the build's reach.
 - The deploy waiter against a real ECS task (shell test with a fake `aws` only).
 - The owner's content reads (reports unchanged under the timeouts; one report after N7 and
   one after N8; the judge verdicts).
+- *(Review.)* The owner-ruled timeouts (floor 15 s, multiples of 5 s) and the review's fixes
+  on a live run: measurement round (h) below. Stall probes 1 and 2 (owner ruling 9). The
+  stale-connection question behind the 1 to 3% hangs (probe 2) is untested; probe 3 cleared
+  the burst cuts.
 
 ## Public safety
 

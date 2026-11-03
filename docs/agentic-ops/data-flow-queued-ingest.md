@@ -23,7 +23,7 @@ never leaves the machine.
 | AWS Lambda function `policy-atlas-v3-ingest` | Fetches the document from the publisher, parses it, writes the text into the database | The document's bytes and parsed text, in memory only, for one invocation (at most 3 minutes); no bytes are kept after parsing (data-model rule "no original bytes retained") | Nothing persists in the function |
 | Amazon Aurora (the existing database) | The document store | The parsed text (`source_snapshot`, `chunk`), the vectors (`chunk_embedding`), and the link from a task to its documents (`task_source_snapshot`) | As today; see the retention rule |
 | AWS Secrets Manager | Gives the function the database connection string at start | The database secret only. The function holds no model-provider credential and no permission to call Amazon Bedrock. | n/a |
-| Amazon CloudWatch Logs `/policy_atlas_v3/ingest` | The function's log | Structured JSON lines: message ids, the two row ids above, status and reason codes, timings, byte counts. Publisher URLs are redacted to their host (the same redaction the web server applies today). No document text, no prompts. | 30 days |
+| Amazon CloudWatch Logs `/policy_atlas_v3/ingest` | The function's log | Structured JSON lines: message ids, the two row ids above, status and reason codes, timings, byte counts. Publisher URLs are redacted to their scheme, host and path (the query string, which is where access tokens would be, is dropped; the same redaction the web server applies today). No document text, no prompts. | 30 days |
 | Publishers (the open web, as today) | The source of the documents | The function sends the same requests the web server sent before: the document URL, from the NAT instance's address. Same hosts, same data, from a new place (contract G1). | n/a |
 
 Not used: Amazon S3 (no bucket), VPC endpoints, any model provider from the function.
@@ -34,10 +34,13 @@ Not used: Amazon S3 (no bucket), VPC endpoints, any model provider from the func
   id) and a schema number. Both ids are meaningless outside the database.
 - The function reads the document's candidate URLs and its PubMed Central id from the
   database (the link row's envelope snapshot), never from the message.
-- The shared document store row (`source_snapshot`) carries no task id, no user id, no run
-  id and no fetch breadcrumb: those live on the task's own link row (`ingested_by_run_id`,
-  `fetched_from`). The shared row's `source_locator` is the public document URL, as before.
-- Logs name message ids and the two row ids; a URL appears only as its host.
+- The shared document store row (`source_snapshot`) carries no task id, no user id and no
+  run id: those live on the task's own link row (`ingested_by_run_id`, `fetched_from`). The
+  shared row's `source_locator` is the address the bytes were fetched from by the first task
+  that stored them (the final URL after redirects, query string included), as the column held
+  before task 057; whether to drop the query string on the shared row is an open owner item
+  from the task 057 review.
+- Logs name message ids and the two row ids; a URL appears as its scheme, host and path only.
 
 ## Retention rule for the store
 

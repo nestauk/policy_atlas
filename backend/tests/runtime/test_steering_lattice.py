@@ -928,3 +928,35 @@ def test_user_answer_beats_standing_declared_rule(engine: Engine) -> None:
         )
     finally:
         _cleanup_task(engine, task_id)
+
+
+def test_full_text_tally_counts_not_read_yet_rows_apart_from_access_failures(
+    conn: Any,
+) -> None:
+    """Task 057 review (Codex 9, deviation 10): a ``not_ready`` row (still being
+    read when the stage stopped waiting) is tallied as ``not_read_yet``, not as
+    a ``fetch_failed`` access failure; a ``paywall`` row stays ``fetch_failed``."""
+    from policy_atlas.core.schema import task_source_snapshot
+    from tests.evidence_search.sourcing.test_ingest_full_text import _seed_relevant_acquired
+    from tests.helpers import seed_scope, seed_task_and_run
+
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    statuses = [
+        ("fetch_failed", "not_ready"), ("fetch_failed", "paywall"), ("not_attempted", None),
+    ]
+    tss_ids = []
+    for status, error in statuses:
+        tss_id = _seed_relevant_acquired(
+            conn, task_id, run_id, scope_id, {"backend": "overton", "provider_fields": {}}
+        )
+        conn.execute(
+            update(task_source_snapshot)
+            .where(task_source_snapshot.c.task_source_snapshot_id == tss_id)
+            .values(full_text_status=status, full_text_error=error)
+        )
+        tss_ids.append(str(tss_id))
+
+    assert steering_bundles._full_text_status_counts(
+        conn, task_id=task_id, tss_ids=tss_ids
+    ) == {"fetch_failed": 1, "not_attempted": 1, "not_read_yet": 1}

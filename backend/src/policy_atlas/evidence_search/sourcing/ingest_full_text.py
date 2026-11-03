@@ -33,6 +33,7 @@ import json
 import os
 import queue as queue_module
 import re
+import socket
 import threading
 import time
 import uuid
@@ -172,13 +173,18 @@ _PMCID_LOOSE_RE = re.compile(r"(?:^|/)(?:PMC)?([0-9]{1,12})/?$", re.IGNORECASE)
 # Task 057 adds two reasons the stage writes, never the per-document function, and
 # neither is an access failure: ``not_ready`` (the document was still being read
 # when the stage stopped waiting; the next run tries it again) and ``send_failed``
-# (the queue refused the message).
+# (the queue refused the message). ``worker_error`` (task 057 review, Codex 8 /
+# security 3) is written by the cloud handler on its last delivery: the function
+# failed outside the per-document vocabulary; not an access failure.
 FAILURE_REASONS = (
     "no_url", "paywall", "not_found", "too_large", "timeout",
     "corrupt", "no_text_layer", "thin_text", "empty",
     "blocked", "blocked_by_host", "fetch_error", "unsupported_type",
-    "not_ready", "send_failed",
+    "not_ready", "send_failed", "worker_error",
 )
+# task 057 review (Codex 9, deviation 10): the reasons that mean "not read yet"
+# (the document was never judged), not "could not be read"; one shared set.
+NOT_READ_YET_REASONS = frozenset({"not_ready", "send_failed", "worker_error"})
 
 # Base content types that are never parseable text; anything here fails fast with
 # a reason-coded outcome instead of being chunked as text (prod incident 2026-08-19:
@@ -969,6 +975,11 @@ def parse_and_segment(body: bytes, content_type: str, thin_min: int) -> dict[str
     return result
 
 
+def _refuse_socket(*_args: Any, **_kwargs: Any) -> Any:
+    """Stand-in for ``socket.socket`` inside the parse worker: always refuses."""
+    raise RuntimeError("socket creation attempted inside the parse worker")
+
+
 def _worker_entry(
     send_conn: Any,
     parse_fn: Callable[[bytes, str, int], dict[str, Any]],
@@ -977,6 +988,11 @@ def _worker_entry(
     thin_min: int,
 ) -> None:
     """Worker-process entrypoint: parse, send the result, exit. Top-level so it pickles."""
+    # task 057 review (security 1): the worker denies itself sockets before
+    # parsing; the result pipe is already open, so nothing needs one after this.
+    # (This assignment only takes sockets away; the module's no-network-client
+    # guard forbids constructing one, not naming the module.)
+    socket.socket = _refuse_socket  # type: ignore[misc, assignment]
     try:
         result = parse_fn(body, content_type, thin_min)
     except Exception as exc:  # defensive: an unexpected parser crash is a corrupt parse
@@ -1290,12 +1306,13 @@ def _eligible_rows(conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID)
 
 
 def _close_queued(
-    connect: ConnectFactory, tss_ids: list[uuid.UUID], *, reason: str
+    connect: ConnectFactory, tss_ids: list[uuid.UUID], *, reason: str, run_id: uuid.UUID
 ) -> list[uuid.UUID]:
     """Mark the rows still ``queued`` among ``tss_ids`` as ``fetch_failed`` with ``reason``.
 
-    One short committed transaction; the update is guarded on ``queued``, so a
-    row a worker resolved in the meantime keeps its own outcome.
+    One short committed transaction; the update is guarded on ``queued`` and on
+    this run having queued the row, so a row a worker resolved in the meantime
+    keeps its own outcome and a row a later run re-queued is left to that run.
 
     Returns:
         The ids that were closed.
@@ -1308,6 +1325,8 @@ def _close_queued(
                 task_source_snapshot.update()
                 .where(task_source_snapshot.c.task_source_snapshot_id.in_(tss_ids))
                 .where(task_source_snapshot.c.full_text_status == "queued")
+                # task 057 review (Codex 1 / security 8): only this run's rows.
+                .where(task_source_snapshot.c.ingested_by_run_id == run_id)
                 .values(
                     full_text_snapshot_id=None,
                     full_text_status="fetch_failed",
@@ -1345,7 +1364,7 @@ def _ingested_snapshot_ids(conn: Connection, tss_ids: list[uuid.UUID]) -> set[uu
 
 
 _EMBED_COUNT_KEYS = (
-    "embedded", "already_embedded", "failed", "skipped_no_units", "units_embedded",
+    "embedded", "already_embedded", "failed", "deferred", "skipped_no_units", "units_embedded",
     "budget_exceeded",
 )
 
@@ -1457,6 +1476,9 @@ class _StageEmbedder:
             "embedded": sum(p["embedded"] for p in passes),
             "already_embedded": final["already_embedded"] - sum(p["embedded"] for p in earlier),
             "failed": final["failed"],
+            # task 057 review: chunks the pool gave up for throttling this pass (no
+            # vector written; the next run picks them up), kept apart from failures.
+            "deferred": final["deferred"],
             "skipped_no_units": final["skipped_no_units"],
             "units_embedded": sum(p["units_embedded"] for p in passes),
             "budget_exceeded": max((p["budget_exceeded"] for p in passes), default=0),
@@ -1651,6 +1673,9 @@ def _run_stage(
                         full_text_snapshot_id=None,
                         full_text_status="queued",
                         full_text_error=None,
+                        # task 057 review (Codex 1 / security 8): stamp the run
+                        # that queued the row; the guarded writes require it.
+                        ingested_by_run_id=run_id,
                     )
                     .returning(task_source_snapshot.c.task_source_snapshot_id)
                 ).scalars()
@@ -1690,7 +1715,13 @@ def _run_stage(
         if isinstance(queue, LocalQueueClient) and queue.inline:
             do_send()
         else:
-            sender = threading.Thread(target=do_send, name="policy-atlas-ingest-send")
+            # task 057 review (code-review 3): carry the caller's contextvars
+            # (structlog run binding, Langfuse propagation) onto the sender.
+            sender = threading.Thread(
+                target=contextvars.copy_context().run,
+                args=(do_send,),
+                name="policy-atlas-ingest-send",
+            )
             sender.start()
 
     deadline = None if stage_deadline_s is None else clock() + stage_deadline_s
@@ -1708,7 +1739,8 @@ def _run_stage(
                 # A message the queue refused never reaches a worker: its row
                 # is closed now rather than waiting for the deadline.
                 closed = _close_queued(
-                    connect, [uuid.UUID(i) for i in send_result.failed], reason="send_failed"
+                    connect, [uuid.UUID(i) for i in send_result.failed], reason="send_failed",
+                    run_id=run_id,
                 )
                 log.warning("ingest.send_failed", count=len(closed))
         counts_now = _status_counts(conn, eligible_ids)
@@ -1729,7 +1761,7 @@ def _run_stage(
     # Rows still ``queued`` now: past the deadline, or (in process) left by a
     # handler that never wrote. A late result cannot flip them back (the
     # function's write is guarded on ``queued``); its snapshot joins the store.
-    not_ready = _close_queued(connect, queued, reason="not_ready")
+    not_ready = _close_queued(connect, queued, reason="not_ready", run_id=run_id)
     if not_ready:
         log.warning("ingest.not_ready", count=len(not_ready))
 

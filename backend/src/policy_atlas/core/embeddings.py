@@ -138,6 +138,9 @@ class _ChunkState:
     units: list[_UnitWork]
     vectors: dict[int, list[float]] = field(default_factory=dict)
     failed: bool = False
+    # task 057 review: code-review 5 - given up for throttling this pass (no
+    # vector written; the next pass picks it up), kept apart from real failures.
+    deferred: bool = False
     inserted: bool = False
 
 
@@ -610,6 +613,10 @@ class AdaptivePool:
                 throttled: list[Throttled] = []
                 requeue: list[tuple[int, T, int]] = []
                 results: list[PoolResult[R]] = []
+                # task 057 review: Codex 10 - a round that completed a throttle
+                # grants no clean credit, so its successes cannot widen the pool
+                # again before the backoff sleep.
+                round_throttled = any(isinstance(f.exception(), Throttled) for f in done)
                 for future in sorted(done, key=lambda f: running[f][0]):
                     index, job, throttles, epoch = running.pop(future)
                     error = future.exception()
@@ -627,7 +634,8 @@ class AdaptivePool:
                     if error is not None:
                         raise error
                     self._streak = 0
-                    self._clean += 1
+                    if not round_throttled:
+                        self._clean += 1
                     if self._clean >= self._clean_run:
                         self._clean = 0
                         self._set_width(min(self.cap, self._width + 1), "clean_run")
@@ -995,8 +1003,10 @@ def embed_pending_chunks(
 
     Returns:
         Counts for newly embedded chunks, already embedded eligible chunks, failed
-        pending chunks, skipped unitless chunks, inserted units and whether the
-        budget guard stopped the pass — the same key set on every path.
+        pending chunks, deferred chunks (given up for throttling this pass, no
+        vector written, picked up by the next pass), skipped unitless chunks,
+        inserted units and whether the budget guard stopped the pass — the same
+        key set on every path.
 
     Raises:
         ValueError: If ``batch_size`` is not positive, ``max_chunks`` is
@@ -1036,6 +1046,7 @@ def embed_pending_chunks(
             "embedded": 0,
             "already_embedded": already_embedded,
             "failed": 0,
+            "deferred": 0,
             "skipped_no_units": len(unitless_chunk_ids),
             "units_embedded": 0,
             "budget_exceeded": 1,
@@ -1077,11 +1088,22 @@ def embed_pending_chunks(
 
     for result in pool.run(batches, embed_batch):
         batch_units = batches[result.index]
-        if result.value is not None:
-            embedded_vectors, failed_units = result.value
-        else:  # throttled too often: this pass gives the batch up; it stays pending
-            assert result.error is not None
-            embedded_vectors, failed_units = [], [(unit, result.error) for unit in batch_units]
+        if result.value is None:
+            # task 057 review: code-review 5 - throttled too often: this pass
+            # gives the batch up; its chunks stay pending and count as deferred.
+            deferred_chunk_ids = {unit.chunk_id for unit in batch_units}
+            for chunk_id in deferred_chunk_ids:
+                states[chunk_id].deferred = True
+                states[chunk_id].vectors.clear()
+            log.warning(
+                "embed.batch_deferred",
+                batch_index=result.index + 1,
+                chunk_count=len(deferred_chunk_ids),
+                unit_count=len(batch_units),
+                run_id=str(run_id),
+            )
+            continue
+        embedded_vectors, failed_units = result.value
         if failed_units:
             failed_chunk_ids = {unit.chunk_id for unit, _exc in failed_units}
             for chunk_id in failed_chunk_ids:
@@ -1099,7 +1121,8 @@ def embed_pending_chunks(
             )
 
         for unit, vector in embedded_vectors:
-            if states[unit.chunk_id].failed or states[unit.chunk_id].inserted:
+            state = states[unit.chunk_id]
+            if state.failed or state.deferred or state.inserted:
                 continue
             states[unit.chunk_id].vectors[unit.unit_index] = vector
 
@@ -1111,7 +1134,7 @@ def embed_pending_chunks(
         batch_rows: list[dict[str, object]] = []
         for chunk_id in sorted(completed_chunk_ids, key=lambda item: chunk_order[item]):
             state = states[chunk_id]
-            if state.failed or state.inserted:
+            if state.failed or state.deferred or state.inserted:
                 continue
             batch_rows.extend(_chunk_rows_for_insert(state))
             state.inserted = True
@@ -1121,10 +1144,12 @@ def embed_pending_chunks(
             insert(batch_rows)
 
     failed = sum(1 for state in states.values() if state.failed)
+    deferred = sum(1 for state in states.values() if state.deferred and not state.failed)
     result_counts = {
         "embedded": embedded,
         "already_embedded": already_embedded,
         "failed": failed,
+        "deferred": deferred,
         "skipped_no_units": len(unitless_chunk_ids),
         "units_embedded": units_embedded,
         "budget_exceeded": 0,

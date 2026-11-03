@@ -27,9 +27,13 @@ Method (plan decision P1)
 4. Per step: ``n`` healthy calls and the 99th percentile (p99) of their
    durations, by linear interpolation between the two nearest values
    (``statistics.quantiles(..., n=100, method="inclusive")``, the same as
-   numpy's default). Proposed ``timeout_s = max(5, ceil(2 x p99))``, only when
-   ``n >= 100``; otherwise the step keeps today's value. Streamed chat is exempt
-   (plan P1) and keeps its value.
+   numpy's default). Proposed ``timeout_s``: twice the p99, rounded up to a whole
+   multiple of ``--round-to`` seconds (default 1, so plain ``ceil``), then raised to
+   at least ``--floor`` seconds (default 5), so
+   ``max(floor, ceil(2 x p99 / round_to) x round_to)``. A step gets a proposal only
+   when it has at least ``--min-n`` healthy calls (default 100); otherwise it keeps
+   today's value. Streamed chat is exempt (plan P1) and keeps its value. (Task 057
+   review, contract verifier 5: options described here.)
 
 Outputs (``--format``)
 ----------------------

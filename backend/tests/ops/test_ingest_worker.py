@@ -15,7 +15,6 @@ import sys
 import uuid
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -95,7 +94,7 @@ class _Doc:
             c.execute(
                 task_source_snapshot.update()
                 .where(task_source_snapshot.c.task_source_snapshot_id == self.tss_id)
-                .values(full_text_status="queued")
+                .values(full_text_status="queued", ingested_by_run_id=self.run_id)
             )
         self.fetcher = _ScriptedFetcher({self.url: result})
         self.body = json.dumps(dict(new_message(link_row_id=self.tss_id, run_id=self.run_id)))
@@ -259,37 +258,53 @@ def test_more_than_one_record_is_an_error(use_worker: Any) -> None:
         ingest_worker.handler({"Records": []}, _Context())
 
 
-def test_a_snapshot_deleted_under_the_link_write_is_retryable(
+def test_an_unexpected_error_is_retried_then_written_as_worker_error(
     engine: Engine, monkeypatch: pytest.MonkeyPatch, use_worker: Any
 ) -> None:
-    """A foreign-key failure on the link write (the retention script deleted the
-    stored snapshot between the lookup and the write) is reported for
-    redelivery on attempt 1; on attempt 2 the handler tries once more at once."""
+    """Task 057 review (Codex 8 / security 3): delivery 1's unexpected error is
+    reported for redelivery with the row untouched; delivery 2's writes
+    ``fetch_failed`` / ``worker_error`` (contract N2) and raises an error that
+    names only the type, so no SQL, parameter or URL text reaches the logs."""
+    doc = _Doc(engine, FetchResult(status="error", error="not_found"))
+    try:
+        use_worker(doc.fetcher)
+
+        def boom(*_args: Any, **_kwargs: Any) -> Any:
+            raise ValueError("UPDATE ... chunk text https://example.org/a.pdf?token=SECRET")
+
+        monkeypatch.setattr(ingest_worker, "ingest_document", boom)
+        with capture_logs() as logs:
+            assert ingest_worker.handler(_event(doc.body, attempt=1), _Context()) == _retry()
+        row = doc.row(engine)
+        assert (row.full_text_status, row.full_text_error) == ("queued", None)
+        [error] = [e for e in logs if e["event"] == "ingest_worker.error"]
+        assert error["error_type"] == "ValueError" and "SECRET" not in repr(logs)
+
+        with pytest.raises(RuntimeError) as raised:
+            ingest_worker.handler(_event(doc.body, attempt=2), _Context())
+        assert str(raised.value) == "ingest worker failed: ValueError"
+        assert raised.value.__cause__ is None and raised.value.__suppress_context__
+        row = doc.row(engine)
+        assert (row.full_text_status, row.full_text_error) == ("fetch_failed", "worker_error")
+    finally:
+        _cleanup(engine, doc, [])
+
+
+def test_an_unrelated_integrity_error_is_not_swallowed(
+    monkeypatch: pytest.MonkeyPatch, use_worker: Any
+) -> None:
+    """The prune-race recovery lives in ``ingest_document`` (task 057 review,
+    Codex 7); the handler gives an unrelated integrity error (23505) no special
+    treatment: redelivered on attempt 1, raised (type only) on attempt 2."""
     use_worker(_ScriptedFetcher({}))
-    fk = IntegrityError("UPDATE task_source_snapshot", {}, _PgError("23503"))
-    calls: list[str] = []
-    outcome = SimpleNamespace(
-        resolution="ingested", reason=None, retryable=False, written=True, already_in_store=False
-    )
-
-    def fake_ingest(*_args: Any, on_retryable_failure: str, **_kwargs: Any) -> Any:
-        calls.append(on_retryable_failure)
-        if len(calls) in (1, 2):
-            raise fk
-        return outcome
-
-    monkeypatch.setattr(ingest_worker, "ingest_document", fake_ingest)
-    body = json.dumps(dict(new_message(link_row_id=uuid.uuid4(), run_id=uuid.uuid4())))
-    assert ingest_worker.handler(_event(body, attempt=1), _Context()) == _retry()
-    assert ingest_worker.handler(_event(body, attempt=2), _Context()) == NO_FAILURES
-    assert calls == ["leave_queued", "write", "write"]
-
     other = IntegrityError("INSERT", {}, _PgError("23505"))
     monkeypatch.setattr(
         ingest_worker, "ingest_document", lambda *_a, **_k: (_ for _ in ()).throw(other)
     )
-    with pytest.raises(IntegrityError):
-        ingest_worker.handler(_event(body, attempt=1), _Context())
+    body = json.dumps(dict(new_message(link_row_id=uuid.uuid4(), run_id=uuid.uuid4())))
+    assert ingest_worker.handler(_event(body, attempt=1), _Context()) == _retry()
+    with pytest.raises(RuntimeError, match="^ingest worker failed: IntegrityError$"):
+        ingest_worker.handler(_event(body, attempt=2), _Context())
 
 
 class _FakeSecrets:
@@ -337,9 +352,13 @@ def test_log_lines_carry_urls_without_their_query_strings() -> None:
         "url": "https://example.org/a.pdf?token=SECRET",
         "attempts": ["https://example.org/b.pdf?sig=SECRET: timeout"],
         "n": 3,
+        # task 057 review (security 3): a structured traceback is nested dicts
+        "exception": [{"exc_value": "GET https://example.org/c.pdf?key=SECRET",
+                       "frames": [{"locals": {"u": "https://example.org/d?x=SECRET"}}]}],
     })
     assert event["url"] == "https://example.org/a.pdf"
     assert event["attempts"] == ["https://example.org/b.pdf: timeout"]
+    assert event["exception"][0]["exc_value"] == "GET https://example.org/c.pdf"
     assert "SECRET" not in repr(event)
 
 

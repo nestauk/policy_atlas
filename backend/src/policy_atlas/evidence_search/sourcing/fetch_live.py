@@ -631,8 +631,15 @@ class LiveDocumentFetcher:
         # actual body size on completion (the part release_body later frees).
         self._account_bytes(MAX_DOCUMENT_BYTES)
         body = bytearray()
+        deadline = FETCH_DEADLINE.get()
         try:
             for chunk in response.iter_bytes():
+                # task 057 review (security 2): a slow-drip body stops at the
+                # per-document deadline, like a per-operation timeout.
+                if deadline is not None and self._clock() > deadline:
+                    self._release_accounted_bytes(MAX_DOCUMENT_BYTES)
+                    log.warning("fetch_live.timeout", reason="deadline_mid_body")
+                    return FetchResult(status="error", error="timeout")
                 if not chunk:
                     continue
                 if len(body) + len(chunk) > MAX_DOCUMENT_BYTES:

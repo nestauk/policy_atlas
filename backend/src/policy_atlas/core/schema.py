@@ -35,6 +35,16 @@ from sqlalchemy.types import UserDefinedType
 metadata = MetaData()
 
 
+def vector_literal(value: Any) -> str:
+    """Return pgvector's text form of a vector, ``'[a,b,...]'``.
+
+    One formatter for the column's bind processor and for a query vector passed
+    as a literal (task 057 review, code-review 7), so the stored and the searched
+    vectors are always written the same way.
+    """
+    return "[" + ",".join(repr(float(v)) for v in value) + "]"
+
+
 class Vector(UserDefinedType[list[float]]):
     """The pgvector ``vector(n)`` column type, without the pgvector Python package.
 
@@ -69,7 +79,7 @@ class Vector(UserDefinedType[list[float]]):
         def process(value: Any) -> str | None:
             if value is None:
                 return None
-            return "[" + ",".join(repr(float(v)) for v in value) + "]"
+            return vector_literal(value)
 
         return process
 

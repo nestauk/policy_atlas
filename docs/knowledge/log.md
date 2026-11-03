@@ -654,6 +654,29 @@
   Declined as knowledge: the stub `to_ready` helper adds a turn per plan part and
   `_folded_coverage` copies only `outcome_counts` (both code-local, recorded in 055 verification.md).
 
+## 2026-11-03
+* **Update** (task 057 review): seven concepts —
+  [queued-row writes guard on the owning run](queued-row-writes-guard-on-the-owning-run.md),
+  [Lambda runs the image as its own user](lambda-runs-the-image-as-its-own-user.md),
+  [scoped SQL retrieval: planner and parity](scoped-sql-retrieval-planner-and-parity.md),
+  [measure a commit from a second worktree](measure-a-commit-from-a-second-worktree.md),
+  [parallel-agent test databases](parallel-agent-test-databases.md),
+  [judge effort needs a content read](judge-effort-needs-a-content-read.md),
+  [the markup rule must not delete content](markup-rule-must-not-delete-content.md);
+  one concept extended, [client timeout sized to the healthy tail](client-timeout-sized-to-healthy-tail.md)
+  (three attempts, derive at the width, the 15 s floor, failed attempts carry no input).
+  Authored from both sources: the build's 22 knowledge candidates (verification.md § Review
+  handoff) and the stack's findings. Folded: the zsh word-split, the two-walk cap, the
+  cherry-pick abort, the `--theirs` rule, the store's like-for-like effect, the pool's probe
+  cost, the overhead timer's noise and the envelope-embedding over-count into the worktree
+  runbook; the `127.0.0.1` refusal, the extension precondition and the contended backfill
+  timing into the agent-database rule; the tokens rule, the `EXPLAIN (ANALYZE, BUFFERS)`
+  reading, the float32 order and the buffer-pool reading into the retrieval concept; the
+  CLI import, the two sync lines and the emulator into the Lambda concept. Declined as
+  knowledge: none of the 22 (each is in a concept above). The review's own lessons
+  (the status-only guard, the unknown send, the test-only socket deny, the 60 s token) are
+  in the first and fifth concepts.
+
 ## 2026-11-02
 * **Update** (task 056 review): ten concepts —
   [Langfuse usage buckets](langfuse-usage-buckets-are-exclusive.md),

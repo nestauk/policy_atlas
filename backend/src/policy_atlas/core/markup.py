@@ -17,13 +17,19 @@ What the rule does, in order (one line at a time; lines are split on ``"\\n"``):
 1. image syntax ``![alt](src)`` is removed entirely;
 2. link syntax ``[text](url)`` is reduced to ``text`` (twice, for a link inside a link);
 3. ``<br>`` becomes a line break (or a space in a table row);
-4. other known HTML tags (``<b>``, ``</span>`` ...; a fixed list of names) are removed,
-   while tag-shaped maths such as ``x<y and y>z`` is kept;
+4. other known HTML tags (``<b>``, ``</span>`` ...; a fixed list of 78 names) are
+   removed, while tag-shaped maths such as ``x<y and y>z`` or ``a<b and c>d`` is kept: a
+   one-letter name (``a``, ``b``, ``i``, ``p``, ``q``, ``s``, ``u``) counts as a tag only
+   when ``>`` follows at once (``<b>``, ``</b>``) or when it carries an attribute with
+   ``=`` (``<a href="u">``), so a bare-word attribute such as ``<b disabled>`` is kept;
 5. inline code ```code``` is reduced to ``code``;
 6. paired emphasis markers (``*``/``**``/``***``/``_``/``__``/``___``) are removed,
    when the opening marker does not follow a letter or digit (so identifiers keep
    their underscores), keeping the words between them (up to three rounds, for nested emphasis);
-7. leftover runs of ``**`` or ``__`` (a marker whose partner was lost) are removed;
+   a backslash-escaped marker (``\\*``) neither opens nor closes emphasis;
+7. leftover runs of ``**`` or ``__`` (a marker whose partner was lost) are removed,
+   except ``**`` after a digit (a significance star in a statistics table, ``0.50**``)
+   or after a backslash;
 8. backslash escapes such as ``\\*`` become the plain character ``*``.
 
 This module must not import anything from ``evidence_search`` (``core`` sits below it).
@@ -121,15 +127,28 @@ _HTML_TAGS = frozenset(
 _IMG_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _LINK_RE = re.compile(r"\[([^\]]*)\]\((?:[^()\s]|\([^()]*\))*\)")
 _BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+# task 057 review: contract verifier 5 - a one-letter name takes free-text
+# "attributes" only when they carry ``=``, so ``a<b and c>d`` stays whole. Known
+# remaining loss: ``<b disabled>`` (a bare-word attribute) is kept as text.
 _TAG_RE = re.compile(
-    r"</?(?:" + "|".join(sorted(_HTML_TAGS, key=lambda n: (-len(n), n))) + r")(?:\s[^<>]*)?/?>",
+    r"</?(?:(?:"
+    + "|".join(sorted((n for n in _HTML_TAGS if len(n) > 1), key=lambda n: (-len(n), n)))
+    + r")(?:\s[^<>]*)?|(?:"
+    + "|".join(sorted(n for n in _HTML_TAGS if len(n) == 1))
+    + r")(?:\s+[^<>=]*=[^<>]*)?\s*)/?>",
     re.IGNORECASE,
 )
-_EMPH_RE = re.compile(r"(?<![A-Za-z0-9])(\*{1,3}|_{1,3})(?=\S)(.+?)(?<=\S)\1(?![A-Za-z0-9])")
+# task 057 review: Codex 12 - an escaped marker (``\*``) neither opens nor closes
+# emphasis, so ``\*literal\*`` keeps its stars (rule 8 unescapes them).
+_EMPH_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?<!\\)(\*{1,3}|_{1,3})(?=\S)(.+?)(?<=\S)(?<!\\)\1(?![A-Za-z0-9])"
+)
 # Stray ``**`` after a digit is a significance star in a statistics table (``0.50**``),
 # not a lost emphasis marker, so it stays (owner ruling 2026-11-03: the rule must not
 # delete content).
-_STRAY_EMPH_RE = re.compile(r"(?<![0-9*])\*\*+|(?<![A-Za-z0-9])__+|__+(?![A-Za-z0-9])")
+_STRAY_EMPH_RE = re.compile(
+    r"(?<![0-9*\\])\*\*+|(?<![A-Za-z0-9\\])__+|(?<!\\)__+(?![A-Za-z0-9])"
+)  # task 057 review: Codex 12 - not after a backslash either
 _CODE_RE = re.compile(r"`([^`]*)`")
 _ESC_RE = re.compile(r"\\([\\`*_{}\[\]()#+\-.!|>~])")
 

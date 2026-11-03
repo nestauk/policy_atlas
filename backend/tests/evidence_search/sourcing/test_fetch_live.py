@@ -632,3 +632,44 @@ def test_retry_wait_past_the_deadline_is_not_started() -> None:
     assert result.status == "error"
     assert len(requests) == 1
     assert clock.sleeps == []
+
+
+class _SlowDripStream(httpx.SyncByteStream):
+    """A body whose chunks each arrive ``step_s`` later on the fake clock."""
+
+    def __init__(self, clock: FakeClock, chunks: int, step_s: float) -> None:
+        self.clock = clock
+        self.chunks = chunks
+        self.step_s = step_s
+        self.sent = 0
+
+    def __iter__(self) -> Any:
+        for _ in range(self.chunks):
+            self.clock.now += self.step_s
+            self.sent += 1
+            yield b"x" * 100
+
+
+def test_a_slow_drip_body_stops_at_the_deadline() -> None:
+    """Task 057 review (security 2): a host dripping the body stops at the
+    per-document deadline with the per-operation timeout's result, and the
+    byte budget is given back."""
+    from policy_atlas.evidence_search.sourcing.ingest_full_text import FETCH_DEADLINE
+
+    clock = FakeClock()
+    stream = _SlowDripStream(clock, chunks=100, step_s=1.0)
+    fetcher, _, _ = _fetcher(
+        lambda _request: httpx.Response(
+            200, headers={"content-type": "text/plain"}, stream=stream
+        ),
+        clock=clock,
+    )
+    token = FETCH_DEADLINE.set(clock.now + 10.0)
+    try:
+        result = fetcher.fetch("https://example.com/drip")
+    finally:
+        FETCH_DEADLINE.reset(token)
+
+    assert (result.status, result.error) == ("error", "timeout")
+    assert stream.sent < 100
+    assert fetcher._inflight_bytes == 0

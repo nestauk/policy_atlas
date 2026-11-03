@@ -698,6 +698,22 @@ def test_zero_egress_socket_deny(conn: Connection, monkeypatch: pytest.MonkeyPat
     assert summary["parse_failed"] == 1
 
 
+def _parse_that_opens_a_socket(body: bytes, content_type: str, thin_min: int) -> dict[str, Any]:
+    socket.socket()  # refused by the worker itself, not by a test wrapper
+    return parse_and_segment(body, content_type, thin_min)
+
+
+def test_the_parse_worker_refuses_sockets_on_its_own() -> None:
+    """Task 057 review (security 1): ``_worker_entry`` installs the socket
+    denial before the parse, so a parser that opens a socket gets a ``corrupt``
+    result naming the refusal."""
+    result = ingest_full_text.run_parse_worker(
+        _parse_that_opens_a_socket, b"plain text", "text/plain", thin_min=1, timeout=60.0
+    )
+    assert (result["status"], result["reason"]) == ("error", "corrupt")
+    assert "socket creation attempted inside the parse worker" in result["detail"]
+
+
 def test_recorder_script_not_imported_by_package() -> None:
     """The full-text recorder stays outside the package import graph (007 precedent)."""
     src_dir = Path(__file__).resolve().parents[3] / "src" / "policy_atlas"
@@ -706,17 +722,23 @@ def test_recorder_script_not_imported_by_package() -> None:
 
 
 def test_ingest_module_has_no_http_client() -> None:
-    """ingest_full_text.py imports no HTTP client or socket machinery."""
+    """ingest_full_text.py imports no HTTP client and never constructs a socket.
+
+    The module may name ``socket`` (task 057 review: the parse worker replaces
+    ``socket.socket`` with a refuser), but no line may open one.
+    """
     module = (
         Path(__file__).resolve().parents[3] / "src" / "policy_atlas"
         / "evidence_search" / "sourcing" / "ingest_full_text.py"
     ).read_text()
     forbidden = re.compile(
         r"^\s*(import|from)\s+"
-        r"(urllib\.(?:request|error)|requests|httpx|aiohttp|http\.client|socket)\b",
+        r"(urllib\.(?:request|error)|requests|httpx|aiohttp|http\.client)\b",
         re.MULTILINE,
     )
     assert not forbidden.search(module)
+    opens_socket = re.compile(r"socket\.(socket|create_connection|socketpair|fromfd)\(")
+    assert not opens_socket.search(module)
 
 
 def test_fulltext_corpus_not_in_package() -> None:

@@ -179,8 +179,9 @@ any error or malformed answer" (the "stall retry"), decision **wrap (done, throu
    retry (now traced). `budgeted` would move the stall's retry to the caller's loop,
    which for classify, screen, select and extract runs **serially after the whole
    batch**, so each stall would add a full serial call to the stage wall. Attempts per
-   logical call fall from at most 3 (SDK) to at most 2; the caller budgets count logical
-   calls and are unchanged, so worst-case HTTP attempts are 2 × budget instead of 3 ×.
+   logical call were planned to fall from at most 3 (SDK) to at most 2; the build set
+   `MODEL_CALL_ATTEMPTS = 3` (deviation 13), so worst-case HTTP attempts stay at 3 × the
+   caller budget, as before; the caller budgets count logical calls and are unchanged.
    `wrap` is also what lets the measurement pair a cut-off attempt with its retry
    (`logical_call_id`). A site can be flipped to `budgeted` row by row if the lead
    prefers.

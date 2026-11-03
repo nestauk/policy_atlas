@@ -77,9 +77,20 @@ def test_strip_markup_examples() -> None:
     assert strip_markup("a<br>b", table=True) == "a b"
     assert strip_markup("![fig](f.png) caption") == " caption"
     assert strip_markup(r"3 \* 4 and a\_b") == "3 * 4 and a_b"
-    # E6 quirk kept as-is: emphasis runs before unescaping, so an escaped pair
-    # still reads as emphasis and loses its stars.
-    assert strip_markup(r"\*literal\*") == "\\literal\\"
+    # task 057 review (Codex 12): an escaped marker neither opens nor closes
+    # emphasis, so the stars survive and rule 8 unescapes them.
+    assert strip_markup(r"\*literal\*") == "*literal*"
+    assert strip_markup(r"\*a\* and *b*") == "*a* and b"
+
+
+def test_one_letter_tag_names_need_a_tag_shape() -> None:
+    """task 057 review (contract verifier 5): tag-shaped maths with a one-letter
+    name stays whole; real one-letter tags still strip."""
+    for kept in ("x<y and y>z", "a<b and c>d", "p<q"):
+        assert strip_markup(kept) == kept
+    assert strip_markup("<b>bold</b> x") == "bold x"
+    assert strip_markup('<a href="u">link</a>') == "link"
+    assert strip_markup("<i>it</i>") == "it"
 
 
 def test_br_span_is_a_space() -> None:
