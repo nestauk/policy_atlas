@@ -1620,8 +1620,9 @@ tightened; the token lifetime change affects no assertion.
    review first wrote $60 from a stale pre-056 figure, corrected by the owner). Probe 3 ran
    (below). Round (h)'s one
    component failure (a judge call: a dropped connection, then two 80 s hangs on the same
-   call) is the shape probe 2 tests; the lead recommends running it before the prod route
-   flip.
+   call) is the shape probe 2 tests. *Closed 2026-11-03:* the owner ordered probe 2 (the
+   client is cleared) and probe 4 (the bare SDK hangs at our rate); see § Stall probes 2
+   and 4 and the brief's items 3 and 4 for what replaces probe 1.
 10. **Rubric 13's wording** ("Bedrock is reached through the function's role") predates D6;
     the function has no Bedrock grant, by design. Noted, not edited.
 
@@ -1692,6 +1693,54 @@ past the 5 s keep-alive expiry), so the stale-connection question (probe 2) is u
 Caveat: the load average means the client-side figures are an upper bound. The build's
 screen_abstract cuts at 7 s across the 48-wide pool are consistent with this: connection
 setup, not the model.
+
+### Stall probe 2 (connection re-use; ordered by the owner after the stack; run by a builder, 4 runs, $2.95)
+
+Two arms on the reviewed commit, NEET and zonal each: arm A with keep-alive off (the live
+worktree's client built on an httpx client with `max_keepalive_connections=0`, reverted
+after), arm B as shipped; back to back, 19:36 to 20:01 UTC; no other runs on the database;
+figures read back from `probe2/probe2.md` and `table-AB.md` (session scratchpad).
+
+| | arm A (no keep-alive) | arm B (shipped pool) |
+|---|---|---|
+| attempts / failed | 1,536 / 6 (0.39%) | 1,569 / 4 (0.25%) |
+| non-fan-out steps, failed | 5 of 149 (3.4%) | 4 of 160 (2.5%) |
+| cuts / connection errors | 6 / 0 | 3 / 1 (after 61.4 s) |
+| calls that reached attempt 3 | 0 | 1 (judge, succeeded) |
+| component failures | 0 | 0 |
+
+**Reading: the client is cleared.** With every request on a fresh connection the hang rate
+did not fall, and arm A's cuts have the same shape (a call sits to its timeout, the retry
+answers). Both arms ran far quieter than round (h) (0.81% overall, 7.4% on the long steps),
+so the rate moves with the hour at the provider. Connection-error counts (0 against 1) are
+too small to read. Owner ruling 9 is closed for probe 2; probe 1 is replaced by the brief's
+items 3 and 4 (the support case and the free metrics).
+
+### Stall probe 4 (the bare SDK outside the pipeline; ordered after the owner questioned the implementation; builder, 90 calls)
+
+Ten real judge inputs from round (h)'s obesity session, three arms, three repeats,
+interleaved, all serial (one request in flight), timeout 300 s: arm 1 the plain OpenAI SDK
+with its defaults (`max_retries=2`, no schema, no cache fields, plain text); arm 2 our exact
+request body on the default client; arm 3 our client and `parse_structured`. Read back from
+`probe4/probe4-summary.md`.
+
+| arm | first attempts hung (> 80 s) | median s | max s |
+|---|---|---|---|
+| 1, bare SDK | 3 of 30 (10%) | 7.9 | 310 |
+| 2, our request shape | 5 of 30 (17%) | 7.0 | 311 |
+| 3, our helpers | 5 of 30 (17%) | 6.6 | 302 |
+| all | 13 of 90 (14%) | | |
+
+The arms are not distinguishable (Fisher p = 0.53); the hangs cluster in time, not by arm.
+**Reading: the provider or the path does it regardless of our code.** Four of the 13 hung
+attempts returned on their own after 126 to 246 s (the rest hit the 300 s cut), so some
+hangs are very slow answers, not lost requests. Request ids were captured for 86 of 90 calls
+(the four cut by our own client have none). Limits: 30 calls per arm cannot tell 10% from
+17%, and 90 cannot see a 1% rate.
+
+The research the owner ordered (four notes under [research/](research/)) and the
+recommendations against what we built are in
+[bedrock-integration-brief.md](bedrock-integration-brief.md).
 
 ### Gate after the fixes and the closing measurement
 
