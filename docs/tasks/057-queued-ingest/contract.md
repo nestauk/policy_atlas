@@ -8,9 +8,9 @@ One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); spe
 > contract-stage adversarial review the same day
 > ([adversarial-review-contract.md](adversarial-review-contract.md), 19 findings, Opus lane
 > standing in for a stalled Codex lane) is folded as revision 3: twelve findings as design
-> detail, seven as owner rulings (§ Owner rulings). Re-approval of revision 3 (before
-> planning): _pending_ · Plan approved (before implementation): _pending_ · ADR: _pending
-> (step 4)_ · Branch: `task/057-queued-ingest`.
+> detail, seven as owner rulings (§ Owner rulings). **Revision 3 approved (before planning):
+> 2026-11-03 · Shabeer Rauf (owner).** Plan approved (before implementation): _pending_ ·
+> ADR: _pending (step 4)_ · Branch: `task/057-queued-ingest`.
 >
 > Revision 1 encoded the owner's 15 rulings on the decision sheet of 2026-11-02 (file
 > `docs/research-and-development/synthesis-refinement/latency-slice-decision-sheet.md`,
