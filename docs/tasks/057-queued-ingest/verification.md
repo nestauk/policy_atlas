@@ -1616,7 +1616,9 @@ tightened; the token lifetime change affects no assertion.
    waited out; timeouts are 2 × the healthy p99 from at least 30 traced calls, floor 15 s,
    rounded up to 5 s". Not edited by the stack.
 9. **Stall probes 1 and 2** (`stall-probes.md`): probe 1 needs Bedrock invocation logging on
-   the account; probe 2 is four full runs (about $60). Probe 3 ran (below). Round (h)'s one
+   the account; probe 2 is four full runs (about $10 at the 056 basis of $1 to $3 a run; the
+   review first wrote $60 from a stale pre-056 figure, corrected by the owner). Probe 3 ran
+   (below). Round (h)'s one
    component failure (a judge call: a dropped connection, then two 80 s hangs on the same
    call) is the shape probe 2 tests; the lead recommends running it before the prod route
    flip.
