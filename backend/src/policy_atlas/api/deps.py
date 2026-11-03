@@ -190,7 +190,7 @@ def get_chat_backend() -> ChatBackend:
         session and trace recording, so this provider stays stateless.
     """
     if _live():
-        return OpenAIChatBackend()
+        return OpenAIChatBackend(langfuse_client=tracing.get_langfuse())
     return StubChatBackend()
 
 

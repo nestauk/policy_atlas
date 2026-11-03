@@ -11,6 +11,7 @@ from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import confidence_is_valid, scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
@@ -105,12 +106,7 @@ class OpenAIScreeningBackend:
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAIScreeningBackend",
-            timeout=60.0,
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIScreeningBackend")
         self._langfuse_client = langfuse_client
 
     def _parse_once(
@@ -121,6 +117,7 @@ class OpenAIScreeningBackend:
         model: str,
         reasoning_effort: str,
         prompt_cache: PromptCache,
+        step: str,
     ) -> UsageResult[ScreenRepWire]:
         parsed, usage = parse_structured(
             self._client,
@@ -131,6 +128,7 @@ class OpenAIScreeningBackend:
             model=model,
             reasoning_effort=reasoning_effort,
             prompt_cache=prompt_cache,
+            timeout_s=route().timeout_for(step),
             max_completion_tokens=SCREEN_MAX_OUTPUT_TOKENS,
         )
         return _scrub_rep(parsed), usage
@@ -193,16 +191,17 @@ class OpenAIScreeningBackend:
                 data_type="NUMERIC",
             )
 
-        rep, usage = tracing.traced_call(
+        rep, usage = tracing.traced_attempts(
             langfuse_client,
             name="screen:abstract",
-            as_type="generation",
+            step="screen_abstract",
             call=lambda: self._parse_once(
                 messages=messages,
                 usage_event="screening.screen.usage",
                 model=SCREEN_MODEL,
                 reasoning_effort=SCREEN_EFFORT,
                 prompt_cache=cache_mode_for("screen_abstract"),
+                step="screen_abstract",
             ),
             update=_update,
             after=_score_trace,
@@ -268,16 +267,17 @@ class OpenAIScreeningBackend:
                 data_type="NUMERIC",
             )
 
-        rep, usage = tracing.traced_call(
+        rep, usage = tracing.traced_attempts(
             langfuse_client,
             name="screen:full",
-            as_type="generation",
+            step="screen_full",
             call=lambda: self._parse_once(
                 messages=messages,
                 usage_event="screening.screen.usage",
                 model=SCREEN_FULL_MODEL,
                 reasoning_effort=SCREEN_FULL_EFFORT,
                 prompt_cache=cache_mode_for("screen_full"),
+                step="screen_full",
             ),
             update=_update,
             after=_score_trace,

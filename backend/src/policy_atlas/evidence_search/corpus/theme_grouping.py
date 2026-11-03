@@ -323,12 +323,10 @@ class OpenAIThemeGroupingBackend:
     mode = "live"
 
     def __init__(self, api_key: str | None = None) -> None:
-        # The call budget in characterise.py counts logical discover/assign calls;
-        # the SDK additionally retries transient 429/5xx failures, so the HTTP
-        # attempt ceiling is (1 + max_retries) x the logical budget maximum.
-        self._client = resolve_openai_client(
-            api_key, backend_name="OpenAIThemeGroupingBackend", timeout=60.0, max_retries=2
-        )
+        # The call budget in characterise.py counts logical discover/assign calls.
+        # The client never retries on its own (task 057, D12); each request's timeout
+        # comes from its route step.
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIThemeGroupingBackend")
 
     def discover(
         self,
@@ -378,6 +376,7 @@ class OpenAIThemeGroupingBackend:
             model=DISCOVERY_MODEL,
             reasoning_effort=DISCOVERY_EFFORT,
             prompt_cache=cache_mode_for("characterise_discover"),
+            timeout_s=route().timeout_for("characterise_discover"),
         )
         return (
             [
@@ -423,6 +422,7 @@ class OpenAIThemeGroupingBackend:
             model=ASSIGNMENT_MODEL,
             reasoning_effort=ASSIGNMENT_EFFORT,
             prompt_cache=cache_mode_for("characterise_assign"),
+            timeout_s=route().timeout_for("characterise_assign"),
         )
 
         assignments: dict[str, str] = {}

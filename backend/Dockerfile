@@ -38,6 +38,12 @@ COPY --from=builder --chown=app:app /app/src ./src
 COPY --from=builder --chown=app:app /app/alembic ./alembic
 COPY --from=builder --chown=app:app /app/alembic.ini ./alembic.ini
 
+# Compile every Python file to bytecode once, at build time (task 057, N13).
+# Without this, each fresh container (an API task or an ingest function) compiles
+# about 6,500 files on its first import: 6 to 8 s of cold start, 2 to 4 s with
+# the bytecode shipped. The laptop's own bytecode is kept out by .dockerignore.
+RUN python -m compileall -q /app/.venv /app/src
+
 ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8000

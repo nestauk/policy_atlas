@@ -129,10 +129,7 @@ class OpenAIRelevanceAnnotatorBackend:
         langfuse_client: Langfuse | None = None,
     ) -> None:
         self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAIRelevanceAnnotatorBackend",
-            timeout=60.0,
-            max_retries=2,
+            api_key, backend_name="OpenAIRelevanceAnnotatorBackend"
         )
         self._langfuse_client = langfuse_client
 
@@ -163,6 +160,7 @@ class OpenAIRelevanceAnnotatorBackend:
                 model=RELEVANCE_ANNOTATOR_MODEL,
                 reasoning_effort=RELEVANCE_ANNOTATOR_EFFORT,
                 prompt_cache=cache_mode_for("extract_annotate_relevance"),
+                timeout_s=route().timeout_for("extract_annotate_relevance"),
                 max_completion_tokens=RELEVANCE_ANNOTATOR_MAX_OUTPUT_TOKENS,
             )
 
@@ -180,10 +178,10 @@ class OpenAIRelevanceAnnotatorBackend:
                 },
             )
 
-        return tracing.traced_call(
+        return tracing.traced_attempts(
             self._langfuse_client,
             name="extract:annotate_relevance",
-            as_type="generation",
+            step="extract_annotate_relevance",
             call=_annotate_once,
             update=_update,
         )

@@ -397,12 +397,7 @@ class OpenAIAgentBackend:
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAIAgentBackend",
-            timeout=60.0,
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIAgentBackend")
         self._langfuse_client = langfuse_client
 
     def route(
@@ -599,7 +594,9 @@ class OpenAIAgentBackend:
             messages=messages,
             response_format=response_format,
             model=route().model_for(step),
+            step=step,
             reasoning_effort=route().effort_for(step),
+            timeout_s=route().timeout_for(step),
             prompt_cache=cache_mode_for(step),
             max_output_tokens=max_output_tokens,
             usage_event=usage_event,

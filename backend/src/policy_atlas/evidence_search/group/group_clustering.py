@@ -61,6 +61,7 @@ _STAGE_CACHE = {
     "discover": cache_mode_for("group_discover"),
     "assign": cache_mode_for("group_assign"),
 }
+_STAGE_STEP = {"discover": "group_discover", "assign": "group_assign"}
 
 # The residual sentinel the group component counts as its honest ungrouped
 # bucket. The assignment prompt asks for the plain word "ungroupable"; the
@@ -341,10 +342,7 @@ class OpenAIGroupClusteringBackendFactory:
         langfuse_client: Langfuse | None = None,
     ) -> None:
         self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAIGroupClusteringBackendFactory",
-            timeout=120.0,
-            max_retries=2,
+            api_key, backend_name="OpenAIGroupClusteringBackendFactory"
         )
         self._langfuse_client = langfuse_client
 
@@ -414,6 +412,7 @@ class _OpenAIGroupFacetBackend:
             model=_STAGE_MODEL[stage],
             reasoning_effort=_STAGE_EFFORT[stage],
             prompt_cache=_STAGE_CACHE[stage],
+            timeout_s=route().timeout_for(_STAGE_STEP[stage]),
         )
 
     def _call(
@@ -448,10 +447,10 @@ class _OpenAIGroupFacetBackend:
                 },
             )
 
-        return tracing.traced_call(
+        return tracing.traced_attempts(
             self._langfuse_client,
             name=f"group:{stage}",
-            as_type="generation",
+            step=_STAGE_STEP[stage],
             call=_run,
             update=_update,
         )

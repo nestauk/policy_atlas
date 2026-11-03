@@ -23,7 +23,7 @@ from sqlalchemy.engine import Engine
 from policy_atlas.api.chat_scope import ResolvedRunScope, build_chat_readers
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
-from policy_atlas.core.usage import usage_details, usage_metadata
+from policy_atlas.core.usage import usage_metadata
 from policy_atlas.evidence_search.extract.quote_verify import (
     BasisText,
     build_basis,
@@ -173,7 +173,7 @@ def apply_appraisal_labels(citations: list[dict[str, Any]]) -> list[dict[str, An
 def _snapped_chunk_quote(basis: BasisText, quote: str) -> tuple[str, bool] | None:
     """Locate ``quote`` uniquely in a chunk's ``quote_verify`` basis.
 
-    Reuses ``quote_verify.locate_unique_span`` (qv_v1) — the canonical
+    Reuses ``quote_verify.locate_unique_span`` (qv_v2) — the canonical
     overlap-aware, word-boundary-guarded, case-fold-round-tripped locator —
     instead of a third parallel matcher. Returns the verbatim raw source text
     of the located span and whether it differs from the model's emitted
@@ -500,7 +500,6 @@ def answer_over_scope(
         def _record(span: Any, result: tuple[dict[str, Any], Any]) -> None:
             response, usage = result
             span.update(
-                usage_details=usage_details(usage),
                 input={
                     "messages": messages,
                     "tool_exchanges": len(transcript),
@@ -512,17 +511,16 @@ def answer_over_scope(
                     "call_index": call_count,
                     **usage_metadata(usage),
                 },
-                model=CHAT_MODEL,
             )
 
-        # The streaming adapter bypasses the instrumented-client path,
-        # so the generation observation is opened here — without it the
-        # turn's trace holds no model I/O at all (review stack,
-        # live-trace lane).
+        # The turn's span. The model calls themselves are generations opened
+        # inside the chat backend (tool turn and final parse, one traced
+        # retry each; the prose stream is exempt, task 057 D12) and nest here,
+        # so tokens and cost are recorded once, on those.
         response, usage = tracing.traced_call(
             backends.langfuse,
             name="chat:call",
-            as_type="generation",
+            as_type="span",
             call=_call,
             update=_record,
         )

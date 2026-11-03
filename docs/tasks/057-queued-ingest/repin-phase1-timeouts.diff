@@ -1,0 +1,234 @@
+diff --git a/backend/src/policy_atlas/evidence_search/corpus/ranking.py b/backend/src/policy_atlas/evidence_search/corpus/ranking.py
+index 3b99f164..b11f66ae 100644
+--- a/backend/src/policy_atlas/evidence_search/corpus/ranking.py
++++ b/backend/src/policy_atlas/evidence_search/corpus/ranking.py
+@@ -214,9 +214,7 @@ class OpenAIRankingBackend:
+         api_key: str | None = None,
+         langfuse_client: Langfuse | None = None,
+     ) -> None:
+-        self._client = resolve_openai_client(
+-            api_key, backend_name="OpenAIRankingBackend", timeout=60.0, max_retries=2
+-        )
++        self._client = resolve_openai_client(api_key, backend_name="OpenAIRankingBackend")
+         self._langfuse_client = langfuse_client
+         self._batch_count = 0
+         self._lock = Lock()
+@@ -251,6 +249,7 @@ class OpenAIRankingBackend:
+             model=RERANK_MODEL,
+             reasoning_effort=RERANK_EFFORT,
+             prompt_cache=cache_mode_for("select_rerank"),
++            timeout_s=route().timeout_for("select_rerank"),
+         )
+         return (
+             [
+@@ -315,10 +314,10 @@ class OpenAIRankingBackend:
+                 data_type="NUMERIC",
+             )
+ 
+-        scores, usage = tracing.traced_call(
++        scores, usage = tracing.traced_attempts(
+             langfuse_client,
+             name="select:rerank",
+-            as_type="generation",
++            step="select_rerank",
+             call=lambda: self._rank_once(batch, intent=intent),
+             update=_update,
+             after=_score_trace,
+diff --git a/backend/src/policy_atlas/evidence_search/corpus/theme_grouping.py b/backend/src/policy_atlas/evidence_search/corpus/theme_grouping.py
+index d225c8dc..351c8a58 100644
+--- a/backend/src/policy_atlas/evidence_search/corpus/theme_grouping.py
++++ b/backend/src/policy_atlas/evidence_search/corpus/theme_grouping.py
+@@ -323,12 +323,10 @@ class OpenAIThemeGroupingBackend:
+     mode = "live"
+ 
+     def __init__(self, api_key: str | None = None) -> None:
+-        # The call budget in characterise.py counts logical discover/assign calls;
+-        # the SDK additionally retries transient 429/5xx failures, so the HTTP
+-        # attempt ceiling is (1 + max_retries) x the logical budget maximum.
+-        self._client = resolve_openai_client(
+-            api_key, backend_name="OpenAIThemeGroupingBackend", timeout=60.0, max_retries=2
+-        )
++        # The call budget in characterise.py counts logical discover/assign calls.
++        # The client never retries on its own (task 057, D12); each request's timeout
++        # comes from its route step.
++        self._client = resolve_openai_client(api_key, backend_name="OpenAIThemeGroupingBackend")
+ 
+     def discover(
+         self,
+@@ -378,6 +376,7 @@ class OpenAIThemeGroupingBackend:
+             model=DISCOVERY_MODEL,
+             reasoning_effort=DISCOVERY_EFFORT,
+             prompt_cache=cache_mode_for("characterise_discover"),
++            timeout_s=route().timeout_for("characterise_discover"),
+         )
+         return (
+             [
+@@ -423,6 +422,7 @@ class OpenAIThemeGroupingBackend:
+             model=ASSIGNMENT_MODEL,
+             reasoning_effort=ASSIGNMENT_EFFORT,
+             prompt_cache=cache_mode_for("characterise_assign"),
++            timeout_s=route().timeout_for("characterise_assign"),
+         )
+ 
+         assignments: dict[str, str] = {}
+diff --git a/backend/src/policy_atlas/evidence_search/extract/finding_vetter.py b/backend/src/policy_atlas/evidence_search/extract/finding_vetter.py
+index 3913c276..844a2475 100644
+--- a/backend/src/policy_atlas/evidence_search/extract/finding_vetter.py
++++ b/backend/src/policy_atlas/evidence_search/extract/finding_vetter.py
+@@ -446,6 +446,7 @@ def _judge_via_openai[T: (FindingVetterResponse, ICFFindingVetterResponse)](
+     model: str,
+     reasoning_effort: str,
+     prompt_cache: PromptCache,
++    step: str,
+     max_output_tokens: int,
+     prompt_version: str,
+     usage_event: str,
+@@ -470,6 +471,7 @@ def _judge_via_openai[T: (FindingVetterResponse, ICFFindingVetterResponse)](
+             model=model,
+             reasoning_effort=reasoning_effort,
+             prompt_cache=prompt_cache,
++            timeout_s=route().timeout_for(step),
+             max_completion_tokens=max_output_tokens,
+         )
+         return _scrub_judge_response(parsed), usage
+@@ -488,10 +490,10 @@ def _judge_via_openai[T: (FindingVetterResponse, ICFFindingVetterResponse)](
+             },
+         )
+ 
+-    return tracing.traced_call(
++    return tracing.traced_attempts(
+         langfuse_client,
+         name=trace_name,
+-        as_type="generation",
++        step=step,
+         call=_judge_once,
+         update=_update,
+     )
+@@ -520,12 +522,7 @@ class OpenAIFindingVetterBackend:
+         api_key: str | None = None,
+         langfuse_client: Langfuse | None = None,
+     ) -> None:
+-        self._client = resolve_openai_client(
+-            api_key,
+-            backend_name="OpenAIFindingVetterBackend",
+-            timeout=120.0,  # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
+-            max_retries=2,
+-        )
++        self._client = resolve_openai_client(api_key, backend_name="OpenAIFindingVetterBackend")
+         self._langfuse_client = langfuse_client
+ 
+     def judge(self, payload: dict[str, Any]) -> UsageResult[FindingVetterResponse]:
+@@ -549,6 +546,7 @@ class OpenAIFindingVetterBackend:
+             model=FINDING_VETTER_MODEL,
+             reasoning_effort=FINDING_VETTER_EFFORT,
+             prompt_cache=cache_mode_for("extract_vet_iof_findings"),
++            step="extract_vet_iof_findings",
+             max_output_tokens=FINDING_VETTER_MAX_OUTPUT_TOKENS,
+             prompt_version=FINDING_VETTER_PROMPT_VERSION,
+             usage_event="finding_vetter.judge.usage",
+@@ -611,12 +609,7 @@ class OpenAIICFFindingVetterBackend:
+         api_key: str | None = None,
+         langfuse_client: Langfuse | None = None,
+     ) -> None:
+-        self._client = resolve_openai_client(
+-            api_key,
+-            backend_name="OpenAIICFFindingVetterBackend",
+-            timeout=120.0,  # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
+-            max_retries=2,
+-        )
++        self._client = resolve_openai_client(api_key, backend_name="OpenAIICFFindingVetterBackend")
+         self._langfuse_client = langfuse_client
+ 
+     def judge(self, payload: dict[str, Any]) -> UsageResult[ICFFindingVetterResponse]:
+@@ -640,6 +633,7 @@ class OpenAIICFFindingVetterBackend:
+             model=ICF_FINDING_VETTER_MODEL,
+             reasoning_effort=ICF_FINDING_VETTER_EFFORT,
+             prompt_cache=cache_mode_for("extract_vet_icf_findings"),
++            step="extract_vet_icf_findings",
+             max_output_tokens=ICF_FINDING_VETTER_MAX_OUTPUT_TOKENS,
+             prompt_version=ICF_FINDING_VETTER_PROMPT_VERSION,
+             usage_event="icf_finding_vetter.judge.usage",
+diff --git a/backend/src/policy_atlas/evidence_search/group/group_clustering.py b/backend/src/policy_atlas/evidence_search/group/group_clustering.py
+index babe22ad..13ad89ed 100644
+--- a/backend/src/policy_atlas/evidence_search/group/group_clustering.py
++++ b/backend/src/policy_atlas/evidence_search/group/group_clustering.py
+@@ -61,6 +61,7 @@ _STAGE_CACHE = {
+     "discover": cache_mode_for("group_discover"),
+     "assign": cache_mode_for("group_assign"),
+ }
++_STAGE_STEP = {"discover": "group_discover", "assign": "group_assign"}
+ 
+ # The residual sentinel the group component counts as its honest ungrouped
+ # bucket. The assignment prompt asks for the plain word "ungroupable"; the
+@@ -341,10 +342,7 @@ class OpenAIGroupClusteringBackendFactory:
+         langfuse_client: Langfuse | None = None,
+     ) -> None:
+         self._client = resolve_openai_client(
+-            api_key,
+-            backend_name="OpenAIGroupClusteringBackendFactory",
+-            timeout=120.0,
+-            max_retries=2,
++            api_key, backend_name="OpenAIGroupClusteringBackendFactory"
+         )
+         self._langfuse_client = langfuse_client
+ 
+@@ -414,6 +412,7 @@ class _OpenAIGroupFacetBackend:
+             model=_STAGE_MODEL[stage],
+             reasoning_effort=_STAGE_EFFORT[stage],
+             prompt_cache=_STAGE_CACHE[stage],
++            timeout_s=route().timeout_for(_STAGE_STEP[stage]),
+         )
+ 
+     def _call(
+@@ -448,10 +447,10 @@ class _OpenAIGroupFacetBackend:
+                 },
+             )
+ 
+-        return tracing.traced_call(
++        return tracing.traced_attempts(
+             self._langfuse_client,
+             name=f"group:{stage}",
+-            as_type="generation",
++            step=_STAGE_STEP[stage],
+             call=_run,
+             update=_update,
+         )
+diff --git a/backend/src/policy_atlas/evidence_search/synthesis/grounding_judge.py b/backend/src/policy_atlas/evidence_search/synthesis/grounding_judge.py
+index 4e06dca4..ebb77f9e 100644
+--- a/backend/src/policy_atlas/evidence_search/synthesis/grounding_judge.py
++++ b/backend/src/policy_atlas/evidence_search/synthesis/grounding_judge.py
+@@ -326,12 +326,7 @@ class OpenAIGroundingJudgeBackend:
+             api_key: Optional OpenAI API key.
+             langfuse_client: Optional Langfuse client for the judge span.
+         """
+-        self._client = resolve_openai_client(
+-            api_key,
+-            backend_name="OpenAIGroundingJudgeBackend",
+-            timeout=120.0,
+-            max_retries=2,
+-        )
++        self._client = resolve_openai_client(api_key, backend_name="OpenAIGroundingJudgeBackend")
+         self._langfuse_client = langfuse_client
+ 
+     def _judge_once(
+@@ -344,6 +339,7 @@ class OpenAIGroundingJudgeBackend:
+                 JUDGE_MODEL,
+                 reasoning_effort=JUDGE_EFFORT,
+                 prompt_cache=JUDGE_CACHE,
++                timeout_s=route().timeout_for("judge_grounding"),
+             ),
+             messages=with_system_breakpoint(messages) if JUDGE_CACHE == "breakpoint" else messages,
+             response_format=JudgeResponseWire,
+@@ -381,10 +377,10 @@ class OpenAIGroundingJudgeBackend:
+                 },
+             )
+ 
+-        verdicts, usage = tracing.traced_call(
++        verdicts, usage = tracing.traced_attempts(
+             self._langfuse_client,
+             name="judge:grounding",
+-            as_type="generation",
++            step="judge_grounding",
+             call=lambda: self._judge_once(messages),
+             update=_update,
+         )

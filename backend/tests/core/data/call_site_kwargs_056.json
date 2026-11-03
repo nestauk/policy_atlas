@@ -13,6 +13,7 @@
       "response_format": "WatchDecisionTransport",
       "stream": null,
       "system_shape": "text",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "agent:decide"
@@ -30,6 +31,7 @@
       "response_format": "GateSortWire",
       "stream": null,
       "system_shape": "text",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "agent:gate_sort"
@@ -47,6 +49,7 @@
       "response_format": "LonglistVerbWire",
       "stream": null,
       "system_shape": "text",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "agent:longlist_sort"
@@ -64,6 +67,7 @@
       "response_format": "OptionDesignWire",
       "stream": null,
       "system_shape": "text",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "agent:option_design"
@@ -81,6 +85,7 @@
       "response_format": "RouterCompileTransport",
       "stream": null,
       "system_shape": "text",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "agent:route"
@@ -98,6 +103,7 @@
       "response_format": "SuggestResponse",
       "stream": null,
       "system_shape": "text",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "agent:suggest"
@@ -115,6 +121,7 @@
       "response_format": "WatchTriageWire",
       "stream": null,
       "system_shape": "text",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "agent:triage"
@@ -136,6 +143,7 @@
       "response_format": "_AssignmentsModel",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "characterise:assign"
@@ -157,6 +165,7 @@
       "response_format": "_ThemeSetModel",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "characterise:discover"
@@ -174,6 +183,7 @@
       "response_format": "ChatAnswerWire",
       "stream": null,
       "system_shape": null,
+      "timeout": 120.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": null
@@ -191,6 +201,7 @@
       "response_format": null,
       "stream": true,
       "system_shape": null,
+      "timeout": 120.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": null
@@ -208,6 +219,7 @@
       "response_format": null,
       "stream": null,
       "system_shape": null,
+      "timeout": 120.0,
       "tool_choice": "required",
       "tools": [
         "search_chunks",
@@ -233,6 +245,7 @@
       "response_format": "ClassifyWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "classify:document"
@@ -254,6 +267,7 @@
       "response_format": "RelevanceAnnotationWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "extract:annotate_relevance"
@@ -275,6 +289,7 @@
       "response_format": "ICFExtractionResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "extract:icf_findings"
@@ -296,6 +311,7 @@
       "response_format": "InterventionsResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "extract:interventions"
@@ -317,6 +333,7 @@
       "response_format": "ExtractionResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "extract:iof_findings"
@@ -338,6 +355,7 @@
       "response_format": "ICFFindingVetterResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "extract:vet_icf_findings"
@@ -359,6 +377,7 @@
       "response_format": "FindingVetterResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "extract:vet_iof_findings"
@@ -380,6 +399,7 @@
       "response_format": "_AssignmentsModel",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "group:assign"
@@ -401,6 +421,7 @@
       "response_format": "_DiscoveryModel",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "group:discover"
@@ -422,6 +443,7 @@
       "response_format": "JudgeResponseWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "judge:grounding"
@@ -443,6 +465,7 @@
       "response_format": "OptionAssignmentsResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:assign"
@@ -464,6 +487,7 @@
       "response_format": "ThemeAssignmentsResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:assign_themes"
@@ -485,6 +509,7 @@
       "response_format": "AuthorityResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:authority"
@@ -506,6 +531,7 @@
       "response_format": "ConstrainResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:constrain"
@@ -527,6 +553,7 @@
       "response_format": "OptionDiscoveryResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:discover"
@@ -548,6 +575,7 @@
       "response_format": "DistinctResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:distinct"
@@ -569,6 +597,7 @@
       "response_format": "ShortlistWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:shortlist"
@@ -590,6 +619,7 @@
       "response_format": "ThemeDiscoveryResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:themes"
@@ -611,6 +641,7 @@
       "response_format": "LeverTypingResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "longlist:type"
@@ -632,6 +663,7 @@
       "response_format": "AmbitionResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "option_profile:ambition"
@@ -653,6 +685,7 @@
       "response_format": "FoldingResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "option_profile:fold"
@@ -674,6 +707,7 @@
       "response_format": "MarkedLineResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "option_profile:line"
@@ -695,6 +729,7 @@
       "response_format": "PlaceSentencesResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "option_profile:place_sentences"
@@ -716,6 +751,7 @@
       "response_format": "PotentialImpactResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "option_profile:potential_impact"
@@ -737,6 +773,7 @@
       "response_format": "SettingResponse",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "option_profile:setting"
@@ -758,6 +795,7 @@
       "response_format": "ScreenRepWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "screen:abstract"
@@ -779,6 +817,7 @@
       "response_format": "ScreenRepWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "screen:full"
@@ -800,6 +839,7 @@
       "response_format": "SearchQueriesWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "search:generate_queries"
@@ -821,6 +861,7 @@
       "response_format": "V2SingleQueryWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "search_queries_v2_openalex:1"
@@ -842,6 +883,7 @@
       "response_format": "V2SingleQueryWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "search_queries_v2_overton:1"
@@ -863,6 +905,7 @@
       "response_format": "SearchQueriesWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "search:reformulate"
@@ -884,6 +927,7 @@
       "response_format": "V2SingleQueryWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "search_reformulate_v2_openalex:r1:1"
@@ -905,6 +949,7 @@
       "response_format": "V2SingleQueryWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "search_reformulate_v2_overton:r1:1"
@@ -926,6 +971,7 @@
       "response_format": "SearchSuggestWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "search:suggest"
@@ -947,6 +993,7 @@
       "response_format": "_RankedDocsModel",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "select:rerank"
@@ -968,6 +1015,7 @@
       "response_format": "SummaryJudgeWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "synthesise:judge_summary"
@@ -989,6 +1037,7 @@
       "response_format": "SectionProposalWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "synthesise:propose_sections"
@@ -1006,6 +1055,7 @@
       "response_format": null,
       "stream": null,
       "system_shape": "text",
+      "timeout": 120.0,
       "tool_choice": {
         "function": {
           "name": "emit_repairs"
@@ -1034,6 +1084,7 @@
       "response_format": null,
       "stream": null,
       "system_shape": "text",
+      "timeout": 120.0,
       "tool_choice": {
         "allowed_tools": {
           "mode": "required",
@@ -1092,6 +1143,7 @@
       "response_format": "SummaryWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "synthesise:write_artefact_summary"
@@ -1113,6 +1165,7 @@
       "response_format": "SummaryWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "synthesise:write_block_summary"
@@ -1134,6 +1187,7 @@
       "response_format": "CaseStudyWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "synthesise:write_case_studies"
@@ -1155,6 +1209,7 @@
       "response_format": "IntroWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 30.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "synthesise:write_intro"
@@ -1176,6 +1231,7 @@
       "response_format": null,
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
       "tool_choice": {
         "function": {
           "name": "emit_section"
@@ -1204,6 +1260,7 @@
       "response_format": "NoteWire",
       "stream": null,
       "system_shape": "parts+breakpoint",
+      "timeout": 30.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "synthesise:write_source_note"
@@ -1221,6 +1278,7 @@
       "response_format": "ScopingTurnWire",
       "stream": null,
       "system_shape": "text",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "task_agent_scoping:turn"
@@ -1238,18 +1296,19 @@
       "response_format": "PlannerTurnWire",
       "stream": null,
       "system_shape": "text",
+      "timeout": 60.0,
       "tool_choice": null,
       "tools": null,
       "trace_name": "task_agent:turn"
     }
   },
   "captured_at": "2026-11-02",
-  "extraction_fingerprint": "d3d8308957d22d6f330ef088c9f390b19b1c7b12c01134ca108eae32e16cf421",
+  "extraction_fingerprint": "3ce82f51170d2e3d21749cc3ada159ade4a9b68ce92b595b357482b01ebc38c4",
   "extraction_fingerprint_source": {
     "extraction_fingerprint": "policy_atlas.evidence_search.extract.extract.extraction_fingerprint('live', finding_vetter_active=True)",
     "icf_extraction_fingerprint": "policy_atlas.evidence_search.extract.extract.icf_extraction_fingerprint('live', finding_vetter_active=True)"
   },
-  "icf_extraction_fingerprint": "c33fb48c32ecae44e9686a0913826c954f06cc89a22a95ede955f2ad08ee24c2",
+  "icf_extraction_fingerprint": "858b242ba304a316279b4b2a5e64f6e438100c97be00c42770130b8b97af8dff",
   "route": "openai-direct",
   "uncaptured": {
     "claude_search_generate_queries": "Inventory row 20, ClaudeSearchGenerationBackend.generate_queries: a boto3 Bedrock `converse` call, not the OpenAI client; it has no route step and no row in the plan's Steps table, and no route selects it (route search_queries.backend is never 'claude')."

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextvars
 import os
+import time
 import uuid
 from collections.abc import Callable, Iterator
 from concurrent.futures import Executor, Future
@@ -17,6 +18,8 @@ from contextlib import AbstractContextManager, contextmanager
 from threading import Lock
 from typing import Any, Literal
 
+import openai
+import structlog
 from langfuse import Langfuse, propagate_attributes
 
 from policy_atlas.core import embeddings
@@ -32,6 +35,16 @@ from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_P
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
 
 _ObservationType = Literal["embedding", "generation", "span", "tool"]
+
+log = structlog.get_logger()
+
+#: Attempts per model call under :func:`traced_attempts`: the call and one retry
+#: (task 057, D12). The OpenAI clients never retry on their own (``max_retries=0``).
+MODEL_CALL_ATTEMPTS = 2
+#: The longest wait before the retry that a provider's ``Retry-After`` header can ask for.
+RETRY_AFTER_CAP_S = 30.0
+#: The wait before the retry when the provider names none.
+DEFAULT_RETRY_WAIT_S = 1.0
 
 
 def submit_with_context[T](
@@ -154,6 +167,124 @@ def traced_call[T](
         if after is not None:
             after(span, result)
         return result
+
+
+def _retryable(exc: BaseException) -> bool:
+    """Whether a failed model request is worth one more try.
+
+    The same failures the OpenAI SDK retried on its own before task 057: a
+    timeout, a dropped connection, "too many requests" (429) and a server
+    error (5xx). Anything else (a bad request, a refused key, an answer that
+    does not parse) would fail the same way again.
+    """
+    if isinstance(exc, openai.APITimeoutError | openai.APIConnectionError | openai.RateLimitError):
+        return True
+    return isinstance(exc, openai.APIStatusError) and exc.status_code >= 500
+
+
+def _retry_wait_s(exc: BaseException) -> float:
+    """Seconds to wait before the retry.
+
+    A 429 that carries a ``Retry-After`` header (a number of seconds) is
+    honoured up to :data:`RETRY_AFTER_CAP_S`; every other case waits
+    :data:`DEFAULT_RETRY_WAIT_S`.
+    """
+    if isinstance(exc, openai.RateLimitError):
+        header = exc.response.headers.get("retry-after")
+        if header is not None:
+            try:
+                seconds = float(header)
+            except ValueError:  # an HTTP date, not seconds: use the default
+                return DEFAULT_RETRY_WAIT_S
+            return min(max(seconds, 0.0), RETRY_AFTER_CAP_S)
+    return DEFAULT_RETRY_WAIT_S
+
+
+def traced_attempts[T](
+    client: Langfuse | None,
+    *,
+    name: str,
+    step: str,
+    call: Callable[[], T],
+    session_id: uuid.UUID | None = None,
+    update: Callable[[Any, T], None] | None = None,
+    after: Callable[[Any, T], None] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+) -> T:
+    """Run one model call with one traced retry, each attempt its own generation.
+
+    In plain terms: the request is sent; if it times out or fails for a passing
+    reason (see :func:`_retryable`) it is sent once more after a short wait.
+    Every attempt opens its own Langfuse generation and, before the request
+    goes out, stamps it with the step name, the attempt number (1 or 2) and a
+    call id the two attempts share. A request that never comes back is
+    therefore still visible and countable. A failed attempt's generation is
+    marked ``ERROR`` with the error class and message. Task 057, contract D12.
+
+    Args:
+        client: Langfuse client, or ``None`` to run the same attempts untraced.
+        name: Observation name (unchanged from before task 057: saved views
+            in Langfuse depend on it).
+        step: The route step name.
+        call: Zero-argument function that makes the provider request and
+            returns the parsed site-specific result.
+        session_id: Optional Langfuse session id to attach to the trace.
+        update: Optional callback that records input, output, model and
+            metadata on the successful attempt's observation. Its metadata is
+            added to the attempt's metadata, not put in its place.
+        after: Optional callback for extra work on the successful attempt
+            before its observation closes (trace scores, for example).
+        sleep: Waits before the retry; tests pass a fake.
+
+    Returns:
+        The value returned by ``call`` on the attempt that succeeded.
+
+    Raises:
+        Exception: Whatever the last attempt raised: a failure that is not
+            worth retrying is raised at once; a retryable one is raised after
+            the second attempt also fails.
+    """
+    logical_call_id = uuid.uuid4().hex[:12]
+    for attempt in range(1, MODEL_CALL_ATTEMPTS + 1):
+        try:
+            if client is None:
+                return call()
+            with (
+                _session_scope(session_id),
+                _observation(client, name=name, as_type="generation") as span,
+            ):
+                span.update(
+                    metadata={
+                        "step": step,
+                        "attempt": attempt,
+                        "logical_call_id": logical_call_id,
+                    }
+                )
+                try:
+                    result = call()
+                except Exception as exc:
+                    span.update(level="ERROR", status_message=f"{type(exc).__name__}: {exc}")
+                    raise
+                if update is not None:
+                    update(span, result)
+                if after is not None:
+                    after(span, result)
+                return result
+        except Exception as exc:
+            if attempt == MODEL_CALL_ATTEMPTS or not _retryable(exc):
+                raise
+            wait_s = _retry_wait_s(exc)
+            log.warning(
+                "model_call.retry",
+                step=step,
+                name=name,
+                attempt=attempt,
+                logical_call_id=logical_call_id,
+                error=type(exc).__name__,
+                wait_s=wait_s,
+            )
+            sleep(wait_s)
+    raise AssertionError("unreachable: the last attempt returns or raises")
 
 
 @contextmanager
@@ -308,14 +439,8 @@ class TracedThemeGroupingBackend:
         Returns:
             Themes and token usage returned by the wrapped backend.
         """
-        with _observation(self._client, name="characterise:discover", as_type="generation") as span:
-            themes, usage = self._backend.discover(
-                docs,
-                intent=intent,
-                min_themes=min_themes,
-                max_themes=max_themes,
-                guidance=guidance,
-            )
+        def _update(span: Any, result: UsageResult[list[Theme]]) -> None:
+            themes, usage = result
             span.update(
                 usage_details=usage_details(usage),
                 input={"intent": intent, "records": list(docs)},
@@ -329,7 +454,20 @@ class TracedThemeGroupingBackend:
                 },
                 model=theme_grouping.DISCOVERY_MODEL,
             )
-            return themes, usage
+
+        return traced_attempts(
+            self._client,
+            name="characterise:discover",
+            step="characterise_discover",
+            call=lambda: self._backend.discover(
+                docs,
+                intent=intent,
+                min_themes=min_themes,
+                max_themes=max_themes,
+                guidance=guidance,
+            ),
+            update=_update,
+        )
 
     def assign(
         self, batch: list[GroupingDoc], *, themes: list[Theme]
@@ -344,12 +482,9 @@ class TracedThemeGroupingBackend:
             Assignments and token usage returned by the wrapped backend.
         """
         assign_index = self._next_assign_index()
-        with _observation(
-            self._client,
-            name="characterise:assign",
-            as_type="generation",
-        ) as span:
-            assignments, usage = self._backend.assign(batch, themes=themes)
+
+        def _update(span: Any, result: UsageResult[dict[str, str]]) -> None:
+            assignments, usage = result
             span.update(
                 usage_details=usage_details(usage),
                 input={"themes": list(themes), "records": list(batch)},
@@ -362,7 +497,14 @@ class TracedThemeGroupingBackend:
                 },
                 model=theme_grouping.ASSIGNMENT_MODEL,
             )
-            return assignments, usage
+
+        return traced_attempts(
+            self._client,
+            name="characterise:assign",
+            step="characterise_assign",
+            call=lambda: self._backend.assign(batch, themes=themes),
+            update=_update,
+        )
 
 
 @contextmanager

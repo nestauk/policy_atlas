@@ -23,8 +23,9 @@ from typing import Any, Literal, Protocol, TypedDict
 
 import boto3
 import structlog
+from botocore.config import Config
 from botocore.exceptions import ClientError
-from openai import RateLimitError
+from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
 from sqlalchemy import exists, func, select, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
@@ -49,6 +50,14 @@ DEFAULT_MAX_CHUNKS = 20_000
 EMBEDDING_RATE_LIMIT_BACKOFF_BASE_S = 2.0
 EMBEDDING_RATE_LIMIT_BACKOFF_CAP_S = 60.0
 EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS = 4
+#: Seconds one OpenAI embedding request may take (the client-level value before
+#: task 057). Embeddings are not a route step, so the value lives here.
+OPENAI_EMBEDDING_TIMEOUT_S = 30.0
+#: How the Bedrock clients (Cohere embeddings here, Claude search queries in
+#: ``search_generation``) wait and retry (task 057, D12): give up on a response
+#: after 60 s, and let botocore make one attempt only, because the callers run
+#: their own throttling backoff.
+BEDROCK_CLIENT_CONFIG = Config(read_timeout=60, retries={"mode": "standard", "max_attempts": 1})
 
 _UINT32_MAX = float((2**32) - 1)
 _SENTENCE_BOUNDARY_RE = re.compile(r"(?<=[.!?])\s+")
@@ -175,11 +184,9 @@ class OpenAIEmbeddingBackend:
     mode = "live"
 
     def __init__(self, api_key: str | None = None) -> None:
-        # The SDK may spend up to 1 + max_retries HTTP attempts per logical
-        # create call; the explicit 429 loop below budgets logical calls.
-        self._client = resolve_openai_client(
-            api_key, backend_name="OpenAIEmbeddingBackend", timeout=30.0, max_retries=2
-        )
+        # The client makes one HTTP attempt per create call (``max_retries=0``,
+        # task 057); the explicit 429 loop below is the only retry.
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIEmbeddingBackend")
 
     def embed_texts(
         self, texts: list[str], *, kind: Literal["document", "query"] = "document"
@@ -195,9 +202,8 @@ class OpenAIEmbeddingBackend:
             One 1536-dimensional vector per input text, in input order.
 
         Raises:
-            RateLimitError: If all logical attempts are exhausted on provider
-                rate limits. With SDK ``max_retries=2``, the HTTP ceiling is
-                ``3 * EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS`` attempts.
+            RateLimitError: If all ``EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS`` attempts
+                are refused for rate limits (one HTTP attempt each).
             RuntimeError: If the provider returns a different number of vectors.
         """
         if not texts:
@@ -220,13 +226,24 @@ class OpenAIEmbeddingBackend:
                     model=EMBEDDING_MODEL,
                     input=texts,
                     dimensions=EMBEDDING_DIMENSIONS,
+                    timeout=OPENAI_EMBEDDING_TIMEOUT_S,
                 )
-            except RateLimitError:
+            except (RateLimitError, APITimeoutError, APIConnectionError, APIStatusError) as exc:
+                # Retry "too many requests", a timeout, a dropped connection and
+                # a server error (5xx), with the same backoff. The client no
+                # longer retries on its own (task 057), so this loop covers them.
+                if (
+                    isinstance(exc, APIStatusError)
+                    and not isinstance(exc, RateLimitError)
+                    and exc.status_code < 500
+                ):
+                    raise
                 if attempt == EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS - 1:
                     raise
                 delay_s = _embedding_rate_limit_delay_s(attempt)
                 log.warning(
                     "embedding.openai_rate_limited",
+                    error=type(exc).__name__,
                     attempt=attempt + 1,
                     max_attempts=EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS,
                     sleep_s=delay_s,
@@ -250,6 +267,7 @@ class CohereEmbeddingBackend:
         self._client = client or boto3.client(
             "bedrock-runtime",
             region_name=os.environ.get("AWS_REGION") or "eu-west-2",
+            config=BEDROCK_CLIENT_CONFIG,
         )
 
     def embed_texts(

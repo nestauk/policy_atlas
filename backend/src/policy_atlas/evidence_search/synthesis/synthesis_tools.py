@@ -1538,7 +1538,7 @@ def _longest_shared_stretch(haystack: str, needle: str) -> tuple[int, int] | Non
 def _quote_anchor(content: str, quote: str) -> tuple[tuple[int, int], bool] | None:
     """Locate ``quote`` in ``content``: ``((start, end), found)`` or ``None``.
 
-    The quote is matched the way verification matches it (the qv_v1
+    The quote is matched the way verification matches it (the qv_v2
     normalisation of :class:`QuoteMatcher`). When it is not there, the anchor
     is the longest stretch of the normalised quote that is (``found`` False).
     ``None`` when the quote shares nothing with the chunk.
