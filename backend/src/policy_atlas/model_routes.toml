@@ -170,7 +170,12 @@ synthesise_write_block_summary = { timeout_s = 6 }   # n 254, p99 2.7 s
 synthesise_judge_summary = { timeout_s = 5 }         # n 277, p99 2.3 s
 synthesise_section_turn = { timeout_s = 23 }         # n 424, p99 11.0 s (repair shares the step)
 option_profile_place_sentences = { timeout_s = 35 }  # n 111, p99 17.1 s
-judge_grounding = { timeout_s = 40 }                 # n 254, p99 19.8 s at medium effort
+# The grounding judge runs at low effort on this route (task 057, D14): half the wall per
+# call at 0.8x the cost, agreement with the medium judge at the judge's own noise floor;
+# the synthesis refinement task revisits it with a labelled set of disputed claims. Its
+# timeout was 40 s (2 x p99 at medium) and was raised once to 80 s after a retry was also
+# cut on the fixed questions (round b, 2026-11-03); re-measured at low effort.
+judge_grounding = { reasoning_effort = "low", timeout_s = 80 }
 
 # ---------------------------------------------------------------------------
 [routes.bedrock-claude]
