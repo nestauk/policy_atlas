@@ -105,6 +105,10 @@ rather than lost ones. The rate moves with the hour (probe 2's runs saw 0.3%, ro
    that costs nothing visible (no Bedrock 429s in any round), but several components'
    bursts in one minute, or production traffic joining staging's, is where it would first
    turn into throttling. One constant per step, measured by the recorded output sizes.
+   **Done 2026-11-03 on the owner's go (verification.md F22):** screen 8,192 → 2,048,
+   classify 16,384 → 8,192, from Langfuse's recorded output counts with reasoning included
+   (screen p99 454 / 656, max 1,608; classify p99 1,915, max 3,610); a classify burst now
+   reserves about a tenth of the quota, a screen burst about a fortieth.
 7. **Do not add TCP keep-alive or the NAT sysctl for this.** The documented 350 s class
    cannot reach a pool that expires idle connections at 5 s; add them only if someone raises
    the keep-alive expiry (write that constraint next to the client).

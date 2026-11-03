@@ -235,7 +235,7 @@
         }
       },
       "function": "OpenAIClassificationBackend.classify",
-      "max_completion_tokens": 16384,
+      "max_completion_tokens": 8192,
       "model": "gpt-6-luna",
       "module": "policy_atlas.evidence_search.assess.classification_backend",
       "other_keys": [],
@@ -785,7 +785,7 @@
         }
       },
       "function": "OpenAIScreeningBackend.screen_envelope",
-      "max_completion_tokens": 8192,
+      "max_completion_tokens": 2048,
       "model": "gpt-6-luna",
       "module": "policy_atlas.evidence_search.assess.screening_backend",
       "other_keys": [],
@@ -807,7 +807,7 @@
         }
       },
       "function": "OpenAIScreeningBackend.screen_fulltext",
-      "max_completion_tokens": 8192,
+      "max_completion_tokens": 2048,
       "model": "gpt-6-luna",
       "module": "policy_atlas.evidence_search.assess.screening_backend",
       "other_keys": [],

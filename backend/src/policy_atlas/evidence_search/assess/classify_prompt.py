@@ -51,9 +51,13 @@ CLASSIFY_MODEL = route().model_for("classify_document")
 CLASSIFY_EFFORT = route().effort_for("classify_document")
 
 # Reasoning model: the cap covers reasoning + output tokens (extract's 011
-# lesson). Classify output is small; 16K leaves ample reasoning headroom for
-# the harder 9-way discrimination.
-CLASSIFY_MAX_OUTPUT_TOKENS = 16_384
+# lesson). Sized from Langfuse (task 057 review, 2026-11-03, 3,850 calls since
+# 2026-10-28, reasoning included, some at the old high effort): p99 1,915,
+# max 3,610; the 9-way discrimination reasons longer than the screens. Bedrock
+# reserves input + this cap against the tokens-per-minute quota before the
+# call runs, so the cap is a bound on the burst, not just on the answer
+# (was 16_384).
+CLASSIFY_MAX_OUTPUT_TOKENS = 8_192
 
 # Open-tag bounds (contract decision 6, the 009 provider-tag bounds).
 TAGS_MAX_PER_DOC = 10

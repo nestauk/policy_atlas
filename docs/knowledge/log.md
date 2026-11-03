@@ -665,6 +665,9 @@
   [the markup rule must not delete content](markup-rule-must-not-delete-content.md);
   one concept extended, [client timeout sized to the healthy tail](client-timeout-sized-to-healthy-tail.md)
   (three attempts, derive at the width, the 15 s floor, failed attempts carry no input).
+  Extended again after the owner's probes 2 and 4 and the Bedrock research: the stalls are
+  the provider's (do not engineer the client for them) and `max_completion_tokens` is a
+  quota reservation on Bedrock (screen and classify caps trimmed, F22).
   Authored from both sources: the build's 22 knowledge candidates (verification.md § Review
   handoff) and the stack's findings. Folded: the zsh word-split, the two-walk cap, the
   cherry-pick abort, the `--theirs` rule, the store's like-for-like effect, the pool's probe

@@ -3468,3 +3468,13 @@ says what is true today and what the lever is. Experiment figures are from the g
   own guard refuses private addresses, so nothing reaches the VPC through it; any other code
   in the image could. Lever: egress rules for 80 and 443 to the internet and 5432 to the
   database group only (owner's call: publishers on other ports would be refused).
+- **The Bedrock hangs are the provider's; their cause is unknown** (review; probes 2 and 4,
+  `docs/tasks/057-queued-ingest/bedrock-integration-brief.md`). The bare OpenAI SDK hangs
+  10 to 17% of serial judge-sized calls, some returning after 2 to 4 minutes; the client,
+  the pool and our wrapper are cleared. Before the production route flip, in the brief's
+  order: file the AWS support case with probe 4's request ids; record the response's
+  request-id header on every traced attempt and graph the free `AWS/Bedrock` `Invocations`
+  metric against Langfuse's attempts; turn on invocation logging only if the DPIA allows
+  the stored bodies; replace the long-term API key (AWS: "exploration only") with
+  short-term keys or SigV4 as its own approval-gated task. Not: TCP keep-alive, the NAT
+  sysctl, streaming on the long steps, a token-aware limiter (reasoned out in the brief).

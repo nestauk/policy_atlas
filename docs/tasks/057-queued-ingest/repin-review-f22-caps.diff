@@ -1,0 +1,54 @@
+diff --git a/backend/src/policy_atlas/evidence_search/assess/classify_prompt.py b/backend/src/policy_atlas/evidence_search/assess/classify_prompt.py
+index c86bc3fe..e81058fe 100644
+--- a/backend/src/policy_atlas/evidence_search/assess/classify_prompt.py
++++ b/backend/src/policy_atlas/evidence_search/assess/classify_prompt.py
+@@ -51,9 +51,13 @@ CLASSIFY_MODEL = route().model_for("classify_document")
+ CLASSIFY_EFFORT = route().effort_for("classify_document")
+ 
+ # Reasoning model: the cap covers reasoning + output tokens (extract's 011
+-# lesson). Classify output is small; 16K leaves ample reasoning headroom for
+-# the harder 9-way discrimination.
+-CLASSIFY_MAX_OUTPUT_TOKENS = 16_384
++# lesson). Sized from Langfuse (task 057 review, 2026-11-03, 3,850 calls since
++# 2026-10-28, reasoning included, some at the old high effort): p99 1,915,
++# max 3,610; the 9-way discrimination reasons longer than the screens. Bedrock
++# reserves input + this cap against the tokens-per-minute quota before the
++# call runs, so the cap is a bound on the burst, not just on the answer
++# (was 16_384).
++CLASSIFY_MAX_OUTPUT_TOKENS = 8_192
+ 
+ # Open-tag bounds (contract decision 6, the 009 provider-tag bounds).
+ TAGS_MAX_PER_DOC = 10
+diff --git a/backend/src/policy_atlas/evidence_search/assess/screen_prompt.py b/backend/src/policy_atlas/evidence_search/assess/screen_prompt.py
+index 348b2e8e..e3fcacc5 100644
+--- a/backend/src/policy_atlas/evidence_search/assess/screen_prompt.py
++++ b/backend/src/policy_atlas/evidence_search/assess/screen_prompt.py
+@@ -55,8 +55,12 @@ STAGE2_REPS = 1
+ STAGE2_WINDOW_CHAR_BUDGET = 60_000
+ 
+ # Reasoning model: the cap covers reasoning + output tokens (extract's 011
+-# lesson). Screen output is tiny; 8K leaves ample reasoning headroom.
+-SCREEN_MAX_OUTPUT_TOKENS = 8_192
++# lesson). Sized from Langfuse (task 057 review, 2026-11-03, 7,763 calls since
++# 2026-10-28 at medium effort, reasoning included): screen:abstract p99 454,
++# max 713; screen:full p99 656, max 1,608. Bedrock reserves input + this cap
++# against the tokens-per-minute quota before the call runs, so the cap is a
++# bound on the burst, not just on the answer (was 8_192).
++SCREEN_MAX_OUTPUT_TOKENS = 2_048
+ 
+ # Input-side caps at prompt assembly (contract M10). Generous for legitimate
+ # envelopes; a bound, not a filter.
+diff --git a/scripts/prompt_hashes.json b/scripts/prompt_hashes.json
+index 172aa9a6..7c50fe4b 100644
+--- a/scripts/prompt_hashes.json
++++ b/scripts/prompt_hashes.json
+@@ -1,7 +1,7 @@
+ {
+   "backend/src/policy_atlas/core/prompt_fields.py": "677f70ecdc7188754020ad71a3f7648a4cd17012b77d3bab3c6fac18a18d7f16",
+-  "backend/src/policy_atlas/evidence_search/assess/classify_prompt.py": "63aef5d11a004ac23f16c85262e7c325dda50fbd762be971cc532fc718bdea95",
+-  "backend/src/policy_atlas/evidence_search/assess/screen_prompt.py": "1225a8054f425495944a6961c7c71b2dc709d2a9740acd368b83223b6b14a76a",
++  "backend/src/policy_atlas/evidence_search/assess/classify_prompt.py": "dfa875087544917f37f69e5732c0d5a7f835929270b60dff05e0feb70287377e",
++  "backend/src/policy_atlas/evidence_search/assess/screen_prompt.py": "eb05d53507fd404902a2bc1d76282753906f07c74aeeb5aa43259b126d0aecc1",
+   "backend/src/policy_atlas/evidence_search/corpus/ranking.py": "0e365117a4f11f555d47a1558d7ea7c121a6785e900a4b90bda2a24a2dd220a7",
+   "backend/src/policy_atlas/evidence_search/corpus/theme_grouping.py": "4cbeb210981e20fa2140aa2096a8a0cb998c57ea54efd0af931d2dd439dee0aa",
+   "backend/src/policy_atlas/evidence_search/extract/finding_references.py": "072329752bcf272c48e231cdd7514b04991d97998d036642c4bff381968be942",
