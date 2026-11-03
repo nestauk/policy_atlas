@@ -1,7 +1,7 @@
 # Rubric: 057-queued-ingest
 
 Core completion criteria. The task is **done only if every box holds**, otherwise it is in
-progress. Item numbers point at [contract.md](contract.md) (revision 3): N1 to N15, D1 to
+progress. Item numbers point at [contract.md](contract.md) (revision 4): N1 to N15, D1 to
 D15, G1 to G10, S1 to S5. Terms are defined in the contract's § Terms. The review record is
 [adversarial-review-contract.md](adversarial-review-contract.md).
 
@@ -29,7 +29,8 @@ Core
        tested.
 
 Queue and function (N1 to N5, D1, D4, D5)
-9. [ ] N1: one message per attempted document; the message carries no user identifier (test).
+9. [ ] N1: one message per attempted document; the message carries two ids and a schema
+       version, no user identifier and no URL (test).
 10. [ ] N2: the handler produces the same statuses and reason codes as the in-process path on
         the committed fixture corpus; the store lookup happens before parsing; a 429 with
         Retry-After is waited for (capped); the handler always writes a final reason-coded
@@ -61,7 +62,9 @@ Embedding in the stage (D6, G4)
         state exists.
 15. [ ] D6, G4: embedding requests, tokens and throttling sleeps per run recorded on staging
         with the quota in force; the embedding wall compared with tokens ÷ quota and with
-        today's 457 s median; the pool width re-derived if the quota changed.
+        today's 457 s median; the pool width re-derived if the quota changed. Staging evidence
+        is gathered after the merge to dev (owner, 2026-11-03: staging deploys only from dev)
+        and appended to verification.md; the PR names it as the one open item.
 
 One code path and the markup rule (N6, N7, N14, D8)
 16. [ ] N6: the scheduler and batch hand-over are gone; the per-document function serves both
@@ -78,9 +81,11 @@ One code path and the markup rule (N6, N7, N14, D8)
 Store and retrieval (N8, N9, D2, D3, D7, G9, G10)
 19. [ ] D2, G9, G10: the compose and CI Postgres image carries pgvector; the migration upgrades
         and downgrades on the test database; the backfill commits per batch and resumes on
-        `embedding is null`; the JSONB column is dropped only when no row is null; staging and
-        prod row counts and a staging dry run recorded at the plan gate; the deploy waiter loop
-        outlasts the measured migration; the downgrade's float32 approximation documented.
+        `embedding is null`; the JSONB column is dropped only when no row is null (rev3, at the
+        end of the retrieval phase); staging and prod row counts recorded before the build (the
+        staging dry run was dropped by the owner, 2026-11-03, in favour of the non-blocking
+        design); the deploy waiter loop outlasts the measured migration; the downgrade's
+        float32 approximation documented; a failure after a committed batch resumes (test).
 20. [ ] N8, D7: the committed synthetic-corpus test passes against both retrievers before the
         Python retriever is deleted; the recorded real-query parity on bedrock-profile vectors
         shows the same top-8 in the same order; the snapshot-id list is frozen once per
@@ -111,16 +116,19 @@ Timeouts and widths (N10, D12, D15)
         the note that prod takes the widths unmeasured on `openai-direct` is in verification.md.
 
 Infra, image, measurement and governance (N11 to N13, D9, G7, G8)
-26. [ ] N11: staging deploys with the function, queue (4-day retention, encrypted), dead-letter
+26. [ ] N11: the function, queue (4-day retention, encrypted, batch size 1), dead-letter
         queue, alarms (dead-letter depth, NAT network, writer CPU credits), the API role's send
         permission, the function's log group with retention and URL redaction, and
-        `ingest_mode = queued`; `cdk diff` reviewed at the plan gate; production config stays
-        `in_process` unless the owner rules otherwise.
+        `ingest_mode = queued` for staging are in CDK with pinned tests; `cdk diff` reviewed at
+        the owner's checkpoint after Phase 5 and before the merge; the staging deploy (from dev,
+        after the merge) succeeds; production config stays `in_process` unless the owner rules
+        otherwise.
 27. [ ] N13, G8: the image ships compiled bytecode; cold import before and after recorded.
-28. [ ] N12, D9: before and after tables on the laptop (in-process, bedrock) and on staging
-        (queued, bedrock) with run ids, ordered by lever with a stage-wall attribution per
-        lever; the ingest split per run; the owner's content read of one report after N7 and
-        one after N8 recorded.
+28. [ ] N12, D9: before and after tables on the laptop (in-process, bedrock) with run ids,
+        ordered by lever with a stage-wall attribution per lever, including three fresh
+        build-open runs as the like-for-like before; the staging (queued, bedrock) tables
+        appended after the merge (item 15); the ingest split per run; the owner's content read
+        of one report after N7 and one after N8 recorded.
 29. [ ] G7, N12: the data-flow note is committed and covers the queue and log retention and the
         pseudonymous identifiers; the retention rule for unlinked snapshots is written with its
         locking rule; the DPIA addendum is named as the merge gate in the PR.

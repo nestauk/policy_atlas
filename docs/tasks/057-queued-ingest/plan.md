@@ -47,7 +47,7 @@ reason for the swap, put to the owner in § Owner items 3.)
 | P6 | Dev and CI image (G9) | `docker-compose.yml` `image: pgvector/pgvector:pg17`. Compose declares no volume, so Postgres 17 would refuse the 16 data directory: Phase 0 dumps with `pg_dumpall` before the switch and restores after, checking row counts; the demo worktree shares this database (memory note) and is told. `tests/conftest.py` runs `CREATE EXTENSION IF NOT EXISTS vector` per worker database (the compose user is a superuser; harmless). CI runs `make setup` on a fresh database, so no CI edit beyond the compose file. |
 | P7 | Retrieval parity and the query repository (N8, D7) | **Committed test:** the synthetic corpus (`tests/evidence_search/synthesis/data/retrieval_synthetic/`: 40 chunks, 3 snapshots, 2 scopes, stub vectors and tokens covering every boost, filter, tie-break and the multi-scope rule) run through both retrievers until the Python one is deleted, then the SQL one against the frozen expected output. **Recorded, not committed:** after rev1, on the dev database, the Python retriever pointed at the float32 column and the SQL retriever run side by side on the fixed questions' section queries (from Langfuse `search_chunks` tool calls) and on the 20 feasibility queries; same top-8 in order, scores recorded in `verification.md`. SQL computes the fused score, every boost and the clamp **before the limit**, and the limit is the per-leg pool (200), not 50; Python keeps the reranker seam, the cut to 8, the budget, dedup, windowing and provenance for returned candidates. **Interface (lead):** `RetrievalScope` becomes a frozen record of snapshot ids and scope metadata plus a connection factory; synthesis passes a factory over its component connection, chat passes the engine and opens one short read per search; both callers are tested after the scope-building connection has closed. |
 | P8 | Per-document function (N2, N6, N9) | `ingest_document(connect, link_row, *, fetcher, parse_fn, deadline) -> DocumentOutcome` in `sourcing/ingest_document.py`, where `connect` is a connection factory. It carries today's full cascade: Europe PMC XML first, next URL on a parse failure, `_maybe_discover_url`, `_apply_oa_cross_check`, the reason-code priority; fetch waits honour Retry-After (429 and 503, capped at 30 s); every wait and the parse kill are capped at `deadline − now − margin`. It opens a connection only for the store lookup and for the one short write transaction (`INSERT source_snapshot … ON CONFLICT (body_hash, parse_profile, segmentation_policy) DO NOTHING RETURNING`, re-select on conflict, chunks, the link update guarded on `queued` with the breadcrumbs on the link row). No embedding. The parse subprocess is today's `_worker_entry` with the kill. |
-| P9 | One stage, two queue clients (N1, N3, D1) | The stage has one code path in both modes: in its own committed transaction re-queue orphaned `queued` rows, flip eligible rows to `queued`, **commit, then send**; poll every 3 s on the component connection with ticks (`fetched=None`); embed per tick (P11); at 600 s mark the rest `fetch_failed` / `not_ready` in its own transaction; return the counts (`already_in_store` inside `ingested`, kept out of the SSE summary). Partial `SendMessageBatch` failures mark their rows `fetch_failed` / `send_failed`. `QueueClient` protocol with two implementations: `SqsQueueClient` (boto3, batches of 10) and **`LocalQueueClient`, whose `send()` runs the handler on a thread pool** (in-process mode on laptops), with an inline mode that runs the handler on the caller's connection for tests that use the rolled-back fixture. `_ParseScheduler`, `_run_parse_jobs`, `_drain_*` and the fetch thread pool are deleted. Message schema: see § Owner items 2 (ids only, lead's recommendation, or N1 as written). `ingest_mode` from `POLICY_ATLAS_INGEST_MODE` (`in_process` default, `queued`), read in `api/settings.py`, and plumbed through all three construction paths: `deps.get_runner_backends()`, the startup re-execution in `app.py`, and the CLI in `runtime/agent.py`; `RunnerBackends` carries the queue client. |
+| P9 | One stage, two queue clients (N1, N3, D1) | The stage has one code path in both modes: in its own committed transaction re-queue orphaned `queued` rows, flip eligible rows to `queued`, **commit, then send**; poll every 3 s on the component connection with ticks (`fetched=None`); embed per tick (P11); at 600 s mark the rest `fetch_failed` / `not_ready` in its own transaction; return the counts (`already_in_store` inside `ingested`, kept out of the SSE summary). Partial `SendMessageBatch` failures mark their rows `fetch_failed` / `send_failed`. `QueueClient` protocol with two implementations: `SqsQueueClient` (boto3, batches of 10) and **`LocalQueueClient`, whose `send()` runs the handler on a thread pool** (in-process mode on laptops), with an inline mode that runs the handler on the caller's connection for tests that use the rolled-back fixture. `_ParseScheduler`, `_run_parse_jobs`, `_drain_*` and the fetch thread pool are deleted. Message schema: `{"link_row_id", "run_id", "schema": 1}` (owner item 2); the function reads candidates from the link row's snapshot metadata. `ingest_mode` from `POLICY_ATLAS_INGEST_MODE` (`in_process` default, `queued`), read in `api/settings.py`, and plumbed through all three construction paths: `deps.get_runner_backends()`, the startup re-execution in `app.py`, and the CLI in `runtime/agent.py`; `RunnerBackends` carries the queue client. |
 | P10 | Handler (N2, D5) | `ops/ingest_worker.py::handler(event, context)`: one record (batch size 1); parse the message; compute `deadline = now + remaining − 10 s`; call `ingest_document`; the receive-count rule: on the first attempt a failure that should be retried leaves the row `queued` and returns the record in `batchItemFailures`; on the second it writes the reason. Reads `DATABASE_URL` from Secrets Manager at cold start through the function's role; no model credential and no Bedrock permission (D6); `POLICY_ATLAS_MODEL_ROUTE` is set because the route is resolved at import. `awslambdaric` in the main dependency group with the marker `sys_platform == "linux"`. |
 | P11 | Stage embedding (D6) | `embed_pending_chunks(…, snapshot_ids=)`. `core/embeddings.py::AdaptivePool` owns concurrency **and** backoff: the backends stop retrying throttles internally and raise a `Throttled` signal the pool catches (halve in flight, floor 1, sleep with the backend's backoff curve; +1 after 5 clean batches; cap `route().embeddings.pool_cap`, default 8); throttling is excluded from `_embed_units_with_isolation`'s splitting; one pool per stage across ticks; database writes on the calling thread; the embedding loop runs on its own thread so the poll, ticks and the deadline are never blocked; before the stage returns it embeds everything ingested. Test: a fake backend that throttles above a set rate; the pool converges and no batch is split for throttling. |
 | P12 | Measurement (D9, N12) | Build-open: three fresh fixed-question runs on bedrock, run the way the afters are run (the like-for-like "before"; the 2026-11-02 anatomy stays as the historical table). After each lever: three runs, median with spread, `scripts/stage_walls.py` (per-stage wall from `event_log`, from the anatomy's `40_anatomy.py`) plus the per-step attempt counts from Langfuse. Levers in order: timeouts; widths; judge; rev1 and binary writes; SQL retrieval; the per-document rewrite (in-process); the adaptive pool. |
@@ -57,37 +57,32 @@ reason for the swap, put to the owner in § Owner items 3.)
 | P16 | Gates | Full `make verify`: build-open (gate 1), end of Phase 0 (compose image, conftest, gate 2), end of Phase 1 (every call site, gate 3), end of Phase 2 (schema, gate 4), end of Phase 3 (retrieval and rev3, gate 5), end of Phase 4a (ingest-adjacent, gate 6), end of Phase 4b (gate 7), step-6 exit (gate 8, plus `make audit`). Phase 5: `make verify-fast` plus `make -C infra test`. |
 | P17 | Connection budget (N5) | Written at the plan gate from `show max_connections` on the staging writer (owner item): API pool 15 + 10 overflow, up to 10 runs each with one component connection and, at width 10, 10 child walk connections, the migration task's one, operators' few, and the functions' 20 (one each, held only for the lookup and the write); headroom 20%; if it does not fit, `max_concurrency` drops first, then `OPTION_SEARCH_WIDTH`. In-process mode holds no connection during fetch or parse. |
 
-## Owner items
+## Owner items (ruled 2026-11-03)
 
-Before the plan is approved:
-
-1. **Phase 6 and the merge.** Deploying the branch to staging before merge works only if dev
-   merges are frozen for the window, because the next dev deploy would ship an Alembic chain
-   without this branch's revisions and the migration task would fail with the service at 0.
-   Options: (a) freeze dev merges, deploy the branch, measure, then merge (the rubric as
-   written); (b) merge first, and Phase 6 is the first post-merge step, with rubric items 15,
-   26 and 28 amended to accept post-merge evidence. Lead's lean: (b).
-2. **Message content.** N1 as written (URLs and the open-access flag in the message), or ids
-   only (`link_row_id`, `run_id`), with the function reading the candidates from the link row
-   and snapshot metadata. Ids only keep URLs out of the queue and the dead-letter queue.
-   Lead's lean: ids only (a minor amendment to N1).
-3. **Phase order.** Schema before the queued stage, for the dependency stated in § Context.
+1. **Phase 6 and the merge.** Owner: "deploys to staging only happen from dev … we don't
+   deploy to staging from branches." Phase 6 is therefore the first step after the merge to
+   dev; rubric items 15, 26 and 28 are amended to accept that evidence post-merge, recorded in
+   the PR and in `verification.md` as the one open item at merge time, as task 056's N8 was.
+2. **Message content.** Ids only: `{"link_row_id", "run_id", "schema": 1}`; the function reads
+   the candidate URLs, the PubMed Central id and the open-access flag from the link row's
+   snapshot metadata. URLs never enter the queue or the dead-letter queue. Contract N1 amended.
+3. **Phase order.** Schema before the queued stage, as in § Context. Accepted.
 4. **G2 addition.** Two nullable columns on `task_source_snapshot` (`ingested_by_run_id`,
-   `fetched_from`) to receive the breadcrumbs that leave the shared row; the shared row's
-   `source_locator` keeps the public document URL.
-5. **G5 timing.** The `cdk diff` review moves from the plan gate to an owner checkpoint after
-   Phase 5 and before any staging deploy.
-6. **Staging dry run** (rubric 19). Either DevOps clones staging's Aurora and runs the
-   migration task against it, or the dry run is dropped in favour of the non-blocking design
-   (nullable JSON column, resumable backfill, serving possible at rev1) plus the row counts.
-   Lead's lean: drop it.
-7. **Pre-build facts** (read-only, owner or DevOps): staging and prod `chunk_embedding` row
-   counts; `show max_connections` on the staging writer; the account's Lambda concurrency
-   and memory quotas; whether staging's `DATABASE_URL` user can run `CREATE EXTENSION`; the
-   quota case's state.
+   `fetched_from`) in rev1; the shared row's `source_locator` keeps the public document URL.
+   Accepted.
+5. **G5 timing.** The `cdk diff` review is an owner checkpoint after Phase 5 and before the
+   merge. Accepted.
+6. **Staging dry run.** Dropped in favour of the non-blocking migration design (nullable JSON
+   column, resumable backfill, serving possible at rev1) plus the row counts; rubric 19
+   amended.
+7. **Pre-build facts** (read-only): staging and prod `chunk_embedding` row counts;
+   `show max_connections` on the staging writer; the account's Lambda concurrency and memory
+   quotas; whether the migration's database user can create extensions (the documented tunnel
+   connects as `dbadmin`, the master user, so yes if the app secret carries the same user); the
+   quota case's state. The lead reads these through the jumpbox tunnel and the CLI once the
+   owner's AWS session is refreshed; recorded in `verification.md` at build-open if not before.
 8. **For information:** in-process mode becomes a local queue client that runs the handler on
-   threads, so the stage has literally one path in both modes; the Opus lane proposed it and
-   the lead adopted it.
+   threads, so the stage has literally one path in both modes.
 
 ## Phases
 
@@ -218,13 +213,16 @@ Each phase ends in a commit on `task/057-queued-ingest`. Every `lead` mark carri
 
 **Gate:** `make verify-fast` plus `make -C infra test`.
 
-### Phase 6 — Staging deploy and measurement (D9, N12), shape per owner item 1
+### Phase 6 — Staging measurement after the merge (D9, N12), per owner item 1
 
-1. The owner's `cdk diff` checkpoint; then the deploy (`make deploy-update DEPLOY_ENV=staging`
-   by the owner or DevOps), the migration time from the waiter's output, the quota in force.
-2. Three fixed-question runs on staging in `queued` mode; `stage_walls.py` through the
+1. Before the merge: the owner's `cdk diff` checkpoint (item 5). The PR names Phase 6 as the
+   one open item.
+2. After the merge to dev, the staging workflow deploys and runs the migrations; the migration
+   time comes from the waiter's output in the workflow log; the quota in force recorded.
+3. Three fixed-question runs on staging in `queued` mode; `stage_walls.py` through the
    jumpbox; the function's logs for the ingest split and the dead-letter depth; the embedding
-   requests, tokens and sleeps. — **lead** (live evidence on the owner's environment).
+   requests, tokens and sleeps; appended to `verification.md` in a follow-up commit on dev
+   through a small PR. — **lead** (live evidence on the owner's environment).
 
 ### Step-6 exit — lead
 
