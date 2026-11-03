@@ -416,7 +416,8 @@ also scales to 0 explicitly before its stop-wait. The steady-state order
 2. resolve + validate the frontend publish config (SSM exports, production
    build guard) — fail-fast, *before* any outage-inducing step
 3. explicit scale to 0, then wait for tasks stopped
-4. migration task + fail-loud wait on exit code (`describe-tasks`)
+4. migration task + fail-loud wait on exit code (`describe-tasks`, polled every
+   15 s up to `MIGRATION_WAIT_MAX_S`; see "Waiting for the migration task" below)
 5. scale to 1 (`aws ecs update-service --desired-count 1` — deliberate,
    documented drift from the template until the next deploy)
 6. fonts injection → `vite build` → `s3 sync` (no `--delete`) → CloudFront
@@ -430,6 +431,57 @@ count the template pins at 0). Fix the cause and rerun `deploy.sh update`, or
 restore service manually with
 `aws ecs update-service --cluster policy-atlas-v3-cluster --service policy-atlas-v3-api-service --desired-count 1`
 (only if the migration step had already passed).
+
+**Waiting for the migration task (task 057).** `deploy.sh` asks ECS for the
+migration task's status (`aws ecs describe-tasks`) every 15 seconds until it
+reports `STOPPED`, then fails the deploy unless the container exited with code 0,
+printing the exit code and ECS's `stoppedReason`. It gives up after
+`MIGRATION_WAIT_MAX_S` seconds, 5,400 (90 minutes) by default; set the variable
+in the environment that runs `deploy.sh` to change it (the deploy role's session
+lasts 7,200 s and the GitHub deploy job 90 minutes, so a larger value only helps
+a run from a laptop). On that timeout it prints the last status and the task
+ARN and **leaves the task running**: a migration stopped half-way is safe to
+rerun, but whether to stop it is the operator's call. A failed `describe-tasks`
+call counts as one more poll, not a failure. The previous
+`aws ecs wait tasks-stopped` gave up after about 10 minutes, too short for task
+057's backfill. `make deploy-migration-wait-test` checks the loop against a
+stubbed `aws`.
+
+**Task 057 release: run its two migrations before the deploy (recommended).**
+Task 057 adds two revisions that are safe to run while the service is up:
+
+- `a3d8f6c1e2b4` (expand) only adds nullable columns, the `queued` status and the
+  `vector` extension, takes each brief table lock with a 10-second
+  `lock_timeout` (if it times out, run it again), and builds its two indexes
+  `CONCURRENTLY`, which does not block the app's writes.
+- `b7e2c4a9d1f3` (backfill) copies every stored embedding into the new
+  `chunk_embedding.embedding` column and fills `tokens`, 2,000 rows per
+  committed batch. On the production writer it is expected to take **tens of
+  minutes**, which is why it should not run inside the deploy's outage window.
+
+Because the deploy stops the service before it migrates, run both first, while
+the old service still serves, then deploy as usual; the deploy's migration task
+finds them applied and runs only what remains. Run them over the § 6 tunnel from
+a checkout of the commit being released (the migration ECS task cannot do this
+before the deploy: its task definition still holds the image that is running
+now, which does not contain these revisions, and `cdk deploy` registers the new
+one only as it stops the service). The command has the same shape as the manual
+downgrade in § 8:
+
+```bash
+# Tunnel open (§ 6). From backend/ in a checkout of the release commit:
+DATABASE_URL=<tunnel-url> uv run alembic upgrade b7e2c4a9d1f3
+# <tunnel-url> = postgresql+psycopg://dbadmin:<password>@localhost:15432/policy_atlas_db?sslmode=require
+```
+
+**It resumes.** Each batch commits on its own and only rows whose `embedding`
+is still empty are picked up, so if the tunnel drops, the laptop sleeps or the
+command fails, run the same command again: it carries on where it stopped and
+redoes nothing. Progress is logged every 25 batches. When it finishes,
+`SELECT count(*) FROM chunk_embedding WHERE embedding IS NULL;` returns 0.
+Rows the old service writes after that moment (it writes only the JSON column)
+are left empty; the deploy's migration must fill them before anything relies on
+the new column.
 
 For normal operator recovery use
 `make deploy-update DEPLOY_ENV=<environment>` so local and GitHub execution stay on
@@ -680,6 +732,11 @@ in committable form — CI's font-guard stays green.
   b3c7d914e0a2` → deploy the pre-033 image → scale up. Do not do this on a
   database that has enrolled organisations without owner sign-off on the
   chat-exposure consequence above.
+- **Each migration commits on its own (task 057):** Alembic now runs one transaction
+  per revision. A downgrade that is refused part-way (a guard that stops it) leaves the
+  revisions above the refusal already undone and committed; check `alembic current`
+  afterwards and decide whether to upgrade back to head or carry on. Before task 057 a
+  refusal rolled the whole downgrade back.
 - **Automation:** disable the GitHub Environment or revoke its OIDC role trust to
   stop new deploys, then revert the workflow change. This does not repair an
   already interrupted stop→migrate→scale sequence; use the recovery procedure in

@@ -3,6 +3,7 @@
 import io
 import json
 import random
+import struct
 import uuid
 from types import SimpleNamespace
 from typing import Any, Literal, cast
@@ -41,6 +42,7 @@ from policy_atlas.core.schema import (
     metadata,
     task_source_snapshot,
 )
+from policy_atlas.core.tokens import word_tokens
 from policy_atlas.evidence_search.sourcing.acquire import (
     AcquireContext,
     SearchBackend,
@@ -75,6 +77,38 @@ def _insert_chunk(
         )
     )
     return chunk_id
+
+
+def _f32(value: float) -> float:
+    """Round a float to single precision, as pgvector stores it."""
+    return float(struct.unpack("f", struct.pack("f", value))[0])
+
+
+def _assert_three_columns_agree(conn: Connection, chunk_ids: list[uuid.UUID]) -> int:
+    """Assert ``vector``, ``embedding`` and ``tokens`` agree on every row of the chunks.
+
+    Task 057 writes the JSON vector, the same floats in pgvector's binary column
+    and the unit's words; the database compares the two vectors itself and the
+    words are checked against ``core.tokens`` on the unit's text.
+    """
+    rows = conn.execute(
+        sa.text(
+            "SELECT ce.vector, ce.embedding, ce.tokens, ce.unit_locator, c.content, "
+            "ce.embedding = (ce.vector::text)::vector AS same_vector "
+            "FROM chunk_embedding ce JOIN chunk c ON c.chunk_id = ce.chunk_id "
+            "WHERE ce.chunk_id = ANY(:ids)"
+        ),
+        {"ids": chunk_ids},
+    ).fetchall()
+    assert rows
+    for row in rows:
+        assert row.same_vector is True
+        assert row.embedding is not None
+        stored = [float(v) for v in row.embedding.strip("[]").split(",")]
+        assert [_f32(v) for v in stored] == [_f32(v) for v in row.vector]
+        unit_text = row.content[row.unit_locator["start"] : row.unit_locator["end"]]
+        assert row.tokens == sorted(word_tokens(unit_text))
+    return len(rows)
 
 
 # --- Migration / table presence ---
@@ -226,6 +260,7 @@ def test_embed_pending_chunks_idempotent_and_stamps_every_row(conn: Connection) 
     for row in rows:
         assert row.embedding_profile == EMBEDDING_PROFILE
         assert row.unit_policy == UNIT_POLICY
+    assert _assert_three_columns_agree(conn, chunk_ids) == 3
 
     # Canonical chunk content is untouched by the embed pass.
     for i, chunk_id in enumerate(chunk_ids, start=1):
@@ -845,6 +880,17 @@ def test_judgment_one_vector_per_unit_no_mean_pooling_path(conn: Connection) -> 
     for row in rows:
         unit_text = chunk_content[row.unit_locator["start"] : row.unit_locator["end"]]
         assert row.vector == stub.embed_texts([unit_text])[0]
+    assert _assert_three_columns_agree(conn, [chunk_id]) == len(units)
+    # The ORM read of the binary column parses back to the stub's floats (float32).
+    embeddings = conn.execute(
+        select(chunk_embedding.c.embedding)
+        .where(chunk_embedding.c.chunk_id == chunk_id)
+        .order_by(chunk_embedding.c.unit_index)
+    ).scalars().all()
+    for unit, embedding in zip(units, embeddings, strict=True):
+        expected = stub.embed_texts([unit["text"]])[0]
+        assert embedding is not None
+        assert [_f32(v) for v in embedding] == [_f32(v) for v in expected]
 
     assert not any(
         "mean" in name.casefold() or "pool" in name.casefold() for name in dir(embeddings_module)

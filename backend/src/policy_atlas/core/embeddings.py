@@ -34,6 +34,7 @@ from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import resolve_openai_client
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.schema import chunk_embedding, task_source_snapshot
+from policy_atlas.core.tokens import word_tokens
 
 log = structlog.get_logger()
 
@@ -581,7 +582,12 @@ def _chunk_rows_for_insert(state: _ChunkState) -> list[dict[str, object]]:
             "unit_policy": UNIT_POLICY,
             "unit_index": unit.unit_index,
             "unit_locator": {"start": unit.start, "end": unit.end},
+            # Task 057: the same floats twice until Phase 3 drops the JSON column
+            # (``embedding`` goes as a ``'[...]'::vector`` text cast, schema.Vector),
+            # plus the unit's sorted distinct words for the word-overlap score.
             "vector": state.vectors[unit.unit_index],
+            "embedding": state.vectors[unit.unit_index],
+            "tokens": sorted(word_tokens(unit.text)),
             "created_at": now,
         }
         for unit in state.units

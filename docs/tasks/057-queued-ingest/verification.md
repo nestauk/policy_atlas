@@ -207,10 +207,130 @@ pgvector" were updated. `make test-fast` on the new image: 3,946 passed, 1 skipp
   [repin-phase1-timeouts.diff](repin-phase1-timeouts.diff); no prompt text changed
   (`make prompt-guard`: 41 files unchanged after the re-pin).
 
+### Measurement round (a): step timeouts alone (commit `8bc43872`; widths and judge unchanged)
+
+Three fresh runs, 2026-11-03 04:08 to 05:05 UTC, same shape as the baseline (NEET and
+zonal together, obesity when a slot freed). All three `succeeded`.
+
+| run | question | total | acquire | screen_abstract | classify | ingest_full_text | screen_full | characterise | select | synthesise |
+|---|---|---|---|---|---|---|---|---|---|---|
+| fd1325c5 | NEET | 1717 | 63 | 50 | 78 | 942 | 48 | 87 | 28 | 438 |
+| 0a755648 | zonal pricing | 1698 | 55 | 31 | 35 | 985 | 43 | 21 | 20 | 371 |
+| f581a92c | childhood obesity | 1623 | 86 | 49 | 38 | 592 | 45 | 37 | 22 | 257 + 600 |
+| median | | 1698 | 63 | 49 | 38 | 942 | 45 | 37 | 22 | 438 |
+
+| run | ingest wall | A fetch+parse | B embedding | embed requests | throttle sleeps (n / s) |
+|---|---|---|---|---|---|
+| fd1325c5 | 942 | 172 | 769 | 82 | 87 / 425 |
+| 0a755648 | 985 | 252 | 731 | 92 | 90 / 432 |
+| f581a92c | 592 | 211 | 379 | 95 | 11 / 37 |
+
+Per-step attempts cut and retried (`model_call.retry` in the server log; every retry was
+attempt 1 after a timeout unless stated):
+
+| step | timeout_s | retries | retry outcome |
+|---|---|---|---|
+| classify_document | 11 | 12 | all recovered; all 12 fired inside three seconds (04:11:10 to 04:11:13) while both runs classified at once |
+| judge_grounding | 40 | 7 | all recovered |
+| synthesise_propose_sections | 120 (kept) | 2 | one recovered; one retry also stalled, so the synthesise component failed and the runner re-ran it (obesity: 257 s lost, then 600 s) |
+| synthesise_section_turn | 23 | 2 | recovered (one connection error, one timeout) |
+| screen_full | 8 | 1 | recovered |
+| characterise_discover | 60 (kept) | 1 | recovered |
+| synthesise_judge_summary | 5 | 1 | recovered |
+| synthesise_write_block_summary | 6 | 1 | recovered |
+
+Read from the saved results:
+- 27 stalls caught, 26 recovered on the one retry. No tightened step had a retry that was
+  also slow, so no step is raised (the contract's "too tight" signal is a slow retry; the
+  classify burst recovered at once and classify's wall halved, 97 → 38 s median).
+- **Components that retried because every attempt was cut: 1, not 0.** The step is
+  `synthesise_propose_sections`, which kept today's 120 s (n = 30, below the 100-call
+  floor), so it is not a tightened timeout: two consecutive 120 s stalls on a 4 s step.
+  Which step raised the error is an inference from the retry timing (the component's
+  failure event carries only `APITimeoutError`). Adjudication item for the review: the
+  contract's remedy for a too-tight step (raise once) does not apply; the lever that would
+  is a second retry on once-per-run steps, which the contract does not include.
+- Synthesise medians are noisy at n = 3 (section counts differ per run): NEET 806 → 438 s,
+  zonal 258 → 371 s. The attribution this round supports is the stall cost: a stall now
+  costs the step's timeout plus one retry instead of 120 s.
+- Ingest is not this lever's: the two concurrent runs saw 87 and 90 throttle sleeps (425
+  and 432 s of waiting) against 32 and 33 in the baseline pair, so the allowance in force
+  at this hour was lower or more contended; the run that embedded alone saw 11.
+- Saved: `stage-walls-phase1a.{md,json}`, `phase1a-retries.txt` and the server log in the
+  session scratchpad (the log holds publisher URLs; not committed).
+
 ### N13, compiled bytecode — Dockerfile edited; cold-import measurement pending
 
 One `RUN python -m compileall -q /app/.venv /app/src` line after the venv copy; the
 `.dockerignore` bytecode patterns gained `**/` so the laptop's `.pyc` files stay out.
+
+## Phase 2: schema and the deploy waiter (D2, G9, G10, P5, P14, P17)
+
+### Migrations rev1 `a3d8f6c1e2b4` (expand) and rev2 `b7e2c4a9d1f3` (backfill) — built, tests green
+
+- `alembic/env.py` runs one transaction per revision. rev1 is online-safe: nullable columns
+  only, the status check re-added `NOT VALID` then validated, both indexes built
+  `CONCURRENTLY IF NOT EXISTS` in an autocommit block (an index left `INVALID` by a crashed
+  build is dropped first), a 10 s lock timeout on the catalogue transaction. rev2 is data
+  only: keyset-paged batches of 2,000 rows, commit per batch, resumable on
+  `embedding IS NULL`, a second pass if rows were written behind it, refuses offline mode.
+- `schema.py`: a `Vector(1536)` user-defined type bound as `CAST(... AS vector(1536))` (no
+  client library, G3); `chunk_embedding.embedding`, `tokens text[]`, `vector` nullable; the
+  three snapshot columns and the unique partial store-key index; the two link-row columns;
+  `queued` in the status check. `core/tokens.py` holds the product tokeniser
+  (`word_tokens`), imported by the retriever.
+- `embed_pending_chunks` now writes all three columns (`vector` JSON, `embedding`, sorted
+  `tokens`); tests assert the three agree in SQL.
+- Tests (`tests/core/test_migration_057_document_store.py`): round trip up, down (JSON
+  rebuilt from the binary column at float32 precision; `queued` rows back to
+  `not_attempted`; old check restored) and up again; rev1 rerun on a database that has it;
+  an `INVALID` index rebuilt; rev2 resume after an injected crash on the second batch;
+  frozen tokens SQL equals `core.tokens` on 30 strings; `queued` admitted, `queued` with a
+  snapshot or an error refused; the vector type round-trips 1536 floats. Whole backend
+  suite on the agent's own database: 4,013 passed, 1 skipped.
+- rev2 timing on a 10,000-unit scratch table: 11 s (about 1.1 ms per row); the dev corpus
+  timing is recorded below once measured.
+- **Flagged (minor, plan wording corrected):** the tokens SQL follows the product rule
+  exactly (match `[0-9A-Za-z]+` on the original text, then lower-case each word, distinct,
+  sorted), not plan P5's "lower then match `[0-9a-z]+`": the two differ on U+212A (Kelvin
+  sign) and U+0130 (dotted capital I), and parity with the Python retriever is the point.
+  `tokens` holds distinct words in sorted order.
+- **Flagged for the owner (plan P14):** the pre-run of rev1 and rev2 before the deploy
+  cannot go through the ECS migration task, whose task definition holds the image running
+  today (without these revisions; the new definition is registered only as the deploy
+  stops the service). `infra/DEPLOYMENT.md` § 4 therefore documents the pre-run over the
+  § 6 tunnel from a checkout of the release commit (`DATABASE_URL=<tunnel-url> uv run
+  alembic upgrade b7e2c4a9d1f3`), the same shape as the manual downgrade in § 8.
+- **Carried into Phase 3:** rows the old image writes between the pre-run and the deploy
+  have only the JSON column, so rev3 must run the same backfill (copied frozen, not
+  imported) before it asserts no null `embedding` and drops the JSON column; SQLAlchemy
+  writes `vector=None` as JSON `null`, so the code must pass `sa.null()` once the JSON write
+  stops; both revisions treat JSON `null` as missing.
+- Carried into Phase 4a: rev1 does not fill `ingested_by_run_id` and `fetched_from` from
+  snapshot metadata; the per-document function writes them.
+- Refused downgrades under per-revision transactions leave the revisions above the
+  refusal undone and committed; two existing tests that assumed all-or-nothing now
+  upgrade back to head in their cleanup; `DEPLOYMENT.md` § 8 says so for operators.
+
+### Deploy waiter (G10, P14)
+
+`scripts/deploy.sh`: `wait_for_migration_task` polls `describe-tasks` every 15 s until the
+task is `STOPPED`, bounded by `MIGRATION_WAIT_MAX_S` (default 5,400 s; the deploy role
+lasts 7,200 s), failing loudly with the stopped reason and exit code; a failed describe
+call counts as one poll. Shell check `scripts/test_deploy_migration_wait.sh` (five cases,
+nine checks) runs as a prerequisite of the existing deploy-build guard, so CI runs it with
+no workflow change.
+
+### Connection budget (N5, P17)
+
+Exact account figures stay in the gitignored ops-facts note (plan § Owner items 7); the
+arithmetic in scale words: the writer's connection limit is in the low hundreds with a few
+dozen in use; worst case = today's use + the API pool (15 + 10 overflow) + 10 runs × (1
+component connection + 10 option-search children at width 10) + 20 functions (one
+connection each, held only for the store lookup and the one write) + the migration task,
+which comes to under half the limit. If a later reading does not fit, `max_concurrency`
+on the event-source mapping drops first, then `OPTION_SEARCH_WIDTH`. The Lambda concurrency
+quota is in the hundreds on both accounts, ample for a cap of 20.
 
 ## Checks beyond the build
 
