@@ -11,20 +11,28 @@ Two clients implement :class:`QueueClient`:
   database connection, and returns when every document is done. With
   ``workers=0`` it runs each document on the caller's thread instead (the inline
   mode the tests use with their rolled-back connection).
-- The cloud client (``queued``) puts the messages on an SQS queue that a function
-  reads; it is built in task 057 Phase 4b (``SqsQueueClient``, here).
+- :class:`SqsQueueClient` (``queued``) puts the messages on an SQS queue (Amazon
+  Simple Queue Service, a managed to-do list of messages); AWS starts the ingest
+  function (``policy_atlas.ops.ingest_worker``) once per message. ``send`` returns
+  as soon as the queue has accepted the messages; the stage then waits for the
+  documents' statuses to change, up to :data:`QUEUED_STAGE_DEADLINE_S`.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import uuid
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Protocol, TypedDict, cast
 
+import boto3
 import structlog
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy.engine import Connection
 
 from policy_atlas.evidence_search.sourcing.ingest_document import (
@@ -44,6 +52,18 @@ log = structlog.get_logger()
 
 #: The message layout's version. Version 1 carries two ids and nothing else, ever.
 MESSAGE_SCHEMA = 1
+
+#: How long the stage waits for queued documents, from the first send (D4).
+#: A document still being read then is marked ``not_ready`` and tried again on
+#: the next run.
+QUEUED_STAGE_DEADLINE_S = 600.0
+#: SQS takes at most 10 messages per ``SendMessageBatch`` call.
+SQS_BATCH_SIZE = 10
+#: The SQS client's waits and retries: give up on a connection or a response
+#: after 10 s, and let botocore try each call up to 3 times.
+SQS_CLIENT_CONFIG = Config(
+    connect_timeout=10, read_timeout=10, retries={"mode": "standard", "max_attempts": 3}
+)
 
 
 class IngestMessage(TypedDict):
@@ -211,7 +231,108 @@ class LocalQueueClient:
         )
 
 
-# The cloud client, ``SqsQueueClient`` (boto3, batches of 10), arrives in Phase 4b.
+class SqsClient(Protocol):
+    """The one SQS call the queue client makes (boto3's ``sqs`` client).
+
+    A protocol rather than the generated stub type: the project's boto3 type
+    stubs cover only the services it already typed (``ops/environment.py`` does
+    the same for STS), and a test passes a small fake instead.
+    """
+
+    def send_message_batch(
+        self, *, QueueUrl: str, Entries: list[dict[str, str]]  # noqa: N803 - boto3's names
+    ) -> Mapping[str, Any]:
+        """Send up to 10 messages; returns ``Successful`` and ``Failed`` entries."""
+        ...
+
+
+def sqs_client() -> SqsClient:
+    """Build the SQS client with :data:`SQS_CLIENT_CONFIG` (region from ``AWS_REGION``).
+
+    Returns:
+        The boto3 ``sqs`` client.
+    """
+    client: SqsClient = boto3.client(
+        "sqs",
+        region_name=os.environ.get("AWS_REGION") or "eu-west-2",
+        config=SQS_CLIENT_CONFIG,
+    )
+    return client
+
+
+class SqsQueueClient:
+    """The cloud queue: ``send`` puts one message per document on an SQS queue.
+
+    Messages go out in batches of 10 (``SendMessageBatch``). The body is the
+    message's JSON (two ids and the schema version, nothing else). A message the
+    queue refuses comes back in :attr:`SendResult.failed` with the queue's reason,
+    and the stage marks its row ``fetch_failed`` / ``send_failed``; a batch whose
+    whole call fails (after botocore's retries) is reported the same way, so one
+    bad call never fails the run.
+
+    Args:
+        queue_url: The queue's URL (``POLICY_ATLAS_INGEST_QUEUE_URL``).
+        client: The SQS client; None builds one (:func:`sqs_client`).
+
+    Attributes:
+        stage_deadline_s: How long the stage waits for these documents
+            (:data:`QUEUED_STAGE_DEADLINE_S`).
+    """
+
+    stage_deadline_s: float = QUEUED_STAGE_DEADLINE_S
+
+    def __init__(self, queue_url: str, client: SqsClient | None = None) -> None:
+        if not queue_url:
+            raise ValueError("SqsQueueClient needs a queue URL")
+        self.queue_url = queue_url
+        self._client = client if client is not None else sqs_client()
+
+    def send(self, messages: Sequence[IngestMessage]) -> SendResult:
+        """Put the messages on the queue, 10 per call.
+
+        Args:
+            messages: One message per document.
+
+        Returns:
+            The link row ids the queue accepted, and the refused ones with the
+            queue's reason. ``outcomes`` is None: the function reports through
+            the link rows, not here.
+        """
+        sent: list[str] = []
+        failed: dict[str, str] = {}
+        for start in range(0, len(messages), SQS_BATCH_SIZE):
+            group = messages[start:start + SQS_BATCH_SIZE]
+            # Entry ids only need to be unique within one call; positions are.
+            by_entry = {str(i): message["link_row_id"] for i, message in enumerate(group)}
+            entries = [
+                {
+                    "Id": str(i),
+                    "MessageBody": json.dumps(dict(message), separators=(",", ":")),
+                }
+                for i, message in enumerate(group)
+            ]
+            try:
+                response = self._client.send_message_batch(
+                    QueueUrl=self.queue_url, Entries=entries
+                )
+            except (ClientError, BotoCoreError) as exc:
+                reason = (
+                    str(exc.response.get("Error", {}).get("Code") or "ClientError")
+                    if isinstance(exc, ClientError)
+                    else type(exc).__name__
+                )
+                failed.update(dict.fromkeys(by_entry.values(), reason))
+                continue
+            for entry in response.get("Successful", []):
+                sent.append(by_entry[entry["Id"]])
+            for entry in response.get("Failed", []):
+                failed[by_entry[entry["Id"]]] = str(entry.get("Code") or "failed")
+        if failed:
+            log.warning("ingest.queue_send_refused", count=len(failed), reasons=sorted(
+                set(failed.values())
+            ))
+        log.info("ingest.queue_sent", sent=len(sent), failed=len(failed))
+        return SendResult(sent=sent, failed=failed)
 
 
 @contextmanager
@@ -242,6 +363,8 @@ def build_queue_client(
     connect: ConnectFactory,
     fetcher: DocumentFetcher,
     workers: int = DEFAULT_MAX_WORKERS,
+    queue_url: str | None = None,
+    sqs: SqsClient | None = None,
 ) -> QueueClient:
     """Build the queue client for an ingest mode.
 
@@ -250,19 +373,22 @@ def build_queue_client(
         connect: Opens one short transaction that commits on exit (``engine.begin``).
         fetcher: The ``DocumentFetcher`` seam the in-process handler fetches with.
         workers: Threads for the in-process client.
+        queue_url: The SQS queue URL; required for ``queued``.
+        sqs: The SQS client for ``queued`` (a test seam); None builds one.
 
     Returns:
         The client.
 
     Raises:
-        RuntimeError: ``queued`` before its client exists (task 057 Phase 4b).
+        RuntimeError: ``queued`` without a queue URL.
         ValueError: An unknown mode.
     """
     if mode == "in_process":
         return LocalQueueClient(make_ingest_handler(fetcher), connect, workers)
     if mode == "queued":
-        raise RuntimeError(
-            "POLICY_ATLAS_INGEST_MODE=queued needs the cloud queue client, which is not "
-            "built yet (task 057 Phase 4b); use in_process"
-        )
+        if not queue_url:
+            raise RuntimeError(
+                "POLICY_ATLAS_INGEST_MODE=queued needs POLICY_ATLAS_INGEST_QUEUE_URL"
+            )
+        return SqsQueueClient(queue_url, client=sqs)
     raise ValueError(f"unknown ingest mode {mode!r}")

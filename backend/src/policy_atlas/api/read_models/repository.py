@@ -1091,6 +1091,7 @@ def evidence_page(
             screen is not None
             and screen.status == "relevant"
             and row.full_text_status in {"fetch_failed", "parse_failed"}
+            and row.full_text_error not in NOT_READ_YET_REASONS
         ):
             status, reason = "unavailable", row.full_text_error
         elif screen is not None and screen.status == "relevant":
@@ -1174,6 +1175,14 @@ def evidence_page(
     return Page(
         data=page_items, pagination=PageMeta(page=page, page_size=page_size, total_items=total)
     )
+
+
+#: Full-text failure reasons that are not access failures (task 057, S2): the
+#: document was still being read when the stage stopped waiting (``not_ready``),
+#: or the queue refused its message (``send_failed``). Such a source is not
+#: ``unavailable``; it reads as screened in and not read yet (``relevant`` /
+#: ``not_selected``), and the next run tries it again.
+NOT_READ_YET_REASONS = frozenset({"not_ready", "send_failed"})
 
 
 _EVIDENCE_STATUS_SORT_RANK = {
@@ -2769,6 +2778,7 @@ def source_dossier_out(
         screen is not None
         and screen.status == "relevant"
         and row["full_text_status"] in {"fetch_failed", "parse_failed"}
+        and row["full_text_error"] not in NOT_READ_YET_REASONS
     ):
         status, reason = "unavailable", row["full_text_error"]
     elif screen is not None and screen.status == "relevant":

@@ -39,6 +39,7 @@ from policy_atlas.core.embeddings import (
     EMBEDDING_PROFILE,
     UNIT_CHAR_BUDGET,
     UNIT_POLICY,
+    embed_with_retry,
     validate_vector,
 )
 from policy_atlas.core.schema import (
@@ -1887,7 +1888,7 @@ class ChunkRetriever:
             uncached.append(query)
         if not uncached:
             return
-        vectors = self._embedder.embed_texts(uncached, kind="query")
+        vectors = embed_with_retry(self._embedder, uncached, kind="query")
         if len(vectors) != len(uncached):
             raise RuntimeError("embedding backend returned wrong query vector count")
         for query, vector in zip(uncached, vectors, strict=True):
@@ -1896,7 +1897,7 @@ class ChunkRetriever:
     def _query_vector(self, query: str) -> list[float]:
         vector = self._query_vectors.get(query)
         if vector is None:
-            vectors = self._embedder.embed_texts([query], kind="query")
+            vectors = embed_with_retry(self._embedder, [query], kind="query")
             if len(vectors) != 1:
                 raise RuntimeError("embedding backend returned wrong query vector count")
             vector = validate_vector(vectors[0])

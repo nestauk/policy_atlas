@@ -8,6 +8,7 @@ snapshots before the next leg starts.
 """
 
 import hashlib
+import json
 import threading
 import time
 import uuid
@@ -17,10 +18,12 @@ from typing import Any
 
 import pytest
 import sqlalchemy as sa
+from botocore.exceptions import ClientError
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Connection, Engine
 from structlog.testing import capture_logs
 
+from policy_atlas.api.read_models.repository import evidence_page
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.schema import chunk_embedding, source_snapshot, task_source_snapshot
 from policy_atlas.evidence_search.sourcing import ingest_document as ingest_document_module
@@ -34,6 +37,7 @@ from policy_atlas.evidence_search.sourcing.ingest_queue import (
     MESSAGE_SCHEMA,
     IngestMessage,
     SendResult,
+    SqsQueueClient,
     build_queue_client,
     inline_connect,
     new_message,
@@ -627,12 +631,19 @@ def test_all_done_early_stops_without_waiting(conn: Connection) -> None:
     assert clock.sleeps == []
 
 
-def test_message_shape_and_queued_mode_needs_its_client() -> None:
+def test_message_shape_and_queued_mode_needs_its_queue_url() -> None:
     link, run = uuid.uuid4(), uuid.uuid4()
     assert new_message(link_row_id=link, run_id=run) == {
         "link_row_id": str(link), "run_id": str(run), "schema": 1,
     }
-    with pytest.raises(RuntimeError, match="Phase 4b"):
+    fake = _FakeSqs()
+    client = build_queue_client(
+        "queued", connect=lambda: None, fetcher=None,  # type: ignore[arg-type, return-value]
+        queue_url=QUEUE_URL, sqs=fake,
+    )
+    assert isinstance(client, SqsQueueClient)
+    assert client.queue_url == QUEUE_URL and client.stage_deadline_s == 600.0
+    with pytest.raises(RuntimeError, match="POLICY_ATLAS_INGEST_QUEUE_URL"):
         build_queue_client("queued", connect=lambda: None, fetcher=None)  # type: ignore[arg-type, return-value]
     with pytest.raises(ValueError, match="unknown ingest mode"):
         build_queue_client("lambda", connect=lambda: None, fetcher=None)  # type: ignore[arg-type, return-value]
@@ -656,3 +667,365 @@ def test_already_in_store_is_kept_out_of_the_public_stage_summary() -> None:
 
     payload = {"component": "ingest_full_text", "ingested": 3, "already_in_store": 2}
     assert _summary(payload) == {"ingested": 3}
+
+
+# --- The cloud queue client (N1, D1; plan P9), with a fake boto3 client ---
+
+
+QUEUE_URL = "https://sqs.eu-west-2.amazonaws.com/000000000000/policy-atlas-v3-ingest"
+
+
+class _FakeSqs:
+    """Records ``SendMessageBatch`` calls; refuses some link rows; may fail one call."""
+
+    def __init__(
+        self, *, refuse: frozenset[str] = frozenset(), fail_call: int | None = None
+    ) -> None:
+        self.refuse = refuse
+        self.fail_call = fail_call
+        self.calls: list[tuple[str, list[dict[str, str]]]] = []
+
+    def send_message_batch(
+        self, *, QueueUrl: str, Entries: list[dict[str, str]]  # noqa: N803
+    ) -> dict[str, Any]:
+        self.calls.append((QueueUrl, Entries))
+        if self.fail_call == len(self.calls):
+            raise ClientError(
+                {"Error": {"Code": "AWS.SimpleQueueService.NonExistentQueue", "Message": "x"}},
+                "SendMessageBatch",
+            )
+        ok, failed = [], []
+        for entry in Entries:
+            if json.loads(entry["MessageBody"])["link_row_id"] in self.refuse:
+                failed.append({"Id": entry["Id"], "Code": "InternalError", "SenderFault": False})
+            else:
+                ok.append({"Id": entry["Id"], "MessageId": f"m-{entry['Id']}"})
+        return {"Successful": ok, "Failed": failed}
+
+
+def test_sqs_client_sends_batches_of_10_with_two_ids_and_the_schema_only() -> None:
+    """N1: 23 messages go out as 10 + 10 + 3; each body is exactly the link row
+    id, the run id and the schema version, with no URL and no user id in it."""
+    run_id = uuid.uuid4()
+    messages = [new_message(link_row_id=uuid.uuid4(), run_id=run_id) for _ in range(23)]
+    fake = _FakeSqs()
+    result = SqsQueueClient(QUEUE_URL, client=fake).send(messages)
+
+    assert [len(entries) for _url, entries in fake.calls] == [10, 10, 3]
+    assert {url for url, _entries in fake.calls} == {QUEUE_URL}
+    assert result.sent == [m["link_row_id"] for m in messages]
+    assert result.failed == {} and result.outcomes is None
+    bodies = [json.loads(e["MessageBody"]) for _url, entries in fake.calls for e in entries]
+    assert bodies == [dict(m) for m in messages]
+    for body in bodies:
+        assert set(body) == {"link_row_id", "run_id", "schema"}
+        assert body["schema"] == 1 and body["run_id"] == str(run_id)
+        uuid.UUID(body["link_row_id"])
+        assert not any("://" in str(value) or "@" in str(value) for value in body.values())
+
+
+def test_sqs_client_reports_partial_and_whole_call_failures_with_the_reason() -> None:
+    run_id = uuid.uuid4()
+    messages = [new_message(link_row_id=uuid.uuid4(), run_id=run_id) for _ in range(25)]
+    refused = frozenset({messages[1]["link_row_id"], messages[22]["link_row_id"]})
+    fake = _FakeSqs(refuse=refused, fail_call=2)
+    with capture_logs() as logs:
+        result = SqsQueueClient(QUEUE_URL, client=fake).send(messages)
+
+    whole_call = {m["link_row_id"] for m in messages[10:20]}
+    assert result.failed == {
+        **dict.fromkeys(refused, "InternalError"),
+        **dict.fromkeys(whole_call, "AWS.SimpleQueueService.NonExistentQueue"),
+    }
+    assert set(result.sent) == {m["link_row_id"] for m in messages} - refused - whole_call
+    [refusal] = [e for e in logs if e["event"] == "ingest.queue_send_refused"]
+    assert refusal["count"] == 12
+    assert "MessageBody" not in repr(logs)
+
+
+def test_queued_mode_settings_fail_loud_without_the_queue_url(
+    monkeypatch: pytest.MonkeyPatch, engine: Engine
+) -> None:
+    from policy_atlas.api.settings import ingest_queue_url_from_env, load_settings
+    from policy_atlas.runtime.runner import RunnerBackends, with_ingest_queue
+
+    monkeypatch.delenv("POLICY_ATLAS_INGEST_QUEUE_URL", raising=False)
+    assert ingest_queue_url_from_env("in_process") is None
+    with pytest.raises(RuntimeError, match="needs POLICY_ATLAS_INGEST_QUEUE_URL"):
+        ingest_queue_url_from_env("queued")
+
+    for name, value in {
+        "OIDC_ISSUER": "https://issuer.example", "OIDC_CLIENT_ID": "client",
+        "APP_ORIGIN": "https://app.example", "DATABASE_URL": "postgresql+psycopg://x/y",
+        "OIDC_JWKS_URL": "https://issuer.example/jwks.json",
+        "POLICY_ATLAS_INGEST_MODE": "queued",
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("OIDC_JWKS_PATH", raising=False)
+    with pytest.raises(RuntimeError, match="needs POLICY_ATLAS_INGEST_QUEUE_URL"):
+        load_settings()
+    monkeypatch.setenv("POLICY_ATLAS_INGEST_QUEUE_URL", QUEUE_URL)
+    settings = load_settings()
+    assert (settings.ingest_mode, settings.ingest_queue_url) == ("queued", QUEUE_URL)
+
+    # The construction path builds the cloud client (no AWS call is made).
+    backends = with_ingest_queue(
+        RunnerBackends(), engine, ingest_mode="queued", queue_url=settings.ingest_queue_url
+    )
+    assert isinstance(backends.queue, SqsQueueClient)
+    with pytest.raises(RuntimeError, match="needs POLICY_ATLAS_INGEST_QUEUE_URL"):
+        with_ingest_queue(RunnerBackends(), engine, ingest_mode="queued")
+
+
+# --- The stage in queued mode (N3, D4): a fake queue, a fake clock, real workers ---
+
+
+class _QueuedFake:
+    """A queue that only records the messages, like SQS; its deadline is SQS's."""
+
+    stage_deadline_s = 600.0
+
+    def __init__(self) -> None:
+        self.messages: list[IngestMessage] = []
+
+    def send(self, messages: Sequence[IngestMessage]) -> SendResult:
+        self.messages.extend(messages)
+        return SendResult(sent=[m["link_row_id"] for m in messages])
+
+
+class _Workers:
+    """The cloud functions, on a fake clock: at the n-th poll wait (sleep), the
+    documents scheduled for it are ingested on a real second connection."""
+
+    def __init__(
+        self, engine: Engine, fetcher: Any, queue: _QueuedFake, schedule: dict[int, list[int]]
+    ) -> None:
+        self.engine = engine
+        self.fetcher = fetcher
+        self.queue = queue
+        self.schedule = schedule  # sleep number -> positions in the eligible order
+        self.order: list[uuid.UUID] = []
+        self.now = 1000.0
+        self.sleeps: list[float] = []
+
+    def clock(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+        for position in self.schedule.get(len(self.sleeps), []):
+            self.ingest(self.order[position])
+
+    def ingest(self, tss_id: uuid.UUID) -> Any:
+        [message] = [m for m in self.queue.messages if m["link_row_id"] == str(tss_id)]
+        return ingest_document(
+            self.engine.begin, tss_id=tss_id, run_id=uuid.UUID(message["run_id"]),
+            fetcher=self.fetcher, parse_fn=_plain_parse, deadline=None,
+        )
+
+
+def _seed_docs_committed(
+    engine: Engine, n: int
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, list[uuid.UUID], list[bytes], _ScriptedFetcher]:
+    bodies = [_unique_body() for _ in range(n)]
+    script: dict[str, FetchResult | BaseException] = {}
+    tss_ids: list[uuid.UUID] = []
+    with _committed(engine) as c:
+        task_id, run_id = seed_task_and_run(c)
+        scope_id = seed_scope(c, task_id)
+        for body in bodies:
+            url = f"https://example.org/queued-{uuid.uuid4()}.txt?sig=SECRET"
+            tss_ids.append(_seed_relevant_acquired(
+                c, task_id, run_id, scope_id,
+                {"backend": "overton", "provider_fields": {"pdf_url": url}},
+            ))
+            script[url] = FetchResult(status="ok", content_type="text/plain", body=body)
+    return task_id, run_id, scope_id, sorted(tss_ids), bodies, _ScriptedFetcher(script)
+
+
+def _run_queued(
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    workers: _Workers,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Run the stage in queued mode; return its summary and its progress ticks."""
+    ticks: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        ingest_full_text, "publish_current_tick", lambda **kwargs: ticks.append(kwargs)
+    )
+    # The stage's connection keeps its transaction open throughout, like the
+    # runner's component transaction; the workers' commits are visible to it.
+    with engine.connect() as component:
+        summary = run_ingest(
+            component, task_id, run_id, scope_id,
+            queue=workers.queue, connect=engine.begin, poll_interval_s=100.0,
+            clock=workers.clock, sleep=workers.sleep,
+        )
+        component.commit()
+    return summary, ticks
+
+
+def _assert_counts_invariant(summary: dict[str, Any]) -> None:
+    assert summary["eligible"] == (
+        summary["ingested"] + summary["already_ingested"]
+        + summary["fetch_failed"] + summary["parse_failed"]
+    )
+    assert 0 <= summary["already_in_store"] <= summary["ingested"]
+
+
+def _embedded_chunk_count(engine: Engine, task_id: uuid.UUID) -> tuple[int, int]:
+    """(chunks, chunks with a vector) over the task's full-text snapshots, committed."""
+    with engine.connect() as c:
+        snap_ids = select(task_source_snapshot.c.full_text_snapshot_id).where(
+            task_source_snapshot.c.task_id == task_id
+        )
+        chunk_ids = select(chunk_table.c.chunk_id).where(
+            chunk_table.c.source_snapshot_id.in_(snap_ids)
+        )
+        chunks = c.execute(
+            select(sa.func.count()).select_from(chunk_table)
+            .where(chunk_table.c.source_snapshot_id.in_(snap_ids))
+        ).scalar_one()
+        with_vector = c.execute(
+            select(sa.func.count(sa.distinct(chunk_embedding.c.chunk_id)))
+            .where(chunk_embedding.c.chunk_id.in_(chunk_ids))
+        ).scalar_one()
+    return int(chunks), int(with_vector)
+
+
+def test_queued_all_done_early_stops_at_once_and_embeds_on_its_own_thread(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every function finishes before the second poll: the stage stops waiting
+    at once (one wait, far inside the 600 s deadline, which comes from the queue
+    client). One document's bytes were already in the store from another task:
+    it counts as ``already_in_store``, inside ``ingested``. Ticks carry
+    ``fetched=None``. The chunks are embedded (committed, by the embedding
+    thread)."""
+    task_id, run_id, scope_id, tss_ids, bodies, fetcher = _seed_docs_committed(engine, 3)
+    # Another task already stored the first document's bytes.
+    other_url = f"https://example.org/other-{uuid.uuid4()}.txt"
+    other_task, other_run, _, other_tss = _seed_doc_task(engine, other_url)
+    try:
+        _set_status(engine, other_tss, "queued")
+        ingest_document(
+            engine.begin, tss_id=other_tss, run_id=other_run,
+            fetcher=_fetcher_for(other_url, bodies[0]), parse_fn=_plain_parse, deadline=None,
+        )
+        queue = _QueuedFake()
+        workers = _Workers(engine, fetcher, queue, schedule={1: [0, 1, 2]})
+        workers.order = tss_ids
+        with capture_logs() as logs:
+            summary, ticks = _run_queued(engine, monkeypatch, task_id, run_id, scope_id, workers)
+
+        assert workers.sleeps == [100.0]
+        assert (summary["ingested"], summary["already_in_store"]) == (3, 1)
+        assert summary["fetch_failed"] == 0 and summary["by_reason"] == {}
+        _assert_counts_invariant(summary)
+        assert summary["bytes_fetched"] is None
+        assert ticks and all(t["fetched"] is None and t["total"] == 3 for t in ticks)
+        assert ticks[-1]["parsed"] == 3
+        chunks, with_vector = _embedded_chunk_count(engine, task_id)
+        assert chunks == 9 and with_vector == 9
+        assert summary["embed"]["embedded"] + summary["embed"]["already_embedded"] == 9
+        [stage_summary] = [e for e in logs if e["event"] == "embed.summary"]
+        assert stage_summary["passes"] >= 1
+        assert not [e for e in logs if "SECRET" in repr(e)]
+    finally:
+        _cleanup(engine, [task_id, other_task], bodies)
+
+
+def test_queued_some_late_the_deadline_closes_them_and_the_late_write_changes_nothing(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two documents land early; the third is still being read at the 600 s
+    deadline and becomes ``fetch_failed`` / ``not_ready``. Its function then
+    finishes: the guarded write leaves the row closed (the late write is a
+    no-op) and the parsed text joins the store. ``not_ready`` stays out of the
+    access-failure status in the sources view: the source reads as not read yet."""
+    task_id, run_id, scope_id, tss_ids, bodies, fetcher = _seed_docs_committed(engine, 3)
+    try:
+        queue = _QueuedFake()
+        workers = _Workers(engine, fetcher, queue, schedule={2: [0, 1]})
+        workers.order = tss_ids
+        # The third function starts in time (it reads its row while ``queued``)
+        # but is still parsing when the stage stops waiting.
+        release = threading.Event()
+        real_find = ingest_document_module.find_in_store
+
+        def slow_find(*args: Any, **kwargs: Any) -> Any:
+            if threading.current_thread() is in_flight:
+                assert release.wait(30)
+            return real_find(*args, **kwargs)
+
+        late_box: list[Any] = []
+        in_flight = threading.Thread(target=lambda: late_box.append(workers.ingest(tss_ids[2])))
+        real_sleep = workers.sleep
+
+        def sleep_then_start(seconds: float) -> None:
+            real_sleep(seconds)
+            if len(workers.sleeps) == 1:
+                monkeypatch.setattr(ingest_document_module, "find_in_store", slow_find)
+                in_flight.start()
+
+        workers.sleep = sleep_then_start  # type: ignore[method-assign]
+        summary, _ticks = _run_queued(engine, monkeypatch, task_id, run_id, scope_id, workers)
+        release.set()
+        in_flight.join(60)
+
+        assert sum(workers.sleeps) >= 600.0
+        assert (summary["ingested"], summary["fetch_failed"]) == (2, 1)
+        assert summary["by_reason"] == {"not_ready": 1}
+        _assert_counts_invariant(summary)
+        [late] = late_box
+        assert late.resolution == "late" and not late.written
+        row = _link(engine, tss_ids[2])
+        assert (row.full_text_status, row.full_text_error) == ("fetch_failed", "not_ready")
+        assert row.full_text_snapshot_id is None
+        assert len(_snapshots_for(engine, bodies[2])) == 1  # in the store for the next run
+
+        with engine.connect() as c:
+            items = {i.source_id: i for i in evidence_page(c, task_id, 1, 50).data}
+        assert items[tss_ids[2]].status == "relevant"
+        assert items[tss_ids[2]].status_reason is None
+        assert {items[t].status for t in tss_ids[:2]} == {"read_in_full"}
+    finally:
+        _cleanup(engine, [task_id], bodies)
+
+
+def test_queued_deadline_hit_with_orphans_requeued_at_start(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A row left ``queued`` by a run that died is queued and sent again; no
+    function finishes, so at the deadline every row is ``not_ready``; the row
+    another failure closed (``paywall``) stays an access failure."""
+    task_id, run_id, scope_id, tss_ids, bodies, fetcher = _seed_docs_committed(engine, 3)
+    try:
+        _set_status(engine, tss_ids[0], "queued")  # the dead run's leftover
+        queue = _QueuedFake()
+        workers = _Workers(engine, fetcher, queue, schedule={})
+        workers.order = tss_ids
+        with capture_logs() as logs:
+            summary, ticks = _run_queued(engine, monkeypatch, task_id, run_id, scope_id, workers)
+
+        assert [e["count"] for e in logs if e["event"] == "ingest.orphans_requeued"] == [1]
+        assert {m["link_row_id"] for m in queue.messages} == {str(t) for t in tss_ids}
+        assert summary["attempted"] == 3 and summary["ingested"] == 0
+        assert summary["by_reason"] == {"not_ready": 3}
+        _assert_counts_invariant(summary)
+        assert sum(workers.sleeps) >= 600.0 and len(workers.sleeps) <= 7
+        assert all(t["parsed"] == 0 and t["fetched"] is None for t in ticks)
+        assert summary["embed"]["embedded"] == 0
+
+        _set_status(engine, tss_ids[1], "fetch_failed", "paywall")
+        with engine.connect() as c:
+            items = {i.source_id: i for i in evidence_page(c, task_id, 1, 50).data}
+        assert items[tss_ids[1]].status == "unavailable"
+        assert items[tss_ids[1]].status_reason == "paywall"
+        assert {items[t].status for t in (tss_ids[0], tss_ids[2])} == {"relevant"}
+    finally:
+        _cleanup(engine, [task_id], bodies)

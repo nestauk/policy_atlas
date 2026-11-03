@@ -335,7 +335,11 @@ class RunnerBackends:
 
 
 def with_ingest_queue(
-    backends: RunnerBackends, engine: Engine, *, ingest_mode: str
+    backends: RunnerBackends,
+    engine: Engine,
+    *,
+    ingest_mode: str,
+    queue_url: str | None = None,
 ) -> RunnerBackends:
     """Return ``backends`` with the full-text ingest queue for ``ingest_mode`` attached.
 
@@ -348,17 +352,21 @@ def with_ingest_queue(
         backends: The bundle without a queue.
         engine: The engine the queue's workers and the stage's writes use.
         ingest_mode: ``in_process`` or ``queued`` (``POLICY_ATLAS_INGEST_MODE``).
+        queue_url: The SQS queue URL ``queued`` sends to
+            (``POLICY_ATLAS_INGEST_QUEUE_URL``).
 
     Returns:
         A copy of ``backends`` carrying ``queue``, ``connect`` and the fetcher.
 
     Raises:
-        RuntimeError: ``queued`` before its client exists (task 057 Phase 4b).
+        RuntimeError: ``queued`` without a queue URL.
     """
     fetcher = (
         backends.document_fetcher if backends.document_fetcher is not None else FixtureFetcher()
     )
-    queue = build_queue_client(ingest_mode, connect=engine.begin, fetcher=fetcher)
+    queue = build_queue_client(
+        ingest_mode, connect=engine.begin, fetcher=fetcher, queue_url=queue_url
+    )
     return replace(backends, document_fetcher=fetcher, queue=queue, connect=engine.begin)
 
 

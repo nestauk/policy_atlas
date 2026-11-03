@@ -42,8 +42,10 @@ Two safety properties are the reason this is a program and not a shell script:
   refuses when the current state is not the state the operator was acting on,
   so two operators cannot interleave a de-enrolment and an admin grant into a
   resurrected administrator.
+
+The package also holds the queued ingest function's handler
+(:mod:`policy_atlas.ops.ingest_worker`, task 057), which runs in the backend
+image. That image leaves out the operator CLI's type-stub dependency (the
+``ops`` dependency group), so this file imports nothing: importing the handler
+must not pull in the CLI. Run the CLI with ``python -m policy_atlas.ops``.
 """
-
-from policy_atlas.ops.cli import main
-
-__all__ = ["main"]

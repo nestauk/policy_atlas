@@ -323,6 +323,7 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
                     candidate.capability_run_id,
                     claim_first=True,
                     ingest_mode=settings.ingest_mode,
+                    ingest_queue_url=settings.ingest_queue_url,
                 )
             for candidate in report.reexecute:
                 # Already claimed before the previous process died, never
@@ -334,6 +335,7 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
                     candidate.capability_run_id,
                     claim_first=False,
                     ingest_mode=settings.ingest_mode,
+                    ingest_queue_url=settings.ingest_queue_url,
                 )
             yield
         finally:
@@ -356,6 +358,7 @@ def _claim_and_execute(
     *,
     claim_first: bool,
     ingest_mode: IngestMode = "in_process",
+    ingest_queue_url: str | None = None,
 ) -> None:
     """Claim (unless pre-claimed) and execute one durable continuation.
 
@@ -380,7 +383,9 @@ def _claim_and_execute(
             engine,
             task_id=task_id,
             capability_run_id=capability_run_id,
-            backends=runner_backends_for(engine, ingest_mode=ingest_mode),
+            backends=runner_backends_for(
+                engine, ingest_mode=ingest_mode, ingest_queue_url=ingest_queue_url
+            ),
             io=ParkIO(),
             agent=get_agent_backend(),
         )

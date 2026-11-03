@@ -154,7 +154,9 @@ def get_task_agent_backend() -> TaskAgentTurnBackend:
     return StubTaskAgentBackend()
 
 
-def runner_backends_for(engine: Engine, *, ingest_mode: IngestMode) -> RunnerBackends:
+def runner_backends_for(
+    engine: Engine, *, ingest_mode: IngestMode, ingest_queue_url: str | None = None
+) -> RunnerBackends:
     """Build the runner backend bundle, key-driven exactly like `agent`.
 
     Shared by the request path (:func:`get_runner_backends`) and the startup
@@ -164,6 +166,7 @@ def runner_backends_for(engine: Engine, *, ingest_mode: IngestMode) -> RunnerBac
         engine: The process engine; the full-text ingest queue's workers take
             their connections from it.
         ingest_mode: Where full-text ingestion runs (``Settings.ingest_mode``).
+        ingest_queue_url: The SQS queue for ``queued`` (``Settings.ingest_queue_url``).
 
     Returns:
         The full live backend set (search transports, OpenAI components,
@@ -175,7 +178,9 @@ def runner_backends_for(engine: Engine, *, ingest_mode: IngestMode) -> RunnerBac
         _, backends = live_task_agent_and_backends(tracing.get_langfuse())
     else:
         backends = RunnerBackends()
-    return with_ingest_queue(backends, engine, ingest_mode=ingest_mode)
+    return with_ingest_queue(
+        backends, engine, ingest_mode=ingest_mode, queue_url=ingest_queue_url
+    )
 
 
 def get_runner_backends(request: Request) -> RunnerBackends:
@@ -188,8 +193,11 @@ def get_runner_backends(request: Request) -> RunnerBackends:
         The runner backend bundle. Tests override this seam with deterministic
         component doubles.
     """
+    settings = get_settings(request)
     return runner_backends_for(
-        get_engine(request), ingest_mode=get_settings(request).ingest_mode
+        get_engine(request),
+        ingest_mode=settings.ingest_mode,
+        ingest_queue_url=settings.ingest_queue_url,
     )
 
 

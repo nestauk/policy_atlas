@@ -147,9 +147,13 @@ def test_every_step_resolves_todays_model_and_effort_on_every_route(name: str) -
     assert len(route.steps) == 56
     for step, (tier, effort) in STEP_TIER_AND_EFFORT.items():
         assert route.model_for(step) == TIER_MODELS[name][tier], step
-        assert route.effort_for(step) == effort, step
-    # Task 057 D12: the bedrock route carries timeout overrides for nine steps (and,
-    # from Phase 1 step 5c, the judge's low effort); no route overrides a model.
+        if name == "bedrock" and step == "judge_grounding":
+            # Task 057 D14: the grounding judge runs at low effort on the bedrock route.
+            assert route.effort_for(step) == "low"
+        else:
+            assert route.effort_for(step) == effort, step
+    # Task 057 D12: the bedrock route carries timeout overrides for nine steps and the
+    # judge's low effort (D14); no route overrides a model.
     assert all(exc.model is None for exc in route.step_exceptions.values())
     if name != "bedrock":
         assert route.step_exceptions == {}
@@ -214,7 +218,10 @@ def test_bedrock_claude_switches_only_query_generation() -> None:
     assert claude.search_queries.model == "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
     for step in STEP_TIER_AND_EFFORT:
         assert claude.model_for(step) == plain.model_for(step), step
-        assert claude.effort_for(step) == plain.effort_for(step), step
+        if step not in plain.step_exceptions:
+            # bedrock-claude is not in use and carries none of bedrock's task 057 step
+            # overrides (timeouts, the judge's low effort); it follows the [steps] defaults.
+            assert claude.effort_for(step) == plain.effort_for(step), step
     assert claude.embeddings == plain.embeddings
 
 
@@ -466,6 +473,26 @@ def test_unknown_backend_names_and_wrong_shapes_fail_loud(
     path = _write(tmp_path, "bad.toml", text)
     with pytest.raises(RuntimeError, match=match):
         load_route(path, "r", {})
+
+
+def test_embedding_pool_cap_defaults_to_8_and_is_strict(tmp_path: Path) -> None:
+    """Task 057 (D6): ``pool_cap`` is optional (8), a whole number of at least 1,
+    and the embeddings table takes no other unknown key."""
+    assert load_route(_write(tmp_path, "r.toml", MINIMAL), "r", {}).embeddings.pool_cap == 8
+    for name in ("openai-direct", "bedrock", "bedrock-claude"):
+        assert load_route(ROUTE_FILE, name, {}).embeddings.pool_cap == 8, name
+    with_cap = MINIMAL.replace('profile = "p"\n', 'profile = "p"\npool_cap = 3\n')
+    assert load_route(_write(tmp_path, "c.toml", with_cap), "r", {}).embeddings.pool_cap == 3
+    for bad, match in (
+        ("pool_cap = 0", "'pool_cap' is 0; it must be at least 1"),
+        ('pool_cap = "8"', "'pool_cap' must be a whole number, not str"),
+        ("pool_cap = 2.5", "'pool_cap' must be a whole number, not float"),
+        ("pool_cap = true", "'pool_cap' must be a whole number, not bool"),
+        ("pool_size = 8", r"embeddings: unknown key\(s\) \['pool_size'\]"),
+    ):
+        text = MINIMAL.replace('profile = "p"\n', f'profile = "p"\n{bad}\n')
+        with pytest.raises(RuntimeError, match=match):
+            load_route(_write(tmp_path, "bad.toml", text), "r", {})
 
 
 def test_malformed_overlay_fails_loud_naming_the_overlay(tmp_path: Path) -> None:

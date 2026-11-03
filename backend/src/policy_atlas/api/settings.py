@@ -31,6 +31,8 @@ class Settings:
         db_pool_size: SQLAlchemy engine connection pool size.
         db_max_overflow: SQLAlchemy engine pool overflow above ``db_pool_size``.
         ingest_mode: Where full-text ingestion runs (``POLICY_ATLAS_INGEST_MODE``).
+        ingest_queue_url: The SQS queue the documents go to in ``queued`` mode
+            (``POLICY_ATLAS_INGEST_QUEUE_URL``); None in process.
     """
 
     oidc_issuer: str
@@ -46,6 +48,7 @@ class Settings:
     db_pool_size: int = 5
     db_max_overflow: int = 10
     ingest_mode: IngestMode = "in_process"
+    ingest_queue_url: str | None = None
 
 
 def load_settings() -> Settings:
@@ -56,7 +59,7 @@ def load_settings() -> Settings:
 
     Raises:
         RuntimeError: If required configuration is absent or mutually exclusive
-            JWKS configuration is invalid.
+            JWKS configuration is invalid, or ``queued`` ingestion has no queue URL.
     """
     # Pure os.environ by design: the DEV entry point loads backend/.env via
     # `uv run --env-file` (backend Makefile `dev` target). Loading .env here
@@ -77,6 +80,8 @@ def load_settings() -> Settings:
     if jwks_url is not None and not jwks_url.startswith("https://"):
         raise RuntimeError("OIDC_JWKS_URL must be an HTTPS URL")
 
+    ingest_mode = ingest_mode_from_env()
+
     jwks_path = Path(jwks_path_value) if jwks_path_value is not None else None
     if jwks_path is not None and not jwks_path.is_file():
         raise RuntimeError("OIDC_JWKS_PATH must name an existing JWKS file")
@@ -94,7 +99,8 @@ def load_settings() -> Settings:
         sse_heartbeat_seconds=_positive_float("SSE_HEARTBEAT_SECONDS", default=15.0),
         db_pool_size=_positive_int("DB_POOL_SIZE", default=5),
         db_max_overflow=_nonnegative_int("DB_MAX_OVERFLOW", default=10),
-        ingest_mode=ingest_mode_from_env(),
+        ingest_mode=ingest_mode,
+        ingest_queue_url=ingest_queue_url_from_env(ingest_mode),
     )
 
 
@@ -113,6 +119,27 @@ def ingest_mode_from_env() -> IngestMode:
     if value == "queued":
         return "queued"
     raise RuntimeError("POLICY_ATLAS_INGEST_MODE must be in_process or queued")
+
+
+def ingest_queue_url_from_env(mode: IngestMode) -> str | None:
+    """Read ``POLICY_ATLAS_INGEST_QUEUE_URL``, which ``queued`` mode needs.
+
+    Args:
+        mode: The ingest mode (:func:`ingest_mode_from_env`).
+
+    Returns:
+        The queue URL, or None when unset (allowed only in process).
+
+    Raises:
+        RuntimeError: ``queued`` mode without a queue URL, so a misconfigured
+            deployment fails at startup, not at its first run.
+    """
+    url = _optional("POLICY_ATLAS_INGEST_QUEUE_URL")
+    if mode == "queued" and url is None:
+        raise RuntimeError(
+            "POLICY_ATLAS_INGEST_MODE=queued needs POLICY_ATLAS_INGEST_QUEUE_URL"
+        )
+    return url
 
 
 def _required(name: str) -> str:

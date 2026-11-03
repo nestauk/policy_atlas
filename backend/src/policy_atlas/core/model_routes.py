@@ -99,13 +99,28 @@ class StepException:
     timeout_s: float | None = None
 
 
+#: Embedding requests the stage may keep in flight at most (task 057, D6), when a
+#: route's ``[routes.<name>.embeddings]`` table does not set ``pool_cap``.
+DEFAULT_EMBEDDING_POOL_CAP = 8
+
+
 @dataclass(frozen=True)
 class Embeddings:
-    """The embedding section of a route."""
+    """The embedding section of a route.
+
+    Attributes:
+        backend: ``openai`` or ``cohere``.
+        model: The embedding model id.
+        profile: The profile name stamped on each stored vector.
+        pool_cap: The most embedding requests kept in flight at once (task 057,
+            D6); the adaptive pool climbs towards it while the provider does not
+            throttle. ``pool_cap`` in the route file, default 8.
+    """
 
     backend: str
     model: str
     profile: str
+    pool_cap: int = DEFAULT_EMBEDDING_POOL_CAP
 
 
 @dataclass(frozen=True)
@@ -237,6 +252,18 @@ def _timeout(value: Any, where: str) -> float:
     return float(value)
 
 
+def _pool_cap(table: Mapping[str, Any], where: str) -> int:
+    """Check ``pool_cap``: a whole number of requests, at least 1 (default 8)."""
+    value = table.get("pool_cap", DEFAULT_EMBEDDING_POOL_CAP)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise RuntimeError(
+            f"{where}: 'pool_cap' must be a whole number, not {type(value).__name__}"
+        )
+    if value < 1:
+        raise RuntimeError(f"{where}: 'pool_cap' is {value!r}; it must be at least 1")
+    return value
+
+
 def _no_stray_keys(table: Mapping[str, Any], allowed: tuple[str, ...], where: str) -> None:
     stray = sorted(set(table) - set(allowed))
     if stray:
@@ -364,6 +391,9 @@ def load_route(
             raise RuntimeError(f"{where}.steps: unknown step {step_name!r}")
         exceptions[step_name] = _parse_exception(step_name, value, f"{where}.steps")
     embeddings_table = _table(table, "embeddings", where)
+    _no_stray_keys(
+        embeddings_table, ("backend", "model", "profile", "pool_cap"), f"{where}.embeddings"
+    )
     search_table = _table(table, "search_queries", where)
     search_backend = _choice(
         search_table, "backend", f"{where}.search_queries", SEARCH_QUERIES_BACKENDS
@@ -390,6 +420,7 @@ def load_route(
             backend=_choice(embeddings_table, "backend", f"{where}.embeddings", EMBEDDING_BACKENDS),
             model=_require(embeddings_table, "model", f"{where}.embeddings"),
             profile=_require(embeddings_table, "profile", f"{where}.embeddings"),
+            pool_cap=_pool_cap(embeddings_table, f"{where}.embeddings"),
         ),
         search_queries=SearchQueries(
             backend=search_backend,

@@ -30,7 +30,7 @@ from sqlalchemy import func
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.settings import ingest_mode_from_env
+from policy_atlas.api.settings import ingest_mode_from_env, ingest_queue_url_from_env
 from policy_atlas.core import events, tracing
 from policy_atlas.core.db import get_engine
 from policy_atlas.core.embeddings import EmbeddingBackend, live_embedding_backend
@@ -1163,8 +1163,12 @@ def main(
     if backends is None:
         # The full-text ingest queue for POLICY_ATLAS_INGEST_MODE (task 057);
         # a caller's own bundle without one gets the in-process queue from run_plan.
+        ingest_mode = ingest_mode_from_env()
         backends = with_ingest_queue(
-            default_backends, engine, ingest_mode=ingest_mode_from_env()
+            default_backends,
+            engine,
+            ingest_mode=ingest_mode,
+            queue_url=ingest_queue_url_from_env(ingest_mode),
         )
     agent = agent if agent is not None else default_agent
     log.info(

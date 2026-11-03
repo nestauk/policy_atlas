@@ -14,6 +14,7 @@ Langfuse), both built in Phase 0 with offline tests under `backend/tests/scripts
 | Build-open (gate 1), 2026-11-03 | `make verify` on `e0553f85` | pass | backend 3,888 passed, 1 skipped (7 min 6 s); infra 95 passed; frontend 943 passed; lint, typecheck, okf-validate, build green |
 | End of Phase 2 (gate 4), 2026-11-03 | `make verify` on the tree holding Phase 2 plus Phase 3 in progress and the width constants | pass after one fix | backend 4,017 passed, 1 failed (`test_option_searches_run_at_width_four`: seeded 8 options against the new width of 10; generalised to the configured width + 2), 1 skipped (16 min 43 s under a concurrent backfill); infra 95; the fixed test re-run green on its own database |
 | End of Phases 3, 4a and the Phase 5 infra (gates 5 and 6), 2026-11-03 | `make verify` on the whole tree | pass | backend 4,058 passed, 1 skipped (10 min 29 s); infra 113 passed; frontend 943 passed; lint, typecheck, format, okf-validate, build green. One run gated the three commits because the phases were built in parallel in one tree. |
+| End of Phase 4b (gate 7), 2026-11-03 | `make verify` on the whole tree | pass | backend 4,086 passed, 1 skipped (11 min 14 s); infra 113; frontend 943; lint, typecheck, format, okf-validate, build, audit green |
 | End of Phase 0 and Phase 1 (gates 2 and 3), 2026-11-03 | `make verify` on the tree holding both phases | pass after one fix | backend 4,004 passed, 1 skipped (6 min 0 s); lint, typecheck, format green; infra: 1 failed (`test_dockerignore_covers_gitignored_backend_content`: the `**/` bytecode patterns no longer matched the gitignore lines literally; both forms kept), then `make -C infra test` 95 passed. One full run gated both commits because the two phases were built in parallel in one tree. |
 
 ## Phase 0: build-open, measurement tools, dev image
@@ -577,6 +578,71 @@ quota is in the hundreds on both accounts, ample for a cap of 20.
   yet special-cased by the read models' access-failure counts (S2, finding 5): Phase 4b.
   (4) `run_parse_worker` imports `runtime.walk_pool` for the slot bound, heavy for the
   function's cold start: Phase 4b decides.
+
+## Phase 4b: adaptive embedding, SQS client, handler (N1 to N5, D1, D4, D5, D6)
+
+Built, targeted tests green (2,461 passed on the agent's database after the two judge-effort
+pins in `test_model_routes.py` were updated for D14); lint, typecheck, `make prompt-guard`
+and `make audit` green (the Linux-only `awslambdaric` pin audited separately with
+`pip-audit --no-deps`: no known vulnerabilities; CI on Linux scans it in the lock).
+
+- **Adaptive pool (D6):** `core/embeddings.AdaptivePool` owns concurrency and backoff. The
+  backends raise `Throttled` (Cohere on `ThrottlingException` or "too many tokens"; OpenAI
+  on 429 with its Retry-After) instead of retrying throttles internally; other errors keep
+  the in-backend retry. Width starts at 2, cap `route().embeddings.pool_cap` (8 on every
+  route; strict key); a throttle halves the width (floor 1; one burst counts once), puts
+  the batch back at the front and sleeps the provider's Retry-After (cap 60 s) or today's
+  backoff curve; five clean batches in a row add one. A batch throttled eight times in a
+  pass is given up (`embed.batch_failed`, chunks stay pending). Throttling never splits a
+  batch. Requests run on a thread pool sized to the cap; writes stay on the calling thread.
+  Logs: `embed.pool_width` on every change and one `embedding.<provider>_rate_limited` per
+  throttled round with `sleep_s`, so `stage_walls.py` still reads the split. Every caller
+  goes through a pool; one-off query embedding uses `embed_with_retry`.
+- **The stage embeds as documents land:** a `_StageEmbedder` thread runs from the start of
+  the stage with its own connection; each tick hands it the snapshots that became
+  `ingested`; before returning the stage hands it every ingested snapshot (including
+  already-ingested documents lacking vectors under the current profile), joins and logs one
+  `embed.summary`. Inline test mode embeds at the end on the test connection. One more
+  database connection per stage (the connection budget gains one per run).
+- **SQS client (N1):** `SqsQueueClient` sends batches of 10 with bodies of exactly
+  `link_row_id`, `run_id`, `schema` (tests pin the keys and that no value is a URL or a
+  user id), partial and whole-call failures reported with the SQS reason; `queued` mode
+  needs `POLICY_ATLAS_INGEST_QUEUE_URL` and fails loud at startup without it; wired
+  through the three construction paths; the queued stage deadline is 600 s.
+- **Handler (N2, D5):** `ops/ingest_worker.handler`: one record only; schema 1; deadline =
+  remaining time − 10 s; attempt from `ApproximateReceiveCount`. Decision table: malformed
+  body → reported for redelivery (dead-letters after the second); ingested or a store hit
+  → written; a non-retryable failure → written with its reason; `not_queued` / `late` → no
+  write; attempt 1 with a retryable outcome (timeout, fetch error, the deadline cut, a
+  foreign-key failure on the link write because the snapshot was pruned underneath) → row
+  left `queued`, record reported for redelivery; attempt 2 or later → written (the
+  foreign-key case retries `ingest_document` once first). Cold start reads the secret's
+  `db_connection_string` once through `POLICY_ATLAS_DB_SECRET_ARN`, builds a `NullPool`
+  engine and a live fetcher; no model client; JSON logging with a URL-redaction processor
+  (scheme, host, path only); bound fields `message_id`, `attempt`, `tss_id`, `run_id`.
+- **Cold-start weight:** `INGEST_SLOTS` moved into `ingest_full_text.py` (re-exported by
+  `runtime.walk_pool`) so the parse worker no longer imports the walk pool, classify and the
+  scoping plan; `ops/__init__.py` no longer imports the operator CLI (which needs
+  `mypy_boto3_cognito_idp`, absent from the image: the handler would not have imported in
+  Lambda). A subprocess test hides that package, imports the handler and asserts none of
+  `ops.cli`, `ops.commands` or `policy_atlas.runtime` loaded.
+- **`not_ready` out of the access-failure vocabulary (S2, finding 5):** the read models'
+  two status ladders treat `not_ready` and `send_failed` as "not read yet" (the row reads
+  `relevant` / `not_selected` with no reason; the frontend already shows "The full text
+  hasn't been read"); `by_reason` still names them and the counts invariant holds. Two
+  status tallies (`steering_bundles._full_text_status_counts`, characterise's reason counts)
+  still count them under `fetch_failed`; noted for the review.
+- Tests: pool convergence under a fake quota (settles at 2 to 4 for an allowance of 3, no
+  batch split, every chunk embedded) and the climb to the cap; the throttle budget; the
+  message shape; batches of 10 and partial failures; the three queued-mode scenarios with a
+  fake queue, a fake clock and real second connections (all early; some late with the late
+  write a no-op and the read model saying `relevant`; deadline hit with orphans re-queued),
+  each checking the invariant, `already_in_store` inside `ingested` and `fetched=None`
+  ticks; 15 handler tests with a fake event, context and Secrets Manager.
+- Dependency (G3): `awslambdaric>=3,<4; sys_platform == 'linux'` in the main group; the lock
+  adds `awslambdaric` 3.1.1, `simplejson` 4.2.0, `snapshot-restore-py` 1.0.0.
+- Open for staging: whether the forkserver parse subprocess runs inside Lambda (no
+  `/dev/shm`); the emulator run below exercises it on the laptop.
 
 ## Phase 5: infra, config, documents
 

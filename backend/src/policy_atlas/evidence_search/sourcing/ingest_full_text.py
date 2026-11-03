@@ -27,9 +27,11 @@ only (decision 8, adversarial findings 6 + 7). Each document's text is decided b
 its own bytes, so the persisted outcome does not depend on the number of workers.
 """
 
+import contextvars
 import functools
 import json
 import os
+import queue as queue_module
 import re
 import threading
 import time
@@ -53,6 +55,7 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.embeddings import (
+    AdaptivePool,
     EmbeddingBackend,
     StubEmbeddingBackend,
     embed_pending_chunks,
@@ -121,6 +124,11 @@ THIN_TEXT_MIN_CHARS = 200  # below this, parsed text is a failure, never "ok" (d
 # (task 044 phase 8, owner 2026-09-17). In process (task 057) it is also the number
 # of threads that each fetch, parse and write one document at a time.
 DEFAULT_MAX_WORKERS = max(4, min(8, os.cpu_count() or 4))
+#: Live parse-job worker processes across every walk in the process (task 045,
+#: S2). Defined here, beside the width it is sized from, so the cloud function's
+#: handler takes it without importing the runtime (``runtime.walk_pool``
+#: re-exports it), task 057.
+INGEST_SLOTS = threading.BoundedSemaphore(DEFAULT_MAX_WORKERS)
 # How often the stage reads the documents' statuses while they are being ingested.
 STAGE_POLL_SECONDS = 3.0
 # Task 057 (N2, D4): the per-document deadline, as a ``time.monotonic()`` value, for
@@ -1034,10 +1042,6 @@ def run_parse_worker(
         The parse result: ok, a reason-coded error, or ``{"status": "error",
         "reason": "timeout"}`` when the worker was killed.
     """
-    # Imported here, not at module level: the slots module sizes itself from
-    # this module's constant.
-    from policy_atlas.runtime.walk_pool import INGEST_SLOTS
-
     ctx = _parse_process_context()
     with INGEST_SLOTS:
         recv_conn, send_conn = ctx.Pipe(duplex=False)
@@ -1326,6 +1330,141 @@ def _status_counts(conn: Connection, tss_ids: list[uuid.UUID]) -> dict[str, int]
     return {status: int(n) for status, n in rows}
 
 
+def _ingested_snapshot_ids(conn: Connection, tss_ids: list[uuid.UUID]) -> set[uuid.UUID]:
+    """The full-text snapshots the ``ingested`` rows among ``tss_ids`` link (a fresh read)."""
+    if not tss_ids:
+        return set()
+    return set(
+        conn.execute(
+            select(task_source_snapshot.c.full_text_snapshot_id)
+            .where(task_source_snapshot.c.task_source_snapshot_id.in_(tss_ids))
+            .where(task_source_snapshot.c.full_text_status == "ingested")
+            .where(task_source_snapshot.c.full_text_snapshot_id.is_not(None))
+        ).scalars()
+    )
+
+
+_EMBED_COUNT_KEYS = (
+    "embedded", "already_embedded", "failed", "skipped_no_units", "units_embedded",
+    "budget_exceeded",
+)
+
+
+class _StageEmbedder:
+    """Embeds the stage's documents on its own thread as they arrive (task 057, D6).
+
+    The stage hands it the snapshots that became ``ingested`` at each tick; the
+    thread embeds their chunks through the stage's one :class:`AdaptivePool`,
+    reading in one short transaction and committing each batch on its own
+    (``connect``), so the stage's polls, ticks and deadline never wait on it.
+    :meth:`finish` hands it everything ingested (documents ingested before this
+    run included, so any of them lacking vectors under the current profile are
+    embedded too), waits for the thread, and returns the stage's counts.
+
+    Args:
+        connect: Opens one short committed transaction.
+        embedder: The embedding backend.
+        pool: The stage's adaptive pool.
+        task_id: The task (embedding eligibility).
+        run_id: The run (logs only).
+    """
+
+    def __init__(
+        self,
+        *,
+        connect: ConnectFactory,
+        embedder: EmbeddingBackend,
+        pool: AdaptivePool,
+        task_id: uuid.UUID,
+        run_id: uuid.UUID,
+    ) -> None:
+        self._connect = connect
+        self._embedder = embedder
+        self._pool = pool
+        self._task_id = task_id
+        self._run_id = run_id
+        self._inbox: queue_module.SimpleQueue[list[uuid.UUID] | None] = queue_module.SimpleQueue()
+        self._handed: set[uuid.UUID] = set()
+        self._passes: list[dict[str, int]] = []
+        self._error: BaseException | None = None
+        # A copy of the caller's context, so the log lines keep the run id.
+        self._thread = threading.Thread(
+            target=contextvars.copy_context().run,
+            args=(self._loop,),
+            name="policy-atlas-ingest-embed",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def _loop(self) -> None:
+        while True:
+            snapshot_ids = self._inbox.get()
+            if snapshot_ids is None:
+                return
+            if self._error is not None:
+                continue  # stop working after a failure; finish() raises it
+            try:
+                self._passes.append(
+                    embed_pending_chunks(
+                        None,
+                        connect=self._connect,
+                        embedder=self._embedder,
+                        task_id=self._task_id,
+                        run_id=self._run_id,
+                        snapshot_ids=snapshot_ids,
+                        pool=self._pool,
+                        summary_event="embed.pass",
+                    )
+                )
+            except BaseException as exc:  # re-raised on the stage's thread
+                self._error = exc
+
+    def hand(self, snapshot_ids: set[uuid.UUID]) -> None:
+        """Queue the snapshots not handed over before."""
+        new = sorted(snapshot_ids - self._handed)
+        if new:
+            self._handed.update(new)
+            self._inbox.put(new)
+
+    def stop(self) -> None:
+        """Stop the thread after the passes already queued (used on a failure)."""
+        self._inbox.put(None)
+        self._thread.join()
+
+    def finish(self, snapshot_ids: list[uuid.UUID]) -> dict[str, int]:
+        """Embed whatever of ``snapshot_ids`` still lacks vectors, wait, and count.
+
+        Returns:
+            The stage's embedding counts, in ``embed_pending_chunks``'s shape:
+            the per-tick passes' new embeddings summed with the final pass's;
+            ``already_embedded`` counts what was embedded before this stage.
+
+        Raises:
+            BaseException: The error a pass raised.
+        """
+        tick_passes = len(self._passes)
+        if snapshot_ids:
+            self._inbox.put(sorted(set(snapshot_ids)))
+        self.stop()
+        if self._error is not None:
+            raise self._error
+        passes = self._passes
+        final = passes[-1] if snapshot_ids and len(passes) > tick_passes else None
+        earlier = passes[:-1] if final is not None else passes
+        if final is None:
+            final = dict.fromkeys(_EMBED_COUNT_KEYS, 0)
+        counts = {
+            "embedded": sum(p["embedded"] for p in passes),
+            "already_embedded": final["already_embedded"] - sum(p["embedded"] for p in earlier),
+            "failed": final["failed"],
+            "skipped_no_units": final["skipped_no_units"],
+            "units_embedded": sum(p["units_embedded"] for p in passes),
+            "budget_exceeded": max((p["budget_exceeded"] for p in passes), default=0),
+        }
+        log.info("embed.summary", **counts, passes=len(passes), run_id=str(self._run_id))
+        return counts
+
+
 def ingest_full_text_sources(
     conn: Connection,
     *,
@@ -1355,12 +1494,19 @@ def ingest_full_text_sources(
     each in its own short transaction. Meanwhile the stage polls the statuses on
     ``conn`` (which sees the other connections' commits) and publishes the
     ``ingest`` progress ticks. A document still ``queued`` when the stage stops
-    waiting becomes ``fetch_failed`` with reason ``not_ready``. The stage then
-    embeds the chunks of every ingested document that lack embeddings, and
-    returns the counts.
+    waiting becomes ``fetch_failed`` with reason ``not_ready``.
 
-    The stage stops waiting when no document is ``queued`` any more, or at
-    ``stage_deadline_s`` (queued mode). In process (``stage_deadline_s=None``)
+    Embedding (task 057, D6): with a real ``connect``, each tick hands the
+    documents that arrived since the last tick to an embedding thread, which
+    embeds their chunks through one adaptive pool on its own connections, so
+    the polls and the deadline never wait on it; before returning, the stage
+    hands it every ingested document (those ingested by earlier runs too) and
+    waits for it. Inline (no ``connect``), the stage embeds at the end on
+    ``conn``, as before.
+
+    The stage stops waiting when no document is ``queued`` any more, or at the
+    stage deadline: ``stage_deadline_s``, else the queue client's own
+    ``stage_deadline_s`` (600 s for the cloud queue). In process (no deadline)
     the local queue client returns only once every document has been handled,
     so there is nothing left to wait for.
 
@@ -1377,9 +1523,11 @@ def ingest_full_text_sources(
             inline local client: every document is handled on the caller's thread
             and on ``conn``, each in a savepoint.
         connect: Opens a short transaction that commits on exit (``engine.begin``).
-            ``None`` uses a savepoint on ``conn``, to pair with the inline client.
+            ``None`` uses a savepoint on ``conn``, to pair with the inline client,
+            and embeds on ``conn`` at the end.
         stage_deadline_s: Seconds from the first send after which documents still
-            ``queued`` become ``not_ready``; ``None`` in process.
+            ``queued`` become ``not_ready``; ``None`` takes the queue client's
+            ``stage_deadline_s`` attribute when it has one (none in process).
         parse_timeout: Hard per-document parse timeout (default client only).
         thin_min: Thin-text guard threshold (default client only).
         parse_fn: Parse callable (default client only; a test seam).
@@ -1401,13 +1549,20 @@ def ingest_full_text_sources(
         LocalQueueClient,
         inline_connect,
         make_ingest_handler,
-        new_message,
     )
 
     started_at = clock()
     stage_started = datetime.now(UTC)
+    if embedder is None:
+        embedder = StubEmbeddingBackend()
+    pool = AdaptivePool()  # one per stage: it learns the provider's allowance once
+    stage_embedder: _StageEmbedder | None = None
     if connect is None:
         connect = inline_connect(conn)
+    else:
+        stage_embedder = _StageEmbedder(
+            connect=connect, embedder=embedder, pool=pool, task_id=task_id, run_id=run_id
+        )
     if queue is None:
         queue = LocalQueueClient(
             make_ingest_handler(
@@ -1416,6 +1571,56 @@ def ingest_full_text_sources(
             connect,
             workers=0,
         )
+    if stage_deadline_s is None:
+        stage_deadline_s = getattr(queue, "stage_deadline_s", None)
+
+    try:
+        return _run_stage(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            context=context,
+            queue=queue,
+            connect=connect,
+            stage_deadline_s=stage_deadline_s,
+            poll_interval_s=poll_interval_s,
+            clock=clock,
+            sleep=sleep,
+            started_at=started_at,
+            stage_started=stage_started,
+            embedder=embedder,
+            pool=pool,
+            stage_embedder=stage_embedder,
+        )
+    except BaseException:
+        if stage_embedder is not None:
+            stage_embedder.stop()
+        raise
+
+
+def _run_stage(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: IngestFullTextContext,
+    queue: "QueueClient",
+    connect: ConnectFactory,
+    stage_deadline_s: float | None,
+    poll_interval_s: float,
+    clock: Callable[[], float],
+    sleep: Callable[[float], None],
+    started_at: float,
+    stage_started: datetime,
+    embedder: EmbeddingBackend,
+    pool: AdaptivePool,
+    stage_embedder: _StageEmbedder | None,
+) -> dict[str, Any]:
+    """The body of :func:`ingest_full_text_sources` (see there)."""
+    from policy_atlas.evidence_search.sourcing.ingest_queue import (
+        LocalQueueClient,
+        new_message,
+    )
 
     eligible_ids = [
         row.task_source_snapshot_id
@@ -1508,6 +1713,9 @@ def ingest_full_text_sources(
                 log.warning("ingest.send_failed", count=len(closed))
         counts_now = _status_counts(conn, eligible_ids)
         publish(counts_now.get("ingested", 0))
+        if stage_embedder is not None:
+            # Documents that arrived since the last tick go to the embedding thread.
+            stage_embedder.hand(_ingested_snapshot_ids(conn, eligible_ids))
         if send_done and counts_now.get("queued", 0) == 0:
             break
         if deadline is None and send_done:
@@ -1569,15 +1777,17 @@ def ingest_full_text_sources(
             raise RuntimeError(f"ingest left a row in status {status!r}")
     assert eligible_set == {row.task_source_snapshot_id for row in rows}
 
-    if embedder is None:
-        embedder = StubEmbeddingBackend()
-    embed_counts = embed_pending_chunks(
-        conn,
-        embedder=embedder,
-        task_id=task_id,
-        run_id=run_id,
-        snapshot_ids=ingested_snapshot_ids,
-    )
+    if stage_embedder is not None:
+        embed_counts = stage_embedder.finish(ingested_snapshot_ids)
+    else:
+        embed_counts = embed_pending_chunks(
+            conn,
+            embedder=embedder,
+            task_id=task_id,
+            run_id=run_id,
+            snapshot_ids=ingested_snapshot_ids,
+            pool=pool,
+        )
 
     summary = {
         "eligible": total,
