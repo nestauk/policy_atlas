@@ -44,7 +44,9 @@ ScreenStatus = Literal["relevant", "not_relevant", "failed", "excluded_retracted
 ScreenBasis = Literal["title_abstract", "title_only", "full_text"]
 
 SCREEN_RETRY_CAP = 1
-MAX_CONCURRENT_STAGE1 = 12
+# 48 (task 057, N10d; was 12): E8 measured the stage-1 set wall 14.4 -> 4.8 s at 48
+# on Bedrock with no 429s. Stage 2 stays at 4 (not measured).
+MAX_CONCURRENT_STAGE1 = 48
 MAX_CONCURRENT_STAGE2 = 4
 
 # Screening-directive criteria list cap (contract decision 2 rev 2.5, plan rev
