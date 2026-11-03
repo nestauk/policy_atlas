@@ -642,6 +642,18 @@ time is skipped; a link attempted after the lock blocks. The citation and extrac
 guards go beyond D3's "no link row" wording because both tables hold foreign keys to the
 snapshot (owner to note).
 
+### S1 to S5 applied; deferred entries written
+
+The five owner-accepted spec items are applied as built with one entry in
+`docs/specs/log.md` (2026-11-03); `docs/deferred.md` gains the task 057 section (rubric item
+7: the dropped parse rules with E6's numbers, the fallback-parser signals, per-host
+coordination, the retention script's scheduling, HNSW, per-claim judge filtering with E9's
+numbers, the low-effort judge revisit with E3's numbers, the prod route flip, plus alarm
+actions, the three NAT instances and a second retry on once-per-run steps) and closes the
+056 seam "timeout retries are billed but untraced". The plan's "two knowledge concepts"
+(Phase 5.3) are left to step 8 as the task-cycle-build skill directs (durable records are
+authored against the reviewed code); the candidates are listed under § Review handoff.
+
 ## Checks beyond the build
 
 Filled per phase below.

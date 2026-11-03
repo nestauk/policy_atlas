@@ -3335,11 +3335,9 @@ Seams left by task 056 (GPT-6 on both routes, one route step per call site, prom
 Unrated appraisal, the ingest scheduler and the Europe PMC XML route) and by its review stack
 (2026-11-02). Each entry says what is true today and what the lever is.
 
-- **Timeout retries are billed but untraced** (review: Codex and the security lane, convergent). A
-  model request that completes at the provider after the client's 60 s timeout is billed, retried
-  by the OpenAI SDK (`max_retries=2`) and never reaches Langfuse, so `scripts/cost_per_run.py` is a
-  floor. Lever: `max_retries=0` on every client plus a traced retry of our own, so each attempt is
-  a generation.
+- **Timeout retries are billed but untraced** — *closed by task 057 (D12, 2026-11-03):*
+  `max_retries=0` on every client and one traced retry of our own (`tracing.traced_attempts`),
+  so each attempt is its own generation with `step`, `attempt` and a shared `logical_call_id`.
 - **The summary retry can oscillate** (review, trace lane). `_write_and_judge_summary` carries
   only the latest failed attempt; on scoping task 809fe75c attempt 3 repeated attempt 1 word for
   word and the block ended `failed` with no summary. Lever: carry every failed attempt
@@ -3386,3 +3384,58 @@ Unrated appraisal, the ingest scheduler and the Europe PMC XML route) and by its
 - **Owner items after deploy:** N8 parse wall time on staging (2 CPUs; measured on a laptop
   only); chunk quality of the XML route on live documents (fixtures only); the 60 s timeout on
   the long-output extraction and vetter steps (decision item 2 in the task's verification.md).
+
+## Queued ingest, document store, SQL retrieval, step timeouts (task 057 seams)
+
+Seams left by task 057 (contract D8, D10, D11, D14, D3; the build of 2026-11-03). Each entry
+says what is true today and what the lever is. Experiment figures are from the gitignored
+`experiments/experiments-057-2026-11-02/` folder, quoted here so they survive.
+
+- **Parse profile v2 is the markup rule only.** The header, page-number and footnote rules
+  (E6 rules b, c, d) were dropped by the owner (D8): together they recovered 5 quotes of 941 on
+  the control PDFs and only worked as a set; alone each added nothing. Lever: build the three
+  together behind a profile bump if a later quote-failure measurement attributes failures to
+  page furniture. The v2 rule's own collateral (paired underscores in a URL, `<b and c>`, `*p*`)
+  is recorded in task 057's verification.md.
+- **Fallback parser trigger signals.** Textract or Bedrock Data Automation stays deferred; the
+  signals that would trigger it are the parse-failure reason counts per run (`parse_failed`
+  by reason) and the thin-text guard hits, both already in the ingest counts. Lever: a
+  measured share of `parse_failed` on real runs that a second parser could recover.
+- **Per-host coordination across functions (D11).** With up to 20 functions in flight the
+  per-host limit (2 at once, 1 s apart) is not coordinated across them; `Retry-After` on 429
+  and 503 plus queue redelivery cover the one host that refused in E5. Lever: a per-host
+  FIFO message group if 429s rise on staging.
+- **Retention script scheduling (D3).** `scripts/prune_unlinked_snapshots.py` runs by hand
+  (dry run by default). Lever: a scheduled run (EventBridge rule on a small task) once the
+  store's growth is measured on staging.
+- **HNSW index (D7).** Retrieval is exact cosine over the scope's units; the dev-corpus
+  measurement (3,400 to 9,000-unit scopes) saw about 300 ms a search under load. Lever: an
+  HNSW index on `chunk_embedding.embedding` if per-search latency matters once scopes grow
+  (chat over several scopes).
+- **Per-claim judge filtering with E9's numbers.** Deterministic quote, number and negation
+  checks catch 8 of 26 unsupported claims with 82 false flags; skipping whole judge calls
+  saves 8% of tokens; per-claim filtering removes about 41% of chunk text at 2% false passes
+  against one judge, while two judges disagree on 13% of claims. Lever: for the synthesis
+  refinement task with a labelled set, if at all.
+- **The low-effort judge revisit (D14).** `judge_grounding` runs at `low` on the bedrock
+  route: E3 measured half the wall per call (11.5 → 5.4 s) at 0.8× the cost, agreement with
+  the medium judge at the judge's own noise floor (91.7%; 8% of claims flip run to run), but
+  26 claims marked unsupported against 33 and 28 for two medium runs and 3 real attribution
+  catches missed in 157 claims. Lever: the synthesis refinement task re-judges a labelled set
+  of disputed claims and raises the effort again if the leniency is real.
+- **The prod route flip to `bedrock`.** `bedrock` is the app's default route going forward and
+  `openai-direct` is legacy (owner, 2026-11-02); prod stays on `openai-direct` until the team's
+  internal testing on staging is done (owner, 2026-11-03). Prod takes the route-neutral levers
+  (widths, SQL retrieval, the per-document stage in `in_process` mode) unmeasured on its route
+  (D15). Lever: a one-line config change at the owner's go.
+- **Alarm actions.** The three task 057 alarms (dead-letter depth, NAT network out, writer CPU
+  credits) have no notification action because the stacks have no SNS topic. Lever: one topic
+  with an email subscription, wired to every alarm.
+- **Three NAT instances.** The VPC runs one fck-nat instance per availability zone (three),
+  not the single instance the network stack's comment and contract D5 describe; the NAT
+  alarm takes the busiest. Lever: the owner's call on cost against zone resilience.
+- **A second traced retry on once-per-run steps.** On the fixed questions one synthesise
+  component per round failed because a step's single retry also stalled
+  (`synthesise_propose_sections` at its kept 120 s; `judge_grounding` at 40 s, since raised to
+  80 s), costing 250 to 400 s each time. Lever: two retries for steps that run once per
+  component, if the pattern holds on staging.

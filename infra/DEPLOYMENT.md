@@ -480,8 +480,16 @@ command fails, run the same command again: it carries on where it stopped and
 redoes nothing. Progress is logged every 25 batches. When it finishes,
 `SELECT count(*) FROM chunk_embedding WHERE embedding IS NULL;` returns 0.
 Rows the old service writes after that moment (it writes only the JSON column)
-are left empty; the deploy's migration must fill them before anything relies on
-the new column.
+are left empty: the third revision fills them.
+
+- `0914321f8de4` (drop the JSON column) runs **inside the deploy's migration
+  task**, not before: it first runs the same fill over any rows the old service
+  wrote after the pre-run (seconds, as batches), then, under a short table lock
+  (10-second lock timeout), checks that no row lacks an embedding and drops the
+  old JSON `vector` column. If the check fails it stops with a message that says
+  how many rows are missing and why, and drops nothing; fix or delete those rows
+  and run the deploy's migration again. Its downgrade rebuilds the JSON column
+  from the binary one at float32 precision (approximate).
 
 For normal operator recovery use
 `make deploy-update DEPLOY_ENV=<environment>` so local and GitHub execution stay on

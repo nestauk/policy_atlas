@@ -128,7 +128,11 @@ config-abstracted only · OpenAI developer-role / `prompt_cache_key` · Anthropi
 `cache_control` breakpoints / prefill · Gemini PTCF idioms · any tuning that fixed a
 previous generation's failure mode. Caching seams: deterministic append-only prefixes
 suit both automatic (OpenAI) and explicit-marker (Bedrock `cachePoint`) caching — only
-the kwarg is provider-specific.
+the kwarg is provider-specific. *Timeouts (task 057, S5, 2026-11-03):* each route step in
+the route file carries a **client timeout sized from its measured tail** (2 × the healthy
+99th percentile from at least 100 traced calls, floor 5 s; a step with fewer calls keeps
+its previous value); a stalled call is **retried once, never waited out**, and each attempt
+is its own trace generation (SDK retries off), so the stall tax is measurable per step.
 
 ## Honestly thin / absent (don't build on these)
 
