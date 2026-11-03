@@ -211,8 +211,8 @@ polls the store. Fetch in the function removes the S3 bucket, the upload step an
 - `chunk_embedding`: `CREATE EXTENSION IF NOT EXISTS vector`; new `embedding vector(1536)`
   and `tokens text[]` columns, backfilled in batches inside the migration from the JSONB
   `vector` and the unit's text; a GIN index on `tokens`. The JSONB `vector` column is
-  **dropped in the same migration** (🟡 Leaning; the downgrade rebuilds it from the vector
-  column; owner may keep it one release).
+  **dropped in the same migration** (Decided, owner 2026-11-03: "We can drop it"; the
+  downgrade rebuilds it from the vector column).
 - Downgrade path written and tested on the dev database.
 Backfill size: 130,614 units took 367 s locally; staging holds fewer. The deploy script
 already waits for the migration task without a timeout of its own.
@@ -342,10 +342,12 @@ coordination; rate-limit limiter; per-document hand-over into full-text screenin
 judge: "Let's drop it to low in this task, but revisit in synthesis refinement to potentially
 increase again in that task" (D14).
 
-❓ Still open for the owner: `infra/pa_config.json` names `openai-direct` for `prod`; fold the
-flip to `bedrock` into N11's config change, or leave it for a separate change?
+**2026-11-03, the four contract-gate items.** G1: "It's fine". S1 to S5: "They're fine". D2's
+JSON column: "We can drop it". The `prod` route flip to `bedrock`: a separate change, "when
+we're ready to move from staging to prod, after some internal testing by the team"; out of
+this slice, noted in `deferred.md`.
 
-## Spec items (proposed; the owner decides each)
+## Spec items (accepted by the owner 2026-11-03: "They're fine"; applied in the build with a line in the spec log)
 
 - **S1.** data-model § Corpus & source snapshots: record the substrate key as built (body
   hash × parse profile × segmentation policy, embeddings per profile on top), `body_hash` as
@@ -385,8 +387,9 @@ flip to `bedrock` into N11's config change, or leave it for a separate change?
 
 - **G1. Egress (runtime).** The function fetches publisher URLs, calls the embedding provider
   of the route, and talks to SQS and Aurora. Same hosts and same data as today, from a new
-  place. Approved at this contract by the owner (sheet item 2); the DevOps colleague's
-  agreement to items 2 and 3 recorded here before planning: _pending_.
+  place. Approved at this contract by the owner (sheet item 2; 2026-11-03 on the shape change
+  against the 2026-10-30 agreement: "It's fine"). The owner carries the change to the DevOps
+  colleague.
 - **G2. Schema.** The D2 migration, approved at this contract. Tier 4.
 - **G3. Dependency.** `awslambdaric` in the `ops` group, approved at this contract. No other
   dependency; vectors are sent as text casts, not through a client library.
@@ -395,8 +398,8 @@ flip to `bedrock` into N11's config change, or leave it for a separate change?
   on it being granted; the staging measurement records the quota in force.
 - **G5. Production config and CDK.** The resources in N11 and `ingest_mode` per environment,
   approved at this contract; `cdk diff` reviewed at the plan gate; production stays
-  `in_process` until the staging measurement is read (Leaning). The `prod` route flip is the
-  open owner item above.
+  `in_process` until the staging measurement is read (Leaning). The `prod` route flip to
+  `bedrock` is a separate later change (owner, 2026-11-03).
 - **G6. Public interface.** None. The SSE stage and tick shapes are unchanged. The counts
   dict gains `already_in_store` (internal).
 - **G7. Governance.** The DPIA addendum for the changed data flow is the owner's artefact and
