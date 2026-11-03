@@ -13,6 +13,7 @@ approved plan.
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -193,6 +194,47 @@ def toc_after_turn(engine: Engine, task_id: uuid.UUID, turn: Any, user_id: str) 
     return " ".join(notes) or None
 
 
+def toc_after_approve(
+    engine: Engine, task_id: uuid.UUID, plan: TocPlan, agent: Any
+) -> tuple[TocPlan, str | None]:
+    """Sense-check a ready plan: can this intervention cause this goal at all? (red team).
+
+    Runs only with live models (the stub agent means a test or a keyless run):
+    a quick search on the whole intervention and one frontier call. A doubtful
+    or implausible plan gets a warning in the reply; the plan is never changed.
+    """
+    import os
+
+    from policy_atlas.core import tracing
+    from policy_atlas.evidence_search.sourcing.search_live import OpenAlexLiveBackend
+    from policy_atlas.runtime.agent_backend import StubAgentBackend
+    from policy_atlas.theory_of_change.backend import OpenAITocBackend
+    from policy_atlas.theory_of_change.sense_check import run_sense_check
+
+    key = os.environ.get("OPENALEX_API_KEY")
+    if isinstance(agent, StubAgentBackend) or not key:
+        return plan, None
+    openalex = OpenAlexLiveBackend(key, email=os.environ.get("OPENALEX_EMAIL"))
+    warning = run_sense_check(
+        engine,
+        task_id=task_id,
+        plan=plan,
+        backend=OpenAITocBackend(langfuse_client=tracing.get_langfuse(), session_id=task_id),
+        search=lambda text: openalex.search_semantic(text, max_results=6),
+    )
+    return plan, warning
+
+
+_SENTENCE = re.compile(r"(?<=[.!?])\s+")
+_START = re.compile(r"\b(start|begin)\b", re.IGNORECASE)
+
+
+def toc_merge_note(reply: str, note: str) -> str:
+    """The reply, without its invitations to start, then the sense check's warning."""
+    kept = [s for s in _SENTENCE.split(reply.strip()) if not _START.search(s)]
+    return "\n\n".join(part for part in (" ".join(kept), note) if part)
+
+
 def toc_draft_from_plan(plan: Any) -> TocPlanDraft:
     """Project an approved plan into the API draft."""
     values = expect_toc_plan(plan).model_dump(mode="json")
@@ -288,4 +330,6 @@ TOC_TASK_AGENT = TaskAgentProfile(
     stub_turn=stub_toc_turn,
     part_ids=frozenset(),
     after_turn=toc_after_turn,
+    after_approve=toc_after_approve,
+    merge_note=toc_merge_note,
 )

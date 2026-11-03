@@ -427,6 +427,130 @@ def check_changes(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) -
     return lines
 
 
+#: A check asked for while another walk runs waits as this event (task 054, round 5).
+TOC_CHECK_QUEUED_EVENT = "toc.check_queued"
+#: Which queued checks a walk took, or Stop cleared: ``{"sequences": [...]}``.
+TOC_CHECK_DEQUEUED_EVENT = "toc.check_dequeued"
+
+
+def queue_check(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    link_ids: list[str],
+    mode: str,
+    studies: dict[str, list[str]] | None,
+    user_id: str,
+) -> None:
+    """Keep a named check to run when the task's current walk ends."""
+    from policy_atlas.core import events
+
+    events.append(
+        conn,
+        task_id=task_id,
+        run_id=None,
+        event_type=TOC_CHECK_QUEUED_EVENT,
+        payload={"links": link_ids, "mode": mode, "studies": studies or {}, "by": user_id},
+    )
+
+
+def _queued(conn: Connection, task_id: uuid.UUID) -> list[Any]:
+    """The queued checks no walk has taken yet, oldest first."""
+    rows = conn.execute(
+        select(event_log.c.sequence, event_log.c.event_type, event_log.c.payload)
+        .where(event_log.c.task_id == task_id)
+        .where(event_log.c.event_type.in_([TOC_CHECK_QUEUED_EVENT, TOC_CHECK_DEQUEUED_EVENT]))
+        .order_by(event_log.c.sequence)
+    ).all()
+    taken = {
+        int(seq)
+        for row in rows
+        if row.event_type == TOC_CHECK_DEQUEUED_EVENT
+        for seq in (row.payload or {}).get("sequences", [])
+    }
+    return [
+        row
+        for row in rows
+        if row.event_type == TOC_CHECK_QUEUED_EVENT and int(row.sequence) not in taken
+    ]
+
+
+def queued_link_ids(conn: Connection, task_id: uuid.UUID) -> list[str]:
+    """The links a queued check names, for the canvas's Queued state."""
+    out: list[str] = []
+    for row in _queued(conn, task_id):
+        out += [key for key in (row.payload or {}).get("links", []) if key not in out]
+    return out
+
+
+def clear_queue(conn: Connection, task_id: uuid.UUID) -> None:
+    """Drop every queued check (the user's Stop)."""
+    from policy_atlas.core import events
+
+    pending = _queued(conn, task_id)
+    if pending:
+        events.append(
+            conn,
+            task_id=task_id,
+            run_id=None,
+            event_type=TOC_CHECK_DEQUEUED_EVENT,
+            payload={"sequences": [int(row.sequence) for row in pending], "reason": "stopped"},
+        )
+
+
+def take_queued_check(
+    conn: Connection, task_id: uuid.UUID
+) -> tuple[uuid.UUID, dict[str, Any], str] | None:
+    """Mint one walk for the oldest queued check and every queued check of its mode.
+
+    Returns:
+        ``(scope_id, plan_row, user_id)``, or ``None`` when nothing waits.
+    """
+    from policy_atlas.core import events
+    from policy_atlas.runtime.toc_plan import (
+        TOC_CHECK_MODE_KEY,
+        TOC_STARTED_BY_KEY,
+        TOC_STUDIES_KEY,
+    )
+
+    pending = _queued(conn, task_id)
+    if not pending:
+        return None
+    mode = pending[0].payload["mode"]
+    batch = [row for row in pending if row.payload["mode"] == mode]
+    links: list[str] = []
+    studies: dict[str, list[str]] = {}
+    for row in batch:
+        links += [key for key in row.payload.get("links", []) if key not in links]
+        for key, dois in (row.payload.get("studies") or {}).items():
+            kept = studies.setdefault(key, [])
+            kept += [doi for doi in dois if doi not in kept]
+    events.append(
+        conn,
+        task_id=task_id,
+        run_id=None,
+        event_type=TOC_CHECK_DEQUEUED_EVENT,
+        payload={"sequences": [int(row.sequence) for row in batch]},
+    )
+    plan_row = latest_approved_plan_row(conn, task_id)
+    if plan_row is None:
+        return None
+    user_id = str(batch[0].payload.get("by") or "")
+    scope_id = mint_scope(
+        conn,
+        task_id=task_id,
+        plan_row=plan_row,
+        toc_walk=TOC_WALK_CHECK,
+        links=links,
+        extra={
+            TOC_CHECK_MODE_KEY: mode,
+            TOC_STARTED_BY_KEY: user_id,
+            **({TOC_STUDIES_KEY: studies} if studies else {}),
+        },
+    )
+    return scope_id, dict(plan_row), user_id
+
+
 #: Posted when the user stops a check (C48).
 STOPPED_MESSAGE = (
     "The check stopped. What it finished stays on the canvas. Connections it did not "
@@ -434,10 +558,23 @@ STOPPED_MESSAGE = (
 )
 
 
+def _plural(count: int, noun: str) -> str:
+    return f"{count} {noun}{'' if count == 1 else 'es' if noun.endswith('h') else 's'}"
+
+
+def _and(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
+
+
 def _pending_found(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> str | None:
-    """The message for a named check (C40 to C45), or ``None`` for a full check."""
+    """The message for a named check (C40 to C45), or ``None`` for a full check.
+
+    It says what the check searched, read and set aside, then one line per
+    connection: how many documents test the step and the verdict now.
+    """
     from policy_atlas.core.schema import toc_item_evidence, toc_link
     from policy_atlas.runtime.toc_plan import TOC_CHECK_MODE_KEY
+    from policy_atlas.theory_of_change.review import _theory
 
     context = conn.execute(
         select(evidence_scope.c.context)
@@ -451,46 +588,143 @@ def _pending_found(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) 
         .where(capability_run.c.capability_run_id == walk_id)
     ).scalar_one_or_none()
     mode = (context or {}).get(TOC_CHECK_MODE_KEY)
-    if mode in ("new_items", "check_again", "add_study", "report"):
-        # A small named check says what it did in one line, not the full change list.
-        if mode == "report":
-            return "The report is updated for the theory as it is now."
-        codes = sorted(
-            code
-            for code in conn.execute(
-                select(toc_link.c.code).where(
-                    toc_link.c.link_id.in_(
-                        [uuid.UUID(key) for key in (context or {}).get("links") or []]
-                    )
-                )
-            ).scalars()
-            if code
-        )
-        done = {
-            "new_items": "Finding evidence",
-            "check_again": "Checking again",
-            "add_study": "Adding the study",
-        }[mode]
-        names = ", ".join(codes) or "the connection"
-        return f"{done} for {names} is done. Open it on the canvas to see its evidence."
-    if mode != "find_more":
+    if mode == "report":
+        return "The report is updated for the theory as it is now."
+    if mode not in ("new_items", "check_again", "add_study", "find_more"):
         return None
-    rows = conn.execute(
-        select(toc_link.c.code, toc_item_evidence.c.support)
-        .join(toc_link, toc_link.c.link_id == toc_item_evidence.c.link_id)
+    link_ids = [uuid.UUID(key) for key in (context or {}).get("links") or []]
+    code_of = {
+        row.link_id: row.code
+        for row in conn.execute(
+            select(toc_link.c.link_id, toc_link.c.code).where(toc_link.c.link_id.in_(link_ids))
+        )
+    }
+    judged: dict[uuid.UUID, list[str]] = {}
+    for row in conn.execute(
+        select(toc_item_evidence.c.link_id, toc_item_evidence.c.support)
         .where(toc_item_evidence.c.task_id == task_id)
         .where(toc_item_evidence.c.capability_run_id == walk_id)
-        .where(toc_item_evidence.c.status == "pending")
-    ).all()
-    useful = [row for row in rows if row.support != "not_about"]
-    codes = sorted({row.code for row in useful if row.code})
-    if not useful:
-        return "Find more evidence is done. It found no new documents that test these connections."
-    return (
-        f"Find more evidence is done. It found {len(useful)} new document"
-        f"{'s' if len(useful) != 1 else ''} that test {', '.join(codes)}. They do not count "
-        "until you accept them: open the connection to see the verdict if you do."
+    ):
+        judged.setdefault(row.link_id, []).append(row.support)
+    verdicts = {link["code"]: link["verdict"] for link in _theory(conn, task_id)["links"]}
+    done = {
+        "new_items": "Finding evidence",
+        "check_again": "Checking again",
+        "add_study": "Adding the study",
+        "find_more": "Finding more evidence",
+    }[mode]
+    codes = [code_of[key] for key in link_ids if code_of.get(key)]
+    lines = [f"{done} for {_and(codes) if codes else 'the connection'} is done."]
+    for key in link_ids:
+        code = code_of.get(key)
+        if not code:
+            continue
+        supports = judged.get(key, [])
+        testing = sum(1 for support in supports if support != "not_about")
+        verdict = verdicts.get(code, "Not enough evidence")
+        prefix = f"{code}: " if len(codes) > 1 else ""
+        if not supports:
+            lines.append(
+                f"{prefix}It found no new documents to judge. The verdict stays {verdict}."
+            )
+        elif testing == 0:
+            lines.append(
+                f"{prefix}It judged {_plural(len(supports), 'new document')}, but none tests "
+                f"this step, so they are listed as not about it. The verdict stays {verdict}."
+            )
+        elif mode == "find_more":
+            lines.append(
+                f"{prefix}{_plural(testing, 'new document')} of {len(supports)} test this step. "
+                "They wait for you to accept them in its sidebar."
+            )
+        else:
+            lines.append(
+                f"{prefix}{testing} of {_plural(len(supports), 'document')} test this step. "
+                f"The verdict is now {verdict}."
+            )
+    return "\n".join(lines)
+
+
+def theory_overview(conn: Connection, *, task_id: uuid.UUID) -> list[str]:
+    """The theory at a glance after a full check (round 6): its pathways, the
+    best-supported one, the critical connection and how the verdicts fall."""
+    from policy_atlas.core.schema import toc_link
+    from policy_atlas.theory_of_change.evidence.grade import VERDICT_LABELS, VERDICT_ORDER
+    from policy_atlas.theory_of_change.review import _theory
+
+    theory = _theory(conn, task_id)
+    rank = {VERDICT_LABELS[verdict]: VERDICT_ORDER.index(verdict) for verdict in VERDICT_ORDER}
+    verdict_of = {link["code"]: link["verdict"] for link in theory["links"]}
+    lines: list[str] = []
+    success = [p for p in theory["pathways"] if p["kind"] != "failure"]
+    failure = [p for p in theory["pathways"] if p["kind"] == "failure"]
+    shape = f"The theory has {_plural(len(success), 'pathway')} to the impact"
+    lines.append(
+        shape + (f" and {_plural(len(failure), 'way')} it could go wrong." if failure else ".")
     )
+
+    def weakest(pathway: dict[str, Any]) -> str:
+        found = [verdict_of[code] for code in pathway["links"] if code in verdict_of]
+        return min(found, key=lambda label: rank[label]) if found else "Not enough evidence"
+
+    if success:
+        best = max(success, key=lambda p: rank[weakest(p)])
+        floor = weakest(best)
+        tail = (
+            "every step is Confident." if floor == "Confident" else f"its weakest step is {floor}."
+        )
+        lines.append(f"The best-supported pathway is “{best['label']}”: {tail}")
+    critical = conn.execute(
+        select(toc_link.c.code, toc_link.c.title)
+        .where(toc_link.c.task_id == task_id, toc_link.c.critical.is_(True))
+        .order_by(toc_link.c.code)
+    ).all()
+    for row in critical:
+        name = f" ({row.title})" if row.title else ""
+        lines.append(
+            f"The critical connection is {row.code}{name}: "
+            f"{verdict_of.get(row.code, 'Not enough evidence')}. Test it first."
+        )
+    labels = [link["verdict"] for link in theory["links"]]
+    good = sum(1 for v in labels if v in ("Confident", "Leaning supports"))
+    weak = sum(
+        1 for v in labels if v in ("Mixed", "Leaning against", VERDICT_LABELS["not_confident"])
+    )
+    none = len(labels) - good - weak
+    lines.append(
+        f"Of {len(labels)} connections, {good} {'is' if good == 1 else 'are'} supported, "
+        f"{weak} {'is' if weak == 1 else 'are'} mixed or against, and {none} "
+        f"{'has' if none == 1 else 'have'} too little evidence."
+    )
+    return lines
+
+
+def _headline(verdict: dict[str, Any]) -> str:
+    """The headline without a leading "Implausible:" that repeats the label."""
+    text = str(verdict["headline"])
+    prefix = f"{verdict['label']}:"
+    if not text.startswith(prefix):
+        return text
+    rest = text[len(prefix) :].strip()
+    return rest[:1].upper() + rest[1:]
+
+
+def _latest_verdict(conn: Connection, task_id: uuid.UUID) -> dict[str, Any] | None:
+    """The overall verdict in the latest report, if it has one."""
+    from policy_atlas.core.schema import event_log
+
+    payload = conn.execute(
+        select(event_log.c.payload)
+        .where(
+            event_log.c.task_id == task_id,
+            event_log.c.event_type == "component.completed",
+            event_log.c.payload["component"].astext == "toc_report",
+        )
+        .order_by(event_log.c.sequence.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    verdict = ((payload or {}).get("report") or {}).get("verdict")
+    return verdict if isinstance(verdict, dict) else None
 
 
 def post_check_message(engine: Engine, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> None:
@@ -504,11 +738,21 @@ def post_check_message(engine: Engine, *, task_id: uuid.UUID, walk_id: uuid.UUID
         if found is not None:
             post_agent_message(engine, task_id=task_id, text=found)
             return
-        changes = check_changes(conn, task_id=task_id, walk_id=walk_id)
-    if changes:
-        body = "The evidence check is done. What it changed:\n" + "\n".join(
-            f"- {line}" for line in changes
-        )
-    else:
-        body = "The evidence check is done. It did not change any pathway."
-    post_agent_message(engine, task_id=task_id, text=f"{body}\n\n{STRESS_TEST_MESSAGE}")
+        overview = theory_overview(conn, task_id=task_id)
+        verdict = _latest_verdict(conn, task_id)
+        added = [
+            line
+            for line in check_changes(conn, task_id=task_id, walk_id=walk_id)
+            if line.startswith("Added")
+        ]
+    lead = (
+        [f"The evidence check is done. Overall: {verdict['label']}. {_headline(verdict)}"]
+        if verdict is not None
+        else ["The evidence check is done."]
+    )
+    body = "\n".join([*lead, *added[:1], *overview])
+    post_agent_message(
+        engine,
+        task_id=task_id,
+        text=f"{body}\n\nRead the full report in the Result tab. {STRESS_TEST_MESSAGE}",
+    )

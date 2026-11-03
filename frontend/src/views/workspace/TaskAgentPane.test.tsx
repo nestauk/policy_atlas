@@ -32,6 +32,7 @@ vi.mock("../../api/queries", async (importOriginal) => {
     useCheckIns: vi.fn(),
     useFunnel: vi.fn(),
     useTask: vi.fn(),
+    useToc: vi.fn(() => ({ data: undefined })),
   };
 });
 vi.mock("../../api/mutations", async (importOriginal) => {

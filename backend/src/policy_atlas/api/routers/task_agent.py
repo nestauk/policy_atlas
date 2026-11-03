@@ -37,6 +37,7 @@ from policy_atlas.api.contract import (
     TaskAgentTurnCreate,
     TaskAgentTurnOut,
     TocPlanDraft,
+    TocPlanPatch,
     TurnDecisionOut,
 )
 from policy_atlas.api.contract.tasks import LatestRun
@@ -1136,7 +1137,11 @@ def create_task_agent_turn(
             with tracing.trace_scope(user_id=user.user_id):
                 approved, note = profile.after_approve(engine, task_id, approved, agent)
             if note is not None:
-                reply_text = f"{turn.reply.rstrip()}\n\n{note}"
+                reply_text = (
+                    profile.merge_note(turn.reply, note)
+                    if profile.merge_note is not None
+                    else f"{turn.reply.rstrip()}\n\n{note}"
+                )
         if profile.after_turn is not None:
             # Outside any transaction: the theory of change stores the edits the
             # turn proposed and any clarification, and says so (task 054, C46, C49).
@@ -1580,12 +1585,16 @@ def patch_plan(
                 "a run is in progress; finish or stop it, then edit the plan",
             )
         capability = access.row["capability"]
-        es_fields = payload.model_fields_set - {"scoping"}
+        es_fields = payload.model_fields_set - {"scoping", "toc"}
         if capability == THEORY_OF_CHANGE:
-            # Increment 1: the plan is set through the Task Agent only.
+            if es_fields or payload.scoping is not None or payload.toc is None:
+                raise HTTPException(
+                    status_code=422, detail="edit a theory-of-change plan through 'toc'"
+                )
+            return _patch_toc_plan(conn, task_id, payload.toc)
+        if payload.toc is not None:
             raise HTTPException(
-                status_code=422,
-                detail="a theory-of-change plan is changed through the Task Agent",
+                status_code=422, detail="'toc' edits a theory-of-change plan only"
             )
         if capability == OPTIONS_SCOPING:
             if es_fields:
@@ -1611,6 +1620,51 @@ def patch_plan(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         row = _persist_version(conn, task_id, patched, conversation_id)
     return _plan_out(EVIDENCE_SEARCH, patched, row)
+
+
+def _patch_toc_plan(conn: Connection, task_id: uuid.UUID, patch: TocPlanPatch) -> PlanOut:
+    """Apply plan-panel edits to a theory-of-change plan as a new approved version.
+
+    Refused once the draft is on the canvas: the plan is then fixed (S7). The
+    Task Agent's latest draft takes the same edits, so its next turn starts
+    from the edited plan rather than the one before.
+    """
+    from policy_atlas.theory_of_change.store import has_graph
+
+    if has_graph(conn, task_id):
+        raise ApiConflict(
+            "toc_plan_fixed",
+            "the theory is drafted, so its plan is fixed; ask the Task Agent for a new task",
+        )
+    row = latest_approved_plan_row(conn, task_id)
+    if row is None:
+        raise HTTPException(status_code=422, detail="plan is not ready to edit")
+    edits = {key: (value or None) for key, value in patch.model_dump(exclude_unset=True).items()}
+    try:
+        plan = validate_plan(THEORY_OF_CHANGE, {**row["payload"], **edits})
+    except (ValidationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    latest = conn.execute(
+        select(task_agent_transcript.c.id, task_agent_transcript.c.task_agent_state)
+        .where(task_agent_transcript.c.task_id == task_id)
+        .where(task_agent_transcript.c.status == "completed")
+        .where(task_agent_transcript.c.task_agent_state.is_not(None))
+        .order_by(task_agent_transcript.c.turn_index.desc())
+        .limit(1)
+    ).one_or_none()
+    if latest is not None:
+        conn.execute(
+            task_agent_transcript.update()
+            .where(task_agent_transcript.c.id == latest.id)
+            .values(task_agent_state={**latest.task_agent_state, **edits})
+        )
+    conversation_id = conn.execute(
+        select(task_plan.c.conversation_id)
+        .where(task_plan.c.task_id == task_id)
+        .order_by(task_plan.c.version.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    return _plan_out(THEORY_OF_CHANGE, plan, _persist_version(conn, task_id, plan, conversation_id))
 
 
 def _persist_new_scoping_version(

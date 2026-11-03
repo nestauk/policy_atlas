@@ -23,7 +23,7 @@ export function CriticalIcon() {
 }
 
 /** A short line sample for each verdict, drawn as on the canvas (C36). */
-function LineSample({ verdict }: { verdict: Verdict }) {
+export function LineSample({ verdict }: { verdict: Verdict }) {
   const line = (stroke: string, width: number, dash?: string) => (
     <line x1="0" y1="4" x2="34" y2="4" stroke={stroke} strokeWidth={width} strokeDasharray={dash} />
   );

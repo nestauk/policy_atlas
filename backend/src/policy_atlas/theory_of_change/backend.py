@@ -76,13 +76,22 @@ from policy_atlas.theory_of_change.merge_prompt import (
     MergeResponse,
     build_merge_messages,
 )
+from policy_atlas.theory_of_change.plausibility_prompt import (
+    PLAUSIBILITY_MAX_OUTPUT_TOKENS,
+    TOC_SENSE_CHECK_PROMPT_VERSION,
+    TOC_VERDICT_PROMPT_VERSION,
+    SenseCheckResponse,
+    TheoryVerdictResponse,
+    build_sense_check_messages,
+    build_verdict_messages,
+)
 from policy_atlas.theory_of_change.report_prompt import (
     TOC_REPORT_MAX_OUTPUT_TOKENS,
     TOC_REPORT_PROMPT_VERSION,
-    AssumptionReasonWire,
-    PathwayParagraphWire,
+    ConnectionReasonWire,
+    PathwayLineWire,
     ReportResponse,
-    TestRowWire,
+    TestWire,
     build_report_messages,
 )
 from policy_atlas.theory_of_change.review_prompt import (
@@ -212,6 +221,18 @@ class TocBackend(Protocol):
         report: dict[str, object] | None,
     ) -> UsageResult[ReviewResponse]:
         """Review the theory's shape after the user's edits (``toc_review_v1``, C45)."""
+        ...
+
+    def sense_check(
+        self, *, plan: dict[str, object], documents: list[dict[str, str]]
+    ) -> UsageResult[SenseCheckResponse]:
+        """Judge whether the intervention could credibly cause the goal (``toc_sense_check_v1``)."""
+        ...
+
+    def theory_verdict(
+        self, *, theory: dict[str, object], sense_check: dict[str, object] | None
+    ) -> UsageResult[TheoryVerdictResponse]:
+        """Give the checked theory one overall verdict and a headline (``toc_verdict_v1``)."""
         ...
 
 
@@ -425,6 +446,30 @@ class OpenAITocBackend:
             prompt_version=TOC_REVIEW_PROMPT_VERSION,
         )
 
+    def sense_check(
+        self, *, plan: dict[str, object], documents: list[dict[str, str]]
+    ) -> UsageResult[SenseCheckResponse]:
+        """See :class:`TocBackend`."""
+        return self._call(
+            build_sense_check_messages(plan, documents),
+            response_format=SenseCheckResponse,
+            step="toc_sense_check",
+            max_output_tokens=PLAUSIBILITY_MAX_OUTPUT_TOKENS,
+            prompt_version=TOC_SENSE_CHECK_PROMPT_VERSION,
+        )
+
+    def theory_verdict(
+        self, *, theory: dict[str, object], sense_check: dict[str, object] | None
+    ) -> UsageResult[TheoryVerdictResponse]:
+        """See :class:`TocBackend`."""
+        return self._call(
+            build_verdict_messages(theory, sense_check),
+            response_format=TheoryVerdictResponse,
+            step="toc_verdict",
+            max_output_tokens=PLAUSIBILITY_MAX_OUTPUT_TOKENS,
+            prompt_version=TOC_VERDICT_PROMPT_VERSION,
+        )
+
     def report(
         self,
         *,
@@ -534,6 +579,8 @@ class StubTocBackend:
       judged document; plain box descriptions with no "seen in".
     - ``report``: a plain report: each pathway's paragraph names its first
       link and cites that link's first source; a reason for every row.
+    - ``sense_check``: plausible, no message.
+    - ``theory_verdict``: plausible but untested.
 
     Calls are counted in :attr:`calls` and their keyword inputs kept in
     :attr:`inputs`, both under a lock (judge runs in a thread pool).
@@ -748,6 +795,37 @@ class StubTocBackend:
             None,
         )
 
+    def sense_check(
+        self, *, plan: dict[str, object], documents: list[dict[str, str]]
+    ) -> UsageResult[SenseCheckResponse]:
+        """See :class:`StubTocBackend`: plausible, with no message."""
+        queued = self._next("sense_check", {"plan": plan, "documents": documents})
+        return (
+            queued
+            or SenseCheckResponse(
+                active_ingredient="What the plan changes.",
+                best_route="Through the plan's own route.",
+                rating="plausible",
+                reason="A credible route exists.",
+                message=None,
+            )
+        ), None
+
+    def theory_verdict(
+        self, *, theory: dict[str, object], sense_check: dict[str, object] | None
+    ) -> UsageResult[TheoryVerdictResponse]:
+        """See :class:`StubTocBackend`: plausible but untested."""
+        queued = self._next("theory_verdict", {"theory": theory, "sense_check": sense_check})
+        return (
+            queued
+            or TheoryVerdictResponse(
+                verdict="plausible_untested",
+                carrying_step="#1",
+                reason="The carrying step is credible but thinly evidenced.",
+                headline="The theory could work, but its key steps are not yet tested.",
+            )
+        ), None
+
     def report(
         self,
         *,
@@ -765,18 +843,18 @@ class StubTocBackend:
         cited = {
             str(code): f" [{source['n']}]"
             for source in reversed(sources)
-            for code in cast(list[str], source["links"])
+            for code in cast(list[str], source["connections"])
         }
 
-        def paragraph(path: dict[str, Any]) -> PathwayParagraphWire:
-            first = str((path.get("links") or ["?"])[0])
-            return PathwayParagraphWire(
+        def line(path: dict[str, Any]) -> PathwayLineWire:
+            first = str((path.get("connections") or ["?"])[0])
+            return PathwayLineWire(
                 pathway=str(path["key"]),
                 title=str(path["label"]),
-                paragraph=f"The route starts at {first}.{cited.get(first, '')}",
+                sentence=f"The route starts at {first}.{cited.get(first, '')}",
             )
 
-        weakest = cast(list[str], theory.get("weakest_critical_links") or [])
+        weakest = cast(list[str], theory.get("weakest_critical_connections") or [])
         return (
             ReportResponse(
                 title="A drafted theory of change",
@@ -784,17 +862,17 @@ class StubTocBackend:
                 if_then_because=f"If {plan.get('intervention') or 'it'} happens, then "
                 f"{plan.get('goal')}, because of the mechanism.",
                 context="The setting matters.",
-                weakest_links=(
-                    f"The weakest link is {weakest[0]}." if weakest else "None stands out."
+                pathways=[line(path) for path in pathways if path.get("kind") == "success"],
+                how_it_could_fail=(
+                    f"The weakest connection is {weakest[0]}." if weakest else "None stands out."
                 ),
-                pathways=[paragraph(path) for path in pathways],
-                assumption_reasons=[
-                    AssumptionReasonWire(row=str(row["key"]), why="The evidence is thin.")
+                connection_reasons=[
+                    ConnectionReasonWire(connection=str(row["code"]), why="The evidence is thin.")
                     for row in rows
                 ],
                 tests=[
-                    TestRowWire(
-                        link=code,
+                    TestWire(
+                        connection=code,
                         question="Does this step happen?",
                         indicator="A count from routine data",
                         test_and_learn="Compare before and after",

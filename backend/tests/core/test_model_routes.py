@@ -60,6 +60,8 @@ DEFAULT_ROUTE_MODELS = {
     "toc_figures": "gpt-5.6-luna",
     "toc_report": "gpt-5.6-sol",
     "toc_review": "gpt-5.6-sol",
+    "toc_sense_check": "gpt-5.6-sol",
+    "toc_verdict": "gpt-5.6-sol",
 }
 
 

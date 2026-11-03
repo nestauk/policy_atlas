@@ -140,6 +140,10 @@ class TaskAgentProfile:
     #: turn: the theory of change stores proposed edits and clarifications here
     #: (task 054, C46, C49).
     after_turn: Callable[[Engine, uuid.UUID, Any, str], str | None] | None = None
+    #: ``(reply, note)`` → the reply with ``after_approve``'s note; default: the
+    #: note after the reply. The theory of change drops "start it" sentences
+    #: when the note warns the plan may not work (task 054, red team).
+    merge_note: Callable[[str, str], str] | None = None
 
 
 @dataclass(frozen=True)

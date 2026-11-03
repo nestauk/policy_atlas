@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 
-import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns, useTask } from "../../api/queries";
+import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns, useTask, useToc } from "../../api/queries";
 import { useComposerSeed } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { COPY, TASK } from "../../lib/vocabulary";
@@ -45,6 +45,8 @@ import { PlanCard } from "./PlanCard";
 import type { PlanOverlay } from "./planOverlay";
 import { COMPONENT_LABEL, RUN_BLOCK_STATUS } from "./planVocabulary";
 import { RunningCard, RunningCardDock } from "./RunningCard";
+import { TocTrace } from "./TocTrace";
+import { TocCodeText } from "../toc/codeLinks";
 import {
   completedSignposts,
   elapsedSeconds,
@@ -69,6 +71,8 @@ export function threadInputs(
   turns: TaskAgentThreadTurn[],
   runs: TaskAgentThreadRun[],
   decisions: TaskAgentThreadDecision[],
+  /** Theory of change (round 5): a child walk's lines go to its parent's block, for the trace. */
+  foldChildren = false,
 ): { boundaries: RunThreadBoundary[]; runDecisions: RunThreadDecision[] } {
   // Task 045 (S12): a child walk (a longlist walk's option search) gets no
   // block of its own; the decisions that name it go nowhere.
@@ -93,9 +97,13 @@ export function threadInputs(
   const orderedRuns = runs
     .filter((run) => !childIds.has(run.capability_run_id))
     .sort((left, right) => left.started_at.localeCompare(right.started_at));
+  const parentOf = new Map(
+    runs.flatMap((run) => (run.parent_capability_run_id != null ? [[run.capability_run_id, run.parent_capability_run_id] as const] : [])),
+  );
   const runDecisions: RunThreadDecision[] = [];
   for (const decision of decisions) {
-    const walkId = decision.capability_run_id;
+    const own = decision.capability_run_id;
+    const walkId = foldChildren && own != null ? (parentOf.get(own) ?? own) : own;
     const tagged = decision.detail?.["capability_run_id"];
     const ownerId =
       walkId != null
@@ -312,10 +320,12 @@ function UserBubble({ text }: { text: string }) {
 
 /** TaskAgent replies are plain text — no box (binding record: task_agent-stage
  *  `.task_agent`); only part cards and the plan card are bordered. */
-function TaskAgentBubble({ text }: { text: string }) {
+function TaskAgentBubble({ text, taskId, tocCodes }: { text: string; taskId?: string; tocCodes?: ReadonlySet<string> }) {
   return (
     <div className="anim-rise mr-8">
-      <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>
+      <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">
+        {tocCodes !== undefined && taskId !== undefined ? <TocCodeText text={text} taskId={taskId} codes={tocCodes} /> : scrub(text)}
+      </p>
     </div>
   );
 }
@@ -374,9 +384,12 @@ function DurableTurn({
   partState,
   onSend,
   onPrefill,
+  tocCodes,
 }: {
   taskId: string;
   turn: TaskAgentThreadTurn;
+  /** A theory of change's box and connection codes, linked in the reply. */
+  tocCodes?: ReadonlySet<string>;
   isLatest: boolean;
   onRetry: (input: { message: string; clientTurnId: string }) => void;
   retryDisabled: boolean;
@@ -422,7 +435,7 @@ function DurableTurn({
     return (
       <div className="space-y-6">
         <UserBubble text={turn.user_message} />
-        {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} />}
+        {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} taskId={taskId} tocCodes={tocCodes} />}
         <DecisionLine label={actionLine(turn.action)} planVersion={null} />
       </div>
     );
@@ -430,7 +443,7 @@ function DurableTurn({
   return (
     <div className="space-y-6">
       {!isConfirmTurn && <UserBubble text={turn.user_message} />}
-      {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} />}
+      {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} taskId={taskId} tocCodes={tocCodes} />}
       {turn.part != null && partState !== undefined && (
         <PartCard
           part={turn.part}
@@ -672,8 +685,34 @@ export function TaskAgentPane({
   const planReady =
     planQuery.data?.status === "approved" &&
     (planQuery.data.plan?.ready === true || planQuery.data.scoping?.ready === true);
-  const runsQuery = useRuns(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
-  const decisionsQuery = useDecisions(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
+  const isToc = planQuery.data?.capability === "theory_of_change";
+  // A theory-of-change walk shows its steps as they happen (rounds 5, 6). Whether one runs
+  // comes from the theory itself, not the live stream, so the chat sidebar on any tab
+  // (which has no stream) shows the same as the Agent tab.
+  const tocGraph = useToc(isToc ? taskId : "");
+  const tocLive = isToc && (tocGraph.data?.check_status === "drafting" || tocGraph.data?.check_status === "checking");
+  const tocCodes = useMemo(
+    () =>
+      tocGraph.data == null
+        ? undefined
+        : new Set([...tocGraph.data.boxes, ...tocGraph.data.links].flatMap((item) => (item.code != null ? [item.code] : []))),
+    [tocGraph.data],
+  );
+  const decisionsQuery = useDecisions(taskId, { page_size: TRANSCRIPT_PAGE_SIZE }, tocLive ? 3000 : undefined);
+  const runsQuery = useRuns(taskId, { page_size: TRANSCRIPT_PAGE_SIZE }, tocLive ? 3000 : undefined);
+  // When a walk ends, fetch its last steps and the Task Agent's message about it at once.
+  const wasLive = useRef(false);
+  const { refetch: refetchDecisions } = decisionsQuery;
+  const { refetch: refetchRuns } = runsQuery;
+  const { refetch: refetchTranscript } = transcript;
+  useEffect(() => {
+    if (wasLive.current && !tocLive) {
+      void refetchDecisions();
+      void refetchRuns();
+      void refetchTranscript();
+    }
+    wasLive.current = tocLive;
+  }, [tocLive, refetchDecisions, refetchRuns, refetchTranscript]);
   const checkInsQuery = useCheckIns(taskId, "all");
   const funnel = useFunnel(taskId);
   const [message, setMessage] = useState("");
@@ -688,6 +727,7 @@ export function TaskAgentPane({
     durableTurns,
     runsQuery.data?.data ?? [],
     decisionsQuery.data?.data ?? [],
+    isToc,
   );
   // Task 044 Phase 5.5: the options-scoping baseline gate is the one check-in
   // that sits INSIDE the thread, in chronological order with the turns it
@@ -744,8 +784,19 @@ export function TaskAgentPane({
   // task_agent turn (approval always comes from a turn; turns are 409-fenced
   // during runs), so a started run's block renders BELOW it, not above.
   const lastTurnAt = thread.findLastIndex((item) => item.type === "task_agent_turn");
-  const planCardAt = lastTurnAt === -1 ? thread.length : lastTurnAt + 1;
-  const planStarted = thread.slice(planCardAt).some((item) => item.type === "run_block");
+  // A theory of change pins its plan card where the plan was agreed: just before its first walk (round 7).
+  const firstRunAt = isToc ? thread.findIndex((item) => item.type === "run_block") : -1;
+  const planCardAt = firstRunAt > 0 ? firstRunAt : lastTurnAt === -1 ? thread.length : lastTurnAt + 1;
+  // A theory of change posts its own messages after its walks, so any walk at all means it started.
+  const planStarted = (isToc ? thread : thread.slice(planCardAt)).some((item) => item.type === "run_block");
+  // The first walk drafts the theory; every later one checks it.
+  const firstTocRunId = isToc ? (thread.find((item) => item.type === "run_block")?.run.capability_run_id ?? null) : null;
+  // The walk running now: the newest one still open.
+  const tocLiveRunId = tocLive
+    ? (thread
+        .filter((item) => item.type === "run_block")
+        .findLast((item) => item.run.status === "running" || item.run.status === "paused")?.run.capability_run_id ?? null)
+    : null;
   const liveRunId = stream.run?.id;
   // Task 045 (A7): the live walk's own purpose, once the walk list has it —
   // an added option's search is not the baseline.
@@ -905,6 +956,15 @@ export function TaskAgentPane({
                 partState={partStates.get(item.turn.turn_index)}
                 onSend={(text) => send({ message: text, clientTurnId: crypto.randomUUID() })}
                 onPrefill={setMessage}
+                tocCodes={tocCodes}
+              />
+            ) : isToc ? (
+              <TocTrace
+                key={`run-${item.run.capability_run_id}`}
+                walkId={item.run.capability_run_id}
+                decisions={item.decisions}
+                live={tocLive && item.run.capability_run_id === tocLiveRunId}
+                kind={item.run.capability_run_id === firstTocRunId ? "draft" : "check"}
               />
             ) : item.run.capability_run_id === liveRunId && liveCard !== null ? (
               <div key="live-run-block" className="space-y-6">
@@ -1008,7 +1068,9 @@ export function TaskAgentPane({
             isOwner={isOwner}
           />
         )}
-        {liveCard !== null && !threadHasLiveRun && (
+        {/* The walk started but the run list has not caught up yet. */}
+        {tocLive && tocLiveRunId === null && <TocTrace walkId="" decisions={[]} live kind={firstTocRunId === null ? "draft" : "check"} />}
+        {!isToc && liveCard !== null && !threadHasLiveRun && (
           <div key="live-run-fallback" className="space-y-6">
             {liveCard}
             <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} />
@@ -1023,7 +1085,7 @@ export function TaskAgentPane({
       </div>
 
       <div className="shrink-0 border-t border-line">
-        {stream.run !== null && cardOffscreen && (
+        {!isToc && stream.run !== null && cardOffscreen && (
           <RunningCardDock
             status={stream.run.status}
             stages={stream.stages}

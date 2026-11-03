@@ -626,8 +626,16 @@ def acquire_sources(
     seen_record_ids: set[str] = set()
     seen_dois: set[str] = set()
     seen_hashes: set[str] = set()
-    for meta, chash in conn.execute(
-        select(source_snapshot.c.metadata, source_snapshot.c.content_hash)
+    # The same keys → the task's document, so a search that finds a document the
+    # task already holds can say so (``source.seen_again``): a theory-of-change
+    # check reads which documents each link's own search found (task 054).
+    held: dict[str, uuid.UUID] = {}
+    for meta, chash, held_tss in conn.execute(
+        select(
+            source_snapshot.c.metadata,
+            source_snapshot.c.content_hash,
+            task_source_snapshot.c.task_source_snapshot_id,
+        )
         .select_from(
             task_source_snapshot.join(
                 source_snapshot,
@@ -637,14 +645,17 @@ def acquire_sources(
         .where(task_source_snapshot.c.task_id == task_id)
     ):
         seen_hashes.add(chash)
+        held[f"h:{chash}"] = held_tss
         if meta.get("backend_record_id"):
             seen_record_ids.add(meta["backend_record_id"])
+            held[f"r:{meta['backend_record_id']}"] = held_tss
         # normalize on read: uploaded snapshots may carry a prefixed/mixed-case
         # DOI in their free-form metadata; acquire-written envelopes are already
         # normalized, but the guard must hold across origins
         doi = _normalize_doi(meta.get("doi"))
         if doi:
             seen_dois.add(doi)
+            held[f"d:{doi}"] = held_tss
 
     now = datetime.now(UTC)
     by_backend: dict[str, dict[str, Any]] = {
@@ -871,6 +882,7 @@ def acquire_sources(
                 error=error,
             )
 
+    seen_again: set[uuid.UUID] = set()
     for name in names:
         counts = by_backend[name]
         kept = 0
@@ -900,6 +912,34 @@ def acquire_sources(
             candidate = candidates[0]
             if not is_new(candidate):
                 counts["already_acquired"] += 1
+                envelope = candidate.mapped["envelope"]
+                known = next(
+                    (
+                        held[key]
+                        for key in (
+                            f"r:{envelope['backend_record_id']}",
+                            f"d:{envelope['doi']}",
+                            f"h:{candidate.chash}",
+                        )
+                        if key in held
+                    ),
+                    None,
+                )
+                if known is not None and known not in seen_again:
+                    seen_again.add(known)
+                    events.append(
+                        conn,
+                        task_id=task_id,
+                        run_id=run_id,
+                        event_type="source.seen_again",
+                        payload={
+                            "task_source_snapshot_id": str(known),
+                            "evidence_scope_id": str(context.scope_id),
+                            "backend": name,
+                            "query_origin": candidate.origin,
+                            "pool_rank": index + 1,
+                        },
+                    )
                 continue
             persist(candidate, pool_rank=index + 1)
             kept += 1

@@ -155,16 +155,21 @@ class TocReportSummaryOut(BaseModel):
     #: The accountability ceiling: the last layer the programme directly influences.
     directly_influenced: str
     context: str
-    weakest_links: str
+    #: Reports before ``toc_report_v4`` only; v4 puts this in ``how_it_could_fail``.
+    weakest_links: str = ""
 
 
 class TocReportPathwayOut(BaseModel):
-    """How change happens along one pathway: a lead-in title and a paragraph."""
+    """One success pathway in the Overview: a lead-in title and a line or two."""
 
     model_config = ConfigDict(extra="forbid")
 
     title: str
     paragraph: str
+    #: The pathway on the canvas (the title selects it) and its weakest
+    #: connection's verdict label; null on reports before ``toc_report_v4``.
+    pathway_id: uuid.UUID | None = None
+    strength: str | None = None
 
 
 class TocReportAssumptionOut(BaseModel):
@@ -172,8 +177,9 @@ class TocReportAssumptionOut(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    #: The link's code, or the failure outcome's for a risk.
+    #: The connection's code (before ``toc_report_v4``: a failure outcome's for a risk).
     code: str
+    #: The connection's sentence (before v4: one of its conditions).
     statement: str
     kind: Literal["assumption", "risk"]
     #: The verdict's label, e.g. "Leaning supports".
@@ -181,6 +187,15 @@ class TocReportAssumptionOut(BaseModel):
     why: str
     #: Numbers in the report's source list.
     sources: list[int]
+    #: From ``toc_report_v4``: what must be true for the connection to work; its
+    #: importance ("75% of pathways", or "Risk") and share of success pathways;
+    #: the verdict's rank (0 is the worst) for sorting; and whether the row is
+    #: central and weak.
+    conditions: list[str] = []
+    importance: str | None = None
+    share: float | None = None
+    verdict_rank: int | None = None
+    flag: bool = False
 
 
 class TocReportTestOut(BaseModel):
@@ -208,10 +223,26 @@ class TocReportSourceOut(BaseModel):
     evidence_id: uuid.UUID | None = None
     quote: str | None = None
     #: Shown as the Evidence search shows its references: title, then authors,
-    #: year and venue; empty or null on reports written before.
+    #: year and venue (the journal, or the publishing organisation); empty or
+    #: null on reports written before.
     authors: list[str] = []
     year: int | None = None
     venue: str | None = None
+
+
+class TocTheoryVerdictOut(BaseModel):
+    """Can the theory work? One overall verdict after the check (``toc_verdict_v1``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    verdict: Literal["supported", "plausible_untested", "doubtful", "implausible"]
+    #: The verdict's words on the page, e.g. "Plausible, not yet tested".
+    label: str
+    #: The report's first sentence: what Policy Atlas concludes.
+    headline: str
+    reason: str
+    #: The connection the whole theory depends on most.
+    carrying_step: str
 
 
 class TocReportOut(BaseModel):
@@ -223,8 +254,12 @@ class TocReportOut(BaseModel):
     #: null on reports written before ``toc_report_v2``.
     title: str | None = None
     summary_text: str | None = None
+    #: The overall verdict; null on reports before ``toc_report_v5`` or when its call failed.
+    verdict: TocTheoryVerdictOut | None = None
     summary: TocReportSummaryOut
     pathways: list[TocReportPathwayOut]
+    #: The failure pathways and the weakest critical connections (``toc_report_v4``).
+    how_it_could_fail: str | None = None
     assumptions: list[TocReportAssumptionOut]
     tests: list[TocReportTestOut]
     sources: list[TocReportSourceOut]
@@ -264,6 +299,8 @@ class TocGraphOut(BaseModel):
     can_edit: bool = False
     #: The editor's changes since the last review (C45); 0 for readers.
     edits_since_review: int = 0
+    #: Links a queued check names: it starts when the running walk ends.
+    queued_link_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class TocDocumentOut(BaseModel):
@@ -530,11 +567,13 @@ class TocCheckIn(BaseModel):
 
 
 class TocCheckOut(BaseModel):
-    """The check walk that started."""
+    """The check walk that started, or null when it waits for the running walk."""
 
     model_config = ConfigDict(extra="forbid")
 
-    capability_run_id: uuid.UUID
+    capability_run_id: uuid.UUID | None
+    #: True when another walk is running: this check starts when it ends.
+    queued: bool = False
 
 
 class TocEvidencePatch(BaseModel):

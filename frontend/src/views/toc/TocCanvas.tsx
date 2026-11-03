@@ -47,7 +47,7 @@ interface BoxData extends Record<string, unknown> {
 interface EdgeData extends Record<string, unknown> {
   /** Columns from source to target; 0 inside one column. */
   span: number;
-  /** A box at either end was moved: a smooth curve between the facing sides (C47). */
+  /** A box at either end was moved: a right-angle route with rounded corners, side to side (C47). */
   curved: boolean;
   /** Something waits for the user here: new evidence, or an edit's evidence to review (C43, C44). */
   attention: boolean;
@@ -123,16 +123,11 @@ function Dividers({ lineY, ceilingX }: { lineY: number | null; ceilingX: number 
   );
 }
 
-/** A smooth curve from a box's right side to another's left side, with its middle (C47; the prototype's rule). */
-function curve(sx: number, sy: number, tx: number, ty: number): readonly [string, number, number] {
-  const pull = Math.max(40, Math.abs(tx - sx) / 2);
-  return [`M ${sx},${sy} C ${sx + pull},${sy} ${tx - pull},${ty} ${tx},${ty}`, (sx + tx) / 2, (sy + ty) / 2] as const;
-}
-
 function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, markerEnd }: EdgeProps<TocEdge>) {
   if (data === undefined) return null;
   const [path, markX, markY] = data.curved
-    ? curve(sourceX, sourceY, targetX, targetY)
+    ? // A moved box keeps the right-angle style with rounded corners, side to side.
+      getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition: Position.Right, targetPosition: Position.Left, borderRadius: 10 })
     : data.span > 0
       ? (({ path: p, labelX, labelY }) => [p, labelX, labelY] as const)(routeEdge(sourceX, sourceY, targetX, targetY, data.span))
       : getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 10 });
@@ -322,8 +317,8 @@ export function TocCanvas({
     return { x, y, width: Math.max(...placed.map((box) => box.x + BOX_W)) - x, height: Math.max(...placed.map((box) => box.y + BOX_H)) - y };
   };
   const boxRef = useRef<HTMLDivElement>(null);
-  // Full screen takes the whole row (canvas and detail panel), which is the canvas's parent.
-  const fsEl = () => boxRef.current?.parentElement ?? null;
+  // Full screen takes the canvas's whole area: its bar, the canvas and the detail panel.
+  const fsEl = () => boxRef.current?.closest<HTMLElement>("#toc-canvas") ?? boxRef.current?.parentElement ?? null;
   const [fullscreen, setFullscreen] = useState(false);
   const [refit, setRefit] = useState(0);
   const canFullscreen = typeof document !== "undefined" && document.fullscreenEnabled === true;
@@ -448,7 +443,7 @@ export function TocCanvas({
     });
 
   return (
-    <div ref={boxRef} className={`toc-canvas min-w-0 flex-1 border border-line bg-paper-2 ${fullscreen ? "h-screen" : "h-[640px]"}`} role="group" aria-label="Theory of change canvas">
+    <div ref={boxRef} className="toc-canvas h-[640px] min-w-0 flex-1 bg-paper-2 lg:h-full" role="group" aria-label="Theory of change canvas">
       <ReactFlow
         nodes={nodes}
         edges={edges}

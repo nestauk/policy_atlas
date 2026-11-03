@@ -18,14 +18,15 @@ from policy_atlas.theory_of_change.report import (
     assumption_rows,
     citation,
     method_note,
+    publisher,
     renumber,
     weakest_links,
 )
 from policy_atlas.theory_of_change.report_prompt import (
-    AssumptionReasonWire,
-    PathwayParagraphWire,
+    ConnectionReasonWire,
+    PathwayLineWire,
     ReportResponse,
-    TestRowWire,
+    TestWire,
 )
 from tests.theory_of_change.test_check_steps import _run, _summary
 
@@ -44,13 +45,14 @@ def _link(code: str, verdict: str, **values: Any) -> LinkFacts:
         "conditions": [],
         "on_failure": False,
         "on_success": True,
+        "on_pathways": 1,
     }
     return LinkFacts(**{**base, **values})
 
 
 LINKS = [
-    _link("#1", "confident", conditions=["c1a", "c1b", "c1c"]),
-    _link("#2", "not_sure_mixed", critical=True, conditions=["c2a", "c2b"]),
+    _link("#1", "confident", conditions=["c1a", "c1b", "c1c"], on_pathways=4),
+    _link("#2", "not_sure_mixed", critical=True, conditions=["c2a", "c2b"], on_pathways=3),
     _link("#3", "not_confident", conditions=["c3a"]),
     _link(
         "#4",
@@ -59,27 +61,35 @@ LINKS = [
         target_layer="failure_outcome",
         on_failure=True,
         on_success=False,
+        on_pathways=0,
     ),
+    # On no kept pathway: left out of the table.
+    _link("#5", "confident", on_success=False, on_pathways=0),
 ]
 
 
-def test_rows_put_the_critical_link_first_then_the_worst_verdict_and_fill_to_five() -> None:
-    rows = assumption_rows(LINKS, {"#2": [3, 4]})
-    assert [(r["key"], r["code"], r["statement"], r["kind"]) for r in rows] == [
-        ("r1", "#2", "c2a", "assumption"),
-        ("r2", "#2", "c2b", "assumption"),
-        ("r3", "#3", "c3a", "assumption"),
-        # A failure-pathway link is a risk, coded by its failure outcome.
-        ("r4", "F1", "Step #4.", "risk"),
-        # Only four rows from the rule: a Confident link's condition fills to five.
-        ("r5", "#1", "c1a", "assumption"),
+def test_one_row_per_connection_central_and_weak_first_then_most_central() -> None:
+    rows = assumption_rows(LINKS, {"#2": [3, 4]}, pathways=4)
+    assert [(r["key"], r["code"], r["importance"], r["flag"]) for r in rows] == [
+        # On 3 of 4 pathways and Mixed: central and weak.
+        ("r1", "#2", "75% of pathways", True),
+        ("r2", "#1", "100% of pathways", False),
+        ("r3", "#3", "25% of pathways", False),
+        # Only on a failure pathway: a risk, after every success connection.
+        ("r4", "#4", "Risk", False),
     ]
-    assert rows[0]["verdict"] == "Mixed" and rows[0]["sources"] == [3, 4]
+    first = rows[0]
+    assert first["statement"] == "Step #2." and first["conditions"] == ["c2a", "c2b"]
+    assert first["verdict"] == "Mixed" and first["sources"] == [3, 4]
+    assert rows[3]["kind"] == "risk" and rows[3]["share"] is None
 
 
-def test_rows_stop_at_twelve() -> None:
-    many = [_link(f"#{i}", "not_confident", conditions=[f"c{i}"]) for i in range(20)]
-    assert len(assumption_rows(many, {})) == 12
+def test_the_publisher_is_the_journal_or_the_organisation_unless_it_is_the_author() -> None:
+    assert publisher({"venue": "The Lancet"}, ["Grant Wyper"]) == "The Lancet"
+    assert publisher({"publisher_org": "The Lancet"}, ["Grant Wyper"]) == "The Lancet"
+    phs = "Public Health Scotland"
+    assert publisher({"publisher_org": phs}, [phs]) is None
+    assert publisher({}, []) is None
 
 
 def test_the_weakest_links_are_the_critical_one_then_the_lowest_on_success_pathways() -> None:
@@ -101,23 +111,24 @@ def test_unknown_codes_and_unsupported_citations_are_removed_and_counted() -> No
 
 def test_sources_are_renumbered_by_first_citation_and_uncited_ones_dropped() -> None:
     report: dict[str, Any] = {
-        "summary": {"if_then_because": "If x [3].", "context": "", "weakest_links": "#2 [1]."},
+        "summary": {"if_then_because": "If x [3].", "context": ""},
         "pathways": [{"title": "Route", "paragraph": "It works [5][3]."}],
+        "how_it_could_fail": "#2 [1].",
         "assumptions": [{"why": "Thin [1].", "sources": [4, 1]}],
         "tests": [{"question": "Q [5]?", "indicator": "I", "test_and_learn": "T"}],
     }
     sources = [{"n": n, "citation": f"S{n}"} for n in range(1, 7)]
     renumber(report, sources)
     assert report["summary"]["if_then_because"] == "If x [1]."
-    assert report["summary"]["weakest_links"] == "#2 [2]."
-    assert report["pathways"][0]["paragraph"] == "It works [3][1]."
-    assert report["assumptions"][0] == {"why": "Thin [2].", "sources": [4, 2]}
-    assert report["tests"][0]["question"] == "Q [3]?"
-    # Source 6 was never cited; 2 only through nothing: both dropped.
+    assert report["pathways"][0]["paragraph"] == "It works [2][1]."
+    assert report["how_it_could_fail"] == "#2 [3]."
+    assert report["assumptions"][0] == {"why": "Thin [3].", "sources": [4, 3]}
+    assert report["tests"][0]["question"] == "Q [2]?"
+    # Sources 2 and 6 were never cited: dropped.
     assert [(s["n"], s["citation"]) for s in report["sources"]] == [
         (1, "S3"),
-        (2, "S1"),
-        (3, "S5"),
+        (2, "S5"),
+        (3, "S1"),
         (4, "S4"),
     ]
 
@@ -144,6 +155,15 @@ def test_a_citation_names_the_first_author_et_al() -> None:
         "American Journal of Clinical Nutrition. Systematic review."
     )
     assert citation(authors=[], year=None, title="A page", venue=None, kind=None) == "A page."
+    # An organisation keeps its whole name.
+    assert citation(
+        authors=["Public Health Scotland"],
+        year=2022,
+        title="MUP and prices",
+        venue=None,
+        kind=None,
+        organisation=True,
+    ) == ("Public Health Scotland (2022) MUP and prices.")
 
 
 def test_the_step_stores_the_report_and_the_read_serves_it(
@@ -155,19 +175,24 @@ def test_the_step_stores_the_report_and_the_read_serves_it(
         report = toc_graph_out(conn, task_id).report
     assert report is not None
     sent = backend.inputs["report"][0]
-    assert sent["plan"]["goal"] and sent["theory"]["weakest_critical_links"]
-    assert all(row["key"].startswith("r") for row in sent["rows"])
+    assert sent["plan"]["goal"] and sent["theory"]["weakest_critical_connections"]
+    assert all(row["code"].startswith("#") for row in sent["rows"])
     assert report.summary.directly_influenced == "outputs"
     assert report.title == "A drafted theory of change"
     assert report.summary_text == "What the theory says, and where its evidence is weakest."
     # Each source carries its judgement and quote, so a marker opens it in context.
     assert all(s.evidence_id is not None and s.quote for s in report.sources)
-    assert len(report.pathways) == len(sent["theory"]["pathways"])
+    success = [p for p in sent["theory"]["pathways"] if p["kind"] == "success"]
+    assert len(report.pathways) == len(success)
+    assert all(p.pathway_id is not None and p.strength for p in report.pathways)
+    assert report.how_it_could_fail
     # The stub cites each pathway's first link's first source: renumbered from 1, all listed.
     assert [s.n for s in report.sources] == list(range(1, len(report.sources) + 1))
     assert report.sources and "[1]" in report.pathways[0].paragraph
     assert route().model_for("toc_judge") in report.method
     assert all(row.why for row in report.assumptions)
+    # A row lists at most three sources when its reason cites none.
+    assert all(len(row.sources) <= 3 for row in report.assumptions)
 
 
 def test_the_step_counts_what_its_checks_removed(engine: Engine, cleanup: list[uuid.UUID]) -> None:
@@ -176,11 +201,11 @@ def test_the_step_counts_what_its_checks_removed(engine: Engine, cleanup: list[u
         summary="A summary.",
         if_then_because="If it happens (L9), then it works [99].",
         context="Context.",
-        weakest_links="None.",
-        pathways=[PathwayParagraphWire(pathway="p99", title="Nowhere", paragraph="No.")],
-        assumption_reasons=[AssumptionReasonWire(row="r99", why="Unknown row.")],
+        pathways=[PathwayLineWire(pathway="p99", title="Nowhere", sentence="No.")],
+        how_it_could_fail="None.",
+        connection_reasons=[ConnectionReasonWire(connection="#99", why="Unknown row.")],
         tests=[
-            TestRowWire(link="#99", question="Q?", indicator="I", test_and_learn="T"),
+            TestWire(connection="#99", question="Q?", indicator="I", test_and_learn="T"),
         ],
     )
     task_id = _run(engine, cleanup, StubTocBackend({"report": [bad]}))

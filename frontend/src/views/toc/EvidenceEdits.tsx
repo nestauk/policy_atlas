@@ -4,7 +4,7 @@ import type { components } from "../../api/gen/types";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { DocumentItem, documentChips, VerdictWords } from "./Documents";
-import type { Editor } from "./Editing";
+import { checkWords, type Editor, isQueued } from "./Editing";
 import { SUPPORT_LABEL } from "./tocModel";
 import type { Support, TocDocument, TocGraph, TocLink } from "./types";
 
@@ -127,7 +127,7 @@ export function RemovedDocuments({ documents, editor }: { documents: TocDocument
 }
 
 /** Add a study by its DOI: Policy Atlas fetches, judges and adds it (C42). */
-export function AddStudy({ link, editor, running }: { link: TocLink; editor: Editor; running: boolean }) {
+export function AddStudy({ link, editor }: { link: TocLink; editor: Editor }) {
   const [value, setValue] = useState("");
   return (
     <form
@@ -148,7 +148,7 @@ export function AddStudy({ link, editor, running }: { link: TocLink; editor: Edi
           placeholder="DOI, e.g. 10.1016/j.appet.2016.02.017"
           className="min-w-0 flex-1 border border-line-2 bg-paper px-2 py-1.5 text-body"
         />
-        <Button type="submit" size="sm" variant="secondary" disabled={editor.busy || running || value.trim() === ""}>
+        <Button type="submit" size="sm" variant="secondary" disabled={editor.busy || value.trim() === ""}>
           Add
         </Button>
       </div>
@@ -159,7 +159,6 @@ export function AddStudy({ link, editor, running }: { link: TocLink; editor: Edi
 
 /** After an edit: the evidence is from the earlier wording. Keep it or check again (C43). */
 export function EditedEvidenceBlock({ link, graph, editor }: { link: TocLink; graph: TocGraph; editor: Editor | null }) {
-  const running = graph.check_status === "drafting" || graph.check_status === "checking";
   if (link.state === "kept") {
     return <p className="mt-2 text-meta text-grey">Evidence kept for the new wording{link.edited_by != null ? ` by ${scrub(link.edited_by)}` : ""}.</p>;
   }
@@ -175,10 +174,10 @@ export function EditedEvidenceBlock({ link, graph, editor }: { link: TocLink; gr
           </Button>
           <Button
             size="sm"
-            disabled={editor.busy || running}
+            disabled={editor.busy || isQueued(graph, [link.link_id])}
             onClick={() => editor.run({ kind: "check", body: { link_ids: [link.link_id], mode: "check_again" } })}
           >
-            {running ? "A check is running" : "Check again"}
+            {checkWords(graph, [link.link_id], "Check again")}
           </Button>
         </div>
       )}
@@ -243,18 +242,18 @@ export function NewEvidenceBlock({ link, documents, editor }: { link: TocLink; d
 
 /** Find more evidence for some links (C44): the button at the bottom of a sidebar. */
 export function FindMore({ links, graph, editor }: { links: TocLink[]; graph: TocGraph; editor: Editor }) {
-  const running = graph.check_status === "drafting" || graph.check_status === "checking";
   const ready = links.filter((link) => link.state !== "pending" && link.state !== "unchecked");
+  const ids = ready.map((link) => link.link_id);
   if (links.length === 0) return null;
   return (
     <div className="mt-5 border-t border-line pt-3">
       <Button
         size="sm"
         variant="secondary"
-        disabled={editor.busy || running || ready.length === 0}
-        onClick={() => editor.run({ kind: "check", body: { link_ids: ready.map((link) => link.link_id), mode: "find_more" } })}
+        disabled={editor.busy || ready.length === 0 || isQueued(graph, ids)}
+        onClick={() => editor.run({ kind: "check", body: { link_ids: ids, mode: "find_more" } })}
       >
-        {running ? "A check is running" : "Find more evidence"}
+        {checkWords(graph, ids, "Find more evidence")}
       </Button>
       <p className="mt-1 text-meta text-grey">
         {ready.length === 0

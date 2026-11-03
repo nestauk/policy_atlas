@@ -183,8 +183,31 @@ def _dispatch_run(
     except Exception:
         log.exception("api.run_dispatch_failed", task_id=str(task_id))
     finally:
+        queued = None
         with _dispatch_lock:
-            _dispatching_tasks.discard(task_id)
+            if capability == THEORY_OF_CHANGE:
+                # A check queued while this walk ran starts now, on this worker.
+                from policy_atlas.api.toc_start import take_queued_check
+
+                try:
+                    with engine.begin() as conn:
+                        queued = take_queued_check(conn, task_id)
+                except Exception:
+                    log.exception("api.toc_queue_failed", task_id=str(task_id))
+            if queued is None:
+                _dispatching_tasks.discard(task_id)
+    if queued is not None:
+        scope_id, next_plan_row, next_user = queued
+        _dispatch_run(
+            engine,
+            task_id=task_id,
+            capability=capability,
+            plan_row=next_plan_row,
+            backends=backends,
+            user_id=next_user or user_id,
+            evidence_scope_id=scope_id,
+            capability_run_id=uuid.uuid4(),
+        )
 
 
 def _run_follow_on_longlist(
@@ -442,21 +465,21 @@ def start_toc_check(
     backends: RunnerBackends,
     mode: str = "new_items",
     studies: dict[str, list[str]] | None = None,
-) -> uuid.UUID:
+) -> uuid.UUID | None:
     """Start a check walk named on links (task 054, C40), as Start does for a whole walk.
 
-    The caller has checked the write grade. Same admission as ``POST /runs``:
-    one parentless walk per task and the executor's capacity.
+    The caller has checked the write grade. While the task has a walk, the
+    check is queued and starts when that walk ends (``_dispatch_run``).
 
     Returns:
-        The new walk's id.
+        The new walk's id, or ``None`` when the check was queued.
 
     Raises:
-        ApiConflict: ``run_active`` or ``capacity``.
+        ApiConflict: ``capacity``.
         HTTPException: 400 when the task has no approved plan.
     """
     # Imported here: the opener imports this module.
-    from policy_atlas.api.toc_start import mint_scope
+    from policy_atlas.api.toc_start import mint_scope, queue_check
     from policy_atlas.runtime.toc_plan import (
         TOC_CHECK_MODE_KEY,
         TOC_STARTED_BY_KEY,
@@ -467,13 +490,22 @@ def start_toc_check(
     walk_id = uuid.uuid4()
     with _dispatch_lock:
         with engine.begin() as conn:
-            if active_parentless_walk(conn, task_id) is not None or task_id in _dispatching_tasks:
-                raise ApiConflict("run_active", "the task already has an active run")
-            if executor_full(conn, settings.run_executor_max):
-                raise ApiConflict("capacity", "the walk executor is at capacity")
             plan_row = latest_approved_plan_row(conn, task_id)
             if plan_row is None:
                 raise HTTPException(status_code=400, detail="no approved plan")
+            if active_parentless_walk(conn, task_id) is not None or task_id in _dispatching_tasks:
+                # A walk is running: this check waits and starts when it ends.
+                queue_check(
+                    conn,
+                    task_id=task_id,
+                    link_ids=[str(link_id) for link_id in link_ids],
+                    mode=mode,
+                    studies=studies,
+                    user_id=user_id,
+                )
+                return None
+            if executor_full(conn, settings.run_executor_max):
+                raise ApiConflict("capacity", "the walk executor is at capacity")
             scope_id = mint_scope(
                 conn,
                 task_id=task_id,

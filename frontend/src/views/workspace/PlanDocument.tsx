@@ -845,9 +845,87 @@ function PlainField({ label, value }: { label: string; value?: string | null }) 
   );
 }
 
-/** The theory-of-change plan's sections. Set through the Task Agent (no
- *  inline editor): Edit seeds the composer, as the scoping plan does. Start
- *  drafts the theory; the evidence check follows by itself. */
+type TocField = "intended_change" | "target_population" | "where" | "time_horizon" | "intervention" | "dosage" | "context";
+
+/**
+ * One theory-of-change plan section edited in place, as an Evidence search
+ * plan's sections are (task 054). Save writes the edits straight away: the
+ * plan has two Start buttons (here and in the chat), so nothing waits for one.
+ */
+function TocEditSection({
+  taskId,
+  toc,
+  label,
+  fields,
+  readOnly,
+}: {
+  taskId: string;
+  toc: TocPlanDraft;
+  label: string;
+  fields: { key: TocField; label: string; rows?: number }[];
+  readOnly: boolean;
+}) {
+  const patchPlan = usePatchPlan(taskId);
+  const [editing, setEditing] = useState(false);
+  const [drafts, setDrafts] = useState<Partial<Record<TocField, string>>>({});
+  const [error, setError] = useState<string | null>(null);
+  const save = () => {
+    const changed = Object.fromEntries(fields.flatMap(({ key }) => ((drafts[key] ?? "").trim() !== (toc[key] ?? "") ? [[key, (drafts[key] ?? "").trim()]] : [])));
+    if (Object.keys(changed).length === 0) {
+      setEditing(false);
+      return;
+    }
+    patchPlan.mutate(
+      { toc: changed },
+      {
+        onSuccess: () => setEditing(false),
+        onError: (err) => setError((err as Error | undefined)?.message ?? "The edit couldn't be saved. Try again."),
+      },
+    );
+  };
+  return (
+    <PanelSection
+      readOnly={readOnly}
+      label={label}
+      editing={editing}
+      onEdit={() => {
+        setDrafts(Object.fromEntries(fields.map(({ key }) => [key, toc[key] ?? ""])));
+        setError(null);
+        setEditing(true);
+      }}
+      onCancel={() => setEditing(false)}
+      onSave={save}
+      view={
+        <dl className="space-y-3">
+          {fields.map(({ key, label: name }) => (
+            <PlainField key={key} label={name} value={toc[key]} />
+          ))}
+        </dl>
+      }
+    >
+      <div className="space-y-3">
+        {fields.map(({ key, label: name, rows = 2 }) => (
+          <label key={key} className="grid gap-1">
+            <span className={panelHintClass}>{name}</span>
+            <textarea
+              rows={rows}
+              value={drafts[key] ?? ""}
+              onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))}
+              className={cn(panelFieldClass, "resize-y")}
+            />
+          </label>
+        ))}
+        {error !== null && (
+          <p role="alert" className="text-body text-red-tint">
+            {error}
+          </p>
+        )}
+      </div>
+    </PanelSection>
+  );
+}
+
+/** The theory-of-change plan's sections, each edited in place until the draft exists; Start drafts the theory. */
 function TocPlanSections({
   taskId,
   toc,
@@ -864,52 +942,51 @@ function TocPlanSections({
   return (
     <>
       <div className="space-y-6">
-        <ScopingSection
+        <PanelSection
           label="Starting point"
-          onEdit={() => seedComposer("Change the starting point: ")}
+          editing={false}
           readOnly={readOnly}
-        >
-          <dl className="space-y-3">
-            <PlainField
-              label="Entry point"
-              value={toc.entry_point != null ? TOC_ENTRY_POINT_LABEL[toc.entry_point] : null}
-            />
-            {toc.existing_theory_text != null && (
-              <PlainField label="Your theory of change" value={toc.existing_theory_text} />
-            )}
-          </dl>
-        </ScopingSection>
-        <ScopingSection
+          view={
+            <dl className="space-y-3">
+              <PlainField
+                label="Entry point"
+                value={toc.entry_point != null ? TOC_ENTRY_POINT_LABEL[toc.entry_point] : null}
+              />
+              {toc.existing_theory_text != null && (
+                <PlainField label="Your theory of change" value={toc.existing_theory_text} />
+              )}
+            </dl>
+          }
+        />
+        <TocEditSection
+          taskId={taskId}
+          toc={toc}
+          readOnly={readOnly}
           label="The change"
-          onEdit={() => seedComposer("Change the intended change: ")}
+          fields={[
+            { key: "intended_change", label: "Intended change", rows: 3 },
+            { key: "target_population", label: "Who it is for" },
+            { key: "where", label: "Where", rows: 1 },
+            { key: "time_horizon", label: "Time horizon", rows: 1 },
+          ]}
+        />
+        <TocEditSection
+          taskId={taskId}
+          toc={toc}
           readOnly={readOnly}
-        >
-          <dl className="space-y-3">
-            <PlainField label="Intended change" value={toc.intended_change} />
-            <PlainField label="Who it is for" value={toc.target_population} />
-            <PlainField label="Where" value={toc.where} />
-            <PlainField label="Time horizon" value={toc.time_horizon} />
-          </dl>
-        </ScopingSection>
-        <ScopingSection
           label="Intervention"
-          onEdit={() => seedComposer("Change the intervention: ")}
+          fields={[
+            { key: "intervention", label: "Intervention", rows: 3 },
+            { key: "dosage", label: "Dosage" },
+          ]}
+        />
+        <TocEditSection
+          taskId={taskId}
+          toc={toc}
           readOnly={readOnly}
-        >
-          <dl className="space-y-3">
-            <PlainField label="Intervention" value={toc.intervention} />
-            <PlainField label="Dosage" value={toc.dosage} />
-          </dl>
-        </ScopingSection>
-        <ScopingSection
           label="Context"
-          onEdit={() => seedComposer("Add to the context: ")}
-          readOnly={readOnly}
-        >
-          <dl>
-            <PlainField label="What you told us about the setting" value={toc.context} />
-          </dl>
-        </ScopingSection>
+          fields={[{ key: "context", label: "What you told us about the setting", rows: 4 }]}
+        />
       </div>
       {!readOnly && (
         <div className="pt-8">

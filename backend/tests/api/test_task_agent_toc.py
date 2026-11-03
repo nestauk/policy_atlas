@@ -14,7 +14,7 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.api.deps import get_task_agent_backend
 from policy_atlas.api.toc_start import mint_scope
-from policy_atlas.core.schema import task_plan
+from policy_atlas.core.schema import task_agent_transcript, task_plan
 from policy_atlas.runtime.capability_registry import latest_approved_plan_row
 from policy_atlas.runtime.task_agent import StubTaskAgentBackend
 from policy_atlas.theory_of_change import store
@@ -96,6 +96,34 @@ def test_a_stub_turn_fills_the_plan_and_get_plan_reads_its_slot(
         )
         assert patched.status_code == 422
     assert _versions(engine, task_id) == 1
+
+
+def test_the_plan_panel_edits_a_toc_plan_until_the_draft_exists(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = _toc_task(client, owner)
+        task_agent_turn_ok(client, owner, task_id, QUESTION)
+        url = f"/api/v1/tasks/{task_id}/plan"
+        patched = client.patch(
+            url, headers=owner, json={"toc": {"where": "Scotland", "dosage": ""}}
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["toc"]["where"] == "Scotland"
+        assert patched.json()["toc"]["dosage"] is None
+        with engine.connect() as conn:
+            state = conn.execute(
+                select(task_agent_transcript.c.task_agent_state)
+                .where(task_agent_transcript.c.task_id == uuid.UUID(task_id))
+                .order_by(task_agent_transcript.c.turn_index.desc())
+                .limit(1)
+            ).scalar_one()
+        # The Task Agent's next turn starts from the edited plan.
+        assert state["where"] == "Scotland"
+        _with_draft_and_walk(engine, task_id, walk="check")
+        fixed = client.patch(url, headers=owner, json={"toc": {"where": "Wales"}})
+        assert fixed.status_code == 409
+    assert _versions(engine, task_id) == 2
 
 
 def test_a_turn_during_the_check_is_admitted_and_leaves_the_plan_as_approved(

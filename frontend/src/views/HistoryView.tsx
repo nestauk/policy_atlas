@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams } from "react-router";
 
-import { useDecisions, useTaskAgentTurns, useTask } from "../api/queries";
+import { useDecisions, useTaskAgentTurns, useTask, useToc } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
@@ -11,6 +11,7 @@ import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { mergeHistory } from "./historyPresentation";
 import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
+import { UndoToast, useTocEditor } from "./toc/Editing";
 
 const PAGE_SIZE = 200;
 
@@ -19,19 +20,23 @@ const PAGE_SIZE = 200;
  *
  * The decision log started at plan approval, which left out the question that
  * began the work and the conversation that shaped the plan. Both are merged
- * in here, so they appear above the run events rather than nowhere.
+ * in here, so they appear above the run events rather than nowhere. A theory
+ * of change's edits are merged in too, with Undo for an editor (task 054).
  */
 export function HistoryView() {
   const { taskId = "" } = useParams();
   const task = useTask(taskId);
   const decisions = useDecisions(taskId, { page_size: PAGE_SIZE });
   const turns = useTaskAgentTurns(taskId, { page_size: PAGE_SIZE });
+  const toc = useToc(taskId);
+  // Only an editor reads a theory's edits: the list names people.
+  const { editor, toast, dismissToast, undoLast, error: editError, history: edits } = useTocEditor(taskId, toc.data?.can_edit === true);
   const [open, setOpen] = useState<string | null>(null);
   useDocumentTitle(task.data?.name, LIFECYCLE_LABELS.history);
 
   const isPending = decisions.isPending || turns.isPending;
   const isError = decisions.isError || turns.isError;
-  const rows = mergeHistory(decisions.data?.data, turns.data?.data);
+  const rows = mergeHistory(decisions.data?.data, turns.data?.data, edits);
 
   if (isError && errorCode(decisions.error ?? turns.error) === "unauthenticated") {
     return <ReauthRedirect />;
@@ -70,13 +75,19 @@ export function HistoryView() {
         </Card>
       )}
 
+      {editError !== null && (
+        <p role="alert" className="mb-2 text-body text-[var(--color-verdict-against-text)]">
+          {editError}
+        </p>
+      )}
+
       {rows.length > 0 && (
         <ol className="overflow-hidden border border-line-2 bg-paper">
           {rows.map((row) => {
             const expandable = (row.details ?? []).length > 0;
             const expanded = open === row.id;
             return (
-              <li key={row.id} className="border-b border-line last:border-b-0">
+              <li key={row.id} className="flex flex-wrap items-baseline border-b border-line last:border-b-0 [&>dl]:basis-full">
                 <button
                   type="button"
                   disabled={!expandable}
@@ -84,7 +95,7 @@ export function HistoryView() {
                   onClick={() => {
                     if (expandable) setOpen(expanded ? null : row.id);
                   }}
-                  className={`flex w-full items-baseline gap-3 px-4 py-3 text-left ${
+                  className={`flex min-w-0 flex-1 items-baseline gap-3 px-4 py-3 text-left ${
                     expandable
                       ? "cursor-pointer hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue"
                       : "cursor-default"
@@ -104,6 +115,16 @@ export function HistoryView() {
                     </span>
                   )}
                 </button>
+                {row.undoEventId !== undefined && (
+                  <button
+                    type="button"
+                    disabled={editor.busy}
+                    onClick={() => editor.run({ kind: "undo", eventId: row.undoEventId as string }, "Undid a change")}
+                    className="shrink-0 cursor-pointer px-4 text-body font-bold text-blue hover:underline disabled:cursor-default disabled:text-grey"
+                  >
+                    Undo
+                  </button>
+                )}
                 {expanded && (
                   <dl className="border-t border-line bg-paper-2 px-4 py-3">
                     {(row.details ?? []).map((detail) => (
@@ -123,6 +144,7 @@ export function HistoryView() {
           })}
         </ol>
       )}
+      {toast !== null && <UndoToast text={toast} onUndo={undoLast} onClose={dismissToast} />}
     </main>
   );
 }

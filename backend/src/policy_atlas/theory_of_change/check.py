@@ -1226,11 +1226,17 @@ def picked_ids(ids: list[str], candidates: list[LinkCandidate]) -> list[uuid.UUI
 def _link_candidates(
     conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID
 ) -> dict[str, list[LinkCandidate]]:
-    """Link id → the documents its own search acquired, from acquire's events."""
+    """Link id → the documents its own search found, from acquire's events.
+
+    A document the task already held counts too (``source.seen_again``): a
+    named check searches again and mostly finds documents an earlier check
+    acquired for another link.
+    """
     child_link = _child_links(conn, task_id=task_id, walk_id=walk_id)
     if not child_link:
         return {}
-    found: dict[uuid.UUID, tuple[str, tuple[str, str], int]] = {}
+    # Keyed by document and link: two links' searches may find the same held document.
+    found: dict[tuple[uuid.UUID, str], tuple[tuple[str, str], int]] = {}
     for row in conn.execute(
         select(event_log.c.payload, runs.c.capability_run_id)
         .select_from(
@@ -1240,14 +1246,14 @@ def _link_candidates(
             )
         )
         .where(event_log.c.task_id == task_id)
-        .where(event_log.c.event_type == "source.acquired")
+        .where(event_log.c.event_type.in_(["source.acquired", "source.seen_again"]))
         .where(runs.c.capability_run_id.in_(list(child_link)))
+        .order_by(event_log.c.sequence)
     ):
         payload = row.payload
-        found[uuid.UUID(payload["task_source_snapshot_id"])] = (
-            child_link[row.capability_run_id],
-            (str(payload["backend"]), str(payload["query_origin"])),
-            int(payload["pool_rank"]),
+        found.setdefault(
+            (uuid.UUID(payload["task_source_snapshot_id"]), child_link[row.capability_run_id]),
+            ((str(payload["backend"]), str(payload["query_origin"])), int(payload["pool_rank"])),
         )
     if not found:
         return {}
@@ -1264,11 +1270,11 @@ def _link_candidates(
                 source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
             )
             .where(task_source_snapshot.c.task_id == task_id)
-            .where(task_source_snapshot.c.task_source_snapshot_id.in_(list(found)))
+            .where(task_source_snapshot.c.task_source_snapshot_id.in_({tss for tss, _ in found}))
         )
     }
     out: dict[str, list[LinkCandidate]] = {}
-    for tss, (link_id, source_list, rank) in found.items():
+    for (tss, link_id), (source_list, rank) in found.items():
         snapshot_id, metadata = meta.get(tss, (None, {}))
         out.setdefault(link_id, []).append(
             LinkCandidate(

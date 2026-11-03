@@ -4324,6 +4324,8 @@ export interface components {
          *         scoping: Options-scoping edits. Mutually exclusive with every field
          *             above: an Evidence search field on a scoping task, or `scoping` on
          *             an Evidence search task, is a 422.
+         *         toc: Theory-of-change edits (task 054), the same way: only on a
+         *             theory-of-change task, and alone.
          */
         PlanPatchIn: {
             /** Analysis Depth */
@@ -4345,6 +4347,7 @@ export interface components {
             search_effort?: ("rapid" | "standard" | "deep") | null;
             /** Steering Mode */
             steering_mode?: ("frequent" | "moderate" | "minimal" | "unattended") | null;
+            toc?: components["schemas"]["TocPlanPatch"] | null;
         };
         /**
          * PlanStep
@@ -5909,14 +5912,16 @@ export interface components {
         };
         /**
          * TocCheckOut
-         * @description The check walk that started.
+         * @description The check walk that started, or null when it waits for the running walk.
          */
         TocCheckOut: {
+            /** Capability Run Id */
+            capability_run_id: string | null;
             /**
-             * Capability Run Id
-             * Format: uuid
+             * Queued
+             * @default false
              */
-            capability_run_id: string;
+            queued: boolean;
         };
         /**
          * TocClarificationIn
@@ -6187,6 +6192,8 @@ export interface components {
             links_left_out: number;
             /** Pathways */
             pathways: components["schemas"]["TocPathwayOut"][];
+            /** Queued Link Ids */
+            queued_link_ids?: string[];
             report: components["schemas"]["TocReportOut"] | null;
             /** Supporting Activities */
             supporting_activities: string[];
@@ -6488,6 +6495,29 @@ export interface components {
             where: string | null;
         };
         /**
+         * TocPlanPatch
+         * @description Typed replace-field edits for a theory-of-change plan (task 054).
+         *
+         *     Omitted fields stay as they are; an empty string clears an optional field.
+         *     Allowed only until the draft is on the canvas (S7).
+         */
+        TocPlanPatch: {
+            /** Context */
+            context?: string | null;
+            /** Dosage */
+            dosage?: string | null;
+            /** Intended Change */
+            intended_change?: string | null;
+            /** Intervention */
+            intervention?: string | null;
+            /** Target Population */
+            target_population?: string | null;
+            /** Time Horizon */
+            time_horizon?: string | null;
+            /** Where */
+            where?: string | null;
+        };
+        /**
          * TocPositionOut
          * @description Where the user dropped a box on the canvas (C47).
          */
@@ -6569,16 +6599,32 @@ export interface components {
             /** Code */
             code: string;
             /**
+             * Conditions
+             * @default []
+             */
+            conditions: string[];
+            /**
+             * Flag
+             * @default false
+             */
+            flag: boolean;
+            /** Importance */
+            importance?: string | null;
+            /**
              * Kind
              * @enum {string}
              */
             kind: "assumption" | "risk";
+            /** Share */
+            share?: number | null;
             /** Sources */
             sources: number[];
             /** Statement */
             statement: string;
             /** Verdict */
             verdict: string;
+            /** Verdict Rank */
+            verdict_rank?: number | null;
             /** Why */
             why: string;
         };
@@ -6599,6 +6645,8 @@ export interface components {
         TocReportOut: {
             /** Assumptions */
             assumptions: components["schemas"]["TocReportAssumptionOut"][];
+            /** How It Could Fail */
+            how_it_could_fail?: string | null;
             /** Method */
             method: string;
             /** Pathways */
@@ -6612,14 +6660,19 @@ export interface components {
             tests: components["schemas"]["TocReportTestOut"][];
             /** Title */
             title?: string | null;
+            verdict?: components["schemas"]["TocTheoryVerdictOut"] | null;
         };
         /**
          * TocReportPathwayOut
-         * @description How change happens along one pathway: a lead-in title and a paragraph.
+         * @description One success pathway in the Overview: a lead-in title and a line or two.
          */
         TocReportPathwayOut: {
             /** Paragraph */
             paragraph: string;
+            /** Pathway Id */
+            pathway_id?: string | null;
+            /** Strength */
+            strength?: string | null;
             /** Title */
             title: string;
         };
@@ -6667,7 +6720,10 @@ export interface components {
             population: string;
             /** Time Horizon */
             time_horizon: string | null;
-            /** Weakest Links */
+            /**
+             * Weakest Links
+             * @default
+             */
             weakest_links: string;
         };
         /**
@@ -6711,6 +6767,25 @@ export interface components {
         TocStudyIn: {
             /** Identifier */
             identifier: string;
+        };
+        /**
+         * TocTheoryVerdictOut
+         * @description Can the theory work? One overall verdict after the check (``toc_verdict_v1``).
+         */
+        TocTheoryVerdictOut: {
+            /** Carrying Step */
+            carrying_step: string;
+            /** Headline */
+            headline: string;
+            /** Label */
+            label: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "supported" | "plausible_untested" | "doubtful" | "implausible";
         };
         /**
          * TocUndoOut

@@ -94,14 +94,14 @@ export function useActiveConversation() {
   const activeConversationId = searchParams.get("chat") || null;
   // A draft chat may carry the artefact it is about (`?chat=new&entry=<id>`).
   const draftEntryArtefactId = activeConversationId === DRAFT_CHAT_ID ? searchParams.get("entry") || null : null;
-  const setActiveConversation = useCallback((conversationId: string | null) => {
+  const setActiveConversation = useCallback((conversationId: string | null, options?: { replace?: boolean }) => {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.delete("entry");
       if (conversationId === null) next.delete("chat");
       else next.set("chat", conversationId);
       return next;
-    });
+    }, options);
   }, [setSearchParams]);
   const openDraftChat = useCallback((entryArtefactId: string | null = null) => {
     setSearchParams((current) => {

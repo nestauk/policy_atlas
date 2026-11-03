@@ -120,4 +120,21 @@ describe("mergeHistory", () => {
       "You changed option 3.",
     ]);
   });
+
+  it("merges a theory of change's edits by time, with Undo only where allowed (task 054)", () => {
+    const rows = mergeHistory(
+      [],
+      [{ turn_index: 0, created_at: "2026-11-01T09:00:00Z", user_message: "Go", reply: null, status: "completed" }],
+      [
+        { event_id: "e2", at: "2026-11-01T10:00:00Z", who: "Ada", what: "Edited S1: text", undoable: true },
+        { event_id: "e1", at: "2026-11-01T08:00:00Z", who: "Bo", what: "Moved A1", undoable: false },
+      ],
+    );
+    expect(rows.map((row) => [row.category, row.sentence, row.undoEventId])).toEqual([
+      ["Edit", "Moved A1 (Bo)", undefined],
+      ["Question", 'You asked: "Go"', undefined],
+      ["Edit", "Edited S1: text (Ada)", "e2"],
+    ]);
+  });
 });
+

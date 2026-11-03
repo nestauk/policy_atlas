@@ -70,6 +70,9 @@ toc_summarise = "standard"
 toc_report = "frontier"
 # One call reviews the theory's shape after the user's edits (C45).
 toc_review = "frontier"
+# Can the theory work at all? The plan-stage sense check and the overall verdict (red team).
+toc_sense_check = "frontier"
+toc_verdict = "frontier"
 
 # ---------------------------------------------------------------------------
 [routes.openai-direct]

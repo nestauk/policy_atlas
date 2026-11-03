@@ -350,7 +350,7 @@ function LinkDetail({
       <p className={SUB}>Documents ({cited.length})</p>
       <LinkDocuments taskId={taskId} documents={documents} actions={editor !== null ? (doc) => <DocumentActions doc={doc} editor={editor} /> : undefined} />
       <RemovedDocuments documents={documents} editor={editor} />
-      {editor !== null && <AddStudy link={link} editor={editor} running={graph.check_status === "drafting" || graph.check_status === "checking"} />}
+      {editor !== null && <AddStudy link={link} editor={editor} />}
       {editor !== null && <FindMore links={[link]} graph={graph} editor={editor} />}
       <Origin origin={link.origin} rules={graph.grade_rules} />
     </>
@@ -378,7 +378,7 @@ export function DetailPanel({
   const link = selection.kind === "link" ? graph.links.find((l) => l.link_id === selection.id) : undefined;
   if (box === undefined && link === undefined) return null;
   return (
-    <aside aria-label="Details" className="max-h-[680px] [:fullscreen>&]:max-h-screen w-[380px] shrink-0 overflow-y-auto border-l border-line bg-paper px-5 py-4 max-lg:w-full max-lg:border-l-0 max-lg:border-t">
+    <aside aria-label="Details" className="w-[380px] shrink-0 overflow-y-auto lg:h-full border-l border-line bg-paper px-5 py-4 max-lg:w-full max-lg:border-l-0 max-lg:border-t">
       <button type="button" onClick={onClose} aria-label="Close" className="float-right cursor-pointer text-lead leading-none text-grey hover:text-navy">
         ×
       </button>

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { useArtefact, useConversations } from "../../../api/queries";
@@ -102,6 +102,25 @@ const HEADER_BUTTON =
  * Returns:
  *   The open panel beside the view, or a compact edge toggle when closed.
  */
+const CLOSED_KEY = "pa.chatSidebarClosed";
+
+function readClosed(): boolean {
+  try {
+    return window.localStorage.getItem(CLOSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeClosed(closed: boolean): void {
+  try {
+    if (closed) window.localStorage.setItem(CLOSED_KEY, "1");
+    else window.localStorage.removeItem(CLOSED_KEY);
+  } catch {
+    // Storage blocked: the sidebar just opens by default.
+  }
+}
+
 export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: boolean }) {
   const { activeConversationId, draftEntryArtefactId, setActiveConversation, openDraftChat } = useActiveConversation();
   const [listOpen, setListOpen] = useState(false);
@@ -115,6 +134,18 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   const draftOpen = activeConversationId === DRAFT_CHAT_ID;
   const artefact = useArtefact(taskId);
   const chatsEnabled = useChatsEnabled(taskId);
+  // The sidebar stays as the user left it across tabs (round 7): open on the
+  // Task Agent unless they closed it, and closed until they open it again.
+  // ponytail: one flag for every task in this browser; per task if users ask.
+  useEffect(() => {
+    if (activeConversationId !== null) {
+      writeClosed(false);
+      return;
+    }
+    if (conversations.isSuccess && !readClosed()) {
+      setActiveConversation(taskAgentId, { replace: true });
+    }
+  }, [activeConversationId, conversations.isSuccess, taskAgentId, setActiveConversation]);
   const openLatestOrTaskAgent = () => {
     // The launcher's decision needs the chats list resolved first — before
     // then "no chats" is read off `undefined` data.
@@ -219,7 +250,10 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
           <button
             type="button"
             aria-label="Close sidebar"
-            onClick={() => setActiveConversation(null)}
+            onClick={() => {
+              writeClosed(true);
+              setActiveConversation(null);
+            }}
             className={HEADER_BUTTON}
           >
             <PanelCloseIcon size={16} />

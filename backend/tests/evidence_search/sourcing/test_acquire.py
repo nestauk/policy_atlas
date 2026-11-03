@@ -748,6 +748,13 @@ def test_source_acquired_events(conn: Connection) -> None:
         e for e in events.read(conn, pid) if e["event_type"] == "source.acquired"
     ]
     assert len(acquired_events_after) == 24
+    # ...but say which documents the task already held, once each (task 054).
+    seen_again = [
+        e for e in events.read(conn, pid) if e["event_type"] == "source.seen_again"
+    ]
+    held = {e["payload"]["task_source_snapshot_id"] for e in acquired_events}
+    assert {e["payload"]["task_source_snapshot_id"] for e in seen_again} == held
+    assert len(seen_again) == len(held)
 
 
 # --- Coverage record + adequacy verdict ---

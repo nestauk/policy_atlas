@@ -81,6 +81,7 @@ from policy_atlas.api.readmodels.repository import (
 from policy_atlas.api.routers._access import accessible_task, readable_or_public_task
 from policy_atlas.api.routers.runs import start_toc_check
 from policy_atlas.api.settings import Settings
+from policy_atlas.api.toc_start import clear_queue, queued_link_ids
 from policy_atlas.core import events, tracing
 from policy_atlas.core.schema import (
     capability_run,
@@ -602,6 +603,7 @@ def get_toc(
     out.can_edit = user is not None and _can_edit(conn, task_id, user.user_id)
     if out.can_edit:
         out.edits_since_review = len(edits_since_review(conn, task_id))
+        out.queued_link_ids = [uuid.UUID(key) for key in queued_link_ids(conn, task_id)]
     return out
 
 
@@ -977,7 +979,7 @@ def start_toc_link_check(
         backends=backends,
         mode=body.mode,
     )
-    return TocCheckOut(capability_run_id=walk_id)
+    return TocCheckOut(capability_run_id=walk_id, queued=walk_id is None)
 
 
 @router.patch("/evidence/{evidence_id}", response_model=TocRevisionOut)
@@ -1069,7 +1071,7 @@ def add_toc_study(
         mode="add_study",
         studies={str(link_id): [doi]},
     )
-    return TocCheckOut(capability_run_id=walk_id)
+    return TocCheckOut(capability_run_id=walk_id, queued=walk_id is None)
 
 
 @router.post("/links/{link_id}/decide", response_model=TocCountOut)
@@ -1104,6 +1106,7 @@ def stop_toc_check(
     walk = _latest_walk(conn, task_id)
     if walk is None or walk.status != "running":
         raise ApiConflict("toc_not_running", "no check is running")
+    clear_queue(conn, task_id)
     events.append(
         conn,
         task_id=task_id,
@@ -1233,7 +1236,7 @@ def update_toc_report(
         backends=backends,
         mode="report",
     )
-    return TocCheckOut(capability_run_id=walk_id)
+    return TocCheckOut(capability_run_id=walk_id, queued=walk_id is None)
 
 
 @router.post("/clarifications", status_code=204)

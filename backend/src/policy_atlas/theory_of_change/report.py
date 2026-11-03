@@ -1,17 +1,21 @@
-"""Detailed information as a short narrative report: the ``toc_report`` step (task 054, C38).
+"""The theory's report: the ``toc_report`` step (task 054, C38).
 
-One frontier call (``toc_report_v1``) writes the prose; code does the rest:
+One frontier call (``toc_report_v4``) writes the prose; code does the rest:
 
-- **Inputs.** The plan; the theory with box and link codes, each link's verdict
-  and evidence sentence; the weakest critical links; the assumption rows
-  (:func:`assumption_rows`); and the numbered sources behind them.
-- **Checks.** Every box or link code the text cites must exist, and every
-  ``[n]`` must be a listed source that bears on a link the same paragraph or
-  row names, or on a link of that pathway. Anything else is removed and
-  counted; a row the model gave no reason gets a fixed one.
-- **Assembly.** Sources are renumbered by first citation (Summary, pathways,
-  assumption rows, tests), uncited ones dropped; code writes the source list
-  and the method note.
+- **Inputs.** The plan; the theory with box and connection codes, each
+  connection's verdict and evidence sentence; the weakest critical connections;
+  the table's rows (:func:`assumption_rows`, one per connection); and the
+  numbered sources behind them.
+- **Checks.** Every box or connection code the text cites must exist, and every
+  ``[n]`` must be a listed source. In a pathway line, a row's reason or a test,
+  the source must bear on a connection that text names or that pathway holds;
+  in the context and How it could fail, on any connection. Anything else is
+  removed and counted; a row the model gave no reason gets a fixed one.
+- **Assembly.** Each success pathway gets a strength label (its weakest
+  connection's verdict) and the Overview lists them strongest first. Sources
+  are renumbered by first citation, uncited ones dropped; code writes the
+  source list (with the journal or publishing organisation) and the method
+  note.
 
 The assembled report is the step's ``component.completed`` payload, as the
 summary's header paragraphs are: the read API serves the latest one.
@@ -52,15 +56,19 @@ from policy_atlas.theory_of_change.evidence.grade import (
     VERDICT_LABELS,
     VERDICT_ORDER,
     Verdict,
+    lowest,
     weight,
 )
 from policy_atlas.theory_of_change.report_prompt import TOC_REPORT_PROMPT_VERSION, ReportResponse
 
 log = structlog.get_logger()
 
-#: Assumption rows in the table (C38).
-MIN_ROWS = 5
-MAX_ROWS = 12
+#: A connection on more than this share of the success pathways is central.
+CENTRAL_SHARE = 0.5
+#: Verdicts at or below this one are weak: a central, weak row is flagged.
+WEAK_VERDICT: Verdict = "not_sure_mixed"
+#: Sources a table row lists: those its reason cites, filled up with the heaviest.
+ROW_SOURCES = 3
 #: Weakest links the summary names.
 WEAKEST_LINKS = 3
 #: What a row says when the model gave it no reason.
@@ -91,59 +99,59 @@ class LinkFacts:
     conditions: list[str]
     on_failure: bool
     on_success: bool
+    #: How many kept success pathways the connection is on.
+    on_pathways: int = 0
 
 
 def assumption_rows(
-    links: list[LinkFacts], sources_of: dict[str, list[int]]
+    links: list[LinkFacts], sources_of: dict[str, list[int]], pathways: int
 ) -> list[dict[str, Any]]:
-    """The Assumptions and evidence rows (C38), 5 to 12, critical first, then worst verdict.
+    """The Assumptions and evidence rows (C38, v4): one per connection on a kept pathway.
 
-    One row per condition of the critical link and of every link that is not
-    Confident (kind ``assumption``), and one per link on a failure pathway
-    (kind ``risk``, its sentence). When that gives fewer than five rows, the
-    conditions of Confident links fill up to five, in link order.
+    Importance is the share of success pathways the connection is on, or Risk
+    for a connection only on failure pathways; evidence is its verdict. A
+    central (more than half the pathways) and weak (Mixed or lower) row is
+    flagged. The default order: flagged first, then the most central, then the
+    worst verdict, then graph order. The reader can re-sort the table.
 
     Args:
-        links: Every link, in graph order.
-        sources_of: Link code → the numbers of its supporting or refuting sources.
+        links: Every connection, in graph order.
+        sources_of: Connection code → the numbers of its supporting or refuting sources.
+        pathways: The number of kept success pathways.
 
     Returns:
-        Rows with ``key`` (``r1``...), ``code`` (the link, or the failure box
-        for a risk), ``link``, ``statement``, ``kind``, ``verdict`` (label)
-        and ``sources``.
+        Rows with ``key`` (``r1``...), ``code``, ``statement`` (the
+        connection's sentence), ``conditions``, ``kind``, ``importance``,
+        ``share``, ``verdict`` (label), ``verdict_rank``, ``flag`` and ``sources``.
     """
-    order = {link.key: i for i, link in enumerate(links)}
-
-    def row(
-        link: LinkFacts, statement: str, kind: str
-    ) -> tuple[tuple[int, int, int], dict[str, Any]]:
-        code = (
-            link.target_code
-            if kind == "risk" and link.target_layer == "failure_outcome"
-            else link.code
+    weak = VERDICT_ORDER.index(WEAK_VERDICT)
+    ranked: list[tuple[tuple[bool, float, int, int], dict[str, Any]]] = []
+    for index, link in enumerate(links):
+        if not (link.on_pathways or link.on_failure):
+            continue
+        risk = link.on_pathways == 0
+        share = link.on_pathways / pathways if pathways else 0.0
+        rank = VERDICT_ORDER.index(link.verdict)
+        flag = share > CENTRAL_SHARE and rank <= weak
+        ranked.append(
+            (
+                (not flag, -share, rank, index),
+                {
+                    "code": link.code,
+                    "statement": link.sentence,
+                    "conditions": list(link.conditions),
+                    "kind": "risk" if risk else "assumption",
+                    "importance": "Risk" if risk else f"{round(share * 100)}% of pathways",
+                    "share": None if risk else share,
+                    "verdict": VERDICT_LABELS[link.verdict],
+                    "verdict_rank": rank,
+                    "flag": flag,
+                    "sources": sources_of.get(link.code, []),
+                },
+            )
         )
-        return (
-            (0 if link.critical else 1, VERDICT_ORDER.index(link.verdict), order[link.key]),
-            {
-                "code": code,
-                "link": link.code,
-                "statement": statement,
-                "kind": kind,
-                "verdict": VERDICT_LABELS[link.verdict],
-                "sources": sources_of.get(link.code, []),
-            },
-        )
-
-    main: list[tuple[tuple[int, int, int], dict[str, Any]]] = []
-    spare: list[tuple[tuple[int, int, int], dict[str, Any]]] = []
-    for link in links:
-        target = main if link.critical or link.verdict != "confident" else spare
-        target.extend(row(link, condition, "assumption") for condition in link.conditions)
-        if link.on_failure:
-            main.append(row(link, link.sentence, "risk"))
-    chosen = [r for _, r in sorted(main, key=lambda pair: pair[0])]
-    chosen += [r for _, r in spare][: max(0, MIN_ROWS - len(chosen))]
-    return [{"key": f"r{i}", **r} for i, r in enumerate(chosen[:MAX_ROWS], start=1)]
+    ranked.sort(key=lambda pair: pair[0])
+    return [{"key": f"r{i}", **row} for i, (_, row) in enumerate(ranked, start=1)]
 
 
 def weakest_links(links: list[LinkFacts]) -> list[str]:
@@ -215,8 +223,8 @@ class TextChecker:
 def renumber(report: dict[str, Any], sources: list[dict[str, Any]]) -> None:
     """Number sources by first citation and keep only cited ones, in place.
 
-    Citation order: the Summary, the pathways, the assumption rows (each row's
-    reason, then its source list), the tests.
+    Citation order: the Overview (if-then-because, context, pathway lines, How
+    it could fail), the rows (each row's reason, then its source list), the tests.
 
     Args:
         report: The assembled sections, with ``[n]`` in their texts and
@@ -227,8 +235,11 @@ def renumber(report: dict[str, Any], sources: list[dict[str, Any]]) -> None:
     texts: list[tuple[dict[str, Any], str]] = [
         (report, key) for key in ("title", "summary_text") if key in report
     ]
-    texts += [(summary, key) for key in ("if_then_because", "context", "weakest_links")]
+    texts += [
+        (summary, key) for key in ("if_then_because", "context", "weakest_links") if key in summary
+    ]
     texts += [(p, key) for p in report["pathways"] for key in ("title", "paragraph")]
+    texts += [(report, "how_it_could_fail")] if "how_it_could_fail" in report else []
     first: dict[int, int] = {}
 
     def see(numbers: Iterable[int]) -> None:
@@ -269,19 +280,34 @@ def method_note(when: datetime, judge_model: str) -> str:
     )
 
 
-def _family(name: str) -> str:
-    return name.split()[-1] if name.split() else name
+def _who(authors: list[str], organisation: bool = False) -> str:
+    """'Boyland et al.', 'Boyland', or an organisation's whole name ('Public Health Scotland')."""
+    if not authors:
+        return ""
+    first = authors[0] if organisation else (authors[0].split() or [authors[0]])[-1]
+    return f"{first} et al." if len(authors) > 1 else first
+
+
+def publisher(meta: dict[str, Any], authors: list[str]) -> str | None:
+    """The journal for a paper, the publishing organisation for a policy document.
+
+    Omitted when it only repeats the sole author (an organisation's own report).
+    """
+    found = _venue(meta) or (str(meta.get("publisher_org") or "") or None)
+    return None if found is not None and authors == [found] else found
 
 
 def citation(
-    *, authors: list[str], year: int | None, title: str, venue: str | None, kind: str | None
+    *,
+    authors: list[str],
+    year: int | None,
+    title: str,
+    venue: str | None,
+    kind: str | None,
+    organisation: bool = False,
 ) -> str:
     """ "Boyland et al. (2016) Advertising as a cue to consume. Appetite. Systematic review."."""
-    who = (
-        f"{_family(authors[0])} et al."
-        if len(authors) > 1
-        else (_family(authors[0]) if authors else "")
-    )
+    who = _who(authors, organisation)
     when = f"({year})" if year else ""
     head = " ".join(part for part in (who, when) if part)
     parts = [
@@ -292,12 +318,10 @@ def citation(
     return " ".join(f"{part.rstrip('.')}." for part in parts if part)
 
 
-def _short(authors: list[str], year: int | None, title: str, venue: str | None) -> str:
-    who = (
-        f"{_family(authors[0])} et al."
-        if len(authors) > 1
-        else (_family(authors[0]) if authors else "")
-    )
+def _short(
+    authors: list[str], year: int | None, title: str, venue: str | None, organisation: bool
+) -> str:
+    who = _who(authors, organisation)
     return ", ".join(part for part in (f"{who} {year or ''}".strip(), title, venue) if part)
 
 
@@ -319,6 +343,70 @@ def _metadata(conn: Connection, task_id: uuid.UUID, ids: set[uuid.UUID]) -> dict
             .where(task_source_snapshot.c.task_id == task_id)
             .where(task_source_snapshot.c.task_source_snapshot_id.in_(ids))
         )
+    }
+
+
+#: The overall verdict's words on the page.
+THEORY_VERDICT_LABELS = {
+    "supported": "Supported",
+    "plausible_untested": "Plausible, not yet tested",
+    "doubtful": "Doubtful",
+    "implausible": "Implausible",
+}
+
+
+def theory_verdict(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    plan: dict[str, Any],
+    facts: list[LinkFacts],
+    box_text: dict[str, str],
+    pathways: list[dict[str, str]],
+    backend: TocBackend,
+    usage: UsageAccumulator,
+) -> dict[str, Any] | None:
+    """The overall verdict and headline (``toc_verdict_v1``); ``None`` if the call failed.
+
+    Reads every connection's verdict and evidence sentence, how many success
+    pathways it is on, and the plan-stage sense check (its whole-intervention
+    search can find evaluations the step-by-step search missed).
+    """
+    from policy_atlas.theory_of_change import sense_check
+
+    payload: dict[str, object] = {
+        "plan": {k: v for k, v in plan.items() if v},
+        "connections": [
+            {
+                "code": f.code,
+                "from": f"{f.source_code}: {box_text[f.source_code]}",
+                "to": f"{f.target_code}: {box_text[f.target_code]}",
+                "verdict": VERDICT_LABELS[f.verdict],
+                "evidence": f.evidence_sentence,
+                "success_pathways": f.on_pathways,
+            }
+            for f in facts
+        ],
+        "pathways": pathways,
+    }
+    found = sense_check.for_verdict(sense_check.latest(conn, task_id))
+    response = _outcome_value(
+        _call(
+            "toc_verdict",
+            lambda: backend.theory_verdict(theory=payload, sense_check=found),
+            "toc_verdict",
+        ),
+        usage,
+    )
+    if response is None:
+        log.warning("toc_verdict.failed", task_id=str(task_id))
+        return None
+    return {
+        "verdict": response.verdict,
+        "label": THEORY_VERDICT_LABELS[response.verdict],
+        "headline": response.headline,
+        "reason": response.reason,
+        "carrying_step": response.carrying_step,
     }
 
 
@@ -355,7 +443,8 @@ def toc_report_scope(
     appraisals = appraisals_for(conn, task_id=task_id, evidence_rows=every)
     kept = [p for p in graph.pathways if p.status == "kept"]
     on_failure = {key for p in kept if p.kind == "failure" for key in p.links}
-    on_success = {key for p in kept if p.kind == "success" for key in p.links}
+    success = [p for p in kept if p.kind == "success"]
+    on_success = {key for p in success for key in p.links}
     box_code = {key: rows.boxes[key].code or key for key in graph.boxes}
     facts = [
         LinkFacts(
@@ -371,6 +460,7 @@ def toc_report_scope(
             conditions=list(link.conditions),
             on_failure=key in on_failure,
             on_success=key in on_success,
+            on_pathways=sum(1 for p in success if key in p.links),
         )
         for key, link in graph.links.items()
     ]
@@ -379,10 +469,10 @@ def toc_report_scope(
     path_links = {p.key: [fact_of[k].code for k in p.links if k in fact_of] for p in kept}
 
     # Sources: documents that support or refute the rows' and pathways' links, heaviest first.
-    preliminary = assumption_rows(facts, {})
+    preliminary = assumption_rows(facts, {}, len(success))
     link_order = list(
         dict.fromkeys(
-            [row["link"] for row in preliminary] + [c for p in kept for c in path_links[p.key]]
+            [row["code"] for row in preliminary] + [c for p in kept for c in path_links[p.key]]
         )
     )
     metadata = _metadata(conn, task_id, {row.task_source_snapshot_id for row in every})
@@ -392,6 +482,7 @@ def toc_report_scope(
     }
     numbers: dict[uuid.UUID, int] = {}
     bears: dict[int, set[str]] = {}
+    sources_of: dict[str, list[int]] = {}
     sources: list[dict[str, Any]] = []
     for code in link_order:
         group = [
@@ -405,7 +496,9 @@ def toc_report_scope(
             if tss not in numbers:
                 meta, locator = metadata.get(tss, ({}, None))
                 authors = [a.name for a in _authorships(meta)]
-                title, year, venue = str(meta.get("title") or ""), _year(meta), _venue(meta)
+                title, year = str(meta.get("title") or ""), _year(meta)
+                venue = publisher(meta, authors)
+                organisation = meta.get("backend") == "overton"
                 numbers[tss] = len(numbers) + 1
                 sources.append(
                     {
@@ -416,8 +509,9 @@ def toc_report_scope(
                             title=title,
                             venue=venue,
                             kind=types.get(tss),
+                            organisation=organisation,
                         ),
-                        "short": _short(authors, year, title, venue),
+                        "short": _short(authors, year, title, venue, organisation),
                         "url": _url(meta, locator),
                         "title": title,
                         "authors": authors,
@@ -430,11 +524,10 @@ def toc_report_scope(
                     }
                 )
             bears.setdefault(numbers[tss], set()).add(code)
-    sources_of: dict[str, list[int]] = {}
-    for n, codes in bears.items():
-        for code in codes:
-            sources_of.setdefault(code, []).append(n)
-    table = assumption_rows(facts, {code: sorted(ns) for code, ns in sources_of.items()})
+            # Each connection's sources, heaviest first.
+            if numbers[tss] not in sources_of.setdefault(code, []):
+                sources_of[code].append(numbers[tss])
+    table = assumption_rows(facts, sources_of, len(success))
 
     pkey = {p.key: f"p{i}" for i, p in enumerate(kept, start=1)}
     theory = {
@@ -442,7 +535,7 @@ def toc_report_scope(
             {"code": box_code[key], "layer": box.layer, "text": box.text}
             for key, box in graph.boxes.items()
         ],
-        "links": [
+        "connections": [
             {
                 "code": f.code,
                 "from": f.source_code,
@@ -459,11 +552,11 @@ def toc_report_scope(
                 "key": pkey[p.key],
                 "kind": p.kind,
                 "label": rows.pathways[p.key].label,
-                "links": path_links[p.key],
+                "connections": path_links[p.key],
             }
             for p in kept
         ],
-        "weakest_critical_links": weakest_links(facts),
+        "weakest_critical_connections": weakest_links(facts),
     }
     plan_fields = {
         "goal": plan.intended_change,
@@ -474,6 +567,19 @@ def toc_report_scope(
         "setting": plan.context,
     }
     usage = UsageAccumulator()
+    # Can the theory work at all? One overall verdict before the prose, which must agree with it.
+    verdict = theory_verdict(
+        conn,
+        task_id=task_id,
+        plan=plan_fields,
+        facts=facts,
+        box_text={box_code[key]: box.text for key, box in graph.boxes.items()},
+        pathways=[{"label": rows.pathways[p.key].label, "kind": p.kind} for p in kept],
+        backend=backend,
+        usage=usage,
+    )
+    if verdict is not None:
+        theory["overall_verdict"] = {k: verdict[k] for k in ("label", "headline", "reason")}
     response: ReportResponse | None = _outcome_value(
         _call(
             "toc_report",
@@ -481,14 +587,24 @@ def toc_report_scope(
                 plan={k: v for k, v in plan_fields.items() if v},
                 theory=theory,
                 rows=[
-                    {k: row[k] for k in ("key", "link", "statement", "kind", "verdict", "sources")}
+                    {
+                        k: row[k]
+                        for k in (
+                            "code",
+                            "statement",
+                            "conditions",
+                            "importance",
+                            "verdict",
+                            "sources",
+                        )
+                    }
                     for row in table
                 ],
                 sources=[
                     {
                         "n": s["n"],
                         "citation": s["short"],
-                        "links": sorted(bears[s["n"]]),
+                        "connections": sorted(bears[s["n"]]),
                         "finding": s["finding"],
                     }
                     for s in sources
@@ -502,61 +618,75 @@ def toc_report_scope(
         raise RuntimeError("toc_report: the report call failed")
 
     check = TextChecker(codes=set(box_code.values()) | set(by_code), sources=bears)
-    links_of = {pkey[p.key]: path_links[p.key] for p in kept}
-    failure_links = [c for p in kept if p.kind == "failure" for c in path_links[p.key]]
-    kind_of = {pkey[p.key]: p.kind for p in kept}
+    every_code = list(by_code)
+    links_of = {pkey[p.key]: path_links[p.key] for p in success}
+    id_of = {pkey[p.key]: p.key for p in success}
+    # A pathway is as strong as its weakest connection.
+    strength: dict[str, Verdict] = {
+        pkey[p.key]: lowest(fact_of[k].verdict for k in p.links if k in fact_of)
+        or "not_sure_insufficient"
+        for p in success
+    }
     pathways = []
     for item in response.pathways:
         if item.pathway not in links_of:
             check.removals.rows += 1
             continue
-        # Failure pathways may share one "How it could fail" paragraph.
-        allowed = failure_links if kind_of[item.pathway] == "failure" else links_of[item.pathway]
         pathways.append(
-            {"title": check(item.title, allowed), "paragraph": check(item.paragraph, allowed)}
+            {
+                "pathway_id": id_of[item.pathway],
+                "title": check(item.title, links_of[item.pathway]),
+                "paragraph": check(item.sentence, links_of[item.pathway]),
+                "strength": VERDICT_LABELS[strength[item.pathway]],
+            }
         )
-    reasons = {item.row: item.why for item in response.assumption_reasons}
+    # Strongest first; a tie keeps the model's order.
+    pathways.sort(key=lambda line: -VERDICT_ORDER.index(strength[pkey[line["pathway_id"]]]))
+    reasons = {item.connection: item.why for item in response.connection_reasons}
     assumptions = []
     for row in table:
-        why = check(reasons.get(row["key"], ""), [row["link"]])
+        why = check(reasons.get(row["code"], ""), [row["code"]])
+        # The Sources column: what the reason cites, then the heaviest, to ROW_SOURCES.
+        cited = [int(n) for n in _CITE.findall(why)]
+        shown = list(dict.fromkeys([*cited, *row["sources"]]))[: max(ROW_SOURCES, len(cited))]
         assumptions.append(
             {
-                "code": row["code"],
-                "statement": row["statement"],
-                "kind": row["kind"],
-                "verdict": row["verdict"],
+                **{k: row[k] for k in ("code", "statement", "conditions", "kind")},
+                **{k: row[k] for k in ("importance", "share", "verdict", "verdict_rank", "flag")},
                 "why": why or ROW_FALLBACK,
-                "sources": list(row["sources"]),
+                "sources": shown,
             }
         )
     tests = []
     for test in response.tests:
-        if test.link not in by_code:
+        if test.connection not in by_code:
             check.removals.rows += 1
             continue
         tests.append(
             {
-                "link": test.link,
-                "question": check(test.question, [test.link]),
-                "indicator": check(test.indicator, [test.link]),
-                "test_and_learn": check(test.test_and_learn, [test.link]),
+                "link": test.connection,
+                "question": check(test.question, [test.connection]),
+                "indicator": check(test.indicator, [test.connection]),
+                "test_and_learn": check(test.test_and_learn, [test.connection]),
             }
         )
     report: dict[str, Any] = {
         "title": check(response.title),
-        "summary_text": check(response.summary),
+        "summary_text": check(response.summary, every_code),
         "summary": {
             "goal": plan.intended_change,
-            "if_then_because": check(response.if_then_because),
+            "if_then_because": check(response.if_then_because, every_code),
             "population": plan.target_population,
             "time_horizon": plan.time_horizon,
             "directly_influenced": DIRECTLY_INFLUENCED,
-            "context": check(response.context),
-            "weakest_links": check(response.weakest_links),
+            # A summarised setting, grounded in any listed source.
+            "context": check(response.context, every_code),
         },
         "pathways": pathways,
+        "how_it_could_fail": check(response.how_it_could_fail, every_code),
         "assumptions": assumptions,
         "tests": tests,
+        "verdict": verdict,
     }
     renumber(report, sources)
     report["sources"] = [

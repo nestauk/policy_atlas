@@ -155,6 +155,8 @@ from policy_atlas.options_scoping.option_profile.place_sentences import (
 )
 from policy_atlas.runtime.capability_registry import (
     OPTIONS_SCOPING,
+    THEORY_OF_CHANGE,
+    capability_of_task,
     expect_scoping_plan,
     latest_approved_plan_row,
     validate_plan,
@@ -1542,6 +1544,7 @@ def _event_decision(row: Any, walk_id: uuid.UUID | None = None) -> DecisionOut:
             capability_run_id=walk_id,
         )
     text = {
+        "component.started": "Started an evidence-search step.",
         "component.completed": "Completed an evidence-search step.",
         "component.failed": "An evidence-search step failed.",
         "component.skipped": "Skipped an evidence-search step.",
@@ -1608,11 +1611,18 @@ def walks_of_event_runs(
 def decisions_page(
     conn: Connection, task_id: uuid.UUID, page: int, page_size: int
 ) -> Page[DecisionOut]:
-    """Return steering-history decisions plus the explicitly allowlisted audit events."""
+    """Return steering-history decisions plus the explicitly allowlisted audit events.
+
+    A theory-of-change task also gets ``component.started``: its chat shows the
+    step running now (task 054, round 6).
+    """
+    kinds = set(_EVENT_KINDS)
+    if capability_of_task(conn, task_id) == THEORY_OF_CHANGE:
+        kinds.add("component.started")
     allowed = (
         conn.execute(
             select(event_log).where(
-                event_log.c.task_id == task_id, event_log.c.event_type.in_(_EVENT_KINDS)
+                event_log.c.task_id == task_id, event_log.c.event_type.in_(kinds)
             )
         )
         .mappings()

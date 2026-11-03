@@ -411,7 +411,7 @@ export function useSourceDossier(taskId: string, sourceId: string | null) {
 
 /** `GET /api/v1/tasks/{task_id}/decisions` — paginated decision log
  *  (`steering_history` + allowlisted events). */
-export function useDecisions(taskId: string, query?: PageQuery) {
+export function useDecisions(taskId: string, query?: PageQuery, refetchInterval?: number) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.decisions(taskId, query?.page, query?.page_size),
@@ -423,6 +423,7 @@ export function useDecisions(taskId: string, query?: PageQuery) {
       return data;
     },
     enabled: Boolean(taskId),
+    refetchInterval,
   });
 }
 
@@ -544,7 +545,7 @@ interface RunsQuery extends PageQuery {
   parentless?: boolean;
 }
 
-export function useRuns(taskId: string, query?: RunsQuery) {
+export function useRuns(taskId: string, query?: RunsQuery, refetchInterval?: number) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.runs(taskId, query?.page, query?.page_size, query?.parentless),
@@ -556,6 +557,7 @@ export function useRuns(taskId: string, query?: RunsQuery) {
       return data;
     },
     enabled: Boolean(taskId),
+    refetchInterval,
   });
 }
 

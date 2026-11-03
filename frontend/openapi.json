@@ -5305,7 +5305,7 @@
       },
       "PlanPatchIn": {
         "additionalProperties": false,
-        "description": "Inbound body for `PATCH /api/v1/tasks/{id}/plan`.\n\nOmitted fields stay as they are. An empty string on a date or geography\nfield clears that constraint. The merged result must still be a valid\nexecutable plan.\n\nArgs:\n    question: Replacement evidence question.\n    backend_scope: Search backend scope.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    steering_mode: Check-in cadence for the run.\n    screening_criteria: Replacement inclusion/exclusion criteria.\n    published_after: Lower publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    published_before: Upper publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    geography: Country, ISO code, or pinned group label, or empty to\n        clear geography filters.\n    scoping: Options-scoping edits. Mutually exclusive with every field\n        above: an Evidence search field on a scoping task, or `scoping` on\n        an Evidence search task, is a 422.",
+        "description": "Inbound body for `PATCH /api/v1/tasks/{id}/plan`.\n\nOmitted fields stay as they are. An empty string on a date or geography\nfield clears that constraint. The merged result must still be a valid\nexecutable plan.\n\nArgs:\n    question: Replacement evidence question.\n    backend_scope: Search backend scope.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    steering_mode: Check-in cadence for the run.\n    screening_criteria: Replacement inclusion/exclusion criteria.\n    published_after: Lower publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    published_before: Upper publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    geography: Country, ISO code, or pinned group label, or empty to\n        clear geography filters.\n    scoping: Options-scoping edits. Mutually exclusive with every field\n        above: an Evidence search field on a scoping task, or `scoping` on\n        an Evidence search task, is a 422.\n    toc: Theory-of-change edits (task 054), the same way: only on a\n        theory-of-change task, and alone.",
         "properties": {
           "analysis_depth": {
             "anyOf": [
@@ -5440,6 +5440,16 @@
               }
             ],
             "title": "Steering Mode"
+          },
+          "toc": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocPlanPatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "PlanPatchIn",
@@ -8780,12 +8790,24 @@
       },
       "TocCheckOut": {
         "additionalProperties": false,
-        "description": "The check walk that started.",
+        "description": "The check walk that started, or null when it waits for the running walk.",
         "properties": {
           "capability_run_id": {
-            "format": "uuid",
-            "title": "Capability Run Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Run Id"
+          },
+          "queued": {
+            "default": false,
+            "title": "Queued",
+            "type": "boolean"
           }
         },
         "required": [
@@ -9605,6 +9627,14 @@
             "title": "Pathways",
             "type": "array"
           },
+          "queued_link_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Queued Link Ids",
+            "type": "array"
+          },
           "report": {
             "anyOf": [
               {
@@ -10330,6 +10360,98 @@
         "title": "TocPlanDraft",
         "type": "object"
       },
+      "TocPlanPatch": {
+        "additionalProperties": false,
+        "description": "Typed replace-field edits for a theory-of-change plan (task 054).\n\nOmitted fields stay as they are; an empty string clears an optional field.\nAllowed only until the draft is on the canvas (S7).",
+        "properties": {
+          "context": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "dosage": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dosage"
+          },
+          "intended_change": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intended Change"
+          },
+          "intervention": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intervention"
+          },
+          "target_population": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Population"
+          },
+          "time_horizon": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Horizon"
+          },
+          "where": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Where"
+          }
+        },
+        "title": "TocPlanPatch",
+        "type": "object"
+      },
       "TocPositionOut": {
         "additionalProperties": false,
         "description": "Where the user dropped a box on the canvas (C47).",
@@ -10494,6 +10616,30 @@
             "title": "Code",
             "type": "string"
           },
+          "conditions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Conditions",
+            "type": "array"
+          },
+          "flag": {
+            "default": false,
+            "title": "Flag",
+            "type": "boolean"
+          },
+          "importance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importance"
+          },
           "kind": {
             "enum": [
               "assumption",
@@ -10501,6 +10647,17 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share"
           },
           "sources": {
             "items": {
@@ -10516,6 +10673,17 @@
           "verdict": {
             "title": "Verdict",
             "type": "string"
+          },
+          "verdict_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict Rank"
           },
           "why": {
             "title": "Why",
@@ -10563,6 +10731,17 @@
             },
             "title": "Assumptions",
             "type": "array"
+          },
+          "how_it_could_fail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "How It Could Fail"
           },
           "method": {
             "title": "Method",
@@ -10613,6 +10792,16 @@
               }
             ],
             "title": "Title"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocTheoryVerdictOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -10628,11 +10817,34 @@
       },
       "TocReportPathwayOut": {
         "additionalProperties": false,
-        "description": "How change happens along one pathway: a lead-in title and a paragraph.",
+        "description": "One success pathway in the Overview: a lead-in title and a line or two.",
         "properties": {
           "paragraph": {
             "title": "Paragraph",
             "type": "string"
+          },
+          "pathway_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pathway Id"
+          },
+          "strength": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strength"
           },
           "title": {
             "title": "Title",
@@ -10778,6 +10990,7 @@
             "title": "Time Horizon"
           },
           "weakest_links": {
+            "default": "",
             "title": "Weakest Links",
             "type": "string"
           }
@@ -10788,8 +11001,7 @@
           "population",
           "time_horizon",
           "directly_influenced",
-          "context",
-          "weakest_links"
+          "context"
         ],
         "title": "TocReportSummaryOut",
         "type": "object"
@@ -10895,6 +11107,47 @@
           "identifier"
         ],
         "title": "TocStudyIn",
+        "type": "object"
+      },
+      "TocTheoryVerdictOut": {
+        "additionalProperties": false,
+        "description": "Can the theory work? One overall verdict after the check (``toc_verdict_v1``).",
+        "properties": {
+          "carrying_step": {
+            "title": "Carrying Step",
+            "type": "string"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "supported",
+              "plausible_untested",
+              "doubtful",
+              "implausible"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verdict",
+          "label",
+          "headline",
+          "reason",
+          "carrying_step"
+        ],
+        "title": "TocTheoryVerdictOut",
         "type": "object"
       },
       "TocUndoOut": {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { type TocEdit, useTocEdit } from "../../api/mutations";
 import { useTocHistory } from "../../api/queries";
@@ -55,54 +55,165 @@ export function useTocEditor(taskId: string, canEdit: boolean) {
   return { editor, toast, dismissToast: () => setToast(null), undoLast, error, history: history.data ?? [] };
 }
 
+/** Whether a queued check already names every one of these links (it starts when the running walk ends). */
+export function isQueued(graph: TocGraph, linkIds: string[]): boolean {
+  const queued = new Set(graph.queued_link_ids ?? []);
+  return linkIds.length > 0 && linkIds.every((id) => queued.has(id));
+}
+
+/** A check button's words: its own, then "Added to the queue" once it waits for the running check. */
+export function checkWords(graph: TocGraph, linkIds: string[], label: string): string {
+  return isQueued(graph, linkIds) ? "Added to the queue" : label;
+}
+
 const LAYERS: BoxLayer[] = ["input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"];
 
-/** The toolbar's editing buttons (C41, C47, C40). */
-export function EditToolbar({
+/** A bordered tool button with its icon: the canvas bar's edit actions. */
+function ToolButton({ icon, label, pressed, disabled, onClick }: { icon: ReactNode; label: string; pressed?: boolean; disabled?: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      disabled={disabled}
+      onClick={onClick}
+      className={`inline-flex cursor-pointer items-center gap-1.5 border px-2.5 py-1.5 text-meta font-semibold focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-default disabled:text-line-2 ${
+        pressed ? "border-blue bg-blue-tint text-blue" : "border-line-2 bg-paper text-navy hover:border-navy disabled:hover:border-line-2"
+      }`}
+    >
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+        {icon}
+      </svg>
+      {label}
+    </button>
+  );
+}
+
+/** The "…" menu: the actions used less often. Closes on a choice or a click elsewhere. */
+function MoreMenu({ items }: { items: { label: string; disabled?: boolean; onClick: () => void }[] }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const close = (event: MouseEvent) => {
+      if (ref.current !== null && !ref.current.contains(event.target as Node)) ref.current.open = false;
+    };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, []);
+  if (items.length === 0) return null;
+  return (
+    <details ref={ref} className="relative">
+      <summary aria-label="More actions" className="flex cursor-pointer list-none items-center border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-bold leading-none text-navy hover:border-navy [&::-webkit-details-marker]:hidden">
+        …
+      </summary>
+      <div role="menu" className="absolute right-0 z-20 mt-1 grid min-w-[16rem] border border-line bg-paper py-1 shadow-lg">
+        {items.map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            role="menuitem"
+            disabled={item.disabled}
+            onClick={() => {
+              if (ref.current !== null) ref.current.open = false;
+              item.onClick();
+            }}
+            className="cursor-pointer px-3 py-2 text-left text-meta font-semibold text-navy hover:bg-paper-2 disabled:cursor-default disabled:text-line-2 disabled:hover:bg-transparent"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+/**
+ * The bar across the top of the canvas (round 5): the pathway choice, the edit
+ * buttons and the "…" menu. It sits inside the full-screen area, so all of it
+ * works in full screen too.
+ */
+export function CanvasBar({
   graph,
+  pathway,
+  pathways,
+  onPathway,
   editor,
   mode,
   onMode,
   onAddBox,
+  onReview,
+  reviewLabel,
+  reviewDisabled,
+  onGuide,
+  guideOpen,
 }: {
   graph: TocGraph;
-  editor: Editor;
+  pathway: string;
+  pathways: { id: string; title: string }[];
+  onPathway: (id: string) => void;
+  /** Null for a reader: the bar shows the pathway choice and How to read this only. */
+  editor: Editor | null;
   mode: "view" | "connect";
   onMode: (mode: "view" | "connect") => void;
   onAddBox: () => void;
+  onReview: () => void;
+  reviewLabel: string;
+  reviewDisabled: boolean;
+  onGuide: () => void;
+  guideOpen: boolean;
 }) {
   const running = graph.check_status === "drafting" || graph.check_status === "checking";
   const unchecked = graph.links.filter((link) => link.state === "unchecked").map((link) => link.link_id);
   const moved = graph.boxes.some((box) => box.position != null);
+  const menu = [
+    ...(editor !== null && unchecked.length > 0 && !isQueued(graph, unchecked)
+      ? [
+          {
+            label: `Find evidence for new connections (${unchecked.length})`,
+            disabled: editor.busy,
+            onClick: () => editor.run({ kind: "check", body: { link_ids: unchecked, mode: "new_items" } }),
+          },
+        ]
+      : []),
+    ...(editor !== null ? [{ label: reviewLabel, disabled: reviewDisabled, onClick: onReview }] : []),
+    { label: guideOpen ? "Hide how to read this" : "How to read this", onClick: onGuide },
+  ];
   return (
-    <>
-      {running && (
-        <Button variant="secondary" size="sm" disabled={editor.busy} onClick={() => editor.run({ kind: "stop" })}>
-          Stop the check
-        </Button>
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-paper px-3 py-2">
+      <select
+        aria-label="Pathway"
+        value={pathway}
+        onChange={(event) => onPathway(event.target.value)}
+        className="border border-line-2 bg-paper px-2.5 py-[5px] text-meta font-semibold text-navy"
+      >
+        <option value="all">All pathways</option>
+        {pathways.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.title}
+          </option>
+        ))}
+      </select>
+      <span className="flex-1" />
+      {editor !== null && running && (
+        <ToolButton icon={<rect x="4" y="4" width="8" height="8" fill="currentColor" stroke="none" />} label="Stop the check" disabled={editor.busy} onClick={() => editor.run({ kind: "stop" })} />
       )}
-      <Button variant="secondary" size="sm" onClick={onAddBox}>
-        ＋ Add box
-      </Button>
-      <Button variant="secondary" size="sm" aria-pressed={mode === "connect"} className={mode === "connect" ? "!border-blue !text-blue" : ""} onClick={() => onMode(mode === "connect" ? "view" : "connect")}>
-        Connect
-      </Button>
-      {moved && (
-        <Button variant="secondary" size="sm" disabled={editor.busy} onClick={() => editor.run({ kind: "resetLayout" }, "Reset the layout")}>
-          Reset layout
-        </Button>
+      {editor !== null && (
+        <>
+          <ToolButton icon={<path d="M2.5 4.5h11v7h-11zM8 6v4M6 8h4" />} label="Add box" onClick={onAddBox} />
+          <ToolButton
+            icon={<path d="M1.5 5.5h4v5h-4zM10.5 5.5h4v5h-4zM5.5 8h4.5M8.5 6.5 10 8l-1.5 1.5" />}
+            label="Connect"
+            pressed={mode === "connect"}
+            onClick={() => onMode(mode === "connect" ? "view" : "connect")}
+          />
+          <ToolButton
+            icon={<path d="M3 8a5 5 0 1 0 1.5-3.5M3 2.5V5h2.5" />}
+            label="Reset layout"
+            disabled={editor.busy || !moved}
+            onClick={() => editor.run({ kind: "resetLayout" }, "Reset the layout")}
+          />
+        </>
       )}
-      {unchecked.length > 0 && (
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={editor.busy || running}
-          onClick={() => editor.run({ kind: "check", body: { link_ids: unchecked, mode: "new_items" } }, undefined)}
-        >
-          Find evidence for new connections ({unchecked.length})
-        </Button>
-      )}
-    </>
+      <MoreMenu items={menu} />
+    </div>
   );
 }
 

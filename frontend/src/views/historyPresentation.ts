@@ -14,6 +14,17 @@ type HistoryRow = {
   sentence: string;
   /** Expandable detail rows, when the source carries any. */
   details?: { label: string; value: string }[];
+  /** A theory-of-change edit the reader may undo (task 054): its event id. */
+  undoEventId?: string;
+};
+
+/** One theory-of-change edit, as `GET .../toc/history` gives it (task 054). */
+type EditLike = {
+  event_id: string;
+  at: string;
+  who: string;
+  what: string;
+  undoable: boolean;
 };
 
 type DecisionLike = {
@@ -70,6 +81,9 @@ const DECISION_CATEGORY: Record<string, { label: string; tone: HistoryRow["tone"
  * negotiation that shaped the plan. Merging the Task Agent turns in by time
  * puts those first, where they happened.
  *
+ * A theory of change's edits join them, so the conversation, the checks and
+ * the user's changes read as one record.
+ *
  * Ordering is by timestamp, with the Task Agent turn's own index and the
  * decision's sequence breaking ties, so two records written in the same
  * instant keep the order they were actually recorded in.
@@ -77,6 +91,7 @@ const DECISION_CATEGORY: Record<string, { label: string; tone: HistoryRow["tone"
 export function mergeHistory(
   decisions: readonly DecisionLike[] | undefined,
   turns: readonly TurnLike[] | undefined,
+  edits: readonly EditLike[] = [],
 ): HistoryRow[] {
   // The tiebreak rides alongside the row rather than on it, so it cannot leak
   // into what the view renders.
@@ -124,6 +139,22 @@ export function mergeHistory(
       tone: category.tone,
       sentence: decision.summary,
       details: details.length > 0 ? details : undefined,
+      },
+    });
+  }
+
+  // A theory of change's edits to its boxes, connections and evidence (task
+  // 054): who changed what, with Undo where the server allows it.
+  for (const [index, edit] of edits.entries()) {
+    rows.push({
+      tiebreak: index,
+      row: {
+        id: `edit-${edit.event_id}`,
+        at: edit.at,
+        category: "Edit",
+        tone: "blue",
+        sentence: `${edit.what} (${edit.who})`,
+        undoEventId: edit.undoable ? edit.event_id : undefined,
       },
     });
   }

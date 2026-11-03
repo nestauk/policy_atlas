@@ -140,6 +140,7 @@ def _report(conn: Connection, task_id: uuid.UUID) -> dict[str, Any] | None:
         "how_change_happens": [
             f"{item.get('title')}: {item.get('paragraph')}" for item in report.get("pathways", [])
         ],
+        "how_it_could_fail": report.get("how_it_could_fail"),
         "tests": [
             f"{item.get('link')}: {item.get('question')}" for item in report.get("tests", [])
         ],

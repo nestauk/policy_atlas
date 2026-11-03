@@ -686,7 +686,7 @@ def test_merge_keeps_one_of_each_kind_and_the_thread_lists_its_changes(
     # The model set aside every pathway; code keeps the first of each kind back.
     assert rows["Main route"][0] == "kept" and rows["Low take-up"][0] == "kept"
     assert rows["Second route"] == ("set_aside", "Merged into “Main route”: Same mechanism.")
-    assert "Merged pathway “Second route” into “Main route”" in replies[-1]
+    assert "to the impact" in replies[-1]
     assert replies[-1].endswith(STRESS_TEST_MESSAGE)
 
 

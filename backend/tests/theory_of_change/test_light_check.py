@@ -166,7 +166,13 @@ def test_codes_follow_the_layer_and_a_deleted_code_is_never_reused(
             for row in conn.execute(select(toc_box).where(toc_box.c.task_id == task_id))
         }
         assert {key: codes[ids[key]] for key in ("b1", "b2", "b3", "b4", "b5", "b6", "b7")} == {
-            "b1": "A1", "b2": "P1", "b3": "S1", "b4": "I1", "b5": "F1", "b6": "L1", "b7": "S2"
+            "b1": "A1",
+            "b2": "P1",
+            "b3": "S1",
+            "b4": "I1",
+            "b5": "F1",
+            "b6": "L1",
+            "b7": "S2",
         }
         link_codes = conn.execute(
             select(toc_link.c.code).where(toc_link.c.task_id == task_id)
@@ -181,12 +187,19 @@ def test_codes_follow_the_layer_and_a_deleted_code_is_never_reused(
             conn,
             store.ChangeLog(),
             toc_box,
-            {"box_id": new_box, "task_id": task_id, "layer": "outcome_short", "text": "New",
-             "result_criteria": {}, "origin": "user"},
+            {
+                "box_id": new_box,
+                "task_id": task_id,
+                "layer": "outcome_short",
+                "text": "New",
+                "result_criteria": {},
+                "origin": "user",
+            },
         )
-        assert conn.execute(
-            select(toc_box.c.code).where(toc_box.c.box_id == new_box)
-        ).scalar_one() == "S3"
+        assert (
+            conn.execute(select(toc_box.c.code).where(toc_box.c.box_id == new_box)).scalar_one()
+            == "S3"
+        )
 
 
 def test_a_fold_keeps_the_user_edited_copy_of_a_doubled_link(
@@ -236,7 +249,16 @@ def test_merge_folds_boxes_first_and_the_thread_lists_it(
     sent = backend.inputs["merge"][0]["boxes"]
     assert {box["key"] for box in sent} >= {"b3", "b7"}
     assert _summary(engine, task_id, "toc_merge")["box_folds"] == 1
-    assert "Merged box “Behaviour shifts” into “Behaviour changes”" in _replies(engine, task_id)[-1]
+    # The thread gives the theory at a glance (round 6); the change list stays in the walk's events.
+    from policy_atlas.api.toc_start import check_changes
+    from tests.theory_of_change.test_walks import _walks
+
+    with engine.connect() as conn:
+        changes = check_changes(
+            conn, task_id=task_id, walk_id=_walks(engine, task_id)[-1].capability_run_id
+        )
+    assert "Merged box “Behaviour shifts” into “Behaviour changes”" in changes
+    assert _replies(engine, task_id)[-1].startswith("The evidence check is done.")
 
 
 # --- Crossref abstracts (C30) ------------------------------------------------------

@@ -166,6 +166,13 @@ export function tocGraphFixture(overrides: Partial<TocGraph> = {}): TocGraph {
     report: {
       title: "Food advert limits and childhood obesity",
       summary_text: "Removing adverts should cut snacking, but whether children see fewer adverts overall is the weakest step.",
+      verdict: {
+        verdict: "plausible_untested",
+        label: "Plausible, not yet tested",
+        headline: "Advert limits could reduce childhood obesity, but whether children see fewer adverts overall is untested.",
+        reason: "#3 is credible but its evidence is mixed.",
+        carrying_step: "#3",
+      },
       summary: {
         goal: "Fewer children in England living with obesity within five years",
         if_then_because:
@@ -173,23 +180,45 @@ export function tocGraphFixture(overrides: Partial<TocGraph> = {}): TocGraph {
         population: "children under 18 in England",
         time_horizon: "five years",
         directly_influenced: "outputs",
-        context: "Children watch most television outside children's programmes.",
-        weakest_links: "Whether fewer covered adverts mean children see fewer adverts overall (#3: not sure, mixed).",
+        context: "Children watch most television outside children's programmes [2].",
+        weakest_links: "",
       },
       pathways: [
-        { title: "Fewer adverts, less snacking", paragraph: "Removing covered adverts (A1 → P1) should cut children's exposure (S1) [1][2]." },
-        { title: "How it could fail", paragraph: "Advertising may move to spaces the rules do not cover (F1) [3]." },
+        {
+          pathway_id: pathwayId(1),
+          title: "Fewer adverts, less snacking",
+          strength: "Mixed",
+          paragraph: "Removing covered adverts (A1 → P1) should cut children's exposure (S1) [1][2].",
+        },
       ],
+      how_it_could_fail: "Advertising may move to spaces the rules do not cover (F1) [3].",
       assumptions: [
         {
           code: "#3",
-          statement: "Brands do not move their spend to brand-only ads",
+          statement: "If fewer covered adverts are shown, then children see fewer adverts overall",
+          conditions: ["Brands do not move their spend to brand-only ads"],
           kind: "assumption",
+          importance: "100% of pathways",
+          share: 1,
           verdict: "Mixed",
-          why: "Chile cut exposure; brands moved to brand-only ads",
+          verdict_rank: 3,
+          flag: true,
+          why: "Chile cut exposure [1]; brands moved to brand-only ads [3]",
           sources: [1, 3],
         },
-        { code: "F1", statement: "Marketing moves to unrestricted spaces", kind: "risk", verdict: "Mixed", why: "Seen after Chile's rules", sources: [3] },
+        {
+          code: "#5",
+          statement: "If marketing moves to unrestricted spaces, then exposure stays the same",
+          conditions: [],
+          kind: "risk",
+          importance: "Risk",
+          share: null,
+          verdict: "Leaning supports",
+          verdict_rank: 4,
+          flag: false,
+          why: "Seen after Chile's rules [3]",
+          sources: [3],
+        },
       ],
       tests: [
         {

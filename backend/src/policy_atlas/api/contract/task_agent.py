@@ -471,6 +471,24 @@ class ScopingPlanDraft(BaseModel):
     ready: bool = False
 
 
+class TocPlanPatch(BaseModel):
+    """Typed replace-field edits for a theory-of-change plan (task 054).
+
+    Omitted fields stay as they are; an empty string clears an optional field.
+    Allowed only until the draft is on the canvas (S7).
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    intended_change: str | None = Field(default=None, max_length=300)
+    target_population: str | None = Field(default=None, max_length=300)
+    intervention: str | None = Field(default=None, max_length=300)
+    dosage: str | None = Field(default=None, max_length=300)
+    where: str | None = Field(default=None, max_length=120)
+    time_horizon: str | None = Field(default=None, max_length=120)
+    context: str | None = Field(default=None, max_length=2000)
+
+
 class ScopingPlanPatch(BaseModel):
     """Typed replace-field edits for a scoping plan.
 
@@ -763,6 +781,8 @@ class PlanPatchIn(BaseModel):
         scoping: Options-scoping edits. Mutually exclusive with every field
             above: an Evidence search field on a scoping task, or `scoping` on
             an Evidence search task, is a 422.
+        toc: Theory-of-change edits (task 054), the same way: only on a
+            theory-of-change task, and alone.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -777,3 +797,4 @@ class PlanPatchIn(BaseModel):
     published_before: str | None = None
     geography: str | None = None
     scoping: ScopingPlanPatch | None = None
+    toc: TocPlanPatch | None = None

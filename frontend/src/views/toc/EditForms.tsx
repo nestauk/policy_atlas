@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { Button } from "../../ui/brand/Button";
-import type { Editor } from "./Editing";
+import { checkWords, type Editor, isQueued } from "./Editing";
 import { LAYER_LABEL } from "./tocModel";
 import type { BoxLayer, TocBox, TocGraph, TocLink } from "./types";
 
@@ -190,8 +190,8 @@ export function LinkEditForm({ link, editor, onDone }: { link: TocLink; editor: 
 
 /** "Needs evidence" with Find evidence, for connections no check has judged (C41, C40). */
 export function NeedsEvidence({ links, graph, editor }: { links: TocLink[]; graph: TocGraph; editor: Editor | null }) {
-  const running = graph.check_status === "drafting" || graph.check_status === "checking";
   const unchecked = links.filter((link) => link.state === "unchecked");
+  const ids = unchecked.map((link) => link.link_id);
   if (unchecked.length === 0) return null;
   return (
     <div className="mt-3 border-l-[3px] border-blue bg-blue-tint-2 px-3 py-2.5">
@@ -201,10 +201,10 @@ export function NeedsEvidence({ links, graph, editor }: { links: TocLink[]; grap
         <div className="mt-2">
           <Button
             size="sm"
-            disabled={editor.busy || running}
-            onClick={() => editor.run({ kind: "check", body: { link_ids: unchecked.map((link) => link.link_id), mode: "new_items" } })}
+            disabled={editor.busy || isQueued(graph, ids)}
+            onClick={() => editor.run({ kind: "check", body: { link_ids: ids, mode: "new_items" } })}
           >
-            {running ? "A check is running" : "Find evidence"}
+            {checkWords(graph, ids, "Find evidence")}
           </Button>
         </div>
       )}
