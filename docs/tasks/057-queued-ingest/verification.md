@@ -1116,7 +1116,22 @@ the round, 4.3 / 5.9 / 14.7 after; no test suite ran beside it.
 after the last document 0.9 / 56.2 / 12.5 s; requests 40 / 47 / 121; throttle sleeps 0 /
 9 (44.3 s) / 0; pool max width 8 / 7 / 8; `already_in_store` 82 / 50 / 43 (eligible 202 /
 267 / 270). Not like-for-like with round (g): more store reuse (53 / 38 / 30 there), different
-eligible sets, and NEET and zonal overlapped on ingest (183 s) and synthesise (243 s).
+eligible sets, and NEET and zonal overlapped on ingest (183 s) and synthesise (243 s). Also
+not like-for-like: six `capability_run` rows on other tasks started in the round's window
+(the builder's run table), and Langfuse holds 232 generations in the window from sessions
+outside the three runs, on `openai-direct` model names (`gpt-5.4-mini`, `gpt-5.6-luna`,
+`gpt-5.6-terra`): a second server on the dev database ran other work beside the round.
+
+**Failed-attempt rate per step, the three sessions only (Langfuse, read at the review):**
+screen_abstract 6 of 328 (1.8%), screen_full 1 of 101 (1.0%), classify_document 45 of 315
+(14.3%, the one 16 s burst), synthesise_section_turn 6 of 48 (12.5%), judge_grounding 6 of
+43 (14.0%), select_rerank 5 of 16 (31%), characterise_assign 3 of 10 (30%),
+write_block_summary 2 of 32 (6%). The judge and the screen steps run the same model
+(`gpt-6-luna`); the rate follows the healthy call's length, not the model: the steps whose
+healthy calls take 5 to 12 s (judge 5.5 s median, rerank and characterise 11 s, section
+turns 6.4 s on `gpt-6.1-terra`) lose 10 to 30% of attempts, the steps whose calls take 1 to
+2 s lose 1 to 2%. That is the shape of a hazard per second in flight (a connection or
+routing path that drops at some rate while a request is open), not of a per-request fault.
 
 **Per-document outcomes:** ingested 122 / 93 / 100, fetch_failed 71 / 118 / 143, parse_failed
 9 / 56 / 27, retryable 9 / 48 / 17; `not_ready`, `send_failed`, `worker_error`, `late`,
