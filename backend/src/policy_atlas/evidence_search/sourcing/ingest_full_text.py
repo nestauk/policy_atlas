@@ -16,10 +16,15 @@ fetch byte cap and the hard per-document parse timeout are guards that fail loud
 stays on the text in hand with a queryable, reason-coded ``full_text_status`` —
 nothing is dropped, nothing is silent (decision 3).
 
-Parse + segment run as a pure function in per-document worker processes that are
-genuinely terminable; fetch stays in the parent and workers receive primitives only
-(decision 8, adversarial findings 6 + 7). DB writes happen in the parent in
-eligible-set order, so the persisted outcome is independent of worker count.
+Task 057 (P8, P9): one document is handled by one call of
+``ingest_document.ingest_document`` (fetch, store-key lookup, parse in its own
+terminable process, one short write transaction). The stage below queues the
+eligible documents, sends one message per document to a queue client, waits for
+the documents to resolve, and embeds. The in-process client runs the function on a
+thread pool, one database connection per thread; the cloud client (Phase 4b) puts
+the messages on a queue that a function reads. Parse workers receive primitives
+only (decision 8, adversarial findings 6 + 7). Each document's text is decided by
+its own bytes, so the persisted outcome does not depend on the number of workers.
 """
 
 import functools
@@ -29,15 +34,14 @@ import re
 import threading
 import time
 import uuid
-from collections import deque
 from collections.abc import Callable, Iterable
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from contextlib import AbstractContextManager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from multiprocessing import get_context
-from multiprocessing.connection import wait as mp_wait
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 from urllib.parse import quote, unquote, urljoin, urlsplit
 
 import lxml.html  # type: ignore[import-untyped]
@@ -45,7 +49,7 @@ import pymupdf
 import pymupdf4llm  # type: ignore[import-untyped]
 import structlog
 import trafilatura
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.embeddings import (
@@ -53,19 +57,27 @@ from policy_atlas.core.embeddings import (
     StubEmbeddingBackend,
     embed_pending_chunks,
 )
-from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.liveness import publish_current_tick
-from policy_atlas.core.schema import (
-    chunk as chunk_table,
-)
+from policy_atlas.core.markup import strip_markup
 from policy_atlas.core.schema import (
     source_screening_result,
     source_snapshot,
     task_source_snapshot,
 )
-from policy_atlas.evidence_search.sourcing.parse_jats import parse_jats
+from policy_atlas.evidence_search.sourcing.parse_jats import (
+    JATS_PARSE_PROFILE,
+    JATS_SEGMENTATION_POLICY,
+    parse_jats,
+)
+
+if TYPE_CHECKING:
+    from policy_atlas.evidence_search.sourcing.ingest_queue import QueueClient, SendResult
 
 log = structlog.get_logger()
+
+#: Opens one short database transaction that commits when the block exits
+#: (``engine.begin`` in production; a savepoint on the test connection inline).
+ConnectFactory = Callable[[], AbstractContextManager[Connection]]
 
 
 def _install_deterministic_column_boxes() -> None:
@@ -106,19 +118,26 @@ PARSE_TIMEOUT_SECONDS = 120.0  # hard per-document parse timeout; worker is term
 THIN_TEXT_MIN_CHARS = 200  # below this, parsed text is a failure, never "ok" (decision 7)
 # Parse workers are separate processes doing CPU-bound work, so the width follows
 # the cores: 4 on the 2-vCPU staging task, up to 8 on a developer machine
-# (task 044 phase 8, owner 2026-09-17). Fetch threads are LIVE_FETCH_WORKERS.
+# (task 044 phase 8, owner 2026-09-17). In process (task 057) it is also the number
+# of threads that each fetch, parse and write one document at a time.
 DEFAULT_MAX_WORKERS = max(4, min(8, os.cpu_count() or 4))
-# LiveDocumentFetcher has the actual global/per-host semaphores; this pool only supplies threads.
-LIVE_FETCH_WORKERS = 10
-# How often the ingest loop looks at finished fetches while parse jobs run.
-_FETCH_POLL_SECONDS = 0.05
+# How often the stage reads the documents' statuses while they are being ingested.
+STAGE_POLL_SECONDS = 3.0
+# Task 057 (N2, D4): the per-document deadline, as a ``time.monotonic()`` value, for
+# the fetcher's waits (set by ``ingest_document`` around its fetches; None in
+# process). No wait or parse is started that would end within the margin of it.
+FETCH_DEADLINE: ContextVar[float | None] = ContextVar("fetch_deadline", default=None)
+DEADLINE_MARGIN_S = 5.0
 
-PDF_PARSE_PROFILE = "pymupdf4llm_v1"
-HTML_PARSE_PROFILE = "trafilatura_v1"
-PLAIN_PARSE_PROFILE = "plain_v1"
-PDF_SEGMENTATION_POLICY = "pymupdf4llm_struct_v1"
-HTML_SEGMENTATION_POLICY = "trafilatura_para_v1"
-PLAIN_SEGMENTATION_POLICY = "plain_para_v1"
+# Parse profile v2 (task 057, N7/D8): the same parsers and cuts as v1, with the markup
+# rule (``core.markup.strip_markup``) applied to every chunk's text and heading. The v1
+# names stay on the snapshots parsed under v1; the parser no longer stamps them.
+PDF_PARSE_PROFILE = "pymupdf4llm_v2"
+HTML_PARSE_PROFILE = "trafilatura_v2"
+PLAIN_PARSE_PROFILE = "plain_v2"
+PDF_SEGMENTATION_POLICY = "pymupdf4llm_struct_v2"
+HTML_SEGMENTATION_POLICY = "trafilatura_para_v2"
+PLAIN_SEGMENTATION_POLICY = "plain_para_v2"
 
 # Europe PMC JATS XML (task 056, N10/S7). The live fetcher never labels a body
 # with an XML type (it sniffs PDF / HTML / plain), so only the Europe PMC
@@ -141,10 +160,16 @@ _PMCID_LOOSE_RE = re.compile(r"(?:^|/)(?:PMC)?([0-9]{1,12})/?$", re.IGNORECASE)
 # Closed failure-reason vocabulary (contract decision 3). Presence on failure is
 # CHECK-enforced (ck_tss_full_text_error_presence); the values are code-enforced so
 # the list can grow at the live seam without a migration.
+#
+# Task 057 adds two reasons the stage writes, never the per-document function, and
+# neither is an access failure: ``not_ready`` (the document was still being read
+# when the stage stopped waiting; the next run tries it again) and ``send_failed``
+# (the queue refused the message).
 FAILURE_REASONS = (
     "no_url", "paywall", "not_found", "too_large", "timeout",
     "corrupt", "no_text_layer", "thin_text", "empty",
     "blocked", "blocked_by_host", "fetch_error", "unsupported_type",
+    "not_ready", "send_failed",
 )
 
 # Base content types that are never parseable text; anything here fails fast with
@@ -664,11 +689,36 @@ def discover_document_url(html_body: bytes, base_url: str) -> str | None:
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 
 
+def _strip_markup_lines(text: str) -> str:
+    """One line of text without markup; a ``<br>`` in it starts a new, trimmed line."""
+    return "\n".join(part for part in (p.strip() for p in strip_markup(text).split("\n")) if part)
+
+
+def _clean_heading(text: str) -> str:
+    """Heading text without markup, its whitespace collapsed to single spaces."""
+    return " ".join(strip_markup(text).split())
+
+
 def _segment_markdown_pages(pages: list[tuple[int, str]]) -> list[dict[str, Any]]:
     """Segment pymupdf4llm markdown into heading-bounded section + table chunks.
 
     Sections may span pages; each chunk's locator carries its page number(s) and
     the heading path in force (decision 7 — the provenance v2 threw away).
+
+    Parse profile v2 (task 057, N7): the markup rule runs on every line as it is
+    read, after the line has been recognised as a heading, a table row or body
+    text, so the structure (which lines are headings, which are tables) is decided
+    exactly as in v1. Body lines are cleaned with ``table=False`` (a ``<br>`` starts
+    a new line); a body line that is only markup (an image, say) is dropped. Table
+    rows are cleaned with ``table=True`` (a ``<br>`` becomes a space, so the row
+    stays one line). Heading text is cleaned before it goes into the locator.
+
+    Args:
+        pages: ``(page_number, markdown_text)`` pairs in reading order.
+
+    Returns:
+        Chunks as ``{"content": str, "locator": {"pages": [...], "heading_path":
+        [...]}}`` dicts, in reading order.
     """
     chunks: list[dict[str, Any]] = []
     heading_stack: list[str] = []  # index = heading level - 1
@@ -723,18 +773,21 @@ def _segment_markdown_pages(pages: list[tuple[int, str]]) -> list[dict[str, Any]
                 level = len(heading.group(1))
                 del heading_stack[level - 1:]
                 heading_stack.extend([""] * (level - 1 - len(heading_stack)))
-                heading_stack.append(heading.group(2))
+                heading_stack.append(_clean_heading(heading.group(2)))
                 continue
             if stripped.startswith("|"):
                 flush_paragraph()
-                table_lines.append(stripped)
+                table_lines.append(strip_markup(stripped, table=True).strip())
                 table_pages.add(page_no)
                 continue
             flush_table()
             if not stripped:
                 flush_paragraph()
                 continue
-            paragraph_lines.append(stripped)
+            cleaned = _strip_markup_lines(stripped)
+            if not cleaned:
+                continue  # the line was only markup
+            paragraph_lines.append(cleaned)
             section_pages.add(page_no)
     flush_table()
     flush_section()
@@ -774,9 +827,11 @@ def _parse_html(body: bytes) -> dict[str, Any]:
     extracted = trafilatura.extract(body, include_comments=False, include_tables=True)
     if not extracted or not extracted.strip():
         return {"status": "error", "reason": "empty"}
+    # Parse profile v2: the markup rule on each paragraph (a ``<br>`` inside one starts
+    # a new line within the same chunk); a paragraph that was only markup is dropped.
     chunks = [
         {"content": para, "locator": {"paragraph": i}}
-        for i, para in enumerate((p.strip() for p in extracted.splitlines()), start=1)
+        for i, para in enumerate((_strip_markup_lines(p) for p in extracted.splitlines()), start=1)
         if para
     ]
     return {
@@ -795,7 +850,12 @@ def _parse_plain(body: bytes) -> dict[str, Any]:
     text = _decode(body)
     if not text.strip():
         return {"status": "error", "reason": "empty"}
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    # Parse profile v2: the markup rule on each paragraph, line by line.
+    paragraphs = [
+        cleaned
+        for p in re.split(r"\n\s*\n", text)
+        if (cleaned := strip_markup(p.strip()).strip())
+    ]
     chunks = [
         {"content": para, "locator": {"paragraph": i}}
         for i, para in enumerate(paragraphs, start=1)
@@ -806,6 +866,38 @@ def _parse_plain(body: bytes) -> dict[str, Any]:
         "parse_profile": PLAIN_PARSE_PROFILE,
         "segmentation_policy": PLAIN_SEGMENTATION_POLICY,
     }
+
+
+def parse_profile_for(content_type: str) -> tuple[str, str]:
+    """Name the parse profile and segmentation policy a content type is parsed under.
+
+    The same choice :func:`parse_and_segment` makes, without parsing anything, so
+    the document store can be searched for an existing parse of the same bytes
+    (keyed by body hash, parse profile and segmentation policy) before parsing.
+
+    Args:
+        content_type: The fetched body's content type (parameters such as
+            ``; charset=utf-8`` are ignored, case does not matter).
+
+    Returns:
+        ``(parse_profile, segmentation_policy)``.
+
+    Raises:
+        ValueError: The content type is one :func:`parse_and_segment` refuses
+            without parsing (``image/``, ``audio/``, ``video/``, ``font/``,
+            ``model/``): no profile applies, and the outcome is
+            ``unsupported_type``.
+    """
+    base_type = content_type.split(";")[0].strip().lower()
+    if base_type.startswith(_NON_TEXT_TYPE_PREFIXES):
+        raise ValueError(f"unsupported_type: {base_type}")
+    if base_type == "application/pdf":
+        return PDF_PARSE_PROFILE, PDF_SEGMENTATION_POLICY
+    if base_type == "text/html":
+        return HTML_PARSE_PROFILE, HTML_SEGMENTATION_POLICY
+    if base_type in _JATS_CONTENT_TYPES:
+        return JATS_PARSE_PROFILE, JATS_SEGMENTATION_POLICY
+    return PLAIN_PARSE_PROFILE, PLAIN_SEGMENTATION_POLICY
 
 
 def parse_and_segment(body: bytes, content_type: str, thin_min: int) -> dict[str, Any]:
@@ -912,254 +1004,79 @@ _PARSE_CONTEXT: Any = None
 _PARSE_CONTEXT_LOCK = threading.Lock()
 
 
-class _ParseScheduler:
-    """Any-free-slot pool of per-document parse processes (task 056, N8).
-
-    Jobs wait in a queue; up to ``max_workers`` run at once, each in its own
-    process with its own deadline. ``collect`` waits on every running job's pipe
-    at once and takes whichever finishes first, so a slow document never holds
-    back the slots behind it (the previous loop waited on the oldest job). A pipe
-    becomes readable when the worker sends its result or dies (end of file), so a
-    child blocked sending a large payload is collected, never misread as a
-    timeout (adversarial finding 7). A job past its deadline with nothing to read
-    is terminated through ``_drain_parse_job`` (finding 6).
-
-    Each running job holds one of the process-wide ingest slots (task 045, S2),
-    so every walk in the process shares one budget of parse workers.
-
-    It also keeps the timing for the ``ingest.batch_handover`` log: when the
-    first job started, when the last result came back, and ``idle_slot_s``, the
-    slot-seconds a slot stood free while a fetched document waited in the queue
-    (this includes waits for a process-wide slot held by another walk).
-    """
-
-    def __init__(
-        self,
-        *,
-        max_workers: int,
-        parse_timeout: float,
-        thin_min: int,
-        parse_fn: Callable[[bytes, str, int], dict[str, Any]],
-    ) -> None:
-        """Set up an empty pool. No process starts until ``start``.
-
-        Args:
-            max_workers: Live-process bound.
-            parse_timeout: Per-document seconds, measured from that worker's start.
-            thin_min: Passed through to ``parse_fn``.
-            parse_fn: Top-level parse callable (test seam; the worker imports it
-                by reference, so it must be picklable).
-        """
-        self._max_workers = max_workers
-        self._parse_timeout = parse_timeout
-        self._thin_min = thin_min
-        self._parse_fn = parse_fn
-        self._ctx = _parse_process_context()
-        self._queue: deque[tuple[int, bytes, str]] = deque()
-        self._live: dict[Any, tuple[int, Any, float]] = {}  # recv pipe -> (idx, proc, started)
-        self._mark = time.monotonic()
-        self.idle_slot_s = 0.0
-        self.first_start: float | None = None
-        self.last_collect: float | None = None
-
-    @property
-    def busy(self) -> bool:
-        """True while any job is queued or running."""
-        return bool(self._queue or self._live)
-
-    @property
-    def live(self) -> bool:
-        """True while any job is running."""
-        return bool(self._live)
-
-    def _account(self) -> None:
-        now = time.monotonic()
-        free = self._max_workers - len(self._live)
-        self.idle_slot_s += (now - self._mark) * max(0, min(free, len(self._queue)))
-        self._mark = now
-
-    def submit(self, idx: int, body: bytes, content_type: str) -> None:
-        """Queue one job; ``start`` hands it to the next free slot."""
-        self._account()
-        self._queue.append((idx, body, content_type))
-
-    def start(self) -> None:
-        """Start queued jobs until every slot is busy or the queue is empty."""
-        # Imported here, not at module level: the slots module sizes itself
-        # from this module's constant.
-        from policy_atlas.runtime.walk_pool import INGEST_SLOTS
-
-        self._account()
-        while self._queue and len(self._live) < self._max_workers:
-            # Block for a slot only with nothing of our own in flight: a walk
-            # holding slots must drain its own jobs rather than wait on another
-            # walk that may be waiting on it.
-            if not INGEST_SLOTS.acquire(blocking=not self._live):
-                break
-            try:
-                idx, body, content_type = self._queue.popleft()
-                recv_conn, send_conn = self._ctx.Pipe(duplex=False)
-                proc = self._ctx.Process(
-                    target=_worker_entry,
-                    args=(send_conn, self._parse_fn, body, content_type, self._thin_min),
-                )
-                proc.start()
-            except BaseException:
-                INGEST_SLOTS.release()
-                raise
-            send_conn.close()  # parent keeps only the receive end
-            started = time.monotonic()
-            self._live[recv_conn] = (idx, proc, started)
-            if self.first_start is None:
-                self.first_start = started
-        self._mark = time.monotonic()
-
-    def collect(self, timeout: float | None) -> dict[int, dict[str, Any]]:
-        """Collect every job that finished, died or ran out of time.
-
-        Waits until any running job's pipe is readable, the earliest deadline
-        passes, or ``timeout`` seconds pass, whichever comes first.
-
-        Args:
-            timeout: Longest wait in seconds; ``None`` waits for the next job.
-
-        Returns:
-            index -> parse result (ok / error / ``timeout``) for each collected job.
-        """
-        from policy_atlas.runtime.walk_pool import INGEST_SLOTS
-
-        if not self._live:
-            return {}
-        self._account()
-        next_deadline = min(started for _, _, started in self._live.values()) + self._parse_timeout
-        wait_for = next_deadline - time.monotonic()
-        if timeout is not None:
-            wait_for = min(wait_for, timeout)
-        ready = set(mp_wait(list(self._live), timeout=max(wait_for, 0.0)))
-        self._account()
-        now = time.monotonic()
-        expired = [
-            conn
-            for conn, (_, _, started) in self._live.items()
-            if conn not in ready and now - started >= self._parse_timeout
-        ]
-        results: dict[int, dict[str, Any]] = {}
-        for conn in [*ready, *expired]:
-            idx, proc, started = self._live.pop(conn)
-            try:
-                results[idx] = _drain_parse_job(proc, conn, started, self._parse_timeout)
-            finally:
-                INGEST_SLOTS.release()
-        if results:
-            self.last_collect = time.monotonic()
-        return results
-
-    def close(self) -> None:
-        """Stop any job still running and give its slot back.
-
-        An exception mid-drain leaves live jobs holding slots: without this the
-        process-wide budget would shrink for good.
-        """
-        from policy_atlas.runtime.walk_pool import INGEST_SLOTS
-
-        self._queue.clear()
-        while self._live:
-            conn, (_idx, proc, _started) = self._live.popitem()
-            if proc.is_alive():
-                proc.kill()
-            proc.join()
-            conn.close()
-            INGEST_SLOTS.release()
-
-
-def _run_parse_jobs(
-    jobs: list[tuple[int, bytes, str]],
-    *,
-    max_workers: int,
-    parse_timeout: float,
-    thin_min: int,
+def run_parse_worker(
     parse_fn: Callable[[bytes, str, int], dict[str, Any]],
-) -> dict[int, dict[str, Any]]:
-    """Run parse jobs over a bounded pool of per-document worker processes.
-
-    Each job runs in its own ``multiprocessing.Process`` (forked from the
-    preloaded forkserver) so a timeout can genuinely ``terminate()`` it
-    (``ProcessPoolExecutor.cancel()`` cannot kill a running task — adversarial
-    finding 6). Whichever running job finishes first frees its slot for the next
-    job (``_ParseScheduler``). Workers receive primitives only (finding 7).
-
-    Args:
-        jobs: ``(index, body, content_type)`` triples.
-        max_workers: Live-process bound.
-        parse_timeout: Per-document seconds, measured from that worker's start.
-        thin_min: Passed through to ``parse_fn``.
-        parse_fn: Top-level parse callable (test seam for the timeout property —
-            workers import it by reference, so it must be picklable).
-
-    Returns:
-        index → parse result (ok / error / ``timeout``), in completion order.
-    """
-    scheduler = _ParseScheduler(
-        max_workers=max_workers, parse_timeout=parse_timeout, thin_min=thin_min, parse_fn=parse_fn
-    )
-    results: dict[int, dict[str, Any]] = {}
-    try:
-        for idx, body, content_type in jobs:
-            scheduler.submit(idx, body, content_type)
-        while scheduler.busy:
-            scheduler.start()
-            results.update(scheduler.collect(None))
-    finally:
-        scheduler.close()
-    return results
-
-
-def _drain_parse_job(
-    proc: Any, recv_conn: Any, started: float, parse_timeout: float
+    body: bytes,
+    content_type: str,
+    *,
+    thin_min: int,
+    timeout: float,
 ) -> dict[str, Any]:
-    """Collect one parse job's result, terminating it at its deadline.
+    """Parse one document in its own process, killing it if it runs out of time.
+
+    The process is forked from the preloaded forkserver (task 056, N8), so it
+    starts in milliseconds, and it is a real process, so a parser stuck in native
+    code can be terminated (adversarial finding 6). It receives primitives only
+    (finding 7). While it runs it holds one of the process-wide ingest slots
+    (task 045, S2), so every walk in the process shares one budget of parse
+    processes. The pipe is readable when the worker has sent its result or has
+    died, so a child busy sending a large result is never misread as a timeout.
 
     Args:
-        proc: The job's worker process.
-        recv_conn: The receive end of the job's pipe (closed here).
-        started: ``time.monotonic()`` at the job's start.
-        parse_timeout: Per-document seconds, measured from ``started``.
+        parse_fn: Top-level parse callable (a test seam; the worker imports it by
+            reference, so it must be picklable).
+        body: The fetched document bytes.
+        content_type: The body's content type.
+        thin_min: Passed through to ``parse_fn``.
+        timeout: Seconds the parse may run, from the worker's start.
 
     Returns:
-        The parse result (ok / error / ``timeout``).
+        The parse result: ok, a reason-coded error, or ``{"status": "error",
+        "reason": "timeout"}`` when the worker was killed.
     """
-    remaining = parse_timeout - (time.monotonic() - started)
-    # Poll even when the deadline has lapsed (max → non-blocking): a sibling job
-    # whose result is already buffered must never be misread as a timeout just
-    # because an earlier-submitted job consumed this loop's wall-clock (step-7
-    # review finding, confirmed).
-    result: dict[str, Any]
-    if recv_conn.poll(max(remaining, 0.0)):
+    # Imported here, not at module level: the slots module sizes itself from
+    # this module's constant.
+    from policy_atlas.runtime.walk_pool import INGEST_SLOTS
+
+    ctx = _parse_process_context()
+    with INGEST_SLOTS:
+        recv_conn, send_conn = ctx.Pipe(duplex=False)
+        proc = ctx.Process(
+            target=_worker_entry, args=(send_conn, parse_fn, body, content_type, thin_min)
+        )
         try:
-            result = recv_conn.recv()
-        except EOFError:  # worker died before sending (e.g. OOM-killed)
-            result = {"status": "error", "reason": "corrupt", "detail": "worker died"}
-        proc.join()
-    else:
-        proc.terminate()
-        proc.join(5.0)
-        if proc.is_alive():  # SIGTERM ignored/stuck in native code — escalate
-            proc.kill()
-            proc.join()
-        result = {"status": "error", "reason": "timeout"}
-    recv_conn.close()
+            proc.start()
+        finally:
+            send_conn.close()  # the parent keeps only the receive end
+        try:
+            result: dict[str, Any]
+            if recv_conn.poll(max(timeout, 0.0)):
+                try:
+                    result = recv_conn.recv()
+                except EOFError:  # the worker died before sending (e.g. OOM-killed)
+                    result = {"status": "error", "reason": "corrupt", "detail": "worker died"}
+                proc.join()
+            else:
+                result = {"status": "error", "reason": "timeout"}
+        finally:
+            recv_conn.close()
+            if proc.is_alive():
+                proc.terminate()
+                proc.join(5.0)
+                if proc.is_alive():  # SIGTERM ignored or stuck in native code: escalate
+                    proc.kill()
+                    proc.join()
     return result
 
 
-# --- Component ---
+# --- Per-document cascade state (used by ``ingest_document``) ---
 
 
 @dataclass
 class _DocState:
-    """Parent-side per-document cascade state."""
+    """One document's cascade state while ``ingest_document`` walks its candidates."""
 
     tss_id: uuid.UUID
-    envelope_snapshot_id: uuid.UUID
     metadata: dict[str, Any]
     urls: list[str]
     xml_pmcid: str | None = None  # set when ``urls[0]`` is the Europe PMC candidate
@@ -1170,48 +1087,13 @@ class _DocState:
     discovered_landing_urls: set[str] = field(default_factory=set)
     resolution: str | None = None  # "ingested" | "fetch_failed" | "parse_failed"
     reason: str | None = None
-    parsed: dict[str, Any] | None = None
     fetched_from: str | None = None
     content_type: str | None = None
 
 
-@dataclass
-class _IngestProgress:
-    """In-memory mirror of the run's ``full_text_status`` values, for progress ticks.
-
-    The store's statuses are written in one pass at the end (eligible-set order),
-    so the live counts are kept here as each outcome lands: documents already
-    ``ingested`` in the store count as fetched and parsed from the start; a
-    document counts as fetched once a body for it is in hand, and as parsed once
-    its parse resolves it to ``ingested`` (the status the write pass stores).
-    No database read per document (task 056, N9).
-
-    Args:
-        total: The eligible set's size (the stage's denominator).
-        already_ingested: Eligible documents already ``ingested`` in the store.
-    """
-
-    total: int
-    already_ingested: int
-    fetched_docs: set[int] = field(default_factory=set)
-    parsed_docs: set[int] = field(default_factory=set)
-
-    def publish(self) -> None:
-        """Publish one ``ingest`` tick carrying the current counts."""
-        fetched = self.already_ingested + len(self.fetched_docs)
-        parsed = self.already_ingested + len(self.parsed_docs)
-        publish_current_tick(
-            stage="ingest",
-            note=f"{parsed} of {self.total} read, {fetched} fetched.",
-            fetched=fetched,
-            parsed=parsed,
-            total=self.total,
-        )
-
-
 @dataclass(frozen=True)
-class _FetchRoundResult:
-    """Parent-thread result for one document's fetch walk in a cascade round."""
+class _FetchStep:
+    """One step of a document's fetch walk: the next body in hand, or none left."""
 
     body: bytes | None
     content_type: str
@@ -1275,7 +1157,19 @@ def _safe_fetch_xml(fetcher: DocumentFetcher, pmcid: str, *, tss_id: uuid.UUID) 
     return body
 
 
-def _fetch_doc_for_round(doc: _DocState, fetcher: DocumentFetcher) -> _FetchRoundResult:
+def _fetch_next_body(doc: _DocState, fetcher: DocumentFetcher) -> _FetchStep:
+    """Walk the document's remaining candidate URLs until one returns a body.
+
+    Records every failed attempt on ``doc``; when the candidates run out the
+    document is resolved ``fetch_failed`` with the highest-priority reason seen.
+
+    Args:
+        doc: The document's cascade state (advanced in place).
+        fetcher: The fetch seam.
+
+    Returns:
+        The body and its content type, or ``body=None`` when nothing was fetched.
+    """
     bytes_fetched = 0
     while doc.next_url < len(doc.urls):
         url = doc.urls[doc.next_url]
@@ -1304,7 +1198,7 @@ def _fetch_doc_for_round(doc: _DocState, fetcher: DocumentFetcher) -> _FetchRoun
                 url=_redact_url(url),
                 outcome="ok",
             )
-            return _FetchRoundResult(
+            return _FetchStep(
                 body=xml,
                 content_type=EUROPE_PMC_XML_CONTENT_TYPE,
                 bytes_fetched=bytes_fetched,
@@ -1336,7 +1230,7 @@ def _fetch_doc_for_round(doc: _DocState, fetcher: DocumentFetcher) -> _FetchRoun
                 url=_redact_url(url),
                 outcome="ok",
             )
-            return _FetchRoundResult(
+            return _FetchStep(
                 body=fetched,
                 content_type=content_type,
                 bytes_fetched=bytes_fetched,
@@ -1354,114 +1248,18 @@ def _fetch_doc_for_round(doc: _DocState, fetcher: DocumentFetcher) -> _FetchRoun
 
     doc.resolution = "fetch_failed"
     doc.reason = _highest_priority_fetch_reason(doc.fetch_failure_reasons)
-    return _FetchRoundResult(body=None, content_type="", bytes_fetched=bytes_fetched)
+    return _FetchStep(body=None, content_type="", bytes_fetched=bytes_fetched)
 
 
-def _drain_ready_parse_jobs(
-    scheduler: _ParseScheduler,
-    *,
-    timeout: float | None,
-    body_lengths: dict[int, int],
-    docs: list[_DocState],
-    fetcher: DocumentFetcher,
-    progress: _IngestProgress,
-) -> bool:
-    """Collect the parse jobs that finish within ``timeout`` and record them.
-
-    Each collected document's fetched body is released (``release_body``) and
-    removed from ``body_lengths``; the caller releases whatever is left there if
-    the round stops early. When any result is recorded, one ``ingest`` progress
-    tick is published with the updated counts.
-
-    Returns:
-        True if any parse result was recorded.
-    """
-    results = scheduler.collect(timeout)
-    for i, result in results.items():
-        _release_fetch_body(fetcher, body_lengths.pop(i))
-        doc = docs[i]
-        if result["status"] == "ok":
-            doc.resolution = "ingested"
-            doc.parsed = result
-            progress.parsed_docs.add(i)
-            continue
-        doc.attempts.append(f"{_redact_url(doc.fetched_from)}: {result['reason']}")
-        doc.reason = result["reason"]
-        log.info(
-            "fulltext.parse_failed",
-            tss_id=str(doc.tss_id),
-            url=_redact_url(doc.fetched_from),
-            reason=result["reason"],
-            detail=result.get("detail"),
-        )
-        if doc.next_url >= len(doc.urls):
-            doc.resolution = "parse_failed"
-        # else: unresolved — next round fetches the next candidate
-    if results:
-        progress.publish()
-    return bool(results)
+# --- The stage ---
 
 
-def ingest_full_text_sources(
-    conn: Connection,
-    *,
-    task_id: uuid.UUID,
-    run_id: uuid.UUID,
-    context: IngestFullTextContext,
-    fetcher: DocumentFetcher,
-    embedder: EmbeddingBackend | None = None,
-    max_workers: int = DEFAULT_MAX_WORKERS,
-    fetch_workers: int | None = None,
-    parse_timeout: float = PARSE_TIMEOUT_SECONDS,
-    thin_min: int = THIN_TEXT_MIN_CHARS,
-    parse_fn: Callable[[bytes, str, int], dict[str, Any]] = parse_and_segment,
-) -> dict[str, Any]:
-    """Ingest full text for a scope's screened-in acquired sources.
-
-    Resolves each eligible document's candidate URLs, walks the fetch cascade in
-    the parent, fans parse + segment out over bounded per-document worker
-    processes, and writes results in eligible-set order: success creates an
-    immutable ``full_text`` snapshot (+ chunks) linked via
-    ``full_text_snapshot_id``; failure records a reason-coded status on the link.
-    Re-runs skip ``ingested`` links and retry failed ones (decision 10).
-
-    Args:
-        conn: Open database connection; all writes occur within its transaction.
-        task_id: Owning task.
-        run_id: The run recorded in the snapshot's governance breadcrumbs.
-        context: Scope-level input naming the evidence scope.
-        fetcher: The ``DocumentFetcher`` seam implementation.
-        embedder: Optional embedding backend. Defaults to the deterministic stub.
-        max_workers: Bound on live worker processes.
-        fetch_workers: Bound on parent-side fetch threads. ``None`` resolves to
-            ``LIVE_FETCH_WORKERS`` for live fetchers and ``1`` for fixture replay.
-        parse_timeout: Hard per-document parse timeout in seconds.
-        thin_min: Thin-text guard threshold in characters.
-        parse_fn: Parse callable (test seam; must be a picklable top-level function).
-
-    Returns:
-        Counts dict: ``eligible``, ``attempted``, ``ingested``,
-        ``already_ingested``, ``fetch_failed``, ``parse_failed``,
-        ``by_reason``, ``by_route`` (this run's ingested documents by serving
-        route: ``europe_pmc_xml`` | ``pdf`` | ``html`` | ``plain``),
-        ``bytes_fetched``, ``wall_clock_s``, ``embed``
-        (invariant:
-        ``eligible == ingested + already_ingested + fetch_failed + parse_failed``).
-    """
-    started_at = time.monotonic()
-    if fetch_workers is None:
-        resolved_fetch_workers = LIVE_FETCH_WORKERS if fetcher.mode == "live" else 1
-    else:
-        resolved_fetch_workers = fetch_workers
-    if resolved_fetch_workers < 1:
-        raise ValueError("fetch_workers must be >= 1")
-
-    eligible_rows = conn.execute(
+def _eligible_rows(conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID) -> list[Any]:
+    """The stage's eligible set: the scope's stage-1 relevant acquired documents."""
+    return list(conn.execute(
         select(
             task_source_snapshot.c.task_source_snapshot_id,
-            task_source_snapshot.c.source_snapshot_id,
             task_source_snapshot.c.full_text_status,
-            source_snapshot.c.metadata,
         )
         .select_from(
             source_screening_result.join(
@@ -1470,13 +1268,9 @@ def ingest_full_text_sources(
                  == task_source_snapshot.c.task_source_snapshot_id)
                 & (source_screening_result.c.task_id
                    == task_source_snapshot.c.task_id),
-            ).join(
-                source_snapshot,
-                task_source_snapshot.c.source_snapshot_id
-                == source_snapshot.c.source_snapshot_id,
             )
         )
-        .where(source_screening_result.c.evidence_scope_id == context.scope_id)
+        .where(source_screening_result.c.evidence_scope_id == scope_id)
         .where(source_screening_result.c.status == "relevant")
         # Stage-1 relevant ONLY: stage 2 runs post-ingestion (it needs the full
         # text this component produces), so fetch must never consult stage-2
@@ -1488,211 +1282,292 @@ def ingest_full_text_sources(
         .where(task_source_snapshot.c.task_id == task_id)
         .where(task_source_snapshot.c.origin == "acquired")
         .order_by(task_source_snapshot.c.task_source_snapshot_id)
-    ).fetchall()
+    ).fetchall())
 
-    already_ingested = sum(1 for row in eligible_rows if row.full_text_status == "ingested")
-    # Europe PMC XML first (task 056, N10/S7) for documents with a PubMed Central
-    # id, then the PDF-first URL cascade unchanged; only when the fetcher offers
-    # the Europe PMC hook (the live fetcher does; fixture replay stays zero-egress).
-    xml_capable = callable(getattr(fetcher, "fetch_europe_pmc_xml", None))
-    docs: list[_DocState] = []
-    for row in eligible_rows:
-        if row.full_text_status == "ingested":
-            continue
-        doc = _DocState(
-            tss_id=row.task_source_snapshot_id,
-            envelope_snapshot_id=row.source_snapshot_id,
-            metadata=dict(row.metadata),
-            urls=candidate_urls(row.metadata),
-        )
-        xml = europe_pmc_candidate(doc.metadata) if xml_capable else None
-        if xml is not None:
-            doc.xml_pmcid, doc.xml_url = xml
-            doc.urls = [doc.xml_url, *(u for u in doc.urls if u != doc.xml_url)]
-        docs.append(doc)
 
-    progress = _IngestProgress(total=len(eligible_rows), already_ingested=already_ingested)
+def _close_queued(
+    connect: ConnectFactory, tss_ids: list[uuid.UUID], *, reason: str
+) -> list[uuid.UUID]:
+    """Mark the rows still ``queued`` among ``tss_ids`` as ``fetch_failed`` with ``reason``.
 
-    for doc in docs:
-        if not doc.urls:
-            # Durable state, distinguishable from not_attempted (adversarial finding 1)
-            doc.resolution, doc.reason = "fetch_failed", "no_url"
-            doc.fetch_failure_reasons.append("no_url")
+    One short committed transaction; the update is guarded on ``queued``, so a
+    row a worker resolved in the meantime keeps its own outcome.
 
-    # Cascade rounds: fetch in the parent, parse in workers; a parse failure with
-    # candidates remaining re-enters the next round on its next URL (decision 4).
-    # Within a round the hand-over is continuous (task 056, N8): each fetched body
-    # joins the parse queue as soon as its fetch finishes and takes the next free
-    # parse slot. (Before, bodies were handed over in batches of ``max_workers``
-    # and each batch was parsed to completion before the next was collected, so
-    # slots sat idle on a batch's slowest document while fetched bodies waited.)
-    bytes_fetched = 0
-    round_index = 0
-    while True:
-        unresolved = [
-            (i, doc)
-            for i, doc in enumerate(docs)
-            if doc.resolution is None
-        ]
-        if not unresolved:
-            break
-        round_started = time.monotonic()
-        fetch_done_at = round_started
-        parsed_any = False
-        handed = 0  # fetched bodies handed to parse this round
-        body_lengths: dict[int, int] = {}  # handed to parse, body not yet released
-        scheduler = _ParseScheduler(
-            max_workers=max_workers,
-            parse_timeout=parse_timeout,
-            thin_min=thin_min,
-            parse_fn=parse_fn,
-        )
-        with ThreadPoolExecutor(max_workers=resolved_fetch_workers) as executor:
-            future_to_index: dict[Future[_FetchRoundResult], int] = {
-                executor.submit(_fetch_doc_for_round, doc, fetcher): i
-                for i, doc in unresolved
-            }
-            pending = set(future_to_index)
-            try:
-                while pending or scheduler.busy:
-                    scheduler.start()
-                    if scheduler.live:
-                        # Wake for a finished parse at once; look at fetches at
-                        # least every poll interval while any are in flight.
-                        parsed_any = (
-                            _drain_ready_parse_jobs(
-                                scheduler,
-                                timeout=_FETCH_POLL_SECONDS if pending else None,
-                                body_lengths=body_lengths,
-                                docs=docs,
-                                fetcher=fetcher,
-                                progress=progress,
-                            )
-                            or parsed_any
-                        )
-                        done = {future for future in pending if future.done()}
-                    else:
-                        done, _ = wait(pending, return_when=FIRST_COMPLETED)
-                    pending -= done
-                    fetched_now = False
-                    for future in done:
-                        i = future_to_index[future]
-                        outcome = future.result()
-                        bytes_fetched += outcome.bytes_fetched
-                        if outcome.body is None:
-                            continue
-                        handed += 1
-                        body_lengths[i] = len(outcome.body)
-                        progress.fetched_docs.add(i)
-                        fetched_now = True
-                        scheduler.submit(i, outcome.body, outcome.content_type)
-                    if fetched_now:
-                        progress.publish()
-                    if done and not pending:
-                        fetch_done_at = time.monotonic()
-            finally:
-                scheduler.close()
-                for n_bytes in body_lengths.values():
-                    _release_fetch_body(fetcher, n_bytes)
-                body_lengths.clear()
-        # One line per round (owner, 2026-11-01): fetch wall = round start to the
-        # last fetch; parse wall = first parse start to the last result; idle gap =
-        # slot-seconds a parse slot stood free while a fetched body waited.
-        parse_started = scheduler.first_start or round_started
-        log.info(
-            "ingest.batch_handover",
-            batch=round_index,
-            documents=handed,
-            fetch_wall_s=round(fetch_done_at - round_started, 3),
-            parse_wall_s=round((scheduler.last_collect or parse_started) - parse_started, 3),
-            idle_gap_s=round(scheduler.idle_slot_s, 3),
-        )
-        round_index += 1
-        if not parsed_any:
-            break
-
-    # Writes, in eligible-set order (decision 8: deterministic regardless of
-    # completion order and worker count).
-    now = datetime.now(UTC)
-    counts = {"ingested": 0, "fetch_failed": 0, "parse_failed": 0}
-    by_reason: dict[str, int] = {}
-    by_route: dict[str, int] = {}
-    for doc in docs:
-        assert doc.resolution is not None  # every doc lands in exactly one bucket
-        if doc.resolution == "ingested":
-            assert doc.parsed is not None
-            chunks = doc.parsed["chunks"]
-            route = _route_of(doc.fetched_from, doc.xml_url, doc.content_type)
-            snapshot_id = uuid.uuid4()
-            conn.execute(
-                source_snapshot.insert().values(
-                    source_snapshot_id=snapshot_id,
-                    content_hash=content_hash("".join(c["content"] for c in chunks)),
-                    text_basis="full_text",
-                    source_locator=doc.fetched_from,
-                    metadata={
-                        # Required full-text snapshot metadata (adversarial
-                        # findings 3 + 8): parse identity + governance breadcrumbs.
-                        "parse_profile": doc.parsed["parse_profile"],
-                        "segmentation_policy": doc.parsed["segmentation_policy"],
-                        "fetched_from": doc.fetched_from,
-                        "content_type": doc.content_type,
-                        "source_kind": route,
-                        "envelope_source_snapshot_id": str(doc.envelope_snapshot_id),
-                        "ingested_by_run_id": str(run_id),
-                    },
-                    created_at=now,
-                )
-            )
-            for seq, chunk in enumerate(chunks, start=1):
-                conn.execute(
-                    chunk_table.insert().values(
-                        chunk_id=uuid.uuid4(),
-                        source_snapshot_id=snapshot_id,
-                        sequence=seq,
-                        content=chunk["content"],
-                        content_hash=content_hash(chunk["content"]),
-                        locator=chunk["locator"],
-                        segmentation_policy=doc.parsed["segmentation_policy"],
-                        created_at=now,
-                    )
-                )
-            conn.execute(
+    Returns:
+        The ids that were closed.
+    """
+    if not tss_ids:
+        return []
+    with connect() as c:
+        return list(
+            c.execute(
                 task_source_snapshot.update()
-                .where(task_source_snapshot.c.task_source_snapshot_id == doc.tss_id)
-                .values(
-                    full_text_snapshot_id=snapshot_id,
-                    full_text_status="ingested",
-                    full_text_error=None,
-                )
-            )
-            counts["ingested"] += 1
-            by_route[route] = by_route.get(route, 0) + 1
-            log.info(
-                "fulltext.ingested", tss_id=str(doc.tss_id), url=_redact_url(doc.fetched_from),
-                chunk_count=len(chunks),
-            )
-        else:
-            if doc.resolution == "fetch_failed":
-                _apply_oa_cross_check(doc)
-            # failure ⟺ closed-vocabulary reason (the CHECK enforces presence; the
-            # vocabulary is code-enforced here, as the FAILURE_REASONS comment claims)
-            assert doc.reason in FAILURE_REASONS, doc.reason
-            conn.execute(
-                task_source_snapshot.update()
-                .where(task_source_snapshot.c.task_source_snapshot_id == doc.tss_id)
+                .where(task_source_snapshot.c.task_source_snapshot_id.in_(tss_ids))
+                .where(task_source_snapshot.c.full_text_status == "queued")
                 .values(
                     full_text_snapshot_id=None,
-                    full_text_status=doc.resolution,
-                    full_text_error=doc.reason,
+                    full_text_status="fetch_failed",
+                    full_text_error=reason,
                 )
+                .returning(task_source_snapshot.c.task_source_snapshot_id)
+            ).scalars()
+        )
+
+
+def _status_counts(conn: Connection, tss_ids: list[uuid.UUID]) -> dict[str, int]:
+    """Count ``full_text_status`` over ``tss_ids`` (a fresh read: sees other commits)."""
+    if not tss_ids:
+        return {}
+    rows = conn.execute(
+        select(task_source_snapshot.c.full_text_status, func.count())
+        .where(task_source_snapshot.c.task_source_snapshot_id.in_(tss_ids))
+        .group_by(task_source_snapshot.c.full_text_status)
+    ).fetchall()
+    return {status: int(n) for status, n in rows}
+
+
+def ingest_full_text_sources(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: IngestFullTextContext,
+    fetcher: DocumentFetcher,
+    embedder: EmbeddingBackend | None = None,
+    queue: "QueueClient | None" = None,
+    connect: ConnectFactory | None = None,
+    stage_deadline_s: float | None = None,
+    parse_timeout: float = PARSE_TIMEOUT_SECONDS,
+    thin_min: int = THIN_TEXT_MIN_CHARS,
+    parse_fn: Callable[[bytes, str, int], dict[str, Any]] = parse_and_segment,
+    poll_interval_s: float = STAGE_POLL_SECONDS,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> dict[str, Any]:
+    """Ingest full text for a scope's screened-in acquired sources (task 057, P9).
+
+    One path in both ingest modes. In its own committed transaction the stage
+    sets every eligible document that is not yet ``ingested`` to ``queued`` (a
+    row left ``queued`` by a run that died is simply queued again), then sends
+    one message per document (the link row id and the run id, nothing else) to
+    ``queue``. The documents are fetched, parsed and written by
+    :func:`~policy_atlas.evidence_search.sourcing.ingest_document.ingest_document`,
+    each in its own short transaction. Meanwhile the stage polls the statuses on
+    ``conn`` (which sees the other connections' commits) and publishes the
+    ``ingest`` progress ticks. A document still ``queued`` when the stage stops
+    waiting becomes ``fetch_failed`` with reason ``not_ready``. The stage then
+    embeds the chunks of every ingested document that lack embeddings, and
+    returns the counts.
+
+    The stage stops waiting when no document is ``queued`` any more, or at
+    ``stage_deadline_s`` (queued mode). In process (``stage_deadline_s=None``)
+    the local queue client returns only once every document has been handled,
+    so there is nothing left to wait for.
+
+    Args:
+        conn: The component's connection; the eligible-set read, the polls and
+            the embedding pass run on it, inside its transaction.
+        task_id: Owning task.
+        run_id: The run, recorded on each ingested link row.
+        context: Scope-level input naming the evidence scope.
+        fetcher: The ``DocumentFetcher`` seam; used only by the default queue
+            client below.
+        embedder: Optional embedding backend. Defaults to the deterministic stub.
+        queue: Where the messages go. ``None`` (tests, direct calls) builds the
+            inline local client: every document is handled on the caller's thread
+            and on ``conn``, each in a savepoint.
+        connect: Opens a short transaction that commits on exit (``engine.begin``).
+            ``None`` uses a savepoint on ``conn``, to pair with the inline client.
+        stage_deadline_s: Seconds from the first send after which documents still
+            ``queued`` become ``not_ready``; ``None`` in process.
+        parse_timeout: Hard per-document parse timeout (default client only).
+        thin_min: Thin-text guard threshold (default client only).
+        parse_fn: Parse callable (default client only; a test seam).
+        poll_interval_s: Seconds between status polls.
+        clock: Monotonic clock (a test seam for the deadline).
+        sleep: Sleep function (a test seam for the deadline).
+
+    Returns:
+        Counts dict: ``eligible``, ``attempted`` (documents queued this run),
+        ``already_ingested``, ``ingested``, ``already_in_store`` (the part of
+        ``ingested`` whose parsed text was in the document store before this
+        stage began, so it was linked, not parsed again), ``fetch_failed``,
+        ``parse_failed``, ``by_reason``, ``by_route`` (this run's ingested
+        documents by serving route), ``bytes_fetched`` (``None`` when the queue
+        client cannot report it), ``wall_clock_s``, ``embed``. Invariant:
+        ``eligible == ingested + already_ingested + fetch_failed + parse_failed``.
+    """
+    from policy_atlas.evidence_search.sourcing.ingest_queue import (
+        LocalQueueClient,
+        inline_connect,
+        make_ingest_handler,
+        new_message,
+    )
+
+    started_at = clock()
+    stage_started = datetime.now(UTC)
+    if connect is None:
+        connect = inline_connect(conn)
+    if queue is None:
+        queue = LocalQueueClient(
+            make_ingest_handler(
+                fetcher, parse_fn=parse_fn, parse_timeout=parse_timeout, thin_min=thin_min
+            ),
+            connect,
+            workers=0,
+        )
+
+    eligible_ids = [
+        row.task_source_snapshot_id
+        for row in _eligible_rows(conn, task_id=task_id, scope_id=context.scope_id)
+    ]
+    eligible_set = set(eligible_ids)
+
+    # Queue every eligible row that is not yet ingested, committed BEFORE any send
+    # (a worker that starts at once must find its row ``queued``). Rows left
+    # ``queued`` by a run that died are among them: they are sent again.
+    queued: list[uuid.UUID] = []
+    orphans = 0
+    if eligible_ids:
+        with connect() as c:
+            orphans = int(
+                c.execute(
+                    select(func.count())
+                    .where(task_source_snapshot.c.task_source_snapshot_id.in_(eligible_ids))
+                    .where(task_source_snapshot.c.full_text_status == "queued")
+                ).scalar_one()
             )
-            counts[doc.resolution] += 1
-            by_reason[doc.reason] = by_reason.get(doc.reason, 0) + 1
-            log.info(
-                "fulltext.failed", tss_id=str(doc.tss_id), status=doc.resolution,
-                reason=doc.reason, attempts=doc.attempts,
+            queued_set = set(
+                c.execute(
+                    task_source_snapshot.update()
+                    .where(task_source_snapshot.c.task_source_snapshot_id.in_(eligible_ids))
+                    .where(task_source_snapshot.c.full_text_status != "ingested")
+                    .values(
+                        full_text_snapshot_id=None,
+                        full_text_status="queued",
+                        full_text_error=None,
+                    )
+                    .returning(task_source_snapshot.c.task_source_snapshot_id)
+                ).scalars()
             )
+        queued = [tss_id for tss_id in eligible_ids if tss_id in queued_set]
+    if orphans:
+        log.warning("ingest.orphans_requeued", count=orphans)
+    already_ingested = len(eligible_ids) - len(queued)
+    total = len(eligible_ids)
+
+    def publish(ingested_now: int) -> None:
+        # ``fetched`` cannot be observed on this path (the worker fetches and
+        # parses in one call); the web-api spec allows it to be null.
+        publish_current_tick(
+            stage="ingest",
+            note=f"{ingested_now} of {total} read.",
+            fetched=None,
+            parsed=ingested_now,
+            total=total,
+        )
+
+    # Send. The inline client runs every document on this thread and this
+    # connection, so it is called directly; any other client is called on a
+    # helper thread while this thread polls (the local thread-pool client
+    # returns only when every document is done, so the ticks come from here).
+    messages = [new_message(link_row_id=tss_id, run_id=run_id) for tss_id in queued]
+    send_box: dict[str, Any] = {}
+
+    def do_send() -> None:
+        try:
+            send_box["result"] = queue.send(messages)
+        except BaseException as exc:  # re-raised on the stage's thread
+            send_box["error"] = exc
+
+    sender: threading.Thread | None = None
+    if messages:
+        if isinstance(queue, LocalQueueClient) and queue.inline:
+            do_send()
+        else:
+            sender = threading.Thread(target=do_send, name="policy-atlas-ingest-send")
+            sender.start()
+
+    deadline = None if stage_deadline_s is None else clock() + stage_deadline_s
+    send_failures_closed = False
+    while True:
+        if sender is not None:
+            sender.join(timeout=poll_interval_s)
+        send_done = sender is None or not sender.is_alive()
+        if send_done and "error" in send_box:
+            raise send_box["error"]
+        send_result: SendResult | None = send_box.get("result")
+        if send_done and not send_failures_closed:
+            send_failures_closed = True
+            if send_result is not None and send_result.failed:
+                # A message the queue refused never reaches a worker: its row
+                # is closed now rather than waiting for the deadline.
+                closed = _close_queued(
+                    connect, [uuid.UUID(i) for i in send_result.failed], reason="send_failed"
+                )
+                log.warning("ingest.send_failed", count=len(closed))
+        counts_now = _status_counts(conn, eligible_ids)
+        publish(counts_now.get("ingested", 0))
+        if send_done and counts_now.get("queued", 0) == 0:
+            break
+        if deadline is None and send_done:
+            break  # in process: nothing is left that could still finish a row
+        if deadline is not None and clock() >= deadline:
+            break
+        if send_done:
+            sleep(poll_interval_s)
+
+    send_result = send_box.get("result")
+    # Rows still ``queued`` now: past the deadline, or (in process) left by a
+    # handler that never wrote. A late result cannot flip them back (the
+    # function's write is guarded on ``queued``); its snapshot joins the store.
+    not_ready = _close_queued(connect, queued, reason="not_ready")
+    if not_ready:
+        log.warning("ingest.not_ready", count=len(not_ready))
+
+    # Final read of this run's rows, with the snapshot each ingested row links.
+    rows = conn.execute(
+        select(
+            task_source_snapshot.c.task_source_snapshot_id,
+            task_source_snapshot.c.full_text_status,
+            task_source_snapshot.c.full_text_error,
+            task_source_snapshot.c.full_text_snapshot_id,
+            source_snapshot.c.created_at,
+            source_snapshot.c.metadata,
+        )
+        .select_from(
+            task_source_snapshot.outerjoin(
+                source_snapshot,
+                task_source_snapshot.c.full_text_snapshot_id
+                == source_snapshot.c.source_snapshot_id,
+            )
+        )
+        .where(task_source_snapshot.c.task_source_snapshot_id.in_(eligible_ids))
+    ).fetchall() if eligible_ids else []
+    queued_set = set(queued)
+    counts = {"ingested": 0, "already_in_store": 0, "fetch_failed": 0, "parse_failed": 0}
+    by_reason: dict[str, int] = {}
+    by_route: dict[str, int] = {}
+    ingested_snapshot_ids: list[uuid.UUID] = []
+    for row in rows:
+        if row.full_text_snapshot_id is not None:
+            ingested_snapshot_ids.append(row.full_text_snapshot_id)
+        if row.task_source_snapshot_id not in queued_set:
+            continue  # already ingested before this run
+        status = row.full_text_status
+        if status == "ingested":
+            counts["ingested"] += 1
+            if row.created_at is not None and row.created_at < stage_started:
+                counts["already_in_store"] += 1
+            route = (row.metadata or {}).get("source_kind") or "plain"
+            by_route[route] = by_route.get(route, 0) + 1
+        elif status in ("fetch_failed", "parse_failed"):
+            counts[status] += 1
+            reason = row.full_text_error
+            by_reason[reason] = by_reason.get(reason, 0) + 1
+        else:  # cannot happen: every queued row was closed above
+            raise RuntimeError(f"ingest left a row in status {status!r}")
+    assert eligible_set == {row.task_source_snapshot_id for row in rows}
 
     if embedder is None:
         embedder = StubEmbeddingBackend()
@@ -1701,17 +1576,22 @@ def ingest_full_text_sources(
         embedder=embedder,
         task_id=task_id,
         run_id=run_id,
+        snapshot_ids=ingested_snapshot_ids,
     )
 
     summary = {
-        "eligible": len(eligible_rows),
-        "attempted": len(docs),
+        "eligible": total,
+        "attempted": len(queued),
         "already_ingested": already_ingested,
         **counts,
         "by_reason": by_reason,
         "by_route": by_route,
-        "bytes_fetched": bytes_fetched,
-        "wall_clock_s": round(time.monotonic() - started_at, 2),
+        "bytes_fetched": (
+            sum(outcome.bytes_fetched for outcome in send_result.outcomes)
+            if send_result is not None and send_result.outcomes is not None
+            else (0 if not messages else None)
+        ),
+        "wall_clock_s": round(clock() - started_at, 2),
         "embed": embed_counts,
     }
     log.info("fulltext.summary", **summary)

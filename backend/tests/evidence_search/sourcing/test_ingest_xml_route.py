@@ -72,7 +72,6 @@ def _run(
         run_id=run_id,
         context=IngestFullTextContext(scope_id=scope_id, intent="test", context={}),
         fetcher=fetcher,
-        max_workers=2,
         parse_timeout=300.0,
     )
 
@@ -212,7 +211,7 @@ def test_xml_missing_or_unparseable_falls_back_to_pdf(
     snap, chunks = _full_text(conn, tss_id)
     assert snap.source_locator == FIXTURE_PDF_URL
     assert snap.metadata["source_kind"] == "pdf"
-    assert snap.metadata["parse_profile"] == "pymupdf4llm_v1"
+    assert snap.metadata["parse_profile"] == "pymupdf4llm_v2"
     assert chunks
 
 

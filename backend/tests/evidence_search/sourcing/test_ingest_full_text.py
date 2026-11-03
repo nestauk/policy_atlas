@@ -9,7 +9,6 @@ import re
 import socket
 import time
 import uuid
-from collections.abc import Generator
 from pathlib import Path
 from typing import Any, cast
 
@@ -21,11 +20,10 @@ from sqlalchemy.exc import IntegrityError
 from structlog.testing import capture_logs
 
 from policy_atlas.core import events
-from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.inference import StubEchoProvider
+from policy_atlas.core.markup import strip_markup
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.schema import (
-    event_log,
     metadata,
     source_appraisal_result,
     source_classification_result,
@@ -45,10 +43,15 @@ from policy_atlas.evidence_search.sourcing.ingest_full_text import (
     FixtureFetcher,
     IngestFullTextContext,
     _highest_priority_fetch_reason,
-    _run_parse_jobs,
     candidate_urls,
     ingest_full_text_sources,
     parse_and_segment,
+    parse_profile_for,
+    run_parse_worker,
+)
+from policy_atlas.evidence_search.sourcing.ingest_queue import (
+    LocalQueueClient,
+    make_ingest_handler,
 )
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
@@ -174,9 +177,13 @@ def run_ingest(
     scope_id: uuid.UUID,
     **kwargs: Any,
 ) -> dict[str, Any]:
-    """Run ingest_full_text_sources over the fixture fetcher with test-friendly defaults."""
+    """Run ingest_full_text_sources over the fixture fetcher with test-friendly defaults.
+
+    Without ``queue``/``connect`` the stage runs inline: every document on this
+    connection, each write in a savepoint, so the rolled-back ``conn`` fixture
+    still rolls everything back (task 057).
+    """
     kwargs.setdefault("fetcher", FixtureFetcher())
-    kwargs.setdefault("max_workers", 4)
     # Generous test-only headroom: outcome-distribution assertions must not flip on
     # machine load (4 concurrent parses + whatever else the host runs). Timeout
     # *semantics* are covered by the dedicated timeout test; the product default
@@ -189,6 +196,26 @@ def run_ingest(
         context=IngestFullTextContext(scope_id=scope_id, intent="test", context={}),
         **kwargs,
     )
+
+
+def local_queue(
+    engine: Engine,
+    *,
+    workers: int,
+    fetcher: Any = None,
+    parse_fn: Any = parse_and_segment,
+    parse_timeout: float = 300.0,
+) -> LocalQueueClient:
+    """The in-process queue client on real threads, each with its own connections.
+
+    Only for committed data: the worker threads cannot see a test's uncommitted rows.
+    """
+    handler = make_ingest_handler(
+        fetcher if fetcher is not None else FixtureFetcher(),
+        parse_fn=parse_fn,
+        parse_timeout=parse_timeout,
+    )
+    return LocalQueueClient(handler, engine.begin, workers)
 
 
 class _ScriptedFetcher:
@@ -307,10 +334,6 @@ def _corpus_state(conn: Connection, task_id: uuid.UUID) -> list[tuple[Any, ...]]
                 ).fetchall()
             ]
         meta = dict(ft_meta) if ft_meta is not None else None
-        if meta is not None:
-            # ids/run breadcrumbs differ across tasks by construction
-            meta.pop("envelope_source_snapshot_id", None)
-            meta.pop("ingested_by_run_id", None)
         state.append((env_hash, status, error, ft_hash, ft_locator, meta, tuple(chunks)))
     return sorted(state, key=lambda t: t[0])
 
@@ -319,26 +342,6 @@ def _summary_without_wall_clock(summary: dict[str, Any]) -> dict[str, Any]:
     comparable = dict(summary)
     comparable.pop("wall_clock_s", None)
     return comparable
-
-
-# --- Fan-out determinism, timeout termination, zero egress (lead-authored) ---
-
-
-def test_fanout_determinism_workers_1_vs_4(
-    ingested_corpus: CorpusFixture, engine: Engine, conn: Connection
-) -> None:
-    """workers=1 and workers=4 produce identical DB state (decision 8).
-
-    Rides the module fixture (already run at workers=1) as one leg instead of
-    paying for a second full 24-document run; only the workers=4 leg is fresh.
-    """
-    fixture_task, _, _, fixture_summary, _ = ingested_corpus
-    p4, r4, s4 = seed_corpus(conn)
-    summary4 = run_ingest(conn, p4, r4, s4, max_workers=4)
-    assert _summary_without_wall_clock(fixture_summary) == _summary_without_wall_clock(summary4)
-    with engine.connect() as conn_a:
-        state_a = _corpus_state(conn_a, fixture_task)
-    assert state_a == _corpus_state(conn, p4)
 
 
 def _slow_parse(body: bytes, content_type: str, thin_min: int) -> dict[str, Any]:
@@ -361,7 +364,7 @@ def test_parse_timeout_terminates_worker_and_run_completes(conn: Connection) -> 
     start = time.monotonic()
     summary = run_ingest(
         conn, task_id, run_id, scope_id,
-        max_workers=2, parse_timeout=1.0, parse_fn=_slow_parse,
+        parse_timeout=1.0, parse_fn=_slow_parse,
     )
     elapsed = time.monotonic() - start
     assert elapsed < 45, f"run took {elapsed:.0f}s — workers were not terminated"
@@ -388,72 +391,6 @@ def _sleep_by_marker_parse(body: bytes, content_type: str, thin_min: int) -> dic
             "parse_profile": "p", "segmentation_policy": "s"}
 
 
-def test_timeout_does_not_swallow_completed_sibling() -> None:
-    """A fast job co-started with a genuinely-hung sibling keeps its result
-    (step-7 review finding, confirmed): the drain loop blocks on the hung job's
-    whole budget, so by the time the fast job is dequeued its own deadline has
-    lapsed — its buffered ``ok`` must still be received, never mislabelled
-    ``timeout``.
-    """
-    import multiprocessing
-
-    # parse_timeout must comfortably exceed worker spawn + package import
-    # (~1s idle, >5s under heavy host load — observed 017): the deadline clock
-    # starts at proc.start(), so too tight a budget mislabels a healthy fast
-    # worker as the timeout this test exists to rule out. 20s keeps the
-    # property intact — the fast job's deadline still lapses while the hung
-    # sibling drains — with spawn headroom.
-    results = _run_parse_jobs(
-        [(0, b"slow", "text/plain"), (1, b"fast", "text/plain")],
-        max_workers=2, parse_timeout=20.0, thin_min=0, parse_fn=_sleep_by_marker_parse,
-    )
-    assert results[0] == {"status": "error", "reason": "timeout"}
-    assert results[1]["status"] == "ok"
-    for proc in multiprocessing.active_children():
-        proc.join(timeout=5)
-    assert not multiprocessing.active_children(), "worker processes leaked"
-
-
-def _release_by_marker_parse(
-    body: bytes, content_type: str, thin_min: int  # noqa: ARG001
-) -> dict[str, Any]:
-    """Picklable double: ``slow:<dir>`` returns once ``a``, ``b`` and ``c`` have run.
-
-    The body is ``<kind>:<dir>``. A quick job touches ``<dir>/done-<kind>`` and
-    returns; the slow job waits for all three sentinels, then a second more so their
-    results reach the parent first. No fixed sleep: a 4 s and then a 10 s sleep both
-    lost to the forkserver's per-job start under a loaded suite (task 056, 2026-11-02,
-    four times), and the property is the order, not a duration.
-    """
-    kind, _, folder = body.decode().partition(":")
-    if kind == "slow":
-        deadline = time.monotonic() + 60
-        while time.monotonic() < deadline:
-            if all((Path(folder) / f"done-{quick}").exists() for quick in "abc"):
-                break
-            time.sleep(0.05)
-        time.sleep(1.0)
-    else:
-        (Path(folder) / f"done-{kind}").touch()
-    return {"status": "ok", "chunks": [{"content": kind, "locator": {}}],
-            "parse_profile": "p", "segmentation_policy": "s"}
-
-
-def test_slow_first_job_does_not_delay_later_jobs(tmp_path: Path) -> None:
-    """Any-free-slot draining (task 056, N8): a slow job at the head of the queue
-    holds only its own slot; the jobs behind it finish first, through the other
-    slot, from the preloaded forkserver."""
-    assert ingest_full_text._parse_process_context().get_start_method() == "forkserver"
-    marked = [(0, "slow"), (1, "a"), (2, "b"), (3, "c")]
-    results = _run_parse_jobs(
-        [(i, f"{kind}:{tmp_path}".encode(), "text/plain") for i, kind in marked],
-        max_workers=2, parse_timeout=60.0, thin_min=0, parse_fn=_release_by_marker_parse,
-    )
-    # results come back in completion order
-    assert list(results) == [1, 2, 3, 0]
-    assert all(r["status"] == "ok" for r in results.values())
-
-
 # Openly licensed committed fixtures (licences in tests/data/fulltext_manifest.json):
 # three CC-BY-4.0 articles and the CC0 generated corrupt PDF (error path).
 _BYTE_IDENTITY_FILES = (
@@ -462,11 +399,13 @@ _BYTE_IDENTITY_FILES = (
     "plos_food_environment_review.pdf",
     "derived_corrupt.pdf",
 )
-# SHA-256 of the parse results below as produced by the scheduler BEFORE task 056
-# (spawn start method, in-order draining; commit 35c92e59) at workers 1 and 4, and by
-# an in-process parse_and_segment. A pymupdf4llm/pymupdf/trafilatura upgrade may move
-# it: re-derive it with the old scheduler only if the in-process leg also changed.
-_BYTE_IDENTITY_DIGEST = "15f69fc20ab88c0d21ad866686e26da009a0f65e52b6587b74b2f108787078b9"
+# SHA-256 of the parse results below under parse profile v2 (task 057, N7: the markup
+# rule at segmentation), from an in-process parse_and_segment, equal at workers 1 and 4.
+# The v1 digest (scheduler before task 056, commit 35c92e59, same at workers 1 and 4)
+# was 15f69fc20ab88c0d21ad866686e26da009a0f65e52b6587b74b2f108787078b9. A
+# pymupdf4llm/pymupdf/trafilatura upgrade may move it: re-derive it from the
+# in-process leg and check the workers legs still equal it.
+_BYTE_IDENTITY_DIGEST = "c84804da2ebe3e77f98e2a5a51cb9f3b6600e3b42bd85469b113071d517c2c78"
 
 
 def _results_digest(results: dict[int, dict[str, Any]]) -> str:
@@ -476,43 +415,231 @@ def _results_digest(results: dict[int, dict[str, Any]]) -> str:
     return hashlib.sha256(json.dumps(ordered, sort_keys=True).encode()).hexdigest()
 
 
-def test_scheduler_output_is_byte_identical_workers_1_vs_4() -> None:
-    """The scheduler changes nothing in the output (task 056, N8): chunk text,
-    locators, parse profile and status are identical at workers 1 and 4, equal to
-    an in-process parse, and equal to the old scheduler's committed digest."""
+def test_parse_worker_output_is_byte_identical_serial_and_concurrent() -> None:
+    """Task 057 (N6; replaces the task 056 scheduler test): a parse in its own
+    worker process gives exactly the in-process result, whether the documents are
+    parsed one at a time or four at once on four threads (the in-process queue's
+    shape), and equals the committed parse profile v2 digest."""
+    from concurrent.futures import ThreadPoolExecutor
+
     fulltext_dir = Path(__file__).resolve().parents[2] / "data" / "fulltext"
     jobs = [
         (i, (fulltext_dir / name).read_bytes(), "application/pdf")
         for i, name in enumerate(_BYTE_IDENTITY_FILES)
     ]
-    in_process = {
-        i: parse_and_segment(body, ct, ingest_full_text.THIN_TEXT_MIN_CHARS)
-        for i, body, ct in jobs
-    }
-    for workers in (1, 4):
-        results = _run_parse_jobs(
-            jobs, max_workers=workers, parse_timeout=300.0,
-            thin_min=ingest_full_text.THIN_TEXT_MIN_CHARS,
-            parse_fn=parse_and_segment,
-        )
-        assert results == in_process, f"workers={workers}"
+    thin = ingest_full_text.THIN_TEXT_MIN_CHARS
+    in_process = {i: parse_and_segment(body, ct, thin) for i, body, ct in jobs}
+
+    def parse(job: tuple[int, bytes, str]) -> dict[str, Any]:
+        _, body, ct = job
+        return run_parse_worker(parse_and_segment, body, ct, thin_min=thin, timeout=300.0)
+
+    serial = {i: parse((i, body, ct)) for i, body, ct in jobs}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        concurrent = dict(zip([i for i, _, _ in jobs], pool.map(parse, jobs), strict=True))
+    assert serial == in_process
+    assert concurrent == in_process
     assert [r["status"] for _, r in sorted(in_process.items())] == ["ok", "ok", "ok", "error"]
+    assert in_process[0]["parse_profile"] == "pymupdf4llm_v2"
     assert _results_digest(in_process) == _BYTE_IDENTITY_DIGEST
 
 
-def test_batch_handover_logged_per_round(conn: Connection) -> None:
-    """One ``ingest.batch_handover`` line per cascade round with the hand-over timings."""
+def test_hung_parse_does_not_hold_back_a_concurrent_one() -> None:
+    """Task 057 (replaces the task 056 drain tests): each parse is its own process
+    with its own clock, so a hung parse on one thread is killed at its own timeout
+    while a parse started beside it returns its result, and no process is left."""
+    import multiprocessing
+    from concurrent.futures import ThreadPoolExecutor
+
+    finished: dict[str, float] = {}
+
+    def parse(body: bytes, timeout: float) -> dict[str, Any]:
+        result = run_parse_worker(
+            _sleep_by_marker_parse, body, "text/plain", thin_min=0, timeout=timeout
+        )
+        finished[body.decode()] = time.monotonic()
+        return result
+
+    # Warm the forkserver first: its first start imports the parsers (seconds
+    # under a loaded suite), which would otherwise land on the fast job's clock.
+    assert parse(b"warm", 60.0)["status"] == "ok"
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        slow = pool.submit(parse, b"slow", 8.0)
+        fast = pool.submit(parse, b"fast", 60.0)
+        assert slow.result() == {"status": "error", "reason": "timeout"}
+        assert fast.result()["status"] == "ok"
+    assert finished["fast"] < finished["slow"]
+    for proc in multiprocessing.active_children():
+        proc.join(timeout=5)
+    assert not multiprocessing.active_children(), "worker processes leaked"
+
+
+def test_local_queue_slow_document_holds_only_its_own_thread() -> None:
+    """Task 057 (replaces the any-free-slot test): with two threads, a slow first
+    document holds one thread; the three behind it all finish on the other."""
+    import threading
+
+    order: list[str] = []
+    quick_done = threading.Event()
+
+    def handler(connect: Any, message: Any) -> Any:  # noqa: ARG001
+        kind = message["link_row_id"]
+        if kind == "slow":
+            assert quick_done.wait(30), "the quick documents waited behind the slow one"
+        order.append(kind)
+        if len(order) == 3 and "slow" not in order:
+            quick_done.set()
+        return kind
+
+    client = LocalQueueClient(handler, connect=lambda: None, workers=2)  # type: ignore[arg-type, return-value]
+    result = client.send(
+        [{"link_row_id": kind, "run_id": "r", "schema": 1} for kind in ("slow", "a", "b", "c")]
+    )
+    assert order == ["a", "b", "c", "slow"]
+    assert result.sent == ["slow", "a", "b", "c"]
+    assert result.outcomes == cast(Any, ["slow", "a", "b", "c"])  # in message order
+
+
+def test_local_queue_raises_a_handler_error_after_the_rest_finish() -> None:
+    """A handler error (a configuration error such as a missing fixture corpus)
+    fails the send loudly, but only once every other document has been handled."""
+    handled: list[str] = []
+
+    def handler(connect: Any, message: Any) -> Any:  # noqa: ARG001
+        if message["link_row_id"] == "bad":
+            raise FileNotFoundError("corpus")
+        handled.append(message["link_row_id"])
+        return None
+
+    client = LocalQueueClient(handler, connect=lambda: None, workers=2)  # type: ignore[arg-type, return-value]
+    with pytest.raises(FileNotFoundError):
+        client.send(
+            [{"link_row_id": k, "run_id": "r", "schema": 1} for k in ("bad", "a", "b", "c")]
+        )
+    assert sorted(handled) == ["a", "b", "c"]
+
+
+def test_document_log_carries_fetch_and_parse_timings(conn: Connection) -> None:
+    """Task 057 (replaces the per-round ``ingest.batch_handover`` line, whose rounds
+    are gone): each document's outcome line carries its fetch and parse seconds."""
     task_id, run_id, scope_id = seed_small_corpus(conn)
     with capture_logs() as logs:
-        run_ingest(conn, task_id, run_id, scope_id, max_workers=2, parse_fn=_ok_parse)
-    handovers = [e for e in logs if e["event"] == "ingest.batch_handover"]
-    assert handovers
-    assert [e["batch"] for e in handovers] == list(range(len(handovers)))
-    # round 0 hands over the 3 bodies that fetch (the 4th link is a 404)
-    assert handovers[0]["documents"] == 3
-    for e in handovers:
-        assert {"fetch_wall_s", "parse_wall_s", "idle_gap_s"} <= e.keys()
-        assert e["idle_gap_s"] >= 0
+        run_ingest(conn, task_id, run_id, scope_id, parse_fn=_ok_parse)
+    lines = [e for e in logs if e["event"] in ("fulltext.ingested", "fulltext.failed")]
+    assert len(lines) == 4
+    for line in lines:
+        assert line["fetch_s"] >= 0 and line["parse_s"] >= 0
+    assert all(line["parse_s"] > 0 for line in lines if line["event"] == "fulltext.ingested")
+
+
+# --- Parse profile v2 on the committed fixture corpus (task 057, N7 and D8) ---
+
+
+def _fixture_corpus_documents() -> list[tuple[Path, str]]:
+    data_dir = Path(__file__).resolve().parents[2] / "data"
+    manifest = json.loads((data_dir / "fulltext_manifest.json").read_text())["documents"]
+    docs = [
+        (data_dir / "fulltext" / name, str(meta["content_type"]))
+        for name, meta in sorted(manifest.items())
+        if (data_dir / "fulltext" / name).exists()
+    ]
+    return docs + [(path, "application/xml") for path in sorted((data_dir / "jats").glob("*.xml"))]
+
+
+def _parse_recording_pages(
+    body: bytes, content_type: str
+) -> tuple[dict[str, Any], list[tuple[int, str]] | None]:
+    """``parse_and_segment``, plus the markdown pages its segmenter was given (PDF, JATS)."""
+    seen: list[list[tuple[int, str]]] = []
+    real_segment = ingest_full_text._segment_markdown_pages
+
+    def recording(pages: list[tuple[int, str]]) -> list[dict[str, Any]]:
+        seen.append(list(pages))
+        return real_segment(pages)
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(ingest_full_text, "_segment_markdown_pages", recording)
+        result = parse_and_segment(body, content_type, ingest_full_text.THIN_TEXT_MIN_CHARS)
+    return result, (seen[0] if seen else None)
+
+
+def _segment_v1(pages: list[tuple[int, str]]) -> list[dict[str, Any]]:
+    """Parse profile v1's cut of the same pages: v2 with the markup rule switched off."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(ingest_full_text, "strip_markup", lambda text, table=False: text)
+        return ingest_full_text._segment_markdown_pages(pages)
+
+
+def _markup_bearing(chunks: list[dict[str, Any]]) -> int:
+    return sum(1 for c in chunks if strip_markup(c["content"]) != c["content"])
+
+
+def _is_table_chunk(chunk: dict[str, Any]) -> bool:
+    return str(chunk["content"]).startswith("|")
+
+
+# v1's cut of the same parsed pages (8 PDFs, 3 JATS articles): this many chunks carried
+# markup, all of them PDF chunks (counted when v2 was built, task 057 phase 4a, and
+# matched by running the v1 code from commit 528250f7). The v1 HTML route added one
+# more (a reference-list URL with underscores on the BMC page): 107 in all; 0 under v2.
+_V1_MARKUP_BEARING_CHUNKS = 106
+
+
+def test_parse_profile_v2_on_the_fixture_corpus() -> None:
+    """Parse profile v2 on every committed fixture that parses (8 PDFs, 2 HTML pages,
+    3 JATS articles), in one test so the large PDFs are parsed once:
+
+    * no chunk carries markup (``strip_markup(text) != text``) under v2;
+    * v1's structure is kept: the same chunks, table chunks, pages and heading paths
+      (v1's headings with the markup taken out of their text);
+    * ``parse_profile_for`` names what ``parse_and_segment`` stamped, on every route;
+    * a second parse is byte-identical (determinism).
+    """
+    parsed = {
+        path.name: (content_type, *_parse_recording_pages(path.read_bytes(), content_type))
+        for path, content_type in _fixture_corpus_documents()
+    }
+    ok = {name: p for name, p in parsed.items() if p[1]["status"] == "ok"}
+    assert len(ok) == 13, sorted(ok)
+
+    v1_markup_bearing = 0
+    v2_markup_bearing = 0
+    compared_chunks = 0
+    for name, (content_type, result, pages) in ok.items():
+        v2 = result["chunks"]
+        v2_markup_bearing += _markup_bearing(v2)
+        assert parse_profile_for(content_type) == (
+            result["parse_profile"], result["segmentation_policy"],
+        ), name
+        if pages is None:  # HTML: no markdown pages to cut the v1 way
+            continue
+        v1 = _segment_v1(pages)
+        v1_markup_bearing += _markup_bearing(v1)
+        assert len(v2) == len(v1), name
+        assert sum(map(_is_table_chunk, v2)) == sum(map(_is_table_chunk, v1)), name
+        for c1, c2 in zip(v1, v2, strict=True):
+            assert _is_table_chunk(c2) == _is_table_chunk(c1), name
+            assert c2["locator"]["pages"] == c1["locator"]["pages"], name
+            expected_path = [
+                h for h in map(ingest_full_text._clean_heading, c1["locator"]["heading_path"]) if h
+            ]
+            assert c2["locator"]["heading_path"] == expected_path, name
+            compared_chunks += 1
+    assert v2_markup_bearing == 0
+    assert v1_markup_bearing == _V1_MARKUP_BEARING_CHUNKS
+    assert compared_chunks > 200
+    assert {ct for ct, _, _ in ok.values()} == {"application/pdf", "text/html", "application/xml"}
+
+    # Determinism: one document per route parsed a second time, byte for byte.
+    one_per_route = {
+        "frontiers_ashp_ventilation_2021.pdf", "bmc_fiscal_policies_review.html", "PMC5264339.xml",
+    }
+    for path, content_type in _fixture_corpus_documents():
+        if path.name in one_per_route:
+            again = parse_and_segment(
+                path.read_bytes(), content_type, ingest_full_text.THIN_TEXT_MIN_CHARS
+            )
+            assert json.dumps(again, sort_keys=True) == json.dumps(ok[path.name][1], sort_keys=True)
 
 
 def _socket_deny_parse(body: bytes, content_type: str, thin_min: int) -> dict[str, Any]:
@@ -662,7 +789,6 @@ def test_escaped_fetcher_raise_is_reason_coded_per_link(conn: Connection) -> Non
             scope_id,
             fetcher=fetcher,
             parse_fn=_ok_parse,
-            max_workers=1,
         )
 
     assert summary["fetch_failed"] == 1
@@ -719,7 +845,6 @@ def test_discovery_extends_cascade_to_discovered_pdf(conn: Connection) -> None:
             scope_id,
             fetcher=fetcher,
             parse_fn=_html_fails_pdf_ok_parse,
-            max_workers=1,
         )
 
     assert summary["ingested"] == 1
@@ -792,7 +917,6 @@ def test_release_body_called_for_parse_and_preparse_reject(
         scope_id,
         fetcher=fetcher,
         parse_fn=_fail_on_marker_parse,
-        max_workers=2,
     )
 
     assert summary["ingested"] == 1
@@ -847,7 +971,6 @@ def test_oa_cross_check_upgrade_and_inconsistency_log(conn: Connection) -> None:
             scope_id,
             fetcher=fetcher,
             parse_fn=_ok_parse,
-            max_workers=1,
         )
 
     assert summary["by_reason"] == {"paywall": 1, "blocked_by_host": 1}
@@ -953,215 +1076,26 @@ def test_ingest_log_lines_never_carry_query_strings(conn: Connection) -> None:
     assert "SECRET-OK" not in log_dump
     assert "SECRET-FAIL" not in log_dump
     assert "token=" not in log_dump
-    # The verbatim URL still persists as provenance (provider-data retention).
-    fetched_from = conn.execute(
-        select(source_snapshot.c.metadata["fetched_from"].astext)
-        .where(source_snapshot.c.text_basis == "full_text")
-        .where(
-            source_snapshot.c.source_snapshot_id
-            == select(task_source_snapshot.c.full_text_snapshot_id)
-            .where(task_source_snapshot.c.task_id == task_id)
-            .where(task_source_snapshot.c.full_text_status == "ingested")
-            .scalar_subquery()
-        )
-    ).scalar_one()
-    assert fetched_from == tokened_ok
-
-
-def test_parallel_fetch_matches_serial_outcomes(conn: Connection) -> None:
-    """Decision 5's determinism invariant: fetch_workers > 1 persists exactly the
-    outcomes and eligible-set write order of the serial path."""
-
-    def seed_one_task() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
-        task_id, run_id = seed_task_and_run(conn)
-        scope_id = seed_scope(conn, task_id)
-        for n in range(6):
-            _seed_relevant_acquired(
-                conn, task_id, run_id, scope_id,
-                {
-                    "backend": "overton",
-                    "provider_fields": {"pdf_url": f"https://example.org/doc-{n}.pdf"},
-                },
-            )
-        return task_id, run_id, scope_id
-
-    def script() -> dict[str, ingest_full_text.FetchResult | BaseException]:
-        outcomes: dict[str, ingest_full_text.FetchResult | BaseException] = {}
-        for n in range(6):
-            url = f"https://example.org/doc-{n}.pdf"
-            if n % 3 == 0:
-                outcomes[url] = ingest_full_text.FetchResult(
-                    status="ok", content_type="text/plain", body=f"body {n} ".encode() * 60
-                )
-            elif n % 3 == 1:
-                outcomes[url] = ingest_full_text.FetchResult(status="error", error="paywall")
-            else:
-                outcomes[url] = ingest_full_text.FetchResult(status="error", error="not_found")
-        return outcomes
-
-    def outcomes_for(task_id: uuid.UUID) -> dict[str, tuple[str, str | None]]:
-        # Keyed by the doc's one candidate URL: tss ids are random UUIDs, so
-        # positional order is not comparable across two seeded tasks.
-        rows = conn.execute(
-            select(
-                source_snapshot.c.metadata,
-                task_source_snapshot.c.full_text_status,
-                task_source_snapshot.c.full_text_error,
-            )
-            .select_from(
-                task_source_snapshot.join(
-                    source_snapshot,
-                    task_source_snapshot.c.source_snapshot_id
-                    == source_snapshot.c.source_snapshot_id,
-                )
-            )
-            .where(task_source_snapshot.c.task_id == task_id)
-        ).fetchall()
-        return {
-            row.metadata["provider_fields"]["pdf_url"]: (
-                row.full_text_status,
-                row.full_text_error,
-            )
-            for row in rows
-        }
-
-    serial_task, serial_run, serial_scope = seed_one_task()
-    serial_summary = run_ingest(
-        conn, serial_task, serial_run, serial_scope,
-        fetcher=_ScriptedFetcher(script()), fetch_workers=1, parse_fn=_ok_parse,
-    )
-    parallel_task, parallel_run, parallel_scope = seed_one_task()
-    parallel_summary = run_ingest(
-        conn, parallel_task, parallel_run, parallel_scope,
-        fetcher=_ScriptedFetcher(script()), fetch_workers=4, parse_fn=_ok_parse,
-    )
-
-    drop_wall_clock = ("wall_clock_s",)
-    assert {k: v for k, v in serial_summary.items() if k not in drop_wall_clock} == {
-        k: v for k, v in parallel_summary.items() if k not in drop_wall_clock
-    }
-    assert outcomes_for(serial_task) == outcomes_for(parallel_task)
-
-
-# --- Bulk contract tests ---
-
-# Ground-truth strings below are extracted from the actual committed fixtures at
-# authoring time (scratch `parse_and_segment` / pymupdf runs) — never invented.
-
-# frontiers_school_readiness_2022.pdf, abstract "Method" paragraph (chunk 1, no
-# heading yet) — spans a PDF line-wrap; compared after whitespace normalization.
-FRONTIERS_ABSTRACT_SENTENCE = (
-    "REDI was delivered by 63 teachers in 37 community-based childcare centers "
-    "with center directors serving as local implementation coaches."
-)
-
-# worldbank_obesity_flagship.pdf, back-matter eco-audit page (doc[-2].get_text()) —
-# survives only if the 233-page document is parsed whole, never truncated.
-WB_BACKMATTER_PHRASE = "Green Press Initiative"
-
-# nesta_heat_pumps_report_page.html, main-content paragraph 2 (verified present
-# via trafilatura extraction at authoring time).
-NESTA_REPORT_SENTENCE = (
-    "This paper sets out a comprehensive analysis of the cost of heat pumps "
-    "and the prospects for making them more affordable."
-)
-# nesta_heat_pumps_report_page.html, footer boilerplate (verified absent from the
-# trafilatura extraction at authoring time — main-content-only, not full-page text).
-NESTA_FOOTER_BOILERPLATE = "Nesta is a registered charity in England and Wales 1144091"
-
-_ALLOWED_LICENCES = {"CC-BY-4.0", "CC-BY-3.0-IGO", "CC0-1.0"}
-_REQUIRED_FT_METADATA_KEYS = {
-    "parse_profile", "segmentation_policy", "fetched_from", "content_type",
-    "envelope_source_snapshot_id", "ingested_by_run_id",
-}
-_KNOWN_INGEST_RUN_EVENT_TYPES = {
-    "component.started", "component.completed", "run.completed", "run.failed",
-}
-
-
-def _norm_ws(text: str) -> str:
-    """Collapse whitespace so PDF line-wraps don't break a literal-sentence check."""
-    return " ".join(text.split())
-
-
-def _envelope_snapshots(conn: Connection, task_id: uuid.UUID) -> list[dict[str, Any]]:
-    """Envelope source_snapshot rows for a task's links, as plain dicts."""
-    return [
-        dict(r._mapping)
-        for r in conn.execute(
-            select(source_snapshot)
-            .select_from(
-                task_source_snapshot.join(
-                    source_snapshot,
-                    task_source_snapshot.c.source_snapshot_id
-                    == source_snapshot.c.source_snapshot_id,
-                )
-            )
-            .where(task_source_snapshot.c.task_id == task_id)
-        ).fetchall()
-    ]
-
-
-@pytest.fixture(scope="module")
-def ingested_corpus(engine: Engine) -> Generator[CorpusFixture, None, None]:
-    """One committed acquire+screen+ingest run, shared read-only across this module.
-
-    Real PDF/HTML parses cost ~15-20s; every read-only test below rides this single
-    run instead of paying for its own (mutating tests use the rollback-safe function-
-    scoped ``conn`` fixture and seed their own corpus).
-
-    Runs at ``max_workers=1``: this doubles as the workers=1 leg of the fan-out
-    determinism comparison in ``test_fanout_determinism_workers_1_vs_4``, which
-    seeds its own fresh workers=4 corpus and compares against this one instead of
-    paying for two full 24-document runs.
-    """
-    with engine.connect() as c:
-        task_id, run_id, scope_id = seed_corpus(c)
-        envelope_snapshots = _envelope_snapshots(c, task_id)
-        summary = run_ingest(c, task_id, run_id, scope_id, max_workers=1)
-        c.commit()
-    yield task_id, run_id, scope_id, summary, envelope_snapshots
-    with engine.connect() as c:
-        delete_task_data(c, task_id)
-        c.commit()
-
-
-def _link_rows(conn: Connection, task_id: uuid.UUID) -> list[Any]:
-    """All links for a task with their envelope + full-text snapshot fields."""
-    ft = source_snapshot.alias("ft")
-    return list(conn.execute(
-        select(
-            task_source_snapshot.c.run_id,
-            task_source_snapshot.c.source_snapshot_id,
-            task_source_snapshot.c.full_text_snapshot_id,
-            task_source_snapshot.c.full_text_status,
-            task_source_snapshot.c.full_text_error,
-            source_snapshot.c.metadata.label("envelope_metadata"),
-            ft.c.source_locator.label("ft_source_locator"),
-            ft.c.metadata.label("ft_metadata"),
-        )
+    # The verbatim URL still persists as provenance (provider-data retention), on
+    # the link row since task 057 (N9), and as the snapshot's public locator.
+    fetched_from, locator = conn.execute(
+        select(task_source_snapshot.c.fetched_from, source_snapshot.c.source_locator)
         .select_from(
             task_source_snapshot.join(
                 source_snapshot,
-                task_source_snapshot.c.source_snapshot_id
+                task_source_snapshot.c.full_text_snapshot_id
                 == source_snapshot.c.source_snapshot_id,
-            ).outerjoin(
-                ft,
-                task_source_snapshot.c.full_text_snapshot_id == ft.c.source_snapshot_id,
             )
         )
         .where(task_source_snapshot.c.task_id == task_id)
-    ).fetchall())
+        .where(task_source_snapshot.c.full_text_status == "ingested")
+    ).one()
+    assert fetched_from == locator == tokened_ok
 
-
-def _by_backend_record_id(conn: Connection, task_id: uuid.UUID, record_id: str) -> Any:
-    """The single link row whose envelope metadata carries this backend_record_id."""
-    matches = [
-        r for r in _link_rows(conn, task_id)
-        if r.envelope_metadata.get("backend_record_id") == record_id
-    ]
-    assert len(matches) == 1, f"expected exactly one link for {record_id!r}, got {len(matches)}"
-    return matches[0]
+_ALLOWED_LICENCES = {"CC-BY-4.0", "CC-BY-3.0-IGO", "CC0-1.0"}
+_KNOWN_INGEST_RUN_EVENT_TYPES = {
+    "component.started", "component.completed", "run.completed", "run.failed",
+}
 
 
 def _full_text_snapshot_count(conn: Connection, task_id: uuid.UUID) -> int:
@@ -1172,149 +1106,6 @@ def _full_text_snapshot_count(conn: Connection, task_id: uuid.UUID) -> int:
         .where(task_source_snapshot.c.task_id == task_id)
         .where(task_source_snapshot.c.full_text_snapshot_id.is_not(None))
     ).scalar_one()
-
-
-def test_outcome_distribution(ingested_corpus: CorpusFixture) -> None:
-    _, _, _, summary, _ = ingested_corpus
-    assert summary["eligible"] == EXPECTED_ELIGIBLE
-    assert summary["ingested"] == EXPECTED_INGESTED
-    assert summary["already_ingested"] == 0
-    assert summary["fetch_failed"] == EXPECTED_FETCH_FAILED
-    assert summary["parse_failed"] == EXPECTED_PARSE_FAILED
-    assert summary["by_reason"] == EXPECTED_BY_REASON
-    assert (
-        summary["eligible"]
-        == summary["ingested"] + summary["already_ingested"]
-        + summary["fetch_failed"] + summary["parse_failed"]
-    )
-
-
-@pytest.mark.parametrize(
-    ("record_id", "status", "error", "fetched_from"),
-    [
-        # openalex: best_oa_location.pdf_url is the FIRST cascade rung (decision 4)
-        ("https://example.org/5f2286252e57", "ingested", None,
-         "https://doi.org/10.99999/287b9e9e3a"),
-        ("https://example.org/c8d8aa774216", "fetch_failed", "paywall", None),
-        ("https://example.org/b1d9810181d0", "fetch_failed", "not_found", None),
-        ("https://example.org/9e1652ffb458", "fetch_failed", "too_large", None),
-        ("https://example.org/6d1e9d4886bb", "parse_failed", "thin_text", None),
-        ("https://example.org/325a3b216a30", "ingested", None, None),  # HTML, trafilatura
-        ("https://example.org/c62a1c4258a2", "ingested", None, None),  # BMC HTML
-        # overton: pdf_url "n/a" sentinel dropped, document_url used
-        ("sanitizedorg1bcd6b-9a9e73d38cfdde74d7dee8c1c06189f2", "ingested", None,
-         "https://doi.org/10.99999/cf91b048b2"),
-        # overton: cascade fallback — pdf_url 404s, document_url succeeds
-        ("sanitizedorg93a3df-7e7e75d9cd6f5b53a0803edca29f531a", "ingested", None,
-         "https://example.org/e1209ba1a2a6"),
-        ("sanitizedorgf49937-f18086f777c8acbad55bb7f2230c557d", "ingested", None, None),
-        ("sanitizedorg23396d-80ffb71f4011d31866fe5e4032586a8c", "parse_failed",
-         "no_text_layer", None),
-        ("sanitizedorg5644d9-72681ca7d0f78da51e464687e8295a7f", "parse_failed", "corrupt", None),
-        ("sanitizedorgfb4a6e-15acd6e31818235c42f3d8daf6e1ea48", "fetch_failed",
-         "too_large", None),
-        ("sanitizedorga9aa9d-c186ae531fb481b0cc4fb0dd6669476e", "fetch_failed",
-         "not_found", None),
-        # Overton doc: both candidate URLs 403 and there is no OA field to
-        # cross-check (decision 8 fixture-403-parity rider), so it reports the
-        # uncorroborated blocked_by_host honestly rather than paywall.
-        ("sanitizedorgdf2d12-42aba8211480495ee10e4ab8faa88047", "fetch_failed",
-         "blocked_by_host", None),
-    ],
-)
-def test_per_link_statuses(
-    ingested_corpus: CorpusFixture,
-    engine: Engine,
-    record_id: str,
-    status: str,
-    error: str | None,
-    fetched_from: str | None,
-) -> None:
-    task_id, _, _, _, _ = ingested_corpus
-    with engine.connect() as conn:
-        row = _by_backend_record_id(conn, task_id, record_id)
-    assert row.full_text_status == status
-    assert row.full_text_error == error
-    if fetched_from is not None:
-        assert row.ft_source_locator == fetched_from
-        assert row.ft_metadata["fetched_from"] == fetched_from
-
-
-def test_pdf_structure_chunks(ingested_corpus: CorpusFixture, engine: Engine) -> None:
-    task_id, _, _, _, _ = ingested_corpus
-    with engine.connect() as conn:
-        row = _by_backend_record_id(conn, task_id, "https://example.org/5f2286252e57")
-        assert row.full_text_status == "ingested"
-        chunks = conn.execute(
-            select(
-                chunk_table.c.sequence, chunk_table.c.content, chunk_table.c.locator,
-                chunk_table.c.segmentation_policy,
-            )
-            .where(chunk_table.c.source_snapshot_id == row.full_text_snapshot_id)
-            .order_by(chunk_table.c.sequence)
-        ).fetchall()
-        assert [c.sequence for c in chunks] == list(range(1, len(chunks) + 1))
-        for c in chunks:
-            assert isinstance(c.locator["pages"], list) and c.locator["pages"]
-            assert "heading_path" in c.locator
-            assert c.segmentation_policy == "pymupdf4llm_struct_v1"
-        assert any(c.locator["heading_path"] for c in chunks)
-        assert row.ft_metadata["segmentation_policy"] == "pymupdf4llm_struct_v1"
-        assert row.ft_metadata["parse_profile"] == "pymupdf4llm_v1"
-
-        norm_sentence = _norm_ws(FRONTIERS_ABSTRACT_SENTENCE)
-        assert any(norm_sentence in _norm_ws(c.content) for c in chunks)
-
-        wb_row = _by_backend_record_id(
-            conn, task_id, "sanitizedorgf49937-f18086f777c8acbad55bb7f2230c557d"
-        )
-        wb_chunks = conn.execute(
-            select(chunk_table.c.content)
-            .where(chunk_table.c.source_snapshot_id == wb_row.full_text_snapshot_id)
-        ).fetchall()
-        assert any(c.content.startswith("|") for c in wb_chunks)  # table kept whole
-
-
-def test_no_truncation_long_report(ingested_corpus: CorpusFixture, engine: Engine) -> None:
-    task_id, _, _, _, _ = ingested_corpus
-    with engine.connect() as conn:
-        row = _by_backend_record_id(
-            conn, task_id, "sanitizedorgf49937-f18086f777c8acbad55bb7f2230c557d"
-        )
-        assert row.full_text_status == "ingested"
-        chunks = conn.execute(
-            select(chunk_table.c.content, chunk_table.c.locator)
-            .where(chunk_table.c.source_snapshot_id == row.full_text_snapshot_id)
-        ).fetchall()
-    max_page = max(p for c in chunks for p in c.locator["pages"])
-    assert max_page >= 220  # 233-page doc parsed whole (decision 6 — never truncated)
-    total_chars = sum(len(c.content) for c in chunks)
-    assert total_chars > 200_000
-    joined = _norm_ws(" ".join(c.content for c in chunks))
-    assert WB_BACKMATTER_PHRASE in joined
-
-
-def test_html_main_content(ingested_corpus: CorpusFixture, engine: Engine) -> None:
-    task_id, _, _, _, _ = ingested_corpus
-    with engine.connect() as conn:
-        row = _by_backend_record_id(conn, task_id, "https://example.org/325a3b216a30")
-        assert row.full_text_status == "ingested"
-        chunks = conn.execute(
-            select(
-                chunk_table.c.content, chunk_table.c.locator, chunk_table.c.segmentation_policy,
-            )
-            .where(chunk_table.c.source_snapshot_id == row.full_text_snapshot_id)
-            .order_by(chunk_table.c.sequence)
-        ).fetchall()
-    assert chunks
-    assert row.ft_metadata["parse_profile"] == "trafilatura_v1"
-    for i, c in enumerate(chunks, start=1):
-        assert c.content.strip()
-        assert c.segmentation_policy == "trafilatura_para_v1"
-        assert c.locator == {"paragraph": i}
-    joined = " ".join(c.content for c in chunks)
-    assert NESTA_FOOTER_BOILERPLATE not in joined
-    assert NESTA_REPORT_SENTENCE in joined
 
 
 def test_html_non_utf8_charset_decoded_correctly() -> None:
@@ -1394,77 +1185,6 @@ def test_javascript_wall_is_blocked_by_host_not_full_text() -> None:
         + b"</p></article></body></html>"
     )
     assert parse_and_segment(real, "text/html", thin_min=200)["status"] == "ok"
-
-
-def test_success_metadata_complete(ingested_corpus: CorpusFixture, engine: Engine) -> None:
-    task_id, _, _, _, _ = ingested_corpus
-    with engine.connect() as conn:
-        ft_ids = [
-            row.full_text_snapshot_id
-            for row in conn.execute(
-                select(task_source_snapshot.c.full_text_snapshot_id)
-                .where(task_source_snapshot.c.task_id == task_id)
-                .where(task_source_snapshot.c.full_text_status == "ingested")
-            ).fetchall()
-        ]
-        assert len(ft_ids) == EXPECTED_INGESTED
-        for ft_id in ft_ids:
-            snap = conn.execute(
-                select(
-                    source_snapshot.c.text_basis, source_snapshot.c.content_hash,
-                    source_snapshot.c.source_locator, source_snapshot.c.metadata,
-                )
-                .where(source_snapshot.c.source_snapshot_id == ft_id)
-            ).one()
-            assert snap.text_basis == "full_text"
-            assert set(snap.metadata) >= _REQUIRED_FT_METADATA_KEYS
-            for key in _REQUIRED_FT_METADATA_KEYS:
-                assert snap.metadata[key] is not None
-            assert snap.source_locator == snap.metadata["fetched_from"]
-            chunk_rows = conn.execute(
-                select(chunk_table.c.content)
-                .where(chunk_table.c.source_snapshot_id == ft_id)
-                .order_by(chunk_table.c.sequence)
-            ).fetchall()
-            assert snap.content_hash == content_hash("".join(c.content for c in chunk_rows))
-
-
-def test_envelope_immutability(ingested_corpus: CorpusFixture, engine: Engine) -> None:
-    task_id, _, _, _, before = ingested_corpus
-    with engine.connect() as conn:
-        after = _envelope_snapshots(conn, task_id)
-        assert (
-            sorted(before, key=lambda r: r["source_snapshot_id"])
-            == sorted(after, key=lambda r: r["source_snapshot_id"])
-        )
-        for row in after:
-            assert row["text_basis"] == "abstract_only"
-            chunk_row = conn.execute(
-                select(chunk_table.c.content)
-                .where(chunk_table.c.source_snapshot_id == row["source_snapshot_id"])
-            ).one()
-            assert row["content_hash"] == content_hash(chunk_row.content)
-
-
-def test_governance_chain(ingested_corpus: CorpusFixture, engine: Engine) -> None:
-    task_id, run_id, _, _, _ = ingested_corpus
-    with engine.connect() as conn:
-        ingested_rows = [
-            r for r in _link_rows(conn, task_id) if r.full_text_status == "ingested"
-        ]
-        assert len(ingested_rows) == EXPECTED_INGESTED
-        for row in ingested_rows:
-            assert row.ft_metadata["ingested_by_run_id"] == str(run_id)
-            assert (
-                uuid.UUID(row.ft_metadata["envelope_source_snapshot_id"])
-                == row.source_snapshot_id
-            )
-            n_search_events = conn.execute(
-                select(sa.func.count()).select_from(event_log)
-                .where(event_log.c.run_id == row.run_id)
-                .where(event_log.c.event_type == "search.executed")
-            ).scalar_one()
-            assert n_search_events > 0
 
 
 def test_licence_guard() -> None:
@@ -1836,9 +1556,10 @@ def test_javascript_wall_page_is_blocked_by_host_not_full_text() -> None:
 def test_progress_ticks_carry_store_status_counts(
     conn: Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Task 056 (N9, S5): the fetch loop and the parse drain publish ``ingest``
-    ticks whose counts mirror the statuses the write pass stores, seeded with
-    the documents the store already holds as ``ingested``."""
+    """Task 057 (N3): the stage publishes ``ingest`` ticks from the stored statuses:
+    ``parsed`` is the eligible documents ``ingested`` so far (those the store held
+    before the run included), ``fetched`` is null (one call fetches and parses, so
+    a fetched-but-unparsed count does not exist), ``total`` the eligible set."""
     ticks: list[dict[str, Any]] = []
     monkeypatch.setattr(
         ingest_full_text, "publish_current_tick", lambda **kwargs: ticks.append(kwargs)
@@ -1848,17 +1569,16 @@ def test_progress_ticks_carry_store_status_counts(
     assert ticks
     assert {tick["stage"] for tick in ticks} == {"ingest"}
     assert {tick["total"] for tick in ticks} == {first["eligible"]} == {4}
+    assert {tick["fetched"] for tick in ticks} == {None}
     for tick in ticks:
-        assert 0 <= tick["parsed"] <= tick["fetched"] <= tick["total"]
+        assert 0 <= tick["parsed"] <= tick["total"]
         assert tick["note"]
-    assert [t["fetched"] for t in ticks] == sorted(t["fetched"] for t in ticks)
     assert [t["parsed"] for t in ticks] == sorted(t["parsed"] for t in ticks)
-    # 3 of the 4 links fetch (the 4th is a 404); 2 parse to ``ingested``.
-    assert (ticks[-1]["fetched"], ticks[-1]["parsed"]) == (3, first["ingested"]) == (3, 2)
+    assert ticks[-1]["parsed"] == first["ingested"] == 2
 
     ticks.clear()
     second = run_ingest(conn, task_id, seed_run(conn, task_id), scope_id)
     assert second["already_ingested"] == 2
-    # The store's two ``ingested`` rows count as fetched and parsed from the start.
-    assert ticks and all(t["parsed"] >= 2 and t["fetched"] >= 2 for t in ticks)
+    # The store's two ``ingested`` rows count as read from the start.
+    assert ticks and all(t["parsed"] >= 2 for t in ticks)
     assert ticks[-1]["parsed"] == 2

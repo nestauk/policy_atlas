@@ -48,8 +48,10 @@ from xml.parsers import expat
 if expat.version_info < (2, 4, 1):
     raise RuntimeError(f"parse_jats needs expat >= 2.4.1, found {expat.version_info}")
 
-JATS_PARSE_PROFILE = "jats_expat_v1"
-JATS_SEGMENTATION_POLICY = "jats_struct_v1"
+# v2 (task 057, N7): the segmenter applies the markup rule to the text this parser
+# renders; the parser itself is unchanged since v1.
+JATS_PARSE_PROFILE = "jats_expat_v2"
+JATS_SEGMENTATION_POLICY = "jats_struct_v2"
 
 _MAX_HEADING_LEVEL = 6
 _XML_PREDEFINED_ENTITIES = frozenset({"amp", "lt", "gt", "quot", "apos"})

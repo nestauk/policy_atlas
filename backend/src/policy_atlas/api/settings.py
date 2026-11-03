@@ -6,6 +6,11 @@ import os
 from dataclasses import dataclass
 from math import isfinite
 from pathlib import Path
+from typing import Literal
+
+#: Where full-text ingestion runs (task 057): ``in_process`` on the API's own
+#: threads (the default), or ``queued`` through the cloud queue and function.
+IngestMode = Literal["in_process", "queued"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +30,7 @@ class Settings:
         sse_heartbeat_seconds: Idle interval before an SSE keep-alive comment.
         db_pool_size: SQLAlchemy engine connection pool size.
         db_max_overflow: SQLAlchemy engine pool overflow above ``db_pool_size``.
+        ingest_mode: Where full-text ingestion runs (``POLICY_ATLAS_INGEST_MODE``).
     """
 
     oidc_issuer: str
@@ -39,6 +45,7 @@ class Settings:
     sse_heartbeat_seconds: float = 15.0
     db_pool_size: int = 5
     db_max_overflow: int = 10
+    ingest_mode: IngestMode = "in_process"
 
 
 def load_settings() -> Settings:
@@ -87,7 +94,25 @@ def load_settings() -> Settings:
         sse_heartbeat_seconds=_positive_float("SSE_HEARTBEAT_SECONDS", default=15.0),
         db_pool_size=_positive_int("DB_POOL_SIZE", default=5),
         db_max_overflow=_nonnegative_int("DB_MAX_OVERFLOW", default=10),
+        ingest_mode=ingest_mode_from_env(),
     )
+
+
+def ingest_mode_from_env() -> IngestMode:
+    """Read ``POLICY_ATLAS_INGEST_MODE``: ``in_process`` (default) or ``queued``.
+
+    Returns:
+        The ingest mode.
+
+    Raises:
+        RuntimeError: The variable names another mode.
+    """
+    value = _optional("POLICY_ATLAS_INGEST_MODE")
+    if value is None or value == "in_process":
+        return "in_process"
+    if value == "queued":
+        return "queued"
+    raise RuntimeError("POLICY_ATLAS_INGEST_MODE must be in_process or queued")
 
 
 def _required(name: str) -> str:
