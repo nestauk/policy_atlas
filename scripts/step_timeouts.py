@@ -254,6 +254,9 @@ def derive_table(
     observations: list[dict[str, Any]],
     steps: list[str],
     sites: tuple[Site, ...] = SITES,
+    *,
+    min_n: int = MIN_N,
+    floor_s: int = FLOOR_S,
 ) -> dict[str, Any]:
     """Compute the per-step timeout table from observation dicts.
 
@@ -313,13 +316,19 @@ def derive_table(
             row["decision"] = "no traced generation"
         elif site.exempt:
             row["decision"] = "keep, exempt (streamed chat)"
-        elif len(values) >= MIN_N:
-            row["proposed_timeout_s"] = max(FLOOR_S, math.ceil(P99_MULTIPLIER * row["p99_s"]))
+        elif len(values) >= min_n:
+            row["proposed_timeout_s"] = max(floor_s, math.ceil(P99_MULTIPLIER * row["p99_s"]))
             row["decision"] = "set"
         else:
-            row["decision"] = f"keep, n<{MIN_N}"
+            row["decision"] = f"keep, n<{min_n}"
         rows.append(row)
-    return {"rows": rows, "unmapped": dict(unmapped), "skipped": dict(skipped)}
+    return {
+        "rows": rows,
+        "unmapped": dict(unmapped),
+        "skipped": dict(skipped),
+        "min_n": min_n,
+        "floor_s": floor_s,
+    }
 
 
 # --- Formatting -------------------------------------------------------------------
@@ -360,8 +369,9 @@ def format_markdown(table: dict[str, Any], since: str) -> str:
     ]
     out = [
         f"### Per-step client timeouts, Bedrock generations since {since}\n",
-        f"Healthy = no ERROR level and shorter than today's timeout. Proposed = max({FLOOR_S}, "
-        f"ceil({P99_MULTIPLIER} x p99)), only when n >= {MIN_N}.\n",
+        f"Healthy = no ERROR level and shorter than today's timeout. Proposed = "
+        f"max({table.get('floor_s', FLOOR_S)}, ceil({P99_MULTIPLIER} x p99)), only when "
+        f"n >= {table.get('min_n', MIN_N)}.\n",
         _md_table(
             ["step", "n healthy", "p99 s", "proposed timeout_s", "today timeout_s", "decision"],
             rows,
@@ -478,6 +488,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--format", choices=["md", "json", "toml"], default="md")
     parser.add_argument("--print-sites", action="store_true", help="print the site table and exit")
     parser.add_argument("--out", help="write to this file instead of stdout")
+    parser.add_argument("--min-n", type=int, default=MIN_N, help=f"smallest healthy sample (default {MIN_N})")
+    parser.add_argument("--floor", type=int, default=FLOOR_S, help=f"smallest timeout in seconds (default {FLOOR_S})")
     args = parser.parse_args(argv)
     if args.print_sites:
         text = format_sites()
@@ -489,7 +501,7 @@ def main(argv: list[str] | None = None) -> int:
             observations = fetch_observations(args.since, args.until)
             if args.cache:
                 Path(args.cache).write_text(json.dumps(observations), encoding="utf-8")
-        table = derive_table(observations, route_steps())
+        table = derive_table(observations, route_steps(), min_n=args.min_n, floor_s=args.floor)
         if args.format == "json":
             text = json.dumps({"since": args.since, **table}, indent=1) + "\n"
         elif args.format == "toml":

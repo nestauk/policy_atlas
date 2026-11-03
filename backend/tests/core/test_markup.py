@@ -23,6 +23,10 @@ LINES = [
     "a stray ** marker and a lost__ one",
     r"escaped \*star\* and \[bracket\] and a\_b",
     "snake_case_name and 2*3*4 keep their characters",
+    "0.47* 0.50** 0.54*** 0.15 significance stars stay",
+    "x<y and y>z stays whole",
+    "Situation_report_-_the_file.pdf stays whole",
+    "<em>kept</em> and <unknown>kept</unknown>",
     "| cell one<br>more | **cell two** |",
     "**[linked bold](http://x.org)** then _[em link](u)_",
     "<a <br> b> tag swallowing a break",
@@ -60,7 +64,15 @@ def test_spans_sorted_and_disjoint(line: str) -> None:
 
 def test_strip_markup_examples() -> None:
     assert strip_markup("**bold** words") == "bold words"
+    # Significance stars in a statistics table are content, not markup (a line from the
+    # frontiers_school_readiness_2022 fixture).
+    assert strip_markup("0.47* 0.50** 0.54*** 0.15") == "0.47* 0.50** 0.54*** 0.15"
     assert strip_markup("see [the report](https://x.org) now") == "see the report now"
+    assert strip_markup("x<y and y>z") == "x<y and y>z"
+    assert strip_markup("see Situation_report_-_the_file") == "see Situation_report_-_the_file"
+    assert strip_markup("<em>a</em> and <unknown>b</unknown>") == "a and <unknown>b</unknown>"
+    assert strip_markup("<B>loud</B>") == "loud"
+    assert strip_markup("_em_ and *it*") == "em and it"
     assert strip_markup("a<br>b") == "a\nb"
     assert strip_markup("a<br>b", table=True) == "a b"
     assert strip_markup("![fig](f.png) caption") == " caption"

@@ -145,6 +145,18 @@ def test_exactly_one_hundred_is_enough(table: dict[str, Any]) -> None:
     assert (row["proposed_timeout_s"], row["decision"]) == (5, "set")
 
 
+def test_min_n_and_floor_are_options(observations: list[dict[str, Any]]) -> None:
+    """Owner ruling 2026-11-03: a 40-call step is enough at --min-n 30, and no timeout
+    goes under the 15 s floor."""
+    table = st.derive_table(observations, st.route_steps(), min_n=30, floor_s=15)
+    row = _row(table, "search_queries_v2_openalex")  # 40 healthy calls, p99 3.0 s
+    assert (row["proposed_timeout_s"], row["decision"]) == (15, "set")
+    assert _row(table, "synthesise_write_intro")["proposed_timeout_s"] == 15  # was 5
+    assert _row(table, "search_reformulate_v2_openalex")["decision"] == "keep, n<30"
+    assert (table["min_n"], table["floor_s"]) == (30, 15)
+    assert "n >= 30" in st.format_markdown(table, "2026-11-02")
+
+
 def test_small_steps_keep_today(table: dict[str, Any]) -> None:
     row = _row(table, "search_queries_v2_openalex")
     assert (row["n_healthy"], row["p99_s"], row["proposed_timeout_s"]) == (40, 3.0, None)

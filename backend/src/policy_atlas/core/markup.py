@@ -17,10 +17,12 @@ What the rule does, in order (one line at a time; lines are split on ``"\\n"``):
 1. image syntax ``![alt](src)`` is removed entirely;
 2. link syntax ``[text](url)`` is reduced to ``text`` (twice, for a link inside a link);
 3. ``<br>`` becomes a line break (or a space in a table row);
-4. other HTML tags (``<b>``, ``</span>`` ...) are removed;
+4. other known HTML tags (``<b>``, ``</span>`` ...; a fixed list of names) are removed,
+   while tag-shaped maths such as ``x<y and y>z`` is kept;
 5. inline code ```code``` is reduced to ``code``;
 6. paired emphasis markers (``*``/``**``/``***``/``_``/``__``/``___``) are removed,
-   keeping the words between them (up to three rounds, for nested emphasis);
+   when the opening marker does not follow a letter or digit (so identifiers keep
+   their underscores), keeping the words between them (up to three rounds, for nested emphasis);
 7. leftover runs of ``**`` or ``__`` (a marker whose partner was lost) are removed;
 8. backslash escapes such as ``\\*`` become the plain character ``*``.
 
@@ -31,12 +33,103 @@ from __future__ import annotations
 
 import re
 
+# The HTML tag names the rule removes; anything else shaped like a tag (``x<y and y>z``)
+# is kept. This set is the single source of truth for the tag pattern below.
+_HTML_TAGS = frozenset(
+    [
+        "a",
+        "abbr",
+        "article",
+        "aside",
+        "b",
+        "big",
+        "blockquote",
+        "body",
+        "br",
+        "caption",
+        "center",
+        "cite",
+        "code",
+        "col",
+        "colgroup",
+        "dd",
+        "del",
+        "dfn",
+        "div",
+        "dl",
+        "dt",
+        "em",
+        "figcaption",
+        "figure",
+        "font",
+        "footer",
+        "form",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "head",
+        "header",
+        "hr",
+        "html",
+        "i",
+        "img",
+        "input",
+        "ins",
+        "kbd",
+        "label",
+        "li",
+        "link",
+        "main",
+        "mark",
+        "meta",
+        "nav",
+        "ol",
+        "option",
+        "p",
+        "pre",
+        "q",
+        "s",
+        "samp",
+        "script",
+        "section",
+        "select",
+        "small",
+        "span",
+        "strike",
+        "strong",
+        "style",
+        "sub",
+        "sup",
+        "table",
+        "tbody",
+        "td",
+        "tfoot",
+        "th",
+        "thead",
+        "title",
+        "tr",
+        "tt",
+        "u",
+        "ul",
+        "var",
+    ]
+)
+
 _IMG_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _LINK_RE = re.compile(r"\[([^\]]*)\]\((?:[^()\s]|\([^()]*\))*\)")
 _BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
-_TAG_RE = re.compile(r"</?[A-Za-z][A-Za-z0-9]*(?:\s[^<>]*)?/?>")
-_EMPH_RE = re.compile(r"(\*{1,3}|_{1,3})(?=\S)(.+?)(?<=\S)\1(?![A-Za-z0-9])")
-_STRAY_EMPH_RE = re.compile(r"\*\*+|(?<![A-Za-z0-9])__+|__+(?![A-Za-z0-9])")
+_TAG_RE = re.compile(
+    r"</?(?:" + "|".join(sorted(_HTML_TAGS, key=lambda n: (-len(n), n))) + r")(?:\s[^<>]*)?/?>",
+    re.IGNORECASE,
+)
+_EMPH_RE = re.compile(r"(?<![A-Za-z0-9])(\*{1,3}|_{1,3})(?=\S)(.+?)(?<=\S)\1(?![A-Za-z0-9])")
+# Stray ``**`` after a digit is a significance star in a statistics table (``0.50**``),
+# not a lost emphasis marker, so it stays (owner ruling 2026-11-03: the rule must not
+# delete content).
+_STRAY_EMPH_RE = re.compile(r"(?<![0-9*])\*\*+|(?<![A-Za-z0-9])__+|__+(?![A-Za-z0-9])")
 _CODE_RE = re.compile(r"`([^`]*)`")
 _ESC_RE = re.compile(r"\\([\\`*_{}\[\]()#+\-.!|>~])")
 

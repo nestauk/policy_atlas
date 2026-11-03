@@ -16,6 +16,7 @@ Langfuse), both built in Phase 0 with offline tests under `backend/tests/scripts
 | End of Phases 3, 4a and the Phase 5 infra (gates 5 and 6), 2026-11-03 | `make verify` on the whole tree | pass | backend 4,058 passed, 1 skipped (10 min 29 s); infra 113 passed; frontend 943 passed; lint, typecheck, format, okf-validate, build green. One run gated the three commits because the phases were built in parallel in one tree. |
 | End of Phase 4b (gate 7), 2026-11-03 | `make verify` on the whole tree | pass | backend 4,086 passed, 1 skipped (11 min 14 s); infra 113; frontend 943; lint, typecheck, format, okf-validate, build, audit green |
 | Step-6 exit (gate 8), 2026-11-03 | `make verify` then `make audit` on the final tree | pass after one test-timing fix | first run: backend 1 failed (`test_adaptive_pool_converges_under_a_quota_and_never_splits_for_throttling`, timing-flaky fake; deviation 22), 4,085 passed; second run after the fix: backend 4,086 passed, 1 skipped (6 min 51 s); infra 113 passed; frontend 943 passed; lint, typecheck, okf-validate (192 concepts), build green; `make audit`: no known vulnerabilities |
+| Owner rulings after the exit (gate 8 again), 2026-11-03 | `make verify` on the tree with the timeouts at n ≥ 30 / floor 15, the markup rules and the probe brief | pass after one re-pin | first run: backend 1 failed (`test_parse_worker_output_is_byte_identical_serial_and_concurrent`: the digest moved on a significance-star line; the rule fixed and the digest re-pinned, § Owner rulings), 4,092 passed; second run: backend 4,095 passed, 1 skipped (11 min 28 s); infra 113; frontend 943; lint, typecheck, okf-validate, build green |
 | End of Phase 0 and Phase 1 (gates 2 and 3), 2026-11-03 | `make verify` on the tree holding both phases | pass after one fix | backend 4,004 passed, 1 skipped (6 min 0 s); lint, typecheck, format green; infra: 1 failed (`test_dockerignore_covers_gitignored_backend_content`: the `**/` bytecode patterns no longer matched the gitignore lines literally; both forms kept), then `make -C infra test` 95 passed. One full run gated both commits because the two phases were built in parallel in one tree. |
 
 ## Phase 0: build-open, measurement tools, dev image
@@ -1165,6 +1166,73 @@ actions, the three NAT instances and a second retry on once-per-run steps) and c
 (Phase 5.3) are left to step 8 as the task-cycle-build skill directs (durable records are
 authored against the reviewed code); the candidates are listed under § Review handoff.
 
+## Owner rulings after the exit (2026-11-03, same day, before the review)
+
+The owner read the exit report and ruled three things; they are applied on the branch
+under the same gate (a second exit commit, § Commands run).
+
+**1. Timeouts for every step with at least 30 healthy calls, floor 15 s** (contract D12
+said n ≥ 100 and floor 5 s; the owner lowered the sample floor and raised the time floor
+after the burst stalls at the 48-wide steps). `scripts/step_timeouts.py` gains `--min-n`
+and `--floor` (defaults unchanged, test added); re-derived from the Phase 0 cache (the
+pre-tightening sample, so the tightened steps' p99s are not truncated at their new
+timeouts):
+
+| step | n | p99 s | before | now |
+|---|---|---|---|---|
+| classify_document | 4739 | 5.3 | 11 | 15 (floor) |
+| screen_abstract | 7876 | 3.3 | 7 | 15 (floor) |
+| screen_full | 921 | 3.9 | 8 | 15 (floor) |
+| select_rerank | 85 | 11.7 | 60 | 24 |
+| characterise_assign | 57 | 12.7 | 60 | 26 |
+| extract_interventions | 1415 | 16.4 | 33 | 33 |
+| search_generate_queries | 95 | 3.5 | 60 | 15 (floor) |
+| synthesise_propose_sections | 30 | 4.3 | 120 | 15 (floor) |
+| synthesise_write_block_summary | 254 | 2.7 | 6 | 15 (floor) |
+| synthesise_judge_summary | 277 | 2.3 | 5 | 15 (floor) |
+| synthesise_section_turn | 424 | 11.0 | 23 | 23 |
+| synthesise_write_source_note | 33 | 1.8 | 30 | 15 (floor) |
+| judge_grounding | 254 | 19.8 | 80 (raised once, D12) | 80 (kept) |
+| longlist_assign | 71 | 22.6 | 60 | 46 |
+| option_profile_line | 65 | 41.7 | 60 | 84 (its p99 was already over today's value) |
+| option_profile_place_sentences | 111 | 17.1 | 35 | 35 |
+
+Every other step has fewer than 30 healthy calls and keeps its `[steps]` value (the full
+table is the script's output with `--min-n 30 --floor 15`). The once-per-run
+`propose_sections` step that stalled for 120 s in rounds (a) and (g) now costs 15 s per
+stall. Rubric 22's "2 × p99 from at least 100 calls" reads "at least 30, floor 15" from
+here on, by the owner's word.
+
+**2. The two markup-rule edge cases that could delete content are closed** (the tag rule
+limited to known HTML tag names, so `x<y and y>z` stays whole; the emphasis rule needs a
+non-letter before its opening marker, so `Situation_report_-_the` keeps its underscores).
+Result: see the diff note below this list.
+
+**3. The stall probes are written as a brief for the review conversation**
+([stall-probes.md](stall-probes.md)): Bedrock only (`openai-direct` is legacy); three
+probes (did the hung requests reach the service; connection re-use on or off; the burst
+shape at width 48) with the reading of each outcome.
+
+Markup diff note: `core/markup.py` gains `_HTML_TAGS` (a fixed set of 70 common tag
+names, the single source of the tag pattern, sorted longest first; a tag-shaped span whose
+name is not in the set stays, e.g. `x<y and y>z`, `<unknown>`), and `_EMPH_RE` gains the
+lookbehind `(?<![A-Za-z0-9])` on the opening marker (`snake_case_name` and
+`Situation_report_-_the` keep their underscores; `_em_`, `*it*`, `<B>loud</B>` still
+strip). `markup_deletions` shares the same patterns, so the quote verifier moves with it.
+Tests: four lines added to the agreement set and six examples (46 passed). The module
+docstring's rules 4 and 6 are reworded.
+
+**A third content loss found by the gate, fixed in the same spirit (the owner to note):**
+the byte-identity digest moved under the two edits, and the one differing chunk was a
+statistics table line in `frontiers_school_readiness_2022` whose raw text is
+`0.47* 0.50** 0.54***` (significance stars). The old rule returned `0.47* 0.50* 0.54`
+and the two edits alone returned `0.47* 0.50 0.54`: the stray-marker rule deletes `**`
+and `***` wherever they stand, so both versions lose p-value stars. The stray rule now
+leaves a star run that follows a digit or another star (`(?<![0-9*])\*\*+`), the line
+is kept whole, and the digest is re-pinned (`c84804da…` → `59655557…`, old value in the
+comment). One chunk of the four fixture documents differs from the old rule, that line
+only.
+
 ## Checks beyond the build
 
 - **Deterministic tests (all in `make verify`; the named ones per phase above):** the
@@ -1314,6 +1382,9 @@ review's diff-scoping exclusions).
     step; not raised in this build (one call in seven rounds), left to the review with the
     obesity run's 47 `screen_abstract` cuts at 7 s across the 48-wide pool (all recovered
     on attempt 2).
+23. The markup rule's stray-marker pattern deleted significance stars after numbers
+    (`0.50**`, `0.54***`) in statistics tables, an E6 limit nobody had listed; fixed with
+    the owner's two markup rulings (§ Owner rulings after the exit), digest re-pinned.
 22. The pool-convergence test (`test_adaptive_pool_converges_under_a_quota_and_never_splits_for_throttling`)
     failed once at the exit gate (width climbed to 5 against an allowance of 3) and once in
     five runs alone: its fake backend measures "in flight" by wall clock with a 20 ms hold,
@@ -1397,8 +1468,9 @@ ops account figures are in the gitignored notes, not in this record.
 
 ## Review handoff (step-7/8 inputs)
 
-- **Adjudication items:** the 22 numbered deviations in § Diff summary; items 7, 13, 14, 16
-  and 21 need an owner ruling, the rest a reviewer's read.
+- **Adjudication items:** the 23 numbered deviations in § Diff summary; items 7, 13, 14 and
+  16 need an owner ruling (21 and the timeouts were ruled on 2026-11-03), the rest a
+  reviewer's read.
 - **Executor provenance (family flip):** the lead wrote the seams, the route-file tables and
   every owner-facing text; deep-reasoner agents built the judgment-bearing phases (schema and
   backfill, the SQL retriever, the per-document function and stage, the pool, the handler,
@@ -1411,6 +1483,8 @@ ops account figures are in the gitignored notes, not in this record.
   `backend/uv.lock`, `infra/uv.lock`.
 - **Live-trace pointers:** run ids per round in the sections above; Langfuse session id =
   task id; server logs per round in the session scratchpad (not committed).
+- **Stall probes:** [stall-probes.md](stall-probes.md), three Bedrock-only probes for the
+  review conversation to run or schedule (the owner dropped the `openai-direct` comparison).
 - **Knowledge candidates** (one per durable-seeming lesson, however raw):
   - zsh does not word-split an unquoted `$variable` holding several arguments; use `${=var}`.
   - The dev server caps concurrent walks at two (`RUN_EXECUTOR_MAX`); a third fixed-question

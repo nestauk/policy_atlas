@@ -404,8 +404,11 @@ _BYTE_IDENTITY_FILES = (
 # The v1 digest (scheduler before task 056, commit 35c92e59, same at workers 1 and 4)
 # was 15f69fc20ab88c0d21ad866686e26da009a0f65e52b6587b74b2f108787078b9. A
 # pymupdf4llm/pymupdf/trafilatura upgrade may move it: re-derive it from the
-# in-process leg and check the workers legs still equal it.
-_BYTE_IDENTITY_DIGEST = "c84804da2ebe3e77f98e2a5a51cb9f3b6600e3b42bd85469b113071d517c2c78"
+# in-process leg and check the workers legs still equal it. The first v2 digest
+# (c84804da2ebe3e77f98e2a5a51cb9f3b6600e3b42bd85469b113071d517c2c78) moved on
+# 2026-11-03 when the markup rule stopped deleting significance stars after a number
+# (one chunk of frontiers_school_readiness_2022: `0.47* 0.50** 0.54***` kept whole).
+_BYTE_IDENTITY_DIGEST = "59655557f2958d057a89a811ea50f21845db1534d4161b360844ddd2ddde30fc"
 
 
 def _results_digest(results: dict[int, dict[str, Any]]) -> str:
