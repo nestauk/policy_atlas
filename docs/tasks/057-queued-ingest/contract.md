@@ -3,9 +3,10 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in
 [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted 2026-11-02, **revision 2 on 2026-11-03**, awaiting contract approval.
-> Contract approved (before planning): _pending_ · Plan approved (before implementation):
-> _pending_ · ADR: _pending (step 4)_ · Branch: `task/057-queued-ingest`.
+> **Status:** approved, revision 2. Drafted 2026-11-02; revision 2 on 2026-11-03.
+> **Contract approved (before planning): 2026-11-03 · Shabeer Rauf (owner).** Contract-stage
+> adversarial review: _running_ (findings folded as revision 3 if material). Plan approved
+> (before implementation): _pending_ · ADR: _pending (step 4)_ · Branch: `task/057-queued-ingest`.
 >
 > Revision 1 encoded the owner's 15 rulings on the decision sheet of 2026-11-02 (file
 > `docs/research-and-development/synthesis-refinement/latency-slice-decision-sheet.md`,
