@@ -1,6 +1,9 @@
 # Implementation plan: 057-queued-ingest
 
-> Status: **draft 2, 2026-11-03, awaiting the owner's approval.** Draft 1 was reviewed by two
+> Status: **approved by the owner 2026-11-03 (Shabeer Rauf).** Draft 2, 2026-11-03, with the
+> seven gate items ruled the same day (§ Owner items). ADR:
+> [0043](../../adr/0043-queued-ingest-document-store-sql-retrieval-step-timeouts.md),
+> Accepted 2026-11-03. Draft 1 was reviewed by two
 > read-only lanes ([adversarial-review-plan.md](adversarial-review-plan.md): Codex 16
 > findings, Opus 26); every finding is folded here or listed under § Owner items. Contract:
 > [contract.md](contract.md) (revision 4: revision 3 approved 2026-11-03, plus the clause

@@ -15,8 +15,11 @@ One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); spe
 > acceptance checks naming `embed_timeout`, D5 naming the `ops` group, and G5 asking for a
 > `cdk diff` before it can exist; all corrected to match D6, N3, G3 and the plan. Two plan
 > items touch the contract and await the owner: ids-only messages (N1) and two link-row
-> columns under G2 (plan § Owner items 2 and 4). Plan approved (before implementation):
-> _pending_ · ADR: _pending (step 4)_ · Branch: `task/057-queued-ingest`.
+> columns under G2 (plan § Owner items 2 and 4; both ruled yes the same day). **Plan approved
+> (before implementation): 2026-11-03 · Shabeer Rauf (owner).** ADR:
+> [0043](../../adr/0043-queued-ingest-document-store-sql-retrieval-step-timeouts.md), Accepted
+> 2026-11-03 · Branch: `task/057-queued-ingest`. **Design phase closed; the build opens in a
+> fresh conversation with task-cycle-build on plan Phase 0.**
 >
 > Revision 1 encoded the owner's 15 rulings on the decision sheet of 2026-11-02 (file
 > `docs/research-and-development/synthesis-refinement/latency-slice-decision-sheet.md`,
