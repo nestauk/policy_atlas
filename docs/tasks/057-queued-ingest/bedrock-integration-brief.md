@@ -97,12 +97,14 @@ rather than lost ones. The rate moves with the hour (probe 2's runs saw 0.3%, ro
    infra change, approval-gated; raise it as its own task.
 6. **Trim `max_completion_tokens` to real output sizes on the wide steps.** The screen step
    sends 8,192 and the classify step 16,384 against outputs of a few hundred tokens
-   (`SCREEN_MAX_OUTPUT_TOKENS`, `CLASSIFY_MAX_OUTPUT_TOKENS`); Bedrock reserves input +
-   `max_tokens` at admission with output at 10×, so a 48-wide burst reserves on the order of
-   the whole Luna global TPM quota for a few seconds. Today that costs nothing visible (no
-   Bedrock 429s in any round), but it is the first thing that would turn into throttling
-   when production traffic joins staging's. One constant per step, measured by the
-   recorded output sizes.
+   (`SCREEN_MAX_OUTPUT_TOKENS`, `CLASSIFY_MAX_OUTPUT_TOKENS`). Bedrock admits a request
+   only if `input + max_tokens` fits in the quota that minute (the 10× burndown applies to
+   the real output at settlement, not to the reservation), so one 48-wide classify burst
+   reserves about 786,000 output tokens plus its inputs, roughly a fifth to a quarter of
+   Luna's 4,000,000 global TPM, for its few seconds; a screen burst about a tenth. Today
+   that costs nothing visible (no Bedrock 429s in any round), but several components'
+   bursts in one minute, or production traffic joining staging's, is where it would first
+   turn into throttling. One constant per step, measured by the recorded output sizes.
 7. **Do not add TCP keep-alive or the NAT sysctl for this.** The documented 350 s class
    cannot reach a pool that expires idle connections at 5 s; add them only if someone raises
    the keep-alive expiry (write that constraint next to the client).
