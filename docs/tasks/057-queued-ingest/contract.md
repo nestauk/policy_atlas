@@ -3,14 +3,14 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in
 [docs/specs/](../../specs/index.md).
 
-> **Status:** revision 3, gate reopened on seven material findings. Drafted 2026-11-02;
-> revision 2 on 2026-11-03; **revision 2 approved 2026-11-03 · Shabeer Rauf (owner)**; the
+> **Status:** revision 3, every item ruled; re-approval pending. Drafted 2026-11-02; revision
+> 2 on 2026-11-03; **revision 2 approved 2026-11-03 · Shabeer Rauf (owner)**; the
 > contract-stage adversarial review the same day
 > ([adversarial-review-contract.md](adversarial-review-contract.md), 19 findings, Opus lane
-> standing in for a stalled Codex lane) is folded as revision 3. Twelve findings are folded as
-> design detail; seven reopen the gate and are marked ❓ **Owner** below (findings 3, 4, 9, 10,
-> 11, 13 and the slice shape). Re-approval of revision 3: _pending_ · Plan approved (before
-> implementation): _pending_ · ADR: _pending (step 4)_ · Branch: `task/057-queued-ingest`.
+> standing in for a stalled Codex lane) is folded as revision 3: twelve findings as design
+> detail, seven as owner rulings (§ Owner rulings). Re-approval of revision 3 (before
+> planning): _pending_ · Plan approved (before implementation): _pending_ · ADR: _pending
+> (step 4)_ · Branch: `task/057-queued-ingest`.
 >
 > Revision 1 encoded the owner's 15 rulings on the decision sheet of 2026-11-02 (file
 > `docs/research-and-development/synthesis-refinement/latency-slice-decision-sheet.md`,
@@ -191,7 +191,7 @@ Experiment folders are under `experiments/experiments-057-2026-11-02/` (gitignor
 | N5 | Concurrency cap on the event-source mapping, **default 20** (finding 14: embedding gains nothing past the quota; the writer is a burstable `db.t3.medium`), raised only on a staging measurement; one database connection per invocation, closed on return (no pool in the function). | none | CDK test pins the cap; the plan records the writer instance's `max_connections`, the API pool (15 + 10) and the arithmetic, and the account's Lambda concurrency and memory quotas. |
 | N6 | One code path: a per-document function `ingest_document(conn, link_row, …)` called by the Lambda handler and, in `in_process` mode, by a thread pool of the parse worker count where **each worker thread holds its own connection from the engine and commits per document** (finding 17: a SQLAlchemy connection is not thread-safe, and this gives both modes the same commit semantics). The N8 scheduler and the batch hand-over are deleted. | `_ParseScheduler`, `_run_parse_jobs`, `_drain_*`, the fetch thread pool. | Byte-identical chunk digest on the committed fixture corpus between worker counts 1 and 4 (the existing test, re-pinned to profile v2); statuses and reasons identical between the two modes on the fixture corpus; the test database's connection count stays within the pool. |
 | N7 | Parse profile v2 for PDF, HTML, JATS and plain routes: markdown and HTML markup removed from chunk text at segmentation, with headings kept in the locator. New profile and policy names; old snapshots untouched. The header, page-number and footnote rules are **not** built (owner, 2026-11-03). | `_parse_pdf`, `_parse_html`, `_segment_markdown_pages`, `parse_jats.py`. | On the 10 control PDFs of E6: markup-bearing chunks 186 → 0, tables and heading paths unchanged; on the fixed questions **no quote failure whose cause is markup** (finding 16: a rate on a few hundred quotes is noise); v2 byte-identical across runs. |
-| N8 | Retrieval in SQL: a `vector(1536)` column and a `tokens text[]` column with a GIN index on `chunk_embedding`, backfilled from the JSONB vectors and the chunk text; `ChunkRetriever.search` runs one statement that returns the fused candidate list (up to 50 rows with their prior factors) over a **snapshot-id list frozen once per synthesise run** (finding 5); Python keeps query embedding, the reranker seam, the cut to 8, the character budget, dedup, windowing and provenance. `build_retrieval_scope` no longer loads units or vectors; the 20,000-unit cap and `RetrievalUnitCapError` are deleted. Both callers (synthesis, chat) switch. **Parity is proven before the Python retriever is deleted** (finding 10): a committed synthetic corpus with stub vectors covering every boost, filter, tie-break and the multi-scope rule, run against both retrievers in one test; plus a recorded real-query parity on bedrock-profile vectors taken before the migration. | `synthesis_tools.py`, `api/chat_scope.py`. | The synthetic-corpus test green against both retrievers; the recorded real-query parity (same top-8, same order) in verification.md; retrieval provenance records the factors for the returned candidates (❓ **Owner**, finding 10: the product records factors for every candidate today); a query under 100 ms on the dev corpus; the embedding write per run measured before and after (E10's 17 to 45 s). |
+| N8 | Retrieval in SQL: a `vector(1536)` column and a `tokens text[]` column with a GIN index on `chunk_embedding`, backfilled from the JSONB vectors and the chunk text; `ChunkRetriever.search` runs one statement that returns the fused candidate list (up to 50 rows with their prior factors) over a **snapshot-id list frozen once per synthesise run** (finding 5); Python keeps query embedding, the reranker seam, the cut to 8, the character budget, dedup, windowing and provenance. `build_retrieval_scope` no longer loads units or vectors; the 20,000-unit cap and `RetrievalUnitCapError` are deleted. Both callers (synthesis, chat) switch. **Parity is proven before the Python retriever is deleted** (finding 10): a committed synthetic corpus with stub vectors covering every boost, filter, tie-break and the multi-scope rule, run against both retrievers in one test; plus a recorded real-query parity on bedrock-profile vectors taken before the migration. Retrieval provenance records the prior factors for the returned candidates only (owner, 2026-11-03: accept). | `synthesis_tools.py`, `api/chat_scope.py`. | The synthetic-corpus test green against both retrievers; the recorded real-query parity (same top-8, same order) in verification.md; a query under 100 ms on the dev corpus; the embedding write per run measured before and after (E10's 17 to 45 s). |
 | N9 | Content-addressed reuse: the function hashes the body, looks up the store key, links an existing full-text snapshot instead of parsing again; embedding fills only the units missing for the current profile (D6). The shared row carries no task, user, run or URL breadcrumb: `ingested_by_run_id`, `envelope_source_snapshot_id` and `fetched_from` move from the snapshot's `metadata` to the link row (finding 13); the test covers JSON keys as well as columns. | `source_snapshot` insert at every ingest with per-task keys in `metadata`; no body hash. | A test ingests the same bytes for two tasks and asserts one snapshot, two link rows, no per-task key on the snapshot; a test with a different embedding profile asserts a second set of embedding rows and no second parse. Live: a second run on an overlapping question shows `already_in_store` in the counts. |
 | N10 | Timeout and width levers, each measured: (a) confirm no call over 300 s on the fixed scoping question under current code (finding 8: the 900 s calls were three 300 s attempts under pre-056 timeouts); (b) `OPTION_SEARCH_WIDTH` 4 → 10; (c) **step timeouts for every model call site** (D12), as `timeout_s` under the bedrock route's `[steps]` overrides, set to 2 × that step's healthy p99 total (healthy = a first attempt that succeeded) from at least 100 traced attempts, else the step keeps today's value; floor 5 s; **`max_retries = 0` on every client plus one traced retry of our own** so each attempt is its own generation and the measure can be read back (finding 12; this closes the 056 seam "timeout retries are billed but untraced"); streamed steps (chat) exempt; (d) pool widths: screen stage 1 and classify 12 → 48 (code constants, both routes); screen stage 2 and extract unchanged unless measured. | `scoping_backend.py`; `scoping_plan.py`; `synthesis_backend.py:721`, `grounding_judge.py:332` and every other client the 056 inventory lists (58 sites); `core/openai_client.py`; `screen.py`, `classify.py`. | Scoping: the fixed question before and after, fan-out wall, no new 429s, no calls over 300 s. Timeouts: per step, attempts that hit the timeout whose retry succeeded (stalls caught) and whose retry was also slow (too tight: raise that step once); the count of components that retried because every attempt was cut (must be 0); synthesise wall before and after; owner's read finds the reports unchanged. Widths: screen and classify stage walls before and after, 429 count. |
 | N11 | Infra: queue (retention 4 days, encrypted at rest), dead-letter queue, function (image = the backend asset, command = the handler, 1,769 MB, timeout 180 s, private subnets, security group with Aurora ingress; **secrets fetched at runtime from Secrets Manager with a grant, not placed in environment variables**; Bedrock through the function's IAM role; one connection per invocation), event-source mapping with the cap, the API task role's `sqs:SendMessage` and the queue URL in its environment, alarms (dead-letter depth, NAT instance network, writer CPU credits), the function's log group with a retention period and URL redaction, `ingest_mode` in `pa_config.json` per environment and in the API task's environment (finding 14). CDK tests. | `policy_atlas_stack.py`, `pa_config.json`, `network_config.json` (NAT `t4g.nano`), `db_config.json` (`db.t3.medium`). | `make -C infra test` green; `cdk diff` reviewed at the plan gate with the account's Lambda quotas recorded; staging deploy succeeds. |
@@ -227,10 +227,8 @@ Backfill size: 130,614 units took 367 s locally as a COPY into a fresh table (th
 study), not as an in-place UPDATE on a `db.t3.medium` Aurora writer; the plan gate records the
 staging and prod row counts and a staging dry run. The deploy script's `aws ecs wait
 tasks-stopped` gives up after about 10 minutes with the service already stopped (finding 9):
-❓ **Owner**, bring the waiter loop in `scripts/deploy.sh` into scope (a polling loop with a
-longer limit), or accept a stop condition that the migration must finish inside 10 minutes.
-Prod runs the same migration while it stays `in_process`; the dev compose Postgres has no
-pgvector (❓ **Owner**, finding 3, see G9).
+the waiter loop comes into scope (G10). Prod runs the same migration while it stays
+`in_process`. The dev and CI Postgres image gains pgvector (G9).
 
 **D3. Store key and reuse. Decided (owner, sheet item 8: reuse on, no switch).** The key is
 body hash × parse profile × segmentation policy. On a hit the function links the existing
@@ -265,24 +263,23 @@ instance. No S3, no VPC endpoints. The parse step runs in a subprocess inside th
 with the same kill and the same socket denial as the tests require today; the handler process
 itself needs the network. Cost for 100 documents at this size: about one to two cents.
 
-**D6. Embedding. ❓ Owner (review finding 4 reopens sheet item 4).** Bedrock throttles Cohere
-Embed v4 by tokens on this account: about 620,000 to 673,000 per minute at any concurrency,
-which a single serial stream already reaches (E1). Fan-out therefore neither speeds nor hurts
-embedding; the stage's embedding time is tokens ÷ quota, about 4 min for 100 documents today,
-about 1 min once the raise to 3,000,000 lands (G4). The review shows that embedding inside the
-function fails under that quota: 20 to 50 throttled functions share the same tokens per
-minute, so a long document (300 units, 130,000 tokens) cannot finish in the time left after
-fetch and parse, and Lambda kills the process at 180 s before any status is written. That
-would bias runs against long documents, which components § 4 forbids, and would hold until
-the raise. **Lead's recommendation:** the function fetches, parses and writes chunks; **the
-stage embeds** pending chunks in one stream as documents land, with today's
-`embed_pending_chunks` scoped to the snapshots that have arrived, so the floor is the same,
-D13's patient backoff is unnecessary, no `embed_timeout` state exists, and a snapshot with
-chunks but no vectors is the same transitional state the code handles today. Alternative
-(sheet item 4 as ruled): keep embedding in the function, stop the handler at the remaining-time
-margin and write `embed_timeout`, and accept that long documents fail until the raise. The
-JSONB write overhead (E10) goes with N8's binary column either way. Switching embedding model
-is out.
+**D6. Embedding runs in the stage, not in the function. Decided (owner, 2026-11-03, after
+review finding 4 reopened sheet item 4).** Bedrock throttles Cohere Embed v4 by tokens on this
+account: about 620,000 to 673,000 per minute at any concurrency (E1), so embedding time is
+tokens ÷ quota wherever it runs: about 4 min for 100 documents today, about 1 min once the
+raise to 3,000,000 lands (G4). Embedding inside the function would fail under the quota: 20 to
+50 throttled functions share the same tokens per minute, a long document (300 units, 130,000
+tokens) cannot finish in the time left after fetch and parse, and Lambda kills the process at
+180 s before any status is written, biasing runs against long documents (components § 4
+forbids that). So the function fetches, parses and writes chunks, and **the stage embeds**
+pending chunks as documents land, with today's `embed_pending_chunks` scoped to the snapshots
+that have arrived. One request stream tops out at about 700,000 tokens per minute (a 96-unit
+request takes about 3.4 s), so the stage runs **a small pool of requests in flight, width =
+quota ÷ 700,000, a value in the route file** (1 today, 4 to 5 after the raise): the design
+scales to the raise without moving anything. The owner asked whether this would have to move
+into the function later: no, for that reason. A snapshot with chunks but no vectors is the same
+transitional state the code handles today. The JSONB write overhead (E10) goes with N8's
+binary column. Switching embedding model is out.
 
 **D7. Retrieval parity. Decided (owner, sheet item 7).** The SQL leg for words uses the
 product's own score (share of query words found in the unit), not Postgres full-text ranking,
@@ -339,20 +336,17 @@ adds nothing on Bedrock (first token at 71 to 97% of total, E2) and hedging bill
 Section order and the ledger are untouched. The Bedrock embedding client's botocore
 `read_timeout` and retry mode are set explicitly too.
 
-**D13. Embedding backoff. Conditional on D6.** If the owner keeps embedding in the function,
-its backoff rises to a cap of 60 s and continues until the remaining-time margin rather than
-giving up after 4 attempts (E1 saw a batch fail that way), and a document whose embedding does
-not finish is `parse_failed` with reason `embed_timeout`, written by the handler before Lambda
-kills it. If the stage embeds (the lead's recommendation), D13 is void: the stream's existing
-backoff applies and no new state is needed.
+**D13. Embedding backoff. Void by D6.** The stage's existing backoff applies to the embedding
+pool; a batch that still fails after its attempts is handled as today (`embed.batch_failed`,
+the chunks stay pending for the next pass). No `embed_timeout` state exists.
 
-**D15. Levers that apply to every route reach prod before the route flip. ❓ Owner (review
-finding 11).** The judge effort and the step timeouts live under the bedrock route's `[steps]`
-overrides, so `openai-direct` keeps today's values. The pool widths (N10d) are code constants
-and apply to both routes, and the SQL retriever and the queued stage are route-neutral. Prod
-stays on `openai-direct` until the separate flip, so it takes the widths and the retriever
-unmeasured on its route. Options: accept that (lead's lean: the widths were safe to 48 with no
-429s and the retriever is at parity); or run one `openai-direct` smoke at the step-6 exit.
+**D15. Levers that apply to every route reach prod before the route flip. Decided (owner,
+2026-11-03: accept).** The judge effort and the step timeouts live under the bedrock route's
+`[steps]` overrides, so `openai-direct` keeps today's values. The pool widths (N10d) are code
+constants and apply to both routes, and the SQL retriever and the queued stage are
+route-neutral. Prod stays on `openai-direct` until the separate flip and takes the widths and
+the retriever unmeasured on its route; the widths were clean to 48 with no 429s and the
+retriever is at parity.
 
 **D14. The grounding judge runs at `low` reasoning effort; its prompt, batching and place in
 the loop are untouched. Decided (owner, 2026-11-03).** Splitting saves nothing (E3). Low
@@ -392,21 +386,14 @@ we're ready to move from staging to prod, after some internal testing by the tea
 this slice, noted in `deferred.md`. **Revision 2 approved.**
 
 **2026-11-03, adversarial review (revision 3).** Twelve findings folded as design detail
-(1, 2, 5, 6, 7, 8, 12, 14, 15, 16, 17, 18, 19). Seven reopen the gate, ❓ pending the owner:
-- **Finding 3 (G9):** the dev and CI Postgres image must gain pgvector (`pgvector/pgvector:pg17`
-  in `docker-compose.yml`, which CI runs). A CI and dev-environment change.
-- **Finding 4 (D6):** embedding in the stage instead of in the function (lead recommends).
-- **Finding 9 (D2):** the deploy waiter loop in `scripts/deploy.sh` into scope, or a 10-minute
-  migration stop condition.
-- **Finding 10 (N8):** accept that retrieval provenance records prior factors for the returned
-  candidates only, not for every candidate.
-- **Finding 11 (D15):** prod takes the widths and the retriever unmeasured on `openai-direct`
-  until the flip, or one smoke run there.
-- **Finding 13 (G6):** `already_in_store` reaches the public SSE summary; hide it, or accept
-  that users see that another task read the same document.
-- **Shape:** one consolidated slice with phases ordered timeouts and widths → queued ingest →
-  SQL retrieval (lead's lean, the owner's standing preference), or the reviewer's split into
-  three slices.
+(1, 2, 5, 6, 7, 8, 12, 14, 15, 16, 17, 18, 19). Seven reopened the gate; the owner ruled the
+same day: finding 3 (G9, pgvector in the dev and CI image): "yes"; finding 4 (D6, embedding in
+the stage): yes, after asking whether it would have to move into the function once the quota
+rises (it does not: one stream caps at about 700,000 tokens a minute, so the stage's request
+pool widens with the quota); finding 9 (G10, the deploy waiter): "Bring it in"; finding 10
+(provenance for returned candidates only): "accept"; finding 11 (D15, prod takes route-neutral
+levers unmeasured): "accept"; finding 13 (G6, `already_in_store` in SSE): "hide it"; shape:
+"one slice", phases ordered timeouts and widths → queued ingest → SQL retrieval.
 
 ## Spec items (accepted by the owner 2026-11-03: "They're fine"; applied in the build with a line in the spec log)
 
@@ -441,8 +428,8 @@ this slice, noted in `deferred.md`. **Revision 2 approved.**
   `infra/pa_config.json`, infra tests; `backend/pyproject.toml` (one dependency, G3);
   `backend/Dockerfile` (compiled bytecode, G8); tests beside each; `docs/deferred.md`; one ADR;
   the spec items the owner accepts; a data-flow note under `docs/`.
-- **Also in, pending the owner (revision 3):** `docker-compose.yml` (G9); the migration
-  waiter loop in `scripts/deploy.sh` (D2, finding 9).
+- **Also in (revision 3, owner-approved):** `docker-compose.yml` (G9); the migration waiter
+  loop in `scripts/deploy.sh` (G10).
 - **Out:** everything in D10; the rest of `scripts/deploy.sh`; the frontend
   (ticks unchanged); prompt text and prompt hashes (a code-only re-pin for a timeout line is
   recorded with its diff, 056's rule; a prompt-text change stops the slice); Langfuse; the
@@ -467,12 +454,15 @@ this slice, noted in `deferred.md`. **Revision 2 approved.**
   `in_process` until the staging measurement is read (Leaning). The `prod` route flip to
   `bedrock` is a separate later change (owner, 2026-11-03).
 - **G6. Public interface.** The SSE stage and tick shapes are unchanged; `fetched` is null in
-  queued mode (allowed). The counts dict gains `already_in_store`, which the runner forwards
-  into the public `stage.completed.summary` (review finding 13): ❓ **Owner**, hide it from the
-  summary, or accept it as a visible count.
+  queued mode (allowed). The counts dict gains `already_in_store`, which is **kept out of the
+  public `stage.completed.summary`** (owner, 2026-11-03: "hide it"; review finding 13); it
+  stays in the component's stored counts and in verification.md.
 - **G9. Dev and CI database image.** `docker-compose.yml` moves to a Postgres image with
   pgvector (`pgvector/pgvector:pg17`, matching Aurora's major version), which CI runs through
-  the same compose file (review finding 3). ❓ **Owner** (CI is a hard gate).
+  the same compose file (review finding 3). Approved (owner, 2026-11-03).
+- **G10. Deploy script.** The migration waiter loop in `scripts/deploy.sh` is replaced by a
+  polling loop with a limit sized for the backfill (review finding 9). Approved (owner,
+  2026-11-03: "Bring it in").
 - **G7. Governance.** The DPIA addendum for the changed data flow is the owner's artefact and
   gates the merge, as in task 033; the slice supplies the data-flow note (N12).
 - **G8. Dockerfile.** One change: compile bytecode into the image (N13). Approved at this
