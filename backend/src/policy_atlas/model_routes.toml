@@ -166,24 +166,25 @@ backend = "openai"   # Luna through Bedrock's OpenAI-format address, like every 
 # Per-step timeouts on Bedrock (task 057, contract D12): 2 x the step's healthy 99th
 # percentile from at least 30 traced calls since 2026-11-02, floor 15 s (owner ruling
 # 2026-11-03, after the build's n >= 100 / 5 s first pass); a step with fewer calls keeps
-# its [steps] value. Derived by scripts/step_timeouts.py --min-n 30 --floor 15; the table
+# its [steps] value, and every value is rounded up to a multiple of 5 s (owner). Derived by
+# scripts/step_timeouts.py --min-n 30 --floor 15 --round-to 5; the table
 # with sample counts is in docs/tasks/057-queued-ingest/verification.md. A stalled call
 # now costs this long, then two traced retries, instead of 60 or 120 s. The fan-out steps
 # (classify, the two screens) run 48 wide, so their 15 s floor also covers queueing.
 classify_document = { timeout_s = 15 }               # n 4739, p99 5.3 s (floor)
 screen_abstract = { timeout_s = 15 }                 # n 7876, p99 3.3 s (floor)
 screen_full = { timeout_s = 15 }                     # n 921, p99 3.9 s (floor)
-select_rerank = { timeout_s = 24 }                   # n 85, p99 11.7 s
-characterise_assign = { timeout_s = 26 }             # n 57, p99 12.7 s
-extract_interventions = { timeout_s = 33 }           # n 1415, p99 16.4 s
+select_rerank = { timeout_s = 25 }                   # n 85, p99 11.7 s
+characterise_assign = { timeout_s = 30 }             # n 57, p99 12.7 s
+extract_interventions = { timeout_s = 35 }           # n 1415, p99 16.4 s
 search_generate_queries = { timeout_s = 15 }         # n 95, p99 3.5 s (floor)
 synthesise_propose_sections = { timeout_s = 15 }     # n 30, p99 4.3 s (floor)
 synthesise_write_block_summary = { timeout_s = 15 }  # n 254, p99 2.7 s (floor)
 synthesise_judge_summary = { timeout_s = 15 }        # n 277, p99 2.3 s (floor)
-synthesise_section_turn = { timeout_s = 23 }         # n 424, p99 11.0 s (repair shares the step)
+synthesise_section_turn = { timeout_s = 25 }         # n 424, p99 11.0 s (repair shares the step)
 synthesise_write_source_note = { timeout_s = 15 }    # n 33, p99 1.8 s (floor)
-longlist_assign = { timeout_s = 46 }                 # n 71, p99 22.6 s
-option_profile_line = { timeout_s = 84 }             # n 65, p99 41.7 s (above today's 60)
+longlist_assign = { timeout_s = 50 }                 # n 71, p99 22.6 s
+option_profile_line = { timeout_s = 85 }             # n 65, p99 41.7 s (above today's 60)
 option_profile_place_sentences = { timeout_s = 35 }  # n 111, p99 17.1 s
 # The grounding judge runs at low effort on this route (task 057, D14): half the wall per
 # call at 0.8x the cost, agreement with the medium judge at the judge's own noise floor;

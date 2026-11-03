@@ -257,6 +257,7 @@ def derive_table(
     *,
     min_n: int = MIN_N,
     floor_s: int = FLOOR_S,
+    round_to: int = 1,
 ) -> dict[str, Any]:
     """Compute the per-step timeout table from observation dicts.
 
@@ -317,7 +318,8 @@ def derive_table(
         elif site.exempt:
             row["decision"] = "keep, exempt (streamed chat)"
         elif len(values) >= min_n:
-            row["proposed_timeout_s"] = max(floor_s, math.ceil(P99_MULTIPLIER * row["p99_s"]))
+            raw = P99_MULTIPLIER * row["p99_s"]
+            row["proposed_timeout_s"] = max(floor_s, math.ceil(raw / round_to) * round_to)
             row["decision"] = "set"
         else:
             row["decision"] = f"keep, n<{min_n}"
@@ -490,6 +492,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", help="write to this file instead of stdout")
     parser.add_argument("--min-n", type=int, default=MIN_N, help=f"smallest healthy sample (default {MIN_N})")
     parser.add_argument("--floor", type=int, default=FLOOR_S, help=f"smallest timeout in seconds (default {FLOOR_S})")
+    parser.add_argument("--round-to", type=int, default=1, help="round each timeout up to a multiple of this many seconds (default 1)")
     args = parser.parse_args(argv)
     if args.print_sites:
         text = format_sites()
@@ -501,7 +504,9 @@ def main(argv: list[str] | None = None) -> int:
             observations = fetch_observations(args.since, args.until)
             if args.cache:
                 Path(args.cache).write_text(json.dumps(observations), encoding="utf-8")
-        table = derive_table(observations, route_steps(), min_n=args.min_n, floor_s=args.floor)
+        table = derive_table(
+            observations, route_steps(), min_n=args.min_n, floor_s=args.floor, round_to=args.round_to
+        )
         if args.format == "json":
             text = json.dumps({"since": args.since, **table}, indent=1) + "\n"
         elif args.format == "toml":

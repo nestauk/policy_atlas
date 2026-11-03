@@ -1183,22 +1183,23 @@ timeouts):
 | classify_document | 4739 | 5.3 | 11 | 15 (floor) |
 | screen_abstract | 7876 | 3.3 | 7 | 15 (floor) |
 | screen_full | 921 | 3.9 | 8 | 15 (floor) |
-| select_rerank | 85 | 11.7 | 60 | 24 |
-| characterise_assign | 57 | 12.7 | 60 | 26 |
-| extract_interventions | 1415 | 16.4 | 33 | 33 |
+| select_rerank | 85 | 11.7 | 60 | 25 |
+| characterise_assign | 57 | 12.7 | 60 | 30 |
+| extract_interventions | 1415 | 16.4 | 33 | 35 |
 | search_generate_queries | 95 | 3.5 | 60 | 15 (floor) |
 | synthesise_propose_sections | 30 | 4.3 | 120 | 15 (floor) |
 | synthesise_write_block_summary | 254 | 2.7 | 6 | 15 (floor) |
 | synthesise_judge_summary | 277 | 2.3 | 5 | 15 (floor) |
-| synthesise_section_turn | 424 | 11.0 | 23 | 23 |
+| synthesise_section_turn | 424 | 11.0 | 23 | 25 |
 | synthesise_write_source_note | 33 | 1.8 | 30 | 15 (floor) |
 | judge_grounding | 254 | 19.8 | 80 (raised once, D12) | 80 (kept) |
-| longlist_assign | 71 | 22.6 | 60 | 46 |
-| option_profile_line | 65 | 41.7 | 60 | 84 (its p99 was already over today's value) |
+| longlist_assign | 71 | 22.6 | 60 | 50 |
+| option_profile_line | 65 | 41.7 | 60 | 85 (its p99 was already over today's value) |
 | option_profile_place_sentences | 111 | 17.1 | 35 | 35 |
 
-Every other step has fewer than 30 healthy calls and keeps its `[steps]` value (the full
-table is the script's output with `--min-n 30 --floor 15`). The once-per-run
+Every value is rounded up to a multiple of 5 s (owner, same day; the script gains
+`--round-to`). Every other step has fewer than 30 healthy calls and keeps its `[steps]`
+value (the full table is the script's output with `--min-n 30 --floor 15 --round-to 5`). The once-per-run
 `propose_sections` step that stalled for 120 s in rounds (a) and (g) now costs 15 s per
 stall. Rubric 22's "2 × p99 from at least 100 calls" reads "at least 30, floor 15" from
 here on, by the owner's word.
