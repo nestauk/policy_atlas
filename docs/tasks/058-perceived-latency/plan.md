@@ -1,7 +1,7 @@
 # Implementation plan: 058-perceived-latency
 
-> Status: **draft 2, 2026-11-04, revised from contract revision 2; unconfirmed until the
-> owner re-approves the contract and the plan-stage adversarial review runs.** (Draft 1 was
+> Status: **draft 2, 2026-11-04, revised from contract revision 2 (approved 2026-11-04);
+> plan-stage adversarial review in progress; unconfirmed until the owner confirms.** (Draft 1 was
 > committed before the contract review finished; the review's finding 5 names that, and this
 > draft replaces it.) Contract: [contract.md](contract.md) revision 2. Rubric:
 > [rubric.md](rubric.md). Design annex: [design-annex.md](design-annex.md) version 5. Terms, needs (N1 to N26), decisions (D1 to
