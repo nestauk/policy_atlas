@@ -3424,6 +3424,17 @@ says what is true today and what the lever is. Experiment figures are from the g
   26 claims marked unsupported against 33 and 28 for two medium runs and 3 real attribution
   catches missed in 157 claims. Lever: the synthesis refinement task re-judges a labelled set
   of disputed claims and raises the effort again if the leniency is real.
+- **The lexical leg is word overlap, not BM25** (contract D7; owner 2026-11-04: the synthesis
+  refinement task). The SQL retriever's word leg scores a chunk by the share of the query's
+  distinct words it holds: every word weighs the same, repetition and chunk length do not
+  count. BM25 adds rarity weighting (inverse document frequency), frequency saturation and
+  length normalisation; rank fusion softens the gap but the ranks would move. Parity with the
+  deleted Python leg was the task's proof, so the recipe stayed. Levers, cheapest first:
+  Postgres `ts_rank_cd` on a `tsvector` column (no rarity weighting, so not BM25); the
+  `pg_search` extension (new dependency) or our own per-scope term statistics. Measure on the
+  88 recorded queries and the citation funnel (about 12 of about 55 relevant documents cited)
+  before adopting; a leg that does not move the relevant documents reaching the writer is not
+  worth its dependency.
 - **The prod route flip to `bedrock`.** `bedrock` is the app's default route going forward and
   `openai-direct` is legacy (owner, 2026-11-02); prod stays on `openai-direct` until the team's
   internal testing on staging is done (owner, 2026-11-03). Prod takes the route-neutral levers
