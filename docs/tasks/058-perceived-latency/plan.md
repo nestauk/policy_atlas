@@ -170,7 +170,7 @@ step-6 exit. Others fast.
 
 ### Phase 5 — Frontend core: store, card, Result tab, strip, sidebar, tabs (N5, N7 frontend, N8, N11 to N16, N21 frontend; P6, P9, P10)
 - 5a plumbing (fast-worker, from the contract's needs and the regenerated types): the SSE
-  client's 45 s read-inactivity watchdog; the post-sign-in deep-link navigate; reducer
+  client's 45 s read-inactivity watchdog; reducer
   cases for the tick fields and heartbeats, deltas with `mode`, revising spans, stage start
   times, the per-section `draft`; `sseFrame.ts`; the provider's run status and stream passed
   to the sidebar; query invalidation rules (ingest ticks throttled, child frames refresh the
