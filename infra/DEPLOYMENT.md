@@ -691,7 +691,7 @@ fixture corpus are intentionally omitted from the deployed task.
 | `OPENALEX_EMAIL` | Secrets Manager field: `policy_atlas_v3/app` `OPENALEX_EMAIL` | `evidence_search/sourcing/search_live.py` |
 | `OVERTON_API_KEY` | Secrets Manager field: `policy_atlas_v3/app` `OVERTON_API_KEY` | `api/deps.py`, `evidence_search/sourcing/search_live.py` |
 | `PA_BACKEND_MODE` | config value: `live` | `api/deps.py` |
-| `POLICY_ATLAS_MODEL_ROUTE` | config value: `backend.model_route` (`bedrock` on staging, `openai-direct` on production) | `core/model_routes.py` |
+| `POLICY_ATLAS_MODEL_ROUTE` | config value: `backend.model_route` (`bedrock` on staging and production) | `core/model_routes.py` |
 | `POLICY_ATLAS_INGEST_MODE` | config value: `backend.ingest_mode` (`queued` on staging, `in_process` on production) | backend ingest stage (task 057) |
 | `POLICY_ATLAS_INGEST_QUEUE_URL` | stack value: the ingest queue's URL | backend ingest stage (task 057) |
 | `POLICY_ATLAS_FIXTURE_CORPUS` | omitted (development/test fixture override) | `evidence_search/sourcing/ingest_full_text.py` |
