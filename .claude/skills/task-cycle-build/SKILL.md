@@ -77,6 +77,25 @@ what actually shipped. But **capture is this phase's job** (014 retro, 2026-07-0
 the build learned dies at the conversation boundary unless it's written into the handoff —
 step 6's knowledge-candidates list below is where.
 
+## Step 5b — Polish passes (frontend-heavy slices; owner, 2026-11-04)
+
+After step 5 is implemented and `make verify-fast` is green, and **before** step 6, the
+slice takes two polish passes on the live dev app, inside the same task and PR:
+
+1. **Agent pass.** The pinned `frontend-designer` agent (`.claude/agents/`; it loads every
+   frontend design skill, `DESIGN.md`, `PRODUCT.md` and the slice's research before it
+   starts) reviews the build against `design-annex.md` and applies material fixes within
+   the annex. Copy and direction changes are proposals to the lead, not edits.
+2. **Owner pass.** The owner looks at the live app; the lead applies the notes. Rounds run
+   until the owner signs off; the contract names the round budget.
+
+Each round commits on green `make verify-fast`; its rulings go into the annex, not the
+contract; the owner's sign-off is a human 🛑 recorded in `verification.md`. The rubric
+carries one row: "polish passes complete, annex updated, owner sign-off recorded". Give
+the polish passes their **own conversation**, re-grounded from the annex and the running
+app (`make dev`; screenshots via Playwright), not from the build transcript. Both passes
+run again at the end of the review phase (task-cycle-review).
+
 ## Step 6 — Verify
 
 Fill `docs/tasks/_templates/verification.md` → `docs/tasks/NNN-slug/verification.md`:
