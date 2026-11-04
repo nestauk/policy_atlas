@@ -12,7 +12,8 @@ Core
        regeneration.
 3. [ ] No approval-gated change beyond G1 to G7: no schema, no dependency, no CI or prod
        config change; the public-interface additions are exactly those G1 lists; the
-       prompt-hash re-pin covers only the final turn's call shape and the time-band table.
+       prompt-hash re-pin covers only the final turn's call shape and the time-band table; no
+       compatibility shim or kept-beside field (replace, do not layer).
 4. [ ] No generated files or secrets edited by hand.
 5. [ ] No tests deleted, skipped or weakened without written justification (the client
        vocabulary tests N17 removes are listed with the server-side test that replaces each).
@@ -50,16 +51,15 @@ Streaming (N6 to N10, D1, D3)
 14. [ ] N6: the final turn streams as strict `json_schema`, deltas are published, the parsed
         object continues unchanged into the claims path, the fallback runs once on failure,
         resets the draft and is counted; the decoded delta text equals `parsed.prose` across
-        escapes and chunk boundaries (test); strict acceptance of the full schema checked on
-        Terra and Luna before Phase 2.
+        escapes and chunk boundaries (test).
 15. [ ] N7: the two ephemeral frames with `mode` are in the union and the spec; the reducer
         appends, replaces, marks, completes, and rebuilds identically from a replay with no
         deltas; disconnect and reload after n chunks then more chunks is tested.
 16. [ ] N8: the Result tab's states match annex scene 6, including the blur and cross-fade with
         nothing marked afterwards, the key-findings note, the footer states, reduce motion,
         the accessible draft state, and no claim marker on draft text.
-17. [ ] N9: the planner turn streams for both profiles under `Accept: application/x-ndjson`
-        with the JSON response unchanged otherwise; one terminal event; auth before headers;
+17. [ ] N9: the planner turn streams for both profiles (the JSON response replaced); one
+        terminal event; auth before headers;
         the turn completes if the client disconnects; the Agent tab fills the pending turn and
         shows "Drafting the plan"; the opening turn streams in the Agent tab.
 18. [ ] N10: the clarifying question renders above its chips; chips survive a reload.

@@ -65,10 +65,9 @@ overlap (the plan does not require it).
 - **P6. The reducer keeps a `draft` per section** (the concatenated deltas plus the marked
   spans) separate from `prose` (from `section_completed`); replay rebuilds `prose` only, so
   the replay-idempotence tests stay as they are. (N7, N8)
-- **P7. The planner stream is a second representation of the same route**, chosen by
-  `Accept: application/x-ndjson`, with the chat route's event shape and its rules (auth before
-  headers, one terminal event, the turn completes without the client). The JSON response is
-  untouched. (N9; finding 3)
+- **P7. The planner route streams**, with the chat route's event shape and its rules (auth
+  before headers, one terminal event, the turn completes without the client); the JSON
+  response is replaced. (N9; owner: deploy together, replace)
 - **P8. A new options read**, `GET /tasks/{id}/options`, lists the task's option rows with
   each one's child search status and count, under the longlist read's predicate; `/longlist`
   is untouched. (N22; findings 2, 13, 14)
@@ -80,8 +79,8 @@ overlap (the plan does not require it).
 - **P11. Copy is written by the lead in one pass** at Phase 1 (labels, blurbs, verbs, count
   keys, the Options scoping blurbs) and committed as the server table; the annex's copy is
   the input. Agents never write user-facing copy.
-- **P12. The Luna strict check runs before Phase 2 is built**, by `builder`, with the real
-  schema on both tiers; a refusal on Luna is a stop condition. (N6; finding 17)
+- **P12. No fast-tier gate.** The writer runs on the standard tier, where the full strict
+  schema is proven; the fast tier is noted as unverified for this call shape. (N6; owner)
 - **P13. Wall time rides the terminal event.** The runner puts `wall_clock_s` in the
   `component.completed` payload, computed before the event, so the live tail never projects
   a null; `component.timing` stays for the per-stage anatomy. (N5; finding 7)
@@ -117,7 +116,8 @@ step-6 exit. Others fast.
 - Commit on fast.
 
 ### Phase 1 — Copy, tick shape, coalescer, wrapper hook, honest totals (N1, N2, N4, N17, D2, D4, S1, S2; P2, P3)
-- `api/contract/sse.py`: tick fields `activity`, `done`, `section` (codex); `make openapi-sync`.
+- `api/contract/sse.py`: the reshaped tick (one field set; the ingest-only fields removed)
+  and the ingest stage moved onto it (codex); `make openapi-sync`.
 - `core/liveness.py`: coalescer (500 ms per task and stage, latest wins), the 10 s in-flight
   heartbeat, last-tick and draft memory keyed by run with clearing, TTL and a bound, the
   `dropped` counter, `publish_progress(stage, done, total, unit)`, a `publish_delta` path for
@@ -137,8 +137,6 @@ step-6 exit. Others fast.
 - Gate: full (types regenerated; `make drift-check`). Commit.
 
 ### Phase 2 — Streaming backend (N3, N6, N7 backend, D1, D3, G2, S3; P4, P5, P12)
-- Pre-build probe (builder): the real schema strict on Terra and Luna with the Phase 1
-  code; a refusal on Luna stops the phase (P12).
 - `synthesis_backend.section_emit_stream` with the strict `json_schema` request,
   `include_usage`, delta publishing with `mode`, the once-only fallback (which publishes an
   empty `replace`) and its counter; the loop's forced-emit turn calls it; the test that the
@@ -155,9 +153,9 @@ step-6 exit. Others fast.
 - Gate: full. Commit.
 
 ### Phase 3 — Planner streaming and planner fixes (N9, N10 backend, N18 backend, N20 backend, S4 part; P7)
-- `POST /task-agent-turns` gains the `Accept: application/x-ndjson` representation for both
-  profiles with the chat route's rules; the JSON response unchanged; the opening turn no
-  longer runs inside task creation; `TaskAgentTurnOut.question` (codex).
+- `POST /task-agent-turns` streams for both profiles with the chat route's rules, replacing
+  the JSON response; the opening turn no longer runs inside task creation;
+  `TaskAgentTurnOut.question` (codex).
 - `task_agent_scoping.py` part ids gain `who_can_act` and `your_options`; one time-band
   table shared by the preset prompt and `task_plan.TIME_BANDS`; `longlist_turns.py` replies
   without asterisks (fast-worker; lead reviews the copy).
@@ -231,10 +229,10 @@ conversation with task-cycle-review (its design lane and second polish round inc
 | Executor | Work |
 |---|---|
 | lead | copy (Phase 1); route step and prompt re-pin (2); spec items; live runs and captures (0, 10); screenshot rounds; owner-facing reads; adjudication |
-| codex | coalescer, heartbeat, draft memory, hooks, snapshot, wall time in the terminal event (1); streamed turn, revising frame, loop callback, decoded-equality test (2); planner representation and question (3); the options read and `stage_label` (4) |
+| codex | coalescer, heartbeat, draft memory, hooks, snapshot, wall time in the terminal event, the reshaped tick (1); streamed turn, revising frame, loop callback, decoded-equality test (2); the streamed planner route and question (3); the options read and `stage_label` (4) |
 | fast-worker | copy-coverage test and loop registrations (1); planner fixes (3); store plumbing (5a); mock API and journeys (8) |
 | frontend-designer | surfaces (5b, 6, 7); the agent polish pass (9) |
-| builder | capture tool and gap measure (0); the pre-build Luna and Terra strict probe (before 2); cost delta (2, 10) |
+| builder | capture tool and gap measure (0); cost delta (2, 10) |
 
 Every `lead` mark above is copy, a prompt-adjacent edit, a spec edit, a live run or a
 judgement call; none is typing a delegable spec.
