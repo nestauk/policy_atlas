@@ -8,10 +8,9 @@ search), so a new call site cannot skip the rule:
 - every ``openai_kwargs(...)``, ``parse_structured(...)`` and ``traced_parse(...)``
   call passes ``timeout_s=`` (and ``traced_parse`` passes ``step=``);
 - no ``OpenAI(...)`` client is built outside ``core/openai_client.py``;
-- a generation observation is opened only by ``tracing.traced_attempts`` (one
-  traced retry, each attempt its own generation), except at the sites listed in
-  :data:`NOT_WRAPPED` with the reason. The per-site table is
-  ``docs/tasks/057-queued-ingest/call-sites.md``.
+- a generation observation is opened only by ``tracing.traced_attempts`` (up to
+  ``MODEL_CALL_ATTEMPTS`` attempts, each its own generation), except at the sites
+  listed in :data:`NOT_WRAPPED` with the reason.
 """
 
 from __future__ import annotations

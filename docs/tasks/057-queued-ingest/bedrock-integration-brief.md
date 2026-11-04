@@ -2,8 +2,8 @@
 
 Written at the task 057 review (2026-11-03) at the owner's request, after the review stack
 found 1 to 14% of model-call attempts hanging to their timeout on the `bedrock` route. Four
-sourced research notes are in [research/](research/) (every claim with its URL; read on
-2026-11-03); the probe results are in `verification.md` § Review findings and § Stall
+sourced research notes are local files under `research/` (the repo's `.gitignore` keeps every
+task's research folder out of version control; the AWS pages they rest on are listed in § 5); the probe results are in `verification.md` § Review findings and § Stall
 probes 2 and 4. Decisions already made by the owner: production moves to the `bedrock`
 route; the GPT-6 models exist only as `global.` inference profiles, so the model ids stay.
 
@@ -126,3 +126,19 @@ Whether a request the client cut ever reached the model (invocation logging woul
 subject to the DPIA), why the long steps hang more at some hours than others, and where the
 `global.` profile sends each request (CloudTrail's `inferenceRegion`, not yet read). None of
 these block the merge or the route flip; items 3 and 4 above are how they get answered.
+
+## 5. Sources (read 2026-11-03)
+
+- Token quotas, the admission reservation and the burndown rates:
+  https://docs.aws.amazon.com/bedrock/latest/userguide/quotas-token-burndown.html
+- Global cross-Region inference profiles and their quotas:
+  https://docs.aws.amazon.com/bedrock/latest/userguide/global-cross-region-inference.html
+- Error codes, retry guidance and "requests can be queued":
+  https://docs.aws.amazon.com/bedrock/latest/userguide/troubleshooting-api-error-codes.html
+- AWS Machine Learning Blog, "Optimize your applications for scale and reliability on Amazon Bedrock" (11 Feb 2026):
+  https://aws.amazon.com/blogs/machine-learning/optimize-your-applications-for-scale-and-reliability-on-amazon-bedrock
+- Model invocation logging: https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html
+- API keys ("for exploration only"): https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html
+- The NAT gateway 350 s idle drop: https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-troubleshooting.html
+- openai-python: hung concurrent requests on OpenAI direct (#3054) and TCP keep-alive declined (#3269):
+  https://github.com/openai/openai-python/issues/3054 and https://github.com/openai/openai-python/issues/3269

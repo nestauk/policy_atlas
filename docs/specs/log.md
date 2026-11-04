@@ -1,5 +1,13 @@
 # Spec update log
 
+## 2026-11-04
+Task 057 review, owner rulings.
+* **Update** (S5 wording): [prompting § Timeouts](system/prompting.md) — as built: three attempts,
+  2 × p99 from at least 30 traced calls, floor 15 s, multiples of 5 s (review ruling 8).
+* **Move**: [data-flow-queued-ingest](system/data-flow-queued-ingest.md) — the DPIA addendum's
+  input, from `docs/agentic-ops/` (development conventions) to the system specs (the app's data
+  flow). Owner, 2026-11-04.
+
 ## 2026-11-03
 Task 057 (queued ingest, document store, SQL retrieval, step timeouts), the owner-accepted spec
 items S1 to S5 (contract rev 4, 2026-11-03: "They're fine"), applied at the build (step 5) as

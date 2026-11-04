@@ -20,7 +20,7 @@ Langfuse), both built in Phase 0 with offline tests under `backend/tests/scripts
 | Review open (step 7), 2026-11-03 | `make verify` on `fb06cd72` (the `--round-to` commit had no gate row) | pass after one re-run | backend 1 failed (`test_the_invariant_holds_after_every_operation_in_a_deterministic_walk`: a 401 at step 67, the walk's 60 s bearer tokens expired in a 29-minute run at a load average of 110 to 195 beside probe 3 and four reviewer agents), 4,094 passed, 1 skipped; alone the walk passes in 9.8 s (F21 raises the test tokens to 600 s); infra 113; frontend 943; lint, typecheck, okf-validate (192), build green |
 | Review fixes, first run, 2026-11-03 | `make verify` on the tree with F1 to F21 | fail, two findings | backend 2 failed: `test_acquire_module_has_no_http_client` (the package-wide import guard, which F6's `import socket` tripped; the guard now allows that one import and the module's own guard forbids constructing a socket) and `test_hung_parse_does_not_hold_back_a_concurrent_one` (timing; passed alone in 17 s; the run's load average was 85 to 145), 4,115 passed, 1 skipped (11 min 53 s) |
 | Review fixes, second run (the step-7 exit), 2026-11-03 | `make verify` on the final reviewed tree, then `make audit` | pass with one lane re-run | backend 4,117 passed, 1 skipped (14 min 53 s); infra 113; typecheck (459 files), lint, okf-validate (199 concepts), eval-check, audit-paths (211 files), prompt-guard, font-guard, drift-check green; frontend: one test timed out at 5 s under a load spike (`SourcesView.test.tsx`, "keeps Origin a plain, non-sortable header", unchanged on this branch), the lane re-run alone (`make frontend-verify`): 88 files, 943 passed, build green; `make audit`: no known vulnerabilities |
-| Review fix F22 (the output caps, on the owner's go), 2026-11-03 | `make verify` on the tree with F22 | pass after the prompt-hash re-pin | backend 4,117 passed, 1 skipped (9 min 34 s); okf-validate (199), eval-check, infra 113, audit-paths (211) green; `prompt-guard` failed on the two prompt files' hashes (a constant and a comment changed, no prompt text; re-pinned with `--update`, [repin-review-f22-caps.diff](repin-review-f22-caps.diff)); then `prompt-guard` (41 unchanged), font-guard, drift-check and frontend-verify (88 files, 943 passed, build) green |
+| Review fix F22 (the output caps, on the owner's go), 2026-11-03 | `make verify` on the tree with F22 | pass after the prompt-hash re-pin | backend 4,117 passed, 1 skipped (9 min 34 s); okf-validate (199), eval-check, infra 113, audit-paths (211) green; `prompt-guard` failed on the two prompt files' hashes (a constant and a comment changed, no prompt text; re-pinned with `--update`; the diff is commit `bd574c66`); then `prompt-guard` (41 unchanged), font-guard, drift-check and frontend-verify (88 files, 943 passed, build) green |
 | Owner rulings applied (6: in-process threads 10; 7: the function's egress rules), 2026-11-04 | `make verify` on the tree with the rulings | pass | backend 4,117 passed, 1 skipped (8 min 60 s); okf-validate (199), typecheck (459 files), lint, eval-check, infra 113 (the egress test extended), audit-paths, prompt-guard (41 unchanged), font-guard, drift-check, frontend 88 files / 943 passed, build green. Rulings 1, 2, 3, 4, 5, 8 and 10 changed records only (contract N8 and N9, spec S5, rubric 13, ADR 0043, two deferred seams closed). |
 | End of Phase 0 and Phase 1 (gates 2 and 3), 2026-11-03 | `make verify` on the tree holding both phases | pass after one fix | backend 4,004 passed, 1 skipped (6 min 0 s); lint, typecheck, format green; infra: 1 failed (`test_dockerignore_covers_gitignored_backend_content`: the `**/` bytecode patterns no longer matched the gitignore lines literally; both forms kept), then `make -C infra test` 95 passed. One full run gated both commits because the two phases were built in parallel in one tree. |
 
@@ -196,7 +196,7 @@ pgvector" were updated. `make test-fast` on the new image: 3,946 passed, 1 skipp
 - All 58 OpenAI call sites pass their step; 23 `traced_call` generation sites switched to
   `traced_attempts`; sites with a caller retry loop keep the loop and get the one traced
   retry too (worst case 2 × budget attempts instead of 3 ×; see
-  [call-sites.md](call-sites.md) note 2). Both boto3 clients get `read_timeout=60` and
+  the call-site table the sweep worked from, kept in the session scratchpad only since 2026-11-04). Both boto3 clients get `read_timeout=60` and
   botocore retries off; the OpenAI embedding client keeps its own loop (now also retrying
   timeouts, connection errors and 5xx) with a 30 s request timeout.
 - **Flagged deviation (minor, within the contract's vocabulary):** chat. The tool turn and
@@ -213,8 +213,8 @@ pgvector" were updated. `make test-fast` on the new image: 3,946 passed, 1 skipp
   has timeout-only step exceptions; no route overrides a model).
 - **Code-only prompt-hash re-pin:** `ranking.py`, `theme_grouping.py`, `finding_vetter.py`,
   `group_clustering.py`, `grounding_judge.py` (builder argument lines, `timeout_s=`,
-  `step=`, the `_STAGE_STEP` dict, one rewritten comment). The full diff is committed as
-  [repin-phase1-timeouts.diff](repin-phase1-timeouts.diff); no prompt text changed
+  `step=`, the `_STAGE_STEP` dict, one rewritten comment). The full diff is the Phase 1 commit
+  `8bc43872` (the file once committed beside this record was removed on 2026-11-04; git holds it); no prompt text changed
   (`make prompt-guard`: 41 files unchanged after the re-pin).
 
 ### Measurement round (a): step timeouts alone (commit `8bc43872`; widths and judge unchanged)
@@ -1205,9 +1205,10 @@ no quote failure had markup in its window.
   network and database stacks one alarm each; app stack additions only (the 12 ingest
   resources, the ingress rule, the task-role policy; the two task definitions replaced as
   on every deploy for the new image hash and the two environment entries; the service
-  gains a `DependsOn`); nothing removed, nothing stateful replaced. The trimmed synth is
-  committed as [cdk-synth-ingest.json](cdk-synth-ingest.json) (placeholders for account,
-  VPC and subnet ids). The prod diff needs the `pa-prod` profile. **Owner information:**
+  gains a `DependsOn`); nothing removed, nothing stateful replaced. The trimmed synth was
+  committed as `cdk-synth-ingest.json` in `69f044be` (placeholders for account, VPC and
+  subnet ids) and removed from the folder on 2026-11-04: the infra tests pin every resource,
+  and the file was already stale on the egress rules (ruling 7). The prod diff needs the `pa-prod` profile. **Owner information:**
   the VPC has three fck-nat instances (one per availability zone), not the one the
   network stack's comment and contract D5 describe.
 - `infra/DEPLOYMENT.md` gains the ingest-function section (plain-language terms, sizing,
@@ -1294,7 +1295,7 @@ non-letter before its opening marker, so `Situation_report_-_the` keeps its unde
 Result: see the diff note below this list.
 
 **3. The stall probes are written as a brief for the review conversation**
-([stall-probes.md](stall-probes.md)): Bedrock only (`openai-direct` is legacy); three
+(`stall-probes.md`, committed in `c89aba82` and removed on 2026-11-04 once the probes had run; the results are in § Review findings): Bedrock only (`openai-direct` is legacy); three
 probes (did the hung requests reach the service; connection re-use on or off; the burst
 shape at width 48) with the reading of each outcome.
 
@@ -1547,11 +1548,11 @@ carrying no input in Langfuse (trace lane).
 | F15 | `_retryable` knew only `openai` errors while the `bedrock-claude` backend (route not in use) runs botocore at one attempt (code review 1) | botocore throttle / not-ready codes and timeouts count as retryable (`tracing.py`) | eight new cases in `test_traced_attempts.py` |
 | F16 | A shared snapshot was searched under the lexicographically first document, so the boosts and citation identity were arbitrary (Codex 4) | chosen by priors: selected, then appraised, then the smaller id (`synthesis_tools.py`) | `test_shared_snapshot_is_searched_under_the_selected_document` (fails on the old sort) |
 | F17 | `_vector_literal` duplicated `Vector.bind_processor`'s formatting (code review 7) | one `schema.vector_literal` for both | parity suite unchanged (17 passed) |
-| F18 | Docstrings said one retry / attempts 1 or 2 (code review 9, contract verifier 9) | `tracing`, `openai_client`, the route-file comment and `call-sites.md` say up to `MODEL_CALL_ATTEMPTS` (three today) | none (text) |
+| F18 | Docstrings said one retry / attempts 1 or 2 (code review 9, contract verifier 9) | `tracing`, `openai_client`, the route-file comment and the call-site table say up to `MODEL_CALL_ATTEMPTS` (three today) | none (text) |
 | F19 | `--round-to` had no test and the script's docstring still said `max(5, …)` with n ≥ 100 (contract verifier 5) | docstring describes the three flags; `test_round_to_rounds_up_before_the_floor` | that test |
 | F20 | No test pinned the two Dockerfile lines (contract verifier 12) | `tests/ops/test_dockerfile_lines.py` | two tests |
 | F21 | The visibility walk's bearer tokens lived 60 s; the HEAD gate (29 min under a load average of 110 to 195) pushed the walk past a minute and it failed with a 401 at step 67 (the gate's one failure; alone it runs in 10 s) | `tests/api/org_support.py` mints 600 s tokens | the walk test |
-| F22 | The screen and classify steps sent `max_completion_tokens` of 8,192 and 16,384 against answers of a few hundred tokens. Bedrock admits a request only if `input + max_tokens` fits the tokens-per-minute quota, so one 48-wide classify burst reserved about 786,000 output tokens (a fifth to a quarter of Luna's 4,000,000) for room it never used; the first thing to throttle when production joins staging (the Bedrock brief, recommendation 6; owner's go 2026-11-03) | `SCREEN_MAX_OUTPUT_TOKENS` 8,192 → 2,048 and `CLASSIFY_MAX_OUTPUT_TOKENS` 16,384 → 8,192, sized from Langfuse's recorded output counts since 2026-10-28 (reasoning tokens included: screen:abstract n 3,894, p99 454, max 713; screen:full n 3,869, p99 656, max 1,608; classify:document n 3,850, p99 1,915, max 3,610, some at the old high effort); the 056 call-site fixture refreshed with `CALL_SITE_KWARGS_UPDATE=1` (three entries changed, nothing else); the two prompt files' hashes re-pinned, code-only (no prompt text changed: [repin-review-f22-caps.diff](repin-review-f22-caps.diff)) | `test_call_site_kwargs.py` (63 pass), `tests/evidence_search/assess` (253 pass) |
+| F22 | The screen and classify steps sent `max_completion_tokens` of 8,192 and 16,384 against answers of a few hundred tokens. Bedrock admits a request only if `input + max_tokens` fits the tokens-per-minute quota, so one 48-wide classify burst reserved about 786,000 output tokens (a fifth to a quarter of Luna's 4,000,000) for room it never used; the first thing to throttle when production joins staging (the Bedrock brief, recommendation 6; owner's go 2026-11-03) | `SCREEN_MAX_OUTPUT_TOKENS` 8,192 → 2,048 and `CLASSIFY_MAX_OUTPUT_TOKENS` 16,384 → 8,192, sized from Langfuse's recorded output counts since 2026-10-28 (reasoning tokens included: screen:abstract n 3,894, p99 454, max 713; screen:full n 3,869, p99 656, max 1,608; classify:document n 3,850, p99 1,915, max 3,610, some at the old high effort); the 056 call-site fixture refreshed with `CALL_SITE_KWARGS_UPDATE=1` (three entries changed, nothing else); the two prompt files' hashes re-pinned, code-only (no prompt text changed; the diff is commit `bd574c66`) | `test_call_site_kwargs.py` (63 pass), `tests/evidence_search/assess` (253 pass) |
 
 Fake-done check on the fixes: no test was deleted or loosened. One test was removed and
 replaced by two stronger ones (the handler-level pruned-snapshot test became a shared-path
@@ -1636,7 +1637,7 @@ tightened; the token lifetime change affects no assertion.
    any IPv4, 5432 to the database group; DNS to the VPC resolver is not filtered by
    security groups); `test_ingest_function_runs_in_the_private_subnets_with_its_own_security_group`
    pins them; `make -C infra test` 113. The committed Phase 5 synth
-   (`cdk-synth-ingest.json`) predates this and still shows "allow all"; the staging
+   (`cdk-synth-ingest.json`, `69f044be`, since removed) predates this and showed "allow all"; the staging
    `cdk diff` after the merge is where the new rules are seen live.
 8. **Spec S5 wording** (`docs/specs/system/prompting.md`, contract verifier 4): "retried
    once", "at least 100 traced calls, floor 5 s" no longer match the code (three attempts;
@@ -1646,7 +1647,7 @@ tightened; the token lifetime change affects no assertion.
    rounded up to 5 s". Not edited by the stack.
    *Ruled 2026-11-04:* the proposed wording applied to `docs/specs/system/prompting.md` (with the
    "a step with fewer calls keeps its previous value" clause kept, as it is still true).
-9. **Stall probes 1 and 2** (`stall-probes.md`): probe 1 needs Bedrock invocation logging on
+9. **Stall probes 1 and 2** (the probe brief, `c89aba82`): probe 1 needs Bedrock invocation logging on
    the account; probe 2 is four full runs (about $10 at the 056 basis of $1 to $3 a run; the
    review first wrote $60 from a stale pre-056 figure, corrected by the owner). Probe 3 ran
    (below). Round (h)'s one
@@ -1771,9 +1772,10 @@ hangs are very slow answers, not lost requests. Request ids were captured for 86
 (the four cut by our own client have none). Limits: 30 calls per arm cannot tell 10% from
 17%, and 90 cannot see a 1% rate.
 
-The research the owner ordered (four notes under [research/](research/)) and the
-recommendations against what we built are in
-[bedrock-integration-brief.md](bedrock-integration-brief.md).
+The research the owner ordered (four sourced notes) and the recommendations against what
+we built are in [bedrock-integration-brief.md](bedrock-integration-brief.md) (tracked; its
+four notes are local under `research/`, which `.gitignore` keeps out of version control for
+every task, so the brief lists the AWS pages they rest on).
 
 ### Gate after the fixes and the closing measurement
 
@@ -1790,7 +1792,7 @@ names what is still outside the build's reach.
 |---|---|---|
 | 1 | N1 to N15 | Met for N1 to N14 as recorded per phase; N15 met as built (judge at low); the owner accepted it on 2026-11-04 without the content read, revisit in the synthesis refinement task (item 31). |
 | 2 | `make verify` at the four gates, infra tests | Met: § Commands run (build-open, after Phase 2, after Phase 3, exit); `make -C infra test` 113. |
-| 3 | No approval-gated change beyond G1 to G10 | Met with one exception flagged: the second Dockerfile line (`chmod 755 /app`, deviation 14), accepted by the owner on 2026-11-04 (review ruling 3); code-only re-pins recorded in [repin-phase1-timeouts.diff](repin-phase1-timeouts.diff) and, at the review, [repin-review-f22-caps.diff](repin-review-f22-caps.diff) (F22's two output caps); no prompt-text re-pin, no public-interface change. *Review (contract verifier 13):* two further changes sit under G10 by extension, not by name: `deploy.sh`'s test-harness mode (`PA_DEPLOY_MIGRATION_WAIT_ONLY`) and the root Makefile prerequisite that runs the waiter's shell test in CI; they are the waiter's own test seam. |
+| 3 | No approval-gated change beyond G1 to G10 | Met with one exception flagged: the second Dockerfile line (`chmod 755 /app`, deviation 14), accepted by the owner on 2026-11-04 (review ruling 3); code-only re-pins recorded in commits `8bc43872` (Phase 1) and `bd574c66` (F22's two output caps); no prompt-text re-pin, no public-interface change. *Review (contract verifier 13):* two further changes sit under G10 by extension, not by name: `deploy.sh`'s test-harness mode (`PA_DEPLOY_MIGRATION_WAIT_ONLY`) and the root Makefile prerequisite that runs the waiter's shell test in CI; they are the waiter's own test seam. |
 | 4 | No generated files or secrets edited by hand | Met (`uv.lock` and the frontend bundle regenerated by their tools; `.env` never read). |
 | 5 | No tests deleted, skipped or weakened without justification | Met: the scheduler tests N6 deletes are listed in Phase 4a with the replacing behaviour; one test generalised (deviation 18); one test's fake timing widened (deviation 22). *Review (contract verifier 8), six removals not listed at the build:* the four embedding throttle-retry tests (`test_openai_embedding_backend_rate_limit_backoff_then_success`, `…_rate_limit_exhaustion_fails_loudly`, `test_cohere_embedding_backend_retries_throttling_then_succeeds`, `…_stops_after_repeated_throttling`) tested the per-backend backoff loops that D6 moved into the pool; their replacements are `test_openai_embedding_backend_raises_throttled_at_once_on_429`, `test_embed_with_retry_waits_out_throttling_then_succeeds`, `test_embed_with_retry_gives_up_after_the_last_attempt`, `test_cohere_embedding_backend_raises_throttled_after_one_call` and the four pool tests. `test_retrieval_unit_cap_error_names_cap` and `test_a_retrieval_cap_is_answered_honestly` tested the 20,000-unit cap N8 deletes. The `envelope_source_snapshot_id` assertion in `test_governance_chain` checked a metadata key N9 moved off the shared row (it is now the link row's column, asserted by `test_already_in_store_on_a_second_task_with_the_same_bytes`). At the review: one handler test replaced by two shared-path tests (F3, F4); no test loosened. |
 | 6 | Evidence as the contract's § Verification evidence lists | Met for the laptop; staging tables, the staging migration timing and the embedding quota in force are post-merge (items 15, 28); `cdk diff` reviewed read-only (item 26). |
@@ -1868,12 +1870,12 @@ ops account figures are in the gitignored notes, not in this record.
   in this phase, so the step-7 Codex lane is the first look from another model family.
 - **Diff-scoping exclusions for the review:**
   `backend/tests/evidence_search/synthesis/data/retrieval_synthetic/` (generated corpus),
-  `docs/tasks/057-queued-ingest/cdk-synth-ingest.json`, `repin-phase1-timeouts.diff`, `repin-review-f22-caps.diff`,
+  the synth and re-pin evidence files (since removed from the folder; see § Commands run),
   `backend/uv.lock`, `infra/uv.lock`.
 - **Live-trace pointers:** run ids per round in the sections above; Langfuse session id =
   task id; server logs per round in the session scratchpad (not committed).
-- **Stall probes:** [stall-probes.md](stall-probes.md), three Bedrock-only probes for the
-  review conversation to run or schedule (the owner dropped the `openai-direct` comparison).
+- **Stall probes:** the probe brief (`c89aba82`, since removed), three Bedrock-only probes for
+  the review conversation to run or schedule (the owner dropped the `openai-direct` comparison).
 - **Knowledge candidates** (one per durable-seeming lesson, however raw; *adjudicated at
   step 8 on 2026-11-03: every one of the 22 is in one of seven new concepts or the extended
   timeout concept, `docs/knowledge/log.md` § 2026-11-03 says which*):

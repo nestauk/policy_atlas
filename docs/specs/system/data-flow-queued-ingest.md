@@ -1,8 +1,16 @@
+---
+type: System contract
+title: Data flow of the queued full-text ingest
+description: What the queued full-text reading stage sends between the web server, the queue, the function, the document store and the publishers; what is kept where and for how long; which identifiers appear where. The input to the owner's DPIA addendum (task 057).
+tags: [system, data-flow, privacy, dpia, ingest, queue, "057"]
+timestamp: 2026-11-04
+---
+
 # Data flow: queued full-text ingest (task 057)
 
 One page for the owner's Data Protection Impact Assessment (DPIA) addendum. It names the
 services the full-text reading stage now uses, what data moves between them, where it is
-kept and for how long, and which identifiers appear where. Written at the build (step 6);
+kept and for how long, and which identifiers appear where. Written at the build (step 6) and moved from `docs/agentic-ops/` to the system specs on 2026-11-04 (it describes the app's data flow, not the development conventions);
 the owner's DPIA addendum gates the merge (contract G7).
 
 ## What changed
