@@ -74,7 +74,7 @@ docs/tasks/*/amendment-*.md
 .github/hooks/
 .impeccable/
 PRODUCT.md
-DESIGN.md
+# DESIGN.md is committed (owner, 2026-11-04): the design system and product principles are shared with the team.
 
 # Task 038 sweep state (per checkout, not a review artefact)
 scripts/.rename_038_state.json

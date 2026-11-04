@@ -53,8 +53,9 @@ change into a deviation. The pass, inside conversation A:
 
 Every agent that touches the frontend in any phase — grounding, build, polish, review —
 is the pinned **`frontend-designer`** agent (`.claude/agents/frontend-designer.md`), which
-loads all the frontend design skills, `DESIGN.md`, `PRODUCT.md`, the product design
-principles and the slice's research before it starts. Unskilled workers ship correct but
+loads all the frontend design skills, `DESIGN.md` (committed; its § Product design
+principles are the team's six principles), `PRODUCT.md` and the slice's research before
+it starts. Unskilled workers ship correct but
 unpolished surfaces (2026-09-05); a brief to any other agent for frontend work needs a
 reason in the plan.
 
