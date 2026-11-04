@@ -1306,6 +1306,81 @@ def _eligible_rows(conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID)
     ).fetchall())
 
 
+def spread_by_host(items: list[tuple[uuid.UUID, str]]) -> list[uuid.UUID]:
+    """Order documents so that each host's documents are spread evenly through the list.
+
+    The queue hands messages to up to 20 workers at once, in this order. If one
+    publisher's documents sit side by side, many workers hit that host together and it
+    answers "too many requests" (HTTP 429). Spreading them out lowers that risk.
+
+    Each host's n-th document gets the position (n + 0.5) / (its host's count), a number
+    between 0 and 1; sorting by it mixes the hosts. The sort is stable, so the order
+    inside one host, and between equal positions, is kept.
+
+    Args:
+        items: ``(document id, host)`` pairs in the current order. A document with no
+            known host can use an empty string; those are spread like any other host.
+
+    Returns:
+        The document ids in the new order.
+    """
+    counts: dict[str, int] = {}
+    for _, host in items:
+        counts[host] = counts.get(host, 0) + 1
+    seen: dict[str, int] = {}
+    keyed: list[tuple[float, int, uuid.UUID]] = []
+    for position, (doc_id, host) in enumerate(items):
+        n = seen.get(host, 0)
+        seen[host] = n + 1
+        keyed.append(((n + 0.5) / counts[host], position, doc_id))
+    return [doc_id for _, _, doc_id in sorted(keyed)]
+
+
+def _spread_queued_by_host(connect: ConnectFactory, queued: list[uuid.UUID]) -> list[uuid.UUID]:
+    """Reorder the queued rows with :func:`spread_by_host`, by the first address each will try.
+
+    The first address is the first of :func:`candidate_urls`, the one the worker fetches
+    first. If the rows cannot be read, the order is left as it was: a different order
+    is only an optimisation.
+
+    Args:
+        connect: Opens a database connection.
+        queued: The queued rows, in the current order.
+
+    Returns:
+        The same rows, spread by host.
+    """
+    if len(queued) < 2:
+        return queued
+    try:
+        with connect() as c:
+            metadata = {
+                row.task_source_snapshot_id: row.metadata
+                for row in c.execute(
+                    select(
+                        task_source_snapshot.c.task_source_snapshot_id,
+                        source_snapshot.c.metadata,
+                    )
+                    .select_from(
+                        task_source_snapshot.join(
+                            source_snapshot,
+                            task_source_snapshot.c.source_snapshot_id
+                            == source_snapshot.c.source_snapshot_id,
+                        )
+                    )
+                    .where(task_source_snapshot.c.task_source_snapshot_id.in_(queued))
+                )
+            }
+        items: list[tuple[uuid.UUID, str]] = []
+        for tss_id in queued:
+            urls = candidate_urls(dict(metadata.get(tss_id) or {}))
+            items.append((tss_id, (urlsplit(urls[0]).hostname or "").lower() if urls else ""))
+        return spread_by_host(items)
+    except Exception as exc:
+        log.warning("ingest.spread_by_host_failed", error_type=type(exc).__name__)
+        return queued
+
+
 def _close_queued(
     connect: ConnectFactory, tss_ids: list[uuid.UUID], *, reason: str, run_id: uuid.UUID
 ) -> list[uuid.UUID]:
@@ -1681,7 +1756,9 @@ def _run_stage(
                     .returning(task_source_snapshot.c.task_source_snapshot_id)
                 ).scalars()
             )
-        queued = [tss_id for tss_id in eligible_ids if tss_id in queued_set]
+        queued = _spread_queued_by_host(
+            connect, [tss_id for tss_id in eligible_ids if tss_id in queued_set]
+        )
     if orphans:
         log.warning("ingest.orphans_requeued", count=orphans)
     already_ingested = len(eligible_ids) - len(queued)

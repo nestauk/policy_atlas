@@ -449,6 +449,7 @@ def test_default_client_carries_pinned_timeout(
 def test_retry_once_then_succeed(
     monkeypatch: pytest.MonkeyPatch, make_exc: Callable[[], Exception]
 ) -> None:
+    monkeypatch.setattr(search_live, "RATE_LIMIT_BACKOFF_S", RETRY_BACKOFF_S)  # 429: own test
     sleeps = _sleep_recorder(monkeypatch)
     calls = {"n": 0}
 
@@ -481,6 +482,7 @@ def test_retry_backoff_doubles_then_succeeds(
     monkeypatch: pytest.MonkeyPatch, make_exc: Callable[[], Exception]
 ) -> None:
     """A burst that outlasts the first wait still succeeds, waiting 1s then 2s."""
+    monkeypatch.setattr(search_live, "RATE_LIMIT_BACKOFF_S", RETRY_BACKOFF_S)  # 429: own test
     sleeps = _sleep_recorder(monkeypatch)
     calls = {"n": 0}
 
@@ -513,6 +515,7 @@ def test_retry_exhausted_raises_search_transport_error(
     monkeypatch: pytest.MonkeyPatch, make_exc: Callable[[], Exception]
 ) -> None:
     """Four attempts, three doubling waits, then the failure is recorded."""
+    monkeypatch.setattr(search_live, "RATE_LIMIT_BACKOFF_S", RETRY_BACKOFF_S)  # 429: own test
     sleeps = _sleep_recorder(monkeypatch)
     calls = {"n": 0}
 
@@ -939,3 +942,20 @@ def test_live_search_backends_missing_overton_key(monkeypatch: pytest.MonkeyPatc
     monkeypatch.delenv("OVERTON_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="OVERTON_API_KEY"):
         live_search_backends()
+
+
+def test_a_429_waits_longer_than_other_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Too many requests: 5 s, then 10 s (other errors wait 1 s, then 2 s)."""
+    sleeps = _sleep_recorder(monkeypatch)
+    monkeypatch.setenv("POLICY_ATLAS_SEARCH_CACHE_TTL_S", "0")
+    calls = {"n": 0}
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise _status_error(429)
+        return {"results": [_oa_stub_record()]}
+
+    OpenAlexLiveBackend("KEY", fetch=fetch).search("policy", max_results=1)
+    assert sleeps == [search_live.RATE_LIMIT_BACKOFF_S, search_live.RATE_LIMIT_BACKOFF_S * 2]
+    assert search_live.RATE_LIMIT_BACKOFF_S > RETRY_BACKOFF_S

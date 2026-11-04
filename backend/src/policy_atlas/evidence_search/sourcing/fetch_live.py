@@ -5,6 +5,7 @@ from __future__ import annotations
 import email.utils
 import http.cookiejar
 import ipaddress
+import random
 import select
 import socket
 import ssl
@@ -45,6 +46,12 @@ MAX_DOCUMENT_BYTES = 25_000_000
 # entity expansion (a ratio, not an absolute) can grow inside a parse worker.
 EUROPE_PMC_MAX_BYTES = 10_000_000
 RETRY_BACKOFF_S = 2.0
+# Workers that fail together would retry together. The fixed wait is spread by this
+# fraction either way (2 s becomes 1 s to 3 s). A host's own ``Retry-After`` is not changed.
+RETRY_JITTER = 0.5
+# After a 429 or 503 the host gets a rest: later requests to it wait out the time it asked
+# for (never more than this), so a warm worker does not hit it again straight away.
+HOST_COOLDOWN_CAP_S = 10.0
 # Task 057 (N2): a 429 or 503 carrying ``Retry-After`` is retried after the delay the
 # host asked for (seconds, or an HTTP date), never longer than this. A missing or
 # malformed header keeps the fixed RETRY_BACKOFF_S wait.
@@ -66,7 +73,8 @@ PAYWALL_MARKERS = (
     "log in via your institution",
 )
 
-USER_AGENT = "policy-atlas/0.1 (+research; contact via repo)"
+# The project page tells a host who is fetching and how to reach us.
+USER_AGENT = "policy-atlas/0.1 (+https://www.nesta.org.uk/project/policy-atlas/)"
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
@@ -98,6 +106,7 @@ class _HostState:
     semaphore: threading.Semaphore
     lock: threading.Lock
     last_start_at: float | None = None
+    cooldown_until: float | None = None
 
 
 @dataclass
@@ -488,7 +497,7 @@ class LiveDocumentFetcher:
                     log.warning("fetch_live.blocked", url=_redact_url(url))
                     return FetchResult(status="error", error="blocked")
                 if _is_timeout_error(exc):
-                    if attempts < 1 and self._wait_before_retry(url, RETRY_BACKOFF_S):
+                    if attempts < 1 and self._wait_before_retry(url, _jittered(RETRY_BACKOFF_S)):
                         log.warning("fetch_live.retry", url=_redact_url(url), reason="timeout")
                         attempts += 1
                         continue
@@ -505,8 +514,10 @@ class LiveDocumentFetcher:
                 wait_s = (
                     outcome.retry_after_s
                     if outcome.retry_after_s is not None
-                    else RETRY_BACKOFF_S
+                    else _jittered(RETRY_BACKOFF_S)
                 )
+                if outcome.status_code in _RETRY_AFTER_STATUSES:
+                    self._cool_host(url, wait_s)
                 if attempts < 1 and self._wait_before_retry(url, wait_s):
                     log.warning(
                         "fetch_live.retry",
@@ -552,6 +563,16 @@ class LiveDocumentFetcher:
             log.info("fetch_live.request", url=_redact_url(guarded))
             with self._client.stream("GET", guarded) as response:
                 return self._response_outcome(guarded, response)
+
+    def _cool_host(self, url: str, wait_s: float) -> None:
+        """Make later requests to this URL's host wait out a 429 or 503, up to a cap."""
+        host = urlsplit(url).hostname
+        if host is None:
+            return
+        state = self._host_state(host.lower())
+        with state.lock:
+            until = self._clock() + min(wait_s, HOST_COOLDOWN_CAP_S)
+            state.cooldown_until = max(state.cooldown_until or 0.0, until)
 
     def _host_slot(self, host: str) -> _HostSlot:
         return _HostSlot(self._host_state(host), self._clock, self._sleep)
@@ -696,11 +717,18 @@ class _HostSlot:
         self._state.semaphore.acquire()
         with self._state.lock:
             now = self._clock()
+            wait_s = 0.0
             if self._state.last_start_at is not None:
                 wait_s = PER_HOST_MIN_INTERVAL_S - (now - self._state.last_start_at)
-                if wait_s > 0:
-                    self._sleep(wait_s)
-                    now = self._clock()
+            if self._state.cooldown_until is not None:
+                rest_s = self._state.cooldown_until - now
+                deadline = FETCH_DEADLINE.get()
+                if deadline is not None:  # never rest past the document's own deadline
+                    rest_s = min(rest_s, deadline - DEADLINE_MARGIN_S - now)
+                wait_s = max(wait_s, rest_s)
+            if wait_s > 0:
+                self._sleep(wait_s)
+                now = self._clock()
             self._state.last_start_at = now
 
     def __exit__(
@@ -812,6 +840,11 @@ def _is_refused_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
 
 def _default_port(scheme: str) -> int:
     return 443 if scheme.lower() == "https" else 80
+
+
+def _jittered(seconds: float) -> float:
+    """Spread a wait by ``RETRY_JITTER`` either way, so parallel workers do not retry in step."""
+    return seconds * random.uniform(1 - RETRY_JITTER, 1 + RETRY_JITTER)  # noqa: S311
 
 
 def _host_from_guarded_url(url: str) -> str:

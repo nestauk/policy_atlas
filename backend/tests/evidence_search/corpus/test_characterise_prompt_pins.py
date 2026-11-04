@@ -70,7 +70,7 @@ def test_characterise_grouping_prompt_surface_is_pinned() -> None:
     assert theme_grouping.MIN_THEMES == 3
     assert theme_grouping.MAX_THEMES == 12
     assert theme_grouping.THEME_NAME_MAX == 80
-    assert theme_grouping.THEME_DESC_MAX == 240
+    assert theme_grouping.THEME_DESC_MAX == 400
     assert theme_grouping.UNCLUSTERED == "unclustered"
     assert theme_grouping.DISCOVERY_SYSTEM_PROMPT == _EXPECTED_DISCOVERY_SYSTEM_PROMPT
     assert theme_grouping.DISCOVERY_USER_TEMPLATE == _EXPECTED_DISCOVERY_USER_TEMPLATE

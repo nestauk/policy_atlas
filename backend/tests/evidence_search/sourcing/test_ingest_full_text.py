@@ -1607,3 +1607,21 @@ def test_progress_ticks_carry_store_status_counts(
     # The store's two ``ingested`` rows count as read from the start.
     assert ticks and all(t["parsed"] >= 2 for t in ticks)
     assert ticks[-1]["parsed"] == 2
+
+
+def test_spread_by_host_mixes_hosts_and_keeps_each_hosts_own_order() -> None:
+    """Five documents from one host and two from another: no run of the big host's
+    documents at the start or the end, and every document appears once."""
+    from policy_atlas.evidence_search.sourcing.ingest_full_text import spread_by_host
+
+    ids = [uuid.uuid4() for _ in range(8)]
+    hosts = ["a.org"] * 5 + ["b.org"] * 2 + [""]
+    items = list(zip(ids, hosts, strict=True))
+    out = spread_by_host(items)
+
+    assert sorted(out) == sorted(ids)
+    assert [i for i in out if i in ids[:5]] == ids[:5]  # a.org keeps its own order
+    first_three = [dict(items)[i] for i in out[:3]]
+    last_three = [dict(items)[i] for i in out[-3:]]
+    assert first_three.count("a.org") < 3 and last_three.count("a.org") < 3
+    assert spread_by_host([]) == []

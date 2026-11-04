@@ -35,7 +35,9 @@ ASSIGNMENT_REPAIR_CAP = 1
 MIN_THEMES = 3
 MAX_THEMES = 12
 THEME_NAME_MAX = 80
-THEME_DESC_MAX = 240
+# The prompt asks the model for at most 240 characters. The check allows 400, because
+# staging runs failed whole when one description was 243-315 characters long.
+THEME_DESC_MAX = 400
 UNCLUSTERED = "unclustered"
 
 DISCOVERY_SYSTEM_PROMPT = """\

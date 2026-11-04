@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import time
 import uuid
@@ -87,6 +88,16 @@ DB_SECRET_FIELD = "db_connection_string"
 #: Secrets Manager client waits and retries at cold start.
 SECRETS_CLIENT_CONFIG = Config(
     connect_timeout=5, read_timeout=10, retries={"mode": "standard", "max_attempts": 3}
+)
+#: A message handed back for a retry comes again after this many seconds (a random
+#: value in the range), not after the queue's own 210 s wait. The first try is over
+#: by then, so the message cannot arrive while it still runs; a host that was
+#: throttling us has had time to recover, and the stage does not wait minutes.
+RETRY_DELAY_RANGE_S = (30, 60)
+#: The retry-delay call must end inside the ``DEADLINE_RESERVE_S`` kept back before
+#: Lambda stops the function: one attempt, at most 2 s to connect and 3 s to answer.
+SQS_CLIENT_CONFIG = Config(
+    connect_timeout=2, read_timeout=3, retries={"mode": "standard", "max_attempts": 1}
 )
 _MESSAGE_KEYS = frozenset({"link_row_id", "run_id", "schema"})
 _URL_RE = re.compile(r"https?://[^\s\"'<>]+")
@@ -139,6 +150,42 @@ def secrets_client() -> SecretsClient:
         config=SECRETS_CLIENT_CONFIG,
     )
     return client
+
+
+def sqs_client() -> Any:
+    """Build the SQS client (region from ``AWS_REGION``, set by Lambda).
+
+    Returns:
+        The boto3 ``sqs`` client.
+    """
+    return boto3.client(
+        "sqs",
+        region_name=os.environ.get("AWS_REGION") or "eu-west-2",
+        config=SQS_CLIENT_CONFIG,
+    )
+
+
+def _delay_redelivery(record: Mapping[str, Any]) -> None:
+    """Ask SQS to deliver this message again after ``RETRY_DELAY_RANGE_S`` seconds.
+
+    Without this, SQS waits the queue's full visibility timeout (210 s) before it
+    delivers a retried message. The function's role already holds
+    ``sqs:ChangeMessageVisibility`` (the queue event source grants it). If the call
+    fails for any reason the message is still retried, only later, so the error is
+    logged and not raised.
+
+    Args:
+        record: The SQS record being handed back (its queue ARN and receipt handle).
+    """
+    try:
+        region, account, name = str(record["eventSourceARN"]).split(":")[3:6]
+        sqs_client().change_message_visibility(
+            QueueUrl=f"https://sqs.{region}.amazonaws.com/{account}/{name}",
+            ReceiptHandle=record["receiptHandle"],
+            VisibilityTimeout=round(random.uniform(*RETRY_DELAY_RANGE_S)),  # noqa: S311
+        )
+    except Exception as exc:
+        log.warning("ingest_worker.retry_delay_failed", error_type=type(exc).__name__)
 
 
 def database_url_from_secret(client: SecretsClient, secret_arn: str) -> str:
@@ -343,4 +390,7 @@ def handler(event: Mapping[str, Any], context: LambdaContext) -> BatchResponse:
                 already_in_store=outcome.already_in_store,
                 redeliver=retry,
             )
-    return retry_record if retry else {"batchItemFailures": []}
+    if retry:
+        _delay_redelivery(record)
+        return retry_record
+    return {"batchItemFailures": []}

@@ -65,7 +65,7 @@ EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS = 4
 #: The adaptive pool (task 057, D6): requests in flight at the start, clean
 #: batches in a row before one more is allowed, and how many times one batch may
 #: be throttled before it is given up for this pass (its chunks stay pending).
-POOL_START_WIDTH = 2
+POOL_START_WIDTH = 6
 POOL_CLEAN_RUN = 5
 POOL_MAX_THROTTLES_PER_BATCH = 8
 #: The longest wait a provider's ``Retry-After`` may ask the pool for.
