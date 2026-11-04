@@ -219,8 +219,12 @@ Nesta palette from `index.css`: navy `#0f294a` structural text, grey `#646363` s
   eyebrow text and pills are hallmarks of generated frontends. Folded into scenes 12, 13 and
   15 (no eyebrow, no "provisional"). Rule for the build and the polish passes: before adding
   any word, chip or label, ask what on the page already says it.
-- No rounds (deferred-list scan, 2026-11-04): task 051 made it one search and one screen per
-  scope, so no line says "Round n of M"; scenes 1, 5, 8 and 13 corrected.
+- No round cap (deferred-list scan, 2026-11-04): task 051 removed the round loop, so no line
+  says "Round n of M"; a second search pass (a coverage steer or a retried attempt) shows as
+  "Search 2" on the same row; scenes 1, 5, 8 and 13 corrected. The duplicate "Screening" row
+  on staging and production is a mapping bug (`stage_for_payload`'s `screen_full` guard tests
+  the wrong field); fixed in this slice, and the full-text screen shows as a line on the one
+  merged row.
 - The mock (version 7) predates these rulings and still shows round counts, the strip's
   diamond, the eyebrow and "provisional"; the annex, not the mock, is the authority.
 

@@ -34,7 +34,8 @@ Activity line (N1 to N5, D2)
 10. [ ] N2: every loop with a known total publishes its own count with a unit; batch stages
         say "batch n of M"; acquire and screen stage 1 say "n so far" with the round; a retry
         never moves a count; the option-search join publishes; fetch notes are no longer
-        labelled acquire.
+        labelled acquire; a full-text screen start yields no second Screening row (the
+        staging and production duplicate is gone).
 11. [ ] N3: the writer publishes the section line and the action line in the contract's
         sequence, with the model's query verbatim.
 12. [ ] N4: a client connecting mid-stage receives the last tick, and mid-section the draft so
