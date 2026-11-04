@@ -292,7 +292,9 @@ def test_ingest_mode_is_set_per_environment_in_the_config():
         env_name: env_config["policy_atlas_config"]["backend"]["ingest_mode"]
         for env_name, env_config in config.items()
     }
-    assert modes == {"staging": "queued", "prod": "in_process"}
+    # Owner 2026-11-04: production is queued too; nothing reaches production before it is
+    # tested on staging, and the function is built for every environment.
+    assert modes == {"staging": "queued", "prod": "queued"}
 
 
 def test_an_unknown_ingest_mode_is_rejected_at_synth():

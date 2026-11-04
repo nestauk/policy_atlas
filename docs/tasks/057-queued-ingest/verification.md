@@ -1194,7 +1194,8 @@ no quote failure had markup in its window.
   event-source mapping batch size 1, batching window 0, `MaximumConcurrency` 20,
   `ReportBatchItemFailures`. The API task role may `SendMessage`/`GetQueueAttributes`/
   `GetQueueUrl` on the queue only; its environment gains `POLICY_ATLAS_INGEST_MODE`
-  (`pa_config.json`: staging `queued`, prod `in_process`; an unknown value fails at synth)
+  (`pa_config.json`: staging `queued`, prod `in_process` at the build and `queued` since the
+  owner's PR ruling of 2026-11-04; an unknown value fails at synth)
   and `POLICY_ATLAS_INGEST_QUEUE_URL`.
 - Alarms: dead-letter depth ≥ 1 (app stack); NAT `NetworkOut` above 1 GB per 5 min for 3
   periods, the busiest of the three fck-nat groups (network stack; threshold documented as
@@ -1625,7 +1626,7 @@ tightened; the token lifetime change affects no assertion.
    store should know where its document is. The user-facing title and URL come from the
    task's own envelope row in all three readers (checked). No code change.
 6. **Deviation 8 / code review 4:** in-process threads are `max(4, min(8, cores))`, so 4 on
-   the 2-vCPU production task that stays `in_process`; before 057, 10 fetch threads fed 4
+   the 2-vCPU production task that stayed `in_process` at the time; before 057, 10 fetch threads fed 4
    parse processes. Round (f) measured 8 threads on the laptop. Recommend 10 threads in
    process (the parse processes stay bounded by the walk pool); a measured-config change.
    *Ruled 2026-11-04:* 10 threads. `ingest_queue.IN_PROCESS_INGEST_THREADS = 10` is the in-process client's
@@ -1660,6 +1661,12 @@ tightened; the token lifetime change affects no assertion.
     the function has no Bedrock grant, by design. Noted, not edited.
     *Ruled 2026-11-04:* rubric 13 reworded to "the function has no model client and no
     Bedrock grant (D6)".
+11. **Production `ingest_mode`** (owner at the PR, 2026-11-04): `queued`, not `in_process`.
+    Production deploys only after staging is tested, and the stack builds the queue and the
+    function for every environment, so the staging evidence covers the production shape.
+    `infra/pa_config.json` changed, the per-environment test pins both as `queued`, G5's
+    "stays `in_process`" is superseded in the contract. Ruling 6 (10 in-process threads) now
+    governs laptops only.
 
 ### Declined (with the reason)
 

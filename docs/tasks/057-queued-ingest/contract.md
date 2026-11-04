@@ -467,8 +467,10 @@ levers unmeasured): "accept"; finding 13 (G6, `already_in_store` in SSE): "hide 
 - **G5. Production config and CDK.** The resources in N11 and `ingest_mode` per environment,
   approved at this contract; `cdk diff` reviewed at an owner checkpoint after the infra phase
   and before any staging deploy (it cannot exist at the plan gate; plan review); production
-  stays `in_process` until the staging measurement is read (Leaning). The `prod` route flip to
-  `bedrock` is a separate later change (owner, 2026-11-03).
+  stays `in_process` until the staging measurement is read (Leaning; **superseded 2026-11-04:**
+  the owner set production to `queued` at the PR, since production deploys only after staging
+  is tested and the function is built for every environment). The `prod` route flip to
+  `bedrock` was a separate change (dev `f0018c4e`, 2026-11-03).
 - **G6. Public interface.** The SSE stage and tick shapes are unchanged; `fetched` is null in
   queued mode (allowed). The counts dict gains `already_in_store`, which is **kept out of the
   public `stage.completed.summary`** (owner, 2026-11-03: "hide it"; review finding 13); it
