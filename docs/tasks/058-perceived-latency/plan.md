@@ -3,7 +3,7 @@
 > Status: **draft 1, 2026-11-04; awaiting the contract-stage adversarial findings and the
 > owner's confirmation.** Contract: [contract.md](contract.md) (approved 2026-11-04; one gate
 > ruling folded; per-stage timings added). Rubric: [rubric.md](rubric.md). Design annex:
-> [design-annex.md](design-annex.md) version 2. Terms, needs (N1 to N26), decisions (D1 to
+> [design-annex.md](design-annex.md) version 3. Terms, needs (N1 to N26), decisions (D1 to
 > D14), gates (G1 to G7) and spec items (S1 to S5) are defined in the contract and not
 > restated here. Executor routing follows `docs/agentic-ops/harness.md` § Agent-side model
 > routing, the owner's rulings of 2026-09-04 (judgment-bearing build work to a reasoning
@@ -24,7 +24,7 @@ are in `research/exp-event-gaps-and-bands.md`):
 | Writing a section (p50 26 s, p90 108 s per section) | nothing until the section is checked and repaired | prose streams in; the research turns show as lines; a failed sentence blurs and settles | 2, 5 |
 | The planner's turn (3 to 12 s) | "Planning…" then the whole reply | the reply streams; "Drafting the plan"; the opening turn in the Agent tab | 3, 6 |
 | Result tab before writing | "Preparing your results" or the old report | the run strip, the question, one sentence; a re-run notice | 5 |
-| Any other tab | the animated logo | the run strip with the Task Agent mark; the sidebar with the real run; tab dots; title on completion | 5 |
+| Any other tab | the animated logo | the run strip (status only); the sidebar with the real run; tab dots; title on completion | 5 |
 | A choice in the plan or a check-in | buttons that sometimes only pre-fill; model-written "1 of 3"; a chip with no question | one radio shape, a client stepper, inputs in the card, the question shown | 3, 6 |
 | Options scoping longlist build (median 14 min) | the Result tab shows the baseline until clustering | the provisional longlist from the first minute, filling in waves | 4, 7 |
 | Progress copy | four client copies, five disagreements, hidden counts | one server source in the plain voice; the spec lists every key | 1, 5 |
@@ -158,7 +158,7 @@ step-6 exit. Others fast.
 - 5b surfaces (frontend-designer, with the annex as authority): card C with the activity
   line, per-stage times and the 120 s line; the Result tab's live body (placeholders, action
   line, streaming prose, blur and settle, key-findings note, footer states); the three
-  pre-writing states; the run strip with the mark and the paused state; the sidebar's run
+  pre-writing states; the run strip (status only) with the paused state; the sidebar's run
   line, thread tail, check-in and lock; tab dots; the title; the task-list row; the Plan
   control and Escape; the mounted reconnecting banner; the Sources default filter. The client
   vocabulary and its copies are deleted (N17).
@@ -173,8 +173,8 @@ step-6 exit. Others fast.
 - Gate: fast. Commit.
 
 ### Phase 7 — Scoping Result tab during the build (N24, N23 frontend, D9)
-- frontend-designer: the provisional longlist view with per-row search status from child
-  frames, stage lines, the fold, new rows, waves, shortlist marks, "provisional".
+- frontend-designer: the longlist during the build with per-row search status from child
+  frames, stage lines, the fold, new rows, waves, shortlist marks; no qualifier word.
 - Gate: fast. Commit.
 
 ### Phase 8 — Mock API and journeys (N26)

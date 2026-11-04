@@ -5,7 +5,7 @@ produce. The contract cites this file by version; looks live here, not in the co
 Owner feedback rounds (mock and polish) edit this file first, then the mock or the app.
 Voice: a short label, then one plain sentence; no mannered prose.
 
-> **Version:** 2 (2026-11-04; v1 = the frozen mock script, v2 adds the contract-gate rulings) · Mock: https://claude.ai/artifact/Xse3bLcA6XhQqxQJFVEwtH
+> **Version:** 3 (2026-11-04; v1 = the frozen mock script, v2 and v3 add the contract-gate rulings) · Mock: https://claude.ai/artifact/Xse3bLcA6XhQqxQJFVEwtH
 > version 7, fifteen scenes; source `research/mock-v7.html` · Frozen: 2026-11-04 (the owner:
 > "broadly looks okay", more judgement expected on the live app) · Polish rounds: log at the
 > end.
@@ -219,6 +219,15 @@ Nesta palette from `index.css`: navy `#0f294a` structural text, grey `#646363` s
   Sources →"); the in-progress row shows its own elapsed time ticking in the same place
   ("Reading the full texts · 14 of 38 read" on the action line, "2 min 10 s" in the count
   column). The top line keeps the run's total. Tabular figures; no band, no estimate.
+- **No label that states what the page already shows (owner, 2026-11-04).** Unnecessary
+  labels, eyebrow text and pills are hallmarks of generated frontends. So: the run strip is
+  status only and carries no Task Agent mark (the sidebar rail's own mark is the way in; the
+  Agent tab is the full view; scenes 5, 6, 7, 13 and 14 lose the strip's diamond); the
+  longlist title has no "provisional" word (scene 15; the stage line and the moving rows say
+  it); the check-in has no "Check-in · after searching" eyebrow (scenes 12 and 13; the
+  question is the title; "after searching" survives only in the "You chose" line). Rule for
+  the build and the polish passes: before adding any word, chip or label, ask what on the
+  page already says it.
 
 ## Polish log
 
