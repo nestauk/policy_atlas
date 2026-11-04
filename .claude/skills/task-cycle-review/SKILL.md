@@ -86,6 +86,7 @@ The lanes:
   `agent-skills:security-auditor` subagent at Tier 3+, `/security-review` at Tier ≤2 —
   **never both on the same diff**.
 - **Adversarial review** — challenge the approach: `/codex:adversarial-review`
+  (findings are adjudicated into `verification.md`; the raw review is not committed)
   (user-typed, diff-shaped) or a read-only `codex-rescue` brief; Tier 2+. At Tier 3+ the
   two heterogeneous reviewers are this Codex pass plus `/code-review medium` (family
   diversity, not reviewer count). Add `agent-skills:test-engineer` only when a coverage
