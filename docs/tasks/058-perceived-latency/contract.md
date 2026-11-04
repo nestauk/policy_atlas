@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in
 [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted 2026-11-04; **contract approval pending (owner)**. Branch
+> **Status:** drafted 2026-11-04; one gate ruling folded (two routes to the agent, annex v2); **contract approved (before planning): 2026-11-04 · Shabeer Rauf (owner)**. Contract-stage adversarial review: in progress. Branch
 > `task/058-perceived-latency`. Design pass done 2026-11-04 in the same conversation under the
 > frontend variant of the cycle (PR #113): grounding (nine explorer reports, four research
 > notes, seven experiments, all under `research/`, gitignored), a scripted mock
@@ -11,8 +11,7 @@ One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); spe
 > https://claude.ai/artifact/Xse3bLcA6XhQqxQJFVEwtH version 7, fifteen scenes), five owner
 > feedback rounds and an interview that fixed the intent (`research/intent.md`). The owner
 > accepted the mock as direction on 2026-11-04 ("broadly looks okay") and expects more
-> judgement on the live app; the polish passes carry that. Contract-stage adversarial review:
-> after approval. Plan: not yet. ADR: not yet.
+> judgement on the live app; the polish passes carry that. Plan: not yet. ADR: not yet.
 
 ## Goal
 
