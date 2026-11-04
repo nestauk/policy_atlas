@@ -4,7 +4,7 @@
 > owner re-approves the contract and the plan-stage adversarial review runs.** (Draft 1 was
 > committed before the contract review finished; the review's finding 5 names that, and this
 > draft replaces it.) Contract: [contract.md](contract.md) revision 2. Rubric:
-> [rubric.md](rubric.md). Design annex: [design-annex.md](design-annex.md) version 4. Terms, needs (N1 to N26), decisions (D1 to
+> [rubric.md](rubric.md). Design annex: [design-annex.md](design-annex.md) version 5. Terms, needs (N1 to N26), decisions (D1 to
 > D14), gates (G1 to G7) and spec items (S1 to S5) are defined in the contract and not
 > restated here. Executor routing follows `docs/agentic-ops/harness.md` § Agent-side model
 > routing, the owner's rulings of 2026-09-04 (judgment-bearing build work to a reasoning
@@ -169,7 +169,8 @@ step-6 exit. Others fast.
 - Gate: fast; `make drift-check`. Commit.
 
 ### Phase 5 — Frontend core: store, card, Result tab, strip, sidebar, tabs (N5, N7 frontend, N8, N11 to N16, N21 frontend; P6, P9, P10)
-- 5a plumbing (fast-worker, from the contract's needs and the regenerated types): reducer
+- 5a plumbing (fast-worker, from the contract's needs and the regenerated types): the SSE
+  client's 45 s read-inactivity watchdog; the post-sign-in deep-link navigate; reducer
   cases for the tick fields and heartbeats, deltas with `mode`, revising spans, stage start
   times, the per-section `draft`; `sseFrame.ts`; the provider's run status and stream passed
   to the sidebar; query invalidation rules (ingest ticks throttled, child frames refresh the

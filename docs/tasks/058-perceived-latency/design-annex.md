@@ -5,7 +5,7 @@ produce. The contract cites this file by version; looks live here, not in the co
 Owner feedback rounds (mock and polish) edit this file first, then the mock or the app.
 Voice: a short label, then one plain sentence; no mannered prose.
 
-> **Version:** 4 (2026-11-04; v1 = the frozen mock script; v2 and v3 added the contract-gate rulings as notes; v4 folds them into the scenes and removes the superseded text, per the contract-stage review) · Mock: https://claude.ai/artifact/Xse3bLcA6XhQqxQJFVEwtH
+> **Version:** 5 (2026-11-04; v5 corrects the round copy after the deferred-list scan; v1 = the frozen mock script; v2 and v3 added the contract-gate rulings as notes; v4 folds them into the scenes and removes the superseded text, per the contract-stage review) · Mock: https://claude.ai/artifact/Xse3bLcA6XhQqxQJFVEwtH
 > version 7, fifteen scenes; source `research/mock-v7.html` · Frozen: 2026-11-04 (the owner:
 > "broadly looks okay", more judgement expected on the live app) · Polish rounds: log at the
 > end.
@@ -57,7 +57,7 @@ Section titles (report order): Key findings (written last, shown first); 1 Why t
 ## Scenes
 
 ### 1. Agent tab · searching and screening (the activity line)
-Running card as revised. Rows: "Searching and screening" in progress with the action line "Round 2 of up to 3 · screening 87 new abstracts · 104 relevant so far"; the 87 counts down to 0 as abstracts are checked (show "screening 61 new abstracts", "screening 23 new abstracts") and "relevant so far" rises slowly (104, 107, 112). Then the line becomes "Round 3 of up to 3 · searching" for 2 s, then "Round 3 of up to 3 · screening 41 new abstracts · 112 relevant so far", then the row completes as "Searching and screening · 312 found · 118 relevant · Sources →" and the next row "Categorising" becomes in progress with "40 of 118 categorised". (The run's fixed figure is 118 relevant; the rounds build up to it.) Upcoming rows below as names only. Elapsed ticks.
+Running card as revised. Rows: "Searching and screening" in progress with the action line "searching · 184 found so far" rising to 312, then "screening 87 new abstracts · 104 relevant so far"; the 87 counts down to 0 as abstracts are checked (show "screening 61 new abstracts", "screening 23 new abstracts") and "relevant so far" rises slowly (104, 107, 112, 118). There are no rounds (task 051: one search and one screen per scope). Then the row completes as "Searching and screening · 312 found · 118 relevant · Sources →" and the next row "Categorising" becomes in progress with "40 of 118 categorised". (The run's fixed figure is 118 relevant; the rounds build up to it.) Upcoming rows below as names only. Elapsed ticks.
 Caption: "One row per step. The round and the counts live in the line under it."
 
 ### 2. A quiet pause
@@ -80,7 +80,7 @@ Then the section line becomes "Section 4 of 7 · Information and outreach" and t
 Caption: "During writing: the section first, then what the model is doing in it."
 
 ### 5. Result tab, early in the run
-Result selected. Under the tabs, the run strip (same as scene 7): "● Searching and screening · Round 2 of up to 3 · 6 min", status only, its text advancing through the stages as in the Agent card. The page is the report-to-be: the question as the title, then one grey sentence: "The report's sections are set out when writing begins." Nothing else. (Round 2 feedback: the output links were redundant with the strip.)
+Result selected. Under the tabs, the run strip (same as scene 7): "● Searching and screening · 184 found so far · 6 min", status only, its text advancing through the stages as in the Agent card. The page is the report-to-be: the question as the title, then one grey sentence: "The report's sections are set out when writing begins." Nothing else. (Round 2 feedback: the output links were redundant with the strip.)
 Caption: "The Result tab is the report before it exists. The strip says where the run is."
 
 ### 6. Result tab, streaming
@@ -106,7 +106,7 @@ Three panels:
 Caption: "The run is visible from every tab, and you are told when it finishes."
 
 ### 8. Re-run and reconnect
-- Result tab with an existing report and one plain line above it: "This report is from 3 November. A new run started 2 min ago." No button: the strip above it carries the stage, and the sidebar rail and the Agent tab are the routes to the run.
+- Result tab with an existing report and one plain line above it: "This report is from 3 November. A new run started 2 min ago." (The strip above reads "Searching and screening · 112 found so far · 2 min".) No button: the strip above it carries the stage, and the sidebar rail and the Agent tab are the routes to the run.
 
 ## Design review round 2 (lead decisions, 2026-11-04)
 Review note: `design-review-round2.md`. Card directions A (tinted, refined), B (paper ledger, recommended), C (step spine) are in the mock behind a "Card: A | B | C" control; the owner chooses. Accepted from the review: paper instead of the green fill in B and C; yellow for running everywhere; counts right-aligned; no pills; repair treatment as in round 2; skeleton bars on the prose pitch; the two copy changes above. Not applied: duration band (owner: out), stop button (owner: cancel deferred), pulsing only the active section (owner asked for all proposed sections to pulse), rewriting the middot data lines as sentences (meta lines keep middots; the voice rule is about prose). For the build: the Result-tab, strip and task-row dots must stop 1.5 s after the last update like the card dot; consider a 0.5 trough for the yellow dot on white.
@@ -157,7 +157,7 @@ Agent tab, card C with Searching and screening done ("312 found · 118 relevant 
 Caption: "A check-in reads like a question. The recommended answer is first, with its reason."
 
 ### 13. The same agent in the sidebar (block I)
-Sources tab at 1100 wide with the sidebar open on the right (320 px). The run strip under the tabs reads "Searching and screening · Round 2 of up to 3 · 6 min", status only. The sidebar opens from the rail's diamond. In the sidebar, top to bottom: header "Task Agent"; a compact run line (dot, "Searching and screening · Round 2 of up to 3 · 6 min"); the thread tail, which is the card's current line ("Searching and screening" in navy-grey with "Round 2 of up to 3 · screening 61 new abstracts · 107 relevant so far" under it); the composer locked with the placeholder "Replanning unlocks when this run finishes." Then, at 4 s, the run pauses: the compact line becomes orange "Paused · check-in after searching" and the check-in card from scene 12 appears in the sidebar at reduced width (radio list, no facts line), answerable there. Answering returns the line to "Categorising · 40 of 118 categorised · 7 min". (Aligned 2026-11-04 after the builder flagged the writing/searching mismatch.)
+Sources tab at 1100 wide with the sidebar open on the right (320 px). The run strip under the tabs reads "Searching and screening · screening 61 new abstracts · 6 min", status only. The sidebar opens from the rail's diamond. In the sidebar, top to bottom: header "Task Agent"; a compact run line (dot, "Searching and screening · 6 min"); the thread tail, which is the card's current line ("Searching and screening" in navy-grey with "screening 61 new abstracts · 107 relevant so far" under it); the composer locked with the placeholder "Replanning unlocks when this run finishes." Then, at 4 s, the run pauses: the compact line becomes orange "Paused · check-in after searching" and the check-in card from scene 12 appears in the sidebar at reduced width (radio list, no facts line), answerable there. Answering returns the line to "Categorising · 40 of 118 categorised · 7 min". (Aligned 2026-11-04 after the builder flagged the writing/searching mismatch.)
 Caption: "The sidebar shows the same run and the same check-in. Nothing is only on the Agent tab."
 
 ### 14. Finding your way (block J)
@@ -219,8 +219,10 @@ Nesta palette from `index.css`: navy `#0f294a` structural text, grey `#646363` s
   eyebrow text and pills are hallmarks of generated frontends. Folded into scenes 12, 13 and
   15 (no eyebrow, no "provisional"). Rule for the build and the polish passes: before adding
   any word, chip or label, ask what on the page already says it.
-- The mock (version 7) predates these rulings and still shows the strip's diamond, the
-  eyebrow and "provisional"; the annex, not the mock, is the authority.
+- No rounds (deferred-list scan, 2026-11-04): task 051 made it one search and one screen per
+  scope, so no line says "Round n of M"; scenes 1, 5, 8 and 13 corrected.
+- The mock (version 7) predates these rulings and still shows round counts, the strip's
+  diamond, the eyebrow and "provisional"; the annex, not the mock, is the authority.
 
 ## Polish log
 
