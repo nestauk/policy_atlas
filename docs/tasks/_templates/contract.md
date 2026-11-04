@@ -54,6 +54,13 @@ doc lookups, MCP and package installs are not gated.
 What is public-safe (committable durable artefacts) vs what stays private (raw evidence,
 uploaded/acquired source text, traces, credentials, exploit notes). Default: private unless cleared.
 
+## Design annex (frontend-heavy slices only)
+
+`design-annex.md` version _N_ (mock: _artifact link_). This contract pins behaviours, states,
+interfaces, invariants and measured outcomes; looks live in the annex. Polish round budget:
+_N_ rounds at the end of build and _N_ at the end of review (task-cycle-build § Step 5b).
+Delete this section for a slice with no user-facing surface.
+
 ## Model route
 
 Inference route + model for any LLM-bearing step (v3.0: OpenAI under approved controls → Bedrock,
