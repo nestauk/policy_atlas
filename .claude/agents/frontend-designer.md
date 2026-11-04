@@ -26,9 +26,9 @@ tool: `~/.claude/skills/impeccable/SKILL.md` (and the references it names),
 `~/.claude/skills/find-animation-opportunities/SKILL.md`,
 `~/.claude/skills/redesign-existing-projects/SKILL.md`, and the `frontend-design`
 plugin skill under `~/.claude/plugins/cache/claude-plugins-official/frontend-design/`.
-Then the product: `DESIGN.md` (its § Product design principles first, then the
-system), `PRODUCT.md` if present, and the slice's `docs/tasks/NNN/design-annex.md`
-plus any research the brief names.
+Then the product: `PRODUCT.md` (its § Product Principles first), `DESIGN.md` (the
+visual system), and the slice's `docs/tasks/NNN/design-annex.md` plus any research
+the brief names.
 `DESIGN.md` and the annex win over any skill on a conflict.
 
 Rules:

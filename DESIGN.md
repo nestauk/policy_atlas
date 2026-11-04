@@ -246,35 +246,10 @@ no KPI tiles, no badge clutter, no icon soup.
 
 ## Product design principles
 
-The team's six principles for Policy Atlas. Every surface, feature and piece of copy is
-judged against them; the visual system below exists to serve them.
-
-1. **Change behaviour, not just knowledge.** A feature that only informs is a research
-   tool. A feature that shifts what gets drafted, checked, or escalated is a policy tool.
-   For every feature, name the behaviour it changes, not just the information it adds.
-2. **Give control if wanted.** Let expert users steer and override the tool directly:
-   filter, pin, edit, or discard, rather than accepting outputs as final. Direct and guide
-   automated searches and analyses. Identify thoughtful moments where users might want to
-   take more control. Include customisable search parameters (jurisdiction, timeline,
-   methodology) and intuitive controls to pin, edit, or discard generated content.
-3. **Earn trust every time.** Maintain absolute credibility by eliminating hidden
-   hallucinations and ensuring the AI's outputs are bulletproof against intense scrutiny.
-   Mandatory, verifiable source citations for every claim, statistic, or policy example,
-   so users can trace insights back to primary documents and data. Decision transparency
-   about why the AI has or has not done something.
-4. **Provide detail when needed.** Balance high-level summaries with the deep, granular
-   evidence required to withstand rigorous cross-examination and ministerial challenge.
-   Make information quick to find and grasp. Progressive disclosure: a concise executive
-   takeaway expands down into raw transcripts, methodology notes, and full unedited source
-   excerpts. Summarise by default for users short on time and attention.
-5. **Assist human judgement.** Act as a co-pilot, not an autopilot: present trade-offs and
-   open questions rather than a single answer, so the human, not the AI, makes the call.
-   Frame outputs around trade-offs, risks, and missing perspectives rather than
-   prescribing a single path, prompting critical thinking instead of passive acceptance.
-6. **Share a team brain.** Break down internal silos by ensuring that individual
-   discoveries, annotations, and curated evidence collections benefit the entire team.
-   Shared workspaces where policy professionals collaborate and build on verified evidence
-   threads, eliminating duplicated effort and working in isolation.
+The team's six principles (change behaviour, not just knowledge · give control if wanted ·
+earn trust every time · provide detail when needed · assist human judgement · share a
+team brain) live in `PRODUCT.md` § Product Principles. Every surface, feature and piece of
+copy is judged against them; the visual system below exists to serve them.
 
 ## Colors
 
