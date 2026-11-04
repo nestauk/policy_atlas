@@ -1,8 +1,8 @@
 # Rubric: 058-perceived-latency
 
 Core completion criteria. The task is **done only if every box holds**, otherwise it is in
-progress. Item numbers point at [contract.md](contract.md): N1 to N26, D1 to D14, G1 to G7,
-S1 to S5. Terms are defined in the contract's § Terms. Looks are judged against
+progress. Item numbers point at [contract.md](contract.md) (revision 2): N1 to N26, D1 to D14, G1
+to G7, S1 to S5. The review record is [adversarial-review-contract.md](adversarial-review-contract.md). Terms are defined in the contract's § Terms. Looks are judged against
 [design-annex.md](design-annex.md) at its cited version, never against this file.
 
 Core
@@ -21,35 +21,47 @@ Core
 7. [ ] Known gaps and deferred seams listed in [docs/deferred.md](../../deferred.md): cancel
        (D7), computed bands (D6), per-option reading counts (D9), the section proposal's place
        (D12), telemetry (D13), email (D14).
-8. [ ] Required Tier 3 review stack ran (contract verifier · one security lane · the
-       heterogeneous pair · the `frontend-designer` design lane · simplification) or skipped
-       with written justification; the ADR is Accepted.
+8. [ ] Required Tier 3 review stack ran, none of it skipped: contract verifier · one security lane
+       · the heterogeneous pair · the `frontend-designer` design lane · simplification ·
+       adversarial reviews at contract and plan stage recorded in this folder · the human deep
+       review at step 9; the ADR is Accepted.
 
 Activity line (N1 to N5, D2)
-9. [ ] N1: one tick per 500 ms per stage under a burst, carrying the latest values; every
-       step has a verb (test); the screening line moves on a live run.
-10. [ ] N2: every loop with a known total registers it; batch stages say "batch n of M";
-        acquire and screen stage 1 say "n so far" with the round; the option-search join
-        publishes; fetch notes are no longer labelled acquire.
+9. [ ] N1: one tick per 500 ms per stage under a burst; heartbeats at most 10 s apart while a
+       call is in flight; every step has a verb (test); the hooks carry no counts; the
+       screening line moves on a live run.
+10. [ ] N2: every loop with a known total publishes its own count with a unit; batch stages
+        say "batch n of M"; acquire and screen stage 1 say "n so far" with the round; a retry
+        never moves a count; the option-search join publishes; fetch notes are no longer
+        labelled acquire.
 11. [ ] N3: the writer publishes the section line and the action line in the contract's
         sequence, with the model's query verbatim.
-12. [ ] N4: a client connecting mid-stage receives the last tick per stage first; a reload
-        shows the activity line within one poll.
-13. [ ] N5: the card follows the annex § The running card (direction C): per-stage wall
-        time on done rows and a ticking elapsed on the in-progress row; rows, the dot's
-        1.5 s stop, the 120 s "Still working on this step" line, no counter, no raw note.
+12. [ ] N4: a client connecting mid-stage receives the last tick, and mid-section the draft so
+        far as a `replace` delta; entries are keyed by run, cleared on stage and run end and on
+        a new run, expire, and are bounded; a re-run shows no stale line; parent and child
+        activity do not overwrite each other.
+13. [ ] N5: the card follows the annex § The running card (direction C): per-stage wall time on
+        done rows, never null on a live tail, merged rows as the constituents' interval; a
+        ticking elapsed on the in-progress row; the dot breathes on ticks and heartbeats and
+        stops 1.5 s after the last; the 120 s "Still working on this step" line; no counter;
+        no raw note.
 
 Streaming (N6 to N10, D1, D3)
 14. [ ] N6: the final turn streams as strict `json_schema`, deltas are published, the parsed
-        object continues unchanged into the claims path, the fallback runs once on failure
-        and is counted; strict acceptance checked on Terra and Luna.
-15. [ ] N7: the two ephemeral frames are in the union and the spec; the reducer appends,
-        marks, replaces, and rebuilds identically from a replay with no deltas.
-16. [ ] N8: the Result tab's states match annex scene 6, including the blur and cross-fade
-        with nothing marked afterwards, the key-findings note, the footer states, and
-        reduce motion.
-17. [ ] N9: the planner turn streams for both profiles; the Agent tab fills the pending turn
-        and shows "Drafting the plan"; the opening turn streams in the Agent tab.
+        object continues unchanged into the claims path, the fallback runs once on failure,
+        resets the draft and is counted; the decoded delta text equals `parsed.prose` across
+        escapes and chunk boundaries (test); strict acceptance of the full schema checked on
+        Terra and Luna before Phase 2.
+15. [ ] N7: the two ephemeral frames with `mode` are in the union and the spec; the reducer
+        appends, replaces, marks, completes, and rebuilds identically from a replay with no
+        deltas; disconnect and reload after n chunks then more chunks is tested.
+16. [ ] N8: the Result tab's states match annex scene 6, including the blur and cross-fade with
+        nothing marked afterwards, the key-findings note, the footer states, reduce motion,
+        the accessible draft state, and no claim marker on draft text.
+17. [ ] N9: the planner turn streams for both profiles under `Accept: application/x-ndjson`
+        with the JSON response unchanged otherwise; one terminal event; auth before headers;
+        the turn completes if the client disconnects; the Agent tab fills the pending turn and
+        shows "Drafting the plan"; the opening turn streams in the Agent tab.
 18. [ ] N10: the clarifying question renders above its chips; chips survive a reload.
 
 Result tab, strip, sidebar, tabs (N11 to N16, D8)
@@ -63,10 +75,11 @@ Result tab, strip, sidebar, tabs (N11 to N16, D8)
         its rail lands on the check-in.
 22. [ ] N14: tab dots appear for new content and clear on visit; the title changes on
         completion; `degraded` opens the report.
-23. [ ] N15: the task list row shows the stage and elapsed time; the "Plan" control opens the
-        plan from any tab; Escape closes it; the reconnecting banner is mounted.
-24. [ ] N16: Sources defaults to "All" until screening completes; per-document stages refresh
-        the Sources queries on ticks.
+23. [ ] N15: the task list row shows the server's stage label and the elapsed time, from the
+        parent walk; the "Plan" control opens the plan from any tab; Escape closes it; the
+        reconnecting banner is mounted.
+24. [ ] N16: Sources defaults to "All" until screening completes; ingest ticks refresh the
+        Sources queries, throttled to 5 s; other ticks do not.
 
 Copy (N17, D4, D5)
 25. [ ] N17: every public key has a server label, blurb and verb in the plain voice; the
@@ -84,20 +97,23 @@ Planning conversation and check-ins (N18 to N21, D10)
 29. [ ] N21: the scoping card shows "n of M searches done · k sources so far".
 
 Scoping Result tab (N22 to N24, D9)
-30. [ ] N22: the provisional longlist read returns the suggested rows with `provisional`
-        after suggest; `has_longlist` semantics unchanged.
-31. [ ] N23: `RunOut.option_id` is set on child walks; child stage frames are kept per walk;
-        the longlist refreshes on child `run.status`.
+30. [ ] N22: `GET /options` returns the suggested rows with their search status and count after
+        suggest; `/longlist` and `has_longlist` unchanged; tenancy tests pass (public task,
+        cross-tenant 404, task scoping).
+31. [ ] N23: child `run.status` and `stage.completed` frames refresh the options query; the
+        reducer stores no child stages; `RunOut` is unchanged.
 32. [ ] N24: the longlist during the build matches annex scene 15: per-row search status,
         stage lines, the fold, new rows, waves, shortlist marks; no "provisional" word.
 
 Measurement, mock, polish (N25, N26, D11, G7)
-33. [ ] N25: before and after measures on the fixed questions on laptop and staging, read
-        from saved results; no silent gap over 30 s on a healthy run; first delta within 5 s
-        of the writing turn; the cost delta per report recorded against the $0.03 estimate.
+33. [ ] N25: before and after measures with the capture client on the fixed questions, laptop
+        and staging (staging baseline before the deploy), read from saved results named in
+        `verification.md`; zero silent gaps on a healthy run; first delta within 5 s of the
+        writing turn; gaps on unhealthy runs reported with their cause.
 34. [ ] N26: the mock API returns parts, suggestions, a real check-in, child frames, ticks,
-        deltas and revising frames; both journeys assert the annex's states, including a
-        reload mid-run.
+        deltas, revising frames and the options read; both journeys assert the annex's
+        states, a reload mid-run and the paused strip; the scoping journey asserts the
+        baseline gate before any option row.
 35. [ ] D11: polish passes complete at build end and after review (agent, then owner, within
         the round budget), the annex's polish log filled, the owner's sign-off recorded in
         `verification.md`, live-dev screenshots of every changed surface attached.
