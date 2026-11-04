@@ -173,7 +173,7 @@ Grounding: `grounding-scoping-result-tab.md`. What the pipeline can honestly sho
 - Child searches run acquire only, so a row's line is "Searching" while its child runs and "Searched · N found" when it completes. No per-option reading or counts exist before clustering, so "Reading the abstracts" and "Clustering into options" are stage-level lines at the top of the list.
 - Clustering keeps the suggested ids; a suggestion may be folded into a wider option (the row stays, marked folded) and new clustered rows may appear. Never split.
 - Profiles, constraint checks and themes each land for every option in one commit, so the list fills in three waves, not row by row. The scene shows waves.
-- The list carries no qualifier word: the stage line and the moving rows say it is being built. The API field `provisional` picks states; it is never shown.
+- The list carries no qualifier word: the stage line and the moving rows say it is being built. The view knows it is building because the longlist does not exist yet while a walk runs; no API flag.
 
 ### 15. The scoping Result tab during the build (block K)
 Scoping task "Reducing youth unemployment", Result tab, card C elsewhere. Run strip under the tabs: "● Suggesting options · 1 min" then advancing. The page is the longlist-to-be:

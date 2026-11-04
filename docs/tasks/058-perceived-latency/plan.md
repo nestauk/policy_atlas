@@ -126,7 +126,7 @@ step-6 exit. Others fast.
   liveness through the coalescer with the stage from the structlog component (codex).
 - `runtime/runner.py`: `wall_clock_s` in the `component.completed` payload (P13) (codex).
 - `api/stage_vocabulary.py`: the single copy table: labels, blurbs, verbs per step, count
-  keys per stage, in the plain voice (lead, P11); the test that every key and step is
+  keys per stage, and which keys share a card row, in the plain voice (lead, P11); the test that every key and step is
   covered (fast-worker).
 - N2 completion-callback counts with units across the stages named in
   `research/grounding-per-item-loops.md`; the option-search join publishes with the task id;
