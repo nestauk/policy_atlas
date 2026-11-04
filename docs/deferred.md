@@ -3474,3 +3474,11 @@ says what is true today and what the lever is. Experiment figures are from the g
   the stored bodies; replace the long-term API key (AWS: "exploration only") with
   short-term keys or SigV4 as its own approval-gated task. Not: TCP keep-alive, the NAT
   sysctl, streaming on the long steps, a token-aware limiter (reasoned out in the brief).
+- **The ingest function runs at most 20 documents at once** (owner, 2026-11-04; contract
+  N5). `MAX_CONCURRENCY = 20` in `infra/infra/components/ingest_worker.py`, so a
+  100-document run parses in about five waves. Kept low on purpose: embedding, not parsing,
+  binds the stage while the Bedrock embedding quota is about 650,000 tokens a minute, and
+  every running copy holds one connection on the burstable `db.t3.medium` writer. Revisit
+  when AWS raises the quota (3,000,000 a minute asked, case open 2026-11-03): measure on
+  staging whether documents wait in the queue for a free copy, check the writer's free
+  connections against the API pool and the scoping fan-out, then raise the cap.
