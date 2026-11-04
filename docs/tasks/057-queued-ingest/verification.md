@@ -1824,8 +1824,10 @@ names what is still outside the build's reach.
 
 ## Intent & assumptions
 
-- Measurements are on the bedrock route only (D9); production still runs `openai-direct`,
-  which takes the widths and timeouts unmeasured (the prod route flip is deferred).
+- Measurements are on the bedrock route only (D9). Production ran `openai-direct` through the
+  build and review and moved to `bedrock` on 2026-11-03 (dev `f0018c4e`, merged into this branch
+  on 2026-11-04), so the measured route is now the production route; production stays
+  `in_process`, the mode the laptop rounds measured.
 - The laptop's Docker Postgres (128 MB shared buffers) stands in for the writer; the
   per-search latency there is an upper bound for a warm production cache and nothing more.
 - One run per question per round: the medians are over three runs, and model stalls

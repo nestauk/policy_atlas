@@ -84,14 +84,14 @@ rather than lost ones. The rate moves with the hour (probe 2's runs saw 0.3%, ro
    the four calls that returned after 126 to 246 s (a 6 s call), with timestamps, region,
    the model id and the inference profile. That is exactly what AWS asks for, it needs no
    account change, and it is the only path to the cause of the hangs themselves.
-4. **Before the production route flip: three cheap observability moves** (the
+4. **Now that production is on `bedrock` (dev `f0018c4e`, 2026-11-03): three cheap observability moves** (the
    observability note's list). Record the response's request-id header on every traced
    attempt (a hung attempt has none, which is itself evidence); graph `AWS/Bedrock`
    `Invocations` per minute per model id against the attempts Langfuse shows starting in
    that minute (free; a shortfall means requests never arrived); turn on model invocation
    logging in eu-west-2 to S3 only if the DPIA allows the stored bodies (text delivery off
    if that setting works; unverified).
-5. **Before the production route flip: the key.** The long-term API key in the route's
+5. **Now that production is on `bedrock`: the key.** The long-term API key in the route's
    `api_key_env` is "exploration only" by AWS's own words. Short-term keys (12 h) need a
    refresh in the task; SigV4 needs a signing transport under the OpenAI SDK. An auth and
    infra change, approval-gated; raise it as its own task.

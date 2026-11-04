@@ -110,7 +110,7 @@ negative.
   and a retention rule for unlinked snapshots are part of the slice.
 - Staging evidence is gathered after the merge to dev, because staging deploys only from dev;
   the PR names it as the one open item.
-- Seams left for later slices, recorded in `deferred.md`: the production route flip to
-  `bedrock`; the remaining parse rules; the low-effort judge's labelled-set check and
+- Seams left for later slices, recorded in `deferred.md` (the production route flip to
+  `bedrock` happened on 2026-11-03, dev `f0018c4e`, before this merged): the remaining parse rules; the low-effort judge's labelled-set check and
   per-claim judge filtering; the fallback parser; per-host fetch coordination; the staging
   inspection secret, whose password no longer matches the database.

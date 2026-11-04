@@ -861,7 +861,7 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   What remains deferred, and to which slice:
   - **Staging and production:** the wiring landed in 053 on 2026-10-21 (owner decision,
     contract note 9): `backend.model_route` in `infra/pa_config.json` (staging switched to
-    `bedrock` on 2026-10-28; production still `openai-direct`), the stack maps `AWS_BEARER_TOKEN_BEDROCK` only on a Bedrock route,
+    `bedrock` on 2026-10-28, production on 2026-11-03 by a colleague, dev `f0018c4e`), the stack maps `AWS_BEARER_TOKEN_BEDROCK` only on a Bedrock route,
     and `infra/DEPLOYMENT.md` § 5 has the switch procedure. The history below is kept
     for the reasoning. The owner's plan changed on 2026-10-21:
     the container does **not** mint its own key from the task role. Both keys live in
@@ -3435,11 +3435,6 @@ says what is true today and what the lever is. Experiment figures are from the g
   88 recorded queries and the citation funnel (about 12 of about 55 relevant documents cited)
   before adopting; a leg that does not move the relevant documents reaching the writer is not
   worth its dependency.
-- **The prod route flip to `bedrock`.** `bedrock` is the app's default route going forward and
-  `openai-direct` is legacy (owner, 2026-11-02); prod stays on `openai-direct` until the team's
-  internal testing on staging is done (owner, 2026-11-03). Prod takes the route-neutral levers
-  (widths, SQL retrieval, the per-document stage in `in_process` mode) unmeasured on its route
-  (D15). Lever: a one-line config change at the owner's go.
 - **Alarm actions.** The three task 057 alarms (dead-letter depth, NAT network out, writer CPU
   credits) have no notification action because the stacks have no SNS topic. Lever: one topic
   with an email subscription, wired to every alarm.
@@ -3472,8 +3467,8 @@ says what is true today and what the lever is. Experiment figures are from the g
 - **The Bedrock hangs are the provider's; their cause is unknown** (review; probes 2 and 4,
   `docs/tasks/057-queued-ingest/bedrock-integration-brief.md`). The bare OpenAI SDK hangs
   10 to 17% of serial judge-sized calls, some returning after 2 to 4 minutes; the client,
-  the pool and our wrapper are cleared. Before the production route flip, in the brief's
-  order: file the AWS support case with probe 4's request ids; record the response's
+  the pool and our wrapper are cleared. Production moved to `bedrock` on 2026-11-03 (dev
+  `f0018c4e`), so these are due now rather than before a flip, in the brief's order: file the AWS support case with probe 4's request ids; record the response's
   request-id header on every traced attempt and graph the free `AWS/Bedrock` `Invocations`
   metric against Langfuse's attempts; turn on invocation logging only if the DPIA allows
   the stored bodies; replace the long-term API key (AWS: "exploration only") with
