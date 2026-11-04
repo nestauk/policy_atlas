@@ -2,7 +2,7 @@
 
 Core completion criteria. The task is **done only if every box holds**, otherwise it is in
 progress. Item numbers point at [contract.md](contract.md) (revision 2): N1 to N26, D1 to D14, G1
-to G7, S1 to S5. The review record is [adversarial-review-contract.md](adversarial-review-contract.md). Terms are defined in the contract's § Terms. Looks are judged against
+to G7, S1 to S5. Review findings are folded into the contract; the records stay local. Terms are defined in the contract's § Terms. Looks are judged against
 [design-annex.md](design-annex.md) at its cited version, never against this file.
 
 Core
@@ -24,8 +24,8 @@ Core
        (D12), telemetry (D13), email (D14).
 8. [ ] Required Tier 3 review stack ran, none of it skipped: contract verifier · one security lane
        · the heterogeneous pair · the `frontend-designer` design lane · simplification ·
-       adversarial reviews at contract and plan stage recorded in this folder · the human deep
-       review at step 9; the ADR is Accepted.
+       adversarial reviews at contract and plan stage folded into the documents (records local) ·
+       the human deep review at step 9; the ADR is Accepted.
 
 Activity line (N1 to N5, D2)
 9. [ ] N1: one tick per 500 ms per stage under a burst; heartbeats at most 10 s apart while a

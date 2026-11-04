@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in
 [docs/specs/](../../specs/index.md).
 
-> **Status: revision 2, re-approval pending.** Revision 1 approved 2026-11-04 · Shabeer Rauf (owner), with three gate rulings folded (two routes to the agent; per-stage timings; no labels that restate the page; annex v3). The contract-stage adversarial review the same day ([adversarial-review-contract.md](adversarial-review-contract.md), Codex, 18 findings) is folded as revision 2: every finding accepted, some narrowed; the material changes are N1/N2 (counts from loops, heartbeats), N4/N7 (the draft replays on connect), N9 (streaming by content negotiation, not a breaking change), N22/N23 (an options read replaces the provisional longlist and the child-walk join), N25 (the measure defined so it is falsifiable) and G1 (the complete interface list). **A plan draft was committed before this review finished (finding 5); it is revised from revision 2 and stays unconfirmed until the owner re-approves.** Owner at revision 2 (2026-11-04): the frontend and backend always deploy together, so no compatibility shims and no kept-beside-the-new fields or responses (N9 and D2 revised); the fast-tier strict gate dropped. Branch
+> **Status: revision 2, re-approval pending.** Revision 1 approved 2026-11-04 · Shabeer Rauf (owner), with three gate rulings folded (two routes to the agent; per-stage timings; no labels that restate the page; annex v3). The contract-stage adversarial review the same day (Codex, 18 findings; the record stays local under `research/`, not committed: owner, 2026-11-04, the findings live in the contract) is folded as revision 2: every finding accepted, some narrowed; the material changes are N1/N2 (counts from loops, heartbeats), N4/N7 (the draft replays on connect), N9 (streaming by content negotiation, not a breaking change), N22/N23 (an options read replaces the provisional longlist and the child-walk join), N25 (the measure defined so it is falsifiable) and G1 (the complete interface list). **A plan draft was committed before this review finished (finding 5); it is revised from revision 2 and stays unconfirmed until the owner re-approves.** Owner at revision 2 (2026-11-04): the frontend and backend always deploy together, so no compatibility shims and no kept-beside-the-new fields or responses (N9 and D2 revised); the fast-tier strict gate dropped. Branch
 > `task/058-perceived-latency`. Design pass done 2026-11-04 in the same conversation under the
 > frontend variant of the cycle (PR #113): grounding (nine explorer reports, four research
 > notes, seven experiments, all under `research/`, gitignored), a scripted mock
@@ -377,7 +377,8 @@ endpoint, telemetry); or when the turn or token budget is spent.
   streamed representation, the options read's tenancy, the query text); the heterogeneous
   pair (Codex adversarial and `/code-review medium`); the `frontend-designer` design lane;
   simplification; and the human deep review at step 9 (finding 16). Adversarial reviews at
-  the contract and plan stages are recorded in this folder.
+  the contract and plan stages are folded into the documents they review; their records
+  stay local (owner, 2026-11-04).
 
 ## Verification evidence expected
 
