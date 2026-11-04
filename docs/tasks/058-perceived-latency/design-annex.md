@@ -214,6 +214,11 @@ Nesta palette from `index.css`: navy `#0f294a` structural text, grey `#646363` s
   state instead: orange dot, "Paused · a check-in is waiting on you", the same diamond, which
   opens the sidebar on the check-in (on the Agent tab the card glows in place). The mock is not
   rebuilt for this; the build follows this ruling.
+- **Per-stage timings on the card.** Each done row carries its wall time in grey after its
+  count, before the link ("Searching and screening · 312 found · 118 relevant · 1 min 4 s ·
+  Sources →"); the in-progress row shows its own elapsed time ticking in the same place
+  ("Reading the full texts · 14 of 38 read" on the action line, "2 min 10 s" in the count
+  column). The top line keeps the run's total. Tabular figures; no band, no estimate.
 
 ## Polish log
 

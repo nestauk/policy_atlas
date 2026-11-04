@@ -35,7 +35,8 @@ Activity line (N1 to N5, D2)
         sequence, with the model's query verbatim.
 12. [ ] N4: a client connecting mid-stage receives the last tick per stage first; a reload
         shows the activity line within one poll.
-13. [ ] N5: the card follows the annex § The running card (direction C): rows, the dot's
+13. [ ] N5: the card follows the annex § The running card (direction C): per-stage wall
+        time on done rows and a ticking elapsed on the in-progress row; rows, the dot's
         1.5 s stop, the 120 s "Still working on this step" line, no counter, no raw note.
 
 Streaming (N6 to N10, D1, D3)
