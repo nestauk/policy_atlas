@@ -52,13 +52,14 @@ Streaming (N6 to N10, D1, D3)
 18. [ ] N10: the clarifying question renders above its chips; chips survive a reload.
 
 Result tab, strip, sidebar, tabs (N11 to N16, D8)
-19. [ ] N11: the three pre-writing states (empty, re-run banner, paused) match annex scenes
-        5 and 8; "Preparing your results" is gone.
+19. [ ] N11: the three pre-writing states (empty, re-run notice with no button, paused) match
+        annex scenes 5 and 8; "Preparing your results" is gone.
 20. [ ] N12: the run strip with the Task Agent mark is on every non-Agent tab; the mark opens
-        the sidebar in place; below `md` it goes to Agent; the done state is green.
+        the sidebar in place; below `md` it goes to Agent; the paused state is on the strip
+        and the separate paused banner is gone; the done state is green.
 21. [ ] N13: the sidebar carries the real stream: run line, thread tail, an answerable
-        check-in, the locked composer; plan links open the plan; the banner link opens the
-        sidebar on the check-in.
+        check-in, the locked composer; plan links open the plan; the paused strip's mark opens
+        the sidebar on the check-in.
 22. [ ] N14: tab dots appear for new content and clear on visit; the title changes on
         completion; `degraded` opens the report.
 23. [ ] N15: the task list row shows the stage and elapsed time; the "Plan" control opens the
@@ -78,8 +79,7 @@ Planning conversation and check-ins (N18 to N21, D10)
         scoping parts render.
 27. [ ] N19: the check-in matches annex scene 12; one stop; "You chose" comes from the
         durable frame; the card reads PAUSED while a check-in waits.
-28. [ ] N20: time bands agree; no literal asterisks; plan edits survive leaving the tab; the
-        banner wording follows the capability.
+28. [ ] N20: time bands agree; no literal asterisks; plan edits survive leaving the tab.
 29. [ ] N21: the scoping card shows "n of M searches done · k sources so far".
 
 Scoping Result tab (N22 to N24, D9)

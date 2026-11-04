@@ -5,7 +5,7 @@ produce. The contract cites this file by version; looks live here, not in the co
 Owner feedback rounds (mock and polish) edit this file first, then the mock or the app.
 Voice: a short label, then one plain sentence; no mannered prose.
 
-> **Version:** 1 (2026-11-04) · Mock: https://claude.ai/artifact/Xse3bLcA6XhQqxQJFVEwtH
+> **Version:** 2 (2026-11-04; v1 = the frozen mock script, v2 adds the contract-gate rulings) · Mock: https://claude.ai/artifact/Xse3bLcA6XhQqxQJFVEwtH
 > version 7, fifteen scenes; source `research/mock-v7.html` · Frozen: 2026-11-04 (the owner:
 > "broadly looks okay", more judgement expected on the live app) · Polish rounds: log at the
 > end.
@@ -205,6 +205,15 @@ The owner accepted the mock as the direction ("broadly looks okay") and expects 
 Nesta palette from `index.css`: navy `#0f294a` structural text, grey `#646363` secondary, ground `#f4f4f5`, paper `#ffffff`, line `#e4e4e7`, green `#18a48c` with tint `#e7f5f2` (running card uses `#17A88D` on `#DDF2EE`), yellow `#fdb633` for running status dots, orange `#ff6e47` for paused. Radius 0 everywhere. Uppercase labels with 0.06 em tracking. Fonts: the app's Averta and Zosia are self-hosted and cannot load in the artifact; use a system sans stack and say so in a footnote. Dark theme: provide tokens, do not invert the running card's green.
 
 ---
+
+## Rulings at the contract gate (annex version 2, 2026-11-04)
+
+- **Two routes to the agent, not three.** The re-run notice (scene 8) loses its "Follow the
+  run" button and reads "This report is from 3 November. A new run started 2 min ago." The
+  separate paused banner (scene 14, panel 3) is removed; the run strip carries the paused
+  state instead: orange dot, "Paused · a check-in is waiting on you", the same diamond, which
+  opens the sidebar on the check-in (on the Agent tab the card glows in place). The mock is not
+  rebuilt for this; the build follows this ruling.
 
 ## Polish log
 
