@@ -479,8 +479,9 @@ def test_embedding_pool_cap_defaults_to_8_and_is_strict(tmp_path: Path) -> None:
     """Task 057 (D6): ``pool_cap`` is optional (8), a whole number of at least 1,
     and the embeddings table takes no other unknown key."""
     assert load_route(_write(tmp_path, "r.toml", MINIMAL), "r", {}).embeddings.pool_cap == 8
-    for name in ("openai-direct", "bedrock", "bedrock-claude"):
-        assert load_route(ROUTE_FILE, name, {}).embeddings.pool_cap == 8, name
+    # The two Cohere routes run a wider pool (12); the legacy OpenAI route keeps 8.
+    for name, cap in (("openai-direct", 8), ("bedrock", 12), ("bedrock-claude", 12)):
+        assert load_route(ROUTE_FILE, name, {}).embeddings.pool_cap == cap, name
     with_cap = MINIMAL.replace('profile = "p"\n', 'profile = "p"\npool_cap = 3\n')
     assert load_route(_write(tmp_path, "c.toml", with_cap), "r", {}).embeddings.pool_cap == 3
     for bad, match in (

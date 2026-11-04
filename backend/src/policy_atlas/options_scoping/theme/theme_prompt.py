@@ -18,7 +18,9 @@ LONGLIST_THEME_PROMPT_VERSION = "longlist_theme_v1"
 
 THEME_MAX_OUTPUT_TOKENS = 8_192
 THEME_LABEL_MAX = 80
-THEME_DESCRIPTION_MAX = 240
+# The prompt asks the model for at most 240 characters; the check allows 400 so one
+# slightly long description does not fail the whole step.
+THEME_DESCRIPTION_MAX = 400
 
 
 class ThemeWire(BaseModel):

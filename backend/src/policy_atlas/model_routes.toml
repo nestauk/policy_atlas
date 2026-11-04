@@ -128,7 +128,7 @@ backend = "openai"
 model = "text-embedding-3-small"
 profile = "openai_text_embedding_3_small_v1"
 # Most embedding requests the full-text stage keeps in flight (task 057, D6):
-# the pool starts at 2, halves on throttling and adds one after 5 clean batches.
+# the pool starts at 6, halves on throttling and adds one after 5 clean batches.
 pool_cap = 8
 
 [routes.openai-direct.search_queries]
@@ -157,8 +157,8 @@ backend = "cohere"
 model = "eu.cohere.embed-v4:0"
 profile = "cohere_embed_v4_1536_v1"
 # Most embedding requests the full-text stage keeps in flight (task 057, D6):
-# the pool starts at 2, halves on throttling and adds one after 5 clean batches.
-pool_cap = 8
+# the pool starts at 6, halves on throttling and adds one after 5 clean batches.
+pool_cap = 12
 
 [routes.bedrock.search_queries]
 backend = "openai"   # Luna through Bedrock's OpenAI-format address, like every other step
@@ -214,8 +214,8 @@ backend = "cohere"
 model = "eu.cohere.embed-v4:0"
 profile = "cohere_embed_v4_1536_v1"
 # Most embedding requests the full-text stage keeps in flight (task 057, D6):
-# the pool starts at 2, halves on throttling and adds one after 5 clean batches.
-pool_cap = 8
+# the pool starts at 6, halves on throttling and adds one after 5 clean batches.
+pool_cap = 12
 
 [routes.bedrock-claude.search_queries]
 backend = "claude"

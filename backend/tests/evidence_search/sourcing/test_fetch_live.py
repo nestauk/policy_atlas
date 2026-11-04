@@ -22,7 +22,7 @@ from policy_atlas.evidence_search.sourcing.fetch_live import (
     _BlockedURL,
     _PinnedIPNetworkBackend,
 )
-from policy_atlas.evidence_search.sourcing.ingest_full_text import _redact_url
+from policy_atlas.evidence_search.sourcing.ingest_full_text import FETCH_DEADLINE, _redact_url
 
 PUBLIC_IP = "93.184.216.34"
 
@@ -311,6 +311,12 @@ def test_200_empty_body_returns_empty() -> None:
     assert result.error == "empty"
 
 
+@pytest.fixture(autouse=True)
+def _no_retry_jitter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the retry waits exact here; the jitter has its own test below."""
+    monkeypatch.setattr("random.uniform", lambda _low, _high: 1.0)
+
+
 def test_retry_429_then_200_succeeds() -> None:
     calls = 0
 
@@ -414,8 +420,8 @@ def test_cookie_and_authorization_headers_never_ride_requests() -> None:
     assert first.status == "ok"
     assert second.status == "ok"
     assert [request.headers.get("user-agent") for request in requests] == [
-        "policy-atlas/0.1 (+research; contact via repo)",
-        "policy-atlas/0.1 (+research; contact via repo)",
+        "policy-atlas/0.1 (+https://www.nesta.org.uk/project/policy-atlas/)",
+        "policy-atlas/0.1 (+https://www.nesta.org.uk/project/policy-atlas/)",
     ]
     assert all("authorization" not in request.headers for request in requests)
     assert all("cookie" not in request.headers for request in requests)
@@ -673,3 +679,81 @@ def test_a_slow_drip_body_stops_at_the_deadline() -> None:
     assert (result.status, result.error) == ("error", "timeout")
     assert stream.sent < 100
     assert fetcher._inflight_bytes == 0
+
+
+def test_retry_wait_is_spread_so_parallel_workers_do_not_retry_in_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The fixed 2 s wait runs from 1 s to 3 s; a host's own Retry-After is not changed."""
+    monkeypatch.undo()  # drop the exact-wait fixture for this test
+    waits = {fetch_live._jittered(RETRY_BACKOFF_S) for _ in range(200)}
+    assert len(waits) > 1
+    assert all(RETRY_BACKOFF_S * 0.5 <= w <= RETRY_BACKOFF_S * 1.5 for w in waits)
+
+
+def test_a_429_makes_the_next_request_to_that_host_wait_but_not_other_hosts() -> None:
+    """After a 429 the host rests (up to HOST_COOLDOWN_CAP_S); other hosts are not held."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.host)
+        if request.url.host == "slow.example.com" and seen.count("slow.example.com") == 1:
+            return httpx.Response(429, headers={"Retry-After": "20"})
+        return _ok_response(b"ok")
+
+    fetcher, _, clock = _fetcher(handler)
+
+    first = fetcher.fetch("https://slow.example.com/a")
+    assert first.status == "ok"
+    fetcher.release_body(2)
+    assert clock.sleeps == [20.0]  # the retry waited the host's Retry-After (cap 30 s)
+
+    clock.sleeps.clear()
+    fetcher._cool_host("https://slow.example.com/b", 7.0)
+    fetcher.fetch("https://slow.example.com/b")
+    fetcher.release_body(2)
+    assert clock.sleeps and clock.sleeps[0] == pytest.approx(7.0)  # waited out the rest
+
+    clock.sleeps.clear()
+    fetcher.fetch("https://other.example.com/c")
+    fetcher.release_body(2)
+    assert clock.sleeps == []  # a different host is not held
+
+
+def test_the_cooldown_is_capped() -> None:
+    fetcher, _, clock = _fetcher(lambda request: _ok_response(b"ok"))
+    fetcher._cool_host("https://slow.example.com/a", 500.0)
+    fetcher.fetch("https://slow.example.com/b")
+    fetcher.release_body(2)
+    assert clock.sleeps == [fetch_live.HOST_COOLDOWN_CAP_S]
+
+
+def test_only_429_and_503_start_a_cooldown_and_a_longer_rest_is_kept() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(502) if calls == 1 else _ok_response(b"ok")
+
+    fetcher, _, clock = _fetcher(handler)
+    fetcher.fetch("https://example.com/a")
+    fetcher.release_body(2)
+    assert fetcher._host_state("example.com").cooldown_until is None  # a 502 is not a rest
+
+    fetcher._cool_host("https://example.com/a", 8.0)
+    fetcher._cool_host("https://example.com/a", 1.0)  # a shorter rest does not replace it
+    assert fetcher._host_state("example.com").cooldown_until == pytest.approx(clock.now + 8.0)
+
+
+def test_the_cooldown_wait_stops_before_the_documents_deadline() -> None:
+    fetcher, _, clock = _fetcher(lambda request: _ok_response(b"ok"))
+    fetcher._cool_host("https://slow.example.com/a", 10.0)
+    token = FETCH_DEADLINE.set(clock.now + 8.0)
+    try:
+        fetcher.fetch("https://slow.example.com/b")
+    finally:
+        FETCH_DEADLINE.reset(token)
+    fetcher.release_body(2)
+    # 8 s to the deadline, less the 5 s margin: rest 3 s, not the full 10 s
+    assert clock.sleeps == [pytest.approx(3.0)]

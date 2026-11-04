@@ -506,19 +506,19 @@ def _provider_tags(backend_name: str, record: dict[str, Any]) -> list[tuple[str,
         source_tags = record.get("source_tags")  # decision 20: publisher-curated headings
         if isinstance(source_tags, list):
             overton_values.extend(source_tags)
+        # The document theme and series come first: the 50-tag cap (``acquire.tags_truncated``)
+        # cuts from the end, so a long topic list loses topics, not the theme or series.
         tags = [
-            *_dedupe_tag_values(overton_values, "overton"),
             *_dedupe_tag_values([record.get("llm_document_theme")], "overton_llm"),
-        ]
-        # decision 20 (rev 3.6b): the document series is methodological/
-        # structural material, not a topical assertion.
-        tags.extend(
-            _dedupe_tag_values(
+            # decision 20 (rev 3.6b): the document series is methodological/
+            # structural material, not a topical assertion.
+            *_dedupe_tag_values(
                 [record.get("overton_policy_document_series")],
                 "overton",
                 tag_type=METHODOLOGICAL_STRUCTURAL,
-            )
-        )
+            ),
+            *_dedupe_tag_values(overton_values, "overton"),
+        ]
         return tags
 
     return []

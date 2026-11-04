@@ -377,3 +377,35 @@ def test_importing_the_handler_pulls_in_neither_the_cli_nor_the_runtime() -> Non
         [sys.executable, "-c", code], capture_output=True, text=True, timeout=120, check=False
     )
     assert done.returncode == 0, done.stderr[-2000:]
+
+
+def test_a_retried_message_comes_back_after_30_to_60_seconds(
+    engine: Engine, use_worker: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The retry asks SQS for a short delay; if that call fails the retry still happens."""
+    calls: list[dict[str, Any]] = []
+
+    class _Sqs:
+        def change_message_visibility(self, **kwargs: Any) -> None:
+            calls.append(kwargs)
+
+    monkeypatch.setattr(ingest_worker, "sqs_client", lambda: _Sqs())
+    doc = _Doc(engine, FetchResult(status="error", error="timeout"))
+    try:
+        use_worker(doc.fetcher)
+        event = _event(doc.body, attempt=1)
+        event["Records"][0]["eventSourceARN"] = "arn:aws:sqs:eu-west-2:123456789012:ingest-queue"
+        event["Records"][0]["receiptHandle"] = "handle-1"
+        assert ingest_worker.handler(event, _Context()) == _retry()
+        assert len(calls) == 1
+        assert calls[0]["QueueUrl"] == "https://sqs.eu-west-2.amazonaws.com/123456789012/ingest-queue"
+        assert calls[0]["ReceiptHandle"] == "handle-1"
+        assert 30 <= calls[0]["VisibilityTimeout"] <= 60
+
+        def broken() -> Any:
+            raise RuntimeError("no permission")
+
+        monkeypatch.setattr(ingest_worker, "sqs_client", broken)
+        assert ingest_worker.handler(event, _Context()) == _retry()
+    finally:
+        _cleanup(engine, doc, [])

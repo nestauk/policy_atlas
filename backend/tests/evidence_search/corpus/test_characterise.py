@@ -1774,7 +1774,7 @@ def test_judgment_prompt_records_are_json_data() -> None:
     [
         {"name": "x" * 81, "description": "Valid description."},
         {"name": "Bad\x1bName", "description": "Valid description."},
-        {"name": "Valid", "description": "x" * 241},
+        {"name": "Valid", "description": "x" * 401},
     ],
 )
 def test_judgment_theme_name_constraints_fail_after_retry(
@@ -2163,3 +2163,12 @@ def test_judgment_tracing_requires_host_when_keys_present(
     monkeypatch.delenv("LANGFUSE_SECRET_KEY")
     with pytest.raises(RuntimeError, match="partially configured"):
         tracing.get_langfuse()
+
+
+def test_theme_description_over_prompt_target_but_within_limit_is_accepted() -> None:
+    """Staging failed whole runs on 243-315 character descriptions; 400 must pass."""
+    themes: list[Theme] = [
+        {"name": "A", "description": "x" * 400},
+        {"name": "B", "description": "y" * 315},
+    ]
+    assert theme_grouping.validate_themes(themes, min_themes=1, max_themes=3) == themes

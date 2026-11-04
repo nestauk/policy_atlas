@@ -582,6 +582,13 @@ The words, one line each:
   hidden from other workers for this long. If the worker has not finished by
   then, the message reappears for another try. It is the function's 180 s time
   limit plus 30 s.
+- **Retry delay** (30 to 60 s): when a page fetch fails in a way worth trying again
+  (a timeout or a network error), the function does not wait for the 210 s above.
+  Before it hands the message back, it asks the queue to show it again after a
+  random 30 to 60 s (`ChangeMessageVisibility`, a call that resets the timer on one
+  message). The first try has ended by then, so the message cannot arrive twice at
+  once. The function's role already holds this permission. If the call fails, the
+  message still comes back, only after the full 210 s.
 - **Dead-letter queue** (`policy-atlas-v3-ingest-dlq`): where a message goes
   after its second failed try, so it stops being retried and a person can look
   at it. Kept 14 days. The function writes the failure reason on the
