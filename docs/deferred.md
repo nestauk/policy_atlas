@@ -3446,12 +3446,6 @@ says what is true today and what the lever is. Experiment figures are from the g
 - **Three NAT instances.** The VPC runs one fck-nat instance per availability zone (three),
   not the single instance the network stack's comment and contract D5 describe; the NAT
   alarm takes the busiest. Lever: the owner's call on cost against zone resilience.
-- **Three attempts per model call, on every step.** On the fixed questions one synthesise
-  component per round failed because a step's single retry also stalled
-  (`synthesise_propose_sections` at its kept 120 s; `judge_grounding` at 40 s, since raised to
-  80 s), costing 250 to 400 s each time, so the build set `MODEL_CALL_ATTEMPTS = 3` for every
-  step (deviation 13, owner ruling open at the review). Lever: if the owner rules for one
-  retry, two retries only for the steps that run once per component.
 - **A failed attempt's generation carries no input** (review, trace lane). `traced_attempts`
   stamps a failed attempt with its step, attempt number, call id and the error; the messages,
   model and parameters are recorded by the caller's `update`, which runs only on success. A
@@ -3475,10 +3469,6 @@ says what is true today and what the lever is. Experiment figures are from the g
 - **The staging inspection secret's password no longer matches the database** (ADR 0043
   consequences; found at the build). Lever: rotate the inspection user's password and update
   the secret at the next staging session.
-- **The function's security group allows all outbound** (review, security lane). The fetcher's
-  own guard refuses private addresses, so nothing reaches the VPC through it; any other code
-  in the image could. Lever: egress rules for 80 and 443 to the internet and 5432 to the
-  database group only (owner's call: publishers on other ports would be refused).
 - **The Bedrock hangs are the provider's; their cause is unknown** (review; probes 2 and 4,
   `docs/tasks/057-queued-ingest/bedrock-integration-brief.md`). The bare OpenAI SDK hangs
   10 to 17% of serial judge-sized calls, some returning after 2 to 4 minutes; the client,

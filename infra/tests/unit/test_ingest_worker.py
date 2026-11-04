@@ -160,6 +160,20 @@ def test_ingest_function_runs_in_the_private_subnets_with_its_own_security_group
     assert set(vpc_config["SubnetIds"]) == set(service_subnets)
     # Outbound only; nothing is allowed in.
     assert "SecurityGroupIngress" not in sg["Properties"]
+    # Outbound is three rules (owner ruling 2026-11-04): 80 and 443 to the internet,
+    # 5432 to the database group. Not "allow all".
+    inline = sg["Properties"]["SecurityGroupEgress"]
+    assert sorted((r["CidrIp"], r["IpProtocol"], r["FromPort"], r["ToPort"]) for r in inline) == [
+        ("0.0.0.0/0", "tcp", 80, 80),
+        ("0.0.0.0/0", "tcp", 443, 443),
+    ]
+    db_egress = [
+        rule["Properties"]
+        for _, rule in _resources(APP, "AWS::EC2::SecurityGroupEgress")
+        if json.dumps(rule["Properties"]["GroupId"]) == json.dumps({"Fn::GetAtt": [sg_id, "GroupId"]})
+    ]
+    assert [(r["IpProtocol"], r["FromPort"], r["ToPort"]) for r in db_egress] == [("tcp", 5432, 5432)]
+    assert "DestinationSecurityGroupId" in db_egress[0]
     assert not [
         rule
         for _, rule in _resources(APP, "AWS::EC2::SecurityGroupIngress")

@@ -122,8 +122,9 @@ PARSE_TIMEOUT_SECONDS = 120.0  # hard per-document parse timeout; worker is term
 THIN_TEXT_MIN_CHARS = 200  # below this, parsed text is a failure, never "ok" (decision 7)
 # Parse workers are separate processes doing CPU-bound work, so the width follows
 # the cores: 4 on the 2-vCPU staging task, up to 8 on a developer machine
-# (task 044 phase 8, owner 2026-09-17). In process (task 057) it is also the number
-# of threads that each fetch, parse and write one document at a time.
+# (task 044 phase 8, owner 2026-09-17). In process (task 057) the ingest threads
+# are ``ingest_queue.IN_PROCESS_INGEST_THREADS`` (10, owner 2026-11-04); this
+# count still bounds the parse step through ``INGEST_SLOTS``.
 DEFAULT_MAX_WORKERS = max(4, min(8, os.cpu_count() or 4))
 #: Live parse-job worker processes across every walk in the process (task 045,
 #: S2). Defined here, beside the width it is sized from, so the cloud function's

@@ -52,7 +52,9 @@ Queue and function (N1 to N5, D1, D4, D5)
 13. [ ] D5: the function is the backend image with another command; the parse step runs in a
         subprocess with the 120 s kill and denied sockets; the function runs in the private
         subnets with no S3 and no new endpoints; secrets are fetched at runtime, not placed in
-        environment variables; Bedrock is reached through the function's role.
+        environment variables; the function has no model client and no Bedrock grant (D6;
+        wording corrected 2026-11-04, review ruling 10, from "Bedrock is reached through
+        the function's role").
 
 Embedding in the stage (D6, G4)
 14. [ ] D6: the function writes no vectors; the stage embeds pending chunks as documents land

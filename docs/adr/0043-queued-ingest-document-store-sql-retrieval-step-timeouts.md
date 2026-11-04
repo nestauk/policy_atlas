@@ -77,8 +77,8 @@ negative.
    otherwise, with the SDK's silent retries replaced by traced attempts of our own so each
    attempt is its own generation. The build settled on three attempts per call (two traced
    retries) after a stall-then-stall on one step lost a synthesise attempt in most measured
-   rounds under one retry; the owner's ruling on that count is open at the review (task 057
-   verification, deviation 13). The grounding judge runs at `low`
+   rounds under one retry; the owner ruled on 2026-11-04 to keep three on every step (task 057
+   verification, deviation 13 and review ruling 2). The grounding judge runs at `low`
    reasoning effort under the bedrock route's override, to be revisited by the synthesis
    refinement task with a labelled set. Section order and the ledger are untouched.
 

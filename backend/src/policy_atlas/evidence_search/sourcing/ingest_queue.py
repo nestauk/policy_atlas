@@ -42,7 +42,6 @@ from policy_atlas.evidence_search.sourcing.ingest_document import (
     ingest_document,
 )
 from policy_atlas.evidence_search.sourcing.ingest_full_text import (
-    DEFAULT_MAX_WORKERS,
     PARSE_TIMEOUT_SECONDS,
     THIN_TEXT_MIN_CHARS,
     ConnectFactory,
@@ -165,6 +164,14 @@ def make_ingest_handler(
         )
 
     return handle
+
+
+#: Threads for the in-process client (owner ruling 2026-11-04, task 057 review):
+#: 10, as the fetch pool had before task 057, not the parse worker count (4 on
+#: the 2-vCPU production task). Each thread fetches, parses and writes one
+#: document; the parse step is still bounded by ``INGEST_SLOTS`` (the parse
+#: worker count), so only fetching and writing run wider than the cores.
+IN_PROCESS_INGEST_THREADS = 10
 
 
 class LocalQueueClient:
@@ -380,7 +387,7 @@ def build_queue_client(
     *,
     connect: ConnectFactory,
     fetcher: DocumentFetcher,
-    workers: int = DEFAULT_MAX_WORKERS,
+    workers: int = IN_PROCESS_INGEST_THREADS,
     queue_url: str | None = None,
     sqs: SqsClient | None = None,
 ) -> QueueClient:

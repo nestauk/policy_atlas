@@ -21,6 +21,7 @@ Langfuse), both built in Phase 0 with offline tests under `backend/tests/scripts
 | Review fixes, first run, 2026-11-03 | `make verify` on the tree with F1 to F21 | fail, two findings | backend 2 failed: `test_acquire_module_has_no_http_client` (the package-wide import guard, which F6's `import socket` tripped; the guard now allows that one import and the module's own guard forbids constructing a socket) and `test_hung_parse_does_not_hold_back_a_concurrent_one` (timing; passed alone in 17 s; the run's load average was 85 to 145), 4,115 passed, 1 skipped (11 min 53 s) |
 | Review fixes, second run (the step-7 exit), 2026-11-03 | `make verify` on the final reviewed tree, then `make audit` | pass with one lane re-run | backend 4,117 passed, 1 skipped (14 min 53 s); infra 113; typecheck (459 files), lint, okf-validate (199 concepts), eval-check, audit-paths (211 files), prompt-guard, font-guard, drift-check green; frontend: one test timed out at 5 s under a load spike (`SourcesView.test.tsx`, "keeps Origin a plain, non-sortable header", unchanged on this branch), the lane re-run alone (`make frontend-verify`): 88 files, 943 passed, build green; `make audit`: no known vulnerabilities |
 | Review fix F22 (the output caps, on the owner's go), 2026-11-03 | `make verify` on the tree with F22 | pass after the prompt-hash re-pin | backend 4,117 passed, 1 skipped (9 min 34 s); okf-validate (199), eval-check, infra 113, audit-paths (211) green; `prompt-guard` failed on the two prompt files' hashes (a constant and a comment changed, no prompt text; re-pinned with `--update`, [repin-review-f22-caps.diff](repin-review-f22-caps.diff)); then `prompt-guard` (41 unchanged), font-guard, drift-check and frontend-verify (88 files, 943 passed, build) green |
+| Owner rulings applied (6: in-process threads 10; 7: the function's egress rules), 2026-11-04 | `make verify` on the tree with the rulings | pass | backend 4,117 passed, 1 skipped (8 min 60 s); okf-validate (199), typecheck (459 files), lint, eval-check, infra 113 (the egress test extended), audit-paths, prompt-guard (41 unchanged), font-guard, drift-check, frontend 88 files / 943 passed, build green. Rulings 1, 2, 3, 4, 5, 8 and 10 changed records only (contract N8 and N9, spec S5, rubric 13, ADR 0043, two deferred seams closed). |
 | End of Phase 0 and Phase 1 (gates 2 and 3), 2026-11-03 | `make verify` on the tree holding both phases | pass after one fix | backend 4,004 passed, 1 skipped (6 min 0 s); lint, typecheck, format green; infra: 1 failed (`test_dockerignore_covers_gitignored_backend_content`: the `**/` bytecode patterns no longer matched the gitignore lines literally; both forms kept), then `make -C infra test` 95 passed. One full run gated both commits because the two phases were built in parallel in one tree. |
 
 ## Phase 0: build-open, measurement tools, dev image
@@ -1429,9 +1430,11 @@ review's diff-scoping exclusions).
 7. **The contract's "under 100 ms a search on the dev corpus" is not met**: 250 to 600 ms
    warm on the fixed questions' scopes, 2 s cold on the largest; about twice the Python
    search; the per-run cost is 10 to 51 s against the scope load it replaces (Phase 3,
-   round (e); HNSW stays out by D7).
+   round (e); HNSW stays out by D7). *Owner 2026-11-04: accepted, N8 reworded (review
+   ruling 1).*
 8. In-process mode fetches on the parse worker threads (4 to 8), not 10 fetch threads
-   plus 4 parse processes (Phase 4a; round (f) measures it).
+   plus 4 parse processes (Phase 4a; round (f) measures it). *Owner 2026-11-04: 10
+   threads in process (review ruling 6).*
 9. Envelope (abstract) chunks are embedded by the acquire stage only, not again at ingest
    (Phase 4a).
 10. `not_ready` and `send_failed` are still counted under `fetch_failed` by two status
@@ -1442,14 +1445,16 @@ review's diff-scoping exclusions).
 12. No alarm has an action (the stacks had no notification topic); the VPC has three
     fck-nat instances, not the one the stack comment and D5 describe (Phase 5).
 13. `MODEL_CALL_ATTEMPTS` 2 → 3 after round (d) lost a run to two consecutive judge stalls
-    (D12; `f908e9f7`).
+    (D12; `f908e9f7`). *Owner 2026-11-04: keep three (review ruling 2).*
 14. `chmod 755 /app`, a second Dockerfile change beyond G8's one line, without which the
-    function cannot start under Lambda's user (`dc7245d9`).
+    function cannot start under Lambda's user (`dc7245d9`). *Owner 2026-11-04: accepted
+    (review ruling 3).*
 15. The retention script also spares snapshots that citations or extraction records point
     at, beyond D3's "no link row" wording (Phase 5).
 16. The low-effort judge marked more claims unsupported than the medium one on the live
     runs (10.9% against 5.1%), the opposite of E3's lean; the owner's content read decides
-    (round (c), rubric 31).
+    (round (c), rubric 31). *Owner 2026-11-04: accepted as built; revisit in the synthesis
+    refinement task (review ruling 4).*
 17. 1,353 `chunk_embedding` rows more than the three `embed.summary` lines account for in
     round (e)'s window: explained in round (g) as the acquire stage's abstract embeddings
     (equal counts in rounds (e), (f) and (g)); not a defect, kept for the record.
@@ -1487,7 +1492,7 @@ review's diff-scoping exclusions).
     holds the first fetcher's final URL with its query string (plan P5's "the public document
     URL", owner item 4), while contract N9 says no URL breadcrumb on the shared row; the N9
     test checks columns and JSON keys but not that column. Owner ruling 5 in § Review
-    findings.
+    findings. *Owner 2026-11-04: accepted, N9 reworded (review ruling 5).*
 
 ## Review findings
 
@@ -1575,26 +1580,33 @@ tightened; the token lifetime change affects no assertion.
   21's citations, 3's gate map, 5's six unlisted removed tests (contract verifier 1, 2, 8, 10,
   13).
 
-### Owner rulings (the stack escalates; nothing changed in code)
+### Owner rulings (the stack escalated; the owner ruled on 2026-11-04; rulings 6 and 7 changed code)
 
 1. **Deviation 7 / Codex 14 / contract verifier 1:** N8's "under 100 ms a search on the dev
    corpus" is not met (250 to 600 ms warm on the fixed questions' scopes). Codex reads it as a
    contract change needing approval, not a minor deviation; the per-run cost is 10 to 51 s
    against the scope load it replaces. Options: accept the measured figure and reword N8;
    keep the Python retriever until an indexed plan meets 100 ms (D7's HNSW).
+   *Ruled 2026-11-04:* accepted and reworded; contract N8's evidence cell now reads "under 1 s warm on the
+   fixed questions' scopes" with the measured figure and the reason.
 2. **Deviation 13 / Codex 6:** three attempts per call against the contract's one traced
    retry. Codex argues for two attempts plus a raise on the too-tight steps. The build's
    evidence: a stall-then-stall on one step (4 to 6% per judge call at low effort) lost a
    synthesise attempt in most rounds under one retry, 250 to 400 s each time; the third
    attempt costs at most one more timeout. The lead recommends keeping three.
+   *Ruled 2026-11-04:* keep three on every step; the deferred seam is closed and ADR 0043 says so. The
+   Bedrock brief's finding (AWS's example budget is six attempts) supports it.
 3. **Deviation 14:** the `chmod 755 /app` Dockerfile line (unapproved second line; now pinned
    by a test).
+   *Ruled 2026-11-04:* accepted under G8.
 4. **Deviation 16 / rubric 31:** the trace lane's content read of the low-effort judge's
    first-pass verdicts (NEET, round (c): 9 of 104 unsupported): four of the five read flag the
    writer's own hedge ("does not establish a causal effect", "remains unclear") as an
    unsupported claim, not a mis-citation; the repair pass then removes the caution. The
    extra verdicts at low effort make reports less hedged, not more wrong. The owner's reads
    of `7796f163`, `c5961a67` and `c3be6e81` decide.
+   *Ruled 2026-11-04:* accepted as built without the content read; the revisit goes to the synthesis
+   refinement task (the D14 seam in `docs/deferred.md` already names it).
 5. **`source_locator` on the shared row (Codex 3, security 7, contract verifier 2):** plan
    P5 and owner item 4 accepted "the public document URL" on the shared row; contract N9's
    wording says no URL breadcrumb; the column holds the first task's final URL with its query
@@ -1604,19 +1616,36 @@ tightened; the token lifetime change affects no assertion.
    own `fetched_from` keeps the full URL; a `?sequence=1`-style path would lose its query);
    accept as-is and reword N9. The test's docstring claim ("no URL key in any column") is
    corrected either way.
+   *Ruled 2026-11-04:* option B. The shared row keeps the full public URL; contract N9 now
+   reads "the public document URL but no task, user or run breadcrumb". The owner's reasons:
+   the query string is the publisher's, never a Policy Atlas identifier; the signed-link case
+   is thin (none seen) and the harm would be an expired token for a public file; a document
+   store should know where its document is. The user-facing title and URL come from the
+   task's own envelope row in all three readers (checked). No code change.
 6. **Deviation 8 / code review 4:** in-process threads are `max(4, min(8, cores))`, so 4 on
    the 2-vCPU production task that stays `in_process`; before 057, 10 fetch threads fed 4
    parse processes. Round (f) measured 8 threads on the laptop. Recommend 10 threads in
    process (the parse processes stay bounded by the walk pool); a measured-config change.
+   *Ruled 2026-11-04:* 10 threads. `ingest_queue.IN_PROCESS_INGEST_THREADS = 10` is the in-process client's
+   default; `DEFAULT_MAX_WORKERS` (4 on 2 vCPUs) still bounds the parse step through
+   `INGEST_SLOTS`. Not re-measured on the laptop (round (f) ran 8 threads there).
 7. **Security 4:** the function's security group allows all outbound; recommend 80 and 443
    to the internet plus 5432 to the database group (publishers on other ports would be
    refused). Infra gate.
+   *Ruled 2026-11-04:* applied. `allow_all_outbound=False` with three egress rules (80 and 443 to
+   any IPv4, 5432 to the database group; DNS to the VPC resolver is not filtered by
+   security groups); `test_ingest_function_runs_in_the_private_subnets_with_its_own_security_group`
+   pins them; `make -C infra test` 113. The committed Phase 5 synth
+   (`cdk-synth-ingest.json`) predates this and still shows "allow all"; the staging
+   `cdk diff` after the merge is where the new rules are seen live.
 8. **Spec S5 wording** (`docs/specs/system/prompting.md`, contract verifier 4): "retried
    once", "at least 100 traced calls, floor 5 s" no longer match the code (three attempts;
    n ≥ 30, floor 15 s, multiples of 5 s). Proposed replacement: "each attempt is its own trace
    generation (SDK retries off) and a stalled call is retried, up to three attempts, never
    waited out; timeouts are 2 × the healthy p99 from at least 30 traced calls, floor 15 s,
    rounded up to 5 s". Not edited by the stack.
+   *Ruled 2026-11-04:* the proposed wording applied to `docs/specs/system/prompting.md` (with the
+   "a step with fewer calls keeps its previous value" clause kept, as it is still true).
 9. **Stall probes 1 and 2** (`stall-probes.md`): probe 1 needs Bedrock invocation logging on
    the account; probe 2 is four full runs (about $10 at the 056 basis of $1 to $3 a run; the
    review first wrote $60 from a stale pre-056 figure, corrected by the owner). Probe 3 ran
@@ -1627,6 +1656,8 @@ tightened; the token lifetime change affects no assertion.
    and 4 and the brief's items 3 and 4 for what replaces probe 1.
 10. **Rubric 13's wording** ("Bedrock is reached through the function's role") predates D6;
     the function has no Bedrock grant, by design. Noted, not edited.
+    *Ruled 2026-11-04:* rubric 13 reworded to "the function has no model client and no
+    Bedrock grant (D6)".
 
 ### Declined (with the reason)
 
@@ -1757,9 +1788,9 @@ names what is still outside the build's reach.
 
 | # | Item | Status |
 |---|---|---|
-| 1 | N1 to N15 | Met for N1 to N14 as recorded per phase; N15 met as built (judge at low) with the owner's content read open (item 31). |
+| 1 | N1 to N15 | Met for N1 to N14 as recorded per phase; N15 met as built (judge at low); the owner accepted it on 2026-11-04 without the content read, revisit in the synthesis refinement task (item 31). |
 | 2 | `make verify` at the four gates, infra tests | Met: § Commands run (build-open, after Phase 2, after Phase 3, exit); `make -C infra test` 113. |
-| 3 | No approval-gated change beyond G1 to G10 | Met with one exception flagged: the second Dockerfile line (`chmod 755 /app`, deviation 14) awaits the owner's ruling at the PR; code-only re-pins recorded in [repin-phase1-timeouts.diff](repin-phase1-timeouts.diff) and, at the review, [repin-review-f22-caps.diff](repin-review-f22-caps.diff) (F22's two output caps); no prompt-text re-pin, no public-interface change. *Review (contract verifier 13):* two further changes sit under G10 by extension, not by name: `deploy.sh`'s test-harness mode (`PA_DEPLOY_MIGRATION_WAIT_ONLY`) and the root Makefile prerequisite that runs the waiter's shell test in CI; they are the waiter's own test seam. |
+| 3 | No approval-gated change beyond G1 to G10 | Met with one exception flagged: the second Dockerfile line (`chmod 755 /app`, deviation 14), accepted by the owner on 2026-11-04 (review ruling 3); code-only re-pins recorded in [repin-phase1-timeouts.diff](repin-phase1-timeouts.diff) and, at the review, [repin-review-f22-caps.diff](repin-review-f22-caps.diff) (F22's two output caps); no prompt-text re-pin, no public-interface change. *Review (contract verifier 13):* two further changes sit under G10 by extension, not by name: `deploy.sh`'s test-harness mode (`PA_DEPLOY_MIGRATION_WAIT_ONLY`) and the root Makefile prerequisite that runs the waiter's shell test in CI; they are the waiter's own test seam. |
 | 4 | No generated files or secrets edited by hand | Met (`uv.lock` and the frontend bundle regenerated by their tools; `.env` never read). |
 | 5 | No tests deleted, skipped or weakened without justification | Met: the scheduler tests N6 deletes are listed in Phase 4a with the replacing behaviour; one test generalised (deviation 18); one test's fake timing widened (deviation 22). *Review (contract verifier 8), six removals not listed at the build:* the four embedding throttle-retry tests (`test_openai_embedding_backend_rate_limit_backoff_then_success`, `…_rate_limit_exhaustion_fails_loudly`, `test_cohere_embedding_backend_retries_throttling_then_succeeds`, `…_stops_after_repeated_throttling`) tested the per-backend backoff loops that D6 moved into the pool; their replacements are `test_openai_embedding_backend_raises_throttled_at_once_on_429`, `test_embed_with_retry_waits_out_throttling_then_succeeds`, `test_embed_with_retry_gives_up_after_the_last_attempt`, `test_cohere_embedding_backend_raises_throttled_after_one_call` and the four pool tests. `test_retrieval_unit_cap_error_names_cap` and `test_a_retrieval_cap_is_answered_honestly` tested the 20,000-unit cap N8 deletes. The `envelope_source_snapshot_id` assertion in `test_governance_chain` checked a metadata key N9 moved off the shared row (it is now the link row's column, asserted by `test_already_in_store_on_a_second_task_with_the_same_bytes`). At the review: one handler test replaced by two shared-path tests (F3, F4); no test loosened. |
 | 6 | Evidence as the contract's § Verification evidence lists | Met for the laptop; staging tables, the staging migration timing and the embedding quota in force are post-merge (items 15, 28); `cdk diff` reviewed read-only (item 26). |
@@ -1769,7 +1800,7 @@ names what is still outside the build's reach.
 | 10 | N2 handler statuses, store lookup first, Retry-After, guarded final write, races | Met (Phase 4a and 4b tests: fixture corpus parity, store hit before parse, Retry-After cases, redelivery and late write no-ops, the two real-connection races). |
 | 11 | N3 own transaction, visibility to the poll, orphans, counts invariant, `not_ready`, `fetched` null | Met (Phase 4a and 4b tests; `not_ready` outside the access-failure counts in the read models, with deviation 10 on two tallies). |
 | 12 | N4, N5 sizing, queue settings, alarm, drain command, connection arithmetic, quotas | Met: CDK pins (Phase 5); drain command in `infra/DEPLOYMENT.md`; connection budget in Phase 2 (scale words; figures in the gitignored notes); the Lambda quota likewise. |
-| 13 | D5 function shape, subprocess kill, no sockets, private subnets, secrets at runtime, Bedrock via role | Met: parse in a subprocess with the 120 s kill; the socket deny was a test fixture at the build (contract revision 4 says "as the tests require") and is runtime code since the review (F6, `test_the_parse_worker_refuses_sockets_on_its_own`); private subnets, no S3, no new endpoints; the secret fetched at cold start; the function has no model client and no Bedrock statement (D6 forbids vectors in the function; the rubric's "Bedrock via role" wording predates D6). |
+| 13 | D5 function shape, subprocess kill, no sockets, private subnets, secrets at runtime, Bedrock via role | Met: parse in a subprocess with the 120 s kill; the socket deny was a test fixture at the build (contract revision 4 says "as the tests require") and is runtime code since the review (F6, `test_the_parse_worker_refuses_sockets_on_its_own`); private subnets, no S3, no new endpoints; the secret fetched at cold start; the function has no model client and no Bedrock statement (D6 forbids vectors in the function; rubric 13's "Bedrock via role" wording predated D6 and was corrected on 2026-11-04, review ruling 10). |
 | 14 | D6 no vectors in the function, adaptive pool converges, no `embed_timeout` | Met (Phase 4b; `embed_timeout` has no occurrence). |
 | 15 | D6, G4 staging embedding evidence | **Open until after the merge** (staging deploys from dev); the PR names it as the one open item. |
 | 16 | N6 one path, per-document commits, digest across 1 and 4 workers, connection count | Met (Phase 4a tests). |
@@ -1787,7 +1818,7 @@ names what is still outside the build's reach.
 | 28 | N12, D9 before and after tables per lever, ingest split, owner's content reads | Met for the laptop (rounds (a) to (g), the across-rounds table in round (g)); the staging tables are post-merge; the owner's two content reads are **open** (artefact ids named in round (g)). |
 | 29 | G7, N12 data-flow note, retention rule, DPIA addendum as the merge gate | Met for the note and the rule; the DPIA addendum is named in the PR body (step 9). |
 | 30 | S1 to S5 applied with a log line | Met (Phase 5). |
-| 31 | N15, D14 judge at low, walls, unsupported counts, owner's read, deferred revisit | Met for the override, walls and counts (round (c)); the owner's read is open; the revisit is in `docs/deferred.md`. |
+| 31 | N15, D14 judge at low, walls, unsupported counts, owner's read, deferred revisit | Met for the override, walls and counts (round (c)); the owner accepted it on 2026-11-04 without the read (review ruling 4); the revisit is the synthesis refinement task's (`docs/deferred.md`, D14). |
 
 ## Intent & assumptions
 

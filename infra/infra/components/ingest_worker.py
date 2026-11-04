@@ -68,8 +68,8 @@ class IngestWorker(Construct):
         queue: The ingest queue the API sends one message per document to.
         dead_letter_queue: Where a message lands after its second failed try.
         function: The ingest Lambda function.
-        security_group: The function's security group (outbound only; the
-            database security group admits it on 5432).
+        security_group: The function's security group (outbound only: 80 and
+            443 to the internet and 5432 to the database group, which admits it).
         dead_letter_alarm: Fires when any message sits in the dead-letter queue.
     """
 
@@ -108,14 +108,29 @@ class IngestWorker(Construct):
             ),
         )
 
-        # Outbound only: publishers and SQS through the NAT, Secrets Manager
-        # likewise, Aurora by the VPC-local route. Nothing connects in.
+        # Outbound only, and only three rules (owner ruling 2026-11-04, task 057
+        # review): 80 and 443 to the internet (publishers through the NAT; SQS and
+        # Secrets Manager likewise, on 443) and 5432 to the database group. A
+        # publisher on another port is refused. DNS to the VPC resolver is not
+        # filtered by security groups. Nothing connects in.
         self.security_group = ec2.SecurityGroup(
             self,
             "SecurityGroup",
             vpc=vpc,
             description="Policy Atlas ingest function",
-            allow_all_outbound=True,
+            allow_all_outbound=False,
+        )
+        for port in (80, 443):
+            self.security_group.add_egress_rule(
+                peer=ec2.Peer.any_ipv4(),
+                connection=ec2.Port.tcp(port),
+                description=f"Allow the Policy Atlas ingest function to fetch on {port}",
+            )
+        # Both halves are needed when outbound is deny-by-default.
+        self.security_group.add_egress_rule(
+            peer=db_security_group,
+            connection=ec2.Port.tcp(5432),
+            description="Allow the Policy Atlas ingest function to connect to RDS",
         )
         db_security_group.add_ingress_rule(
             self.security_group,
