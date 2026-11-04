@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, cast, runtime_checkable
 
@@ -47,7 +47,12 @@ from policy_atlas.evidence_search.extract.finding_vetter import (
 )
 from policy_atlas.evidence_search.group.group import GroupClusteringBackendFactory
 from policy_atlas.evidence_search.sourcing.acquire import SearchBackend
-from policy_atlas.evidence_search.sourcing.ingest_full_text import DocumentFetcher
+from policy_atlas.evidence_search.sourcing.ingest_full_text import (
+    ConnectFactory,
+    DocumentFetcher,
+    FixtureFetcher,
+)
+from policy_atlas.evidence_search.sourcing.ingest_queue import QueueClient, build_queue_client
 from policy_atlas.evidence_search.sourcing.search_generation import SearchGenerationBackend
 from policy_atlas.evidence_search.synthesis.grounding_judge import GroundingJudgeBackend
 from policy_atlas.evidence_search.synthesis.synthesis_backend import (
@@ -300,6 +305,10 @@ class RunnerBackends:
         longlist: Optional model seam for the options-scoping ``longlist``
             step (task 045); ``None`` lets the harness resolve the
             deterministic ``StubLonglistBackend``.
+        queue: The full-text ingest queue client (task 057). ``None`` lets the
+            runner build the in-process client over its own engine.
+        connect: Opens one short committed transaction for the full-text stage's
+            own writes (``engine.begin``); ``None`` uses the runner's engine.
     """
 
     embedding: EmbeddingBackend | None = None
@@ -321,6 +330,44 @@ class RunnerBackends:
     langfuse_client: Langfuse | None = None
     suggest: SuggestBackend | None = None
     longlist: LonglistBackend | None = None
+    queue: QueueClient | None = None
+    connect: ConnectFactory | None = None
+
+
+def with_ingest_queue(
+    backends: RunnerBackends,
+    engine: Engine,
+    *,
+    ingest_mode: str,
+    queue_url: str | None = None,
+) -> RunnerBackends:
+    """Return ``backends`` with the full-text ingest queue for ``ingest_mode`` attached.
+
+    The queue's handler fetches with the bundle's document fetcher (the fixture
+    fetcher when the bundle has none, as the harness would), so the bundle's
+    fetcher is set to that same one. Each handler thread takes its own
+    connections from ``engine`` (one short committed transaction per write).
+
+    Args:
+        backends: The bundle without a queue.
+        engine: The engine the queue's workers and the stage's writes use.
+        ingest_mode: ``in_process`` or ``queued`` (``POLICY_ATLAS_INGEST_MODE``).
+        queue_url: The SQS queue URL ``queued`` sends to
+            (``POLICY_ATLAS_INGEST_QUEUE_URL``).
+
+    Returns:
+        A copy of ``backends`` carrying ``queue``, ``connect`` and the fetcher.
+
+    Raises:
+        RuntimeError: ``queued`` without a queue URL.
+    """
+    fetcher = (
+        backends.document_fetcher if backends.document_fetcher is not None else FixtureFetcher()
+    )
+    queue = build_queue_client(
+        ingest_mode, connect=engine.begin, fetcher=fetcher, queue_url=queue_url
+    )
+    return replace(backends, document_fetcher=fetcher, queue=queue, connect=engine.begin)
 
 
 class CheckInIO(Protocol):
@@ -5802,6 +5849,11 @@ def _run_step_attempt(
             component=step.component,
             session_id=session_id,
         ) as run_span:
+            ingest_backends = backends
+            if registry_component == "ingest_full_text" and backends.queue is None:
+                # A bundle built without the construction paths (tests, stubs):
+                # the in-process queue over this runner's engine.
+                ingest_backends = with_ingest_queue(backends, engine, ingest_mode="in_process")
             with engine.begin() as conn:
                 _apply_directive(
                     conn,
@@ -5840,7 +5892,13 @@ def _run_step_attempt(
                     longlist_backend=backends.longlist,
                     search_backends=backends.search_backends,
                     search_generation_backend=backends.search_generation,
-                    document_fetcher=backends.document_fetcher,
+                    document_fetcher=ingest_backends.document_fetcher,
+                    ingest_queue=ingest_backends.queue,
+                    ingest_connect=(
+                        ingest_backends.connect
+                        if ingest_backends.connect is not None
+                        else engine.begin
+                    ),
                     progress_emitter=(
                         ProgressEmitter(engine, task_id=task_id, run_id=run_id)
                         if registry_component == "synthesise"

@@ -543,3 +543,133 @@ def test_account_bytes_wedged_budget_raises_loudly(monkeypatch: pytest.MonkeyPat
 
     with pytest.raises(RuntimeError, match="wedged"):
         fetcher._account_bytes(1)
+
+
+# --- Retry-After on 429 and 503 (task 057, N2) ---
+
+
+def _status_then_ok(
+    status: int, headers: dict[str, str]
+) -> Callable[[httpx.Request], httpx.Response]:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(status, headers=headers)
+        return _ok_response(b"ok")
+
+    return handler
+
+
+@pytest.mark.parametrize(
+    ("status", "retry_after", "expected_wait"),
+    [
+        (429, "7", 7.0),  # seconds, honoured
+        (503, "7", 7.0),
+        (429, "90", fetch_live.RETRY_AFTER_CAP_S),  # capped at 30 s
+        (429, "soon", RETRY_BACKOFF_S),  # malformed: today's wait
+        (503, "-3", RETRY_BACKOFF_S),  # not a whole number of seconds: malformed
+        (500, "7", RETRY_BACKOFF_S),  # only 429 and 503 carry a usable Retry-After
+    ],
+)
+def test_retry_after_is_honoured_on_429_and_503(
+    status: int, retry_after: str, expected_wait: float
+) -> None:
+    fetcher, requests, clock = _fetcher(_status_then_ok(status, {"retry-after": retry_after}))
+
+    result = fetcher.fetch("https://example.com/busy")
+
+    assert result.status == "ok"
+    assert len(requests) == 2
+    assert clock.sleeps == [expected_wait]
+    fetcher.release_body(2)
+
+
+def test_retry_after_http_date_header() -> None:
+    from datetime import UTC, datetime, timedelta
+    from email.utils import format_datetime
+
+    when = format_datetime(datetime.now(UTC) + timedelta(seconds=12), usegmt=True)
+    fetcher, _, clock = _fetcher(_status_then_ok(429, {"retry-after": when}))
+
+    assert fetcher.fetch("https://example.com/busy").status == "ok"
+    assert len(clock.sleeps) == 1 and 9.0 <= clock.sleeps[0] <= 12.0
+    fetcher.release_body(2)
+
+
+def test_retry_after_seconds_parser() -> None:
+    from datetime import UTC, datetime
+
+    now = datetime(2026, 11, 3, 12, 0, 0, tzinfo=UTC)
+    parse = fetch_live.retry_after_seconds
+    assert parse("7", now=now) == 7.0
+    assert parse(" 7 ", now=now) == 7.0
+    assert parse("0", now=now) == 0.0
+    assert parse("90", now=now) == 30.0
+    assert parse("Tue, 03 Nov 2026 12:00:20 GMT", now=now) == 20.0
+    assert parse("Tue, 03 Nov 2026 12:05:00 GMT", now=now) == 30.0  # capped
+    assert parse("Tue, 03 Nov 2026 11:59:00 GMT", now=now) == 0.0  # in the past
+    assert parse(None, now=now) is None
+    assert parse("", now=now) is None
+    assert parse("7.5", now=now) is None
+    assert parse("not a date", now=now) is None
+
+
+def test_retry_wait_past_the_deadline_is_not_started() -> None:
+    """A wait that would end inside the deadline's margin is given up: one
+    request, no sleep (the per-document deadline, task 057 D4)."""
+    from policy_atlas.evidence_search.sourcing.ingest_full_text import FETCH_DEADLINE
+
+    fetcher, requests, clock = _fetcher(_status_then_ok(429, {"retry-after": "7"}))
+    token = FETCH_DEADLINE.set(clock.now + 10.0)  # 7 s wait > 10 - 5 s margin
+    try:
+        result = fetcher.fetch("https://example.com/busy")
+    finally:
+        FETCH_DEADLINE.reset(token)
+
+    assert result.status == "error"
+    assert len(requests) == 1
+    assert clock.sleeps == []
+
+
+class _SlowDripStream(httpx.SyncByteStream):
+    """A body whose chunks each arrive ``step_s`` later on the fake clock."""
+
+    def __init__(self, clock: FakeClock, chunks: int, step_s: float) -> None:
+        self.clock = clock
+        self.chunks = chunks
+        self.step_s = step_s
+        self.sent = 0
+
+    def __iter__(self) -> Any:
+        for _ in range(self.chunks):
+            self.clock.now += self.step_s
+            self.sent += 1
+            yield b"x" * 100
+
+
+def test_a_slow_drip_body_stops_at_the_deadline() -> None:
+    """Task 057 review (security 2): a host dripping the body stops at the
+    per-document deadline with the per-operation timeout's result, and the
+    byte budget is given back."""
+    from policy_atlas.evidence_search.sourcing.ingest_full_text import FETCH_DEADLINE
+
+    clock = FakeClock()
+    stream = _SlowDripStream(clock, chunks=100, step_s=1.0)
+    fetcher, _, _ = _fetcher(
+        lambda _request: httpx.Response(
+            200, headers={"content-type": "text/plain"}, stream=stream
+        ),
+        clock=clock,
+    )
+    token = FETCH_DEADLINE.set(clock.now + 10.0)
+    try:
+        result = fetcher.fetch("https://example.com/drip")
+    finally:
+        FETCH_DEADLINE.reset(token)
+
+    assert (result.status, result.error) == ("error", "timeout")
+    assert stream.sent < 100
+    assert fetcher._inflight_bytes == 0

@@ -51,7 +51,13 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     REASONING_CLAIMS_MAX,
     SECTION_CAP,
     SECTION_TURN_CAP,
+    ChunkRetriever,
+    ChunkSearchResult,
+    PassThroughChunkReranker,
+    RetrievalScope,
+    SynthesisDirective,
     ToolValidationError,
+    borrowed_connection,
     build_retrieval_scope,
     make_lookup_reader,
     run_section_loop,
@@ -468,6 +474,16 @@ def test_injection_shaped_chunk_and_tag_land_inert(conn: Connection) -> None:
 # --- Test 5: foreign-task scope guard ---
 
 
+def _search_all(scope: RetrievalScope, query: str) -> list[ChunkSearchResult]:
+    """Search the scope with the stub embedder and default directive."""
+    return ChunkRetriever(
+        scope,
+        embedder=StubEmbeddingBackend(),
+        directive=SynthesisDirective(),
+        reranker=PassThroughChunkReranker(),
+    ).search(query)
+
+
 def test_foreign_task_scope_guard(conn: Connection) -> None:
     task_a, run_a = seed_task_and_run(conn)
     scope_a = seed_scope(conn, task_a)
@@ -480,12 +496,18 @@ def test_foreign_task_scope_guard(conn: Connection) -> None:
     seed_ingested_full_text(conn, tss_id=tss_b, chunks=["Beta corpus evidence chunk."])
 
     scope = build_retrieval_scope(
-        conn, task_id=task_a, scope_id=scope_a, selected_tss_ids=set()
+        conn,
+        task_id=task_a,
+        scope_id=scope_a,
+        selected_tss_ids=set(),
+        connect=borrowed_connection(conn),
     )
-    # No unit or chunk of B is reachable from A's retrieval scope.
+    # No document, snapshot or chunk of B is reachable from A's retrieval scope.
     assert str(tss_b) not in scope.docs
-    assert all(unit["tss_id"] != str(tss_b) for unit in scope.units)
-    assert all(chunk["tss_id"] != str(tss_b) for chunk in scope.chunks.values())
+    assert set(scope.snapshot_by_tss) == {str(tss_a)}
+    results = _search_all(scope, "corpus evidence chunk")
+    assert results
+    assert {result["tss_id"] for result in results} == {str(tss_a)}
 
     reader = make_lookup_reader(
         conn,
@@ -519,10 +541,15 @@ def test_screened_out_doc_unreachable(conn: Connection) -> None:
     seed_ingested_full_text(conn, tss_id=tss_id, chunks=["Unreachable screened-out text."])
 
     scope = build_retrieval_scope(
-        conn, task_id=task_id, scope_id=scope_id, selected_tss_ids=set()
+        conn,
+        task_id=task_id,
+        scope_id=scope_id,
+        selected_tss_ids=set(),
+        connect=borrowed_connection(conn),
     )
-    assert scope.units == []
-    assert scope.chunks == {}
+    assert scope.docs == {}
+    assert scope.snapshot_ids == ()
+    assert _search_all(scope, "unreachable screened out text") == []
 
 
 def test_demoted_doc_unreachable_in_retrieval_scope(conn: Connection) -> None:
@@ -540,10 +567,15 @@ def test_demoted_doc_unreachable_in_retrieval_scope(conn: Connection) -> None:
     seed_ingested_full_text(conn, tss_id=tss_id, chunks=["Demoted at stage 2."])
 
     scope = build_retrieval_scope(
-        conn, task_id=task_id, scope_id=scope_id, selected_tss_ids=set()
+        conn,
+        task_id=task_id,
+        scope_id=scope_id,
+        selected_tss_ids=set(),
+        connect=borrowed_connection(conn),
     )
-    assert scope.units == []
-    assert scope.chunks == {}
+    assert scope.docs == {}
+    assert scope.snapshot_ids == ()
+    assert _search_all(scope, "demoted at stage") == []
 
     reader = make_lookup_reader(
         conn,

@@ -1,0 +1,103 @@
+{
+ "_note": "Hand-written synthetic extract for test_stage_walls.py: two Evidence search runs (A, B) and one Options scoping run (S) with two fan-out children (K1, K2), plus server log lines for A's ingest run. No real run data; expected numbers are derived in the test.",
+ "runs": [
+  {
+   "capability_run_id": "aaaaaaaa-0057-4000-8000-000000000001",
+   "capability": "evidence_search",
+   "status": "succeeded",
+   "session_id": "a0000000-0057-4000-8000-000000000001",
+   "task_id": "a0000000-0057-4000-8000-000000000001",
+   "started_at": "2026-11-01T10:00:00+00:00",
+   "ended_at": "2026-11-01T10:10:00+00:00",
+   "parent_capability_run_id": null,
+   "task_name": "Synthetic run A",
+   "components": [
+    {"run_id": "a1000000-0057-4000-8000-000000000001", "run_status": "succeeded", "run_started": "2026-11-01T10:00:01+00:00", "run_ended": "2026-11-01T10:01:01+00:00", "component": "acquire", "registry_component": "acquire", "timing": {"wall_clock_s": 60.0}, "completed": {"acquired": 100}},
+    {"run_id": "a1000000-0057-4000-8000-000000000002", "run_status": "succeeded", "run_started": "2026-11-01T10:01:01+00:00", "run_ended": "2026-11-01T10:05:01+00:00", "component": "ingest_full_text", "registry_component": "ingest_full_text", "timing": {"wall_clock_s": 240.0}, "completed": {"eligible": 40, "attempted": 40, "ingested": 30}},
+    {"run_id": "a1000000-0057-4000-8000-000000000003", "run_status": "succeeded", "run_started": "2026-11-01T10:05:01+00:00", "run_ended": "2026-11-01T10:09:01+00:00", "component": "synthesise", "registry_component": "synthesise", "timing": {"wall_clock_s": 290.0}, "completed": {}}
+   ],
+   "lifecycle": [{"event_type": "run.opened", "occurred_at": "2026-11-01T10:00:00+00:00"}]
+  },
+  {
+   "capability_run_id": "bbbbbbbb-0057-4000-8000-000000000002",
+   "capability": "evidence_search",
+   "status": "succeeded",
+   "session_id": "b0000000-0057-4000-8000-000000000002",
+   "task_id": "b0000000-0057-4000-8000-000000000002",
+   "started_at": "2026-11-01T11:00:00+00:00",
+   "ended_at": "2026-11-01T11:20:00+00:00",
+   "parent_capability_run_id": null,
+   "task_name": "Synthetic run B",
+   "components": [
+    {"run_id": "b1000000-0057-4000-8000-000000000001", "run_status": "succeeded", "run_started": "2026-11-01T11:00:00+00:00", "run_ended": "2026-11-01T11:02:00+00:00", "component": "acquire", "registry_component": "acquire", "timing": null, "completed": {"acquired": 200}},
+    {"run_id": "b1000000-0057-4000-8000-000000000002", "run_status": "succeeded", "run_started": "2026-11-01T11:02:00+00:00", "run_ended": "2026-11-01T11:03:00+00:00", "component": "classify", "registry_component": "classify", "timing": {"wall_clock_s": 60.0}, "completed": {}},
+    {"run_id": "b1000000-0057-4000-8000-000000000003", "run_status": "succeeded", "run_started": "2026-11-01T11:03:00+00:00", "run_ended": "2026-11-01T11:03:30+00:00", "component": "classify", "registry_component": "classify", "timing": {"wall_clock_s": 30.0}, "completed": {}},
+    {"run_id": "b1000000-0057-4000-8000-000000000004", "run_status": "succeeded", "run_started": "2026-11-01T11:03:30+00:00", "run_ended": "2026-11-01T11:13:30+00:00", "component": "ingest_full_text", "registry_component": "ingest_full_text", "timing": {"wall_clock_s": 600.0}, "completed": {}},
+    {"run_id": "b1000000-0057-4000-8000-000000000005", "run_status": "succeeded", "run_started": "2026-11-01T11:13:30+00:00", "run_ended": "2026-11-01T11:18:30+00:00", "component": "synthesise", "registry_component": "synthesise", "timing": {"wall_clock_s": 320.0}, "completed": {}}
+   ],
+   "lifecycle": [{"event_type": "run.parked", "occurred_at": "2026-11-01T11:05:00+00:00"}, {"event_type": "continuation.claimed", "occurred_at": "2026-11-01T11:05:01+00:00"}]
+  },
+  {
+   "capability_run_id": "cccccccc-0057-4000-8000-000000000003",
+   "capability": "options_scoping",
+   "status": "succeeded",
+   "session_id": "c0000000-0057-4000-8000-000000000003",
+   "task_id": "c0000000-0057-4000-8000-000000000003",
+   "started_at": "2026-11-01T12:00:00+00:00",
+   "ended_at": "2026-11-01T12:30:00+00:00",
+   "parent_capability_run_id": null,
+   "task_name": "Synthetic scoping run S",
+   "components": [
+    {"run_id": "c1000000-0057-4000-8000-000000000001", "run_status": "succeeded", "run_started": "2026-11-01T12:00:00+00:00", "run_ended": "2026-11-01T12:05:00+00:00", "component": "longlist", "registry_component": "longlist", "timing": {"wall_clock_s": 300.0}, "completed": {}},
+    {"run_id": "c1000000-0057-4000-8000-000000000002", "run_status": "succeeded", "run_started": "2026-11-01T12:25:00+00:00", "run_ended": "2026-11-01T12:29:00+00:00", "component": "shortlist", "registry_component": "shortlist", "timing": {"wall_clock_s": 240.0}, "completed": {}}
+   ],
+   "lifecycle": null
+  },
+  {
+   "capability_run_id": "dddddddd-0057-4000-8000-000000000001",
+   "capability": "evidence_search",
+   "status": "succeeded",
+   "session_id": "c0000000-0057-4000-8000-000000000003",
+   "task_id": "c0000000-0057-4000-8000-000000000003",
+   "started_at": "2026-11-01T12:05:00+00:00",
+   "ended_at": "2026-11-01T12:15:00+00:00",
+   "parent_capability_run_id": "cccccccc-0057-4000-8000-000000000003",
+   "task_name": "Synthetic scoping run S",
+   "components": [
+    {"run_id": "d1000000-0057-4000-8000-000000000001", "run_status": "succeeded", "run_started": "2026-11-01T12:05:00+00:00", "run_ended": "2026-11-01T12:15:00+00:00", "component": "acquire", "registry_component": "acquire", "timing": {"wall_clock_s": 600.0}, "completed": {}}
+   ],
+   "lifecycle": null
+  },
+  {
+   "capability_run_id": "dddddddd-0057-4000-8000-000000000002",
+   "capability": "evidence_search",
+   "status": "succeeded",
+   "session_id": "c0000000-0057-4000-8000-000000000003",
+   "task_id": "c0000000-0057-4000-8000-000000000003",
+   "started_at": "2026-11-01T12:06:00+00:00",
+   "ended_at": "2026-11-01T12:20:00+00:00",
+   "parent_capability_run_id": "cccccccc-0057-4000-8000-000000000003",
+   "task_name": "Synthetic scoping run S",
+   "components": [
+    {"run_id": "d1000000-0057-4000-8000-000000000002", "run_status": "succeeded", "run_started": "2026-11-01T12:06:00+00:00", "run_ended": "2026-11-01T12:20:00+00:00", "component": "acquire", "registry_component": "acquire", "timing": {"wall_clock_s": 840.0}, "completed": {}}
+   ],
+   "lifecycle": null
+  }
+ ],
+ "log_lines": [
+  "\u001b[2m2026-11-01T10:01:01.000000Z\u001b[0m [\u001b[32m\u001b[1minfo     \u001b[0m] \u001b[1mcomponent.started             \u001b[0m \u001b[36mcomponent\u001b[0m=\u001b[35mingest_full_text\u001b[0m \u001b[36mrun_id\u001b[0m=\u001b[35ma1000000-0057-4000-8000-000000000002\u001b[0m \u001b[36mtask_id\u001b[0m=\u001b[35ma0000000-0057-4000-8000-000000000001\u001b[0m",
+  "2026-11-01T10:01:30.000000Z [info     ] ingest.document_queued         run_id=a1000000-0057-4000-8000-000000000002 document=7",
+  "2026-11-01T10:02:00.000000Z [info     ] ingest.batch_handover          batch=0 documents=20 fetch_wall_s=50.5 parse_wall_s=30.0 idle_gap_s=1.0 run_id=a1000000-0057-4000-8000-000000000002",
+  "2026-11-01T10:02:41.000000Z [info     ] embedding.cohere.request       component=ingest_full_text run_id=a1000000-0057-4000-8000-000000000002 text_count=96",
+  "2026-11-01T10:02:50.000000Z [warning  ] embedding.cohere_rate_limited  run_id=a1000000-0057-4000-8000-000000000002 sleep_s=3.5",
+  "2026-11-01T10:03:00.000000Z [info     ] embedding.cohere.request       component=ingest_full_text run_id=a1000000-0057-4000-8000-000000000002 text_count=12",
+  "{\"event\": \"embedding.cohere_rate_limited\", \"timestamp\": \"2026-11-01T10:03:10.000000Z\", \"level\": \"warning\", \"run_id\": \"a1000000-0057-4000-8000-000000000002\", \"sleep_s\": 1.5}",
+  "2026-11-01T10:03:20.000000Z [info     ] http.request                   run_id=a1000000-0057-4000-8000-000000000002 status=200",
+  "2026-11-01T10:03:30.000000Z [info     ] embedding.cohere.response      run_id=a1000000-0057-4000-8000-000000000002",
+  "this line is not a log line at all",
+  "{\"not\": \"an event\"",
+  "2026-11-01T10:04:00.000000Z [info     ] embed.batch_started            component=ingest_full_text",
+  "2026-11-01T10:04:51.000000Z [info     ] embed.summary                  run_id=a1000000-0057-4000-8000-000000000002 embedded=30",
+  "{\"event\": \"component.completed\", \"timestamp\": \"2026-11-01T10:05:01.000000Z\", \"run_id\": \"a1000000-0057-4000-8000-000000000002\", \"task_id\": \"a0000000-0057-4000-8000-000000000001\"}"
+ ]
+}

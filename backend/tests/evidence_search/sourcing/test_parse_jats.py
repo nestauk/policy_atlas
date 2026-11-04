@@ -24,7 +24,10 @@ from policy_atlas.evidence_search.sourcing.fetch_live import (
     fetch_europe_pmc_xml,
     normalise_pmcid,
 )
-from policy_atlas.evidence_search.sourcing.ingest_full_text import _segment_markdown_pages
+from policy_atlas.evidence_search.sourcing.ingest_full_text import (
+    _segment_markdown_pages,
+    parse_and_segment,
+)
 from policy_atlas.evidence_search.sourcing.parse_jats import (
     JATS_PARSE_PROFILE,
     JATS_SEGMENTATION_POLICY,
@@ -247,8 +250,33 @@ def test_rendering_shape_on_a_small_article() -> None:
 def test_text_that_looks_like_markdown_structure_is_escaped() -> None:
     xml = _article(b"<body><p># not a heading</p><p>| not a table</p></body>")
     markdown = _markdown(parse_jats(xml))
+    assert markdown == "\\# not a heading\n\n\\| not a table\n"
     chunks = _segment_markdown_pages([(1, markdown)])
-    assert [c["content"] for c in chunks] == ["\\# not a heading\n\n\\| not a table"]
+    # The escape keeps the lines body text; parse profile v2's markup rule then turns
+    # the escaped characters back into plain ones in the chunk (task 057, N7).
+    assert [c["content"] for c in chunks] == ["# not a heading\n\n| not a table"]
+    assert [c["locator"]["heading_path"] for c in chunks] == [[]]
+
+
+def test_markup_in_jats_text_is_stripped_at_segmentation() -> None:
+    """Markup written into the article's text (not XML tags) leaves the chunk text and
+    the heading path under parse profile v2 (task 057, N7)."""
+    xml = _article(
+        b"<body><sec><title>**Main** results</title>"
+        b"<p>The effect was **large** (see [the appendix](https://example.org/a))"
+        b" and _robust_ &lt;br&gt;across sites.</p>"
+        b"<table-wrap><table><tr><td>`A`</td><td>1&lt;br&gt;2</td></tr></table></table-wrap>"
+        b"</sec></body>"
+    )
+    result = parse_and_segment(xml, "application/xml", 0)
+    assert result["status"] == "ok", result
+    assert result["parse_profile"] == JATS_PARSE_PROFILE == "jats_expat_v2"
+    assert result["segmentation_policy"] == JATS_SEGMENTATION_POLICY == "jats_struct_v2"
+    assert [(c["content"], c["locator"]["heading_path"]) for c in result["chunks"]] == [
+        # A table is cut as soon as it ends; its section's text follows (as in v1).
+        ("| A | 1 2 |\n| --- | --- |", ["Main results"]),
+        ("The effect was large (see the appendix) and robust\nacross sites.", ["Main results"]),
+    ]
 
 
 # --- Real articles ---

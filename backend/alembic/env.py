@@ -35,6 +35,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        transaction_per_migration=True,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -45,7 +46,14 @@ def run_migrations_online() -> None:
     cfg["sqlalchemy.url"] = _get_url()
     connectable = engine_from_config(cfg, prefix="sqlalchemy.", poolclass=pool.NullPool)
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        # One transaction per revision (task 057): a long data revision commits
+        # the revisions before it, so a failure there does not undo them, and
+        # its own autocommit block never commits another revision's half-done work.
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            transaction_per_migration=True,
+        )
         with context.begin_transaction():
             context.run_migrations()
 

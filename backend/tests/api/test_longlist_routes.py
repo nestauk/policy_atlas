@@ -20,6 +20,7 @@ the application's own connections see it.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -1203,7 +1204,9 @@ def test_add_proposes_a_design_mints_it_and_opens_a_parentless_walk(
     engine: Engine, tmp_path: Path
 ) -> None:
     agent = _design_backend()
-    overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
+    overrides: dict[Callable[..., object], Callable[..., object]] = {
+        get_agent_backend: lambda: agent, get_runner_backends: _runner_backends
+    }
     with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
         response = client.post(
@@ -1263,7 +1266,9 @@ def test_the_buttons_are_run_active_while_a_parentless_walk_runs(
     engine: Engine, tmp_path: Path
 ) -> None:
     agent = _design_backend()
-    overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
+    overrides: dict[Callable[..., object], Callable[..., object]] = {
+        get_agent_backend: lambda: agent, get_runner_backends: _runner_backends
+    }
     with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         oid = built.options["Mentoring"]
@@ -1336,7 +1341,9 @@ def test_the_buttons_are_run_active_while_a_parentless_walk_runs(
 
 def test_the_buttons_are_422_on_an_evidence_search_task(engine: Engine, tmp_path: Path) -> None:
     agent = _design_backend()
-    overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
+    overrides: dict[Callable[..., object], Callable[..., object]] = {
+        get_agent_backend: lambda: agent, get_runner_backends: _runner_backends
+    }
     with api_client(tmp_path, overrides) as (client, owner, _other):
         task_id = create_task(client, owner)
         oid = uuid.uuid4()
@@ -1605,7 +1612,9 @@ def test_add_answers_with_the_option_when_its_search_is_still_queued(
     monkeypatch.setattr(longlist_actions, "run_option_search", run_option_search)
     monkeypatch.setattr(longlist_actions, "_await_new_run", never_opens)
     agent = _design_backend()
-    overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
+    overrides: dict[Callable[..., object], Callable[..., object]] = {
+        get_agent_backend: lambda: agent, get_runner_backends: _runner_backends
+    }
     try:
         with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
             built = _org_build(engine, owner, colleague, linked=False)

@@ -513,23 +513,23 @@ def test_an_es_directive_cannot_name_the_intervention_profile() -> None:
     [
         (
             "stub", False,
-            "5a527e072b4c1e4cbb2b207cc808854238fbb992e2ddffe815cd255093a805d8",
-            "ab52e0ba8b4343c28585af73c5a8f628f9d595da32769c577b82ba1f6e19704b",
+            "76120948e3e55768b8080d35bab178d85352c530b5a60739d90a6296ab27be75",
+            "642900d5796898e54dc290f977b5cec0f0d9a41876bc40ae0db9bb32cc968413",
         ),
         (
             "stub", True,
-            "1acf7d0c2311c163c6266d22e84fa8b5bcd0e24beb0b68559e781ef47b62bf2d",
-            "ce17835bf91394acde9d2a39a7823e3ea36e79d500b315edf9720fbb6e3f0a1c",
+            "30c9e6eb91c3f435de10f6527ed2f5381da4f6fe6385abff256e35478908c654",
+            "eeb648d51d4937ea005f08df53fc38e30271d945c79dcf06dff982213e8c0e4c",
         ),
         (
             "live", False,
-            "2ba010a17daa4f0ee31dac229e780084bfe56e6f049ee346f92b2686711cf9d5",
-            "4d4aa70db2f5f2cf12097c615630a163e8e42b5b2a16e2ec910a86e0406b36b8",
+            "9aa6ebd93a0339bebd66965878df44c79a43dd400a822073da44ae7c3965a762",
+            "851ef70b7d150d871418365125636636dd5d5677135d5bee23a8a38ec6938f18",
         ),
         (
             "live", True,
-            "d3d8308957d22d6f330ef088c9f390b19b1c7b12c01134ca108eae32e16cf421",
-            "c33fb48c32ecae44e9686a0913826c954f06cc89a22a95ede955f2ad08ee24c2",
+            "3ce82f51170d2e3d21749cc3ada159ade4a9b68ce92b595b357482b01ebc38c4",
+            "858b242ba304a316279b4b2a5e64f6e438100c97be00c42770130b8b97af8dff",
         ),
     ],
 )
@@ -547,6 +547,9 @@ def test_the_iof_and_icf_fingerprints_are_pinned(
     task 056 moved the fast tier to gpt-6-luna (the digest shows the model as the only
     moved component; the vetter effort stays "high"); and once more in Phase 5 when the
     two finding vetters moved from "high" to "medium" (the digest embeds the vetter effort).
+    Re-pinned on 2026-11-03 (task 057, N14) when the quote verifier moved from ``qv_v1``
+    to ``qv_v2`` (markup ignored on both sides): re-digesting with ``qv_v1`` reproduces
+    the earlier hashes exactly, so the verifier is the only moved component.
     """
     assert extraction_fingerprint(mode, finding_vetter_active=vetted)[0] == iof
     assert icf_extraction_fingerprint(mode, finding_vetter_active=vetted)[0] == icf

@@ -326,12 +326,7 @@ class OpenAIGroundingJudgeBackend:
             api_key: Optional OpenAI API key.
             langfuse_client: Optional Langfuse client for the judge span.
         """
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAIGroundingJudgeBackend",
-            timeout=120.0,
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIGroundingJudgeBackend")
         self._langfuse_client = langfuse_client
 
     def _judge_once(
@@ -344,6 +339,7 @@ class OpenAIGroundingJudgeBackend:
                 JUDGE_MODEL,
                 reasoning_effort=JUDGE_EFFORT,
                 prompt_cache=JUDGE_CACHE,
+                timeout_s=route().timeout_for("judge_grounding"),
             ),
             messages=with_system_breakpoint(messages) if JUDGE_CACHE == "breakpoint" else messages,
             response_format=JudgeResponseWire,
@@ -381,10 +377,10 @@ class OpenAIGroundingJudgeBackend:
                 },
             )
 
-        verdicts, usage = tracing.traced_call(
+        verdicts, usage = tracing.traced_attempts(
             self._langfuse_client,
             name="judge:grounding",
-            as_type="generation",
+            step="judge_grounding",
             call=lambda: self._judge_once(messages),
             update=_update,
         )

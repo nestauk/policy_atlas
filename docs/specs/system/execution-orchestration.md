@@ -256,7 +256,13 @@ ask* / *flag & continue* / *silently log & continue*, by **kind of decision × m
   when it lands — never fan out the *conclusion*).
 - **"Serial" ≠ no within-step fan-out** — data-parallel fan-out over a corpus (appraise/extract N
   docs) is **retained**; atomic to the durability engine (block/component boundary = checkpoint),
-  needs no durable cross-branch exactly-once.
+  needs no durable cross-branch exactly-once. *As built (task 057, S3, 2026-11-03):* the
+  full-text reading stage is the first component whose work runs **outside the API process**
+  (queued functions filling the shared document store). The component boundary stays the
+  checkpoint **because** a function's result that lands after the stage closed does not
+  change this run's rows: the link write is guarded on the row still being `queued`, so a
+  late result only joins the store for later runs. The store is the hand-over; no
+  cross-process exactly-once is needed.
 - **Durable, resumable runs** via **block-boundary commits + tool-result memoisation.**
   Parked-branch freshness: resume on **current** structured state, staleness **flagged** (§3.6),
   never silently consumed. Live steering = a signal applied at the **next block boundary**. Agent

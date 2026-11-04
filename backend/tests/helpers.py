@@ -475,6 +475,7 @@ def seed_ingested_full_text(
     from policy_atlas.core.hashing import content_hash
     from policy_atlas.core.schema import chunk as chunk_table
     from policy_atlas.core.schema import chunk_embedding, source_snapshot, task_source_snapshot
+    from policy_atlas.core.tokens import word_tokens
 
     full_snapshot_id = uuid.uuid4()
     conn.execute(
@@ -516,7 +517,8 @@ def seed_ingested_full_text(
                 unit_policy=UNIT_POLICY,
                 unit_index=0,
                 unit_locator={"start": 0, "end": len(content)},
-                vector=vectors[index],
+                embedding=vectors[index],
+                tokens=sorted(word_tokens(content)),
                 created_at=now(),
             )
         )

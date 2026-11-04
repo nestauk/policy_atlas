@@ -21,6 +21,8 @@ API_ENVIRONMENT_NAMES = {
     "LOG_FORMAT",
     "LANGFUSE_TRACING_ENVIRONMENT",
     "POLICY_ATLAS_MODEL_ROUTE",
+    "POLICY_ATLAS_INGEST_MODE",
+    "POLICY_ATLAS_INGEST_QUEUE_URL",
 }
 APP_SECRET_NAMES = {
     "OPENAI_API_KEY",
@@ -69,6 +71,8 @@ def test_api_container_has_the_complete_deployed_plain_environment_map():
     assert environment["LOG_FORMAT"] == "json"
     assert environment["LANGFUSE_TRACING_ENVIRONMENT"] == "staging"
     assert environment["POLICY_ATLAS_MODEL_ROUTE"] == "openai-direct"
+    assert environment["POLICY_ATLAS_INGEST_MODE"] == "queued"
+    assert "IngestQueue" in json.dumps(environment["POLICY_ATLAS_INGEST_QUEUE_URL"])
 
 
 def test_api_container_references_database_and_app_secrets_without_values():

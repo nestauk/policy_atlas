@@ -38,10 +38,10 @@ from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 
 log = structlog.get_logger()
 
-# 12: the screen's stage-1 width; classify is provider-bound threads, not CPU
-# (task 044 phase 8, owner 2026-09-17: 4 workers put ~25 documents through
-# 6-7 rounds, 42-86 s measured).
-MAX_CONCURRENT_CLASSIFY = 12
+# 48 (task 057, N10d; was 12 since task 044): classify is provider-bound threads,
+# not CPU. E8 measured 12 -> 48 on Bedrock: classify set wall 7.9 -> 4.5 s, no 429s
+# up to 48, per-call latency flat. Measured again on the fixed questions in 057.
+MAX_CONCURRENT_CLASSIFY = 48
 CLASSIFY_RETRY_CAP = 1
 
 #: The one key of classify's directive (``context["classify"]``) and of

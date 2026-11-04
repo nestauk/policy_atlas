@@ -702,8 +702,12 @@ def test_a_finished_child_never_closes_the_task_agent_conversation(
 # --- the pool and the semaphores --------------------------------------------
 
 
-def test_option_searches_run_at_width_four(engine: Engine, child_run_plan: Any) -> None:
-    """The cross-walk bound: eight searches, never more than four at once."""
+def test_option_searches_run_at_the_configured_width(engine: Engine, child_run_plan: Any) -> None:
+    """The cross-walk bound: more searches than the width, never more at once than it.
+
+    The width is ``OPTION_SEARCH_WIDTH`` (4 until task 057, 10 since); the test seeds two
+    more options than the width so the pool's ceiling, not the option count, sets the peak.
+    """
     task_id: uuid.UUID | None = None
     lock = threading.Lock()
     live = 0
@@ -723,7 +727,8 @@ def test_option_searches_run_at_width_four(engine: Engine, child_run_plan: Any) 
         plan = _longlist_plan()
         task_id, scope_id, plan_id = _seed_longlist(engine, plan)
         parent = _seed_walk(engine, task_id, scope_id, plan_id)
-        for i in range(8):
+        option_count = OPTION_SEARCH_WIDTH + 2
+        for i in range(option_count):
             _seed_option(engine, task_id, f"Own {i}", "added_by_you")
         children = option_search.dispatch_option_searches(
             engine,
@@ -734,7 +739,7 @@ def test_option_searches_run_at_width_four(engine: Engine, child_run_plan: Any) 
             backends=_runner_backends(),
             session_id=task_id,
         )
-        assert len(children) == 8
+        assert len(children) == option_count
         # 30 s, not 10 (task 056, 2026-11-02): under the eight-worker suite the child
         # runs' rows and statuses arrive later than on an idle core; the assertions below
         # are unchanged, only the wait is longer.
@@ -794,21 +799,22 @@ def test_the_classify_slots_bound_every_walk_together() -> None:
 
 
 def test_the_ingest_slots_are_all_returned() -> None:
-    """Each parse job holds one slot while it runs and gives it back."""
+    """Each parse job holds one slot while it runs and gives it back, including
+    a job killed at its timeout (task 057: one process per document)."""
     from policy_atlas.evidence_search.sourcing.ingest_full_text import (
         DEFAULT_MAX_WORKERS,
-        _run_parse_jobs,
+        run_parse_worker,
     )
     from tests.evidence_search.sourcing.test_ingest_full_text import _sleep_by_marker_parse
 
-    results = _run_parse_jobs(
-        [(0, b"fast", "text/plain"), (1, b"fast", "text/plain")],
-        max_workers=2,
-        parse_timeout=20.0,
-        thin_min=0,
-        parse_fn=_sleep_by_marker_parse,
+    fast = run_parse_worker(
+        _sleep_by_marker_parse, b"fast", "text/plain", thin_min=0, timeout=20.0
     )
-    assert set(results) == {0, 1}
+    slow = run_parse_worker(
+        _sleep_by_marker_parse, b"slow", "text/plain", thin_min=0, timeout=1.0
+    )
+    assert fast["status"] == "ok"
+    assert slow == {"status": "error", "reason": "timeout"}
     assert walk_pool.INGEST_SLOTS._value == DEFAULT_MAX_WORKERS
 
 

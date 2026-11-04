@@ -208,7 +208,7 @@ def test_downgrade_blocked_by_superseded_generation(engine: Engine) -> None:
         with pytest.raises(RuntimeError, match="screen_generation > 0"):
             command.downgrade(cfg, PRE_MIGRATION_REVISION)
 
-        # No DDL ran: the schema is exactly as it was at head.
+        # The guarded revision's own DDL did not run: its objects are all still there.
         inspector = inspect(engine)
         assert "capability_run" in set(inspector.get_table_names())
         runs_columns = {c["name"] for c in inspector.get_columns("runs")}
@@ -218,6 +218,10 @@ def test_downgrade_blocked_by_superseded_generation(engine: Engine) -> None:
         ssr_indexes = {ix["name"] for ix in inspector.get_indexes("source_screening_result")}
         assert "uq_ssr_scope_source_stage" in ssr_indexes
     finally:
+        # One transaction per revision (task 057): the refusal rolls back only the
+        # guarded revision; the newer revisions above it were already undone and
+        # committed on the way down, so climb back to head before cleaning up.
+        command.upgrade(cfg, "head")
         connection = engine.connect()
         trans = connection.begin()
         try:

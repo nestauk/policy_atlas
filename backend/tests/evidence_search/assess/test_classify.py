@@ -678,10 +678,14 @@ def test_classify_backend_passes_model_and_reasoning_effort() -> None:
 
 
 def test_openai_kwargs_always_sends_reasoning_effort() -> None:
-    kwargs = openai_kwargs("gpt-5.4-mini", reasoning_effort="medium", prompt_cache="auto")
-    assert kwargs == {"model": "gpt-5.4-mini", "reasoning_effort": "medium"}
+    kwargs = openai_kwargs(
+        "gpt-5.4-mini", reasoning_effort="medium", prompt_cache="auto", timeout_s=60
+    )
+    assert kwargs == {"model": "gpt-5.4-mini", "reasoning_effort": "medium", "timeout": 60}
 
 
 def test_openai_kwargs_includes_reasoning_effort_when_set() -> None:
-    kwargs = openai_kwargs("gpt-5.4-mini", reasoning_effort="xhigh", prompt_cache="auto")
-    assert kwargs == {"model": "gpt-5.4-mini", "reasoning_effort": "xhigh"}
+    kwargs = openai_kwargs(
+        "gpt-5.4-mini", reasoning_effort="xhigh", prompt_cache="auto", timeout_s=60
+    )
+    assert kwargs == {"model": "gpt-5.4-mini", "reasoning_effort": "xhigh", "timeout": 60}

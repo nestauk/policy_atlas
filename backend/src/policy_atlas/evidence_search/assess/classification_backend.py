@@ -8,6 +8,7 @@ from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import confidence_is_valid, scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
@@ -81,12 +82,7 @@ class OpenAIClassificationBackend:
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAIClassificationBackend",
-            timeout=60.0,
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIClassificationBackend")
         self._langfuse_client = langfuse_client
 
     def _classify_once(
@@ -103,6 +99,7 @@ class OpenAIClassificationBackend:
             model=CLASSIFY_MODEL,
             reasoning_effort=CLASSIFY_EFFORT,
             prompt_cache=cache_mode_for("classify_document"),
+            timeout_s=route().timeout_for("classify_document"),
         )
         return _scrub_classification(parsed), usage
 
@@ -158,10 +155,10 @@ class OpenAIClassificationBackend:
                 data_type="NUMERIC",
             )
 
-        wire, usage = tracing.traced_call(
+        wire, usage = tracing.traced_attempts(
             langfuse_client,
             name="classify:document",
-            as_type="generation",
+            step="classify_document",
             call=lambda: self._classify_once(messages),
             update=_update,
             after=_score_trace,

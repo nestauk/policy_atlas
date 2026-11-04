@@ -446,6 +446,7 @@ def _judge_via_openai[T: (FindingVetterResponse, ICFFindingVetterResponse)](
     model: str,
     reasoning_effort: str,
     prompt_cache: PromptCache,
+    step: str,
     max_output_tokens: int,
     prompt_version: str,
     usage_event: str,
@@ -470,6 +471,7 @@ def _judge_via_openai[T: (FindingVetterResponse, ICFFindingVetterResponse)](
             model=model,
             reasoning_effort=reasoning_effort,
             prompt_cache=prompt_cache,
+            timeout_s=route().timeout_for(step),
             max_completion_tokens=max_output_tokens,
         )
         return _scrub_judge_response(parsed), usage
@@ -488,10 +490,10 @@ def _judge_via_openai[T: (FindingVetterResponse, ICFFindingVetterResponse)](
             },
         )
 
-    return tracing.traced_call(
+    return tracing.traced_attempts(
         langfuse_client,
         name=trace_name,
-        as_type="generation",
+        step=step,
         call=_judge_once,
         update=_update,
     )
@@ -520,12 +522,7 @@ class OpenAIFindingVetterBackend:
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAIFindingVetterBackend",
-            timeout=120.0,  # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIFindingVetterBackend")
         self._langfuse_client = langfuse_client
 
     def judge(self, payload: dict[str, Any]) -> UsageResult[FindingVetterResponse]:
@@ -549,6 +546,7 @@ class OpenAIFindingVetterBackend:
             model=FINDING_VETTER_MODEL,
             reasoning_effort=FINDING_VETTER_EFFORT,
             prompt_cache=cache_mode_for("extract_vet_iof_findings"),
+            step="extract_vet_iof_findings",
             max_output_tokens=FINDING_VETTER_MAX_OUTPUT_TOKENS,
             prompt_version=FINDING_VETTER_PROMPT_VERSION,
             usage_event="finding_vetter.judge.usage",
@@ -611,12 +609,7 @@ class OpenAIICFFindingVetterBackend:
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAIICFFindingVetterBackend",
-            timeout=120.0,  # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIICFFindingVetterBackend")
         self._langfuse_client = langfuse_client
 
     def judge(self, payload: dict[str, Any]) -> UsageResult[ICFFindingVetterResponse]:
@@ -640,6 +633,7 @@ class OpenAIICFFindingVetterBackend:
             model=ICF_FINDING_VETTER_MODEL,
             reasoning_effort=ICF_FINDING_VETTER_EFFORT,
             prompt_cache=cache_mode_for("extract_vet_icf_findings"),
+            step="extract_vet_icf_findings",
             max_output_tokens=ICF_FINDING_VETTER_MAX_OUTPUT_TOKENS,
             prompt_version=ICF_FINDING_VETTER_PROMPT_VERSION,
             usage_event="icf_finding_vetter.judge.usage",

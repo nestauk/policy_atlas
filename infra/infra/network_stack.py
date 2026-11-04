@@ -18,11 +18,21 @@ from aws_cdk import (
     aws_route53 as route53,
     aws_elasticloadbalancingv2 as elbv2,
     aws_certificatemanager as acm,
+    aws_cloudwatch as cloudwatch,
 )
 
 from cdk_fck_nat import FckNatInstanceProvider, FckNatInstanceProps
 
 from .components.nesta_ssm_endpoints import SsmConnectivity, SsmVpcEndpoints
+
+# NAT traffic alarm (task 057). NetworkOut counts every byte a NAT instance
+# sends, so downloaded documents count once on their way back to the private
+# subnets. 1 GB in 5 minutes is about 27 Mbit/s, close to a t4g.nano's
+# 32 Mbit/s baseline bandwidth; three such periods in a row means the NAT has
+# been near its sustained limit for 15 minutes. A first guess: review on
+# staging once queued ingest has run (infra/DEPLOYMENT.md).
+NAT_NETWORK_OUT_ALARM_BYTES = 1_000_000_000
+NAT_NETWORK_OUT_ALARM_PERIODS = 3
 
 class NetworkStack(Stack):
     def __init__(self, scope: Stack, id: str,
@@ -76,6 +86,37 @@ class NetworkStack(Stack):
         # It is not trusted by Aurora and is not the database tunnel target.
         fck_nat.role.add_managed_policy(
             iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore")
+        )
+
+        # One fck-nat auto scaling group per availability zone; alarm when the
+        # busiest one sustains near its baseline bandwidth. No action: the
+        # stacks have no alarm topic yet (the state shows in CloudWatch).
+        nat_metrics = {
+            f"nat{index}": cloudwatch.Metric(
+                namespace="AWS/EC2",
+                metric_name="NetworkOut",
+                dimensions_map={"AutoScalingGroupName": asg.auto_scaling_group_name},
+                statistic="Sum",
+                period=Duration.minutes(5),
+            )
+            for index, asg in enumerate(fck_nat.auto_scaling_groups)
+        }
+        cloudwatch.Alarm(self, "NatNetworkOutAlarm",
+            alarm_name="policy-atlas-v3-nat-network-out",
+            alarm_description=(
+                "A NAT instance sent over 1 GB per 5 minutes for 15 minutes, near a "
+                "t4g.nano's baseline bandwidth. Threshold to review on staging (task 057)."
+            ),
+            metric=cloudwatch.MathExpression(
+                expression=f"MAX([{', '.join(nat_metrics)}])",
+                using_metrics=nat_metrics,
+                label="Busiest NAT instance NetworkOut (bytes per 5 min)",
+                period=Duration.minutes(5),
+            ),
+            threshold=NAT_NETWORK_OUT_ALARM_BYTES,
+            evaluation_periods=NAT_NETWORK_OUT_ALARM_PERIODS,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
         )
 
         # Output the VPC ID into SSM for reference later.

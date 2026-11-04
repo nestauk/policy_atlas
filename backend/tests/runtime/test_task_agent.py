@@ -515,7 +515,10 @@ def test_scoping_turns_trace_usage_details_under_a_static_name() -> None:
     assert isinstance(turn, ScopingTurnWire)
     assert turn.reply == "Who should change?"
     assert langfuse.names == ["task_agent_scoping:turn"]
-    (update,) = langfuse.updates
+    # Task 057 D12: the attempt is stamped before the request, then the result is recorded.
+    pre_call, update = langfuse.updates
+    assert pre_call["metadata"]["step"] == "task_agent_scoping_turn"
+    assert pre_call["metadata"]["attempt"] == 1
     assert update["usage_details"] == {
         "prompt_tokens": 120,
         "completion_tokens": 30,

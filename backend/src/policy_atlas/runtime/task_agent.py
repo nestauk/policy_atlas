@@ -202,12 +202,7 @@ class OpenAITaskAgentBackend:
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAITaskAgentBackend",
-            timeout=60.0,
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAITaskAgentBackend")
         self._langfuse_client = langfuse_client
 
     def turn(
@@ -242,7 +237,9 @@ class OpenAITaskAgentBackend:
             messages=profile.build_messages(turns, previous_draft, inputs),
             response_format=profile.wire,
             model=route().model_for(profile.step),
+            step=profile.step,
             reasoning_effort=route().effort_for(profile.step),
+            timeout_s=route().timeout_for(profile.step),
             prompt_cache=cache_mode_for(profile.step),
             max_output_tokens=profile.max_output_tokens,
             usage_event=profile.usage_event,

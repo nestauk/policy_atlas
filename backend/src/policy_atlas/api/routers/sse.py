@@ -406,8 +406,16 @@ def _uuid(value: Any) -> uuid.UUID | None:
 
 
 def _summary(payload: dict[str, Any]) -> dict[str, int | float | str]:
-    """Keep only scalar terminal counts; never expose nested raw component payloads."""
-    hidden = {"component", "registry_component", "plan_id", "plan_version", "session_id"}
+    """Keep only scalar terminal counts; never expose nested raw component payloads.
+
+    ``already_in_store`` (the full-text stage's documents linked from the shared
+    document store) stays in the stored counts but out of the public summary
+    (task 057, G6: owner 2026-11-03, "hide it").
+    """
+    hidden = {
+        "component", "registry_component", "plan_id", "plan_version", "session_id",
+        "already_in_store",
+    }
     summary: dict[str, int | float | str] = {
         key: value
         for key, value in payload.items()

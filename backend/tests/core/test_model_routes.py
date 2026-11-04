@@ -99,6 +99,37 @@ TIER_MODELS = {
 }
 TIER_MODELS["bedrock-claude"] = TIER_MODELS["bedrock"]
 
+# Each step's request timeout in [steps] (task 057, D12): the literal its call site's
+# client carried in code before task 057, so a route without overrides behaves as
+# before. 120 s: the synthesis writer client, the grounding judge, group clustering,
+# the long-output extract and vetter steps, and chat; 30 s: the source note and
+# intro (their own small client); 60 s: every other step.
+STEP_TIMEOUT_S: dict[str, float] = {
+    **dict.fromkeys(STEP_TIER_AND_EFFORT, 60.0),
+    **dict.fromkeys(
+        (
+            "group_discover",
+            "group_assign",
+            "extract_iof_findings",
+            "extract_icf_findings",
+            "extract_vet_iof_findings",
+            "extract_vet_icf_findings",
+            "synthesise_propose_sections",
+            "synthesise_write_block_summary",
+            "synthesise_write_artefact_summary",
+            "synthesise_judge_summary",
+            "synthesise_section_turn",
+            "synthesise_write_key_findings",
+            "synthesise_write_case_studies",
+            "judge_grounding",
+            "chat",
+        ),
+        120.0,
+    ),
+    "synthesise_write_source_note": 30.0,
+    "synthesise_write_intro": 30.0,
+}
+
 def _default() -> Route:
     return load_route(ROUTE_FILE, "openai-direct", {})
 
@@ -116,8 +147,39 @@ def test_every_step_resolves_todays_model_and_effort_on_every_route(name: str) -
     assert len(route.steps) == 56
     for step, (tier, effort) in STEP_TIER_AND_EFFORT.items():
         assert route.model_for(step) == TIER_MODELS[name][tier], step
-        assert route.effort_for(step) == effort, step
-    assert route.step_exceptions == {}
+        if name == "bedrock" and step == "judge_grounding":
+            # Task 057 D14: the grounding judge runs at low effort on the bedrock route.
+            assert route.effort_for(step) == "low"
+        else:
+            assert route.effort_for(step) == effort, step
+    # Task 057 D12: the bedrock route carries timeout overrides for nine steps and the
+    # judge's low effort (D14); no route overrides a model.
+    assert all(exc.model is None for exc in route.step_exceptions.values())
+    if name != "bedrock":
+        assert route.step_exceptions == {}
+
+
+def test_every_step_carries_todays_timeout() -> None:
+    """Task 057 D12: every [steps] entry has timeout_s > 0, equal to the call site's old literal."""
+    route = _default()
+    assert set(STEP_TIMEOUT_S) == set(route.steps)
+    for step, timeout_s in STEP_TIMEOUT_S.items():
+        assert route.steps[step].timeout_s > 0, step
+        assert route.steps[step].timeout_s == timeout_s, step
+        assert route.timeout_for(step) == timeout_s, step
+
+
+@pytest.mark.parametrize("name", ["openai-direct", "bedrock", "bedrock-claude"])
+def test_timeout_for_is_the_override_else_the_step_default(name: str) -> None:
+    route = load_route(ROUTE_FILE, name, {})
+    for step, default in route.steps.items():
+        exception = route.step_exceptions.get(step)
+        expected = (
+            exception.timeout_s
+            if exception is not None and exception.timeout_s is not None
+            else default.timeout_s
+        )
+        assert route.timeout_for(step) == expected, step
 
 
 def test_default_route_names_the_owners_model_choice() -> None:
@@ -156,7 +218,10 @@ def test_bedrock_claude_switches_only_query_generation() -> None:
     assert claude.search_queries.model == "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
     for step in STEP_TIER_AND_EFFORT:
         assert claude.model_for(step) == plain.model_for(step), step
-        assert claude.effort_for(step) == plain.effort_for(step), step
+        if step not in plain.step_exceptions:
+            # bedrock-claude is not in use and carries none of bedrock's task 057 step
+            # overrides (timeouts, the judge's low effort); it follows the [steps] defaults.
+            assert claude.effort_for(step) == plain.effort_for(step), step
     assert claude.embeddings == plain.embeddings
 
 
@@ -168,8 +233,8 @@ def _write(tmp_path: Path, name: str, text: str) -> Path:
 
 MINIMAL = """\
 [steps]
-screen = { tier = "mini", reasoning_effort = "medium" }
-synthesis = { tier = "standard", reasoning_effort = "none" }
+screen = { tier = "mini", reasoning_effort = "medium", timeout_s = 60 }
+synthesis = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
 
 [routes.r]
 openai_base_url = "https://example.test/v1"
@@ -215,6 +280,45 @@ def test_step_exception_table_form_sets_model_and_or_effort(tmp_path: Path) -> N
     assert route.effort_for("screen") == "high"
     assert route.model_for("synthesis") == "m-mini"
     assert route.effort_for("synthesis") == "low"
+    # Neither override names a timeout, so both keep the step's own.
+    assert route.timeout_for("screen") == 60
+    assert route.timeout_for("synthesis") == 120
+
+
+def test_step_exception_may_override_only_the_timeout(tmp_path: Path) -> None:
+    """Task 057 D12: a route may shorten one step's timeout and change nothing else."""
+    path = _write(
+        tmp_path,
+        "r.toml",
+        MINIMAL + "[routes.r.steps]\nscreen = { timeout_s = 7.5 }\n",
+    )
+    route = load_route(path, "r", {})
+    assert route.timeout_for("screen") == 7.5
+    assert route.model_for("screen") == "m-mini"
+    assert route.effort_for("screen") == "medium"
+    assert route.timeout_for("synthesis") == 120
+    # A bare-string exception changes the model only, never the timeout.
+    bare = _write(tmp_path, "bare.toml", MINIMAL + '[routes.r.steps]\nscreen = "standard"\n')
+    assert load_route(bare, "r", {}).timeout_for("screen") == 60
+
+
+@pytest.mark.parametrize(
+    ("text", "match"),
+    [
+        (MINIMAL.replace(", timeout_s = 60", ""), "missing key 'timeout_s'"),
+        (MINIMAL.replace("timeout_s = 60", "timeout_s = 0"), "must be above zero"),
+        (MINIMAL.replace("timeout_s = 60", "timeout_s = -5"), "must be above zero"),
+        (MINIMAL.replace("timeout_s = 60", 'timeout_s = "60"'), "must be a number of seconds"),
+        (MINIMAL.replace("timeout_s = 60", "timeout_s = true"), "must be a number of seconds"),
+        (MINIMAL + "[routes.r.steps]\nscreen = { timeout_s = 0 }\n", "must be above zero"),
+        (MINIMAL + '[routes.r.steps]\nscreen = { timeout_s = "x" }\n', "number of seconds"),
+        (MINIMAL + "[routes.r.steps]\nscreen = { timeout = 5 }\n", "unknown key"),
+    ],
+)
+def test_timeout_shapes_fail_loud(tmp_path: Path, text: str, match: str) -> None:
+    path = _write(tmp_path, "bad.toml", text)
+    with pytest.raises(RuntimeError, match=match):
+        load_route(path, "r", {})
 
 
 @pytest.mark.parametrize(
@@ -224,7 +328,8 @@ def test_step_exception_table_form_sets_model_and_or_effort(tmp_path: Path) -> N
         (MINIMAL.replace(', reasoning_effort = "medium"', ""), "missing key 'reasoning_effort'"),
         (
             MINIMAL.replace(
-                'screen = { tier = "mini", reasoning_effort = "medium" }', 'screen = "mini"'
+                'screen = { tier = "mini", reasoning_effort = "medium", timeout_s = 60 }',
+                'screen = "mini"',
             ),
             "must be a table",
         ),
@@ -370,6 +475,26 @@ def test_unknown_backend_names_and_wrong_shapes_fail_loud(
         load_route(path, "r", {})
 
 
+def test_embedding_pool_cap_defaults_to_8_and_is_strict(tmp_path: Path) -> None:
+    """Task 057 (D6): ``pool_cap`` is optional (8), a whole number of at least 1,
+    and the embeddings table takes no other unknown key."""
+    assert load_route(_write(tmp_path, "r.toml", MINIMAL), "r", {}).embeddings.pool_cap == 8
+    for name in ("openai-direct", "bedrock", "bedrock-claude"):
+        assert load_route(ROUTE_FILE, name, {}).embeddings.pool_cap == 8, name
+    with_cap = MINIMAL.replace('profile = "p"\n', 'profile = "p"\npool_cap = 3\n')
+    assert load_route(_write(tmp_path, "c.toml", with_cap), "r", {}).embeddings.pool_cap == 3
+    for bad, match in (
+        ("pool_cap = 0", "'pool_cap' is 0; it must be at least 1"),
+        ('pool_cap = "8"', "'pool_cap' must be a whole number, not str"),
+        ("pool_cap = 2.5", "'pool_cap' must be a whole number, not float"),
+        ("pool_cap = true", "'pool_cap' must be a whole number, not bool"),
+        ("pool_size = 8", r"embeddings: unknown key\(s\) \['pool_size'\]"),
+    ):
+        text = MINIMAL.replace('profile = "p"\n', f'profile = "p"\n{bad}\n')
+        with pytest.raises(RuntimeError, match=match):
+            load_route(_write(tmp_path, "bad.toml", text), "r", {})
+
+
 def test_malformed_overlay_fails_loud_naming_the_overlay(tmp_path: Path) -> None:
     base = _write(tmp_path, "r.toml", MINIMAL)
     overlay = _write(tmp_path, "overlay.toml", "routes = [1, 2]\n")
@@ -387,8 +512,16 @@ def test_stray_openai_base_url_does_not_move_the_client(monkeypatch: pytest.Monk
 
     monkeypatch.setenv("OPENAI_BASE_URL", "https://stray.test/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    client = resolve_openai_client(None, backend_name="test", timeout=1.0, max_retries=0)
+    client = resolve_openai_client(None, backend_name="test")
     assert str(client.base_url).rstrip("/") == "https://api.openai.com/v1"
+
+
+def test_client_never_retries_on_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Task 057 D12: the one retry is traced_attempts', never the SDK's silent one."""
+    from policy_atlas.core.openai_client import resolve_openai_client
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    assert resolve_openai_client(None, backend_name="test").max_retries == 0
 
 
 def test_bedrock_route_reads_its_own_key_variable(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -400,10 +533,10 @@ def test_bedrock_route_reads_its_own_key_variable(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(openai_client, "route", lambda: bedrock)
     monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
     with pytest.raises(RuntimeError, match="requires AWS_BEARER_TOKEN_BEDROCK"):
-        openai_client.resolve_openai_client(None, backend_name="t", timeout=1.0, max_retries=0)
+        openai_client.resolve_openai_client(None, backend_name="t")
     assert model_routes.live_api_key() is None
     monkeypatch.setenv("AWS_BEARER_TOKEN_BEDROCK", "bedrock-key")
-    client = openai_client.resolve_openai_client(None, backend_name="t", timeout=1.0, max_retries=0)
+    client = openai_client.resolve_openai_client(None, backend_name="t")
     assert client.api_key == "bedrock-key"
     assert model_routes.live_api_key() == "bedrock-key"
 

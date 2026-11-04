@@ -127,7 +127,6 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     ARTEFACT_TITLE_MAX,
     GROUP_ID_EXPECTED_FORM,
     REASONING_CLAIMS_MAX,
-    RETRIEVAL_UNIT_CAP,
     SCREEN_CONFIDENCE_MAX,
     SCREEN_CONFIDENCE_MIN,
     SECTION_CAP,
@@ -137,10 +136,10 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     ChunkRetriever,
     MalformedEmissionError,
     PassThroughChunkReranker,
-    RetrievalUnitCapError,
     SynthesisDirectiveError,
     ToolExchange,
     available_lookup_kinds,
+    borrowed_connection,
     build_retrieval_scope,
     build_section_tools,
     chunk_text_basis_case,
@@ -5803,15 +5802,15 @@ def synthesise_scope(
     retrieval_scope = None
     retriever: ChunkRetriever | None = None
     if corpus.screened_docs > 0:
-        try:
-            retrieval_scope = build_retrieval_scope(
-                conn,
-                task_id=task_id,
-                scope_id=context.scope_id,
-                selected_tss_ids=selected_tss_ids,
-            )
-        except RetrievalUnitCapError as exc:
-            raise SynthesiseFailure(str(exc)) from exc
+        # Searches read through this run's own connection (task 057 N8): inside
+        # the component transaction, like every other read here.
+        retrieval_scope = build_retrieval_scope(
+            conn,
+            task_id=task_id,
+            scope_id=context.scope_id,
+            selected_tss_ids=selected_tss_ids,
+            connect=borrowed_connection(conn),
+        )
         retriever = ChunkRetriever(
             retrieval_scope,
             embedder=embedding_backend,
@@ -6564,7 +6563,6 @@ def synthesise_scope(
             "SECTION_TURN_CAP": SECTION_TURN_CAP,
             "SYNTH_CHUNK_TOP_K": SYNTH_CHUNK_TOP_K,
             "SYNTH_CHUNK_CHAR_BUDGET": SYNTH_CHUNK_CHAR_BUDGET,
-            "RETRIEVAL_UNIT_CAP": RETRIEVAL_UNIT_CAP,
             "REPAIR_ROUND_CAP": 1,  # never enforced beyond a single repair pass
         },
         "sections": section_provenance,

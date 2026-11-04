@@ -71,26 +71,26 @@ class CallBudget:
         return True
 
 
-def resolve_openai_client(
-    api_key: str | None,
-    *,
-    backend_name: str,
-    timeout: float,
-    max_retries: int,
-) -> OpenAI:
+def resolve_openai_client(api_key: str | None, *, backend_name: str) -> OpenAI:
     """Resolve the OpenAI API key and construct a client, failing loudly.
 
-    Shared by both live backends so key-resolution policy lives in one place.
+    Shared by every live backend so key-resolution policy lives in one place.
     The base address always comes from the selected route, so ``OPENAI_BASE_URL``
     in the environment is never consulted.
+
+    The client never retries on its own (``max_retries=0``) and carries no
+    timeout of its own (task 057, D12). Each request sends its step's timeout
+    (``openai_kwargs(..., timeout_s=route().timeout_for(step))``), and the retries
+    a model call gets (up to ``MODEL_CALL_ATTEMPTS`` attempts, three today; task 057
+    review: code-review 9) are made by :func:`policy_atlas.core.tracing.traced_attempts`,
+    so every attempt is its own Langfuse generation. Before task 057 the SDK
+    retried up to twice, silently and untraced.
 
     Args:
         api_key: Explicit key, or ``None`` to read the variable the route names
             (``OPENAI_API_KEY`` on ``openai-direct``, ``AWS_BEARER_TOKEN_BEDROCK``
             on the Bedrock routes).
         backend_name: Backend class name for the error message.
-        timeout: Per-request timeout in seconds.
-        max_retries: SDK-level retry cap for transient failures.
 
     Raises:
         RuntimeError: If no API key is provided or configured.
@@ -101,19 +101,19 @@ def resolve_openai_client(
     return OpenAI(
         api_key=resolved_key,
         base_url=route().openai_base_url,
-        timeout=timeout,
-        max_retries=max_retries,
+        max_retries=0,
     )
 
 
 def openai_kwargs(
-    model: str, *, reasoning_effort: str, prompt_cache: PromptCache
+    model: str, *, reasoning_effort: str, prompt_cache: PromptCache, timeout_s: float
 ) -> dict[str, Any]:
     """Request kwargs shared by every OpenAI chat-completions call site.
 
-    Every call site states its reasoning effort (task 056, D4): the value comes
-    from the route file (``route().effort_for(step)``), never from a literal in
-    code. ``"none"`` is sent as the string the provider expects.
+    Every call site states its reasoning effort (task 056, D4) and its timeout
+    (task 057, D12): both come from the route file (``route().effort_for(step)``
+    and ``route().timeout_for(step)``), never from a literal in code.
+    ``"none"`` is sent as the string the provider expects.
 
     Args:
         model: The model id for this call site's route step.
@@ -123,8 +123,17 @@ def openai_kwargs(
             automatic storing off (``"breakpoint"`` then stores only at the
             breakpoint set on the messages, see :func:`with_system_breakpoint`);
             ``"auto"`` adds nothing.
+        timeout_s: Seconds this one request may take before the SDK gives up
+            on it (sent as the SDK's per-request ``timeout`` option).
+
+    Returns:
+        Keyword arguments for ``chat.completions.create`` / ``parse``.
     """
-    kwargs: dict[str, Any] = {"model": model, "reasoning_effort": reasoning_effort}
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "reasoning_effort": reasoning_effort,
+        "timeout": timeout_s,
+    }
     if prompt_cache in ("off", "breakpoint"):
         kwargs["extra_body"] = {"prompt_cache_options": {"mode": "explicit"}}
     return kwargs
@@ -200,6 +209,7 @@ def parse_structured[T: BaseModel](
     model: str,
     reasoning_effort: str,
     prompt_cache: PromptCache,
+    timeout_s: float,
     **parse_kwargs: Any,
 ) -> UsageResult[T]:
     """Run one ``chat.completions.parse`` call and apply the shared guards.
@@ -220,6 +230,7 @@ def parse_structured[T: BaseModel](
         prompt_cache: The step's prompt-cache mode (:data:`PromptCache`);
             ``"breakpoint"`` sends the messages through
             :func:`with_system_breakpoint`.
+        timeout_s: The step's request timeout (``route().timeout_for(step)``).
         **parse_kwargs: Additional keyword arguments forwarded to
             ``chat.completions.parse`` (``max_completion_tokens``, ...).
 
@@ -232,7 +243,12 @@ def parse_structured[T: BaseModel](
     response = client.chat.completions.parse(
         messages=with_system_breakpoint(messages) if prompt_cache == "breakpoint" else messages,
         response_format=response_format,
-        **openai_kwargs(model, reasoning_effort=reasoning_effort, prompt_cache=prompt_cache),
+        **openai_kwargs(
+            model,
+            reasoning_effort=reasoning_effort,
+            prompt_cache=prompt_cache,
+            timeout_s=timeout_s,
+        ),
         **parse_kwargs,
     )
     log_usage(usage_event, response.usage)
@@ -247,7 +263,9 @@ def traced_parse[T: BaseModel](
     messages: list[Any],
     response_format: type[T],
     model: str,
+    step: str,
     reasoning_effort: str,
+    timeout_s: float,
     max_output_tokens: int,
     usage_event: str,
     label: str,
@@ -258,11 +276,15 @@ def traced_parse[T: BaseModel](
     clean: Callable[[T], T] | None = None,
     prompt_cache: PromptCache,
 ) -> UsageResult[T]:
-    """Run :func:`parse_structured` under one Langfuse generation.
+    """Run :func:`parse_structured` under Langfuse generations, one per attempt.
 
-    The span records the messages, the parsed output, the model, the prompt
-    version, any extra metadata and the token usage (``usage_details``, so
-    Langfuse can price the call).
+    The call runs under :func:`policy_atlas.core.tracing.traced_attempts`: a
+    timeout or a passing provider failure is tried again, up to
+    ``MODEL_CALL_ATTEMPTS`` attempts (three today; task 057 review: code-review 9),
+    and each attempt is its own generation carrying the step, the attempt number and a shared
+    call id. The successful attempt's span records the messages, the parsed
+    output, the model, the prompt version, any extra metadata and the token
+    usage (``usage_details``, so Langfuse can price the call).
 
     Args:
         client: The OpenAI client.
@@ -270,7 +292,9 @@ def traced_parse[T: BaseModel](
         messages: Chat messages for the call.
         response_format: The pydantic wire type to parse into.
         model: Model id.
+        step: The route step name (recorded on every attempt's generation).
         reasoning_effort: The step's effort (``route().effort_for(step)``).
+        timeout_s: The step's request timeout (``route().timeout_for(step)``).
         max_output_tokens: Completion token cap.
         usage_event: structlog event name for usage logging.
         label: Call label used in guard error messages.
@@ -303,6 +327,7 @@ def traced_parse[T: BaseModel](
             model=model,
             reasoning_effort=reasoning_effort,
             prompt_cache=prompt_cache,
+            timeout_s=timeout_s,
             max_completion_tokens=max_output_tokens,
         )
         return (clean(parsed) if clean is not None else parsed), usage
@@ -323,10 +348,10 @@ def traced_parse[T: BaseModel](
             },
         )
 
-    return tracing.traced_call(
+    return tracing.traced_attempts(
         langfuse_client,
         name=name,
-        as_type="generation",
+        step=step,
         call=_call,
         session_id=session_id,
         update=_update,

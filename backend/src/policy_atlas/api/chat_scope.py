@@ -350,6 +350,8 @@ def build_chat_readers(
             scope_id=scope.evidence_scope_id,
             selected_tss_ids=selected_tss_ids,
             extra_scope_ids=scope.extra_scope_ids,
+            # Each search opens its own short read and closes it (task 057 N8).
+            connect=engine.connect,
         )
         if scope.resolve_labels:
             _fill_resolved_labels(conn, task_id=task_id, docs=retrieval_scope.docs)

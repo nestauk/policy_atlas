@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import email.utils
 import http.cookiejar
 import ipaddress
 import select
@@ -12,6 +13,7 @@ import time
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, cast
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
@@ -21,8 +23,10 @@ import structlog
 
 from policy_atlas.core.liveness import publish_current_tick
 from policy_atlas.evidence_search.sourcing.ingest_full_text import (
+    DEADLINE_MARGIN_S,
     EUROPE_PMC_FULL_TEXT_URL,
     EUROPE_PMC_HOST,
+    FETCH_DEADLINE,
     DocumentFetcher,
     FetchResult,
     FixtureFetcher,
@@ -41,6 +45,11 @@ MAX_DOCUMENT_BYTES = 25_000_000
 # entity expansion (a ratio, not an absolute) can grow inside a parse worker.
 EUROPE_PMC_MAX_BYTES = 10_000_000
 RETRY_BACKOFF_S = 2.0
+# Task 057 (N2): a 429 or 503 carrying ``Retry-After`` is retried after the delay the
+# host asked for (seconds, or an HTTP date), never longer than this. A missing or
+# malformed header keeps the fixed RETRY_BACKOFF_S wait.
+RETRY_AFTER_CAP_S = 30.0
+_RETRY_AFTER_STATUSES = frozenset({429, 503})
 FETCH_MAX_CONCURRENCY = 10
 PER_HOST_MAX_CONCURRENCY = 2
 PER_HOST_MIN_INTERVAL_S = 1.0
@@ -99,6 +108,9 @@ class _Redirect:
 @dataclass(frozen=True)
 class _RetryableStatus:
     status_code: int
+    # Seconds the host asked us to wait (``Retry-After`` on a 429 or 503), already
+    # capped; None means no usable header, so the fixed backoff applies.
+    retry_after_s: float | None = None
 
 
 @dataclass
@@ -476,9 +488,8 @@ class LiveDocumentFetcher:
                     log.warning("fetch_live.blocked", url=_redact_url(url))
                     return FetchResult(status="error", error="blocked")
                 if _is_timeout_error(exc):
-                    if attempts < 1:
+                    if attempts < 1 and self._wait_before_retry(url, RETRY_BACKOFF_S):
                         log.warning("fetch_live.retry", url=_redact_url(url), reason="timeout")
-                        self._sleep(RETRY_BACKOFF_S)
                         attempts += 1
                         continue
                     log.warning("fetch_live.timeout", url=_redact_url(url))
@@ -491,13 +502,18 @@ class LiveDocumentFetcher:
                 return FetchResult(status="error", error="fetch_error")
 
             if isinstance(outcome, _RetryableStatus):
-                if attempts < 1:
+                wait_s = (
+                    outcome.retry_after_s
+                    if outcome.retry_after_s is not None
+                    else RETRY_BACKOFF_S
+                )
+                if attempts < 1 and self._wait_before_retry(url, wait_s):
                     log.warning(
                         "fetch_live.retry",
                         url=_redact_url(url),
                         status_code=outcome.status_code,
+                        wait_s=wait_s,
                     )
-                    self._sleep(RETRY_BACKOFF_S)
                     attempts += 1
                     continue
                 log.warning(
@@ -507,6 +523,27 @@ class LiveDocumentFetcher:
                 )
                 return FetchResult(status="error", error="fetch_error")
             return outcome
+
+    def _wait_before_retry(self, url: str, wait_s: float) -> bool:
+        """Sleep before the one retry, unless the wait would run past the deadline.
+
+        The deadline is the per-document one the ingest function sets in
+        ``FETCH_DEADLINE`` (a value of this fetcher's clock; none in-process). A
+        wait that would end within ``DEADLINE_MARGIN_S`` of it is not started.
+
+        Args:
+            url: The URL being retried (redacted in the log line).
+            wait_s: Seconds to wait before the retry.
+
+        Returns:
+            True after sleeping; False when the retry is given up for the deadline.
+        """
+        deadline = FETCH_DEADLINE.get()
+        if deadline is not None and self._clock() + wait_s > deadline - DEADLINE_MARGIN_S:
+            log.warning("fetch_live.retry_past_deadline", url=_redact_url(url), wait_s=wait_s)
+            return False
+        self._sleep(wait_s)
+        return True
 
     def _attempt_request(self, url: str) -> FetchResult | _Redirect | _RetryableStatus:
         guarded = _guard_url(url, self._resolver)
@@ -540,7 +577,12 @@ class LiveDocumentFetcher:
                 return FetchResult(status="error", error="fetch_error")
             return _Redirect(redirect_url)
         if status_code in _RETRYABLE_STATUSES:
-            return _RetryableStatus(status_code)
+            retry_after_s = (
+                retry_after_seconds(response.headers.get("retry-after"), now=datetime.now(UTC))
+                if status_code in _RETRY_AFTER_STATUSES
+                else None
+            )
+            return _RetryableStatus(status_code, retry_after_s)
         if status_code in {401, 402}:
             return FetchResult(status="error", error="paywall")
         if status_code == 403:
@@ -589,8 +631,15 @@ class LiveDocumentFetcher:
         # actual body size on completion (the part release_body later frees).
         self._account_bytes(MAX_DOCUMENT_BYTES)
         body = bytearray()
+        deadline = FETCH_DEADLINE.get()
         try:
             for chunk in response.iter_bytes():
+                # task 057 review (security 2): a slow-drip body stops at the
+                # per-document deadline, like a per-operation timeout.
+                if deadline is not None and self._clock() > deadline:
+                    self._release_accounted_bytes(MAX_DOCUMENT_BYTES)
+                    log.warning("fetch_live.timeout", reason="deadline_mid_body")
+                    return FetchResult(status="error", error="timeout")
                 if not chunk:
                     continue
                 if len(body) + len(chunk) > MAX_DOCUMENT_BYTES:
@@ -661,6 +710,35 @@ class _HostSlot:
         traceback: object | None,
     ) -> None:
         self._state.semaphore.release()
+
+
+def retry_after_seconds(value: str | None, *, now: datetime) -> float | None:
+    """Read a ``Retry-After`` header as a wait in seconds, capped at 30 s.
+
+    The header is either a whole number of seconds (``Retry-After: 7``) or an HTTP
+    date (``Retry-After: Wed, 21 Oct 2026 07:28:00 GMT``); a date in the past means
+    no wait.
+
+    Args:
+        value: The header's value, or None when the response had none.
+        now: The current time, to turn a date into a number of seconds.
+
+    Returns:
+        Seconds to wait (at most ``RETRY_AFTER_CAP_S``), or None when the header is
+        missing or malformed, so the caller keeps its fixed backoff.
+    """
+    if value is None:
+        return None
+    text = value.strip()
+    if text.isascii() and text.isdigit():
+        return min(float(int(text)), RETRY_AFTER_CAP_S)
+    try:
+        when = email.utils.parsedate_to_datetime(text)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return min(max((when - now).total_seconds(), 0.0), RETRY_AFTER_CAP_S)
 
 
 def _default_resolver(host: str, port: int) -> Sequence[Any]:

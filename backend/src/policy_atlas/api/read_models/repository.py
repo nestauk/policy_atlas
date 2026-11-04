@@ -123,6 +123,9 @@ from policy_atlas.evidence_search.extract.interventions_records import (
     PROFILE_ID as INTERVENTIONS_PROFILE_ID,
 )
 from policy_atlas.evidence_search.extract.quote_verify import build_basis, locate_unique_span
+from policy_atlas.evidence_search.sourcing.ingest_full_text import (
+    NOT_READ_YET_REASONS as _NOT_READ_YET_REASONS,
+)
 from policy_atlas.options_scoping.labels import DocumentLabels, labels_for_snapshots
 from policy_atlas.options_scoping.longlist.coverage import (
     ROLE_BUCKETS,
@@ -1091,6 +1094,7 @@ def evidence_page(
             screen is not None
             and screen.status == "relevant"
             and row.full_text_status in {"fetch_failed", "parse_failed"}
+            and row.full_text_error not in NOT_READ_YET_REASONS
         ):
             status, reason = "unavailable", row.full_text_error
         elif screen is not None and screen.status == "relevant":
@@ -1174,6 +1178,16 @@ def evidence_page(
     return Page(
         data=page_items, pagination=PageMeta(page=page, page_size=page_size, total_items=total)
     )
+
+
+#: Full-text failure reasons that are not access failures (task 057, S2): the
+#: document was still being read when the stage stopped waiting (``not_ready``),
+#: the queue refused its message (``send_failed``), or the cloud function failed
+#: outside the per-document vocabulary (``worker_error``). Such a source is not
+#: ``unavailable``; it reads as screened in and not read yet (``relevant`` /
+#: ``not_selected``), and the next run tries it again. Defined once in
+#: ``ingest_full_text`` (task 057 review, Codex 9) and re-exported here.
+NOT_READ_YET_REASONS = _NOT_READ_YET_REASONS
 
 
 _EVIDENCE_STATUS_SORT_RANK = {
@@ -2769,6 +2783,7 @@ def source_dossier_out(
         screen is not None
         and screen.status == "relevant"
         and row["full_text_status"] in {"fetch_failed", "parse_failed"}
+        and row["full_text_error"] not in NOT_READ_YET_REASONS
     ):
         status, reason = "unavailable", row["full_text_error"]
     elif screen is not None and screen.status == "relevant":

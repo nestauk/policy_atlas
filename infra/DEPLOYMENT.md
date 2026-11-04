@@ -11,9 +11,9 @@ Four core CloudFormation stacks, plus a staging-only analytics stack:
 
 | Stack | Region | Contents |
 | --- | --- | --- |
-| `PaV3NetworkStack` | `eu-west-2` | VPC, fck-nat, shared ALB + wildcard ACM cert |
-| `PaV3DatabaseStack` | `eu-west-2` | Aurora Postgres cluster, generated credentials secret, `load_secret` Lambda, SSM jumpbox |
-| `PaV3AppStack` | `eu-west-2` | ECS Fargate API service + migration task, Cognito, S3 + CloudFront frontend, font bucket |
+| `PaV3NetworkStack` | `eu-west-2` | VPC, fck-nat, shared ALB + wildcard ACM cert, NAT traffic alarm |
+| `PaV3DatabaseStack` | `eu-west-2` | Aurora Postgres cluster, generated credentials secret, `load_secret` Lambda, SSM jumpbox, writer CPU-credit alarm |
+| `PaV3AppStack` | `eu-west-2` | ECS Fargate API service + migration task, document-ingest queue + Lambda function (§ 4, "The ingest function"), Cognito, S3 + CloudFront frontend, font bucket |
 | `PaV3CertStack` | `us-east-1` | CloudFront's ACM certificate (AWS requires this region for CloudFront certs) |
 | `PaV3AnalyticsStack` (staging only) | `eu-west-2` | Metabase Fargate service, dedicated RDS PostgreSQL application database, secrets, shared-ALB route + DNS |
 
@@ -416,7 +416,8 @@ also scales to 0 explicitly before its stop-wait. The steady-state order
 2. resolve + validate the frontend publish config (SSM exports, production
    build guard) — fail-fast, *before* any outage-inducing step
 3. explicit scale to 0, then wait for tasks stopped
-4. migration task + fail-loud wait on exit code (`describe-tasks`)
+4. migration task + fail-loud wait on exit code (`describe-tasks`, polled every
+   15 s up to `MIGRATION_WAIT_MAX_S`; see "Waiting for the migration task" below)
 5. scale to 1 (`aws ecs update-service --desired-count 1` — deliberate,
    documented drift from the template until the next deploy)
 6. fonts injection → `vite build` → `s3 sync` (no `--delete`) → CloudFront
@@ -430,6 +431,65 @@ count the template pins at 0). Fix the cause and rerun `deploy.sh update`, or
 restore service manually with
 `aws ecs update-service --cluster policy-atlas-v3-cluster --service policy-atlas-v3-api-service --desired-count 1`
 (only if the migration step had already passed).
+
+**Waiting for the migration task (task 057).** `deploy.sh` asks ECS for the
+migration task's status (`aws ecs describe-tasks`) every 15 seconds until it
+reports `STOPPED`, then fails the deploy unless the container exited with code 0,
+printing the exit code and ECS's `stoppedReason`. It gives up after
+`MIGRATION_WAIT_MAX_S` seconds, 5,400 (90 minutes) by default; set the variable
+in the environment that runs `deploy.sh` to change it (the deploy role's session
+lasts 7,200 s and the GitHub deploy job 90 minutes, so a larger value only helps
+a run from a laptop). On that timeout it prints the last status and the task
+ARN and **leaves the task running**: a migration stopped half-way is safe to
+rerun, but whether to stop it is the operator's call. A failed `describe-tasks`
+call counts as one more poll, not a failure. The previous
+`aws ecs wait tasks-stopped` gave up after about 10 minutes, too short for task
+057's backfill. `make deploy-migration-wait-test` checks the loop against a
+stubbed `aws`.
+
+**Task 057 release: run its two migrations before the deploy (recommended).**
+Task 057 adds two revisions that are safe to run while the service is up:
+
+- `a3d8f6c1e2b4` (expand) only adds nullable columns, the `queued` status and the
+  `vector` extension, takes each brief table lock with a 10-second
+  `lock_timeout` (if it times out, run it again), and builds its two indexes
+  `CONCURRENTLY`, which does not block the app's writes.
+- `b7e2c4a9d1f3` (backfill) copies every stored embedding into the new
+  `chunk_embedding.embedding` column and fills `tokens`, 2,000 rows per
+  committed batch. On the production writer it is expected to take **tens of
+  minutes**, which is why it should not run inside the deploy's outage window.
+
+Because the deploy stops the service before it migrates, run both first, while
+the old service still serves, then deploy as usual; the deploy's migration task
+finds them applied and runs only what remains. Run them over the § 6 tunnel from
+a checkout of the commit being released (the migration ECS task cannot do this
+before the deploy: its task definition still holds the image that is running
+now, which does not contain these revisions, and `cdk deploy` registers the new
+one only as it stops the service). The command has the same shape as the manual
+downgrade in § 8:
+
+```bash
+# Tunnel open (§ 6). From backend/ in a checkout of the release commit:
+DATABASE_URL=<tunnel-url> uv run alembic upgrade b7e2c4a9d1f3
+# <tunnel-url> = postgresql+psycopg://dbadmin:<password>@localhost:15432/policy_atlas_db?sslmode=require
+```
+
+**It resumes.** Each batch commits on its own and only rows whose `embedding`
+is still empty are picked up, so if the tunnel drops, the laptop sleeps or the
+command fails, run the same command again: it carries on where it stopped and
+redoes nothing. Progress is logged every 25 batches. When it finishes,
+`SELECT count(*) FROM chunk_embedding WHERE embedding IS NULL;` returns 0.
+Rows the old service writes after that moment (it writes only the JSON column)
+are left empty: the third revision fills them.
+
+- `0914321f8de4` (drop the JSON column) runs **inside the deploy's migration
+  task**, not before: it first runs the same fill over any rows the old service
+  wrote after the pre-run (seconds, as batches), then, under a short table lock
+  (10-second lock timeout), checks that no row lacks an embedding and drops the
+  old JSON `vector` column. If the check fails it stops with a message that says
+  how many rows are missing and why, and drops nothing; fix or delete those rows
+  and run the deploy's migration again. Its downgrade rebuilds the JSON column
+  from the binary one at float32 precision (approximate).
 
 For normal operator recovery use
 `make deploy-update DEPLOY_ENV=<environment>` so local and GitHub execution stay on
@@ -504,6 +564,100 @@ bash scripts/deploy.sh update        # migrate → scale → publish on the fres
   replacing an SSM-exported resource; `--force` is a harmless belt-and-braces
   on that path and the Aurora encryption runbook above keeps it.
 
+### The ingest function (task 057)
+
+**What it is.** When a run needs the full text of its documents, the API can
+hand the reading out instead of doing it itself. It puts one message per
+document on a queue, and AWS starts a small worker for each message: the
+**ingest function** (`policy-atlas-v3-ingest`, an AWS Lambda function). The
+function downloads the document, parses it into passages and writes them to the
+database. It makes no AI calls and holds no AI key; the run embeds the passages
+itself once they land.
+
+The words, one line each:
+
+- **SQS queue** (Amazon Simple Queue Service): a managed to-do list of messages,
+  here `policy-atlas-v3-ingest`. Messages are kept 4 days, encrypted at rest.
+- **Visibility timeout** (210 s): once a worker takes a message, the message is
+  hidden from other workers for this long. If the worker has not finished by
+  then, the message reappears for another try. It is the function's 180 s time
+  limit plus 30 s.
+- **Dead-letter queue** (`policy-atlas-v3-ingest-dlq`): where a message goes
+  after its second failed try, so it stops being retried and a person can look
+  at it. Kept 14 days. The function writes the failure reason on the
+  document's row before giving up (on its second try, an unexpected error is
+  written as `worker_error`), so the run is not waiting on it. The two cases
+  it cannot write are a platform kill at the 180 s limit and a database that
+  refuses the write; the run's own 600 s deadline then records the document
+  as `not_ready`.
+- **Event-source mapping**: the AWS-managed poller that reads the queue and
+  starts the function, one message per start, at most 20 at once (raise only
+  after a staging measurement: the database writer is a small burstable
+  instance).
+
+Sizing: 1,769 MB of memory (one full CPU core), 180 s time limit, 512 MB of
+scratch disk, in the private subnets with its own security group, which the
+database security group admits on port 5432. Its logs go to
+`/policy_atlas_v3/ingest`, kept 30 days. Its only environment variables are
+`POLICY_ATLAS_DB_SECRET_ARN` (where the database password lives; the function
+reads the secret itself at start-up, through its role), `POLICY_ATLAS_MODEL_ROUTE`
+and `LOG_FORMAT=json`. It runs the same container image as the API (built once
+per deploy), started with
+`python -m awslambdaric policy_atlas.ops.ingest_worker.handler` instead of the
+web server.
+
+**Which environments use it.** `backend.ingest_mode` in `pa_config.json`, per
+environment: `queued` sends documents to the function, `in_process` reads them
+inside the API task as before. Today staging is `queued` and production is
+`in_process`. The queue and function exist in both; in `in_process` mode nothing
+is sent to them. Changing the value is a config edit plus a deploy.
+
+**Alarms.** Three CloudWatch alarms watch this work. None sends a notification
+yet (the stacks have no alarm topic); check their state in the CloudWatch
+console, Alarms page.
+
+| Alarm | Stack | Fires when |
+| --- | --- | --- |
+| `policy-atlas-v3-ingest-dlq-depth` | app | at least 1 message in the dead-letter queue (5-minute check) |
+| `policy-atlas-v3-nat-network-out` | network | the busiest fck-nat instance sends over 1 GB per 5 minutes, 3 periods in a row (about 27 Mbit/s, near a `t4g.nano`'s 32 Mbit/s baseline). **A first guess: review on staging** after a few queued runs and adjust `NAT_NETWORK_OUT_ALARM_BYTES` in `network_stack.py`. |
+| `policy-atlas-v3-db-writer-cpu-credits` | database | the Aurora writer's CPU credit balance drops below 50 (at zero the writer is slowed to its baseline) |
+
+**Draining and inspecting the dead-letter queue.** A message there carries only
+two ids and a schema version (no URL, no user). The reason the document failed
+is on its row in the database (`task_source_snapshot.full_text_status` and its
+reason), so the message is mainly a pointer. With the environment's AWS profile
+logged in:
+
+```bash
+export AWS_PROFILE=<the environment's profile>   # e.g. the staging SSO profile
+DLQ_URL=$(aws sqs get-queue-url --queue-name policy-atlas-v3-ingest-dlq \
+  --query QueueUrl --output text)
+
+# How many are waiting:
+aws sqs get-queue-attributes --queue-url "$DLQ_URL" \
+  --attribute-names ApproximateNumberOfMessages
+
+# Look at up to 10 (they stay in the queue; each reappears after 60 s):
+aws sqs receive-message --queue-url "$DLQ_URL" --max-number-of-messages 10 \
+  --visibility-timeout 60 --attribute-names All
+
+# Remove one you have dealt with (ReceiptHandle from the receive above):
+aws sqs delete-message --queue-url "$DLQ_URL" --receipt-handle '<ReceiptHandle>'
+
+# Or empty the whole dead-letter queue (cannot be undone):
+aws sqs purge-queue --queue-url "$DLQ_URL"
+```
+
+Nothing needs re-sending by hand: the run has already recorded the document as
+not read and carried on without it.
+
+**Deploys and messages in flight.** On every deploy after the first,
+`cdk deploy` updates the function to the new image *before* `deploy.sh` runs the
+migration task. A message the new function picks up in that gap meets the old
+database schema, may fail twice and land in the dead-letter queue (the alarm
+fires). This is expected around a deploy: the run records the document as not
+read and carries on. Deploy in quiet windows, as for the API.
+
 ## 5. Env & secret map
 
 Generated from `settings.py`'s required/optional calls plus the direct
@@ -538,6 +692,8 @@ fixture corpus are intentionally omitted from the deployed task.
 | `OVERTON_API_KEY` | Secrets Manager field: `policy_atlas_v3/app` `OVERTON_API_KEY` | `api/deps.py`, `evidence_search/sourcing/search_live.py` |
 | `PA_BACKEND_MODE` | config value: `live` | `api/deps.py` |
 | `POLICY_ATLAS_MODEL_ROUTE` | config value: `backend.model_route` (`bedrock` on staging and production) | `core/model_routes.py` |
+| `POLICY_ATLAS_INGEST_MODE` | config value: `backend.ingest_mode` (`queued` on staging and production since 2026-11-04; `in_process` is the laptop mode) | backend ingest stage (task 057) |
+| `POLICY_ATLAS_INGEST_QUEUE_URL` | stack value: the ingest queue's URL | backend ingest stage (task 057) |
 | `POLICY_ATLAS_FIXTURE_CORPUS` | omitted (development/test fixture override) | `evidence_search/sourcing/ingest_full_text.py` |
 | `POLICY_ATLAS_SEARCH_CACHE_TTL_S` | omitted (development tuning; application default) | `evidence_search/sourcing/search_live.py` |
 | `RUN_EXECUTOR_MAX` | config value: `backend.run_executor_max` | `api/settings.py` |
@@ -680,6 +836,26 @@ in committable form — CI's font-guard stays green.
   b3c7d914e0a2` → deploy the pre-033 image → scale up. Do not do this on a
   database that has enrolled organisations without owner sign-off on the
   chat-exposure consequence above.
+- **Task 057 (queued ingest, document store, SQL retrieval):** two independent
+  rollbacks. *The reading stage:* set `backend.ingest_mode` to `in_process` in
+  `pa_config.json` and deploy; the queue and function stay but receive nothing.
+  Messages already in flight finish or dead-letter harmlessly (the row guard
+  ignores a result for a row the new run has re-queued). *Retrieval and the
+  store:* deploy the previous image, then (last resort, § 6 tunnel, API scaled to
+  zero) `uv run alembic downgrade 152a234e2391`, which drops the three task 057
+  revisions in order: the JSON vector column is rebuilt from the binary vectors
+  at float32 precision (the pre-057 JSON held float64; search order can differ on
+  near-ties), the backfilled `tokens` and `embedding` columns are dropped, the
+  `queued` status and the two link-row columns (`ingested_by_run_id`,
+  `fetched_from`) are dropped (rows in `queued` are set to `not_attempted`
+  first). Snapshots stored by the body-hash key stay valid rows for the old
+  code. Tested on the test database
+  (`tests/core/test_migration_057_document_store.py`); not rehearsed on staging.
+- **Each migration commits on its own (task 057):** Alembic now runs one transaction
+  per revision. A downgrade that is refused part-way (a guard that stops it) leaves the
+  revisions above the refusal already undone and committed; check `alembic current`
+  afterwards and decide whether to upgrade back to head or carry on. Before task 057 a
+  refusal rolled the whole downgrade back.
 - **Automation:** disable the GitHub Environment or revoke its OIDC role trust to
   stop new deploys, then revert the workflow change. This does not repair an
   already interrupted stop→migrate→scale sequence; use the recovery procedure in

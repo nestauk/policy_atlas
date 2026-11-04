@@ -351,11 +351,13 @@ def test_step_kwargs_send_the_steps_model_and_effort() -> None:
     assert sb._step_kwargs("synthesise_section_turn") == {
         "model": route().model_for("synthesise_section_turn"),
         "reasoning_effort": "none",
+        "timeout": route().timeout_for("synthesise_section_turn"),
     }
     # A "breakpoint" step also sends the body that turns the provider's own storing off.
     assert sb._step_kwargs("synthesise_write_source_note") == {
         "model": route().model_for("synthesise_write_source_note"),
         "reasoning_effort": "medium",
+        "timeout": route().timeout_for("synthesise_write_source_note"),
         "extra_body": {"prompt_cache_options": {"mode": "explicit"}},
     }
 

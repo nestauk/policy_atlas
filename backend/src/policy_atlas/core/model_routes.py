@@ -1,8 +1,9 @@
 """Which AI model each step of the app uses, read from one committed file.
 
 The file is ``model_routes.toml`` at the package root. It names every step once
-(one step is one named model call site) with a default tier and a reasoning
-effort, and for each named *route* says which model each tier is, plus the
+(one step is one named model call site) with a default tier, a reasoning
+effort and a timeout (how many seconds one request may take before it is cut
+off), and for each named *route* says which model each tier is, plus the
 embedding model, the search-queries backend and which environment variable
 holds the route's API key (so one secret can hold both the OpenAI key and a
 Bedrock key, and switching route never edits the secret). One environment
@@ -12,11 +13,12 @@ variable, ``POLICY_ATLAS_MODEL_ROUTE``, picks the route; unset means
 touching the committed file (for evaluations).
 
 Design: task 053 contract D3 and ADR 0041; task 056 contract D4 and D9 and
-ADR 0042 (one step per call site, reasoning effort per step). Every lookup
-fails loud: an unknown route, step, tier, effort or backend name, a stray key,
-or a file of the wrong shape, raises at import rather than falling back to
-anything. One value is taken as written: a step exception's model that is not
-a tier name is sent to the provider as a model id.
+ADR 0042 (one step per call site, reasoning effort per step); task 057
+contract D12 and ADR 0043 (a timeout per step). Every lookup fails loud: an
+unknown route, step, tier, effort or backend name, a stray key, a missing or
+non-positive timeout, or a file of the wrong shape, raises at import rather
+than falling back to anything. One value is taken as written: a step
+exception's model that is not a tier name is sent to the provider as a model id.
 """
 
 from __future__ import annotations
@@ -72,10 +74,14 @@ class Step:
         tier: The tier name the step follows unless a route says otherwise.
         reasoning_effort: The ``reasoning_effort`` the step sends unless a
             route says otherwise.
+        timeout_s: How many seconds one request of this step may take before
+            the client gives up on it, unless a route says otherwise. Applied
+            per request (task 057, D12).
     """
 
     tier: str
     reasoning_effort: str
+    timeout_s: float
 
 
 @dataclass(frozen=True)
@@ -85,19 +91,36 @@ class StepException:
     Args:
         model: A tier name or a model id, or ``None`` to keep the step's tier.
         reasoning_effort: An effort value, or ``None`` to keep the step's effort.
+        timeout_s: A request timeout in seconds, or ``None`` to keep the step's.
     """
 
     model: str | None
     reasoning_effort: str | None
+    timeout_s: float | None = None
+
+
+#: Embedding requests the stage may keep in flight at most (task 057, D6), when a
+#: route's ``[routes.<name>.embeddings]`` table does not set ``pool_cap``.
+DEFAULT_EMBEDDING_POOL_CAP = 8
 
 
 @dataclass(frozen=True)
 class Embeddings:
-    """The embedding section of a route."""
+    """The embedding section of a route.
+
+    Attributes:
+        backend: ``openai`` or ``cohere``.
+        model: The embedding model id.
+        profile: The profile name stamped on each stored vector.
+        pool_cap: The most embedding requests kept in flight at once (task 057,
+            D6); the adaptive pool climbs towards it while the provider does not
+            throttle. ``pool_cap`` in the route file, default 8.
+    """
 
     backend: str
     model: str
     profile: str
+    pool_cap: int = DEFAULT_EMBEDDING_POOL_CAP
 
 
 @dataclass(frozen=True)
@@ -178,6 +201,25 @@ class Route:
             return exception.reasoning_effort
         return default.reasoning_effort
 
+    def timeout_for(self, step: str) -> float:
+        """Return how many seconds one request of a step may take on this route.
+
+        Args:
+            step: A step name from the ``[steps]`` table.
+
+        Returns:
+            The route's override for the step when it sets ``timeout_s``, else
+            the step's own ``timeout_s`` from ``[steps]``. Always above zero.
+
+        Raises:
+            RuntimeError: If the step is not in the ``[steps]`` table.
+        """
+        default = self._step(step)
+        exception = self.step_exceptions.get(step)
+        if exception is not None and exception.timeout_s is not None:
+            return exception.timeout_s
+        return default.timeout_s
+
 
 def _require(table: Mapping[str, Any], key: str, where: str) -> Any:
     if key not in table:
@@ -199,6 +241,29 @@ def _choice(table: Mapping[str, Any], key: str, where: str, allowed: tuple[str, 
     return str(value)
 
 
+def _timeout(value: Any, where: str) -> float:
+    """Check a ``timeout_s`` value: a number of seconds above zero."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise RuntimeError(
+            f"{where}: 'timeout_s' must be a number of seconds, not {type(value).__name__}"
+        )
+    if not value > 0:
+        raise RuntimeError(f"{where}: 'timeout_s' is {value!r}; it must be above zero")
+    return float(value)
+
+
+def _pool_cap(table: Mapping[str, Any], where: str) -> int:
+    """Check ``pool_cap``: a whole number of requests, at least 1 (default 8)."""
+    value = table.get("pool_cap", DEFAULT_EMBEDDING_POOL_CAP)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise RuntimeError(
+            f"{where}: 'pool_cap' must be a whole number, not {type(value).__name__}"
+        )
+    if value < 1:
+        raise RuntimeError(f"{where}: 'pool_cap' is {value!r}; it must be at least 1")
+    return value
+
+
 def _no_stray_keys(table: Mapping[str, Any], allowed: tuple[str, ...], where: str) -> None:
     stray = sorted(set(table) - set(allowed))
     if stray:
@@ -210,14 +275,15 @@ def _parse_steps(raw: Mapping[str, Any], where: str) -> dict[str, Step]:
     for name, value in raw.items():
         if not isinstance(value, Mapping):
             raise RuntimeError(
-                f"{where}: step {name!r} must be a table with tier and reasoning_effort, "
-                f"not {type(value).__name__}"
+                f"{where}: step {name!r} must be a table with tier, reasoning_effort "
+                f"and timeout_s, not {type(value).__name__}"
             )
         here = f"{where} step {name!r}"
-        _no_stray_keys(value, ("tier", "reasoning_effort"), here)
+        _no_stray_keys(value, ("tier", "reasoning_effort", "timeout_s"), here)
         steps[name] = Step(
             tier=str(_require(value, "tier", here)),
             reasoning_effort=_choice(value, "reasoning_effort", here, REASONING_EFFORTS),
+            timeout_s=_timeout(_require(value, "timeout_s", here), here),
         )
     return steps
 
@@ -232,7 +298,7 @@ def _parse_exception(name: str, value: Any, where: str) -> StepException:
             f"{where}: step {name!r} must be a string or a table, not {type(value).__name__}"
         )
     here = f"{where} step {name!r}"
-    _no_stray_keys(value, ("model", "reasoning_effort"), here)
+    _no_stray_keys(value, ("model", "reasoning_effort", "timeout_s"), here)
     if not value:
         raise RuntimeError(f"{here}: an empty table changes nothing; remove it")
     effort = value.get("reasoning_effort")
@@ -243,9 +309,11 @@ def _parse_exception(name: str, value: Any, where: str) -> StepException:
     model = value.get("model")
     if model is not None and not model:
         raise RuntimeError(f"{here}: 'model' is empty; name a tier or a model id, or drop the key")
+    timeout = value.get("timeout_s")
     return StepException(
         model=str(model) if model is not None else None,
         reasoning_effort=str(effort) if effort is not None else None,
+        timeout_s=_timeout(timeout, here) if timeout is not None else None,
     )
 
 
@@ -283,7 +351,8 @@ def load_route(
     Raises:
         RuntimeError: On a missing or malformed file, a section that is not a
             table, an unknown route, a route missing a section, a step without a
-            tier or effort, an effort value the providers do not accept, a step
+            tier, effort or timeout, a timeout that is not a number above zero,
+            an effort value the providers do not accept, a step
             default naming an undefined tier, a step exception naming an unknown
             step or carrying a stray key, a leftover ``knobs`` table (retired by
             task 056), a backend name the code does not implement, or an overlay
@@ -322,6 +391,9 @@ def load_route(
             raise RuntimeError(f"{where}.steps: unknown step {step_name!r}")
         exceptions[step_name] = _parse_exception(step_name, value, f"{where}.steps")
     embeddings_table = _table(table, "embeddings", where)
+    _no_stray_keys(
+        embeddings_table, ("backend", "model", "profile", "pool_cap"), f"{where}.embeddings"
+    )
     search_table = _table(table, "search_queries", where)
     search_backend = _choice(
         search_table, "backend", f"{where}.search_queries", SEARCH_QUERIES_BACKENDS
@@ -348,6 +420,7 @@ def load_route(
             backend=_choice(embeddings_table, "backend", f"{where}.embeddings", EMBEDDING_BACKENDS),
             model=_require(embeddings_table, "model", f"{where}.embeddings"),
             profile=_require(embeddings_table, "profile", f"{where}.embeddings"),
+            pool_cap=_pool_cap(embeddings_table, f"{where}.embeddings"),
         ),
         search_queries=SearchQueries(
             backend=search_backend,

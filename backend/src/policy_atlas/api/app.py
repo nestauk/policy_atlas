@@ -23,7 +23,7 @@ from starlette.middleware.cors import CORSMiddleware
 from policy_atlas.api import continuation
 from policy_atlas.api.auth import JwtAuthenticator
 from policy_atlas.api.contract import ErrorBody, ErrorEnvelope
-from policy_atlas.api.settings import Settings, load_settings
+from policy_atlas.api.settings import IngestMode, Settings, load_settings
 from policy_atlas.core import tracing
 from policy_atlas.core.logging import configure_logging
 
@@ -322,6 +322,8 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
                     candidate.task_id,
                     candidate.capability_run_id,
                     claim_first=True,
+                    ingest_mode=settings.ingest_mode,
+                    ingest_queue_url=settings.ingest_queue_url,
                 )
             for candidate in report.reexecute:
                 # Already claimed before the previous process died, never
@@ -332,6 +334,8 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
                     candidate.task_id,
                     candidate.capability_run_id,
                     claim_first=False,
+                    ingest_mode=settings.ingest_mode,
+                    ingest_queue_url=settings.ingest_queue_url,
                 )
             yield
         finally:
@@ -348,7 +352,13 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
 
 
 def _claim_and_execute(
-    engine: Engine, task_id: Any, capability_run_id: Any, *, claim_first: bool
+    engine: Engine,
+    task_id: Any,
+    capability_run_id: Any,
+    *,
+    claim_first: bool,
+    ingest_mode: IngestMode = "in_process",
+    ingest_queue_url: str | None = None,
 ) -> None:
     """Claim (unless pre-claimed) and execute one durable continuation.
 
@@ -357,7 +367,7 @@ def _claim_and_execute(
     bundle and NullIO — a redispatched real continuation executed against
     deterministic stubs and auto-continued every subsequent pause).
     """
-    from policy_atlas.api.deps import get_agent_backend, get_runner_backends
+    from policy_atlas.api.deps import get_agent_backend, runner_backends_for
     from policy_atlas.api.run_io import ParkIO
 
     try:
@@ -373,7 +383,9 @@ def _claim_and_execute(
             engine,
             task_id=task_id,
             capability_run_id=capability_run_id,
-            backends=get_runner_backends(),
+            backends=runner_backends_for(
+                engine, ingest_mode=ingest_mode, ingest_queue_url=ingest_queue_url
+            ),
             io=ParkIO(),
             agent=get_agent_backend(),
         )

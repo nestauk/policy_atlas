@@ -8,15 +8,16 @@
 # is unset, "openai-direct" is used: OpenAI called directly.
 #
 # Three layers:
-#   [steps]            every step, once: its default tier and its reasoning
+#   [steps]            every step, once: its default tier, its reasoning
 #                      effort ("none", "low", "medium", "high" or "xhigh";
 #                      "none" means the model does not think before answering)
+#                      and its timeout_s (see below)
 #   [routes.<name>]    the model for each tier, embeddings, and the
 #                      search-queries backend
 #   [routes.<name>.steps]  optional: a step that should not follow its default
 #                      on this route. A bare string is a tier name or a model
-#                      id. A table may carry `model` (tier name or model id)
-#                      and/or `reasoning_effort`.
+#                      id. A table may carry `model` (tier name or model id),
+#                      `reasoning_effort` and/or `timeout_s`.
 #
 # Reasoning effort is per step (task 056, D4). "medium" is the provider's own
 # default, written out so every step says what it sends. Terra-class models
@@ -24,77 +25,91 @@
 # writer and chat steps carry "none". Sol-class models refuse "none"; their
 # lowest accepted value is "low".
 #
+# timeout_s is how many seconds one request of the step may take before the app
+# gives up on it (task 057, D12). It is applied to each request, not to the
+# shared client. A request that is cut off, or that fails for a passing reason
+# (a dropped connection, "too many requests", a server error), is tried again,
+# up to MODEL_CALL_ATTEMPTS attempts (three today; task 057 review: code-review 9),
+# and each try is recorded as its own generation in Langfuse with the
+# step name and the try number. The values in [steps] are the timeouts each
+# call site had in code before task 057 (60, 120 or 30 seconds), so a route
+# that sets nothing keeps them. Streamed chat is the exception to the retry:
+# its timeout bounds the wait between chunks, and it is never tried twice.
+#
 # To try models without editing this file, point an env variable
 # POLICY_ATLAS_MODEL_ROUTE_FILE at a second file with its own [routes.*] tables;
 # they replace or add routes by name. [steps] always comes from this file.
 #
 # Design: docs/tasks/053-bedrock-local-route/contract.md (D3), ADR 0041, and
-# docs/tasks/056-cost-latency/contract.md (D2, D4, D9), ADR 0042.
+# docs/tasks/056-cost-latency/contract.md (D2, D4, D9), ADR 0042, and
+# docs/tasks/057-queued-ingest/contract.md (D12), ADR 0043.
 
 [steps]
 # --- Evidence search: assess ---------------------------------------------
-classify_document = { tier = "fast", reasoning_effort = "medium" }   # was high; medium measured within noise, 19% cheaper (task 056 P5)
-screen_abstract = { tier = "fast", reasoning_effort = "medium" }
-screen_full = { tier = "fast", reasoning_effort = "medium" }
+classify_document = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }   # was high; medium measured within noise, 19% cheaper (task 056 P5)
+screen_abstract = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+screen_full = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
 # --- Evidence search: corpus, group ---------------------------------------
-select_rerank = { tier = "fast", reasoning_effort = "medium" }
-characterise_discover = { tier = "fast", reasoning_effort = "medium" }
-characterise_assign = { tier = "fast", reasoning_effort = "medium" }
-group_discover = { tier = "fast", reasoning_effort = "medium" }
-group_assign = { tier = "fast", reasoning_effort = "medium" }
+select_rerank = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+characterise_discover = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+characterise_assign = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+group_discover = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }
+group_assign = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }
 # --- Evidence search: extract ----------------------------------------------
-extract_iof_findings = { tier = "fast", reasoning_effort = "medium" }
-extract_icf_findings = { tier = "fast", reasoning_effort = "medium" }
-extract_interventions = { tier = "fast", reasoning_effort = "medium" }
-extract_vet_iof_findings = { tier = "fast", reasoning_effort = "medium" }
-extract_vet_icf_findings = { tier = "fast", reasoning_effort = "medium" }
-extract_annotate_relevance = { tier = "fast", reasoning_effort = "high" }   # no stored calls to measure (task 056 P5); stays high
+extract_iof_findings = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }   # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
+extract_icf_findings = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }   # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
+extract_interventions = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+extract_vet_iof_findings = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }   # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
+extract_vet_icf_findings = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }   # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
+extract_annotate_relevance = { tier = "fast", reasoning_effort = "high", timeout_s = 60 }   # no stored calls to measure (task 056 P5); stays high
 # --- Evidence search: search ------------------------------------------------
-search_generate_queries = { tier = "fast", reasoning_effort = "medium" }
-search_reformulate = { tier = "fast", reasoning_effort = "medium" }
-search_suggest = { tier = "fast", reasoning_effort = "medium" }
-search_queries_v2_openalex = { tier = "fast", reasoning_effort = "medium" }
-search_queries_v2_overton = { tier = "fast", reasoning_effort = "medium" }
-search_reformulate_v2_openalex = { tier = "fast", reasoning_effort = "medium" }
-search_reformulate_v2_overton = { tier = "fast", reasoning_effort = "medium" }
+search_generate_queries = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+search_reformulate = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+search_suggest = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+search_queries_v2_openalex = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+search_queries_v2_overton = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+search_reformulate_v2_openalex = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+search_reformulate_v2_overton = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
 # --- Evidence search: synthesise (the writer; Terra needs "none" for tools) --
-synthesise_propose_sections = { tier = "standard", reasoning_effort = "none" }
-synthesise_write_block_summary = { tier = "standard", reasoning_effort = "none" }
-synthesise_write_artefact_summary = { tier = "standard", reasoning_effort = "none" }
-synthesise_judge_summary = { tier = "standard", reasoning_effort = "none" }
-synthesise_section_turn = { tier = "standard", reasoning_effort = "none" }   # section turns and the repair share this step (D10)
-synthesise_write_key_findings = { tier = "standard", reasoning_effort = "none" }
-synthesise_write_case_studies = { tier = "standard", reasoning_effort = "none" }
-synthesise_write_source_note = { tier = "fast", reasoning_effort = "medium" }
-synthesise_write_intro = { tier = "fast", reasoning_effort = "medium" }
-judge_grounding = { tier = "fast", reasoning_effort = "medium" }
+synthesise_propose_sections = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
+synthesise_write_block_summary = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
+synthesise_write_artefact_summary = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
+synthesise_judge_summary = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
+synthesise_section_turn = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }   # section turns and the repair share this step (D10)
+synthesise_write_key_findings = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
+synthesise_write_case_studies = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
+synthesise_write_source_note = { tier = "fast", reasoning_effort = "medium", timeout_s = 30 }
+synthesise_write_intro = { tier = "fast", reasoning_effort = "medium", timeout_s = 30 }
+judge_grounding = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }
 # --- Conversation and agents -----------------------------------------------
-chat = { tier = "standard", reasoning_effort = "none" }   # the tool turn, the prose stream and the final parse share this step
-agent_route = { tier = "standard", reasoning_effort = "medium" }
-agent_triage = { tier = "fast", reasoning_effort = "medium" }
-agent_decide = { tier = "standard", reasoning_effort = "medium" }
-agent_gate_sort = { tier = "fast", reasoning_effort = "medium" }
-agent_longlist_sort = { tier = "fast", reasoning_effort = "medium" }
-agent_option_design = { tier = "standard", reasoning_effort = "medium" }
-agent_suggest = { tier = "standard", reasoning_effort = "medium" }
-task_agent_turn = { tier = "standard", reasoning_effort = "medium" }
+chat = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }   # the tool turn, the prose stream and the final parse share this step
+agent_route = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }
+agent_triage = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+agent_decide = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }
+agent_gate_sort = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+agent_longlist_sort = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+agent_option_design = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }
+agent_suggest = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }
+task_agent_turn = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }
 # --- Options scoping (the judgment calls run on the strongest tier) ----------
-task_agent_scoping_turn = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-longlist_discover = { tier = "frontier", reasoning_effort = "low" }
-longlist_assign = { tier = "fast", reasoning_effort = "medium" }
-longlist_themes = { tier = "standard", reasoning_effort = "medium" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-longlist_assign_themes = { tier = "fast", reasoning_effort = "medium" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-longlist_type = { tier = "fast", reasoning_effort = "medium" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-longlist_constrain = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-longlist_distinct = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-longlist_authority = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-longlist_shortlist = { tier = "frontier", reasoning_effort = "low" }
-option_profile_line = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-option_profile_potential_impact = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-option_profile_ambition = { tier = "standard", reasoning_effort = "none" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-option_profile_setting = { tier = "standard", reasoning_effort = "high" }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-option_profile_fold = { tier = "fast", reasoning_effort = "medium" }
-option_profile_place_sentences = { tier = "fast", reasoning_effort = "medium" }
+task_agent_scoping_turn = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+# timeout_s 60, not 300 (task 056, owner 2026-11-02): the longlist and profile calls take 5 to 20 s, so a
+# stalled request is retried after a minute, not five.
+longlist_discover = { tier = "frontier", reasoning_effort = "low", timeout_s = 60 }
+longlist_assign = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+longlist_themes = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_assign_themes = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_type = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_constrain = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_distinct = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_authority = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_shortlist = { tier = "frontier", reasoning_effort = "low", timeout_s = 60 }
+option_profile_line = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_potential_impact = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_ambition = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_setting = { tier = "standard", reasoning_effort = "high", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_fold = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+option_profile_place_sentences = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
 
 # ---------------------------------------------------------------------------
 [routes.openai-direct]
@@ -112,6 +127,9 @@ frontier = "gpt-6.1-sol"
 backend = "openai"
 model = "text-embedding-3-small"
 profile = "openai_text_embedding_3_small_v1"
+# Most embedding requests the full-text stage keeps in flight (task 057, D6):
+# the pool starts at 2, halves on throttling and adds one after 5 clean batches.
+pool_cap = 8
 
 [routes.openai-direct.search_queries]
 # Which code path writes the search queries (the one step with two
@@ -138,9 +156,43 @@ frontier = "global.openai.gpt-6.1-sol"
 backend = "cohere"
 model = "eu.cohere.embed-v4:0"
 profile = "cohere_embed_v4_1536_v1"
+# Most embedding requests the full-text stage keeps in flight (task 057, D6):
+# the pool starts at 2, halves on throttling and adds one after 5 clean batches.
+pool_cap = 8
 
 [routes.bedrock.search_queries]
 backend = "openai"   # Luna through Bedrock's OpenAI-format address, like every other step
+
+[routes.bedrock.steps]
+# Per-step timeouts on Bedrock (task 057, contract D12): 2 x the step's healthy 99th
+# percentile from at least 30 traced calls since 2026-11-02, floor 15 s (owner ruling
+# 2026-11-03, after the build's n >= 100 / 5 s first pass); a step with fewer calls keeps
+# its [steps] value, and every value is rounded up to a multiple of 5 s (owner). Derived by
+# scripts/step_timeouts.py --min-n 30 --floor 15 --round-to 5; the table
+# with sample counts is in docs/tasks/057-queued-ingest/verification.md. A stalled call
+# now costs this long, then two traced retries, instead of 60 or 120 s. The fan-out steps
+# (classify, the two screens) run 48 wide, so their 15 s floor also covers queueing.
+classify_document = { timeout_s = 15 }               # n 4739, p99 5.3 s (floor)
+screen_abstract = { timeout_s = 15 }                 # n 7876, p99 3.3 s (floor)
+screen_full = { timeout_s = 15 }                     # n 921, p99 3.9 s (floor)
+select_rerank = { timeout_s = 25 }                   # n 85, p99 11.7 s
+characterise_assign = { timeout_s = 30 }             # n 57, p99 12.7 s
+extract_interventions = { timeout_s = 35 }           # n 1415, p99 16.4 s
+search_generate_queries = { timeout_s = 15 }         # n 95, p99 3.5 s (floor)
+synthesise_propose_sections = { timeout_s = 15 }     # n 30, p99 4.3 s (floor)
+synthesise_write_block_summary = { timeout_s = 15 }  # n 254, p99 2.7 s (floor)
+synthesise_judge_summary = { timeout_s = 15 }        # n 277, p99 2.3 s (floor)
+synthesise_section_turn = { timeout_s = 25 }         # n 424, p99 11.0 s (repair shares the step)
+synthesise_write_source_note = { timeout_s = 15 }    # n 33, p99 1.8 s (floor)
+longlist_assign = { timeout_s = 50 }                 # n 71, p99 22.6 s
+option_profile_line = { timeout_s = 85 }             # n 65, p99 41.7 s (above today's 60)
+option_profile_place_sentences = { timeout_s = 35 }  # n 111, p99 17.1 s
+# The grounding judge runs at low effort on this route (task 057, D14): half the wall per
+# call at 0.8x the cost, agreement with the medium judge at the judge's own noise floor;
+# the synthesis refinement task revisits it with a labelled set of disputed claims. Its
+# timeout was 40 s (2 x p99 at medium) and was raised once to 80 s after a retry was also
+# cut on the fixed questions (round b, 2026-11-03); re-measured at low effort.
+judge_grounding = { reasoning_effort = "low", timeout_s = 80 }
 
 # ---------------------------------------------------------------------------
 [routes.bedrock-claude]
@@ -161,6 +213,9 @@ frontier = "global.openai.gpt-6.1-sol"
 backend = "cohere"
 model = "eu.cohere.embed-v4:0"
 profile = "cohere_embed_v4_1536_v1"
+# Most embedding requests the full-text stage keeps in flight (task 057, D6):
+# the pool starts at 2, halves on throttling and adds one after 5 clean batches.
+pool_cap = 8
 
 [routes.bedrock-claude.search_queries]
 backend = "claude"

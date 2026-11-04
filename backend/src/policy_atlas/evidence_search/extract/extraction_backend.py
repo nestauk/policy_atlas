@@ -12,6 +12,7 @@ import structlog
 from langfuse import Langfuse
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.extract.icf_prompt import (
@@ -128,15 +129,7 @@ class OpenAIExtractionBackend:
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAIExtractionBackend",
-            # 60 s, not 300 (task 056, owner 2026-11-02): the median extract call is 5 s and
-            # the pre-GPT-6 tail 18 s; a request that stalls at the provider is retried after
-            # a minute instead of five, so one stall no longer parks a worker for ten minutes.
-            timeout=120.0,  # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIExtractionBackend")
         self._langfuse_client = langfuse_client
 
     def _extract_once(
@@ -153,6 +146,7 @@ class OpenAIExtractionBackend:
             model=EXTRACTION_MODEL,
             reasoning_effort=EXTRACTION_EFFORT,
             prompt_cache=cache_mode_for("extract_iof_findings"),
+            timeout_s=route().timeout_for("extract_iof_findings"),
             max_completion_tokens=EXTRACT_MAX_OUTPUT_TOKENS,
         )
 
@@ -187,10 +181,10 @@ class OpenAIExtractionBackend:
                 },
             )
 
-        response, usage = tracing.traced_call(
+        response, usage = tracing.traced_attempts(
             self._langfuse_client,
             name="extract:iof_findings",
-            as_type="generation",
+            step="extract_iof_findings",
             call=lambda: self._extract_once(payload),
             update=_update,
         )
@@ -217,15 +211,7 @@ class OpenAIICFExtractionBackend:
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAIICFExtractionBackend",
-            # 60 s, not 300 (task 056, owner 2026-11-02): the median extract call is 5 s and
-            # the pre-GPT-6 tail 18 s; a request that stalls at the provider is retried after
-            # a minute instead of five, so one stall no longer parks a worker for ten minutes.
-            timeout=120.0,  # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIICFExtractionBackend")
         self._langfuse_client = langfuse_client
 
     def _extract_once(
@@ -242,6 +228,7 @@ class OpenAIICFExtractionBackend:
             model=ICF_EXTRACTION_MODEL,
             reasoning_effort=ICF_EXTRACTION_EFFORT,
             prompt_cache=cache_mode_for("extract_icf_findings"),
+            timeout_s=route().timeout_for("extract_icf_findings"),
             max_completion_tokens=ICF_EXTRACT_MAX_OUTPUT_TOKENS,
         )
 
@@ -280,10 +267,10 @@ class OpenAIICFExtractionBackend:
                 },
             )
 
-        response, usage = tracing.traced_call(
+        response, usage = tracing.traced_attempts(
             self._langfuse_client,
             name="extract:icf_findings",
-            as_type="generation",
+            step="extract_icf_findings",
             call=lambda: self._extract_once(payload),
             update=_update,
         )
@@ -464,15 +451,7 @@ class OpenAIInterventionsBackend:
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAIInterventionsBackend",
-            # 60 s, not 300 (task 056, owner 2026-11-02): the median extract call is 5 s and
-            # the pre-GPT-6 tail 18 s; a request that stalls at the provider is retried after
-            # a minute instead of five, so one stall no longer parks a worker for ten minutes.
-            timeout=60.0,
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIInterventionsBackend")
         self._langfuse_client = langfuse_client
 
     def extract(
@@ -516,10 +495,10 @@ class OpenAIInterventionsBackend:
                 },
             )
 
-        response, usage = tracing.traced_call(
+        response, usage = tracing.traced_attempts(
             self._langfuse_client,
             name="extract:interventions",
-            as_type="generation",
+            step="extract_interventions",
             call=lambda: parse_structured(
                 self._client,
                 messages=messages,
@@ -529,6 +508,7 @@ class OpenAIInterventionsBackend:
                 model=INTERVENTIONS_MODEL,
                 reasoning_effort=INTERVENTIONS_EFFORT,
                 prompt_cache=cache_mode_for("extract_interventions"),
+                timeout_s=route().timeout_for("extract_interventions"),
                 max_completion_tokens=INTERVENTIONS_MAX_OUTPUT_TOKENS,
             ),
             update=_update,

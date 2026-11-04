@@ -18,6 +18,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ValidationError
 
 from policy_atlas.core import tracing
+from policy_atlas.core.embeddings import BEDROCK_CLIENT_CONFIG
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.usage import (
@@ -155,12 +156,7 @@ class OpenAISearchGenerationBackend:
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAISearchGenerationBackend",
-            timeout=60.0,
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAISearchGenerationBackend")
         self._langfuse_client = langfuse_client
 
     def _parse_once(
@@ -170,6 +166,7 @@ class OpenAISearchGenerationBackend:
         model: str,
         reasoning_effort: str,
         prompt_cache: PromptCache,
+        step: str,
         response_format: type[WireT],
         usage_event: str,
         label: str,
@@ -183,6 +180,7 @@ class OpenAISearchGenerationBackend:
             model=model,
             reasoning_effort=reasoning_effort,
             prompt_cache=prompt_cache,
+            timeout_s=route().timeout_for(step),
             max_completion_tokens=SEARCH_GEN_MAX_OUTPUT_TOKENS,
         )
 
@@ -193,6 +191,7 @@ class OpenAISearchGenerationBackend:
         model: str,
         reasoning_effort: str,
         prompt_cache: PromptCache,
+        step: str,
         response_format: type[WireT],
         prompt_version: str,
         usage_event: str,
@@ -216,15 +215,16 @@ class OpenAISearchGenerationBackend:
                 },
             )
 
-        wire, usage = tracing.traced_call(
+        wire, usage = tracing.traced_attempts(
             langfuse_client,
             name=trace_name,
-            as_type="generation",
+            step=step,
             call=lambda: self._parse_once(
                 messages=messages,
                 model=model,
                 reasoning_effort=reasoning_effort,
                 prompt_cache=prompt_cache,
+                step=step,
                 response_format=response_format,
                 usage_event=usage_event,
                 label=label,
@@ -250,6 +250,7 @@ class OpenAISearchGenerationBackend:
             model=SEARCH_QUERIES_MODEL,
             reasoning_effort=SEARCH_QUERIES_EFFORT,
             prompt_cache=cache_mode_for("search_generate_queries"),
+            step="search_generate_queries",
             response_format=SearchQueriesWire,
             prompt_version=SEARCH_QUERIES_PROMPT_VERSION,
             usage_event="search_generation.queries.usage",
@@ -275,6 +276,7 @@ class OpenAISearchGenerationBackend:
             model=SEARCH_REFORMULATE_MODEL,
             reasoning_effort=SEARCH_REFORMULATE_EFFORT,
             prompt_cache=cache_mode_for("search_reformulate"),
+            step="search_reformulate",
             response_format=SearchQueriesWire,
             prompt_version=SEARCH_REFORMULATE_PROMPT_VERSION,
             usage_event="search_generation.reformulate.usage",
@@ -300,6 +302,7 @@ class OpenAISearchGenerationBackend:
             model=SEARCH_SUGGEST_MODEL,
             reasoning_effort=SEARCH_SUGGEST_EFFORT,
             prompt_cache=cache_mode_for("search_suggest"),
+            step="search_suggest",
             response_format=SearchSuggestWire,
             prompt_version=SEARCH_SUGGEST_PROMPT_VERSION,
             usage_event="search_generation.suggest.usage",
@@ -332,6 +335,7 @@ class ClaudeSearchGenerationBackend:
         self._client = client or boto3.client(
             "bedrock-runtime",
             region_name=os.environ.get("AWS_REGION") or "eu-west-2",
+            config=BEDROCK_CLIENT_CONFIG,
         )
         self._inner = inner or OpenAISearchGenerationBackend(
             api_key,
@@ -509,6 +513,7 @@ class V2SearchGenerationBackend(OpenAISearchGenerationBackend):
         model: str,
         reasoning_effort: str,
         prompt_cache: PromptCache,
+        step: str,
         prompt_version: str,
         usage_event: str,
         trace_prefix: str,
@@ -523,6 +528,7 @@ class V2SearchGenerationBackend(OpenAISearchGenerationBackend):
                 model=model,
                 reasoning_effort=reasoning_effort,
                 prompt_cache=prompt_cache,
+                step=step,
                 response_format=V2SingleQueryWire,
                 prompt_version=prompt_version,
                 usage_event=usage_event,
@@ -548,6 +554,7 @@ class V2SearchGenerationBackend(OpenAISearchGenerationBackend):
             model=SEARCH_QUERIES_V2_OPENALEX_MODEL,
             reasoning_effort=SEARCH_QUERIES_V2_OPENALEX_EFFORT,
             prompt_cache=cache_mode_for("search_queries_v2_openalex"),
+            step="search_queries_v2_openalex",
             prompt_version=SEARCH_QUERIES_V2_OPENALEX_PROMPT_VERSION,
             usage_event="search_generation.v2.openalex.queries.usage",
             trace_prefix="search_queries_v2_openalex",
@@ -559,6 +566,7 @@ class V2SearchGenerationBackend(OpenAISearchGenerationBackend):
             model=SEARCH_QUERIES_V2_OVERTON_MODEL,
             reasoning_effort=SEARCH_QUERIES_V2_OVERTON_EFFORT,
             prompt_cache=cache_mode_for("search_queries_v2_overton"),
+            step="search_queries_v2_overton",
             prompt_version=SEARCH_QUERIES_V2_OVERTON_PROMPT_VERSION,
             usage_event="search_generation.v2.overton.queries.usage",
             trace_prefix="search_queries_v2_overton",
@@ -587,6 +595,7 @@ class V2SearchGenerationBackend(OpenAISearchGenerationBackend):
             model=SEARCH_REFORMULATE_V2_OPENALEX_MODEL,
             reasoning_effort=SEARCH_REFORMULATE_V2_OPENALEX_EFFORT,
             prompt_cache=cache_mode_for("search_reformulate_v2_openalex"),
+            step="search_reformulate_v2_openalex",
             prompt_version=SEARCH_QUERIES_V2_OPENALEX_PROMPT_VERSION,
             usage_event="search_generation.v2.openalex.reformulate.usage",
             trace_prefix=f"search_reformulate_v2_openalex:r{payload.round_index}",
@@ -598,6 +607,7 @@ class V2SearchGenerationBackend(OpenAISearchGenerationBackend):
             model=SEARCH_REFORMULATE_V2_OVERTON_MODEL,
             reasoning_effort=SEARCH_REFORMULATE_V2_OVERTON_EFFORT,
             prompt_cache=cache_mode_for("search_reformulate_v2_overton"),
+            step="search_reformulate_v2_overton",
             prompt_version=SEARCH_QUERIES_V2_OVERTON_PROMPT_VERSION,
             usage_event="search_generation.v2.overton.reformulate.usage",
             trace_prefix=f"search_reformulate_v2_overton:r{payload.round_index}",

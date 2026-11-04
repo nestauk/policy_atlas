@@ -116,6 +116,7 @@ _NAMED_KEYS = frozenset(
         "max_completion_tokens",
         "stream",
         "extra_body",
+        "timeout",
         "messages",
     }
 )
@@ -853,6 +854,7 @@ def _serialise(site: _Site, kwargs: dict[str, Any], trace_name: str | None) -> d
         "max_completion_tokens": kwargs.get("max_completion_tokens"),
         "stream": kwargs.get("stream"),
         "extra_body": _json_value(kwargs["extra_body"]) if "extra_body" in kwargs else None,
+        "timeout": kwargs.get("timeout"),
         "system_shape": _system_shape(kwargs.get("messages")),
         "other_keys": sorted(set(kwargs) - _NAMED_KEYS),
     }

@@ -51,37 +51,42 @@ def _parse(prompt_cache: Any) -> dict[str, Any]:
         model="gpt-test",
         reasoning_effort="low",
         prompt_cache=prompt_cache,
+        timeout_s=45,
     )
     assert parsed == _Answer(text="ok")
     return completions.kwargs
 
 
 def test_openai_kwargs_off_adds_the_extra_body() -> None:
-    assert openai_kwargs("m", reasoning_effort="low", prompt_cache="off") == {
+    assert openai_kwargs("m", reasoning_effort="low", prompt_cache="off", timeout_s=60) == {
         "model": "m",
         "reasoning_effort": "low",
+        "timeout": 60,
         "extra_body": _OFF_BODY,
     }
 
 
 def test_openai_kwargs_breakpoint_adds_the_extra_body_too() -> None:
     """A breakpoint only limits what the provider stores if its own storing is off."""
-    assert openai_kwargs("m", reasoning_effort="low", prompt_cache="breakpoint") == {
+    assert openai_kwargs("m", reasoning_effort="low", prompt_cache="breakpoint", timeout_s=60) == {
         "model": "m",
         "reasoning_effort": "low",
+        "timeout": 60,
         "extra_body": _OFF_BODY,
     }
 
 
 def test_openai_kwargs_auto_adds_nothing() -> None:
-    assert openai_kwargs("m", reasoning_effort="low", prompt_cache="auto") == {
+    assert openai_kwargs("m", reasoning_effort="low", prompt_cache="auto", timeout_s=60) == {
         "model": "m",
         "reasoning_effort": "low",
+        "timeout": 60,
     }
 
 
 def test_openai_kwargs_auto_sends_no_extra_body() -> None:
-    assert "extra_body" not in openai_kwargs("m", reasoning_effort="low", prompt_cache="auto")
+    kwargs = openai_kwargs("m", reasoning_effort="low", prompt_cache="auto", timeout_s=60)
+    assert "extra_body" not in kwargs
 
 
 def test_with_system_breakpoint_rewrites_only_the_first_system_message() -> None:
@@ -136,6 +141,11 @@ def test_parse_structured_auto_sends_messages_unchanged() -> None:
     kwargs = _parse("auto")
     assert kwargs["messages"] is _MESSAGES
     assert "extra_body" not in kwargs
+
+
+def test_parse_structured_sends_the_step_timeout_per_request() -> None:
+    """The timeout rides on the request, not the client (task 057, D12)."""
+    assert _parse("auto")["timeout"] == 45
 
 
 def test_cache_mode_for_known_and_unknown_steps() -> None:

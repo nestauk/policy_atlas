@@ -28,14 +28,15 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from policy_atlas.evidence_search.assess.classify import MAX_CONCURRENT_CLASSIFY
-from policy_atlas.evidence_search.sourcing.ingest_full_text import DEFAULT_MAX_WORKERS
+
+# INGEST_SLOTS lives beside the parse worker it bounds (task 057: the cloud
+# function's handler must not import the runtime); re-exported here.
+from policy_atlas.evidence_search.sourcing.ingest_full_text import INGEST_SLOTS as INGEST_SLOTS
 from policy_atlas.runtime.scoping_plan import OPTION_SEARCH_WIDTH
 
 #: Classification provider calls in flight across every walk in the process.
 CLASSIFY_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_CLASSIFY)
 
-#: Live parse-job worker processes across every walk in the process.
-INGEST_SLOTS = threading.BoundedSemaphore(DEFAULT_MAX_WORKERS)
 
 @functools.cache
 def option_search_pool() -> ThreadPoolExecutor:

@@ -184,7 +184,9 @@ OPTION_SEARCH_TARGET = 10
 OPTION_SEARCH_CAP = 15
 
 #: How many option searches run at once (the cross-walk bound's width).
-OPTION_SEARCH_WIDTH = 4
+#: 10 since task 057 (N10b; was 4): each child walk holds one database
+#: connection, so the width is part of the connection budget (plan P17).
+OPTION_SEARCH_WIDTH = 10
 
 #: The suggest step proposes at most this many options (D7), within the cap.
 #: The prompt module's constant is the value; re-exported here beside the

@@ -4,6 +4,8 @@ No deferred columns (no same_content_as or lineage key).
 """
 
 import uuid
+from collections.abc import Callable
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -22,11 +24,77 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    cast,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.engine import Dialect
+from sqlalchemy.sql.elements import BindParameter
+from sqlalchemy.types import UserDefinedType
 
 metadata = MetaData()
+
+
+def vector_literal(value: Any) -> str:
+    """Return pgvector's text form of a vector, ``'[a,b,...]'``.
+
+    One formatter for the column's bind processor and for a query vector passed
+    as a literal (task 057 review, code-review 7), so the stored and the searched
+    vectors are always written the same way.
+    """
+    return "[" + ",".join(repr(float(v)) for v in value) + "]"
+
+
+class Vector(UserDefinedType[list[float]]):
+    """The pgvector ``vector(n)`` column type, without the pgvector Python package.
+
+    pgvector is a PostgreSQL extension that stores a list of numbers (an embedding)
+    in a compact binary form and compares them in SQL. Task 057 adds no Python
+    library for it (contract G3): a vector goes to the database as text such as
+    ``'[0.1,0.2]'``, cast to ``vector(n)`` in the SQL, and comes back as the same
+    text form, which this type parses into a list of floats. The database keeps
+    single-precision (float32) numbers, so a value read back can differ from the
+    one sent after about the seventh significant digit.
+
+    Args:
+        dimensions: The number of values every vector in the column holds.
+    """
+
+    cache_ok = True
+
+    def __init__(self, dimensions: int) -> None:
+        self.dimensions = dimensions
+
+    def get_col_spec(self, **kw: Any) -> str:
+        """Return the column type as PostgreSQL spells it, e.g. ``vector(1536)``."""
+        return f"vector({self.dimensions})"
+
+    def bind_expression(self, bindvalue: BindParameter[list[float]]) -> Any:
+        """Cast the bound text to ``vector(n)`` in the SQL itself."""
+        return cast(bindvalue, self)
+
+    def bind_processor(self, dialect: Dialect) -> Callable[[Any], str | None]:
+        """Turn a list of floats into pgvector's text form, ``'[a,b,...]'``."""
+
+        def process(value: Any) -> str | None:
+            if value is None:
+                return None
+            return vector_literal(value)
+
+        return process
+
+    def result_processor(
+        self, dialect: Dialect, coltype: object
+    ) -> Callable[[Any], list[float] | None]:
+        """Parse pgvector's text form back into a list of floats."""
+
+        def process(value: Any) -> list[float] | None:
+            if value is None:
+                return None
+            body = str(value).strip()[1:-1]
+            return [float(v) for v in body.split(",")] if body else []
+
+        return process
 
 # Task 033 tenancy: an organisation sits above the entity hierarchy, and a row's
 # `org_id` is NULL until its owner is enrolled. NULL never matches NULL — the org
@@ -302,6 +370,21 @@ source_snapshot = Table(
     Column("source_locator", Text, nullable=False),
     Column("metadata", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    # Task 057 (D2): the document-store key. body_hash is the SHA-256 of the fetched
+    # bytes before parsing; null on envelope snapshots and on full-text snapshots
+    # made before task 057 (their bytes are gone, so they are never reused by key).
+    # parse_profile / segmentation_policy name the parser and the chunking rule.
+    Column("body_hash", Text, nullable=True),
+    Column("parse_profile", Text, nullable=True),
+    Column("segmentation_policy", Text, nullable=True),
+    # One full-text snapshot per store key (partial: rows without a body hash are
+    # exempt). Built CONCURRENTLY by revision a3d8f6c1e2b4.
+    Index(
+        "uq_source_snapshot_store_key",
+        "body_hash", "parse_profile", "segmentation_policy",
+        unique=True,
+        postgresql_where=text("body_hash IS NOT NULL"),
+    ),
     # No task_id — identity is content, not task.
 )
 
@@ -332,11 +415,18 @@ task_source_snapshot = Table(
     ),
     Column("full_text_status", Text, nullable=False, server_default="not_attempted"),
     Column("full_text_error", Text, nullable=True),
+    # Task 057 (N9, owner G2 addition): per-task breadcrumbs that used to sit in the
+    # shared full-text snapshot's metadata. The run that ingested this document for
+    # this task, and the address its bytes came from.
+    Column("ingested_by_run_id", UUID(as_uuid=True), nullable=True),
+    Column("fetched_from", Text, nullable=True),
     UniqueConstraint("task_id", "source_snapshot_id", name="uq_task_source_snapshot"),
     # Composite unique target for source_screening_result FK
     UniqueConstraint("task_source_snapshot_id", "task_id", name="uq_tss_id_task"),
     CheckConstraint(
-        "full_text_status IN ('not_attempted', 'ingested', 'fetch_failed', 'parse_failed')",
+        # 'queued' (task 057): handed to the ingest queue, no snapshot and no error yet.
+        "full_text_status IN "
+        "('not_attempted', 'queued', 'ingested', 'fetch_failed', 'parse_failed')",
         name="ck_tss_full_text_status",
     ),
     CheckConstraint(
@@ -706,14 +796,19 @@ chunk_embedding = Table(
     Column("unit_policy", Text, nullable=False),        # e.g. "embedding_unit_policy_v1"
     Column("unit_index", Integer, nullable=False),
     Column("unit_locator", JSONB, nullable=False),      # char offsets into the canonical chunk
-    # Vector as a JSONB float array — code-validated (array, expected dims, finite floats);
-    # pgvector arrives with the retrieve slice, the vectors' first reader (decision 3).
-    Column("vector", JSONB, nullable=False),
+    # Task 057 (N8): the vector in pgvector's binary column (float32), validated in
+    # code before the write (list, 1,536 dims, finite floats), and the unit's
+    # distinct words (core.tokens, sorted) for the word-overlap score. The JSON
+    # ``vector`` column these replaced was dropped by revision 0914321f8de4, which
+    # first checks that every row has an embedding; nullable only by history.
+    Column("embedding", Vector(1536), nullable=True),
+    Column("tokens", ARRAY(Text), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     UniqueConstraint(
         "chunk_id", "embedding_profile", "unit_policy", "unit_index",
         name="uq_chunk_embedding_unit",
     ),
+    Index("ix_chunk_embedding_tokens", "tokens", postgresql_using="gin"),
 )
 
 characterisation_result = Table(

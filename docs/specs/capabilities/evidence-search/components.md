@@ -217,7 +217,16 @@ URLs `blocked`; bot-blocks are never counted as paywalls). Full-text fetch is eg
 mechanical execution of the governed `search` (telemetry
 plane + run-record summary, *not* a per-document audit event). Vectorisation is **eager and
 uniform** (lazy/on-demand rejected — biases retrieval toward what was vectorised early). In v3.0
-Tier-0 ingestion lands as fetch → parse → segment → embed: the embed seam opened in task 009
+Tier-0 ingestion lands as fetch → parse → segment → embed. *As built (task 057, S2,
+2026-11-03):* in the cloud the reading of full texts runs as a **queued job outside the web
+server** (`ingest_mode = queued`): the stage puts one message per document on a queue (two
+ids and a schema number, no URL, no user identifier), a function fetches, parses and writes
+the document into the shared store, and the stage embeds the text as documents land and
+**waits with a deadline** (10 minutes); on laptops and in tests (`ingest_mode = in_process`)
+the same per-document code runs on threads. A document still unread at the deadline is
+`fetch_failed` with reason **`not_ready`**, which sits **outside the access-failure
+vocabulary** (it is not a paywall or a block; the document is retried on the next run) and
+reads as "not read yet". The embed seam opened in task 009
 **ahead of its first reader** (approved exception to "vectorise at the first vector reader" —
 chunk vectors are certain retrieval/synthesis substrate, and landing them with the egress
 gate beat relitigating egress in a third slice). Vectorisation is eager and uniform over all
@@ -489,9 +498,11 @@ on what the run produced:
   never hidden/dropped).
 - ⏸ **Corpus-scale retrieval** (ADR 0009 decision 4): in-corpus chunk grounding
   over the **screened-in corpus** is part of grounded synthesis above (a referenced selection
-  is only a soft ranking prior) — what remains gated on the index-backed `retrieve` slice is
-  retrieval **beyond the in-memory ceiling** (`RETRIEVAL_UNIT_CAP`, fail-closed) or over
-  **unscreened** content, with ADR 0009's recorded risk note.
+  is only a soft ranking prior) — *As built (task 057, S4,
+  2026-11-03):* chunk retrieval is **one SQL query over the store** (pgvector cosine leg and
+  a word-overlap leg, fused by reciprocal rank, at parity with the former in-memory ranking);
+  the Python scope load and its 20,000-unit ceiling are gone. What remains gated is
+  retrieval over **unscreened** content, with ADR 0009's recorded risk note.
 
 ⏸ **Consensus seam:** the *weighted* verdict (strength-weighted "the evidence supports X at
 strength Y") is deferred to the same roll-up seam; candidate mechanism = the deferred

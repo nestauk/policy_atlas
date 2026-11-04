@@ -472,12 +472,8 @@ class OpenAILonglistBackend:
         langfuse_client: Langfuse | None = None,
         session_id: uuid.UUID | None = None,
     ) -> None:
-        # 60 s, not 300 (task 056, owner 2026-11-02): the longlist and profile calls take
-        # 5 to 20 s; a request that stalls at the provider is retried after a minute, not
-        # five (one stalled folding call held a scoping run for a quarter of an hour).
-        self._client = resolve_openai_client(
-            api_key, backend_name="OpenAILonglistBackend", timeout=60.0, max_retries=2
-        )
+        # Each step's request timeout (60 s today, task 056) lives in the route file.
+        self._client = resolve_openai_client(api_key, backend_name="OpenAILonglistBackend")
         self._langfuse_client = langfuse_client
         self._session_id = session_id
 
@@ -500,7 +496,9 @@ class OpenAILonglistBackend:
             messages=messages,
             response_format=response_format,
             model=route().model_for(step),
+            step=step,
             reasoning_effort=route().effort_for(step),
+            timeout_s=route().timeout_for(step),
             prompt_cache=cache_mode_for(step),
             max_output_tokens=max_output_tokens,
             usage_event=f"{name.replace(':', '.')}.usage",

@@ -131,11 +131,11 @@ FULL_REPORT_INTRO_MODEL = route().model_for("synthesise_write_intro")
 
 
 def _step_kwargs(step: str) -> dict[str, Any]:
-    """Return the model and reasoning effort for one synthesis call site.
+    """Return the model, reasoning effort and request timeout for one synthesis call site.
 
-    Both come from the route file (task 056): Terra needs ``"none"`` or
-    tool-bearing and structured-parse calls return 400 (029), and the route
-    file says so on the writer steps.
+    All three come from the route file (tasks 056 and 057): Terra needs
+    ``"none"`` or tool-bearing and structured-parse calls return 400 (029),
+    and the route file says so on the writer steps.
 
     Args:
         step: A step name from the route file's ``[steps]`` table.
@@ -147,6 +147,7 @@ def _step_kwargs(step: str) -> dict[str, Any]:
         route().model_for(step),
         reasoning_effort=route().effort_for(step),
         prompt_cache=cache_mode_for(step),
+        timeout_s=route().timeout_for(step),
     )
 
 
@@ -715,12 +716,7 @@ class OpenAISynthesisBackend:
             api_key: Optional OpenAI API key.
             langfuse_client: Optional Langfuse client for generation spans.
         """
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAISynthesisBackend",
-            timeout=120.0,
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAISynthesisBackend")
         self._langfuse_client = langfuse_client
         self._turn_count = 0
         self._lock = Lock()
@@ -808,10 +804,10 @@ class OpenAISynthesisBackend:
                 },
             )
 
-        proposal, usage = tracing.traced_call(
+        proposal, usage = tracing.traced_attempts(
             self._langfuse_client,
             name="synthesise:propose_sections",
-            as_type="generation",
+            step="synthesise_propose_sections",
             call=lambda: self._parse_proposal_once(messages),
             update=_update,
         )
@@ -861,14 +857,14 @@ class OpenAISynthesisBackend:
                 metadata={"prompt_version": SUMMARISER_PROMPT_VERSION, **usage_metadata(usage)},
             )
 
-        return tracing.traced_call(
+        return tracing.traced_attempts(
             self._langfuse_client,
             name=(
                 "synthesise:write_artefact_summary"
                 if seed.get("kind") == "artefact"
                 else "synthesise:write_block_summary"
             ),
-            as_type="generation",
+            step=step,
             call=lambda: self._write_summary_once(messages, step=step),
             update=_update,
         )
@@ -908,10 +904,10 @@ class OpenAISynthesisBackend:
                 metadata={"prompt_version": SUMMARY_JUDGE_PROMPT_VERSION, **usage_metadata(usage)},
             )
 
-        return tracing.traced_call(
+        return tracing.traced_attempts(
             self._langfuse_client,
             name="synthesise:judge_summary",
-            as_type="generation",
+            step="synthesise_judge_summary",
             call=_call,
             update=_update,
         )
@@ -1053,10 +1049,10 @@ class OpenAISynthesisBackend:
                 },
             )
 
-        turn, usage = tracing.traced_call(
+        turn, usage = tracing.traced_attempts(
             self._langfuse_client,
             name="synthesise:section_turn",
-            as_type="generation",
+            step="synthesise_section_turn",
             call=lambda: self._create_section_turn_once(
                 messages, force_emit=force_emit, tools=tools
             ),
@@ -1139,10 +1135,10 @@ class OpenAISynthesisBackend:
                 },
             )
 
-        repairs, usage, _ignored = tracing.traced_call(
+        repairs, usage, _ignored = tracing.traced_attempts(
             self._langfuse_client,
             name="synthesise:repair_claims",
-            as_type="generation",
+            step="synthesise_section_turn",
             call=lambda: self._repair_once(messages, tools=tools),
             update=_update,
         )
@@ -1209,10 +1205,10 @@ class OpenAISynthesisBackend:
                 },
             )
 
-        section, usage = tracing.traced_call(
+        section, usage = tracing.traced_attempts(
             self._langfuse_client,
             name="synthesise:write_key_findings",
-            as_type="generation",
+            step="synthesise_write_key_findings",
             call=lambda: self._write_key_findings_once(messages),
             update=_update,
         )
@@ -1258,10 +1254,10 @@ class OpenAISynthesisBackend:
                 },
             )
 
-        wire, usage = tracing.traced_call(
+        wire, usage = tracing.traced_attempts(
             self._langfuse_client,
             name="synthesise:write_case_studies",
-            as_type="generation",
+            step="synthesise_write_case_studies",
             call=lambda: self._write_case_studies_once(messages),
             update=_update,
         )
@@ -1278,12 +1274,7 @@ class OpenAISynthesisBackend:
         Returns:
             Structurally parsed note plus token usage.
         """
-        client = resolve_openai_client(
-            None,
-            backend_name="MRSNoteWriter",
-            timeout=30.0,
-            max_retries=1,
-        )
+        client = resolve_openai_client(None, backend_name="MRSNoteWriter")
         messages = [
             {"role": "system", "content": MRS_NOTE_SYSTEM_PROMPT},
             {
@@ -1318,10 +1309,10 @@ class OpenAISynthesisBackend:
                 },
             )
 
-        wire, usage = tracing.traced_call(
+        wire, usage = tracing.traced_attempts(
             self._langfuse_client,
             name="synthesise:write_source_note",
-            as_type="generation",
+            step="synthesise_write_source_note",
             call=_call,
             update=_update,
         )
@@ -1338,12 +1329,7 @@ class OpenAISynthesisBackend:
         Returns:
             Structurally parsed intro plus token usage.
         """
-        client = resolve_openai_client(
-            None,
-            backend_name="FullReportIntroWriter",
-            timeout=30.0,
-            max_retries=1,
-        )
+        client = resolve_openai_client(None, backend_name="FullReportIntroWriter")
         messages = [
             {"role": "system", "content": FULL_REPORT_INTRO_SYSTEM_PROMPT},
             {
@@ -1378,10 +1364,10 @@ class OpenAISynthesisBackend:
                 },
             )
 
-        wire, usage = tracing.traced_call(
+        wire, usage = tracing.traced_attempts(
             self._langfuse_client,
             name="synthesise:write_intro",
-            as_type="generation",
+            step="synthesise_write_intro",
             call=_call,
             update=_update,
         )
