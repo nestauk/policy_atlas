@@ -1,9 +1,9 @@
 # ADR 0044 — Live activity from coalesced ticks, streamed report sections, the planner's reply as a stream, and one server source of progress copy
 
-- **Status:** Proposed — awaiting the task 058 plan gate (owner).
+- **Status:** Accepted — 2026-11-04 (Shabeer Rauf, owner, task 058 plan gate).
 - **Date:** 2026-11-04
 - **Task:** [058-perceived-latency](../tasks/058-perceived-latency/contract.md) (contract
-  revision 2 approved 2026-11-04; plan draft 2 under review; design annex version 5)
+  revision 2 and plan draft 3 both approved 2026-11-04; design annex version 5)
 - **Builds on:** [ADR 0027](0027-durable-planning-transcript-artefact-streaming.md) decision 4 (the skeleton and
   per-section progress frames; whole-section grain; the artefact of record lands at commit) ·
   [ADR 0015](0015-prose-first-synthesis-with-span-anchored-claims.md) (repair rewrites the

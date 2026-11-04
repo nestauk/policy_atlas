@@ -1,6 +1,6 @@
 # Implementation plan: 058-perceived-latency
 
-> Status: **draft 3, 2026-11-04; awaiting the owner's confirmation.** Draft 2 was reviewed
+> Status: **approved by the owner 2026-11-04 (Shabeer Rauf), draft 3, with the three owner items ruled as recommended: mock before the frontend; the streamed turn inherits the section turn's 25 s between-chunks bound; the staging baseline is captured before the PR and the "after" lands post-merge as a follow-up evidence commit.** Draft 2 was reviewed
 > read-only by the Codex lane (13 findings: two blockers on regeneration sequencing and the
 > staging baseline, ten material, one minor; the record stays local under `research/`); every
 > finding is folded here. Contract: [contract.md](contract.md) revision 2, approved
@@ -102,7 +102,7 @@ before any frontend surface so the `frontend-designer` can self-check transient 
   "after" runs after merge and deploy, and lands as a follow-up evidence commit, as 057 did.
   (N25, G7; finding 2; owner item 3 below confirms it)
 
-## Owner items (to rule at the plan gate)
+## Owner items (ruled 2026-11-04: all three as recommended)
 
 1. **Mock-before-frontend order (Phase 5 before 6 to 8).** Recommendation: yes. Consequence
    of no: the `frontend-designer` cannot reproduce mid-stream, reload, repair, paused or
