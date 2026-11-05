@@ -198,6 +198,9 @@ Splash-page **Request access** intake. Public — no bearer token.
   task's readers key on what exists and what is active, never on a single
   latest run; `latest_run` stays as it is for the Evidence search (owner,
   plan review P4: "scoping readers see what exists and what is active").
+  `active_run` also carries `stage` (the current public stage key) and
+  `stage_label` (the server's copy), taken from the parentless walk so a
+  scoping task shows its own stage, not a child search's (task 058, S4).
 - `GET /api/v1/tasks/{id}` → task (read grade, or the public leg —
   § Auth boundary). A public-leg read returns the **redacted shape**:
   `access = "public"`, `is_owner = false`, `owner_display = null`,
@@ -306,8 +309,19 @@ is wanted (`docs/deferred.md` § Task lifecycle IA).
 ### Task Agent turns
 
 - `POST /api/v1/tasks/{id}/task-agent-turns`
-  `{message, client_turn_id}` → `{reply, plan, suggestions[]}` — one real
-  planner turn. Every turn is durable in the per-task
+  `{message, client_turn_id}` → an `application/x-ndjson` event stream (task
+  058, S4, replacing the JSON body: the frontend and backend deploy
+  together): `progress` ("Drafting the plan"), `delta` fragments of the
+  reply as the planner writes it, then exactly one terminal event,
+  `completed {turn: TaskAgentTurnOut}` or `failed {error, turn_index}`. The
+  chat route's rules apply: the reservation and every authorisation error
+  resolve before the headers (as the JSON envelope); the turn finishes and
+  persists whether or not the client stays connected; a connection error
+  before the first token is retried once; a replay of a completed turn is one
+  `completed` line. A gate decision, an answer or a longlist action is one
+  `completed` line. `TaskAgentTurnOut` (and the transcript turn) carries
+  `question`, the planner's clarifying question, above its `suggestions`.
+  One real planner turn. Every turn is durable in the per-task
   `task_agent_transcript`: its monotonic `turn_index`, assigned when the user
   message is received, is the conversation ordering coordinate;
   `created_at` is display metadata only. `message` caps at 10 000 characters
@@ -634,7 +648,14 @@ render honest absence: missing stages are `null`/absent, never faked.
 
 **Longlist routes** *([task 045 contract](../tasks/045-scoping-longlist/contract.md), deliverable 11; Options scoping only)*:
 `GET /api/v1/tasks/{id}/longlist` (themes, options, counts, states, the run it
-came from) · `GET /api/v1/tasks/{id}/options/{option_id}` (the option card) ·
+came from; 404 until the first clustering result) · `GET /api/v1/tasks/{id}/options`
+(task 058, S4: every option row of the task from the end of the suggest stage,
+`{option_id, name, description, origin, state, merged_into_option_id,
+search_status, found}`, where `search_status` is `queued` · `searching` ·
+`searched` · `failed` from the option's own search and `found` its acquired
+count, null until searched; the same read predicate as the longlist; no
+provisional flag, the client knows from `has_longlist`) ·
+`GET /api/v1/tasks/{id}/options/{option_id}` (the option card) ·
 `POST /api/v1/tasks/{id}/options` (add by hand — the button's path, the same
 handler as the chat verb) · `POST .../options/{option_id}/exclude` and
 `.../include` (with the user's reason). Each write is logged as the user's
@@ -707,22 +728,49 @@ Frame vocabulary (discriminated union, `type` names are contract):
 | `checkin.resolved` | `{check_in_id, response, decided_by}` | `steering.decision` |
 | `plan.updated` | `{plan, version}` | plan row supersession |
 | `task.updated` | `{name?, question?, status?}` | lifecycle audit events |
-| `tick` | `{stage?, note, fetched, parsed, total, ephemeral: true}` (the three counts null when absent) | **ephemeral channel** — never persisted, never state-bearing, no `id:` |
+| `tick` | `{stage?, activity, done, total, unit, section, heartbeat, dropped, ephemeral: true}` (`done`, `total`, `unit` and `section` null when absent) | **ephemeral channel** — never persisted, never state-bearing, no `id:` |
+| `artefact.section_delta` | `{index, text, mode: "append" \| "replace", ephemeral: true}` | **ephemeral**: prose appended to the section being written (task 058); display-only, never replayed |
+| `artefact.section_revising` | `{index, spans: [{start, end}], ephemeral: true}` | **ephemeral**: the sentences the judge failed, sent before the repair (task 058); display-only, never replayed |
 
-`stage` keys are the pinned stable component vocabulary (`acquire`,
-`screen`, `classify`, `appraise`, `ingest` ("Reading the full texts"),
-`characterise`, `select`, `extract`, `group`, `synthesise`); labels/blurbs
-are server-supplied presentation and may change. A `tick`'s optional integer
-counts `fetched`, `parsed` and `total` (the `ingest` stage's documents fetched,
-read and eligible, task 056) are null when absent. Nothing else internal
-(module names, model ids, raw payload keys) is observable. The frontend store must rebuild idempotently from
+`stage` keys are the pinned stable component vocabulary, nineteen keys
+(task 058, S1). Evidence search: `acquire`, `screen`, `classify`, `appraise`,
+`ingest`, `characterise`, `select`, `extract`, `group`, `synthesise`. Options
+scoping: `inherit`, `suggest`, `option_searches`, `extract_interventions`,
+`longlist`, `option_profile`, `constrain`, `theme`, `shortlist`. Labels,
+blurbs and the activity text are server-supplied presentation from one table
+(`api/stage_vocabulary.py`, task 058 N17) and may change; the client renders
+them and keeps no stage copy of its own. A plan step carries a `row` key:
+stages that share a row key render as one card row ("Searching and
+screening" for `acquire` and `screen`; "Categorising" for `classify` and
+`appraise`), so the client decides nothing about rows.
+
+A `tick` (task 058, S2) carries one set of fields for every stage:
+`activity` (the line the client shows as it is, in the server's plain
+voice), `done` and `total` (integers, null when the stage has no honest
+count: no total known before its loop started), `unit` (`documents`,
+`batches`, `abstracts`, `searches`, `sections`, `windows`, `options`; null
+with no count), `section` (the writer's section line, null outside writing),
+`heartbeat` (true when the server repeated the current tick because a model
+call is still in flight, every 10 s) and `dropped` (the server's dropped-tick
+counter for the task, for the silent-gap measure). Ticks are coalesced to at
+most one per task per stage per 500 ms. A client that connects mid-run
+receives, after the durable replay, the last tick per stage and the current
+section draft as one `artefact.section_delta` with `mode: "replace"`, from
+process-local memory that is cleared when the stage or the run ends and
+expires after ten minutes. Nothing else internal (module names, model ids,
+raw payload keys) is observable. The frontend store must rebuild idempotently from
 replay alone — mid-run refresh, server restart with a parked pending
 check-in, and reconnect-mid-stream are the tested cases.
 
-`artefact.*` frames are durable presentation/progress records, not partial
-artefact reads or authoritative artefact content: whole-section prose is sent
-for live rendering, while the report — the artefact of record — is committed
-only when synthesis completes. The skeleton's display `index` is the identity
+`artefact.*` frames other than the two ephemeral ones are durable
+presentation/progress records, not partial artefact reads or authoritative
+artefact content: whole-section prose is sent for live rendering, while the
+report — the artefact of record — is committed only when synthesis completes.
+`artefact.section_delta` and `artefact.section_revising` (task 058, S3) are
+display-only: the draft a client builds from deltas is never shown as
+verified, carries no claim markers, and is replaced by
+`artefact.section_completed`, which stays the record; a replay carries no
+deltas, so a store rebuilt from replay holds the completed prose only. The skeleton's display `index` is the identity
 used by every artefact frame; it includes key findings first (although that
 section is generated last) and conclusions last. An empty key-findings pass
 still closes its slot with `artefact.section_completed` and empty prose.

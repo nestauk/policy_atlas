@@ -960,7 +960,8 @@ def test_landscape_summary_structure(conn: Connection) -> None:
     )
 
     assert set(summary.keys()) == {
-        "coverage", "themes", "unclustered", "flags", "provenance", "usage_totals",
+        "coverage", "theme_count", "themes", "unclustered", "flags", "provenance",
+        "usage_totals",
     }
     assert set(summary["unclustered"].keys()) == {"count", "share"}
     for theme in summary["themes"]:
@@ -2090,6 +2091,7 @@ def test_characterise_stub_summary_matches_pinned_fixture(conn: Connection) -> N
                 "failed_embedding_share": 0.0,
             },
         },
+        "theme_count": 3,
         "themes": [
             {
                 "name": "Housing",
@@ -2172,3 +2174,28 @@ def test_theme_description_over_prompt_target_but_within_limit_is_accepted() -> 
         {"name": "B", "description": "y" * 315},
     ]
     assert theme_grouping.validate_themes(themes, min_themes=1, max_themes=3) == themes
+
+
+# --- Summary count (task 058, N2) ---
+
+
+def test_summary_carries_the_theme_count(conn: Connection) -> None:
+    pid, rid = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    for theme in ("Health", "Housing", "Education"):
+        for i in range(2):
+            _seed_doc(
+                conn, pid, rid, scope_id,
+                title=f"{theme} report {i}",
+                abstract=f"Body text. [stub-theme: {theme}]",
+            )
+
+    summary = characterise_scope(
+        conn,
+        task_id=pid,
+        run_id=rid,
+        context=CharacteriseContext(scope_id=scope_id, intent="Test", context={}),
+        theme_grouping_backend=StubThemeGroupingBackend(),
+    )
+
+    assert summary["theme_count"] == 3

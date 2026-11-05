@@ -427,6 +427,11 @@ def _section_turn(lf: Any) -> object:
     return _synthesis(lf).section_turn(_SECTION_SEED, [], force_emit=False)
 
 
+def _section_emit(lf: Any) -> object:
+    # The streamed final turn (task 058, N6): the loop's forced turn, empty transcript.
+    return _synthesis(lf).section_emit_stream(_SECTION_SEED, [])
+
+
 def _repair(lf: Any) -> object:
     return _synthesis(lf).repair_section(
         _SECTION_SEED,
@@ -520,6 +525,13 @@ def _task_agent(lf: Any) -> OpenAITaskAgentBackend:
 
 def _task_agent_turn(lf: Any) -> object:
     return _task_agent(lf).turn(EVIDENCE_SEARCH_TASK_AGENT, _TURNS, None)
+
+
+def _task_agent_turn_stream(lf: Any) -> object:
+    # The streamed planner turn the turn route sends (task 058, N9).
+    return _task_agent(lf).turn(
+        EVIDENCE_SEARCH_TASK_AGENT, _TURNS, None, on_delta=lambda _text: None
+    )
 
 
 def _task_agent_scoping_turn(lf: Any) -> object:
@@ -725,6 +737,10 @@ SITES: tuple[_Site, ...] = (
         "synthesise_section_turn/repair", _DC, OpenAISynthesisBackend, "repair_section", _repair
     ),
     _Site(
+        "synthesise_section_emit", _DC, OpenAISynthesisBackend, "section_emit_stream",
+        _section_emit,
+    ),
+    _Site(
         "synthesise_write_key_findings", _DC, OpenAISynthesisBackend, "write_key_findings",
         _key_findings,
     ),
@@ -733,6 +749,10 @@ SITES: tuple[_Site, ...] = (
     ),
     _Site(
         "chat/stream", _DC, OpenAIChatBackend, "chat_turn(force_emit=True) step 1", _chat_final
+    ),
+    _Site(
+        "task_agent_turn/stream", _DC, OpenAITaskAgentBackend,
+        "turn(EVIDENCE_SEARCH_TASK_AGENT, on_delta=...)", _task_agent_turn_stream,
     ),
     # traced_parse (core.openai_client.traced_parse)
     _Site("agent_route", _TP, OpenAIAgentBackend, "route", _agent_route),
@@ -836,6 +856,15 @@ def _system_shape(messages: Any) -> str | None:
     return None
 
 
+def _response_format_name(response_format: Any) -> str | None:
+    """A parsed class by name; a ``json_schema`` dict (the streamed emit) by its schema name."""
+    if response_format is None:
+        return None
+    if isinstance(response_format, dict):
+        return f"json_schema:{response_format['json_schema']['name']}"
+    return str(response_format.__name__)
+
+
 def _serialise(site: _Site, kwargs: dict[str, Any], trace_name: str | None) -> dict[str, Any]:
     response_format = kwargs.get("response_format")
     tools = kwargs.get("tools")
@@ -847,7 +876,7 @@ def _serialise(site: _Site, kwargs: dict[str, Any], trace_name: str | None) -> d
         "trace_name": trace_name,
         "model": kwargs.get("model"),
         "reasoning_effort": kwargs.get("reasoning_effort"),
-        "response_format": response_format.__name__ if response_format is not None else None,
+        "response_format": _response_format_name(response_format),
         "tools": [tool["function"]["name"] for tool in tools] if tools is not None else None,
         "tool_choice": _json_value(tool_choice) if tool_choice is not None else None,
         "parallel_tool_calls": kwargs.get("parallel_tool_calls"),

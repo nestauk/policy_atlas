@@ -920,6 +920,13 @@ SECTION_FINAL_TURN_MESSAGE = (
     "claims this section can support from what you have gathered."
 )
 
+#: The same instruction for the streamed final turn (task 058, D1), where the
+#: section comes back as a structured response and no tool is offered.
+SECTION_FINAL_TURN_MESSAGE_STREAMED = (
+    "This is your final turn: write the section now, as the prose and the "
+    "claims this section can support from what you have gathered."
+)
+
 SECTION_REPAIR_TEMPLATE = """\
 Some of this section's claims failed verification. Each failing claim is
 listed below with its verification rationale, replacement span, adjacent prose
@@ -1363,6 +1370,7 @@ def build_section_messages(
     transcript: list[ToolExchange],
     *,
     force_emit: bool,
+    streamed: bool = False,
 ) -> list[dict[str, Any]]:
     """Assemble the section-loop conversation for one turn.
 
@@ -1374,6 +1382,9 @@ def build_section_messages(
         seed: Id-keyed section seed (see :func:`build_section_prefix`).
         transcript: Executed tool exchanges so far, in order.
         force_emit: True on the final turn — appends the emit-now user message.
+        streamed: With ``force_emit``, the final turn is the streamed
+            structured response (task 058, D1): the message asks for the
+            section itself, since no tool is offered on that request.
 
     Returns:
         Chat messages ready for a tool-forced completion: the prefix, then the
@@ -1409,7 +1420,14 @@ def build_section_messages(
             }
         )
     if force_emit:
-        messages.append({"role": "user", "content": SECTION_FINAL_TURN_MESSAGE})
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    SECTION_FINAL_TURN_MESSAGE_STREAMED if streamed else SECTION_FINAL_TURN_MESSAGE
+                ),
+            }
+        )
     return messages
 
 

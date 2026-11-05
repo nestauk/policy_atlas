@@ -21,6 +21,8 @@ from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.check_ins_read import _check_in
 from policy_atlas.api.contract import (
     ArtefactSectionCompletedFrame,
+    ArtefactSectionDeltaFrame,
+    ArtefactSectionRevisingFrame,
     ArtefactSectionStartedFrame,
     ArtefactSkeletonFrame,
     CheckinPendingFrame,
@@ -28,6 +30,7 @@ from policy_atlas.api.contract import (
     PlanUpdatedFrame,
     RunStatus,
     RunStatusFrame,
+    SectionSpan,
     StageCompletedFrame,
     StageFailedFrame,
     StageKey,
@@ -58,7 +61,12 @@ from policy_atlas.api.stage_vocabulary import (
     stage_for_payload as _stage,
 )
 from policy_atlas.core import events
-from policy_atlas.core.liveness import Tick, tick_hub
+from policy_atlas.core.liveness import (
+    HubMessage,
+    SectionDelta,
+    Tick,
+    tick_hub,
+)
 from policy_atlas.core.schema import event_log, task_plan
 from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.capability_registry import (
@@ -443,7 +451,12 @@ def _seconds(
     row: dict[str, Any],
     payload: dict[str, Any],
 ) -> float | None:
-    """Read an adjacent timing record when available, then use terminal payload time."""
+    """Return a stage's seconds: the terminal payload's time first, else its timing row.
+
+    The runner puts ``wall_clock_s`` on ``component.completed`` (task 058, N5),
+    so a live tail has the time before the later ``component.timing`` row
+    lands. Older rows without it fall back to that timing row.
+    """
     wall_clock = payload.get("wall_clock_s")
     if isinstance(wall_clock, int | float) and not isinstance(wall_clock, bool):
         return float(wall_clock)
@@ -605,20 +618,44 @@ def _encode_frame(frame: dict[str, Any]) -> str:
     return f"id: {frame['sequence']}\nevent: {frame['type']}\ndata: {payload}\n\n"
 
 
-def _encode_tick(tick: Tick) -> str:
+def _encode_ephemeral(message: HubMessage) -> str:
     """Serialize a validated ephemeral frame without an SSE id line."""
-    stage = cast(StageKey | None, tick.stage) if tick.stage in _STAGE_PRESENTATION else None
-    frame = TickFrame(
-        type="tick",
-        stage=stage,
-        note=tick.note,
-        fetched=tick.fetched,
-        parsed=tick.parsed,
-        total=tick.total,
-        occurred_at=tick.occurred_at,
-    )
-    # The counts are null when absent, as the generated contract says (owner, 2026-11-02).
-    return f"event: tick\ndata: {frame.model_dump_json()}\n\n"
+    if isinstance(message, Tick):
+        stage = (
+            cast(StageKey | None, message.stage)
+            if message.stage in _STAGE_PRESENTATION
+            else None
+        )
+        frame: TickFrame | ArtefactSectionDeltaFrame | ArtefactSectionRevisingFrame = (
+            TickFrame(
+                type="tick",
+                stage=stage,
+                activity=message.activity,
+                done=message.done,
+                total=message.total,
+                unit=message.unit,
+                section=message.section,
+                heartbeat=message.heartbeat,
+                dropped=message.dropped,
+                occurred_at=message.occurred_at,
+            )
+        )
+    elif isinstance(message, SectionDelta):
+        frame = ArtefactSectionDeltaFrame(
+            type="artefact.section_delta",
+            index=message.index,
+            text=message.text,
+            mode=message.mode,
+            occurred_at=message.occurred_at,
+        )
+    else:
+        frame = ArtefactSectionRevisingFrame(
+            type="artefact.section_revising",
+            index=message.index,
+            spans=[SectionSpan(start=start, end=end) for start, end in message.spans],
+            occurred_at=message.occurred_at,
+        )
+    return f"event: {frame.type}\ndata: {frame.model_dump_json()}\n\n"
 
 
 @router.get("/{task_id}/events")
@@ -641,30 +678,34 @@ async def stream_events(
     )
 
     async def body() -> AsyncIterator[str]:
-        queue = await tick_hub.subscribe(task_id)
+        queue, cached = await tick_hub.subscribe_with_snapshot(task_id)
         next_sequence = max(snapshot + 1, cursor + 1)
         last_heartbeat = asyncio.get_running_loop().time()
         try:
             for frame in replay:
                 yield _encode_frame(frame)
+            for message in cached:
+                yield _encode_ephemeral(message)
             while True:
                 now = asyncio.get_running_loop().time()
                 heartbeat_remaining = max(
                     0.0, settings.sse_heartbeat_seconds - (now - last_heartbeat)
                 )
                 timeout = min(settings.sse_poll_interval_seconds, heartbeat_remaining)
+                pending: list[HubMessage] = []
                 try:
-                    tick = await asyncio.wait_for(queue.get(), timeout=timeout)
+                    pending.append(await asyncio.wait_for(queue.get(), timeout=timeout))
                 except TimeoutError:
-                    tick = None
-                # The tick is **held**, not yielded, until the tail has
-                # re-authorised. A tick carries the task's current stage and
-                # its progress note — task-derived content — so yielding it
-                # first handed a caller whose access had just gone one more
-                # frame about work they may no longer read. Re-authorisation is
-                # the first thing every iteration does; nothing is written to
-                # the response before it answers.
-                pending_tick = _encode_tick(tick) if tick is not None else None
+                    pass
+                else:
+                    while True:
+                        try:
+                            pending.append(queue.get_nowait())
+                        except asyncio.QueueEmpty:
+                            break
+                # The whole ephemeral batch is held until the tail has
+                # re-authorised. Nothing is written to the response before it
+                # answers (task 058, N4 and N7).
                 batch = await anyio.to_thread.run_sync(
                     partial(
                         _tail,
@@ -682,10 +723,8 @@ async def stream_events(
                     log.info("api.sse_revoked", task_id=str(task_id))
                     return
                 last_sequence, tail = batch
-                # Order within the iteration is unchanged: the ephemeral tick
-                # still precedes the durable frames it was observed alongside.
-                if pending_tick is not None:
-                    yield pending_tick
+                for message in pending:
+                    yield _encode_ephemeral(message)
                 for frame in tail:
                     yield _encode_frame(frame)
                 next_sequence = last_sequence + 1

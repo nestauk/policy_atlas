@@ -34,6 +34,8 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.contract.sse import (
     ArtefactSectionCompletedFrame,
+    ArtefactSectionDeltaFrame,
+    ArtefactSectionRevisingFrame,
     ArtefactSectionStartedFrame,
     ArtefactSkeletonFrame,
     CheckinPendingFrame,
@@ -258,7 +260,7 @@ def test_stage_started_frame_discriminates() -> None:
             "sequence": 2,
             "occurred_at": _now().isoformat(),
             "stage": "acquire",
-            "label": "Searching sources",
+            "label": "Searching and screening",
             "blurb": "…",
         }
     )
@@ -273,7 +275,7 @@ def test_stage_completed_frame_discriminates() -> None:
             "sequence": 3,
             "occurred_at": _now().isoformat(),
             "stage": "acquire",
-            "label": "Searching sources",
+            "label": "Searching and screening",
             "summary": {"found": 58},
             "seconds": 12.4,
         }
@@ -421,40 +423,85 @@ def test_tick_frame_discriminates_and_has_no_sequence() -> None:
         {
             "type": "tick",
             "occurred_at": _now().isoformat(),
-            "note": "still working…",
+            "activity": "Categorising",
         }
     )
     assert isinstance(model, TickFrame)
     assert not hasattr(model, "sequence")
 
 
-def test_tick_frame_counts_are_optional_typed_ints() -> None:
-    """Task 056 (S5): `fetched`, `parsed`, `total` are optional ints on a tick."""
+def test_tick_frame_fields_are_one_set_for_every_stage() -> None:
+    """Task 058 (D2, S2): `done`, `total`, `unit`, `section` are optional; the rest typed."""
     with_counts = _adapter().validate_python(
         {
             "type": "tick",
             "stage": "ingest",
             "occurred_at": _now().isoformat(),
-            "note": "1 of 4 read, 2 fetched.",
-            "fetched": 2,
-            "parsed": 1,
+            "activity": "1 of 4 read",
+            "done": 1,
             "total": 4,
+            "unit": "documents",
+            "heartbeat": True,
+            "dropped": 2,
         }
     )
     assert isinstance(with_counts, TickFrame)
-    assert (with_counts.fetched, with_counts.parsed, with_counts.total) == (2, 1, 4)
+    assert (with_counts.done, with_counts.total, with_counts.unit) == (1, 4, "documents")
+    assert (with_counts.section, with_counts.heartbeat, with_counts.dropped) == (None, True, 2)
     bare = _adapter().validate_python(
-        {"type": "tick", "occurred_at": _now().isoformat(), "note": "still working…"}
+        {"type": "tick", "occurred_at": _now().isoformat(), "activity": "Writing"}
     )
     assert isinstance(bare, TickFrame)
-    assert (bare.fetched, bare.parsed, bare.total) == (None, None, None)
+    assert (bare.done, bare.total, bare.unit, bare.section) == (None, None, None, None)
+    assert (bare.heartbeat, bare.dropped) == (False, 0)
     with pytest.raises(ValidationError):
         _adapter().validate_python(
             {
                 "type": "tick",
                 "occurred_at": _now().isoformat(),
-                "note": "n",
-                "parsed": "many",
+                "activity": "n",
+                "done": "many",
+            }
+        )
+    with pytest.raises(ValidationError):  # the task 056 ingest-only fields are gone
+        _adapter().validate_python(
+            {"type": "tick", "occurred_at": _now().isoformat(), "note": "1 of 4 read."}
+        )
+
+
+def test_section_delta_and_revising_frames_are_ephemeral() -> None:
+    """Task 058 (N7, S3): the two display-only frames carry no `sequence`."""
+    delta = _adapter().validate_python(
+        {
+            "type": "artefact.section_delta",
+            "occurred_at": _now().isoformat(),
+            "index": 3,
+            "text": "Cost is the barrier ",
+            "mode": "append",
+        }
+    )
+    assert isinstance(delta, ArtefactSectionDeltaFrame)
+    assert not hasattr(delta, "sequence")
+    assert delta.ephemeral is True
+    revising = _adapter().validate_python(
+        {
+            "type": "artefact.section_revising",
+            "occurred_at": _now().isoformat(),
+            "index": 3,
+            "spans": [{"start": 40, "end": 112}],
+        }
+    )
+    assert isinstance(revising, ArtefactSectionRevisingFrame)
+    assert not hasattr(revising, "sequence")
+    assert (revising.spans[0].start, revising.spans[0].end) == (40, 112)
+    with pytest.raises(ValidationError):
+        _adapter().validate_python(
+            {
+                "type": "artefact.section_delta",
+                "occurred_at": _now().isoformat(),
+                "index": 3,
+                "text": "",
+                "mode": "rewrite",
             }
         )
 
@@ -521,3 +568,46 @@ def test_task_agent_turn_out_round_trips_a_decision_turn() -> None:
     assert turn.decision.check_in_id == check_in_id
     assert turn.decision.capability_run_id == capability_run_id
     assert turn.decision.plan_version == 3
+
+
+def test_the_options_read_models_validate_and_refuse_an_unknown_status() -> None:
+    """Task 058, N22: one option row with its search, and the read around it."""
+    from policy_atlas.api.contract import OptionProgressOut, OptionsOut
+
+    row = {
+        "option_id": str(uuid.uuid4()),
+        "name": "Mentoring",
+        "description": "A mentor for each young person.",
+        "origin": "suggested",
+        "state": "included",
+        "merged_into_option_id": None,
+        "search_status": "searched",
+        "found": 12,
+    }
+    model = OptionsOut.model_validate({"options": [row]})
+    assert model.options[0].search_status == "searched"
+    assert model.options[0].found == 12
+    assert OptionsOut().options == []
+    queued = OptionProgressOut.model_validate({**row, "search_status": "queued", "found": None})
+    assert queued.found is None
+    with pytest.raises(ValidationError):
+        OptionProgressOut.model_validate({**row, "search_status": "provisional"})
+
+
+def test_latest_run_carries_a_stage_key_and_its_label() -> None:
+    """Task 058, N15: ``active_run.stage`` is a public stage key or null."""
+    from policy_atlas.api.contract import LatestRun
+
+    base = {
+        "capability_run_id": str(uuid.uuid4()),
+        "status": "running",
+        "started_at": datetime(2026, 11, 5, tzinfo=UTC).isoformat(),
+    }
+    bare = LatestRun.model_validate(base)
+    assert bare.stage is None and bare.stage_label is None
+    staged = LatestRun.model_validate(
+        {**base, "stage": "classify", "stage_label": "Categorising"}
+    )
+    assert staged.stage == "classify"
+    with pytest.raises(ValidationError):
+        LatestRun.model_validate({**base, "stage": "screen_full"})

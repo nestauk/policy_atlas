@@ -18,10 +18,10 @@ from langgraph.graph import END, StateGraph
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import events
+from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY
+from policy_atlas.core import events, liveness
 from policy_atlas.core.embeddings import EmbeddingBackend, StubEmbeddingBackend
 from policy_atlas.core.inference import InferenceProvider
-from policy_atlas.core.liveness import task_liveness
 from policy_atlas.core.schema import evidence_scope, runs, task_plan
 from policy_atlas.evidence_search.assess.appraise import AppraiseContext, appraise_sources
 from policy_atlas.evidence_search.assess.classification_backend import (
@@ -123,6 +123,7 @@ from policy_atlas.runtime.inherit import inherit_documents
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Config
 from policy_atlas.runtime.scoping_plan import ScopingPlan
+from policy_atlas.runtime.task_plan import registry_component_for
 
 log = structlog.get_logger()
 
@@ -993,8 +994,15 @@ def run_harness(
     # the innermost boundary that sees exactly one component execution: each
     # run_harness call dispatches to exactly one node (routed by config.component),
     # and it is the direct caller of node-level component work.
-    with task_liveness(task_id), structlog.contextvars.bound_contextvars(
-        task_id=str(task_id), run_id=str(run_id), component=config.component,
-    ):
-        final: HarnessState = graph.invoke(initial)
+    stage = STAGE_BY_REGISTRY.get(registry_component_for(config.component))
+    try:
+        with liveness.task_liveness(
+            task_id, stage=stage
+        ), structlog.contextvars.bound_contextvars(
+            task_id=str(task_id), run_id=str(run_id), component=config.component,
+        ):
+            final: HarnessState = graph.invoke(initial)
+    finally:
+        if stage is not None:
+            liveness.tick_hub.end_stage(task_id, stage)
     return {"summary": final.get("summary"), "error": final.get("error")}

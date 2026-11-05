@@ -26,6 +26,8 @@ from sqlalchemy import select as sa_select
 from sqlalchemy import update as sa_update
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import liveness
 from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.schema import (
     EVIDENCE_TYPES,
@@ -4274,7 +4276,23 @@ def _section_claims(
     intent: str = "",
     section_focus: str = "",
     gap_restatement_seeds: Sequence[Mapping[str, Any]] | None = None,
+    section_line: str | None = None,
 ) -> tuple[list[ClaimDraft], str, list[dict[str, Any]], dict[str, int], dict[str, int]]:
+    """Check a section's claims, repair the failing ones once, and settle its prose.
+
+    While it runs it tells the user what is happening (task 058, N3 and N7):
+    "Checking claims" before the judge; when claims fail, "Revising n claims"
+    and the draft ranges being rewritten, before the repair call. Once the
+    prose is settled the live draft is forgotten; the durable
+    ``section_completed`` frame stays the record.
+
+    ``section_line`` is the section's own line, sent with each activity line,
+    or ``None`` (the key findings pass).
+
+    Returns:
+        The final claims, the final prose, the minted unspanned records, the
+        call counts and the usage totals.
+    """
     call_counts = {"judge": 0, "repair": 0, "rejudge": 0}
     usage_totals = UsageAccumulator()
     prose = raw_claims.prose
@@ -4290,6 +4308,7 @@ def _section_claims(
         available_claim_types=available_claim_types,
         gap_restatement_seeds=gap_restatement_seeds,
     )
+    liveness.publish_progress(activity=activity("synthesise.checking"), section=section_line)
     judge_calls, judge_usage, unspanned = _judge_claims(
         claims=initial.drafts,
         substrate=substrate,
@@ -4316,6 +4335,7 @@ def _section_claims(
     else:
         accounting.repair_taken = True
         call_counts["repair"] += 1
+        _publish_revising(section_index, failing, section_line=section_line)
         repair_wire: SectionRepairWire | None
         try:
             repair_wire, repair_usage = synthesis_backend.repair_section(
@@ -4389,7 +4409,36 @@ def _section_claims(
         accounting=accounting,
         claim_spans=[claim.span for claim in final if claim.span is not None],
     )
+    liveness.clear_section_draft()
     return final, final_prose, minted_unspanned, call_counts, usage_totals.payload()
+
+
+def _publish_revising(
+    section_index: int,
+    failing: Sequence[Mapping[str, Any]],
+    *,
+    section_line: str | None,
+) -> None:
+    """Tell the user which claims are being rewritten (task 058, N3 and N7).
+
+    Publishes "Revising n claim(s)" and the draft ranges of the failing claims
+    that bound to the prose (a claim that never bound has no range).
+
+    Args:
+        section_index: The section's position in the report.
+        failing: The failing claim records, each with ``span`` or ``None``.
+        section_line: The section's own line, or ``None``.
+    """
+    count = len(failing)
+    key = "synthesise.revising" if count == 1 else "synthesise.revising_many"
+    liveness.publish_progress(activity=activity(key, count=count), section=section_line)
+    spans = [
+        (int(record["span"][0]), int(record["span"][1]))
+        for record in failing
+        if record.get("span") is not None
+    ]
+    if spans:
+        liveness.publish_section_revising(section_index, spans)
 
 
 def _claim_counts(claims: Sequence[ClaimDraft]) -> dict[str, int]:
@@ -5003,6 +5052,7 @@ def _key_findings_pass(
         },
     }
     usage_totals = UsageAccumulator()
+    liveness.publish_progress(activity=activity("synthesise.key_findings"))
     raw_kf, kf_usage = synthesis_backend.write_key_findings(seed)
     usage_totals.add(kf_usage)
     # The explicit absence path (test-owned): nothing is forced.
@@ -5359,6 +5409,7 @@ def _case_studies_pass(
         intent, section_claim_groups, run_chunk_content, doc_meta,
     )
     usage_totals = UsageAccumulator()
+    liveness.publish_progress(activity=activity("synthesise.case_studies"))
     raw_wire, cs_usage = synthesis_backend.write_case_studies(seed)
     usage_totals.add(cs_usage)
 
@@ -5646,6 +5697,7 @@ def _write_mrs_notes(
             "quotes": source.get("quotes", [])[:5],
         }
         try:
+            liveness.publish_progress(activity=activity("synthesise.source_note"))
             note_wire, note_usage = synthesis_backend.write_source_note(seed)
             note_calls += 1
             usage_totals.add(note_usage)
@@ -5696,6 +5748,7 @@ def _write_full_report_intro(
         ],
     }
     try:
+        liveness.publish_progress(activity=activity("synthesise.intro"))
         intro_wire, intro_usage = synthesis_backend.write_full_report_intro(seed)
         intro_text = intro_wire.intro.strip()
         usage_totals = UsageAccumulator()
@@ -6102,6 +6155,22 @@ def synthesise_scope(
     for section_index, section in enumerate(written_sections):
         if progress_emitter is not None:
             progress_emitter.section_started(section_index)
+        # Task 058, N2 and N3: the section line rides on ``section=`` with
+        # every writer line for this section; ``done`` counts the sections
+        # finished before this one.
+        section_line = activity(
+            "synthesise.section",
+            number=section_index + 1,
+            total=len(written_sections),
+            title=section.title,
+        )
+        liveness.publish_progress(
+            activity=activity("synthesise.writing"),
+            section=section_line,
+            done=section_index,
+            total=len(written_sections),
+            unit="sections",
+        )
         member_findings = _group_member_findings(section, substrate=substrate)
         member_finding_ids = {
             finding["finding_id"]
@@ -6154,6 +6223,7 @@ def synthesise_scope(
                 turn_cap=section.turn_cap or SECTION_TURN_CAP,
                 retriever=retriever,
                 langfuse_client=getattr(synthesis_backend, "langfuse_client", None),
+                section_line=section_line,
             )
             usage_totals.add_payload(loop_result["usage_totals"])
         except RuntimeError as exc:
@@ -6199,6 +6269,7 @@ def synthesise_scope(
                 accounting=accounting,
                 intent=context.intent,
                 section_focus=section.focus,
+                section_line=section_line,
             )
             usage_totals.add_payload(section_usage)
         except SynthesiseFailure as exc:
@@ -6272,6 +6343,7 @@ def synthesise_scope(
         sources_index = len(written_sections)
         if progress_emitter is not None:
             progress_emitter.section_started(sources_index)
+        liveness.publish_progress(activity=activity("synthesise.sources"))
         sources_prose = _baseline_sources_prose(
             document_count=corpus.appraised_docs,
             mix=_baseline_source_mix(
@@ -6691,6 +6763,7 @@ def write_summaries_after_commit(
         return _empty_summary_accounting(source_error=False)
 
     artefact_id, artefact_title, question, block_specs = source
+    liveness.publish_progress(activity=activity("synthesise.summaries"))
     records: list[dict[str, Any]] = []
     totals = UsageAccumulator()
     call_counts = {"writer": 0, "judge": 0}

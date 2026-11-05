@@ -8,7 +8,7 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.core import events
+from policy_atlas.core import events, liveness
 from policy_atlas.core.inference import StubEchoProvider
 from policy_atlas.core.schema import artefact, runs, task
 from policy_atlas.evidence_search.corpus.theme_grouping import StubThemeGroupingBackend
@@ -66,6 +66,35 @@ def test_run_lifecycle_succeeded(conn: Connection) -> None:
     row = conn.execute(select(runs).where(runs.c.run_id == rid)).one()
     assert row.status == "succeeded"
     assert row.ended_at is not None
+
+
+def test_run_harness_binds_and_ends_the_component_stage(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class _RecordingHub:
+        def __init__(self) -> None:
+            self.ended: list[tuple[uuid.UUID, str]] = []
+
+        def end_stage(self, task_id: uuid.UUID, stage: str) -> None:
+            self.ended.append((task_id, stage))
+
+        def publish_tick(self, task_id: uuid.UUID, **kwargs: Any) -> None:
+            pass
+
+    pid, rid = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    config = compile(Plan(component="acquire", evidence_scope_id=scope_id))
+    hub = _RecordingHub()
+    monkeypatch.setattr(liveness, "tick_hub", hub)
+
+    events.append(conn, task_id=pid, run_id=rid, event_type="run.started", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+
+    run_harness(
+        conn, config=config, task_id=pid, run_id=rid, provider=StubEchoProvider()
+    )
+
+    assert hub.ended == [(pid, "acquire")]
 
 
 def test_run_lifecycle_failed_on_component_error(conn: Connection) -> None:

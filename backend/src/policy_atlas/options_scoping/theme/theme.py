@@ -168,6 +168,7 @@ def _theme_policy(max_labels: int) -> ClusteringPolicy:
         label_noun="theme",
         log_event_prefix="longlist.themes",
         max_concurrent_batches=MAX_CONCURRENT_BATCHES,
+        progress_key="theme.batches",
     )
 
 

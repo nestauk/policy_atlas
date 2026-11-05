@@ -1044,9 +1044,49 @@ def test_component_started_commits_before_the_component_transaction(
         completed = next(
             entry for entry in terminal if entry["event_type"] == "component.completed"
         )
-        assert completed["payload"] == {"component": "acquire", "sources_added": 1}
+        payload = dict(completed["payload"])
+        # The runner's own wall time rides the terminal event (task 058, N5).
+        wall_clock_s = payload.pop("wall_clock_s")
+        assert isinstance(wall_clock_s, float) and wall_clock_s >= 0.0
+        assert payload == {"component": "acquire", "sources_added": 1}
     finally:
         release.set()
+        _cleanup(engine, task_id)
+
+
+def test_a_component_reported_wall_clock_keeps_its_value_on_the_completed_event(
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task_id: uuid.UUID | None = None
+
+    def reporting_harness(
+        conn: Connection,
+        *,
+        run_id: uuid.UUID,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        del kwargs
+        conn.execute(
+            runs.update().where(runs.c.run_id == run_id).values(status="succeeded", ended_at=now())
+        )
+        return {"summary": {"sources_added": 1, "wall_clock_s": 99.5}, "error": None}
+
+    monkeypatch.setattr(runner_module, "run_harness", reporting_harness)
+    try:
+        task_id, scope_id = _seed_task(engine)
+        outcome = _single_component_attempt(
+            engine, task_id=task_id, scope_id=scope_id, component="acquire"
+        )
+        assert outcome.status == "succeeded"
+        with engine.connect() as conn:
+            completed = next(
+                entry
+                for entry in events.read(conn, task_id)
+                if entry["event_type"] == "component.completed"
+            )
+        assert completed["payload"]["wall_clock_s"] == 99.5
+    finally:
         _cleanup(engine, task_id)
 
 
@@ -1285,5 +1325,77 @@ def test_directive_application_replaces_only_top_level_delta_keys(
         assert context["selection"] == {"budget": 25}
         assert context["extraction"] == {"profiles": list(KNOWN_PROFILE_IDS)}
         assert context["grouping"] == {"facets": ["unit"]}
+    finally:
+        _cleanup(engine, task_id)
+
+
+def test_walk_lifecycle_registers_top_level_and_child_runs_with_the_tick_hub(
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task_id: uuid.UUID | None = None
+    begun: list[tuple[uuid.UUID, uuid.UUID, uuid.UUID | None]] = []
+    ended: list[tuple[uuid.UUID, uuid.UUID]] = []
+
+    class FakeHub:
+        def begin_run(
+            self,
+            task_id: uuid.UUID,
+            run_id: uuid.UUID,
+            *,
+            parent_run_id: uuid.UUID | None = None,
+        ) -> None:
+            begun.append((task_id, run_id, parent_run_id))
+
+        def end_run(self, task_id: uuid.UUID, run_id: uuid.UUID) -> None:
+            ended.append((task_id, run_id))
+
+    monkeypatch.setattr(runner_module, "tick_hub", FakeHub())
+    try:
+        task_id, scope_id = _seed_task(engine)
+        plan_id = uuid.uuid4()
+        parent_id = uuid.uuid4()
+        child_id = uuid.uuid4()
+        runner_module._open_capability_run(
+            engine,
+            capability_run_id=parent_id,
+            task_id=task_id,
+            evidence_scope_id=scope_id,
+            plan_id=plan_id,
+            plan_version=1,
+            session_id=None,
+        )
+        runner_module._open_capability_run(
+            engine,
+            capability_run_id=child_id,
+            task_id=task_id,
+            evidence_scope_id=scope_id,
+            plan_id=plan_id,
+            plan_version=1,
+            session_id=None,
+            parent_capability_run_id=parent_id,
+        )
+        runner_module._finish_run(
+            engine,
+            [],
+            [],
+            status="succeeded",
+            capability_run_id=child_id,
+            task_id=task_id,
+        )
+        runner_module._finish_run(
+            engine,
+            [],
+            [],
+            status="succeeded",
+            capability_run_id=parent_id,
+            task_id=task_id,
+        )
+
+        assert begun == [
+            (task_id, parent_id, None),
+            (task_id, child_id, parent_id),
+        ]
+        assert ended == [(task_id, child_id), (task_id, parent_id)]
     finally:
         _cleanup(engine, task_id)

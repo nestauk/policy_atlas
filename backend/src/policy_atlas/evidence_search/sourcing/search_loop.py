@@ -1502,6 +1502,8 @@ def run_search(
     round_index = count_search_runs(conn, task_id=task_id, scope_id=context.scope_id) + 1
     record_cap = parse_record_cap(context.context)
     started = time.monotonic()
+    # Task 058, N2: the line appears at once, before the first query goes out.
+    acquire.publish_acquire_progress(0, round_index)
 
     wire, usage = generation_backend.generate_queries(
         QueriesPayload(intent=context.intent, guidance=guidance)
@@ -1578,6 +1580,7 @@ def run_search(
         depth=depth,
         scope_wire_params=scope_wire_params,
         search_guidance=guidance,
+        round_index=round_index,
     )
     legs = {name: summaries.get(name, _LegSummary()) for name in names}
     counts["search"] = {

@@ -13,8 +13,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import httpx
+from pydantic import TypeAdapter
 from sqlalchemy import false, select, update
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.sql.elements import ColumnElement
@@ -23,9 +25,14 @@ from structlog.testing import capture_logs
 
 from policy_atlas.api import continuation
 from policy_atlas.api.app import create_app
+from policy_atlas.api.contract import SseFrame
+from policy_atlas.api.contract.sse import (
+    ArtefactSectionDeltaFrame,
+    ArtefactSectionRevisingFrame,
+)
 from policy_atlas.api.dev_issuer import init, mint_token
 from policy_atlas.api.routers import access, sse
-from policy_atlas.api.routers.sse import _encode_tick, _summary, _tail
+from policy_atlas.api.routers.sse import _encode_ephemeral, _summary, _tail
 from policy_atlas.api.settings import Settings
 from policy_atlas.api.stage_vocabulary import stage_for_payload
 from policy_atlas.core import events
@@ -298,7 +305,10 @@ class _ApiSession:
 
 @asynccontextmanager
 async def _api_session(
-    tmp_path: Path, *, heartbeat_seconds: float = 15.0
+    tmp_path: Path,
+    *,
+    heartbeat_seconds: float = 15.0,
+    poll_seconds: float = 0.01,
 ) -> AsyncIterator[_ApiSession]:
     """Create a dev-issuer app under its lifespan with an incremental ASGI client."""
     key_dir = tmp_path / "issuer"
@@ -310,7 +320,7 @@ async def _api_session(
         init(key_dir),
         "http://app.example.test",
         os.environ["DATABASE_URL"],
-        sse_poll_interval_seconds=0.01,
+        sse_poll_interval_seconds=poll_seconds,
         sse_heartbeat_seconds=heartbeat_seconds,
     )
     other_id = f"other-{uuid.uuid4()}"
@@ -435,31 +445,55 @@ def _tick_data(encoded: str) -> dict[str, Any]:
 
 
 def test_tick_with_counts_serialises_them() -> None:
-    """Task 056 (S5): an ``ingest`` tick carries its typed counts on the wire."""
+    """A counted tick carries its activity, count, unit and liveness fields."""
     tick = Tick(
         stage="ingest",
-        note="3 of 10 read, 5 fetched.",
+        activity="Reading full texts",
         occurred_at=datetime.now(UTC),
-        fetched=5,
-        parsed=3,
+        done=3,
         total=10,
+        unit="documents",
+        heartbeat=True,
+        dropped=2,
     )
-    data = _tick_data(_encode_tick(tick))
+    data = _tick_data(_encode_ephemeral(tick))
     assert data["stage"] == "ingest"
-    assert (data["fetched"], data["parsed"], data["total"]) == (5, 3, 10)
-    assert data["note"] == "3 of 10 read, 5 fetched."
+    assert (data["done"], data["total"], data["unit"]) == (3, 10, "documents")
+    assert data["activity"] == "Reading full texts"
+    assert data["heartbeat"] is True
+    assert data["dropped"] == 2
 
 
 def test_tick_without_counts_sends_them_as_null() -> None:
-    """A tick with no counts carries the three keys as null, matching the generated
-    contract (`fetched: number | null`, always present; owner ruling 2026-11-02)."""
-    tick = Tick(stage="acquire", note="Searching a source database.", occurred_at=datetime.now(UTC))
-    data = _tick_data(_encode_tick(tick))
+    """A tick with no honest count keeps its nullable fields on the wire."""
+    tick = Tick(
+        stage="acquire",
+        activity="Searching a source database",
+        occurred_at=datetime.now(UTC),
+    )
+    data = _tick_data(_encode_ephemeral(tick))
     assert set(data) == {
-        "type", "ephemeral", "stage", "note", "occurred_at", "fetched", "parsed", "total"
+        "type",
+        "ephemeral",
+        "stage",
+        "activity",
+        "done",
+        "total",
+        "unit",
+        "section",
+        "heartbeat",
+        "dropped",
+        "occurred_at",
     }
-    assert (data["fetched"], data["parsed"], data["total"]) == (None, None, None)
-    stageless = _tick_data(_encode_tick(Tick(stage=None, note="n", occurred_at=datetime.now(UTC))))
+    assert (data["done"], data["total"], data["unit"]) == (None, None, None)
+    assert data["section"] is None
+    assert data["heartbeat"] is False
+    assert data["dropped"] == 0
+    stageless = _tick_data(
+        _encode_ephemeral(
+            Tick(stage=None, activity="Working", occurred_at=datetime.now(UTC))
+        )
+    )
     assert stageless["stage"] is None
 
 
@@ -723,7 +757,9 @@ def test_sse_tick_is_ephemeral_and_has_no_cursor_id(engine: Engine, tmp_path: Pa
                     ).all()
                 stream = await api.open_stream(task_id)
                 await asyncio.sleep(0.02)
-                tick_hub.publish(task_id, stage="acquire", note="Test tick")
+                tick_hub.publish_tick(
+                    task_id, stage="acquire", activity="Test tick"
+                )
                 item = await stream.next(timeout=1.0)
                 await stream.aclose()
                 with engine.connect() as conn:
@@ -732,8 +768,227 @@ def test_sse_tick_is_ephemeral_and_has_no_cursor_id(engine: Engine, tmp_path: Pa
                     ).all()
                 assert item.event == "tick"
                 assert item.sequence is None
-                assert item.data is not None and item.data["note"] == "Test tick"
+                assert item.data is not None and item.data["activity"] == "Test tick"
                 assert after == before
+        finally:
+            _cleanup(engine, task_id)
+
+    asyncio.run(exercise())
+
+
+async def _subscribed(task_id: uuid.UUID) -> None:
+    """Wait until an open stream's body has subscribed to the hub.
+
+    The response opens before its body runs, so a message published straight
+    after ``open_stream`` could reach the hub before any queue exists. Writer
+    messages that the hub does not remember (revising marks) would then be
+    lost and the test would flake.
+    """
+    for _ in range(200):
+        if tick_hub._subscribers.get(task_id):
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("the stream never subscribed to the hub")
+
+
+def test_sse_snapshot_sends_last_ticks_then_the_draft_after_the_replay(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A reconnect receives replay, stage snapshots, then the whole current draft."""
+
+    async def exercise() -> None:
+        task_id: uuid.UUID | None = None
+        try:
+            async with _api_session(tmp_path) as api:
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                with engine.begin() as conn:
+                    events.append(
+                        conn,
+                        task_id=task_id,
+                        run_id=None,
+                        event_type="task.renamed",
+                        payload={"name_to": "Replay before snapshot"},
+                    )
+                tick_hub.publish_tick(
+                    task_id, stage="acquire", activity="Searching"
+                )
+                tick_hub.publish_tick(
+                    task_id, stage="screen", activity="Screening"
+                )
+                tick_hub.publish_delta(
+                    task_id, index=2, text="Draft", mode="replace"
+                )
+                tick_hub.publish_delta(task_id, index=2, text=" continues")
+
+                stream = await api.open_stream(task_id)
+                items = await stream.collect_until(
+                    lambda item: item.event == "artefact.section_delta"
+                )
+                await stream.aclose()
+
+                assert [item.event for item in items] == [
+                    "task.updated",
+                    "tick",
+                    "tick",
+                    "artefact.section_delta",
+                ]
+                assert [item.sequence is not None for item in items] == [
+                    True,
+                    False,
+                    False,
+                    False,
+                ]
+                assert [
+                    item.data["activity"]
+                    for item in items[1:3]
+                    if item.data is not None
+                ] == ["Searching", "Screening"]
+                assert items[-1].data is not None
+                assert items[-1].data["mode"] == "replace"
+                assert items[-1].data["text"] == "Draft continues"
+        finally:
+            _cleanup(engine, task_id)
+
+    asyncio.run(exercise())
+
+
+def test_sse_delta_and_revising_frames_have_no_id_line(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Published writer messages arrive as validated cursor-free frames."""
+
+    async def exercise() -> None:
+        task_id: uuid.UUID | None = None
+        try:
+            async with _api_session(tmp_path) as api:
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                stream = await api.open_stream(task_id)
+                await _subscribed(task_id)
+                tick_hub.publish_delta(
+                    task_id, index=1, text="A draft sentence.", mode="replace"
+                )
+                tick_hub.publish_revising(task_id, index=1, spans=[(2, 7), (9, 12)])
+                items = await stream.collect_until(
+                    lambda item: item.event == "artefact.section_revising"
+                )
+                await stream.aclose()
+
+                frames = _frames(items)
+                assert [item.event for item in frames] == [
+                    "artefact.section_delta",
+                    "artefact.section_revising",
+                ]
+                assert all(item.sequence is None for item in frames)
+                adapter: TypeAdapter[SseFrame] = TypeAdapter(SseFrame)
+                validated = [adapter.validate_python(item.data) for item in frames]
+                assert isinstance(validated[0], ArtefactSectionDeltaFrame)
+                assert isinstance(validated[1], ArtefactSectionRevisingFrame)
+                assert [(span.start, span.end) for span in validated[1].spans] == [
+                    (2, 7),
+                    (9, 12),
+                ]
+        finally:
+            _cleanup(engine, task_id)
+
+    asyncio.run(exercise())
+
+
+def test_sse_drains_every_queued_message_in_one_poll(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """One authorised poll emits every message already waiting in the hub queue."""
+
+    async def exercise() -> None:
+        task_id: uuid.UUID | None = None
+        try:
+            async with _api_session(tmp_path, poll_seconds=1.0) as api:
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                real_tail = sse._tail
+                tail_calls = 0
+
+                def allow_one_poll(*args: Any, **kwargs: Any) -> Any:
+                    nonlocal tail_calls
+                    tail_calls += 1
+                    if tail_calls == 1:
+                        return real_tail(*args, **kwargs)
+                    return None
+
+                with patch.object(sse, "_tail", side_effect=allow_one_poll):
+                    stream = await api.open_stream(task_id)
+                    await _subscribed(task_id)
+                    for index in range(5):
+                        tick_hub.publish_revising(
+                            task_id, index=index, spans=[(index, index + 1)]
+                        )
+                    closed, items = await stream.drain_until_closed(timeout=3.0)
+                    await stream.aclose()
+
+                assert closed
+                frames = _frames(items)
+                assert [item.data["index"] for item in frames if item.data is not None] == list(
+                    range(5)
+                )
+                assert tail_calls == 2
+        finally:
+            _cleanup(engine, task_id)
+
+    asyncio.run(exercise())
+
+
+def test_sse_snapshot_race_loses_nothing(engine: Engine, tmp_path: Path) -> None:
+    """A publisher racing atomic subscription appears once in snapshot or live state."""
+
+    async def exercise() -> None:
+        task_id: uuid.UUID | None = None
+        try:
+            async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                stages = ("acquire", "screen", "classify", "appraise", "ingest")
+                activities = [f"Race tick {index}" for index in range(len(stages))]
+                subscribe_started = threading.Event()
+                original = type(tick_hub).subscribe_with_snapshot
+
+                async def racing_subscribe(
+                    hub: Any, racing_task_id: uuid.UUID
+                ) -> tuple[asyncio.Queue[Any], list[Any]]:
+                    subscribe_started.set()
+                    return await original(hub, racing_task_id)
+
+                def publish_during_subscribe() -> None:
+                    assert subscribe_started.wait(timeout=2.0)
+                    for stage, activity in zip(stages, activities, strict=True):
+                        tick_hub.publish_tick(
+                            task_id, stage=stage, activity=activity
+                        )
+
+                publisher = threading.Thread(target=publish_during_subscribe)
+                publisher.start()
+                with patch.object(
+                    type(tick_hub),
+                    "subscribe_with_snapshot",
+                    racing_subscribe,
+                ):
+                    stream = await api.open_stream(task_id)
+                    await asyncio.to_thread(publisher.join, 2.0)
+                    assert not publisher.is_alive()
+                    items = await stream.collect_until(
+                        lambda item: item.event == "tick"
+                        and item.data is not None
+                        and item.data["activity"] == activities[-1]
+                    )
+                    items.extend(
+                        await stream.collect_until(
+                            lambda item: item.comment == "keep-alive"
+                        )
+                    )
+                    await stream.aclose()
+
+                observed = [
+                    item.data["activity"]
+                    for item in items
+                    if item.event == "tick" and item.data is not None
+                ]
+                assert sorted(observed) == sorted(activities)
         finally:
             _cleanup(engine, task_id)
 
@@ -835,8 +1090,8 @@ async def _colleague_stream_closes_when(
     **A tick is published immediately after the revocation commits**, and no
     frame may follow it. That is what turns every revocation case into a
     disclosure assertion rather than only a liveness one: the loop used to
-    yield `_encode_tick(tick)` — the task's current stage and progress
-    note — *before* the tail re-authorised, so a revoked caller received one
+    yield `_encode_ephemeral(tick)` — the task's current stage and activity
+    line — *before* the tail re-authorised, so a revoked caller received one
     more frame about the task on their way out. Draining and discarding, as
     these cases did before, cannot see that: the stream still closes.
 
@@ -850,7 +1105,15 @@ async def _colleague_stream_closes_when(
     try:
         await _live(stream)
         await revoke()
-        tick_hub.publish(task_id, stage="acquire", note="After the revocation")
+        tick_hub.publish_tick(
+            task_id, stage="acquire", activity="After the revocation"
+        )
+        # The draft prose and its revising marks are task content too
+        # (task 058, N7): they wait for the same re-authorisation.
+        tick_hub.publish_delta(
+            task_id, index=0, text="Draft after the revocation", mode="replace"
+        )
+        tick_hub.publish_revising(task_id, index=0, spans=[(0, 5)])
         closed, drained = await stream.drain_until_closed(timeout=5.0)
         assert closed
         assert _frames(drained) == []
@@ -1393,8 +1656,8 @@ def test_sse_stream_closes_when_the_administrators_flag_is_revoked(
                 await _live(admin_stream)
                 with seeded(engine) as conn:
                     ops_set_admin(conn, user_id=api.other_id, is_admin=False)
-                tick_hub.publish(
-                    task_id, stage="acquire", note="After the revocation"
+                tick_hub.publish_tick(
+                    task_id, stage="acquire", activity="After the revocation"
                 )
                 closed, drained = await admin_stream.drain_until_closed(timeout=5.0)
                 assert closed
@@ -1476,6 +1739,60 @@ def test_stage_frames_name_the_walk_their_component_run_belongs_to(engine: Engin
             frames = sse._map_rows(conn, task_id=task_id, rows=rows, through=None)
         stages = [frame for frame in frames if frame["type"] == "stage.started"]
         assert [frame["capability_run_id"] for frame in stages] == [str(walk_id), None]
+    finally:
+        with engine.begin() as conn:
+            delete_task_data(conn, task_id)
+
+
+def test_stage_completed_seconds_is_set_from_the_completed_payload_before_timing_lands(
+    engine: Engine,
+) -> None:
+    """The terminal payload supplies seconds before component.timing is appended."""
+    from policy_atlas.core.schema import runs
+    from tests.helpers import now
+
+    task_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                task.insert().values(
+                    task_id=task_id,
+                    name="Live terminal timing",
+                    status="active",
+                    created_at=now(),
+                    updated_at=now(),
+                )
+            )
+            conn.execute(
+                runs.insert().values(
+                    run_id=run_id,
+                    task_id=task_id,
+                    status="succeeded",
+                    started_at=now(),
+                )
+            )
+            events.append(
+                conn,
+                task_id=task_id,
+                run_id=run_id,
+                event_type="run.started",
+                payload={"component": "acquire"},
+            )
+            events.append(
+                conn,
+                task_id=task_id,
+                run_id=run_id,
+                event_type="component.completed",
+                payload={"component": "acquire", "wall_clock_s": 4.25},
+            )
+
+        with engine.connect() as conn:
+            rows = sse._event_rows(conn, task_id=task_id, after=0, through=None)
+            frames = sse._map_rows(conn, task_id=task_id, rows=rows, through=None)
+
+        completed = next(frame for frame in frames if frame["type"] == "stage.completed")
+        assert completed["seconds"] == 4.25
     finally:
         with engine.begin() as conn:
             delete_task_data(conn, task_id)

@@ -69,6 +69,7 @@ card's order) and counted in ``provenance.option_profile.place_sentences``.
 from __future__ import annotations
 
 import re
+import threading
 import time
 import uuid
 from collections import Counter
@@ -84,7 +85,9 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import tracing
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import liveness, tracing
+from policy_atlas.core.done_callbacks import add_done_callback_in_context
 from policy_atlas.core.schema import (
     intervention_profile_record,
     longlist_result,
@@ -304,9 +307,31 @@ def _type_options(
     typings: dict[uuid.UUID, _Typing] = {}
     answered: set[uuid.UUID] = set()
     failed_batches = 0
+
+    # Task 058, N2: one count per typing batch, on the pool's own future.
+    typing_done = 0
+    typing_lock = threading.Lock()
+    typing_total = len(batches)
+
+    def publish_typing(finished: Future[Any] | None) -> None:
+        nonlocal typing_done
+        with typing_lock:
+            if finished is not None:
+                typing_done += 1
+            n = typing_done
+        liveness.publish_progress(
+            activity=activity("option_profile.typing", done=n, total=typing_total),
+            done=n,
+            total=typing_total,
+            unit="batches",
+        )
+
+    publish_typing(None)
+
     with ThreadPoolExecutor(max_workers=TYPING_MAX_CONCURRENT) as pool:
-        futures = [
-            tracing.submit_with_context(
+        futures = []
+        for batch in batches:
+            future = tracing.submit_with_context(
                 pool,
                 backend.type_options,
                 options=[
@@ -321,8 +346,8 @@ def _type_options(
                 plan=plan,
                 baseline_sections=baseline,
             )
-            for batch in batches
-        ]
+            add_done_callback_in_context(future, publish_typing)
+            futures.append(future)
         results: list[UsageResult[LeverTypingResponse] | None] = []
         for future in futures:
             try:
@@ -1336,9 +1361,32 @@ def _place_sentence_wave(
     def _place_ids(o: _ProfiledOption) -> frozenset[str]:
         return frozenset(group.place_id for group in groups[str(o.option_id)])
 
+    # Task 058, N2: one count per option with documents, on the pool's own
+    # future. Retries happen inside ``call_with_retry`` and never move it.
+    places_done = 0
+    places_lock = threading.Lock()
+    places_total = len(called)
+
+    def publish_places(finished: Future[Any] | None) -> None:
+        nonlocal places_done
+        with places_lock:
+            if finished is not None:
+                places_done += 1
+            n = places_done
+        liveness.publish_progress(
+            activity=activity("option_profile.places", done=n, total=places_total),
+            done=n,
+            total=places_total,
+            unit="options",
+        )
+
+    if places_total:
+        publish_places(None)
+
     with ThreadPoolExecutor(max_workers=OPTION_PROFILE_MAX_CONCURRENT) as pool:
-        futures = {
-            str(o.option_id): tracing.submit_with_context(
+        futures = {}
+        for o in called:
+            future = tracing.submit_with_context(
                 pool,
                 call_with_retry,
                 f"place sentences {o.option_id}",
@@ -1347,8 +1395,8 @@ def _place_sentence_wave(
                 final_check=partial(_checked_places, known=_place_ids(o)),
                 event="option_profile",
             )
-            for o in called
-        }
+            add_done_callback_in_context(future, publish_places)
+            futures[str(o.option_id)] = future
         answers = {option_id: future.result() for option_id, future in futures.items()}
     stats: dict[str, Any] = {
         "calls": len(called),

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import threading
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from typing import Any, Literal, cast
 
 import structlog
@@ -14,7 +16,9 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.selectable import Subquery
 
-from policy_atlas.core import events, tracing
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import events, liveness, tracing
+from policy_atlas.core.done_callbacks import add_done_callback_in_context
 from policy_atlas.core.openai_client import CallBudget
 from policy_atlas.core.prompt_fields import clamp_reason, metadata_dict
 from policy_atlas.core.schema import (
@@ -536,6 +540,40 @@ def _run_stage1_calls(
     errors: dict[tuple[int, int], Exception] = {}
     usage_totals = UsageAccumulator()
 
+    # Task 058, N2: documents screened so far (first reads only) and the
+    # relevant ones so far (either read). Counted on the future the pool
+    # waits on, never in the serial retry below.
+    progress_lock = threading.Lock()
+    progress = {"screened": 0, "relevant": 0}
+
+    def publish(*, first_read: bool, relevant: bool) -> None:
+        with progress_lock:
+            if first_read:
+                progress["screened"] += 1
+            if relevant:
+                progress["relevant"] += 1
+            screened = progress["screened"]
+            relevant_so_far = progress["relevant"]
+        liveness.publish_progress(
+            activity=activity(
+                "screen.abstracts",
+                remaining=baseline - screened,
+                relevant=relevant_so_far,
+            ),
+            done=screened,
+            total=None,
+            unit="abstracts",
+        )
+
+    def on_done(rep_index: int, future: Future[Any]) -> None:
+        relevant = False
+        if future.exception() is None:
+            rep, _usage = future.result()
+            relevant = rep.decision in ("relevant", "unsure")
+        publish(first_read=rep_index == 0, relevant=relevant)
+
+    publish(first_read=False, relevant=False)
+
     def run_batch(tasks: list[tuple[int, int]]) -> None:
         batch_errors: dict[tuple[int, int], Exception] = {}
         submitted: list[tuple[tuple[int, int], Future[Any]]] = []
@@ -545,17 +583,14 @@ def _run_stage1_calls(
                     batch_errors[key] = RuntimeError("call budget exhausted")
                     continue
                 doc_index, rep_index = key
-                submitted.append(
-                    (
-                        key,
-                        tracing.submit_with_context(
-                            executor,
-                            screening_backend.screen_envelope,
-                            docs[doc_index].payload,
-                            rep_index=rep_index,
-                        ),
-                    )
+                future = tracing.submit_with_context(
+                    executor,
+                    screening_backend.screen_envelope,
+                    docs[doc_index].payload,
+                    rep_index=rep_index,
                 )
+                add_done_callback_in_context(future, partial(on_done, rep_index))
+                submitted.append((key, future))
             wait([future for _, future in submitted])
         for key, future in submitted:
             try:
@@ -1052,20 +1087,38 @@ def _run_stage2_reps(
     errors: dict[int, Exception] = {}
     usage_totals = UsageAccumulator()
 
+    # Task 058, N2: one count per document, on the pool's own future; the
+    # serial retry below never publishes.
+    done = 0
+    lock = threading.Lock()
+    total = len(tasks)
+
+    def publish_done(finished: Future[Any] | None) -> None:
+        nonlocal done
+        with lock:
+            if finished is not None:
+                done += 1
+            n = done
+        liveness.publish_progress(
+            activity=activity("screen.full_texts", done=n, total=total),
+            done=n,
+            total=total,
+            unit="documents",
+        )
+
+    publish_done(None)
+
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_STAGE2) as executor:
         submitted: list[tuple[int, Future[Any]]] = []
         for doc_index in tasks:
             if not budget.reserve():
                 errors[doc_index] = RuntimeError("call budget exhausted")
                 continue
-            submitted.append(
-                (
-                    doc_index,
-                    tracing.submit_with_context(
-                        executor, screening_backend.screen_fulltext, payloads[doc_index]
-                    ),
-                )
+            future = tracing.submit_with_context(
+                executor, screening_backend.screen_fulltext, payloads[doc_index]
             )
+            add_done_callback_in_context(future, publish_done)
+            submitted.append((doc_index, future))
         wait([future for _, future in submitted])
         for doc_index, future in submitted:
             try:

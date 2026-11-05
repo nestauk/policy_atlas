@@ -96,6 +96,7 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
 )
 from policy_atlas.runtime.agent import persist_approved_plan
 from policy_atlas.runtime.task_plan import TaskPlan
+from tests import progress_recorder
 from tests.evidence_search.group.test_group import (
     _group_row,
     seed_extraction,
@@ -3818,3 +3819,26 @@ def test_mrs_notes_present_in_rollup(conn: Connection) -> None:
     # or findings). With chunk claims, the substrate maps chunk→tss, so notes
     # appear when the stub has at least one cited source.
     assert isinstance(notes, list)
+
+
+def test_each_section_start_publishes_its_number_title_and_sections_done(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    recorded = progress_recorder.install(monkeypatch)
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    seed_select_doc(conn, task_id, run_id, scope_id, title="Progress source")
+
+    summary = _run_synthesise(conn, task_id=task_id, run_id=run_id, scope_id=scope_id)
+
+    # The section starts are the lines that count sections; the writer's other
+    # lines (task 058, N3) carry no count.
+    calls = [call for call in recorded if call.get("unit") == "sections"]
+    total = summary["section_count"]
+    assert total >= 1
+    assert [c["done"] for c in calls] == list(range(total))
+    for number, call in enumerate(calls, start=1):
+        assert call["total"] == total
+        assert call["unit"] == "sections"
+        assert call["activity"] == "Writing"
+        assert call["section"].startswith(f"Section {number} of {total} · ")

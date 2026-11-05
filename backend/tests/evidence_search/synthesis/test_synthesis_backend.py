@@ -6,7 +6,7 @@ import json
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from types import TracebackType
+from types import SimpleNamespace, TracebackType
 from typing import Any, Literal, cast
 
 import pytest
@@ -23,6 +23,7 @@ from policy_atlas.evidence_search.synthesis.section_prompt import (
     GapPayloadWire,
     RepairItemWire,
     SectionProposalWire,
+    SectionProseWire,
     SectionRepairWire,
     build_section_messages,
     build_section_repair_messages,
@@ -827,3 +828,293 @@ def test_salvage_section_rejects_missing_and_oversized_prose() -> None:
         _salvage_section(
             json.dumps({"prose": "x" * (SECTION_PROSE_MAX + 1), "claims": []})
         )
+
+
+# --- The streamed final turn (task 058, N6) -----------------------------------
+
+# Prose with every escape the decoder must hold across fragment boundaries: a
+# quote, a backslash, a newline, a tab, an accented letter sent as ``é``
+# and an emoji sent as a surrogate pair (``json.dumps`` escapes non-ASCII).
+_STREAM_PROSE = 'He said "go" \\ then:\nnext\tstep, café 😀 done.'
+_STREAM_JSON = json.dumps(
+    {
+        "prose": _STREAM_PROSE,
+        "claims": [
+            {"claim_type": "reasoning", "text": "next"},
+            {"claim_type": "not-a-type", "text": "bad"},
+        ],
+    }
+)
+_STREAM_USAGE = SimpleNamespace(prompt_tokens=120, completion_tokens=40, total_tokens=160)
+
+
+def _content_chunk(text: str) -> Any:
+    return SimpleNamespace(
+        choices=[SimpleNamespace(delta=SimpleNamespace(content=text))], usage=None
+    )
+
+
+def _stream_chunks(text: str, size: int) -> list[Any]:
+    chunks = [_content_chunk(text[at : at + size]) for at in range(0, len(text), size)]
+    # The usage arrives on the last chunk, which carries no choices.
+    chunks.append(SimpleNamespace(choices=[], usage=_STREAM_USAGE))
+    return chunks
+
+
+class _StreamCompletions:
+    """``chat.completions`` double: ``create`` returns the scripted chunks."""
+
+    def __init__(self, chunks: list[Any], *, fail_after: int | None = None) -> None:
+        self._chunks = chunks
+        self._fail_after = fail_after
+        self.calls: list[dict[str, Any]] = []
+
+    def create(self, **kwargs: Any) -> Iterator[Any]:
+        self.calls.append(kwargs)
+        return self._iterate()
+
+    def _iterate(self) -> Iterator[Any]:
+        for index, chunk in enumerate(self._chunks):
+            if self._fail_after is not None and index == self._fail_after:
+                raise ConnectionError("stream dropped")
+            yield chunk
+
+
+def _streaming_backend(
+    completions: _StreamCompletions, *, langfuse: Any | None = None
+) -> OpenAISynthesisBackend:
+    backend = OpenAISynthesisBackend(api_key="sk-test-stream", langfuse_client=langfuse)
+    cast("Any", backend)._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    return backend
+
+
+@pytest.fixture
+def section_deltas(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, str, str]]:
+    """Record every ``publish_section_delta`` call as ``(index, text, mode)``."""
+    from policy_atlas.evidence_search.synthesis import synthesis_backend as sb
+
+    recorded: list[tuple[int, str, str]] = []
+
+    def _record(index: int, text: str, *, mode: str = "append") -> None:
+        recorded.append((index, text, mode))
+
+    monkeypatch.setattr(sb, "publish_section_delta", _record)
+    return recorded
+
+
+def test_section_emit_stream_request_shape(section_deltas: list[tuple[int, str, str]]) -> None:
+    completions = _StreamCompletions(_stream_chunks(_STREAM_JSON, 50))
+    backend = _streaming_backend(completions)
+
+    backend.section_emit_stream(_seed(), [])
+
+    [kwargs] = completions.calls
+    assert kwargs["stream"] is True
+    assert kwargs["stream_options"] == {"include_usage": True}
+    assert kwargs["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "section",
+            "strict": True,
+            "schema": SectionProseWire.model_json_schema(),
+        },
+    }
+    assert "tools" not in kwargs
+    assert "tool_choice" not in kwargs
+    assert kwargs["model"] == route().model_for("synthesise_section_emit")
+    assert kwargs["reasoning_effort"] == route().effort_for("synthesise_section_emit")
+    assert kwargs["timeout"] == route().timeout_for("synthesise_section_emit")
+    assert kwargs["messages"][-1] == build_section_messages(
+        _seed(), [], force_emit=True, streamed=True
+    )[-1]
+
+
+@pytest.mark.parametrize("size", [1, 2, 3, 7, 50])
+def test_section_emit_stream_deltas_decode_to_the_parsed_prose(
+    size: int, section_deltas: list[tuple[int, str, str]]
+) -> None:
+    """N6: the appended deltas, joined, equal ``parsed.prose`` at any chunking."""
+    backend = _streaming_backend(_StreamCompletions(_stream_chunks(_STREAM_JSON, size)))
+
+    turn, _usage = backend.section_emit_stream(_seed(), [])
+
+    claims = turn["claims"]
+    assert claims is not None
+    assert claims.prose == _STREAM_PROSE
+    assert {mode for _index, _text, mode in section_deltas} == {"append"}
+    assert {index for index, _text, _mode in section_deltas} == {0}
+    assert "".join(text for _index, text, _mode in section_deltas) == claims.prose
+
+
+def test_incremental_decoder_holds_split_escapes_and_lone_surrogates() -> None:
+    """Every split point of a tricky string, including two high surrogates in a row."""
+    from policy_atlas.core.openai_client import JsonStringFieldDecoder
+
+    prose = 'a\\"b\ud83d😀c\udc00"'
+    text = '{ "prose" :\n "' + json.dumps(prose)[1:-1] + '", "claims": []}'
+    expected = json.loads(text)["prose"]
+    for cut in range(len(text) + 1):
+        decoder = JsonStringFieldDecoder("prose")
+        assert decoder.feed(text[:cut]) + decoder.feed(text[cut:]) == expected, cut
+
+
+def test_section_emit_stream_turn_matches_the_forced_tool_parse(
+    section_deltas: list[tuple[int, str, str]],
+) -> None:
+    """The streamed turn is what ``_emit_turn`` returns for the same JSON."""
+    streamed, usage = _streaming_backend(
+        _StreamCompletions(_stream_chunks(_STREAM_JSON, 7))
+    ).section_emit_stream(_seed(), [])
+    forced, _forced_usage = cast(
+        "Any", _backend_with_fake_client([_FakeToolCall("emit_section", _STREAM_JSON)])
+    )._create_section_turn_once([], force_emit=True)
+
+    assert streamed == forced
+    assert streamed["malformed_claims"] == 1
+    claims = streamed["claims"]
+    assert claims is not None
+    assert [claim.text for claim in claims.claims] == ["next"]
+    # The usage comes from the last chunk.
+    assert usage is not None
+    assert (usage.prompt, usage.completion, usage.total) == (120, 40, 160)
+
+
+def test_section_emit_stream_records_one_generation(
+    section_deltas: list[tuple[int, str, str]],
+) -> None:
+    langfuse = _FakeLangfuse()
+    backend = _streaming_backend(
+        _StreamCompletions(_stream_chunks(_STREAM_JSON, 50)), langfuse=langfuse
+    )
+
+    backend.section_emit_stream(_seed(), [])
+
+    [(name, as_type, span)] = langfuse.spans
+    assert (name, as_type) == ("synthesise:section_emit", "generation")
+    assert "input" in span.updates[0]
+    assert span.updates[0]["metadata"]["step"] == "synthesise_section_emit"
+    assert span.updates[0]["metadata"]["attempt"] == 1
+    assert span.updates[-1]["model"] == route().model_for("synthesise_section_emit")
+    assert span.updates[-1]["usage_details"]
+
+
+def _spy_section_turn(
+    backend: OpenAISynthesisBackend, monkeypatch: pytest.MonkeyPatch
+) -> tuple[list[bool], SectionTurn]:
+    fallback_turn: SectionTurn = {
+        "tool_calls": [],
+        "claims": SectionProseWire(prose="Fallback prose.", claims=[]),
+    }
+    forced: list[bool] = []
+
+    def _section_turn(
+        seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
+    ) -> tuple[SectionTurn, None]:
+        del seed, transcript
+        forced.append(force_emit)
+        return fallback_turn, None
+
+    monkeypatch.setattr(backend, "section_turn", _section_turn)
+    return forced, fallback_turn
+
+
+def test_section_emit_stream_failure_midway_falls_back_once(
+    monkeypatch: pytest.MonkeyPatch, section_deltas: list[tuple[int, str, str]]
+) -> None:
+    backend = _streaming_backend(
+        _StreamCompletions(_stream_chunks(_STREAM_JSON, 7), fail_after=4)
+    )
+    forced, fallback_turn = _spy_section_turn(backend, monkeypatch)
+
+    with capture_logs() as logs:
+        turn, usage = backend.section_emit_stream(_seed(), [])
+
+    assert turn is fallback_turn
+    assert usage is None
+    assert forced == [True]
+    assert backend.stream_fallbacks == 1
+    # Some prose went out before the drop; one empty replace resets the draft.
+    assert section_deltas[-1] == (0, "", "replace")
+    assert [mode for _i, _t, mode in section_deltas].count("replace") == 1
+    [entry] = [e for e in logs if e["event"] == "synthesis.section_emit_stream.fallback"]
+    assert entry["error"] == "ConnectionError"
+
+
+def test_section_emit_stream_unparseable_text_falls_back_once(
+    monkeypatch: pytest.MonkeyPatch, section_deltas: list[tuple[int, str, str]]
+) -> None:
+    backend = _streaming_backend(
+        _StreamCompletions(_stream_chunks('{"prose": "Cut short', 5))
+    )
+    forced, fallback_turn = _spy_section_turn(backend, monkeypatch)
+
+    turn, _usage = backend.section_emit_stream(_seed(), [])
+
+    assert turn is fallback_turn
+    assert forced == [True]
+    assert backend.stream_fallbacks == 1
+    assert section_deltas[-1] == (0, "", "replace")
+
+
+class _StreamingLoopBackend:
+    """A loop backend with the streamed final turn: one read turn, then the stream."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def section_turn(
+        self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
+    ) -> tuple[SectionTurn, None]:
+        del seed, transcript
+        self.calls.append(f"section_turn(force_emit={force_emit})")
+        return {"tool_calls": [{"tool": "lookup", "arguments": {}}], "claims": None}, None
+
+    def section_emit_stream(
+        self, seed: dict[str, Any], transcript: list[ToolExchange]
+    ) -> tuple[SectionTurn, None]:
+        del seed, transcript
+        self.calls.append("section_emit_stream")
+        return {"tool_calls": [], "claims": SectionProseWire(prose="Done.", claims=[])}, None
+
+
+def test_run_section_loop_streams_only_the_forced_turn() -> None:
+    backend = _StreamingLoopBackend()
+
+    result = run_section_loop(
+        backend, seed=_seed(), tools={"lookup": lambda _arguments: {}}, turn_cap=2
+    )
+
+    assert backend.calls == ["section_turn(force_emit=False)", "section_emit_stream"]
+    claims = result["claims"]
+    assert claims is not None
+    assert claims.prose == "Done."
+
+
+def test_run_section_loop_without_the_stream_method_uses_the_forced_tool() -> None:
+    class _ToolOnlyBackend:
+        def __init__(self) -> None:
+            self.calls: list[bool] = []
+
+        def section_turn(
+            self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
+        ) -> tuple[SectionTurn, None]:
+            del seed, transcript
+            self.calls.append(force_emit)
+            if force_emit:
+                return {
+                    "tool_calls": [],
+                    "claims": SectionProseWire(prose="Forced.", claims=[]),
+                }, None
+            return {"tool_calls": [{"tool": "lookup", "arguments": {}}], "claims": None}, None
+
+    backend = _ToolOnlyBackend()
+
+    result = run_section_loop(
+        backend, seed=_seed(), tools={"lookup": lambda _arguments: {}}, turn_cap=2
+    )
+
+    assert backend.calls == [False, True]
+    claims = result["claims"]
+    assert claims is not None
+    assert claims.prose == "Forced."
+    assert result["turn_cap_hit"] is True

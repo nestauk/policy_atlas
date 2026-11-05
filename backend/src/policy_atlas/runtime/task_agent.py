@@ -13,16 +13,32 @@ completes before acquire begins — this seam is never invoked mid-run
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from typing import Any, Protocol, cast
 
+import openai
 import structlog
 from langfuse import Langfuse
+from openai.lib._pydantic import to_strict_json_schema
 
 from policy_atlas.api.contract import PlanDraft, PlanStep
-from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
+from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION, STAGE_ROW
+from policy_atlas.core import tracing
 from policy_atlas.core.model_routes import route
-from policy_atlas.core.openai_client import resolve_openai_client, traced_parse
+from policy_atlas.core.openai_client import (
+    JsonStringFieldDecoder,
+    openai_kwargs,
+    resolve_openai_client,
+    traced_parse,
+    with_system_breakpoint,
+)
 from policy_atlas.core.prompt_fields import scrub_nul
+from policy_atlas.core.usage import (
+    log_usage,
+    token_usage_from_provider,
+    usage_details,
+    usage_metadata,
+)
 from policy_atlas.evidence_search.extract.extract import _scrub_nul
 from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 from policy_atlas.runtime.capability_registry import (
@@ -105,6 +121,7 @@ class TaskAgentTurnBackend(Protocol):
         inputs: Any = None,
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
+        on_delta: Callable[[str], None] | None = None,
     ) -> TaskAgentTurnWire:
         """Advance one capability's Task Agent conversation by one turn.
 
@@ -115,6 +132,9 @@ class TaskAgentTurnBackend(Protocol):
             inputs: What ``profile.load_inputs`` returned.
             session_id: Optional Langfuse session id (the task id).
             conversation_id: Optional conversation id for trace metadata.
+            on_delta: Optional callback given each new piece of the reply
+                text as it is written (task 058, N9). When it is given, the
+                pieces joined equal the returned turn's ``reply``.
 
         Returns:
             One parsed turn of ``profile.wire``.
@@ -214,8 +234,13 @@ class OpenAITaskAgentBackend:
         inputs: Any = None,
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
+        on_delta: Callable[[str], None] | None = None,
     ) -> TaskAgentTurnWire:
         """Advance the conversation through structured OpenAI output.
+
+        Without ``on_delta`` the turn is one ``parse`` request with the usual
+        traced retries. With it, the turn is streamed (task 058, N9): see
+        :meth:`_streamed_turn`.
 
         Args:
             profile: The task's capability profile.
@@ -224,6 +249,7 @@ class OpenAITaskAgentBackend:
             inputs: What ``profile.load_inputs`` returned.
             session_id: Optional Langfuse session id (the task id).
             conversation_id: Optional conversation id for trace metadata.
+            on_delta: Optional callback given each new piece of the reply.
 
         Returns:
             One parsed turn, NUL-scrubbed.
@@ -231,10 +257,23 @@ class OpenAITaskAgentBackend:
         Raises:
             RuntimeError: If the response cannot be parsed.
         """
+        messages = profile.build_messages(turns, previous_draft, inputs)
+        metadata = {
+            "conversation_id": str(conversation_id) if conversation_id is not None else None,
+            "turn_number": len(turns),
+        }
+        if on_delta is not None:
+            streamed = self._streamed_turn(
+                profile, messages, on_delta=on_delta, session_id=session_id, metadata=metadata
+            )
+            return cast(
+                TaskAgentTurnWire,
+                _degrade_suggestions(streamed) if profile.degrade_suggestions else streamed,
+            )
         parsed, _usage = traced_parse(
             self._client,
             self._langfuse_client,
-            messages=profile.build_messages(turns, previous_draft, inputs),
+            messages=messages,
             response_format=profile.wire,
             model=route().model_for(profile.step),
             step=profile.step,
@@ -247,10 +286,7 @@ class OpenAITaskAgentBackend:
             name=profile.trace_name,
             prompt_version=profile.prompt_version,
             session_id=session_id,
-            metadata={
-                "conversation_id": str(conversation_id) if conversation_id is not None else None,
-                "turn_number": len(turns),
-            },
+            metadata=metadata,
             clean=lambda model: _scrub_turn(cast(Any, model)),
         )
         turn: Any = parsed
@@ -258,6 +294,156 @@ class OpenAITaskAgentBackend:
             TaskAgentTurnWire,
             _degrade_suggestions(turn) if profile.degrade_suggestions else turn,
         )
+
+    def _streamed_turn(
+        self,
+        profile: TaskAgentProfile,
+        messages: list[Any],
+        *,
+        on_delta: Callable[[str], None],
+        session_id: uuid.UUID | None,
+        metadata: dict[str, Any],
+    ) -> Any:
+        """Stream one turn, retrying once only if nothing has arrived yet.
+
+        In plain terms: the reply reaches the user piece by piece, so a request
+        that fails after the first piece cannot be sent again without showing
+        the user the same words twice; that failure fails the turn. A dropped
+        connection or a timeout *before* the first piece has shown the user
+        nothing, so it is sent once more, as its own traced attempt
+        (deferred.md, the chat stream's missing pre-token retry; task 058, N9).
+        """
+        logical_call_id = uuid.uuid4().hex[:12]
+        for attempt in (1, 2):
+            started: list[bool] = []
+            try:
+                return self._stream_attempt(
+                    profile,
+                    messages,
+                    on_delta=on_delta,
+                    started=started,
+                    session_id=session_id,
+                    metadata={
+                        **metadata,
+                        "attempt": attempt,
+                        "logical_call_id": logical_call_id,
+                    },
+                )
+            except (openai.APIConnectionError, openai.APITimeoutError) as exc:
+                if attempt == 2 or started:
+                    raise
+                log.warning(
+                    "task_agent.turn.pre_token_retry",
+                    step=profile.step,
+                    attempt=attempt,
+                    logical_call_id=logical_call_id,
+                    error=type(exc).__name__,
+                )
+        raise AssertionError("unreachable: the second attempt returns or raises")
+
+    def _stream_attempt(
+        self,
+        profile: TaskAgentProfile,
+        messages: list[Any],
+        *,
+        on_delta: Callable[[str], None],
+        started: list[bool],
+        session_id: uuid.UUID | None,
+        metadata: dict[str, Any],
+    ) -> Any:
+        """Send one streamed request under its own Langfuse generation.
+
+        ``started`` gains an entry when the first content piece arrives, so the
+        caller knows whether a retry is still safe.
+        """
+        step = profile.step
+        model = route().model_for(step)
+        reasoning_effort = route().effort_for(step)
+        prompt_cache = cache_mode_for(step)
+
+        def _call(span: Any | None) -> Any:
+            completions: Any = self._client.chat.completions
+            stream = completions.create(
+                messages=with_system_breakpoint(messages)
+                if prompt_cache == "breakpoint"
+                else messages,
+                # The schema ``parse`` sends for the same wire (strict mode
+                # needs every key listed as required), so the model is held to
+                # the same shape on both paths.
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "turn",
+                        "strict": True,
+                        "schema": to_strict_json_schema(profile.wire),
+                    },
+                },
+                stream=True,
+                stream_options={"include_usage": True},
+                max_completion_tokens=profile.max_output_tokens,
+                **openai_kwargs(
+                    model,
+                    reasoning_effort=reasoning_effort,
+                    prompt_cache=prompt_cache,
+                    timeout_s=route().timeout_for(step),
+                ),
+            )
+            decoder = JsonStringFieldDecoder("reply")
+            pieces: list[str] = []
+            provider_usage: Any | None = None
+            for chunk in stream:
+                choices = getattr(chunk, "choices", None)
+                if choices:
+                    fragment = getattr(getattr(choices[0], "delta", None), "content", None)
+                    if isinstance(fragment, str) and fragment:
+                        started.append(True)
+                        pieces.append(fragment)
+                        text = scrub_nul(decoder.feed(fragment))
+                        if text:
+                            on_delta(text)
+                chunk_usage = getattr(chunk, "usage", None)
+                if chunk_usage is not None:
+                    provider_usage = chunk_usage
+            log_usage(profile.usage_event, provider_usage)
+            try:
+                parsed = profile.wire.model_validate_json("".join(pieces))
+            except ValueError as exc:
+                raise RuntimeError(f"OpenAI {profile.label} streamed turn was not parsed.") from exc
+            turn = _scrub_turn(cast(Any, parsed))
+            usage = token_usage_from_provider(provider_usage)
+            if span is not None:
+                span.update(
+                    usage_details=usage_details(usage),
+                    output=turn.model_dump(),
+                    metadata={
+                        "prompt_version": profile.prompt_version,
+                        "reasoning_effort": reasoning_effort,
+                        "prompt_cache": prompt_cache,
+                        "streamed": True,
+                        **metadata,
+                        **usage_metadata(usage),
+                    },
+                )
+            return turn
+
+        if self._langfuse_client is None:
+            return _call(None)
+        with (
+            tracing.trace_scope(session_id=session_id),
+            tracing._observation(
+                self._langfuse_client, name=profile.trace_name, as_type="generation"
+            ) as span,
+        ):
+            span.update(
+                input={"messages": messages},
+                model=model,
+                metadata={"step": step, **metadata},
+            )
+            try:
+                return _call(span)
+            except Exception as exc:
+                span.update(level="ERROR", status_message=f"{type(exc).__name__}: {exc}")
+                raise
 
     def plan_turn(
         self,
@@ -387,6 +573,7 @@ class StubTaskAgentBackend:
         inputs: Any = None,
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
+        on_delta: Callable[[str], None] | None = None,
     ) -> TaskAgentTurnWire:
         """Return the profile's deterministic turn, derived from ``turns`` alone.
 
@@ -397,12 +584,17 @@ class StubTaskAgentBackend:
             inputs: Accepted for protocol compatibility; ignored.
             session_id: Accepted for tracing compatibility; ignored.
             conversation_id: Accepted for tracing compatibility; ignored.
+            on_delta: When given, called once with the whole reply, so a
+                streamed route behaves as it does live.
 
         Returns:
             A deterministic turn of ``profile.wire``.
         """
         del previous_draft, inputs, session_id, conversation_id
-        return cast(TaskAgentTurnWire, profile.stub_turn(turns))
+        turn = cast(TaskAgentTurnWire, profile.stub_turn(turns))
+        if on_delta is not None:
+            on_delta(turn.reply)
+        return turn
 
     def plan_turn(
         self,
@@ -504,7 +696,7 @@ def draft_from_plan(plan: TaskPlan) -> PlanDraft:
             continue
         seen_stages.add(stage)
         label, blurb = STAGE_PRESENTATION[stage]
-        steps.append(PlanStep(label=label, blurb=blurb, stage=stage))
+        steps.append(PlanStep(label=label, blurb=blurb, stage=stage, row=STAGE_ROW[stage]))
     values["steps"] = steps
     values["ready"] = True
     return PlanDraft.model_validate(values)

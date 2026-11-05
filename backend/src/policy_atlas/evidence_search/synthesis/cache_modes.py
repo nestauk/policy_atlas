@@ -54,6 +54,8 @@ CACHE_MODES: dict[str, PromptCache] = {
     "synthesise_write_artefact_summary": "breakpoint",
     "synthesise_judge_summary": "breakpoint",
     "synthesise_section_turn": "auto",
+    # The streamed final turn (task 058, D1): its own cache lineage, at the measured cost.
+    "synthesise_section_emit": "auto",
     "synthesise_write_key_findings": "breakpoint",
     "synthesise_write_case_studies": "breakpoint",
     "synthesise_write_source_note": "breakpoint",

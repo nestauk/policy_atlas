@@ -1352,3 +1352,48 @@ class OptionAddedOut(BaseModel):
 
     option: OptionOut
     opened_run: LatestRun | None = None
+
+
+#: Where an option's own search stands (task 058, N22): no child walk yet,
+#: the walk running or paused, the walk finished with a result, or the walk
+#: ended without one (failed, aborted or interrupted).
+OptionSearchStatus = Literal["queued", "searching", "searched", "failed"]
+
+
+class OptionProgressOut(BaseModel):
+    """One option row while the longlist is being built (task 058, N22).
+
+    Args:
+        option_id: The option's identity.
+        name: Its name.
+        description: Its one-line description.
+        origin: Where it came from.
+        state: Included or excluded.
+        merged_into_option_id: The kept option a duplicate was folded into,
+            or `None`.
+        search_status: Where the option's own search stands.
+        found: How many sources that search found (its acquire count), or
+            `None` until the search has finished acquiring.
+    """
+
+    option_id: uuid.UUID
+    name: str
+    description: str
+    origin: OptionOrigin
+    state: OptionState
+    merged_into_option_id: uuid.UUID | None = None
+    search_status: OptionSearchStatus
+    found: int | None = None
+
+
+class OptionsOut(BaseModel):
+    """The `options` read: every option row of the task, with its search (N22).
+
+    Served from the end of the suggest stage, before the longlist exists; an
+    empty list before suggest has written any option.
+
+    Args:
+        options: The task's options, oldest first.
+    """
+
+    options: list[OptionProgressOut] = Field(default_factory=list)

@@ -59,6 +59,7 @@ from policy_atlas.options_scoping.scoping_backend import (
 )
 from policy_atlas.runtime import harness
 from policy_atlas.runtime.scoping_plan import PROFILE_LINE_KEYS
+from tests import progress_recorder
 from tests.options_scoping.test_longlist import _Scripted, _Walk
 from tests.options_scoping.test_theme import _longlist_walk
 from tests.runtime.test_baseline_gate import (
@@ -1571,3 +1572,47 @@ def test_a_potential_impact_answer_over_the_target_but_under_the_hard_bound_is_k
         if key == "folds":
             continue
         assert entry["1"]["lines"]["potential_impact"]["sentence"] == long_but_kept
+
+
+# --- Live progress (task 058, N2) ---
+
+
+def test_typing_publishes_batches_done_of_total(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    walk = _ProfiledWalk(conn)
+    for i in range(41):  # three batches of at most 20
+        walk.option(f"Seed option {i}", origin="added_by_you")
+    walk.build(_Scripted())
+
+    typing_calls = [c for c in calls if c["unit"] == "batches"]
+    assert all(c["total"] == 3 for c in typing_calls)
+    assert sorted(c["done"] for c in typing_calls) == [0, 1, 2, 3]
+    assert max(typing_calls, key=lambda c: c["done"])["activity"] == (
+        "Typing options · batch 3 of 3"
+    )
+
+
+def test_place_sentences_publish_options_done_and_a_retry_does_not_move_it(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    walk = _Walk(conn)
+    _place_walk(walk)
+    duplicate = PlaceSentencesResponse(
+        places=[
+            PlaceSentenceWire(place_id="p1", sentence="2 evaluations."),
+            PlaceSentenceWire(place_id="p1", sentence="2 evaluations."),
+        ]
+    )
+    backend = _place_backend(["not a response", duplicate])
+    run_id, _ = walk.build(backend)
+    _profile(walk, backend)
+    stats = walk.result(run_id).provenance["option_profile"]["place_sentences"]
+
+    assert stats["retries"] == 1  # the one option's call was tried twice
+    place_calls = [c for c in calls if c["unit"] == "options"]
+    assert all(c["total"] == 1 for c in place_calls)
+    assert [c["done"] for c in place_calls] == [0, 1]
+    assert place_calls[-1]["activity"] == "Writing place sentences · 1 of 1 options"

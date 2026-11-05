@@ -225,6 +225,92 @@
         "title": "ArtefactSectionCompletedFrame",
         "type": "object"
       },
+      "ArtefactSectionDeltaFrame": {
+        "description": "Ephemeral: prose appended to the section being written (task 058, N7).\n\nDisplay-only. `artefact.section_completed` stays the record; a replay\ncarries no deltas. Never persisted, no `id:` line, no `sequence`.\n\nArgs:\n    index: The skeleton display index of the section.\n    text: The prose delta.\n    mode: `append` adds `text` to the client's draft; `replace` resets\n        the draft to `text` (a reconnect mid-section, or the streamed\n        turn's fallback resetting an abandoned draft with empty text).",
+        "properties": {
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "append",
+              "replace"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "artefact.section_delta",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "index",
+          "text",
+          "mode",
+          "occurred_at"
+        ],
+        "title": "ArtefactSectionDeltaFrame",
+        "type": "object"
+      },
+      "ArtefactSectionRevisingFrame": {
+        "description": "Ephemeral: the sentences the judge failed, sent before the repair (N7).\n\nDisplay-only: the client blurs these spans of its draft until\n`artefact.section_completed` brings the repaired prose. Never persisted,\nno `id:` line, no `sequence`.",
+        "properties": {
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "spans": {
+            "items": {
+              "$ref": "#/components/schemas/SectionSpan"
+            },
+            "title": "Spans",
+            "type": "array"
+          },
+          "type": {
+            "const": "artefact.section_revising",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "index",
+          "spans",
+          "occurred_at"
+        ],
+        "title": "ArtefactSectionRevisingFrame",
+        "type": "object"
+      },
       "ArtefactSectionSkeleton": {
         "description": "One planned live-artefact section in presentation order.",
         "properties": {
@@ -3232,7 +3318,7 @@
         "type": "object"
       },
       "LatestRun": {
-        "description": "The derived latest-run read model carried on a task.\n\nArgs:\n    capability_run_id: Identity of the task's most recent run.\n    status: That run's current status.\n    started_at: When that run started executing.\n    ended_at: When that run reached a terminal status, or `None` while\n        still running or paused.",
+        "description": "The derived latest-run read model carried on a task.\n\nArgs:\n    capability_run_id: Identity of the task's most recent run.\n    status: That run's current status.\n    started_at: When that run started executing.\n    ended_at: When that run reached a terminal status, or `None` while\n        still running or paused.\n    stage: On `TaskOut.active_run` only: the public stage the task's\n        parentless active walk last started, so a scoping task shows the\n        parent's stage rather than a child's (task 058, N15). `None` before\n        the walk starts a stage, and on every other use of this shape.\n    stage_label: The server's label for `stage` (the stage vocabulary),\n        or `None` with it.",
         "properties": {
           "capability_run_id": {
             "format": "uuid",
@@ -3250,6 +3336,49 @@
               }
             ],
             "title": "Ended At"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "acquire",
+                  "screen",
+                  "classify",
+                  "appraise",
+                  "ingest",
+                  "characterise",
+                  "select",
+                  "extract",
+                  "group",
+                  "synthesise",
+                  "inherit",
+                  "suggest",
+                  "option_searches",
+                  "extract_interventions",
+                  "longlist",
+                  "option_profile",
+                  "constrain",
+                  "theme",
+                  "shortlist"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "stage_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Label"
           },
           "started_at": {
             "format": "date-time",
@@ -4236,6 +4365,85 @@
         "title": "OptionProfileOut",
         "type": "object"
       },
+      "OptionProgressOut": {
+        "description": "One option row while the longlist is being built (task 058, N22).\n\nArgs:\n    option_id: The option's identity.\n    name: Its name.\n    description: Its one-line description.\n    origin: Where it came from.\n    state: Included or excluded.\n    merged_into_option_id: The kept option a duplicate was folded into,\n        or `None`.\n    search_status: Where the option's own search stands.\n    found: How many sources that search found (its acquire count), or\n        `None` until the search has finished acquiring.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "found": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Found"
+          },
+          "merged_into_option_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merged Into Option Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "option_id": {
+            "format": "uuid",
+            "title": "Option Id",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "clustered",
+              "suggested",
+              "from_evidence_search",
+              "added_by_you"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "search_status": {
+            "enum": [
+              "queued",
+              "searching",
+              "searched",
+              "failed"
+            ],
+            "title": "Search Status",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "included",
+              "excluded"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "option_id",
+          "name",
+          "description",
+          "origin",
+          "state",
+          "search_status"
+        ],
+        "title": "OptionProgressOut",
+        "type": "object"
+      },
       "OptionRecordOut": {
         "description": "One intervention profile record of a document, under one option (R67).\n\nThe record in its own words, as the extraction wrote it: the source\ndossier's slot shows it in place of findings on an options-scoping task\n(task 046, amendment 3).\n\nArgs:\n    option_id: The option the record is a member of.\n    option_name: That option's name.\n    record_id: The intervention profile record.\n    intervention: The intervention, as the document names it.\n    setting: Where it was delivered, as the document says.\n    unit: What it was tried on (the unit), as the document says.\n    outcome: The outcomes measured, as the document says.\n    study_geography: Where it was studied, as the document says.\n    role: What the document does with the intervention.",
         "properties": {
@@ -4595,6 +4803,20 @@
           "state"
         ],
         "title": "OptionSummaryOut",
+        "type": "object"
+      },
+      "OptionsOut": {
+        "description": "The `options` read: every option row of the task, with its search (N22).\n\nServed from the end of the suggest stage, before the longlist exists; an\nempty list before suggest has written any option.\n\nArgs:\n    options: The task's options, oldest first.",
+        "properties": {
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/OptionProgressOut"
+            },
+            "title": "Options",
+            "type": "array"
+          }
+        },
+        "title": "OptionsOut",
         "type": "object"
       },
       "OrganisationRef": {
@@ -5531,7 +5753,7 @@
         "type": "object"
       },
       "PlanStep": {
-        "description": "One user-visible step in the composed chain, for progress display.\n\nArgs:\n    label: Short user-visible step label (presentation; may change).\n    blurb: Longer user-visible step description (presentation; may\n        change).\n    stage: Composed-chain stage name the step corresponds to.",
+        "description": "One user-visible step in the composed chain, for progress display.\n\nArgs:\n    label: Short user-visible step label (presentation; may change).\n    blurb: Longer user-visible step description (presentation; may\n        change).\n    stage: Composed-chain stage name the step corresponds to.\n    row: The card row the step belongs to (task 058, N17). Steps that\n        share a row key render as one row, with the row's label; the\n        client groups by this key and decides nothing about rows.",
         "properties": {
           "blurb": {
             "title": "Blurb",
@@ -5539,6 +5761,10 @@
           },
           "label": {
             "title": "Label",
+            "type": "string"
+          },
+          "row": {
+            "title": "Row",
             "type": "string"
           },
           "stage": {
@@ -5570,7 +5796,8 @@
         "required": [
           "label",
           "blurb",
-          "stage"
+          "stage",
+          "row"
         ],
         "title": "PlanStep",
         "type": "object"
@@ -6859,6 +7086,25 @@
         "title": "SectionOut",
         "type": "object"
       },
+      "SectionSpan": {
+        "description": "A code-point span `[start, end)` of the section draft.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "SectionSpan",
+        "type": "object"
+      },
       "ShortlistOut": {
         "description": "The latest shortlist proposal on a longlist (task 055).\n\nArgs:\n    note: The proposal's short \"what this leaves out\" note; `null` before\n        the first proposal.\n    provenance: How the proposal was made (prompt version, model,\n        appetite, plan version, \u2026); empty before the first proposal.\n    places_target: How many places a proposal fills to.\n    stale: The proposal does not match the plan's current risk appetite,\n        or a built longlist has no proposal yet. The view then asks the\n        user to press Suggest more to re-propose.",
         "properties": {
@@ -7280,6 +7526,8 @@
         "discriminator": {
           "mapping": {
             "artefact.section_completed": "#/components/schemas/ArtefactSectionCompletedFrame",
+            "artefact.section_delta": "#/components/schemas/ArtefactSectionDeltaFrame",
+            "artefact.section_revising": "#/components/schemas/ArtefactSectionRevisingFrame",
             "artefact.section_started": "#/components/schemas/ArtefactSectionStartedFrame",
             "artefact.skeleton": "#/components/schemas/ArtefactSkeletonFrame",
             "checkin.pending": "#/components/schemas/CheckinPendingFrame",
@@ -7330,6 +7578,12 @@
           },
           {
             "$ref": "#/components/schemas/TickFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSectionDeltaFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSectionRevisingFrame"
           }
         ]
       },
@@ -7611,8 +7865,110 @@
         "title": "TaggedOut",
         "type": "object"
       },
+      "TaskAgentCompletedEvent": {
+        "description": "The one successful last event: the finished, stored turn.\n\nArgs:\n    turn: The turn exactly as a read of it returns it.",
+        "properties": {
+          "turn": {
+            "$ref": "#/components/schemas/TaskAgentTurnOut"
+          },
+          "type": {
+            "const": "completed",
+            "default": "completed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn"
+        ],
+        "title": "TaskAgentCompletedEvent",
+        "type": "object"
+      },
+      "TaskAgentDeltaEvent": {
+        "description": "One new piece of the planner's reply; the pieces joined are the reply.\n\nArgs:\n    text: The next piece of reply text.",
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "delta",
+            "default": "delta",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TaskAgentDeltaEvent",
+        "type": "object"
+      },
+      "TaskAgentFailedEvent": {
+        "description": "The one failed last event, sent after the response has started.\n\nArgs:\n    error: What went wrong, in public-safe terms.\n    turn_index: The failed turn's place in the conversation; the stored\n        row is marked failed and may be retried with the same client turn id.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/TaskAgentFailedEventError"
+          },
+          "turn_index": {
+            "title": "Turn Index",
+            "type": "integer"
+          },
+          "type": {
+            "const": "failed",
+            "default": "failed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "turn_index"
+        ],
+        "title": "TaskAgentFailedEvent",
+        "type": "object"
+      },
+      "TaskAgentFailedEventError": {
+        "description": "Failure details that are safe to show the caller.\n\nArgs:\n    code: A stable error code (``task_agent_turn_failed``, or a conflict\n        or capacity code such as ``run_active``).\n    message: A short plain explanation.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "TaskAgentFailedEventError",
+        "type": "object"
+      },
+      "TaskAgentProgressEvent": {
+        "description": "What the planner is doing now, sent before its reply starts (task 058, N9).\n\nArgs:\n    label: The user-facing activity line, such as \"Drafting the plan\".",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "type": {
+            "const": "progress",
+            "default": "progress",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "TaskAgentProgressEvent",
+        "type": "object"
+      },
       "TaskAgentTranscriptTurnOut": {
-        "description": "One durable task_agent-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-task conversation coordinate.\n    conversation_id: Owning task_agent conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Task Agent reply, absent until a pending turn completes.\n    suggestions: Task Agent quick-reply suggestions, if the turn completed.\n    part: Structured sequential-task_agent proposal, absent for legacy turns.\n    capability: The owning task's capability, absent on legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.\n    action: The applied longlist verb, on an `action` turn.",
+        "description": "One durable task_agent-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-task conversation coordinate.\n    conversation_id: Owning task_agent conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Task Agent reply, absent until a pending turn completes.\n    question: The planner's clarifying question, read back off the stored\n        turn (task 058, N10). Null when the turn asked none.\n    suggestions: Task Agent quick-reply suggestions, if the turn completed.\n    part: Structured sequential-task_agent proposal, absent for legacy turns.\n    capability: The owning task's capability, absent on legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.\n    action: The applied longlist verb, on an `action` turn.",
         "properties": {
           "action": {
             "anyOf": [
@@ -7716,6 +8072,17 @@
               }
             ]
           },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
           "reply": {
             "anyOf": [
               {
@@ -7788,7 +8155,7 @@
         "type": "object"
       },
       "TaskAgentTurnOut": {
-        "description": "Response body for one task_agent turn.\n\nA turn is one of four things, named by ``kind``: a planning ``reply``, a\ngrounded ``answer`` from the paused walk's evidence (or the longlist's), a\nrecorded ``decision`` at a gate, or an applied longlist ``action`` (task\n045). They are additive optional fields rather than a discriminated union,\nso every existing reader keeps working and a turn stored before task 044\nstays valid with ``kind`` absent.\n\nArgs:\n    reply: The task_agent's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The task_agent's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-task_agent proposal, when this turn carries one.\n    conversation_id: Task Agent conversation that produced this turn.\n    capability: The owning task's capability, when known. Absent on turns\n        stored before task 044.\n    scoping_plan: The full current scoping draft, on an options-scoping\n        turn. `plan` is null for those turns, and this is null for\n        Evidence search turns.\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.\n    action: The applied longlist verb, on an `action` turn.",
+        "description": "Response body for one task_agent turn.\n\nA turn is one of four things, named by ``kind``: a planning ``reply``, a\ngrounded ``answer`` from the paused walk's evidence (or the longlist's), a\nrecorded ``decision`` at a gate, or an applied longlist ``action`` (task\n045). They are additive optional fields rather than a discriminated union,\nso every existing reader keeps working and a turn stored before task 044\nstays valid with ``kind`` absent.\n\nArgs:\n    reply: The task_agent's conversational reply for this turn.\n    plan: The full current draft plan.\n    question: The planner's clarifying question, when this turn asks one\n        (task 058, N10); the ``suggestions`` answer it. Null otherwise.\n    suggestions: The task_agent's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-task_agent proposal, when this turn carries one.\n    conversation_id: Task Agent conversation that produced this turn.\n    capability: The owning task's capability, when known. Absent on turns\n        stored before task 044.\n    scoping_plan: The full current scoping draft, on an options-scoping\n        turn. `plan` is null for those turns, and this is null for\n        Evidence search turns.\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.\n    action: The applied longlist verb, on an `action` turn.",
         "properties": {
           "action": {
             "anyOf": [
@@ -7879,6 +8246,17 @@
                 "type": "null"
               }
             ]
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
           },
           "reply": {
             "title": "Reply",
@@ -8464,46 +8842,56 @@
         "type": "object"
       },
       "TickFrame": {
-        "description": "Ephemeral heartbeat/progress-note frame.\n\nNever persisted, never state-bearing, carries no `id:` line \u2014 so it has\nno `sequence` field at all (unlike every other frame type).",
+        "description": "Ephemeral activity frame (task 058, D2): what the model is doing now.\n\nNever persisted, never state-bearing, carries no `id:` line \u2014 so it has\nno `sequence` field at all (unlike every other frame type). One set of\nfields for every stage.\n\nArgs:\n    stage: The stage the activity belongs to.\n    activity: The activity line, in the server's plain voice; the client\n        shows it as it is.\n    done: Items finished so far, or null when the stage has no honest\n        count (no total known before its loop started).\n    total: The total known before the loop started, or null.\n    unit: What `done` and `total` count (`documents`, `batches`,\n        `searches`, `sections`), or null with no count.\n    section: The writer's section line (\"Section 3 of 7 \u00b7 Costs\"), or\n        null outside writing.\n    heartbeat: True when the hub repeated the current tick because a\n        model call is still in flight (every 10 s), not because anything\n        changed.\n    dropped: The hub's dropped-tick counter for this task (slow\n        subscriber evictions), for the silent-gap measure (N25).",
         "properties": {
+          "activity": {
+            "title": "Activity",
+            "type": "string"
+          },
+          "done": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Done"
+          },
+          "dropped": {
+            "default": 0,
+            "title": "Dropped",
+            "type": "integer"
+          },
           "ephemeral": {
             "const": true,
             "default": true,
             "title": "Ephemeral",
             "type": "boolean"
           },
-          "fetched": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Fetched"
-          },
-          "note": {
-            "title": "Note",
-            "type": "string"
+          "heartbeat": {
+            "default": false,
+            "title": "Heartbeat",
+            "type": "boolean"
           },
           "occurred_at": {
             "format": "date-time",
             "title": "Occurred At",
             "type": "string"
           },
-          "parsed": {
+          "section": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
             "default": null,
-            "title": "Parsed"
+            "title": "Section"
           },
           "stage": {
             "anyOf": [
@@ -8554,11 +8942,23 @@
             "const": "tick",
             "title": "Type",
             "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unit"
           }
         },
         "required": [
           "type",
-          "note",
+          "activity",
           "occurred_at"
         ],
         "title": "TickFrame",
@@ -11224,6 +11624,53 @@
       }
     },
     "/api/v1/tasks/{task_id}/options": {
+      "get": {
+        "description": "Return the task's option rows with each option's search (task 058, N22).\n\nReadable from the end of the suggest stage, before the longlist exists,\nunder the same graded-or-public check as the longlist read. Empty before\nany option exists; never a 404 for a readable task.",
+        "operationId": "get_options_api_v1_tasks__task_id__options_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Options",
+        "tags": [
+          "longlist"
+        ]
+      },
       "post": {
         "description": "Add an option by hand: propose its design, mint it, open its option search.\n\nThe design is proposed back from the user's words (``option_design_v1``)\noutside any transaction; the option is minted *added by you* and its\noption search opened as a walk with no parent (:func:`add_option`). The\nfence is read twice: before the model call, so a refused add costs no\ncall, and again under the lock.",
         "operationId": "post_option_api_v1_tasks__task_id__options_post",
@@ -12230,7 +12677,7 @@
         ]
       },
       "post": {
-        "description": "Advance one task's durable task_agent conversation once per client turn id.\n\nTwo capabilities share this route, and everything durable about it \u2014 the\nphase-one reservation, the idempotency key, the run fences, the transaction\nthat joins the turn to the plan it approved \u2014 is shared with them. What the\ncapability picks is which Task Agent is called, which plan model validates\nwhat it returns, and which of the two draft projections the turn carries\nback (task 044, C9).\n\nA turn that arrives while an options-scoping walk is paused on its baseline\ngate is admitted, sorted, and dispatched to an answer or a decision before\nany planner call (task 044, S5). One shape crosses back into the ordinary\npath: \"change the plan\" carrying an instruction commits the decision and\nthen continues, on the *same* reserved row, as an ordinary planning turn.",
+        "description": "Advance one task's durable task_agent conversation once per client turn id.\n\nTwo capabilities share this route, and everything durable about it \u2014 the\nphase-one reservation, the idempotency key, the run fences, the transaction\nthat joins the turn to the plan it approved \u2014 is shared with them. What the\ncapability picks is which Task Agent is called, which plan model validates\nwhat it returns, and which of the two draft projections the turn carries\nback (task 044, C9).\n\nA turn that arrives while an options-scoping walk is paused on its baseline\ngate is admitted, sorted, and dispatched to an answer or a decision before\nany planner call (task 044, S5). One shape crosses back into the ordinary\npath: \"change the plan\" carrying an instruction commits the decision and\nthen continues, on the *same* reserved row, as an ordinary planning turn.\n\nThe response is a stream of NDJSON lines with the chat route's rules\n(task 058, N9). Everything up to the planner call happens before the\nresponse headers are sent, so a refusal (an unknown task, a turn already\nrunning, a run in progress) is the usual JSON error. A turn settled there\n(a replay, a gate answer or decision, a longlist action) is one\n``completed`` line. A planner turn runs in its own thread: one\n``progress`` line, the reply as ``delta`` lines while it is written, then\nexactly one ``completed`` or ``failed`` line. The thread finishes and\nstores the turn even if the caller stops reading, and it holds the task's\nturn lock until it ends.",
         "operationId": "create_task_agent_turn_api_v1_tasks__task_id__task_agent_turns_post",
         "parameters": [
           {
@@ -12257,13 +12704,13 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
+              "application/x-ndjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskAgentTurnOut"
+                  "type": "string"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "`application/x-ndjson`: progress/delta events followed by exactly one completed or failed terminal event."
           },
           "422": {
             "content": {

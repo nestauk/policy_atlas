@@ -2859,3 +2859,92 @@ def test_provenance_records_prior_factors_for_returned_chunks_only(
     assert len(results) == SYNTH_CHUNK_TOP_K
     assert set(factors) == {result["chunk_record_id"] for result in results}
     assert retriever.provenance()["unit_count"] == SYNTH_CHUNK_TOP_K + 3
+
+
+# --- The writer's activity lines (task 058, N3) --------------------------------
+
+
+def test_run_section_loop_publishes_the_writer_activity_with_the_section_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from policy_atlas.core import liveness
+
+    recorded: list[tuple[str, str | None]] = []
+
+    def _record(*, activity: str, section: str | None = None, **_counts: Any) -> None:
+        recorded.append((activity, section))
+
+    monkeypatch.setattr(liveness, "publish_progress", _record)
+    backend = ScriptedBackend([
+        {
+            "tool_calls": [
+                {"tool": "search_chunks", "arguments": {"query": "  evidence​ on\n subsidy  "}}
+            ],
+            "claims": None,
+        },
+        {"tool_calls": [{"tool": "query_findings", "arguments": {}}], "claims": None},
+        {"tool_calls": [{"tool": "lookup", "arguments": {}}], "claims": None},
+        {"tool_calls": [], "claims": _claims("forced")},
+    ])
+    section_line = "Section 2 of 5 · Costs and funding"
+
+    result = run_section_loop(
+        backend,
+        seed={},
+        tools={
+            "search_chunks": lambda _args: {"chunks": []},
+            "query_findings": lambda _args: {},
+            "lookup": lambda _args: {},
+        },
+        turn_cap=4,
+        section_line=section_line,
+    )
+
+    assert result["turn_cap_hit"] is True
+    assert [activity for activity, _section in recorded] == [
+        "Looking for: evidence on subsidy",
+        "Reading findings",
+        "Looking up sources",
+        "Writing",
+    ]
+    assert {section for _activity, section in recorded} == {section_line}
+
+
+def test_search_without_a_usable_query_reads_looking_up_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from policy_atlas.core import liveness
+
+    recorded: list[str] = []
+    monkeypatch.setattr(
+        liveness, "publish_progress", lambda *, activity, **_rest: recorded.append(activity)
+    )
+    backend = ScriptedBackend([
+        {"tool_calls": [{"tool": "search_chunks", "arguments": {"query": 7}}], "claims": None},
+        {"tool_calls": [], "claims": _claims()},
+    ])
+
+    run_section_loop(backend, seed={}, tools={"search_chunks": lambda _args: {"chunks": []}})
+
+    assert recorded == ["Looking up sources"]
+
+
+def test_normalise_query_nfc() -> None:
+    assert synthesis_tools.normalise_query("café") == "café"
+
+
+def test_normalise_query_strips_control_and_format_characters() -> None:
+    assert synthesis_tools.normalise_query("a​b\u0007c‮d") == "abcd"
+
+
+def test_normalise_query_collapses_whitespace() -> None:
+    assert synthesis_tools.normalise_query("  rent \n\t caps   now ") == "rent caps now"
+
+
+def test_normalise_query_cuts_at_120_characters() -> None:
+    assert synthesis_tools.normalise_query("q" * 300) == "q" * 120
+
+
+def test_normalise_query_non_string_is_empty() -> None:
+    assert synthesis_tools.normalise_query(None) == ""
+    assert synthesis_tools.normalise_query(["housing"]) == ""

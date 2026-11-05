@@ -22,6 +22,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -33,6 +34,7 @@ from sqlalchemy.engine import Connection, Engine
 from policy_atlas.api.contract import OptionDocumentOut
 from policy_atlas.api.deps import get_agent_backend, get_runner_backends
 from policy_atlas.api.read_models import repository
+from policy_atlas.core import events
 from policy_atlas.core.schema import (
     capability_run,
     evidence_scope,
@@ -65,6 +67,7 @@ from policy_atlas.runtime.scoping_plan import (
 from tests.api.org_support import (
     Principal,
     make_org,
+    make_task,
     ops_enrol,
     seeded,
     tenancy_client,
@@ -76,7 +79,7 @@ from tests.api.resource_support import (  # noqa: F401 — autouse teardown
     remove_committed_tasks_after_walks,
 )
 from tests.api.resource_support import await_walks_ended as _await_walks_ended
-from tests.helpers import now, seed_run
+from tests.helpers import now, seed_run, seed_walk
 from tests.options_scoping.test_longlist import (
     RCT,
     _current_fingerprint,
@@ -425,6 +428,184 @@ def test_no_longlist_is_a_404_and_an_unknown_option_too(engine: Engine, tmp_path
         assert client.get(f"/api/v1/tasks/{task_id}/longlist", headers=owner).status_code == 404
         unknown = client.get(f"/api/v1/tasks/{task_id}/options/{uuid.uuid4()}", headers=owner)
         assert unknown.status_code == 404
+
+
+# --- the options read (task 058, N22) ------------------------------------------------
+
+
+def _options(client: TestClient, task_id: uuid.UUID, headers: dict[str, str] | None) -> Any:
+    return client.get(f"/api/v1/tasks/{task_id}/options", headers=headers)
+
+
+def _statuses(client: TestClient, task_id: uuid.UUID, headers: dict[str, str]) -> list[Any]:
+    response = _options(client, task_id, headers)
+    assert response.status_code == 200, response.text
+    return [(row["name"], row["search_status"], row["found"]) for row in response.json()["options"]]
+
+
+def _suggested(conn: Connection, task_id: uuid.UUID, name: str, minutes: int) -> uuid.UUID:
+    """One suggested option row, as the suggest stage writes it, ``minutes`` apart."""
+    option_id = uuid.uuid4()
+    moment = now()
+    conn.execute(
+        option.insert().values(
+            option_id=option_id,
+            task_id=task_id,
+            name=name,
+            description=f"{name}, as suggested.",
+            design={"name": name, "description": f"{name}, as suggested."},
+            outcomes=["the NEET rate"],
+            origin="suggested",
+            state="included",
+            secondary_lever_types=[],
+            created_at=moment + timedelta(minutes=minutes),
+            updated_at=moment,
+        )
+    )
+    return option_id
+
+
+def _child(
+    engine: Engine, task_id: uuid.UUID, parent: uuid.UUID, option_id: uuid.UUID
+) -> tuple[uuid.UUID, uuid.UUID]:
+    """A running option search for ``option_id`` under ``parent``, with one component run."""
+    with engine.begin() as conn:
+        seeded_walk = seed_walk(
+            conn,
+            task_id,
+            purpose="targeted",
+            status="running",
+            parent=parent,
+            context={"option_id": str(option_id)},
+            with_run=True,
+        )
+    assert seeded_walk.run_id is not None
+    return seeded_walk.walk_id, seeded_walk.run_id
+
+
+def _acquired(engine: Engine, task_id: uuid.UUID, run_id: uuid.UUID, count: int) -> None:
+    with engine.begin() as conn:
+        events.append(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            event_type="component.completed",
+            payload={"component": "acquire", "registry_component": "acquire", "acquired": count},
+        )
+
+
+def _end(engine: Engine, walk_id: uuid.UUID, status: str) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            update(capability_run)
+            .where(capability_run.c.capability_run_id == walk_id)
+            .values(status=status, ended_at=now())
+        )
+
+
+def test_the_options_read_follows_each_option_search_before_the_longlist(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
+            task_id = make_task(
+                conn, owner_user_id=owner.user_id, org_id=org_id, capability="options_scoping"
+            )
+        # Before suggest: an empty list, not a 404.
+        assert _statuses(client, task_id, owner.headers) == []
+        with engine.begin() as conn:
+            parent = seed_walk(conn, task_id, purpose="longlist", status="running").walk_id
+            mentoring = _suggested(conn, task_id, "Mentoring", 1)
+            guarantee = _suggested(conn, task_id, "Youth guarantee", 2)
+            folded = _suggested(conn, task_id, "Mentors", 3)
+            conn.execute(
+                update(option)
+                .where(option.c.option_id == folded)
+                .values(merged_into_option_id=mentoring)
+            )
+        assert _statuses(client, task_id, owner.headers) == [
+            ("Mentoring", "queued", None),
+            ("Youth guarantee", "queued", None),
+            ("Mentors", "queued", None),
+        ]
+
+        child, run_id = _child(engine, task_id, parent, mentoring)
+        failed, _ = _child(engine, task_id, parent, guarantee)
+        assert _statuses(client, task_id, colleague.headers)[:2] == [
+            ("Mentoring", "searching", None),
+            ("Youth guarantee", "searching", None),
+        ]
+        _acquired(engine, task_id, run_id, 12)
+        assert _statuses(client, task_id, owner.headers)[0] == ("Mentoring", "searching", 12)
+        _end(engine, child, "succeeded")
+        _end(engine, failed, "interrupted")
+        body = _options(client, task_id, owner.headers).json()["options"]
+        assert [(row["name"], row["search_status"], row["found"]) for row in body] == [
+            ("Mentoring", "searched", 12),
+            ("Youth guarantee", "failed", None),
+            ("Mentors", "queued", None),
+        ]
+        assert body[0] == {
+            "option_id": str(mentoring),
+            "name": "Mentoring",
+            "description": "Mentoring, as suggested.",
+            "origin": "suggested",
+            "state": "included",
+            "merged_into_option_id": None,
+            "search_status": "searched",
+            "found": 12,
+        }
+        assert body[2]["merged_into_option_id"] == str(mentoring)
+
+        # The longlist read and the existence flag do not move until the result exists.
+        assert _longlist(client, task_id, owner.headers).status_code == 404
+        listed = client.get(f"/api/v1/tasks/{task_id}", headers=owner.headers).json()
+        assert listed["has_longlist"] is False
+        end_walks(engine, task_id)
+
+
+def test_the_options_read_is_graded_public_and_scoped_to_its_task(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with tenancy_client(tmp_path) as (client, (owner, colleague, stranger)):
+        built = _org_build(engine, owner, colleague)
+        with engine.begin() as conn:
+            other = make_task(conn, owner_user_id=owner.user_id, capability="options_scoping")
+            _suggested(conn, other, "Another task's option", 1)
+        names = {row[0] for row in _statuses(client, built.task_id, owner.headers)}
+        assert set(built.options) <= names
+        assert "Another task's option" not in names
+        assert _statuses(client, built.task_id, colleague.headers)
+
+        absent = _options(client, uuid.uuid4(), stranger.headers)
+        hidden = _options(client, built.task_id, stranger.headers)
+        assert hidden.status_code == absent.status_code == 404
+        assert hidden.content == absent.content
+        assert _options(client, built.task_id, None).status_code == 404
+
+        # A link grants no read: the source's owner still gets the 404.
+        with engine.begin() as conn:
+            conn.execute(
+                update(task)
+                .where(task.c.task_id == built.source_task_id)
+                .values(owner_user_id=stranger.user_id)
+            )
+        assert (
+            client.get(f"/api/v1/tasks/{built.source_task_id}", headers=stranger.headers)
+        ).status_code == 200
+        assert _options(client, built.task_id, stranger.headers).status_code == 404
+
+        shared = client.patch(
+            f"/api/v1/tasks/{built.task_id}", headers=owner.headers, json={"is_public": True}
+        )
+        assert shared.status_code == 200, shared.text
+        for headers in (None, stranger.headers):
+            response = _options(client, built.task_id, headers)
+            assert response.status_code == 200
+            assert {row["name"] for row in response.json()["options"]} == names
 
 
 # --- the list ----------------------------------------------------------------------

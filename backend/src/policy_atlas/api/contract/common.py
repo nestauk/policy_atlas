@@ -8,7 +8,7 @@ contract package.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -105,3 +105,50 @@ class Page[T](BaseModel):
 
     data: list[T]
     pagination: PageMeta
+
+
+#: The pinned stable component-vocabulary stage keys (spec § SSE).
+StageKey = Literal[
+    "acquire",
+    "screen",
+    "classify",
+    "appraise",
+    "ingest",
+    "characterise",
+    "select",
+    "extract",
+    "group",
+    "synthesise",
+    "inherit",
+    "suggest",
+    "option_searches",
+    "extract_interventions",
+    "longlist",
+    "option_profile",
+    "constrain",
+    "theme",
+    "shortlist",
+]
+
+#: `StageKey`'s members as a plain tuple, for runtime membership checks.
+STAGE_KEYS: tuple[StageKey, ...] = (
+    "acquire",
+    "screen",
+    "classify",
+    "appraise",
+    "ingest",
+    "characterise",
+    "select",
+    "extract",
+    "group",
+    "synthesise",
+    "inherit",
+    "suggest",
+    "option_searches",
+    "extract_interventions",
+    "longlist",
+    "option_profile",
+    "constrain",
+    "theme",
+    "shortlist",
+)

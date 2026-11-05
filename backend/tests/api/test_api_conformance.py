@@ -51,6 +51,9 @@ _CONDITIONALLY_PUBLIC_GETS = frozenset(
         # Task 045 (S12): the longlist and the option card, public like the artefact.
         "/api/v1/tasks/{task_id}/longlist",
         "/api/v1/tasks/{task_id}/options/{option_id}",
+        # Task 058 (N22): the option rows while the longlist is built, public
+        # like the longlist; an empty list (200) before any option exists.
+        "/api/v1/tasks/{task_id}/options",
         # Task 046, amendment 3 (R67): the dossier's records, public like the dossier.
         "/api/v1/tasks/{task_id}/sources/{source_id}/records",
     }

@@ -816,7 +816,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Get Options
+         * @description Return the task's option rows with each option's search (task 058, N22).
+         *
+         *     Readable from the end of the suggest stage, before the longlist exists,
+         *     under the same graded-or-public check as the longlist read. Empty before
+         *     any option exists; never a 404 for a readable task.
+         */
+        get: operations["get_options_api_v1_tasks__task_id__options_get"];
         put?: never;
         /**
          * Post Option
@@ -1173,6 +1181,17 @@ export interface paths {
          *     any planner call (task 044, S5). One shape crosses back into the ordinary
          *     path: "change the plan" carrying an instruction commits the decision and
          *     then continues, on the *same* reserved row, as an ordinary planning turn.
+         *
+         *     The response is a stream of NDJSON lines with the chat route's rules
+         *     (task 058, N9). Everything up to the planner call happens before the
+         *     response headers are sent, so a refusal (an unknown task, a turn already
+         *     running, a run in progress) is the usual JSON error. A turn settled there
+         *     (a replay, a gate answer or decision, a longlist action) is one
+         *     ``completed`` line. A planner turn runs in its own thread: one
+         *     ``progress`` line, the reply as ``delta`` lines while it is written, then
+         *     exactly one ``completed`` or ``failed`` line. The thread finishes and
+         *     stores the turn even if the caller stops reading, and it holds the task's
+         *     turn lock until it ends.
          */
         post: operations["create_task_agent_turn_api_v1_tasks__task_id__task_agent_turns_post"];
         delete?: never;
@@ -1386,6 +1405,77 @@ export interface components {
              * @enum {string}
              */
             type: "artefact.section_completed";
+        };
+        /**
+         * ArtefactSectionDeltaFrame
+         * @description Ephemeral: prose appended to the section being written (task 058, N7).
+         *
+         *     Display-only. `artefact.section_completed` stays the record; a replay
+         *     carries no deltas. Never persisted, no `id:` line, no `sequence`.
+         *
+         *     Args:
+         *         index: The skeleton display index of the section.
+         *         text: The prose delta.
+         *         mode: `append` adds `text` to the client's draft; `replace` resets
+         *             the draft to `text` (a reconnect mid-section, or the streamed
+         *             turn's fallback resetting an abandoned draft with empty text).
+         */
+        ArtefactSectionDeltaFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "append" | "replace";
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Text */
+            text: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_delta";
+        };
+        /**
+         * ArtefactSectionRevisingFrame
+         * @description Ephemeral: the sentences the judge failed, sent before the repair (N7).
+         *
+         *     Display-only: the client blurs these spans of its draft until
+         *     `artefact.section_completed` brings the repaired prose. Never persisted,
+         *     no `id:` line, no `sequence`.
+         */
+        ArtefactSectionRevisingFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Spans */
+            spans: components["schemas"]["SectionSpan"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_revising";
         };
         /**
          * ArtefactSectionSkeleton
@@ -2849,6 +2939,12 @@ export interface components {
          *         started_at: When that run started executing.
          *         ended_at: When that run reached a terminal status, or `None` while
          *             still running or paused.
+         *         stage: On `TaskOut.active_run` only: the public stage the task's
+         *             parentless active walk last started, so a scoping task shows the
+         *             parent's stage rather than a child's (task 058, N15). `None` before
+         *             the walk starts a stage, and on every other use of this shape.
+         *         stage_label: The server's label for `stage` (the stage vocabulary),
+         *             or `None` with it.
          */
         LatestRun: {
             /**
@@ -2858,6 +2954,10 @@ export interface components {
             capability_run_id: string;
             /** Ended At */
             ended_at?: string | null;
+            /** Stage */
+            stage?: ("acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist") | null;
+            /** Stage Label */
+            stage_label?: string | null;
             /**
              * Started At
              * Format: date-time
@@ -3375,6 +3475,52 @@ export interface components {
             settings: string[];
         };
         /**
+         * OptionProgressOut
+         * @description One option row while the longlist is being built (task 058, N22).
+         *
+         *     Args:
+         *         option_id: The option's identity.
+         *         name: Its name.
+         *         description: Its one-line description.
+         *         origin: Where it came from.
+         *         state: Included or excluded.
+         *         merged_into_option_id: The kept option a duplicate was folded into,
+         *             or `None`.
+         *         search_status: Where the option's own search stands.
+         *         found: How many sources that search found (its acquire count), or
+         *             `None` until the search has finished acquiring.
+         */
+        OptionProgressOut: {
+            /** Description */
+            description: string;
+            /** Found */
+            found?: number | null;
+            /** Merged Into Option Id */
+            merged_into_option_id?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Option Id
+             * Format: uuid
+             */
+            option_id: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "clustered" | "suggested" | "from_evidence_search" | "added_by_you";
+            /**
+             * Search Status
+             * @enum {string}
+             */
+            search_status: "queued" | "searching" | "searched" | "failed";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "included" | "excluded";
+        };
+        /**
          * OptionRecordOut
          * @description One intervention profile record of a document, under one option (R67).
          *
@@ -3580,6 +3726,20 @@ export interface components {
             state: "included" | "excluded";
             /** Taxonomy Version */
             taxonomy_version?: string | null;
+        };
+        /**
+         * OptionsOut
+         * @description The `options` read: every option row of the task, with its search (N22).
+         *
+         *     Served from the end of the suggest stage, before the longlist exists; an
+         *     empty list before suggest has written any option.
+         *
+         *     Args:
+         *         options: The task's options, oldest first.
+         */
+        OptionsOut: {
+            /** Options */
+            options?: components["schemas"]["OptionProgressOut"][];
         };
         /**
          * OrganisationRef
@@ -4014,12 +4174,17 @@ export interface components {
          *         blurb: Longer user-visible step description (presentation; may
          *             change).
          *         stage: Composed-chain stage name the step corresponds to.
+         *         row: The card row the step belongs to (task 058, N17). Steps that
+         *             share a row key render as one row, with the row's label; the
+         *             client groups by this key and decides nothing about rows.
          */
         PlanStep: {
             /** Blurb */
             blurb: string;
             /** Label */
             label: string;
+            /** Row */
+            row: string;
             /**
              * Stage
              * @enum {string}
@@ -4691,6 +4856,16 @@ export interface components {
             title: string;
         };
         /**
+         * SectionSpan
+         * @description A code-point span `[start, end)` of the section draft.
+         */
+        SectionSpan: {
+            /** End */
+            end: number;
+            /** Start */
+            start: number;
+        };
+        /**
          * ShortlistOut
          * @description The latest shortlist proposal on a longlist (task 055).
          *
@@ -4846,7 +5021,7 @@ export interface components {
             /** Tag Type */
             tag_type: string;
         };
-        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"];
+        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"] | components["schemas"]["ArtefactSectionDeltaFrame"] | components["schemas"]["ArtefactSectionRevisingFrame"];
         /**
          * StageCompletedFrame
          * @description A component reached its terminal (successful) outcome.
@@ -4970,6 +5145,91 @@ export interface components {
             text: string;
         };
         /**
+         * TaskAgentCompletedEvent
+         * @description The one successful last event: the finished, stored turn.
+         *
+         *     Args:
+         *         turn: The turn exactly as a read of it returns it.
+         */
+        TaskAgentCompletedEvent: {
+            turn: components["schemas"]["TaskAgentTurnOut"];
+            /**
+             * Type
+             * @default completed
+             * @constant
+             */
+            type: "completed";
+        };
+        /**
+         * TaskAgentDeltaEvent
+         * @description One new piece of the planner's reply; the pieces joined are the reply.
+         *
+         *     Args:
+         *         text: The next piece of reply text.
+         */
+        TaskAgentDeltaEvent: {
+            /** Text */
+            text: string;
+            /**
+             * Type
+             * @default delta
+             * @constant
+             */
+            type: "delta";
+        };
+        /**
+         * TaskAgentFailedEvent
+         * @description The one failed last event, sent after the response has started.
+         *
+         *     Args:
+         *         error: What went wrong, in public-safe terms.
+         *         turn_index: The failed turn's place in the conversation; the stored
+         *             row is marked failed and may be retried with the same client turn id.
+         */
+        TaskAgentFailedEvent: {
+            error: components["schemas"]["TaskAgentFailedEventError"];
+            /** Turn Index */
+            turn_index: number;
+            /**
+             * Type
+             * @default failed
+             * @constant
+             */
+            type: "failed";
+        };
+        /**
+         * TaskAgentFailedEventError
+         * @description Failure details that are safe to show the caller.
+         *
+         *     Args:
+         *         code: A stable error code (``task_agent_turn_failed``, or a conflict
+         *             or capacity code such as ``run_active``).
+         *         message: A short plain explanation.
+         */
+        TaskAgentFailedEventError: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * TaskAgentProgressEvent
+         * @description What the planner is doing now, sent before its reply starts (task 058, N9).
+         *
+         *     Args:
+         *         label: The user-facing activity line, such as "Drafting the plan".
+         */
+        TaskAgentProgressEvent: {
+            /** Label */
+            label: string;
+            /**
+             * Type
+             * @default progress
+             * @constant
+             */
+            type: "progress";
+        };
+        /**
          * TaskAgentTranscriptTurnOut
          * @description One durable task_agent-transcript turn shown in chronological order.
          *
@@ -4980,6 +5240,8 @@ export interface components {
          *             so a reloaded client can retry its own incomplete latest turn.
          *         user_message: Submitted user message.
          *         reply: Task Agent reply, absent until a pending turn completes.
+         *         question: The planner's clarifying question, read back off the stored
+         *             turn (task 058, N10). Null when the turn asked none.
          *         suggestions: Task Agent quick-reply suggestions, if the turn completed.
          *         part: Structured sequential-task_agent proposal, absent for legacy turns.
          *         capability: The owning task's capability, absent on legacy turns.
@@ -5015,6 +5277,8 @@ export interface components {
             /** Kind */
             kind?: ("reply" | "answer" | "decision" | "action") | null;
             part?: components["schemas"]["PartProposalOut"] | null;
+            /** Question */
+            question?: string | null;
             /** Reply */
             reply: string | null;
             /**
@@ -5062,6 +5326,8 @@ export interface components {
          *     Args:
          *         reply: The task_agent's conversational reply for this turn.
          *         plan: The full current draft plan.
+         *         question: The planner's clarifying question, when this turn asks one
+         *             (task 058, N10); the ``suggestions`` answer it. Null otherwise.
          *         suggestions: The task_agent's suggested answers to its clarifying
          *             question, rendered as tappable quick replies. Empty when none.
          *         part: Structured sequential-task_agent proposal, when this turn carries one.
@@ -5089,6 +5355,8 @@ export interface components {
             kind?: ("reply" | "answer" | "decision" | "action") | null;
             part?: components["schemas"]["PartProposalOut"] | null;
             plan?: components["schemas"]["PlanDraft"] | null;
+            /** Question */
+            question?: string | null;
             /** Reply */
             reply: string;
             scoping_plan?: components["schemas"]["ScopingPlanDraft"] | null;
@@ -5452,12 +5720,42 @@ export interface components {
         };
         /**
          * TickFrame
-         * @description Ephemeral heartbeat/progress-note frame.
+         * @description Ephemeral activity frame (task 058, D2): what the model is doing now.
          *
          *     Never persisted, never state-bearing, carries no `id:` line — so it has
-         *     no `sequence` field at all (unlike every other frame type).
+         *     no `sequence` field at all (unlike every other frame type). One set of
+         *     fields for every stage.
+         *
+         *     Args:
+         *         stage: The stage the activity belongs to.
+         *         activity: The activity line, in the server's plain voice; the client
+         *             shows it as it is.
+         *         done: Items finished so far, or null when the stage has no honest
+         *             count (no total known before its loop started).
+         *         total: The total known before the loop started, or null.
+         *         unit: What `done` and `total` count (`documents`, `batches`,
+         *             `searches`, `sections`), or null with no count.
+         *         section: The writer's section line ("Section 3 of 7 · Costs"), or
+         *             null outside writing.
+         *         heartbeat: True when the hub repeated the current tick because a
+         *             model call is still in flight (every 10 s), not because anything
+         *             changed.
+         *         dropped: The hub's dropped-tick counter for this task (slow
+         *             subscriber evictions), for the silent-gap measure (N25).
          */
         TickFrame: {
+            /** Activity */
+            activity: string;
+            /**
+             * Done
+             * @default null
+             */
+            done: number | null;
+            /**
+             * Dropped
+             * @default 0
+             */
+            dropped: number;
             /**
              * Ephemeral
              * @default true
@@ -5465,22 +5763,20 @@ export interface components {
              */
             ephemeral: true;
             /**
-             * Fetched
-             * @default null
+             * Heartbeat
+             * @default false
              */
-            fetched: number | null;
-            /** Note */
-            note: string;
+            heartbeat: boolean;
             /**
              * Occurred At
              * Format: date-time
              */
             occurred_at: string;
             /**
-             * Parsed
+             * Section
              * @default null
              */
-            parsed: number | null;
+            section: string | null;
             /**
              * Stage
              * @default null
@@ -5496,6 +5792,11 @@ export interface components {
              * @enum {string}
              */
             type: "tick";
+            /**
+             * Unit
+             * @default null
+             */
+            unit: string | null;
         };
         /**
          * TurnActionOut
@@ -6782,6 +7083,37 @@ export interface operations {
             };
         };
     };
+    get_options_api_v1_tasks__task_id__options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_option_api_v1_tasks__task_id__options_post: {
         parameters: {
             query?: never;
@@ -7334,13 +7666,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description `application/x-ndjson`: progress/delta events followed by exactly one completed or failed terminal event. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaskAgentTurnOut"];
+                    "application/x-ndjson": string;
                 };
             };
             /** @description Validation Error */

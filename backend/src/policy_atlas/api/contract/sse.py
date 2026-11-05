@@ -1,11 +1,12 @@
 """SSE frame-vocabulary contract (discriminated union on `type`).
 
-Frame `type` names and the nine pinned `stage` keys are contract (spec §
+Frame `type` names and the nineteen pinned `stage` keys are contract (spec §
 SSE) — Hyrum hygiene means nothing else internal (module names, model ids,
-raw payload keys) is ever observable through a frame. Every frame except
-`tick` carries a `sequence` (the `event_log` sequence, doubling as the
-client's reconnect cursor); `tick` is the ephemeral channel and carries
-neither `sequence` nor an `id:` line.
+raw payload keys) is ever observable through a frame. Every frame except the
+three ephemeral ones (`tick`, `artefact.section_delta`,
+`artefact.section_revising`) carries a `sequence` (the `event_log` sequence,
+doubling as the client's reconnect cursor); the ephemeral frames carry
+neither `sequence` nor an `id:` line and are never replayed.
 """
 
 from __future__ import annotations
@@ -17,55 +18,10 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field
 
 from .check_ins import CheckInOut
+from .common import StageKey
 from .runs import RunStatus
 from .task_agent import PlanDraft, ScopingPlanDraft
 from .tasks import TaskStatus
-
-#: The pinned stable component-vocabulary stage keys (spec § SSE).
-StageKey = Literal[
-    "acquire",
-    "screen",
-    "classify",
-    "appraise",
-    "ingest",
-    "characterise",
-    "select",
-    "extract",
-    "group",
-    "synthesise",
-    "inherit",
-    "suggest",
-    "option_searches",
-    "extract_interventions",
-    "longlist",
-    "option_profile",
-    "constrain",
-    "theme",
-    "shortlist",
-]
-
-#: `StageKey`'s members as a plain tuple, for runtime membership checks.
-STAGE_KEYS: tuple[StageKey, ...] = (
-    "acquire",
-    "screen",
-    "classify",
-    "appraise",
-    "ingest",
-    "characterise",
-    "select",
-    "extract",
-    "group",
-    "synthesise",
-    "inherit",
-    "suggest",
-    "option_searches",
-    "extract_interventions",
-    "longlist",
-    "option_profile",
-    "constrain",
-    "theme",
-    "shortlist",
-)
 
 #: Who decided a resolved check-in. Mirrors `steering_events.DecidedBy`.
 DecidedBy = Literal["user", "agent", "standing_default"]
@@ -198,22 +154,84 @@ class TaskUpdatedFrame(_PersistedFrameBase):
 
 
 class TickFrame(BaseModel):
-    """Ephemeral heartbeat/progress-note frame.
+    """Ephemeral activity frame (task 058, D2): what the model is doing now.
 
     Never persisted, never state-bearing, carries no `id:` line — so it has
-    no `sequence` field at all (unlike every other frame type).
+    no `sequence` field at all (unlike every other frame type). One set of
+    fields for every stage.
+
+    Args:
+        stage: The stage the activity belongs to.
+        activity: The activity line, in the server's plain voice; the client
+            shows it as it is.
+        done: Items finished so far, or null when the stage has no honest
+            count (no total known before its loop started).
+        total: The total known before the loop started, or null.
+        unit: What `done` and `total` count (`documents`, `batches`,
+            `searches`, `sections`), or null with no count.
+        section: The writer's section line ("Section 3 of 7 · Costs"), or
+            null outside writing.
+        heartbeat: True when the hub repeated the current tick because a
+            model call is still in flight (every 10 s), not because anything
+            changed.
+        dropped: The hub's dropped-tick counter for this task (slow
+            subscriber evictions), for the silent-gap measure (N25).
     """
 
     type: Literal["tick"]
     ephemeral: Literal[True] = True
     stage: StageKey | None = None
-    note: str
-    #: Typed progress counts for the full-text reading stage (task 056, S5):
-    #: documents fetched, parsed, and the eligible total. Omitted from the
-    #: wire when the tick carries no counts.
-    fetched: int | None = None
-    parsed: int | None = None
+    activity: str
+    done: int | None = None
     total: int | None = None
+    unit: str | None = None
+    section: str | None = None
+    heartbeat: bool = False
+    dropped: int = 0
+    occurred_at: datetime
+
+
+class ArtefactSectionDeltaFrame(BaseModel):
+    """Ephemeral: prose appended to the section being written (task 058, N7).
+
+    Display-only. `artefact.section_completed` stays the record; a replay
+    carries no deltas. Never persisted, no `id:` line, no `sequence`.
+
+    Args:
+        index: The skeleton display index of the section.
+        text: The prose delta.
+        mode: `append` adds `text` to the client's draft; `replace` resets
+            the draft to `text` (a reconnect mid-section, or the streamed
+            turn's fallback resetting an abandoned draft with empty text).
+    """
+
+    type: Literal["artefact.section_delta"]
+    ephemeral: Literal[True] = True
+    index: int
+    text: str
+    mode: Literal["append", "replace"]
+    occurred_at: datetime
+
+
+class SectionSpan(BaseModel):
+    """A code-point span `[start, end)` of the section draft."""
+
+    start: int
+    end: int
+
+
+class ArtefactSectionRevisingFrame(BaseModel):
+    """Ephemeral: the sentences the judge failed, sent before the repair (N7).
+
+    Display-only: the client blurs these spans of its draft until
+    `artefact.section_completed` brings the repaired prose. Never persisted,
+    no `id:` line, no `sequence`.
+    """
+
+    type: Literal["artefact.section_revising"]
+    ephemeral: Literal[True] = True
+    index: int
+    spans: list[SectionSpan]
     occurred_at: datetime
 
 
@@ -230,6 +248,8 @@ SseFrame = Annotated[
     | CheckinResolvedFrame
     | PlanUpdatedFrame
     | TaskUpdatedFrame
-    | TickFrame,
+    | TickFrame
+    | ArtefactSectionDeltaFrame
+    | ArtefactSectionRevisingFrame,
     Field(discriminator="type"),
 ]

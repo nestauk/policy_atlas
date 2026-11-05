@@ -151,6 +151,7 @@ def _backend(
     raw._langfuse_client = langfuse
     raw._turn_count = 0
     raw._lock = Lock()
+    raw.stream_fallbacks = 0
     return backend, completions
 
 
@@ -278,6 +279,10 @@ def test_section_loop_result_counts_ignored_calls() -> None:
 
     result = run_section_loop(backend, seed=_seed(), tools={}, turn_cap=1)
 
+    # The fake answers the streamed request with a tool-call response, which is
+    # not a stream, so the forced turn reaches the forced tool call through the
+    # stream's one fallback (task 058, N6).
+    assert backend.stream_fallbacks == 1
     assert result["turn_cap_hit"] is True
     assert result["claims"] is not None
     assert result["claims"].prose == "First."

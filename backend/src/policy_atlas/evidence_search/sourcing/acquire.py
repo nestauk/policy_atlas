@@ -22,7 +22,8 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import events
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import events, liveness
 from policy_atlas.core.embeddings import (
     EmbeddingBackend,
     StubEmbeddingBackend,
@@ -536,6 +537,20 @@ class _Candidate(NamedTuple):
     chash: str
 
 
+def publish_acquire_progress(found: int, round_index: int) -> None:
+    """Publish the acquire stage's running count (task 058, N2).
+
+    Args:
+        found: Records acquired so far on this pass.
+        round_index: 1 for the first search on a scope, 2 or more after.
+    """
+    if round_index >= 2:
+        line = activity("acquire.searching_again", pass_number=round_index, found=found)
+    else:
+        line = activity("acquire.searching", found=found)
+    liveness.publish_progress(activity=line, done=found, total=None, unit="documents")
+
+
 def acquire_sources(
     conn: Connection,
     *,
@@ -550,6 +565,7 @@ def acquire_sources(
     search_guidance: list[str] | None = None,
     pools: dict[str, list[tuple[dict[str, Any], str, str]]] | None = None,
     caps: dict[str, int] | None = None,
+    round_index: int = 1,
 ) -> dict[str, Any]:
     """Acquire metadata-only sources for an evidence scope over the given backends.
 
@@ -580,6 +596,8 @@ def acquire_sources(
         caps: Maximum persisted records for each backend's ranked pool. When
             omitted (or missing a backend), there is no cut: this is what a
             caller that only has executed calls gets.
+        round_index: 1 on a fresh scope, 2 or more when the search is run
+            again on the same scope; it picks the progress line's wording.
 
     Returns:
         Counts dict: ``acquired``, ``already_acquired``, ``skipped_unusable``,
@@ -823,6 +841,9 @@ def acquire_sources(
 
         counts["acquired"] += 1
         acquired_tss_by_verb.setdefault(verb, []).append(str(tss_id))
+        # Task 058, N2: the running count of records kept so far.
+        found = sum(b["acquired"] for b in by_backend.values())
+        publish_acquire_progress(found, round_index)
 
     for call in executed_calls:
         backend = backend_by_name[call.backend_name]

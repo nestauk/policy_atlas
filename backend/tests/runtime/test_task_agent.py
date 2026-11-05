@@ -516,7 +516,8 @@ def test_scoping_turns_trace_usage_details_under_a_static_name() -> None:
     assert turn.reply == "Who should change?"
     assert langfuse.names == ["task_agent_scoping:turn"]
     # Task 057 D12: the attempt is stamped before the request, then the result is recorded.
-    pre_call, update = langfuse.updates
+    # traced_parse's ``before`` hook records the input as its own update.
+    pre_call, _input, update = langfuse.updates
     assert pre_call["metadata"]["step"] == "task_agent_scoping_turn"
     assert pre_call["metadata"]["attempt"] == 1
     assert update["usage_details"] == {
@@ -525,3 +526,200 @@ def test_scoping_turns_trace_usage_details_under_a_static_name() -> None:
         "total_tokens": 150,
     }
     assert update["metadata"]["turn_number"] == 3
+
+
+# --- The streamed turn (task 058, N9) ------------------------------------------
+
+
+def _chunk(content: str | None = None, usage: Any = None) -> Any:
+    from types import SimpleNamespace
+
+    choices = [] if content is None else [SimpleNamespace(delta=SimpleNamespace(content=content))]
+    return SimpleNamespace(choices=choices, usage=usage)
+
+
+class _StreamingCompletions:
+    """Fake ``chat.completions``: each ``create`` plays the next scripted attempt."""
+
+    def __init__(self, attempts: list[Any]) -> None:
+        self._attempts = list(attempts)
+        self.requests: list[dict[str, Any]] = []
+
+    def create(self, **kwargs: Any) -> Any:
+        self.requests.append(kwargs)
+        attempt = self._attempts.pop(0)
+        if isinstance(attempt, BaseException):
+            raise attempt
+        return attempt
+
+
+def _streaming_backend(attempts: list[Any]) -> tuple[OpenAITaskAgentBackend, _StreamingCompletions]:
+    from types import SimpleNamespace
+
+    completions = _StreamingCompletions(attempts)
+    backend: OpenAITaskAgentBackend = object.__new__(OpenAITaskAgentBackend)
+    cast("Any", backend)._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    cast("Any", backend)._langfuse_client = None
+    return backend, completions
+
+
+def _connection_error() -> Exception:
+    import httpx
+    import openai
+
+    return openai.APIConnectionError(request=httpx.Request("POST", "https://example.invalid"))
+
+
+def _wire_json() -> str:
+    wire = PlannerTurnWire(
+        reply='Line one\nsaid "hi" é 😀\x00',
+        plan_draft=PlanDraftWire(question="Q?"),
+        question="What decision?",
+        suggested_answers=["A briefing", "A comparison"],
+        ready=False,
+    )
+    import json
+
+    return json.dumps(wire.model_dump(mode="json"))
+
+
+def _pieces(text: str, size: int = 3) -> Iterator[Any]:
+    from openai.types.completion_usage import CompletionUsage
+
+    for start in range(0, len(text), size):
+        yield _chunk(text[start : start + size])
+    yield _chunk(usage=CompletionUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15))
+
+
+def test_streamed_turn_sends_a_strict_schema_stream_and_deltas_join_to_the_reply() -> None:
+    from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
+
+    backend, completions = _streaming_backend([_pieces(_wire_json())])
+    deltas: list[str] = []
+    turn = backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=deltas.append)
+
+    assert len(deltas) > 1
+    assert "".join(deltas) == turn.reply == 'Line one\nsaid "hi" é 😀'
+    assert turn.question == "What decision?"
+    (request,) = completions.requests
+    assert request["stream"] is True
+    assert request["stream_options"] == {"include_usage": True}
+    schema = request["response_format"]
+    assert schema["type"] == "json_schema"
+    assert schema["json_schema"]["name"] == "turn"
+    assert schema["json_schema"]["strict"] is True
+    assert list(schema["json_schema"]["schema"]["properties"])[0] == "reply"
+    assert "timeout" in request and "reasoning_effort" in request
+
+
+def test_streamed_turn_retries_once_on_a_connection_error_before_the_first_piece(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from policy_atlas.runtime import task_agent as task_agent_module
+    from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
+
+    warnings: list[tuple[str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        task_agent_module.log,
+        "warning",
+        lambda event, **kwargs: warnings.append((event, kwargs)),
+    )
+
+    def _drops_before_content() -> Iterator[Any]:
+        raise _connection_error()
+        yield  # pragma: no cover
+
+    backend, completions = _streaming_backend([_drops_before_content(), _pieces(_wire_json())])
+    deltas: list[str] = []
+    turn = backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=deltas.append)
+
+    assert len(completions.requests) == 2
+    assert "".join(deltas) == turn.reply
+    assert [event for event, _ in warnings] == ["task_agent.turn.pre_token_retry"]
+    assert warnings[0][1]["attempt"] == 1
+
+
+def test_streamed_turn_is_not_retried_after_the_first_piece() -> None:
+    from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
+
+    def _drops_mid_reply() -> Iterator[Any]:
+        yield _chunk('{"reply": "Hal')
+        raise _connection_error()
+
+    backend, completions = _streaming_backend([_drops_mid_reply(), _pieces(_wire_json())])
+    deltas: list[str] = []
+    import openai
+
+    with pytest.raises(openai.APIConnectionError):
+        backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=deltas.append)
+    assert len(completions.requests) == 1
+    assert deltas == ["Hal"]
+
+
+def test_streamed_turn_retries_at_most_once() -> None:
+    from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
+
+    backend, completions = _streaming_backend(
+        [_connection_error(), _connection_error(), _pieces(_wire_json())]
+    )
+    import openai
+
+    with pytest.raises(openai.APIConnectionError):
+        backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=lambda _t: None)
+    assert len(completions.requests) == 2
+
+
+def test_turn_without_on_delta_keeps_the_parse_path() -> None:
+    from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
+
+    parsed = PlannerTurnWire(reply="Hi", plan_draft=PlanDraftWire(question="Q?"), ready=False)
+    backend: OpenAITaskAgentBackend = object.__new__(OpenAITaskAgentBackend)
+    cast("Any", backend)._client = fake_parse_client(parsed=parsed)
+    cast("Any", backend)._langfuse_client = None
+    assert backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None).reply == "Hi"
+
+
+def test_stub_backend_sends_its_whole_reply_as_one_delta() -> None:
+    from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
+
+    deltas: list[str] = []
+    turn = StubTaskAgentBackend().turn(
+        EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=deltas.append
+    )
+    assert deltas == [turn.reply]
+
+
+# --- JsonStringFieldDecoder ------------------------------------------------------
+
+
+@pytest.mark.parametrize("ensure_ascii", [True, False])
+@pytest.mark.parametrize("size", [1, 2, 3, 5, 7])
+def test_decoder_matches_json_across_every_split(ensure_ascii: bool, size: int) -> None:
+    import json
+
+    from policy_atlas.core.openai_client import JsonStringFieldDecoder
+
+    value = 'q "x" \\ / \n\t\b\f\r é 😀 𝄞 \x00 end'
+    payload = {
+        "plan_draft": {"reply": "nested, not ours"},
+        "decoy": '"reply": "inside a string"',
+        "list": [{"reply": "deeper"}, 1, None],
+        "n": 3,
+        "reply": value,
+        "after": "ignored",
+    }
+    text = json.dumps(payload, ensure_ascii=ensure_ascii)
+    decoder = JsonStringFieldDecoder("reply")
+    out = "".join(decoder.feed(text[i : i + size]) for i in range(0, len(text), size))
+    assert out == value
+    assert decoder.done
+    assert decoder.feed('"more"') == ""
+
+
+def test_decoder_holds_a_split_surrogate_pair() -> None:
+    from policy_atlas.core.openai_client import JsonStringFieldDecoder
+
+    decoder = JsonStringFieldDecoder("reply")
+    assert decoder.feed('{"reply": "a\\ud8') == "a"
+    assert decoder.feed("3d\\u") == ""
+    assert decoder.feed('de00b"}') == "😀b"

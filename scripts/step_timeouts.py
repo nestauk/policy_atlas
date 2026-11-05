@@ -164,6 +164,8 @@ SITES: tuple[Site, ...] = (
     Site("synthesise:section_turn", "synthesise_section_turn", 120, SYNTH),
     # the claim repair shares the section-turn step (route file comment, D10)
     Site("synthesise:repair_claims", "synthesise_section_turn", 120, SYNTH),
+    # the streamed final turn (task 058, D1): one generation, no retry loop
+    Site("synthesise:section_emit", "synthesise_section_emit", 120, SYNTH),
     Site("synthesise:write_key_findings", "synthesise_write_key_findings", 120, SYNTH),
     Site("synthesise:write_case_studies", "synthesise_write_case_studies", 120, SYNTH),
     # source note and intro build their own 30 s client (max_retries=1)

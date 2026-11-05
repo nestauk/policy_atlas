@@ -42,8 +42,10 @@ from langfuse import Langfuse
 from pydantic import ValidationError
 
 from policy_atlas.core import tracing
+from policy_atlas.core.liveness import publish_section_delta
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import (
+    JsonStringFieldDecoder,
     openai_kwargs,
     require_parsed,
     require_single_tool_call,
@@ -720,6 +722,8 @@ class OpenAISynthesisBackend:
         self._langfuse_client = langfuse_client
         self._turn_count = 0
         self._lock = Lock()
+        # Streamed final turns that fell back to the forced tool call (task 058, N6).
+        self.stream_fallbacks = 0
 
     @property
     def langfuse_client(self) -> Langfuse | None:
@@ -1059,6 +1063,115 @@ class OpenAISynthesisBackend:
             update=_update,
         )
         return turn, usage
+
+    def section_emit_stream(
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+    ) -> UsageResult[SectionTurn]:
+        """Write the section's final turn as one streamed response (task 058, N6).
+
+        The request asks for the section object itself (prose plus claims,
+        strict ``json_schema``, no tools). Each piece of prose is sent to the
+        user as it arrives through :func:`publish_section_delta`; the whole text
+        is then parsed exactly as the forced ``emit_section`` call is, so the
+        result continues into the claim checks unchanged.
+
+        The call runs once, outside the retry loop, because a retry would
+        repeat text the user has already seen; the route step's timeout bounds
+        the wait between chunks. On any failure (connection, a gap between
+        chunks that runs out, text that is not a section object) the user's
+        draft is reset with an empty ``replace``, :attr:`stream_fallbacks` is
+        counted, and the turn is run once more without streaming through
+        :meth:`section_turn` with the forced tool, which keeps its own retries.
+
+        Args:
+            seed: Section seed record.
+            transcript: Executed tool exchanges so far.
+
+        Returns:
+            A parsed claims emission plus token usage.
+        """
+        step = "synthesise_section_emit"
+        messages = build_section_messages(
+            seed, transcript, force_emit=True, streamed=True
+        )
+        index = int(seed["section_index"])
+        metadata = {
+            "step": step,
+            "attempt": 1,
+            "prompt_version": self._section_prompt_version,
+            "transcript_length": len(transcript),
+        }
+
+        def _stream(span: Any | None = None) -> UsageResult[SectionTurn]:
+            if span is not None:
+                span.update(input={"messages": messages}, metadata=metadata)
+            completions: Any = self._client.chat.completions
+            stream = completions.create(
+                **_step_kwargs(step),
+                messages=_cache_messages(step, messages),
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "section",
+                        "strict": True,
+                        "schema": SectionProseWire.model_json_schema(),
+                    },
+                },
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+            decoder = JsonStringFieldDecoder("prose")
+            text = ""
+            provider_usage: Any | None = None
+            for chunk in stream:
+                choices = getattr(chunk, "choices", None)
+                if choices:
+                    delta = getattr(choices[0], "delta", None)
+                    fragment = getattr(delta, "content", None)
+                    if isinstance(fragment, str):
+                        text += fragment
+                        decoded = decoder.feed(fragment)
+                        if decoded:
+                            publish_section_delta(index, decoded)
+                chunk_usage = getattr(chunk, "usage", None)
+                if chunk_usage is not None:
+                    provider_usage = chunk_usage
+            log_usage("synthesis.section_emit_stream.usage", provider_usage)
+            section, malformed = _salvage_section(text)
+            turn: SectionTurn = {"tool_calls": [], "claims": section}
+            if malformed:
+                turn["malformed_claims"] = malformed
+            usage = token_usage_from_provider(provider_usage)
+            if span is not None:
+                span.update(
+                    usage_details=usage_details(usage),
+                    output=_turn_output(turn),
+                    model=route().model_for(step),
+                    metadata={**metadata, **usage_metadata(usage)},
+                )
+            return turn, usage
+
+        try:
+            if self._langfuse_client is None:
+                return _stream()
+            with tracing._observation(
+                self._langfuse_client,
+                name="synthesise:section_emit",
+                as_type="generation",
+            ) as span:
+                return _stream(span)
+        except Exception as exc:
+            log.warning(
+                "synthesis.section_emit_stream.fallback",
+                section_index=index,
+                error=type(exc).__name__,
+            )
+            publish_section_delta(index, "", mode="replace")
+            with self._lock:
+                self.stream_fallbacks += 1
+            return self.section_turn(seed, transcript, force_emit=True)
 
     def _repair_once(
         self,

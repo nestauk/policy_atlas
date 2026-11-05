@@ -1235,6 +1235,7 @@ def _option_policy(max_labels: int) -> ClusteringPolicy:
         label_noun="option",
         log_event_prefix="longlist",
         max_concurrent_batches=MAX_CONCURRENT_BATCHES,
+        progress_key="longlist.batches",
     )
 
 

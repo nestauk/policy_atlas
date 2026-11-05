@@ -1042,6 +1042,26 @@
       "tools": null,
       "trace_name": "synthesise:propose_sections"
     },
+    "synthesise_section_emit": {
+      "extra_body": null,
+      "function": "OpenAISynthesisBackend.section_emit_stream",
+      "max_completion_tokens": null,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.evidence_search.synthesis.synthesis_backend",
+      "other_keys": [
+        "stream_options"
+      ],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "direct_create",
+      "response_format": "json_schema:section",
+      "stream": true,
+      "system_shape": "text",
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "synthesise:section_emit"
+    },
     "synthesise_section_turn/repair": {
       "extra_body": null,
       "function": "OpenAISynthesisBackend.repair_section",
@@ -1295,6 +1315,26 @@
       "request_path": "traced_parse",
       "response_format": "PlannerTurnWire",
       "stream": null,
+      "system_shape": "text",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "task_agent:turn"
+    },
+    "task_agent_turn/stream": {
+      "extra_body": null,
+      "function": "OpenAITaskAgentBackend.turn(EVIDENCE_SEARCH_TASK_AGENT, on_delta=...)",
+      "max_completion_tokens": 16384,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.runtime.task_agent",
+      "other_keys": [
+        "stream_options"
+      ],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "direct_create",
+      "response_format": "json_schema:turn",
+      "stream": true,
       "system_shape": "text",
       "timeout": 60.0,
       "tool_choice": null,

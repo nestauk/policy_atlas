@@ -22,6 +22,7 @@ import hashlib
 import json
 import math
 import re
+import unicodedata
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
@@ -34,7 +35,8 @@ from sqlalchemy import text as sa_text
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.elements import Label
 
-from policy_atlas.core import tracing
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import liveness, tracing
 from policy_atlas.core.embeddings import (
     EMBEDDING_PROFILE,
     UNIT_CHAR_BUDGET,
@@ -3572,6 +3574,48 @@ def run_tool_loop(
     raise RuntimeError("section loop exhausted without emission")
 
 
+#: Longest model query shown in the writer's activity line (task 058, N3).
+ACTIVITY_QUERY_MAX = 120
+
+
+def normalise_query(query: object) -> str:
+    """Make the model's search query safe to show in an activity line (task 058, N3).
+
+    The text is put in Unicode NFC form, every run of whitespace becomes one
+    space, control and format characters (Unicode categories starting with
+    ``C``, such as zero-width spaces) are removed, and the result is cut to
+    :data:`ACTIVITY_QUERY_MAX` characters with nothing appended.
+
+    Args:
+        query: The ``query`` argument the model sent, of any type.
+
+    Returns:
+        The cleaned query, or ``""`` when it is missing or not a string.
+    """
+    if not isinstance(query, str):
+        return ""
+    kept = (
+        " " if char.isspace() else char
+        for char in unicodedata.normalize("NFC", query)
+        if char.isspace() or not unicodedata.category(char).startswith("C")
+    )
+    return " ".join("".join(kept).split())[:ACTIVITY_QUERY_MAX]
+
+
+def _tool_activity(tool_name: str, arguments: Mapping[str, Any]) -> str | None:
+    """Return the activity line for a read tool the writer is about to run."""
+    if tool_name == "search_chunks":
+        query = normalise_query(arguments.get("query"))
+        if query:
+            return activity("synthesise.looking_for", query=query)
+        return activity("synthesise.looking_up")
+    if tool_name == "query_findings":
+        return activity("synthesise.reading_findings")
+    if tool_name == "lookup":
+        return activity("synthesise.looking_up")
+    return None
+
+
 def run_section_loop(
     backend: Any,
     *,
@@ -3580,17 +3624,27 @@ def run_section_loop(
     turn_cap: int = SECTION_TURN_CAP,
     retriever: ChunkRetriever | None = None,
     langfuse_client: Any | None = None,
+    section_line: str | None = None,
 ) -> SectionLoopResult:
     """Run one bounded section loop against the closed read-only tool set.
 
+    While it runs, the loop publishes what the writer is doing (task 058,
+    N3): before each read tool, "Looking for: <query>", "Reading findings" or
+    "Looking up sources"; before the forced final turn, "Writing". Each line
+    carries ``section_line`` so the user sees which section it belongs to.
+
     Args:
-        backend: Synthesis backend implementing ``section_turn``.
+        backend: Synthesis backend implementing ``section_turn``, and
+            optionally ``section_emit_stream`` for a streamed final turn.
         seed: Id-keyed section seed.
         tools: Available substrate tools.
         turn_cap: Maximum generation turns; final turn forces emission.
         retriever: Optional chunk retriever. When given, a turn's uncached
             ``search_chunks`` query embeddings are batched into one backend
             call before the turn's tool calls execute (022 rider 16).
+        langfuse_client: Optional Langfuse client for the tool spans.
+        section_line: The section's own line ("Section 3 of 7 · Costs"),
+            sent with every activity line, or ``None``.
 
     Returns:
         Claims, transcript and accounting counters.
@@ -3599,10 +3653,23 @@ def run_section_loop(
         RuntimeError: If the backend violates the loop protocol.
     """
 
+    def on_tool_start(tool_name: str, arguments: dict[str, Any]) -> None:
+        line = _tool_activity(tool_name, arguments)
+        if line is not None:
+            liveness.publish_progress(activity=line, section=section_line)
+
     def turn_fn(
         transcript: list[ToolExchange], *, force_emit: bool
     ) -> UsageResult[LoopTurn]:
-        result, usage = backend.section_turn(seed, transcript, force_emit=force_emit)
+        if force_emit:
+            liveness.publish_progress(
+                activity=activity("synthesise.writing"), section=section_line
+            )
+        stream_emit = getattr(backend, "section_emit_stream", None)
+        if force_emit and stream_emit is not None:
+            result, usage = stream_emit(seed, transcript)
+        else:
+            result, usage = backend.section_turn(seed, transcript, force_emit=force_emit)
         return {
             "emission": result.get("claims"),
             "tool_calls": result.get("tool_calls", []),
@@ -3616,6 +3683,7 @@ def run_section_loop(
         turn_cap=turn_cap,
         retriever=retriever,
         langfuse_client=langfuse_client,
+        on_tool_start=on_tool_start,
     )
     return {
         "claims": cast("SectionProseWire | None", result["emission"]),

@@ -9,6 +9,7 @@ adapters; the engine only reads opaque unit ids plus label/description text.
 from __future__ import annotations
 
 import math
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
@@ -16,7 +17,9 @@ from typing import Any, Literal, Protocol
 
 import structlog
 
-from policy_atlas.core import tracing
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import liveness, tracing
+from policy_atlas.core.done_callbacks import add_done_callback_in_context
 from policy_atlas.core.tags import has_control_character
 from policy_atlas.core.usage import UsageAccumulator, UsageResult
 
@@ -198,6 +201,9 @@ class ClusteringPolicy:
         max_concurrent_batches: Worker count for first-round assignment fan-out.
         rejection_reason_cap: Maximum rejection details retained in the result.
         rejection_detail_max_len: Maximum length of one retained rejection detail.
+        progress_key: ``ACTIVITY`` key (a ``"<stage>.batches"`` line) the
+            first assignment round publishes as each batch finishes, or
+            ``None`` to publish nothing (task 058, N2).
     """
 
     min_labels: int
@@ -216,6 +222,7 @@ class ClusteringPolicy:
     max_concurrent_batches: int = 1
     rejection_reason_cap: int = _DEFAULT_REJECTION_REASON_CAP
     rejection_detail_max_len: int = _DEFAULT_REJECTION_DETAIL_MAX_LEN
+    progress_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -520,17 +527,37 @@ def run_first_assignment_round(
 
     submitted: list[tuple[int, list[ClusterUnit], Future[Any]]] = []
     usage_totals = UsageAccumulator()
+
+    # Task 058, N2: one count per batch, on the pool's own future; repair
+    # calls after this round never publish.
+    done = 0
+    lock = threading.Lock()
+    total = len(batches)
+
+    def publish_done(finished: Future[Any] | None) -> None:
+        nonlocal done
+        if policy.progress_key is None:
+            return
+        with lock:
+            if finished is not None:
+                done += 1
+            n = done
+        liveness.publish_progress(
+            activity=activity(policy.progress_key, done=n, total=total),
+            done=n,
+            total=total,
+            unit="batches",
+        )
+
+    publish_done(None)
+
     with ThreadPoolExecutor(max_workers=policy.max_concurrent_batches) as executor:
         for batch_index, batch in enumerate(batches, start=1):
-            submitted.append(
-                (
-                    batch_index,
-                    batch,
-                    tracing.submit_with_context(
-                        executor, backend.assign, batch, labels=labels
-                    ),
-                )
+            future = tracing.submit_with_context(
+                executor, backend.assign, batch, labels=labels
             )
+            add_done_callback_in_context(future, publish_done)
+            submitted.append((batch_index, batch, future))
         wait([future for _, _, future in submitted])
 
     attempts: list[AssignmentAttempt] = []

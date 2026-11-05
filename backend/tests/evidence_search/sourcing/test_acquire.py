@@ -38,6 +38,7 @@ from policy_atlas.evidence_search.sourcing.acquire import (
 )
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
+from tests import progress_recorder
 from tests.helpers import (
     delete_task_data,
     executed_calls_for,
@@ -1178,3 +1179,41 @@ def test_provider_tag_bounds() -> None:
     assert _normalize_tag("x" * (TAG_MAX_LENGTH + 1)) is None
     assert _normalize_tag("bad\x1b[31mtag") is None
     assert _normalize_tag(42) is None
+
+
+# --- Live progress (task 058, N2) ---
+
+
+def test_acquire_publishes_records_found_so_far(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    pid, rid = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    counts = acquire(conn, pid, rid, scope_id)
+
+    assert counts["acquired"] == 24
+    assert [c["done"] for c in calls] == list(range(1, 25))
+    assert all(c["total"] is None and c["unit"] == "documents" for c in calls)
+    assert calls[-1]["activity"] == "searching · 24 found so far"
+
+
+def test_acquire_on_a_second_pass_names_the_pass(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    pid, rid = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    context = make_context(scope_id)
+    backends = [OpenAlexFixtureBackend()]
+    acquire_sources(
+        conn,
+        task_id=pid,
+        run_id=rid,
+        context=context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, context.intent),
+        round_index=2,
+    )
+
+    assert calls[-1]["activity"] == "Search 2 · 12 found so far"

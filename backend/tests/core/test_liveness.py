@@ -1,0 +1,538 @@
+"""The liveness hub: coalescing, heartbeats, remembered state and the context helpers (task 058).
+
+Every test drives a ``TickHub`` with a fake clock and no scheduler, calling
+``flush()`` and ``sweep()`` by hand. Messages reach a subscriber queue through
+its event loop, so each test yields to the loop before draining the queue.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import threading
+import uuid
+from collections.abc import Callable, Coroutine
+from typing import Any, get_args
+
+import pytest
+
+from policy_atlas.api.contract import StageKey
+from policy_atlas.core import liveness
+from policy_atlas.core.liveness import (
+    COALESCE_SECONDS,
+    DELTA_COALESCE_SECONDS,
+    DRAFT_MAX_CHARS,
+    HEARTBEAT_SECONDS,
+    MEMORY_TTL_SECONDS,
+    HubMessage,
+    SectionDelta,
+    SectionRevising,
+    Tick,
+    TickHub,
+)
+
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _run(test: Callable[[], Coroutine[Any, Any, None]]) -> None:
+    asyncio.run(test())
+
+
+async def _drain(queue: asyncio.Queue[HubMessage]) -> list[HubMessage]:
+    # Two yields: one for the hub's call_soon_threadsafe callbacks to run.
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    out: list[HubMessage] = []
+    while not queue.empty():
+        out.append(queue.get_nowait())
+    return out
+
+
+def _ticks(messages: list[HubMessage]) -> list[Tick]:
+    assert all(isinstance(m, Tick) for m in messages)
+    return [m for m in messages if isinstance(m, Tick)]
+
+
+def _hub(**kwargs: Any) -> tuple[TickHub, FakeClock]:
+    clock = FakeClock()
+    return TickHub(clock=clock, schedule=None, **kwargs), clock
+
+
+TASK = uuid.UUID(int=1)
+
+
+def test_a_burst_coalesces_to_one_tick_now_and_the_latest_after_the_window() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+        queue = await hub.subscribe(TASK)
+        for i in range(50):
+            clock.now = i * 0.3 / 49
+            hub.publish_tick(
+                TASK, stage="classify", activity=f"line {i}", done=i, total=50, unit="documents"
+            )
+        first = _ticks(await _drain(queue))
+        assert [t.activity for t in first] == ["line 0"]
+
+        hub.flush()  # the window is still open: nothing goes out
+        assert await _drain(queue) == []
+
+        clock.now = COALESCE_SECONDS + 0.01
+        hub.flush()
+        second = _ticks(await _drain(queue))
+        assert len(second) == 1
+        assert (second[0].activity, second[0].done, second[0].total, second[0].unit) == (
+            "line 49",
+            49,
+            50,
+            "documents",
+        )
+        hub.flush()
+        assert await _drain(queue) == []
+
+    _run(body)
+
+
+def test_two_stages_coalesce_independently() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+        queue = await hub.subscribe(TASK)
+        for i in range(10):
+            clock.now = i * 0.01
+            hub.publish_tick(TASK, stage="screen", activity=f"screen {i}")
+            hub.publish_tick(TASK, stage="classify", activity=f"classify {i}")
+        ticks = _ticks(await _drain(queue))
+        assert [(t.stage, t.activity) for t in ticks] == [
+            ("screen", "screen 0"),
+            ("classify", "classify 0"),
+        ]
+
+    _run(body)
+
+
+def test_heartbeats_repeat_the_last_tick_every_ten_seconds_while_a_call_is_open() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+        queue = await hub.subscribe(TASK)
+        hub.call_opened(TASK, "classify")
+        hub.publish_tick(TASK, stage="classify", activity="Categorising", done=3, total=9)
+        original = _ticks(await _drain(queue))[0]
+
+        beats: list[float] = []
+        for at in (10.0, 20.0, 30.0, 35.0):
+            clock.now = at
+            hub.sweep()
+            for tick in _ticks(await _drain(queue)):
+                beats.append(at)
+                assert tick.heartbeat is True
+                assert (tick.stage, tick.activity, tick.done, tick.total, tick.unit) == (
+                    original.stage,
+                    original.activity,
+                    original.done,
+                    original.total,
+                    original.unit,
+                )
+        assert beats == [10.0, 20.0, 30.0]
+
+        hub.call_closed(TASK, "classify")
+        clock.now = 60.0
+        hub.sweep()
+        assert await _drain(queue) == []
+
+    _run(body)
+
+
+def test_a_hook_tick_never_overwrites_a_loop_tick_but_a_loop_tick_overwrites_a_hook() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+        queue = await hub.subscribe(TASK)
+        hub.publish_tick(TASK, stage="classify", activity="3 of 9 documents")
+        clock.now = 0.1
+        hub.publish_tick(TASK, stage="classify", activity="Categorising", source="hook")
+        clock.now = 0.2  # held: the hook still loses to the held loop tick
+        hub.publish_tick(TASK, stage="classify", activity="4 of 9 documents")
+        hub.publish_tick(TASK, stage="classify", activity="Categorising", source="hook")
+        clock.now = 2.0
+        hub.flush()
+        assert [t.activity for t in _ticks(await _drain(queue))] == [
+            "3 of 9 documents",
+            "4 of 9 documents",
+        ]
+
+        hub.publish_tick(TASK, stage="screen", activity="Screening", source="hook")
+        clock.now = 3.0
+        hub.publish_tick(TASK, stage="screen", activity="5 of 9 documents")
+        assert [t.activity for t in _ticks(await _drain(queue))] == [
+            "Screening",
+            "5 of 9 documents",
+        ]
+        _queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+        assert [m.activity for m in snapshot if isinstance(m, Tick)] == [
+            "4 of 9 documents",
+            "5 of 9 documents",
+        ]
+
+    _run(body)
+
+
+def test_snapshot_gives_a_mid_stage_mid_section_client_the_last_ticks_then_the_draft() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+        hub.publish_tick(TASK, stage="classify", activity="done classifying")
+        hub.publish_tick(TASK, stage="synthesise", activity="first", section="Costs")
+        clock.now = 1.0
+        hub.publish_tick(TASK, stage="synthesise", activity="Writing", section="Costs")
+        hub.flush()
+        hub.publish_delta(TASK, index=2, text="The first ")
+        hub.publish_delta(TASK, index=2, text="sentence.")
+
+        queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+        assert len(snapshot) == 3
+        classify, synthesise, draft = snapshot
+        assert isinstance(classify, Tick) and classify.activity == "done classifying"
+        assert isinstance(synthesise, Tick) and synthesise.activity == "Writing"
+        assert synthesise.heartbeat is False
+        assert isinstance(draft, SectionDelta)
+        assert (draft.index, draft.text, draft.mode) == (2, "The first sentence.", "replace")
+
+        # Later text reaches the new client as appends after its replace.
+        hub.publish_delta(TASK, index=2, text=" More.")
+        clock.now = 2.0
+        hub.flush()
+        later = await _drain(queue)
+        assert len(later) == 1 and isinstance(later[0], SectionDelta)
+        assert (later[0].text, later[0].mode) == (" More.", "append")
+
+    _run(body)
+
+
+def test_a_tick_published_during_subscription_lands_exactly_once() -> None:
+    async def body() -> None:
+        for publish_first in (True, False):
+            hub, _clock = _hub()
+            barrier = threading.Barrier(2)
+            done = threading.Event()
+
+            def publish(
+                h: TickHub = hub, b: threading.Barrier = barrier, d: threading.Event = done
+            ) -> None:
+                b.wait()
+                h.publish_tick(TASK, stage="classify", activity="racing")
+                d.set()
+
+            thread = threading.Thread(target=publish)
+            thread.start()
+            if publish_first:
+                barrier.wait()
+                done.wait(timeout=5)
+                queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+            else:
+                # Hold the hub lock so the publisher blocks inside publish_tick
+                # until the subscription has taken its snapshot.
+                hub._lock.acquire()
+                barrier.wait()
+                assert not done.wait(timeout=0.05)
+                hub._lock.release()
+                queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+                done.wait(timeout=5)
+            thread.join(timeout=5)
+            queued = await _drain(queue)
+            seen = [m for m in snapshot + queued if isinstance(m, Tick)]
+            assert [t.activity for t in seen] == ["racing"]
+
+    _run(body)
+
+
+def test_a_publish_racing_the_snapshot_from_a_thread_is_never_lost_or_doubled() -> None:
+    async def body() -> None:
+        for _ in range(50):
+            hub, _clock = _hub()
+            start = threading.Barrier(2)
+
+            def publish(h: TickHub = hub, b: threading.Barrier = start) -> None:
+                b.wait()
+                h.publish_tick(TASK, stage="classify", activity="racing")
+
+            thread = threading.Thread(target=publish)
+            thread.start()
+            start.wait()
+            queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+            thread.join(timeout=5)
+            queued = await _drain(queue)
+            seen = [m for m in snapshot + queued if isinstance(m, Tick)]
+            assert [t.activity for t in seen] == ["racing"]
+
+    _run(body)
+
+
+def test_the_draft_concatenates_resets_and_is_capped_while_the_stream_is_not() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+
+        async def draft() -> SectionDelta:
+            queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+            await hub.unsubscribe(TASK, queue)
+            last = snapshot[-1]
+            assert isinstance(last, SectionDelta)
+            return last
+
+        hub.publish_delta(TASK, index=0, text="Alpha ")
+        hub.publish_delta(TASK, index=0, text="beta")
+        assert (await draft()).text == "Alpha beta"
+
+        hub.publish_delta(TASK, index=0, text="Fresh", mode="replace")
+        assert (await draft()).text == "Fresh"
+
+        hub.publish_delta(TASK, index=1, text="Next section")
+        current = await draft()
+        assert (current.index, current.text) == (1, "Next section")
+
+        queue = await hub.subscribe(TASK)
+        long_text = "x" * (DRAFT_MAX_CHARS + 500)
+        hub.publish_delta(TASK, index=3, text=long_text, mode="replace")
+        sent = await _drain(queue)
+        assert isinstance(sent[-1], SectionDelta) and sent[-1].text == long_text
+        await hub.unsubscribe(TASK, queue)
+        assert len((await draft()).text) == DRAFT_MAX_CHARS
+
+        clock.now = 10.0
+        hub.publish_delta(TASK, index=4, text="y" * (DRAFT_MAX_CHARS + 10))
+        hub.publish_delta(TASK, index=4, text="z")
+        kept = await draft()
+        assert len(kept.text) == DRAFT_MAX_CHARS
+
+    _run(body)
+
+
+def test_appends_merge_and_replace_and_revising_flush_the_held_append_first() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+        queue = await hub.subscribe(TASK)
+        for i, piece in enumerate(("One ", "two ", "three.")):
+            clock.now = i * 0.03
+            hub.publish_delta(TASK, index=0, text=piece)
+        assert await _drain(queue) == []
+        clock.now = DELTA_COALESCE_SECONDS + 0.01
+        hub.flush()
+        merged = await _drain(queue)
+        assert len(merged) == 1 and isinstance(merged[0], SectionDelta)
+        assert (merged[0].text, merged[0].mode) == ("One two three.", "append")
+
+        hub.publish_delta(TASK, index=0, text=" Four.")
+        hub.publish_delta(TASK, index=0, text="Rewritten.", mode="replace")
+        ordered = await _drain(queue)
+        assert [(m.text, m.mode) for m in ordered if isinstance(m, SectionDelta)] == [
+            (" Four.", "append"),
+            ("Rewritten.", "replace"),
+        ]
+
+        hub.publish_delta(TASK, index=0, text=" Five.")
+        hub.publish_revising(TASK, index=0, spans=[(0, 10)])
+        revising = await _drain(queue)
+        assert isinstance(revising[0], SectionDelta) and revising[0].text == " Five."
+        assert isinstance(revising[1], SectionRevising)
+        assert revising[1].spans == ((0, 10),)
+
+    _run(body)
+
+
+def test_runs_and_stages_clear_only_their_own_memory() -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        parent, child = uuid.uuid4(), uuid.uuid4()
+
+        async def snapshot() -> list[HubMessage]:
+            queue, messages = await hub.subscribe_with_snapshot(TASK)
+            await hub.unsubscribe(TASK, queue)
+            return messages
+
+        def fill() -> None:
+            hub.publish_tick(TASK, stage="option_searches", activity="2 of 5 searches")
+            hub.publish_tick(TASK, stage="synthesise", activity="Writing")
+            hub.publish_delta(TASK, index=0, text="Draft", mode="replace")
+            hub.call_opened(TASK, "synthesise")
+
+        hub.begin_run(TASK, parent)
+        fill()
+        assert len(await snapshot()) == 3
+
+        hub.begin_run(TASK, child, parent_run_id=parent)
+        assert len(await snapshot()) == 3
+        hub.end_run(TASK, child)
+        assert len(await snapshot()) == 3
+
+        hub.end_stage(TASK, "option_searches")
+        remaining = await snapshot()
+        assert [m.stage for m in remaining if isinstance(m, Tick)] == ["synthesise"]
+        assert any(isinstance(m, SectionDelta) for m in remaining)
+
+        hub.end_stage(TASK, "synthesise")
+        assert await snapshot() == []
+
+        fill()
+        hub.end_run(TASK, parent)
+        assert await snapshot() == []
+
+        hub.begin_run(TASK, parent)
+        fill()
+        hub.begin_run(TASK, uuid.uuid4())  # a re-run shows no stale activity
+        assert await snapshot() == []
+        # Open-call counters went too: no heartbeat follows.
+        queue = await hub.subscribe(TASK)
+        hub.publish_tick(TASK, stage="synthesise", activity="Writing again")
+        await _drain(queue)
+        _clock.now = HEARTBEAT_SECONDS * 2
+        hub.sweep()
+        assert await _drain(queue) == []
+
+    _run(body)
+
+
+def test_memory_untouched_for_ten_minutes_expires() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+        hub.publish_tick(TASK, stage="classify", activity="old")
+        hub.publish_delta(TASK, index=0, text="old draft", mode="replace")
+        clock.now = MEMORY_TTL_SECONDS - 1
+        hub.publish_tick(TASK, stage="screen", activity="fresh")
+
+        clock.now = MEMORY_TTL_SECONDS + 1
+        queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+        await hub.unsubscribe(TASK, queue)
+        assert [m.activity for m in snapshot if isinstance(m, Tick)] == ["fresh"]
+        assert not any(isinstance(m, SectionDelta) for m in snapshot)
+
+        hub.sweep()
+        memory = hub._tasks[TASK]
+        assert list(memory.stages) == ["screen"]
+        assert memory.draft is None
+
+        clock.now = MEMORY_TTL_SECONDS * 3
+        hub.sweep()
+        assert TASK not in hub._tasks
+
+    _run(body)
+
+
+def test_memory_holds_one_tick_per_stage_and_one_draft() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+        stages = get_args(StageKey)
+        assert len(stages) == 19
+        for round_ in range(20):
+            clock.now = round_ * 1.0
+            for stage in stages:
+                hub.publish_tick(TASK, stage=stage, activity=f"{stage} {round_}")
+            hub.publish_delta(TASK, index=round_ % 3, text="more text ")
+        hub.flush()
+        queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+        await hub.unsubscribe(TASK, queue)
+        ticks = [m for m in snapshot if isinstance(m, Tick)]
+        drafts = [m for m in snapshot if isinstance(m, SectionDelta)]
+        assert [t.stage for t in ticks] == list(stages)
+        assert {t.activity for t in ticks} == {f"{stage} 19" for stage in stages}
+        assert len(drafts) == 1
+        memory = hub._tasks[TASK]
+        assert len(memory.stages) == 19
+        assert all(entry.pending is None for entry in memory.stages.values())
+
+    _run(body)
+
+
+def test_a_full_queue_counts_dropped_messages_and_the_next_tick_carries_the_count() -> None:
+    async def body() -> None:
+        hub, clock = _hub(queue_size=2)
+        await hub.subscribe(TASK)
+        for i in range(5):
+            clock.now = i * 1.0
+            hub.publish_tick(TASK, stage="classify", activity=f"line {i}")
+            await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert hub.dropped(TASK) == 3
+
+        watcher = await hub.subscribe(TASK)
+        clock.now = 10.0
+        hub.publish_tick(TASK, stage="classify", activity="line 5")
+        sixth = _ticks(await _drain(watcher))
+        assert sixth[0].dropped == 3
+
+    _run(body)
+
+
+def test_context_helpers_publish_for_the_bound_task_and_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        monkeypatch.setattr(liveness, "tick_hub", hub)
+        queue = await hub.subscribe(TASK)
+
+        liveness.publish_progress(activity="nobody bound")
+        liveness.publish_verb("Categorising")
+        liveness.model_call_opened()
+        assert await _drain(queue) == []
+        assert hub._tasks == {}
+
+        with liveness.task_liveness(TASK, stage="classify"):
+            assert liveness.current_task_id() == TASK
+            assert liveness.current_stage() == "classify"
+            liveness.publish_progress(
+                activity="3 of 9 documents", done=3, total=9, unit="documents"
+            )
+            liveness.model_call_opened()
+            liveness.model_call_opened()
+            assert hub._tasks[TASK].stages["classify"].open_calls == 2
+            liveness.model_call_closed()
+            assert hub._tasks[TASK].stages["classify"].open_calls == 1
+            liveness.model_call_closed()
+            assert hub._tasks[TASK].stages["classify"].open_calls == 0
+        ticks = _ticks(await _drain(queue))
+        assert [(t.stage, t.activity, t.done, t.total, t.unit) for t in ticks] == [
+            ("classify", "3 of 9 documents", 3, 9, "documents")
+        ]
+        assert liveness.current_task_id() is None
+        assert liveness.current_stage() is None
+
+        with liveness.task_liveness(TASK):
+            liveness.publish_verb("Categorising")
+            liveness.model_call_opened()
+        assert await _drain(queue) == []
+        assert None not in hub._tasks[TASK].stages
+
+    _run(body)
+
+
+def test_a_held_tick_schedules_one_flush_per_key_and_an_open_call_one_sweep() -> None:
+    scheduled: list[tuple[float, Callable[[], None]]] = []
+    clock = FakeClock()
+    hub = TickHub(clock=clock, schedule=lambda delay, fn: scheduled.append((delay, fn)))
+
+    hub.publish_tick(TASK, stage="classify", activity="first")
+    hub.publish_tick(TASK, stage="screen", activity="first")
+    assert scheduled == []
+    clock.now = 0.1
+    for i in range(5):
+        hub.publish_tick(TASK, stage="classify", activity=f"held {i}")
+        hub.publish_tick(TASK, stage="screen", activity=f"held {i}")
+    assert len(scheduled) == 2
+    assert all(delay == pytest.approx(COALESCE_SECONDS - 0.1) for delay, _fn in scheduled)
+
+    hub.call_opened(TASK, "classify")
+    hub.call_opened(TASK, "screen")
+    assert len(scheduled) == 3
+    assert scheduled[2][0] == HEARTBEAT_SECONDS
+
+    # A due flush clears the hold; the timer's sweep reschedules while a call is open.
+    clock.now = 1.0
+    scheduled[0][1]()
+    assert hub._tasks[TASK].stages["classify"].pending is None
+    scheduled[2][1]()
+    assert len(scheduled) == 4 and scheduled[3][0] == HEARTBEAT_SECONDS
+    hub.call_closed(TASK, "classify")
+    hub.call_closed(TASK, "screen")
+    scheduled[3][1]()
+    assert len(scheduled) == 4

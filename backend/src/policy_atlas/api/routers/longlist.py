@@ -1,6 +1,6 @@
 """The longlist routes (task 045, S12; contract deliverable 11).
 
-Two reads, public-readable like the artefact (ADR 0033 / 0035: the graded
+The reads, public-readable like the artefact (ADR 0033 / 0035: the graded
 read or the narrow public leg, through ``_readable``), and the buttons — the
 longlist's three and the shortlist's three (task 055, P9) — owner-only
 (``accessible_task(write=True)``), each calling the apply function
@@ -28,6 +28,7 @@ from policy_atlas.api.contract import (
     OptionExcludeIn,
     OptionIncludeIn,
     OptionOut,
+    OptionsOut,
 )
 from policy_atlas.api.deps import (
     get_agent_backend,
@@ -89,6 +90,22 @@ def get_longlist(
     if result is None:
         raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL)
     return result
+
+
+@router.get("/{task_id}/options", response_model=OptionsOut)
+def get_options(
+    task_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser | None, Depends(get_optional_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> OptionsOut:
+    """Return the task's option rows with each option's search (task 058, N22).
+
+    Readable from the end of the suggest stage, before the longlist exists,
+    under the same graded-or-public check as the longlist read. Empty before
+    any option exists; never a 404 for a readable task.
+    """
+    _readable(conn, task_id, user)
+    return repository.options_out(conn, task_id)
 
 
 @router.get("/{task_id}/options/{option_id}", response_model=OptionOut)

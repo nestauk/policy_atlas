@@ -23,6 +23,7 @@ from sqlalchemy.engine import Connection, Engine
 from policy_atlas.core import events, tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.inference import StubEchoProvider
+from policy_atlas.core.liveness import tick_hub
 from policy_atlas.core.schema import (
     capability_run,
     event_log,
@@ -5554,6 +5555,11 @@ def _open_capability_run(
                 "plan_version": plan_version,
             },
         )
+    tick_hub.begin_run(
+        task_id,
+        capability_run_id,
+        parent_run_id=parent_capability_run_id,
+    )
     return capability, purpose, scope_context
 
 
@@ -5645,6 +5651,7 @@ def _finish_run(
         # watching belongs to its parent. Nor does any option search.
         if status in ("succeeded", "degraded") and not is_child and not is_option_search:
             close_task_agent_conversation(conn, task_id=task_id, closed_at=ended_at)
+    tick_hub.end_run(task_id, capability_run_id)
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)
     _log_run_summary(outcomes, status=status)
@@ -5957,13 +5964,18 @@ def _run_step_attempt(
         # append its terminal lifecycle event separately so the payload remains
         # byte-identical to the former node-level append.
         if component_summary is not None:
+            completed_wall_clock_s = time.monotonic() - started
             with engine.begin() as conn:
                 events.append(
                     conn,
                     task_id=task_id,
                     run_id=run_id,
                     event_type="component.completed",
-                    payload={"component": registry_component, **component_summary},
+                    payload={
+                        "component": registry_component,
+                        "wall_clock_s": completed_wall_clock_s,
+                        **component_summary,
+                    },
                 )
             log.info(
                 "component.completed",

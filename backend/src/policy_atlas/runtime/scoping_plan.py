@@ -294,6 +294,7 @@ ACQUIRE_ONLY_KEY = "acquire_only"
 SCOPING_STEPS: tuple[PlanStep, ...] = (
     PlanStep(
         label="Baseline",
+        row="baseline",
         blurb=(
             "What is in place, the trend, who is affected and what is "
             "contested, from Overton and OpenAlex. The run pauses for you to "
@@ -303,6 +304,7 @@ SCOPING_STEPS: tuple[PlanStep, ...] = (
     ),
     PlanStep(
         label="Longlist",
+        row="longlist",
         blurb=(
             "Suggest options, search widely, read every abstract for the "
             "interventions it covers, cluster them into options, apply your "
@@ -312,6 +314,7 @@ SCOPING_STEPS: tuple[PlanStep, ...] = (
     ),
     PlanStep(
         label="Shortlist",
+        row="shortlist",
         blurb=(
             "Policy Atlas proposes about five places for close reading, one "
             "reason each, mixed to your risk appetite. Add, remove, ask for "

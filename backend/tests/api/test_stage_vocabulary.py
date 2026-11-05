@@ -7,13 +7,16 @@ registry dicts in `stage_vocabulary` never drift apart.
 
 from __future__ import annotations
 
+import tomllib
+from pathlib import Path
 from typing import get_args
 
-from policy_atlas.api.contract.sse import STAGE_KEYS, StageKey
+from policy_atlas.api.contract import STAGE_KEYS, StageKey
 from policy_atlas.api.contract.task_agent import PlanStageKey
 from policy_atlas.api.stage_vocabulary import (
     STAGE_BY_REGISTRY,
     STAGE_PRESENTATION,
+    STEP_VERBS,
     stage_for_payload,
 )
 
@@ -45,7 +48,19 @@ def test_ingest_stage_words_and_registry_mapping() -> None:
     assert STAGE_KEYS.index("ingest") == STAGE_KEYS.index("appraise") + 1
     assert STAGE_PRESENTATION["ingest"] == (
         "Reading the full texts",
-        "Fetching each selected document's full text and reading it into sections.",
+        "Fetching each selected document and reading it into sections.",
     )
     assert STAGE_BY_REGISTRY["ingest_full_text"] == "ingest"
     assert stage_for_payload({"component": "ingest_full_text"}) == "ingest"
+
+
+def test_every_route_step_has_a_verb() -> None:
+    """Every configured model-call step has one fixed activity verb."""
+    route_file = Path(__file__).resolve().parents[2] / "src/policy_atlas/model_routes.toml"
+    with route_file.open("rb") as handle:
+        route_steps = set(tomllib.load(handle)["steps"])
+
+    assert route_steps <= set(STEP_VERBS)
+    # Phase 2 adds this streamed writer step to the routes file, then removes
+    # this temporary allowance.
+    assert set(STEP_VERBS) - route_steps <= {"synthesise_section_emit"}

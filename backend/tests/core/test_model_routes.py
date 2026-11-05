@@ -61,6 +61,7 @@ STEP_TIER_AND_EFFORT: dict[str, tuple[str, str]] = {
     "synthesise_write_artefact_summary": ("standard", "none"),
     "synthesise_judge_summary": ("standard", "none"),
     "synthesise_section_turn": ("standard", "none"),
+    "synthesise_section_emit": ("standard", "none"),
     "synthesise_write_key_findings": ("standard", "none"),
     "synthesise_write_case_studies": ("standard", "none"),
     "chat": ("standard", "none"),
@@ -119,6 +120,7 @@ STEP_TIMEOUT_S: dict[str, float] = {
             "synthesise_write_artefact_summary",
             "synthesise_judge_summary",
             "synthesise_section_turn",
+            "synthesise_section_emit",
             "synthesise_write_key_findings",
             "synthesise_write_case_studies",
             "judge_grounding",
@@ -144,7 +146,7 @@ def test_every_step_resolves_todays_model_and_effort_on_every_route(name: str) -
     """Task 056 D4/D9: 56 steps, each with today's model and effort, on all three routes."""
     route = load_route(ROUTE_FILE, name, {})
     assert set(route.steps) == set(STEP_TIER_AND_EFFORT)
-    assert len(route.steps) == 56
+    assert len(route.steps) == 57  # task 058 adds synthesise_section_emit
     for step, (tier, effort) in STEP_TIER_AND_EFFORT.items():
         assert route.model_for(step) == TIER_MODELS[name][tier], step
         if name == "bedrock" and step == "judge_grounding":

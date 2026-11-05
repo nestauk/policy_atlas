@@ -57,7 +57,10 @@ from policy_atlas.api.contract import (
     OptionDocumentOut,
     OptionOut,
     OptionProfileOut,
+    OptionProgressOut,
     OptionRecordOut,
+    OptionSearchStatus,
+    OptionsOut,
     OptionSummaryOut,
     OutcomeCountOut,
     OutcomeCountsOut,
@@ -4477,6 +4480,109 @@ def _place_sentences_out(
         )
         for group in group_places(_place_documents(lines), where_country=where_country)
     ]
+
+
+#: A child walk's status → the option row's search status (task 058, N22).
+_SEARCH_STATUS: dict[str, OptionSearchStatus] = {
+    "running": "searching",
+    "paused": "searching",
+    "succeeded": "searched",
+    "degraded": "searched",
+    "failed": "failed",
+    "aborted": "failed",
+    "interrupted": "failed",
+}
+
+
+def options_out(conn: Connection, task_id: uuid.UUID) -> OptionsOut:
+    """Every option row of the task, each with where its own search stands (task 058, N22).
+
+    Served while the longlist is being built, so it reads the option rows and
+    the option searches only, never the longlist result. An option's search
+    is the most recent walk under a ``targeted`` intent record naming the
+    option (a longlist walk's child, or the walk *add* opened); ``found`` is
+    the acquire count of that walk's latest acquire completion.
+
+    Args:
+        conn: Open database connection. Read-only.
+        task_id: The task. Only its own options are read.
+
+    Returns:
+        The rows oldest first, or an empty list before any option exists.
+    """
+    rows = conn.execute(
+        select(
+            option.c.option_id,
+            option.c.name,
+            option.c.description,
+            option.c.origin,
+            option.c.state,
+            option.c.merged_into_option_id,
+        )
+        .where(option.c.task_id == task_id)
+        .order_by(option.c.created_at, option.c.option_id)
+    ).all()
+    if not rows:
+        return OptionsOut()
+    option_key = evidence_scope.c.context["option_id"].astext
+    walks = conn.execute(
+        select(capability_run.c.capability_run_id, capability_run.c.status, option_key)
+        .select_from(
+            capability_run.join(
+                evidence_scope,
+                (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+                & (evidence_scope.c.task_id == capability_run.c.task_id),
+            )
+        )
+        .where(capability_run.c.task_id == task_id)
+        .where(evidence_scope.c.purpose == "targeted")
+        .where(option_key.in_([str(row.option_id) for row in rows]))
+        .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
+    ).all()
+    latest: dict[str, tuple[uuid.UUID, str]] = {}
+    for walk_id, status, option_id in walks:
+        latest.setdefault(option_id, (walk_id, status))
+    acquired: dict[uuid.UUID, int] = {}
+    if latest:
+        completions = conn.execute(
+            select(runs.c.capability_run_id, event_log.c.payload["acquired"].astext)
+            .select_from(
+                event_log.join(
+                    runs,
+                    (runs.c.run_id == event_log.c.run_id) & (runs.c.task_id == event_log.c.task_id),
+                )
+            )
+            .where(event_log.c.task_id == task_id)
+            .where(event_log.c.event_type == "component.completed")
+            .where(event_log.c.payload["component"].astext == "acquire")
+            .where(runs.c.capability_run_id.in_([walk_id for walk_id, _ in latest.values()]))
+            .order_by(event_log.c.sequence.desc())
+        )
+        for walk_id, value in completions:
+            if walk_id in acquired:
+                continue
+            try:
+                acquired[walk_id] = int(value)
+            except (TypeError, ValueError):
+                continue
+    options: list[OptionProgressOut] = []
+    for row in rows:
+        search = latest.get(str(row.option_id))
+        options.append(
+            OptionProgressOut(
+                option_id=row.option_id,
+                name=row.name,
+                description=row.description,
+                origin=row.origin,
+                state=row.state,
+                merged_into_option_id=row.merged_into_option_id,
+                search_status=(
+                    "queued" if search is None else _SEARCH_STATUS.get(search[1], "searching")
+                ),
+                found=acquired.get(search[0]) if search is not None else None,
+            )
+        )
+    return OptionsOut(options=options)
 
 
 def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> OptionOut | None:

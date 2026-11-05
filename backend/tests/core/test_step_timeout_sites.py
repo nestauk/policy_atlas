@@ -34,6 +34,18 @@ NOT_WRAPPED: dict[tuple[str, str], str] = {
     # traced_attempts itself opens one generation per attempt.
     ("core/tracing.py", "traced_attempts"): "the wrapper's own per-attempt observation",
     (
+        "evidence_search/synthesis/synthesis_backend.py",
+        "OpenAISynthesisBackend.section_emit_stream",
+    ): (
+        "exempt-stream: the streamed section emit sends prose to the user as it arrives; "
+        "its timeout bounds the gap between chunks; one non-streamed re-run on failure, "
+        "in section_emit_stream"
+    ),
+    ("runtime/task_agent.py", "OpenAITaskAgentBackend._stream_attempt"): (
+        "exempt-stream: the planner reply reaches the user as it arrives; one traced "
+        "pre-token retry; the timeout bounds the gap between chunks"
+    ),
+    (
         "evidence_search/sourcing/search_generation.py",
         "ClaudeSearchGenerationBackend.generate_queries",
     ): (

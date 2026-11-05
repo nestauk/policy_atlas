@@ -830,6 +830,7 @@ def _group_policy(*, unit_count: int, granularity: str = "standard") -> Clusteri
         log_event_prefix="group.clustering",
         rejection_reason_cap=REJECTION_REASON_CAP,
         rejection_detail_max_len=REJECTION_REASON_MAX,
+        progress_key="group.batches",
     )
 
 
@@ -1542,6 +1543,8 @@ def _build_summary(
         "facet": facets[0] if len(facets) == 1 else None,
         "facets": list(facets),
         "facet_source": facet_source,
+        # Task 058, N2: the integer the done row shows.
+        "group_count": sum(len(groups[facet]) for facet in facets),
         "groups": {facet: groups[facet] for facet in facets},
         "residuals": {facet: residuals[facet] for facet in facets},
         "counts": {facet: counts[facet] for facet in facets},

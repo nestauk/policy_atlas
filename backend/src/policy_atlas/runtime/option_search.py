@@ -50,11 +50,13 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 from pydantic import ValidationError
-from sqlalchemy import select, update
+from sqlalchemy import Integer, cast, func, select, update
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.stage_vocabulary import activity
 from policy_atlas.core import events, tracing
-from policy_atlas.core.schema import capability_run, event_log, evidence_scope, option
+from policy_atlas.core.liveness import tick_hub
+from policy_atlas.core.schema import capability_run, event_log, evidence_scope, option, runs
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.scoping_plan import (
@@ -476,6 +478,33 @@ def child_walks(
     }
 
 
+def child_acquired_total(conn: Connection, *, child_ids: list[uuid.UUID]) -> int:
+    """Return sources acquired by a set of child capability runs.
+
+    Args:
+        conn: Open connection.
+        child_ids: Child capability-run ids.
+
+    Returns:
+        The sum of acquired sources reported by the children.
+    """
+    if not child_ids:
+        return 0
+    total = conn.execute(
+        select(
+            func.coalesce(
+                func.sum(cast(event_log.c.payload["acquired"].astext, Integer)),
+                0,
+            )
+        )
+        .select_from(event_log.join(runs, runs.c.run_id == event_log.c.run_id))
+        .where(event_log.c.event_type == "component.completed")
+        .where(event_log.c.payload["component"].astext == "acquire")
+        .where(runs.c.capability_run_id.in_(child_ids))
+    ).scalar_one()
+    return int(total)
+
+
 def dispatched_children(
     conn: Connection, *, task_id: uuid.UUID, parent_id: uuid.UUID
 ) -> list[uuid.UUID] | None:
@@ -612,9 +641,25 @@ def join_option_searches(
     deadline = time.monotonic() + (OPTION_SEARCH_JOIN_TIMEOUT if timeout is None else timeout)
     statuses: dict[uuid.UUID, str] = {}
     pending: list[uuid.UUID] = list(child_ids)
+    sources = 0
     while True:
         with engine.connect() as conn:
             statuses = child_walks(conn, task_id=task_id, parent_id=parent_id)
+            sources = child_acquired_total(conn, child_ids=child_ids)
+        finished = sum(1 for child in child_ids if statuses.get(child) in _FINISHED)
+        tick_hub.publish_tick(
+            task_id,
+            stage=OPTION_SEARCHES_STAGE,
+            activity=activity(
+                "option_searches.progress",
+                done=finished,
+                total=len(child_ids),
+                sources=sources,
+            ),
+            done=finished,
+            total=len(child_ids),
+            unit="searches",
+        )
         pending = [child for child in child_ids if not _ended(child, statuses.get(child))]
         if not pending or time.monotonic() >= deadline:
             break
@@ -640,6 +685,7 @@ def join_option_searches(
                 "total": outcome.total,
                 "finished": outcome.finished,
                 "failed": outcome.failed,
+                "sources": sources,
             },
         )
     log.info(
