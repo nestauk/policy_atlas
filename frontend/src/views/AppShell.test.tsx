@@ -359,20 +359,11 @@ describe("AppShell — new content marks its tab (task 058, N14)", () => {
   });
 });
 
-describe("AppShell — the Plan control (task 058, N15)", () => {
-  it("opens the plan document as a read-only side panel from a non-Agent tab, and closes it", async () => {
-    taskState.isOwner = true;
-    taskState.access = "full";
-    const user = userEvent.setup();
+describe("AppShell — the plan's links (task 058; owner, polish round 2)", () => {
+  it("puts no Plan control in the task nav: the card and the Result tab carry the plan's links", async () => {
     renderShell(`/tasks/${TASK_ID}/sources`);
-    const controls = screen.getAllByRole("button", { name: "Plan" });
-    // Two placements: the task nav (md+) and the bottom bar.
-    expect(controls).toHaveLength(2);
-    await user.click(controls[0]);
-    const panel = screen.getByRole("complementary", { name: "Search plan" });
-    expect(panel).toHaveAttribute("data-readonly", "true");
-    await user.click(screen.getByRole("button", { name: "Close the search plan" }));
-    expect(screen.queryByRole("complementary", { name: "Search plan" })).toBeNull();
+    await screen.findByRole("navigation", {}, { timeout: 3000 }).catch(() => undefined);
+    expect(screen.queryByRole("button", { name: "Plan" })).toBeNull();
   });
 });
 

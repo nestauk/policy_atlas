@@ -297,7 +297,7 @@ def test_liveness_hooks_publish_the_step_verb_and_bracket_the_call(
     assert hub.events[0][1] == {
         "task_id": task_id,
         "stage": "classify",
-        "activity": "Categorising",
+        "activity": "Classifying",
         "source": "hook",
     }
     assert all("done" not in payload for _event, payload in hub.events)

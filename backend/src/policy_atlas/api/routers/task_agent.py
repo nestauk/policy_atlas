@@ -81,7 +81,7 @@ from policy_atlas.api.routers.check_ins import execute_claimed
 from policy_atlas.api.routers.common import (
     active_parentless_walk,
 )
-from policy_atlas.api.stage_vocabulary import STEP_VERBS
+from policy_atlas.api.stage_vocabulary import STAGE_PRESENTATION, STAGE_ROW, STEP_VERBS
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import (
@@ -444,6 +444,28 @@ def _task_agent_inputs(
     return turns, previous_draft
 
 
+def _with_current_steps(stored: dict[str, Any]) -> dict[str, Any]:
+    """Re-stamp a stored turn's plan steps with the server's current copy.
+
+    A stored response carries the plan steps as they were projected when the
+    turn landed. Their label, blurb and row key are presentation the server
+    owns (task 058, N17): every read shows today's words, and a turn stored
+    before the row key existed still validates.
+    """
+    plan = stored.get("plan")
+    if not isinstance(plan, dict) or not isinstance(plan.get("steps"), list):
+        return stored
+    steps = []
+    for step in plan["steps"]:
+        stage = step.get("stage") if isinstance(step, dict) else None
+        if stage in STAGE_PRESENTATION:
+            label, blurb = STAGE_PRESENTATION[stage]
+            steps.append({**step, "label": label, "blurb": blurb, "row": STAGE_ROW[stage]})
+        else:
+            steps.append(step)
+    return {**stored, "plan": {**plan, "steps": steps}}
+
+
 def _transcript_out(row: RowMapping, capability: str) -> TaskAgentTranscriptTurnOut:
     """Project one durable transcript row into its honest read representation.
 
@@ -452,7 +474,7 @@ def _transcript_out(row: RowMapping, capability: str) -> TaskAgentTranscriptTurn
     citations and a decision as a decision — not as a bare reply (task 044).
     """
     stored = row["response"] if isinstance(row["response"], dict) else {}
-    projected = TaskAgentTurnOut.model_validate(stored) if stored else None
+    projected = TaskAgentTurnOut.model_validate(_with_current_steps(stored)) if stored else None
     return TaskAgentTranscriptTurnOut(
         capability=capability,
         turn_index=row["turn_index"],

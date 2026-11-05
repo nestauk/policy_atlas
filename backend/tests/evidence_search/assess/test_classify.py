@@ -737,4 +737,4 @@ def test_classify_publishes_documents_done_of_total(monkeypatch: pytest.MonkeyPa
     assert all(c["total"] == 4 and c["unit"] == "documents" for c in calls)
     # The retried call counts its document once: 0, then 1..4, nothing more.
     assert sorted(c["done"] for c in calls) == [0, 1, 2, 3, 4]
-    assert max(calls, key=lambda c: c["done"])["activity"] == "4 of 4 categorised"
+    assert max(calls, key=lambda c: c["done"])["activity"] == "4 of 4 classified"

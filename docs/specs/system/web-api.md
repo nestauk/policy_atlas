@@ -741,7 +741,7 @@ blurbs and the activity text are server-supplied presentation from one table
 (`api/stage_vocabulary.py`, task 058 N17) and may change; the client renders
 them and keeps no stage copy of its own. A plan step carries a `row` key:
 stages that share a row key render as one card row ("Searching and
-screening" for `acquire` and `screen`; "Categorising" for `classify` and
+screening" for `acquire` and `screen`; "Classifying" for `classify` and
 `appraise`), so the client decides nothing about rows.
 
 A `tick` (task 058, S2) carries one set of fields for every stage:

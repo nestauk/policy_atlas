@@ -165,9 +165,9 @@ test.describe("mock options-scoping longlist states (task 045)", () => {
     await thread.getByRole("radio", { name: /^Confirm plan and build longlist/ }).click();
   }
 
-  /** The plan opens from the task nav's Plan control at any time (task 058, N15). */
+  /** The plan opens from the running card's "See plan" (owner, polish round 2). */
   async function openPlan(page: Page) {
-    await page.getByRole("navigation", { name: "Task" }).getByRole("button", { name: "Plan", exact: true }).click();
+    await page.getByRole("button", { name: "See plan" }).click();
   }
 
   test("the plan document says the longlist is building, then built, and the Result opens on it", async ({

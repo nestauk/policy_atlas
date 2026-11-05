@@ -614,9 +614,9 @@ describe("mock API", () => {
       const frames = await playEvidenceWalk();
       const started = new Map(ofType(frames, "stage.started").map((frame) => [frame.stage, frame]));
       expect(started.get("acquire")).toMatchObject({ label: "Searching and screening", blurb: "Querying academic and policy databases." });
-      expect(started.get("classify")).toMatchObject({ label: "Categorising", blurb: "Labelling each source by its evidence type." });
+      expect(started.get("classify")).toMatchObject({ label: "Classifying", blurb: "Labelling each source by its evidence type." });
       expect(started.get("synthesise")).toMatchObject({ label: "Writing", blurb: "A cited report, checked claim by claim." });
-      expect(started.get("appraise")?.label).toBe("Categorising");
+      expect(started.get("appraise")?.label).toBe("Classifying");
 
       const plan = (await (await mockFetch(`${base}/plan`)).json()) as { plan: { steps: { stage: string; row: string }[] } };
       const rows = Object.fromEntries(plan.plan.steps.map((step) => [step.stage, step.row]));
@@ -656,7 +656,7 @@ describe("mock API", () => {
       expect(lines).toEqual(expect.arrayContaining([
         "searching · 184 found so far",
         "screening 61 new abstracts · 107 relevant so far",
-        "40 of 118 categorised",
+        "40 of 118 classified",
         "Assigning themes · batch 1 of 3",
         "Looking for: evidence on subsidy uptake among low-income households",
         "Reading findings",
@@ -664,7 +664,7 @@ describe("mock API", () => {
         "Checking claims",
         "Revising 1 claim",
       ]));
-      expect(ticks.find((entry) => entry.activity === "40 of 118 categorised")).toMatchObject({ done: 40, total: 118, unit: "documents" });
+      expect(ticks.find((entry) => entry.activity === "40 of 118 classified")).toMatchObject({ done: 40, total: 118, unit: "documents" });
       expect(ticks.find((entry) => entry.activity === "Writing")?.section).toBe("Section 2 of 2 · Implications for local action");
       // One heartbeat per stage with ticks.
       const heartbeats = ticks.filter((entry): entry is Tick => entry.heartbeat);

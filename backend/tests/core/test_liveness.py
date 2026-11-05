@@ -119,7 +119,7 @@ def test_heartbeats_repeat_the_last_tick_every_ten_seconds_while_a_call_is_open(
         hub, clock = _hub()
         queue = await hub.subscribe(TASK)
         hub.call_opened(TASK, "classify")
-        hub.publish_tick(TASK, stage="classify", activity="Categorising", done=3, total=9)
+        hub.publish_tick(TASK, stage="classify", activity="Classifying", done=3, total=9)
         original = _ticks(await _drain(queue))[0]
 
         beats: list[float] = []
@@ -152,10 +152,10 @@ def test_a_hook_tick_never_overwrites_a_loop_tick_but_a_loop_tick_overwrites_a_h
         queue = await hub.subscribe(TASK)
         hub.publish_tick(TASK, stage="classify", activity="3 of 9 documents")
         clock.now = 0.1
-        hub.publish_tick(TASK, stage="classify", activity="Categorising", source="hook")
+        hub.publish_tick(TASK, stage="classify", activity="Classifying", source="hook")
         clock.now = 0.2  # held: the hook still loses to the held loop tick
         hub.publish_tick(TASK, stage="classify", activity="4 of 9 documents")
-        hub.publish_tick(TASK, stage="classify", activity="Categorising", source="hook")
+        hub.publish_tick(TASK, stage="classify", activity="Classifying", source="hook")
         clock.now = 2.0
         hub.flush()
         assert [t.activity for t in _ticks(await _drain(queue))] == [
@@ -472,7 +472,7 @@ def test_context_helpers_publish_for_the_bound_task_and_stage(
         queue = await hub.subscribe(TASK)
 
         liveness.publish_progress(activity="nobody bound")
-        liveness.publish_verb("Categorising")
+        liveness.publish_verb("Classifying")
         liveness.model_call_opened()
         assert await _drain(queue) == []
         assert hub._tasks == {}
@@ -498,7 +498,7 @@ def test_context_helpers_publish_for_the_bound_task_and_stage(
         assert liveness.current_stage() is None
 
         with liveness.task_liveness(TASK):
-            liveness.publish_verb("Categorising")
+            liveness.publish_verb("Classifying")
             liveness.model_call_opened()
         assert await _drain(queue) == []
         assert None not in hub._tasks[TASK].stages

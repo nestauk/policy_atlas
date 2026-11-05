@@ -274,6 +274,7 @@ export function ChatSidePanel({
                 stream={stream}
                 isOwner={isOwner}
                 onReviewPlan={openPlan}
+                compact
               />
             )
           ) : draftOpen ? (

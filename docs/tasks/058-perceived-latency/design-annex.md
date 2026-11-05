@@ -48,8 +48,8 @@ Section titles (report order): Key findings (written last, shown first); 1 Why t
 
 ## The running card (revised)
 - Top line: dot, "RUNNING", elapsed "6 min 12 s" right-aligned in tabular figures, "Minimise" link. No second title.
-- Rows, one per plan step in order. **Owner 2026-11-04: "Sorting by evidence type" is renamed "Categorising" and absorbs Appraising (a one-second deterministic step); Shortlisting has no view in the app and gets no link (the selection shows through citations and the read-in-full status).** Evidence search rows: Searching and screening; Categorising; Reading the full texts; Mapping; Shortlisting; Writing (six). Three looks:
-  - Done: label in navy, then on the same line in grey the key count, then the link. Examples: "Searching and screening · 312 found · 118 relevant · Sources →"; "Categorising · 118 categorised · Landscape →" (link appears once Mapping is done; before that no link); "Reading the full texts · 38 read" (no link; owner round 4: nowhere relevant to point); "Mapping · 7 themes · Landscape →"; "Shortlisting · 24 selected" (no link); "Writing · 7 sections · Report →". In-progress line for Categorising: "40 of 118 categorised".
+- Rows, one per plan step in order. **Owner 2026-11-04: "Sorting by evidence type" is renamed "Classifying" and absorbs Appraising (a one-second deterministic step); Shortlisting has no view in the app and gets no link (the selection shows through citations and the read-in-full status).** Evidence search rows: Searching and screening; Classifying; Reading the full texts; Mapping; Shortlisting; Writing (six). Three looks:
+  - Done: label in navy, then on the same line in grey the key count, then the link. Examples: "Searching and screening · 312 found · 118 relevant · Sources →"; "Classifying · 118 classified · Landscape →" (link appears once Mapping is done; before that no link); "Reading the full texts · 38 read" (no link; owner round 4: nowhere relevant to point); "Mapping · 7 themes · Landscape →"; "Shortlisting · 24 selected" (no link); "Writing · 7 sections · Report →". In-progress line for Classifying: "40 of 118 classified".
   - In progress: label in navy with the breathing dot at the right; under it the action line in grey (and, for Writing, the section line above the action line). No "In progress" word; the dot is the state.
   - Upcoming: name only, grey, smaller, no status word.
 - Rules between rows stay. Row order is the plan order; Searching and screening is one row even when the search runs several rounds.
@@ -57,7 +57,7 @@ Section titles (report order): Key findings (written last, shown first); 1 Why t
 ## Scenes
 
 ### 1. Agent tab · searching and screening (the activity line)
-Running card as revised. Rows: "Searching and screening" in progress with the action line "searching · 184 found so far" rising to 312, then "screening 87 new abstracts · 104 relevant so far"; the 87 counts down to 0 as abstracts are checked (show "screening 61 new abstracts", "screening 23 new abstracts") and "relevant so far" rises slowly (104, 107, 112, 118). There are no rounds (task 051: one search and one screen per scope). Then the row completes as "Searching and screening · 312 found · 118 relevant · Sources →" and the next row "Categorising" becomes in progress with "40 of 118 categorised". (The run's fixed figure is 118 relevant; the rounds build up to it.) Upcoming rows below as names only. Elapsed ticks.
+Running card as revised. Rows: "Searching and screening" in progress with the action line "searching · 184 found so far" rising to 312, then "screening 87 new abstracts · 104 relevant so far"; the 87 counts down to 0 as abstracts are checked (show "screening 61 new abstracts", "screening 23 new abstracts") and "relevant so far" rises slowly (104, 107, 112, 118). There are no rounds (task 051: one search and one screen per scope). Then the row completes as "Searching and screening · 312 found · 118 relevant · Sources →" and the next row "Classifying" becomes in progress with "40 of 118 classified". (The run's fixed figure is 118 relevant; the rounds build up to it.) Upcoming rows below as names only. Elapsed ticks.
 Caption: "One row per step. The round and the counts live in the line under it."
 
 ### 2. A quiet pause
@@ -157,7 +157,7 @@ Agent tab, card C with Searching and screening done ("312 found · 118 relevant 
 Caption: "A check-in reads like a question. The recommended answer is first, with its reason."
 
 ### 13. The same agent in the sidebar (block I)
-Sources tab at 1100 wide with the sidebar open on the right (320 px). The run strip under the tabs reads "Searching and screening · screening 61 new abstracts · 6 min", status only. The sidebar opens from the rail's diamond. In the sidebar, top to bottom: header "Task Agent"; a compact run line (dot, "Searching and screening · 6 min"); the thread tail, which is the card's current line ("Searching and screening" in navy-grey with "screening 61 new abstracts · 107 relevant so far" under it); the composer locked with the placeholder "Replanning unlocks when this run finishes." Then, at 4 s, the run pauses: the compact line becomes orange "Paused · check-in after searching" and the check-in card from scene 12 appears in the sidebar at reduced width (radio list, no facts line), answerable there. Answering returns the line to "Categorising · 40 of 118 categorised · 7 min". (Aligned 2026-11-04 after the builder flagged the writing/searching mismatch.)
+Sources tab at 1100 wide with the sidebar open on the right (320 px). The run strip under the tabs reads "Searching and screening · screening 61 new abstracts · 6 min", status only. The sidebar opens from the rail's diamond. In the sidebar, top to bottom: header "Task Agent"; a compact run line (dot, "Searching and screening · 6 min"); the thread tail, which is the card's current line ("Searching and screening" in navy-grey with "screening 61 new abstracts · 107 relevant so far" under it); the composer locked with the placeholder "Replanning unlocks when this run finishes." Then, at 4 s, the run pauses: the compact line becomes orange "Paused · check-in after searching" and the check-in card from scene 12 appears in the sidebar at reduced width (radio list, no facts line), answerable there. Answering returns the line to "Classifying · 40 of 118 classified · 7 min". (Aligned 2026-11-04 after the builder flagged the writing/searching mismatch.)
 Caption: "The sidebar shows the same run and the same check-in. Nothing is only on the Agent tab."
 
 ### 14. Finding your way (block J)
@@ -285,12 +285,37 @@ Nesta palette from `index.css`: navy `#0f294a` structural text, grey `#646363` s
   lines; the annex's reason-only form is the mock's shape. The mid-write failure banner's copy
   and the plan panel's arrival motion are deferred to the owner pass.
 
+## Owner pass, round 2 (2026-11-05): the owner's notes on the live app and what was done
+
+1. "Your Task Agent conversation couldn't be loaded" on a completed search, and the History tab
+   likewise: a bug, not polish. Turns stored before this slice carry plan steps without the new
+   `row` key, so re-reading the transcript failed validation. The transcript read now re-stamps
+   every stored plan step with the server's current label, blurb and row (one source of copy on
+   every read).
+2. The "Plan" control leaves the task nav. "See plan" is back on the running card's top line, and
+   the Result tab carries a small "See the plan" link under its title (before and after the
+   report exists). Both open the plan side panel.
+3. "Esc closes" is removed from the plan view (Escape still closes it).
+4. The sidebar's pane shows no running card: the strip and the sidebar's run line already say
+   where the run is.
+5. "Categorising" becomes "Classifying" everywhere (the row label for classify and appraise, the
+   activity line "n of M classified", the step verb). The row key `categorise` is unchanged.
+6. The plan card with "Start the search" under a completed search's conversation was the same
+   bug as item 1: with the transcript unreadable the pane saw no run block after the plan card.
+   To confirm on the live app after restarting `make dev`.
+
+Noted by the lead on the live check for the next owner round: on a completed task, a past
+turn's part card (for example "Plan · step 2 of 3 · Scope" with "Looks right" and "Add or change
+a constraint") still shows its unsettled radio list in the conversation history; the settled
+one-line form, or a read-only look, would read better once the plan has run. The sidebar's run
+block lists every run event ("Executed a search query × 50"); it predates this slice.
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |
 |---|---|---|---|---|
 | 1 | build, agent pass | 2026-11-05 | Plan side panel lies over the page instead of squeezing the report; task nav keeps a gutter before Plan; the card's step in progress keeps its clock on the label line on phones; the strip's elapsed time never truncates; in-card inputs span the card on phones | lead |
-| 2 | build, owner pass | | | owner |
+| 2 | build, owner pass | 2026-11-05 | six notes applied (above); the transcript-read bug fixed; Classifying | owner (round 1 of 3) |
 | 3 | review, agent pass | | | lead |
 | 4 | review, owner pass | | | owner |
 

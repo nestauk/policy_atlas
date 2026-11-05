@@ -442,7 +442,7 @@ def test_tick_frame_discriminates_and_has_no_sequence() -> None:
         {
             "type": "tick",
             "occurred_at": _now().isoformat(),
-            "activity": "Categorising",
+            "activity": "Classifying",
         }
     )
     assert isinstance(model, TickFrame)
@@ -625,7 +625,7 @@ def test_latest_run_carries_a_stage_key_and_its_label() -> None:
     bare = LatestRun.model_validate(base)
     assert bare.stage is None and bare.stage_label is None
     staged = LatestRun.model_validate(
-        {**base, "stage": "classify", "stage_label": "Categorising"}
+        {**base, "stage": "classify", "stage_label": "Classifying"}
     )
     assert staged.stage == "classify"
     with pytest.raises(ValidationError):

@@ -1385,3 +1385,30 @@ def test_question_and_suggestions_survive_a_transcript_read(
     stored = listed.json()["data"][0]
     assert stored["question"] == turn["question"]
     assert stored["suggestions"] == turn["suggestions"] and len(stored["suggestions"]) == 3
+
+
+def test_a_turn_stored_before_the_row_key_reads_back_with_todays_steps() -> None:
+    """Task 058 polish: stored plan steps are re-stamped with the server's copy on read.
+
+    A turn stored before this slice carries steps with the old labels and no
+    `row`; the transcript read fills today's label, blurb and row so the row
+    validates and shows the current words.
+    """
+    from policy_atlas.api.routers.task_agent import _with_current_steps
+
+    stored = {
+        "reply": "ok",
+        "plan": {
+            "steps": [
+                {"stage": "acquire", "label": "Searching sources", "blurb": "old"},
+                {"stage": "classify", "label": "Sorting by evidence type", "blurb": "old"},
+            ],
+            "ready": True,
+        },
+    }
+    out = _with_current_steps(stored)
+    assert [s["row"] for s in out["plan"]["steps"]] == ["search_screen", "categorise"]
+    assert [s["label"] for s in out["plan"]["steps"]] == ["Searching and screening", "Classifying"]
+    assert out["plan"]["ready"] is True
+    assert _with_current_steps({"reply": "no plan"}) == {"reply": "no plan"}
+

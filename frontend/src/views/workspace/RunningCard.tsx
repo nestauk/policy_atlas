@@ -191,6 +191,7 @@ export function RunningCard({
   hasFindings,
   minimised,
   onMinimisedChange,
+  onSeePlan,
   capability,
   purpose,
   liveness,
@@ -211,8 +212,8 @@ export function RunningCard({
   hasFindings: boolean;
   minimised: boolean;
   onMinimisedChange: (minimised: boolean) => void;
-  /** No longer shown: the task nav's Plan control opens the plan from every
-   *  tab (task 058, N15). Accepted until the Agent pane stops passing it. */
+  /** Opens the plan document (owner, polish round 2: the plan's link lives on
+   *  the card, not in the task nav). */
   onSeePlan?: () => void;
 }) {
   const kind = walkKind(capability, stages, purpose);
@@ -252,6 +253,11 @@ export function RunningCard({
           <span className="text-body text-grey">
             <Figures text={elapsedLabel} />
           </span>
+          {onSeePlan !== undefined && (
+            <button type="button" className={QUIET_CONTROL_CLASS} onClick={onSeePlan}>
+              See plan
+            </button>
+          )}
           {tone !== "stopped" && (
             <button type="button" className={QUIET_CONTROL_CLASS} onClick={() => onMinimisedChange(true)}>
               Minimise

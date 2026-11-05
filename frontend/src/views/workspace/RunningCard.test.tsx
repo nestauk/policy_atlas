@@ -27,8 +27,8 @@ function standardPlan(): PlanDraft {
     steps: [
       step("acquire", "Searching and screening", "search_screen"),
       step("screen", "Searching and screening", "search_screen"),
-      step("classify", "Categorising", "categorise"),
-      step("appraise", "Categorising", "categorise"),
+      step("classify", "Classifying", "categorise"),
+      step("appraise", "Classifying", "categorise"),
       step("ingest", "Reading the full texts", "ingest"),
       step("characterise", "Mapping", "characterise"),
       step("select", "Shortlisting", "select"),
@@ -113,11 +113,11 @@ describe("RunningCard — direction C (task 058, D5, N5)", () => {
   it("shows the step in progress with its activity line, its own elapsed time and a breathing mark", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     const { container } = renderCard({
-      stages: [...SEARCHED, entry({ stage: "classify", label: "Categorising", status: "started", startedAt: ago(75) })],
-      liveness: { classify: { activity: "40 of 118 categorised", done: 40, total: 118, heartbeat: false, dropped: 0, occurredAt: ago(0) } },
+      stages: [...SEARCHED, entry({ stage: "classify", label: "Classifying", status: "started", startedAt: ago(75) })],
+      liveness: { classify: { activity: "40 of 118 classified", done: 40, total: 118, heartbeat: false, dropped: 0, occurredAt: ago(0) } },
     });
-    const row = rowOf("Categorising");
-    expect(row).toHaveTextContent("40 of 118 categorised");
+    const row = rowOf("Classifying");
+    expect(row).toHaveTextContent("40 of 118 classified");
     expect(row).toHaveTextContent("1 min 15 s");
     expect(row.querySelector(".anim-breathe")).not.toBeNull();
     expect(container.querySelectorAll(".anim-breathe")).toHaveLength(1);
@@ -223,3 +223,28 @@ describe("RunningCard — direction C (task 058, D5, N5)", () => {
     expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
   });
 });
+
+describe("RunningCard — the plan's link (owner, polish round 2)", () => {
+  it("shows See plan on the top line when the pane gives it a handler", async () => {
+    const onSeePlan = vi.fn();
+    render(
+      <MemoryRouter>
+        <RunningCard
+          taskId="t"
+          status="running"
+          stages={SEARCHED}
+          liveness={{}}
+          plan={standardPlan()}
+          startedAt={ago(600)}
+          hasFindings={false}
+          minimised={false}
+          onMinimisedChange={() => undefined}
+          onSeePlan={onSeePlan}
+        />
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "See plan" }));
+    expect(onSeePlan).toHaveBeenCalledTimes(1);
+  });
+});
+

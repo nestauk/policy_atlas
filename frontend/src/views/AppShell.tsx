@@ -298,22 +298,6 @@ function TaskTabs({
   );
 }
 
-/** The task nav's "Plan" control: opens the plan document as a side panel
- *  from any tab (task 058, N15). Grey text, underlined on hover. */
-function PlanControl() {
-  const plan = usePlanPanel();
-  return (
-    <button
-      type="button"
-      aria-expanded={plan.open}
-      onClick={plan.open ? plan.closePlan : plan.openPlan}
-      className="inline-flex cursor-pointer items-center border-b-[3px] border-transparent pb-1 text-lead font-semibold leading-none text-grey underline-offset-4 hover:text-navy hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue"
-    >
-      Plan
-    </button>
-  );
-}
-
 /** The plan document over a non-Agent tab (the Agent tab mounts its own,
  *  with the plan's edits). Read-only here: edits and starts belong to the
  *  Agent tab. It lies over the right of the page with the overlay lift, so
@@ -518,7 +502,7 @@ export function AppShell() {
             <TaskTabs
               placement="nav"
               items={lifecycleItems ?? []}
-              lead={liveShell ? <PlanControl /> : undefined}
+              lead={undefined}
             />
           </div>
         </NavBar>
@@ -570,7 +554,7 @@ export function AppShell() {
         <TaskTabs
           placement="bottom"
           items={lifecycleItems}
-          lead={liveShell ? <PlanControl /> : undefined}
+          lead={undefined}
         />
       )}
       {/* List pages only — Plan hosts its own footer in the chat scroll. */}

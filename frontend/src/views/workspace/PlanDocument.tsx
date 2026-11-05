@@ -291,13 +291,6 @@ function PlanChrome({
     "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center p-0 text-[#97a8bc] hover:text-white focus-visible:outline-2 focus-visible:outline-blue";
   return (
     <div className={cn("flex h-8 items-center", className)}>
-      {/* Keyboard hint for the side panel (task 058, N15); a touch screen
-          has no Escape key, so it is not shown there. */}
-      {!showDock && (
-        <span aria-hidden="true" className="mr-2 text-caption text-[#97a8bc] [@media(hover:none)]:hidden">
-          Esc closes
-        </span>
-      )}
       {showDock && onDock !== undefined && (
         <button
           type="button"

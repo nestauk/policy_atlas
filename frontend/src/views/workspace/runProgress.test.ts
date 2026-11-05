@@ -46,8 +46,8 @@ function standardPlan(): PlanDraft {
     steps: [
       step("acquire", "Searching and screening", "search_screen"),
       step("screen", "Searching and screening", "search_screen"),
-      step("classify", "Categorising", "categorise"),
-      step("appraise", "Categorising", "categorise"),
+      step("classify", "Classifying", "categorise"),
+      step("appraise", "Classifying", "categorise"),
       step("ingest", "Reading the full texts", "ingest"),
       step("characterise", "Mapping", "characterise"),
       step("select", "Shortlisting", "select"),
@@ -57,7 +57,7 @@ function standardPlan(): PlanDraft {
 }
 
 function tick(overrides: Partial<StageLiveness> = {}): StageLiveness {
-  return { activity: "40 of 118 categorised", heartbeat: false, dropped: 0, occurredAt: T0, ...overrides };
+  return { activity: "40 of 118 classified", heartbeat: false, dropped: 0, occurredAt: T0, ...overrides };
 }
 
 describe("cardRows — rows from the server's plan steps (task 058, D5)", () => {
@@ -65,7 +65,7 @@ describe("cardRows — rows from the server's plan steps (task 058, D5)", () => 
     const rows = cardRows([], standardPlan(), "running");
     expect(rows.map((row) => row.label)).toEqual([
       "Searching and screening",
-      "Categorising",
+      "Classifying",
       "Reading the full texts",
       "Mapping",
       "Shortlisting",
@@ -115,7 +115,7 @@ describe("cardRows — rows from the server's plan steps (task 058, D5)", () => 
       [
         entry({ stage: "acquire", status: "completed" }),
         entry({ stage: "screen", status: "completed" }),
-        entry({ stage: "classify", label: "Categorising", status: "failed" }),
+        entry({ stage: "classify", label: "Classifying", status: "failed" }),
       ],
       standardPlan(),
       "failed",
@@ -192,13 +192,13 @@ describe("rowLink — where a done row points", () => {
   ];
 
   it("links Sources after searching and screening; Landscape on categorising only once mapping is done", () => {
-    const early = done([...searchScreen, entry({ stage: "classify", label: "Categorising", status: "completed" }), entry({ stage: "appraise", label: "Categorising", status: "completed" })]);
+    const early = done([...searchScreen, entry({ stage: "classify", label: "Classifying", status: "completed" }), entry({ stage: "appraise", label: "Classifying", status: "completed" })]);
     expect(rowLink(early[0], early, "t1", "evidence_search", false)).toEqual({ href: "/tasks/t1/sources/all", label: "Sources" });
     expect(rowLink(early[1], early, "t1", "evidence_search", false)).toBeNull();
     const mapped = done([
       ...searchScreen,
-      entry({ stage: "classify", label: "Categorising", status: "completed" }),
-      entry({ stage: "appraise", label: "Categorising", status: "completed" }),
+      entry({ stage: "classify", label: "Classifying", status: "completed" }),
+      entry({ stage: "appraise", label: "Classifying", status: "completed" }),
       entry({ stage: "characterise", label: "Mapping", status: "completed" }),
     ]);
     expect(rowLink(mapped[1], mapped, "t1", "evidence_search", false)?.label).toBe("Landscape");
@@ -238,7 +238,7 @@ describe("the activity line", () => {
     expect(rowDetail(tick({ section: "Section 3 of 7 · Costs and funding", activity: "Writing" }))).toBe(
       "Section 3 of 7 · Costs and funding",
     );
-    expect(rowDetail(tick({ activity: "40 of 118 categorised" }))).toBe("40 of 118 categorised");
+    expect(rowDetail(tick({ activity: "40 of 118 classified" }))).toBe("40 of 118 classified");
     expect(rowDetail(undefined)).toBeNull();
   });
 });

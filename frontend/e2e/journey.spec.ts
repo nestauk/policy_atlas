@@ -195,13 +195,14 @@ test.describe("mock task-lifecycle journey", () => {
     // completion card's "Read the report" link is also on the page,
     // pointing at `/result`.
     await expect(runCompletionLink(page)).toBeVisible({ timeout: 15_000 });
-    // The plan is one click from the task nav; Escape closes it (task 058, N15).
-    await expect(page.getByRole("button", { name: "See plan" })).toHaveCount(0);
-    const planControl = nav.getByRole("button", { name: "Plan", exact: true });
-    await planControl.click();
-    await expect(planControl).toHaveAttribute("aria-expanded", "true");
+    // The plan opens from the card's "See plan" (owner, polish round 2: no
+    // Plan control in the task nav); Escape closes it.
+    await expect(nav.getByRole("button", { name: "Plan", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "See plan" }).click();
+    const planPanel = page.getByRole("dialog", { name: /plan/i });
+    await expect(planPanel).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(planControl).toHaveAttribute("aria-expanded", "false");
+    await expect(planPanel).toHaveCount(0);
     for (const label of ["Agent", "Result", "Sources", "Share", "History"]) {
       await expect(nav.getByRole("link", { name: new RegExp(`^${label}`) })).toBeVisible();
     }
@@ -708,18 +709,18 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("312 found · 118 relevant")).toBeVisible();
     const rows = await timeline.getByRole("listitem").allInnerTexts();
-    const order = ["Searching and screening", "Categorising", "Mapping", "Writing"].map((label) =>
+    const order = ["Searching and screening", "Classifying", "Mapping", "Writing"].map((label) =>
       rows.findIndex((row) => row.startsWith(label)),
     );
     expect(order).toEqual([0, 1, 2, 3]);
-    for (const upcoming of ["Categorising", "Mapping", "Writing"]) {
+    for (const upcoming of ["Classifying", "Mapping", "Writing"]) {
       const row = rows.find((text) => text.startsWith(upcoming)) ?? "";
       expect(row).not.toContain("·");
       expect(row).not.toMatch(/\d/);
     }
 
     await answerCheckIn(page);
-    await seen(page, /^\d+ of 118 categorised$/);
+    await seen(page, /^\d+ of 118 classified$/);
     await seen(page, /Assigning themes · batch \d of 3/);
     await expect(runCompletionLink(page)).toBeVisible({ timeout: 20_000 });
 
@@ -791,7 +792,9 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await startRun(page);
     await expect(page.getByRole("region", { name: "Analysis run" })).toBeVisible({ timeout: 15_000 });
     await taskNav(page).getByRole("link", { name: /^Sources/ }).click();
-    await seen(page, /^Searching and screening · .*· \d+ s$/);
+    // The strip's elapsed time sits in its own span, so the recorded line is
+    // the words alone.
+    await seen(page, /^Searching and screening · /);
 
     // Answer from the sidebar, then watch the strip to the end.
     await expect(page.getByText("Paused · a check-in is waiting on you")).toBeVisible({ timeout: 15_000 });

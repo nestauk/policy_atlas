@@ -740,13 +740,13 @@ describe("reduceRunStreamFrame — tick transience", () => {
   it("stores heartbeats per stage, each stage keeping its own latest tick", () => {
     let state = createInitialRunStreamState();
     state = reduceRunStreamFrame(state, tick({ stage: "screen", activity: "Screening abstracts" }));
-    state = reduceRunStreamFrame(state, tick({ stage: "classify", activity: "Categorising" }));
+    state = reduceRunStreamFrame(state, tick({ stage: "classify", activity: "Classifying" }));
     state = reduceRunStreamFrame(
       state,
       tick({ stage: "screen", activity: "Screening abstracts", heartbeat: true, occurred_at: "2026-07-21T10:02:10Z" }),
     );
     expect(state.liveness.screen).toMatchObject({ heartbeat: true, occurredAt: "2026-07-21T10:02:10Z" });
-    expect(state.liveness.classify).toMatchObject({ activity: "Categorising", heartbeat: false });
+    expect(state.liveness.classify).toMatchObject({ activity: "Classifying", heartbeat: false });
   });
 
   it("a stage-less tick lands under the global liveness key", () => {

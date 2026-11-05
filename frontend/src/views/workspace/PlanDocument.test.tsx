@@ -317,7 +317,7 @@ describe("PlanDocument", () => {
         <PlanDocument taskId={TASK_ID} placement="side" onClose={onClose} overlay={{}} onOverlayChange={vi.fn()} />
       </TooltipProvider>,
     );
-    expect(screen.getByText("Esc closes")).toBeInTheDocument();
+    expect(screen.queryByText("Esc closes")).toBeNull();
     await user.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalledTimes(1);
   });

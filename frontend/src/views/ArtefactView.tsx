@@ -33,6 +33,7 @@ import { hasLonglist, isBaselineArtefact, statusRun } from "./scopingActivity";
 import { useChatsEnabled } from "./taskResult";
 import { LonglistBuilding, LonglistView } from "./longlist/LonglistView";
 import { isLonglistBuilding, LONGLIST_WALK_STAGES } from "./longlist/longlistPresentation";
+import { usePlanPanel } from "./planPanel";
 import { ShortlistView } from "./longlist/ShortlistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
@@ -1490,10 +1491,13 @@ export function LiveArtefactBody({
 export function ReportToBe({
   question,
   ended = false,
+  onSeePlan,
 }: {
   question: string | null | undefined;
   /** The run ended before any section was proposed (failed, aborted, interrupted). */
   ended?: boolean;
+  /** Opens the plan document (owner, polish round 2: a small link on the Result tab). */
+  onSeePlan?: () => void;
 }) {
   return (
     <ReportPage>
@@ -1501,7 +1505,17 @@ export function ReportToBe({
       <p className="mt-4 text-body text-grey">
         {ended ? "This run ended before writing began." : "The report's sections are set out when writing begins."}
       </p>
+      {onSeePlan !== undefined && <SeePlanLink onClick={onSeePlan} />}
     </ReportPage>
+  );
+}
+
+/** The Result tab's small link to the plan document. */
+function SeePlanLink({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="mt-2 cursor-pointer text-meta text-grey underline-offset-4 hover:text-navy hover:underline">
+      See the plan
+    </button>
   );
 }
 
@@ -1765,6 +1779,7 @@ function ScopingResult({ taskId, building }: { taskId: string; building: boolean
 function ArtefactReport() {
   const { taskId = "" } = useParams();
   const isPublicView = usePublicView();
+  const planPanel = usePlanPanel();
   const task = useTask(taskId);
   const artefact = useArtefact(taskId);
   // The public view (task 037) must issue only public-surface requests:
@@ -1906,7 +1921,7 @@ function ArtefactReport() {
       stream.run?.status === "failed" ||
       stream.run?.status === "aborted" ||
       stream.run?.status === "interrupted";
-    return <ReportToBe question={question} ended={endedEarly} />;
+    return <ReportToBe question={question} ended={endedEarly} onSeePlan={isPublicView ? undefined : planPanel.openPlan} />;
   }
 
   const data = artefact.data;
@@ -2034,6 +2049,7 @@ function ArtefactReport() {
           <ArtefactDownload artefact={data} />
         </ReportKindRow>
         <h1 className={REPORT_TITLE_CLASS}>{scrub(data.title)}</h1>
+        {!isPublicView && <SeePlanLink onClick={planPanel.openPlan} />}
         <SnapshotCells cells={snapshotCells} />
         {!isPublicView && (
           <button

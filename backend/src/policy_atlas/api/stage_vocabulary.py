@@ -27,8 +27,8 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
         "Searching and screening",
         "Checking each title and abstract against your question.",
     ),
-    "classify": ("Categorising", "Labelling each source by its evidence type."),
-    "appraise": ("Categorising", "Scoring how much weight each source can bear."),
+    "classify": ("Classifying", "Labelling each source by its evidence type."),
+    "appraise": ("Classifying", "Scoring how much weight each source can bear."),
     "ingest": (
         "Reading the full texts",
         "Fetching each selected document and reading it into sections.",
@@ -59,7 +59,7 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
 
 #: The card row each stage belongs to (D5, direction C). Stages with the same
 #: row key render as one row: search and screen as "Searching and screening",
-#: classify and appraise as "Categorising". The client groups by this key and
+#: classify and appraise as "Classifying". The client groups by this key and
 #: decides nothing about rows itself.
 STAGE_ROW: dict[StageKey, str] = {
     "acquire": "search_screen",
@@ -89,7 +89,7 @@ STAGE_ROW: dict[StageKey, str] = {
 STAGE_COUNTS: dict[StageKey, tuple[tuple[str, str], ...]] = {
     "acquire": (("acquired", "found"),),
     "screen": (("relevant", "relevant"),),
-    "classify": (("classified", "categorised"),),
+    "classify": (("classified", "classified"),),
     "appraise": (),
     "ingest": (("ingested", "read"),),
     "characterise": (("theme_count", "themes"),),
@@ -114,7 +114,7 @@ STAGE_COUNTS: dict[StageKey, tuple[tuple[str, str], ...]] = {
 #: run outside a harness (chat, the agents) publish nothing; their verb is
 #: here so the table is complete.
 STEP_VERBS: dict[str, str] = {
-    "classify_document": "Categorising",
+    "classify_document": "Classifying",
     "screen_abstract": "Screening abstracts",
     "screen_full": "Reading full texts for relevance",
     "select_rerank": "Ranking sources",
@@ -183,7 +183,7 @@ ACTIVITY: dict[str, str] = {
     "screen.abstracts": "screening {remaining:,} new abstracts · {relevant:,} relevant so far",
     # loops with a known total: "n of M <unit>"
     "screen.full_texts": "reading {done} of {total} full texts for relevance",
-    "classify.progress": "{done:,} of {total:,} categorised",
+    "classify.progress": "{done:,} of {total:,} classified",
     "ingest.progress": "{done} of {total} read",
     "extract.progress": "{done} of {total} read for findings",
     "extract_interventions.progress": "{done:,} of {total:,} abstracts read",

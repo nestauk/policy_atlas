@@ -26,6 +26,8 @@ secrets, no raw source text, no unredacted traces.
 
 | Step-6 exit gate, deterministic build (2026-11-05, `ce383f24`) | `make verify` | pass | backend 4257 passed, 1 skipped (8.1 min); mypy, ruff, prompt-guard, OKF, audit, font-guard, infra all green; `drift-check: OK`; frontend 1064 tests in 93 files, build OK. The owner-gated items (the N25 measures, the owner polish rounds) re-run this gate when they land. |
 
+| Phase 10, owner round 1 of 3 (2026-11-05) | `make verify-fast && make frontend-verify && make drift-check && pnpm e2e` | pass | backend 4220 passed, 1 skipped (test-fast, typecheck, lint); frontend 1065 tests in 93 files, build OK, `drift-check: OK`; Playwright 31 passed after three journeys moved from the nav Plan control to the card's "See plan" and one stopped matching the strip's time on the same text line. Live check on the owner's real completed task through a spare API and frontend pair (ports 8010/5190): the Agent and History tabs load, no Start button under the completed search, "See plan" on the card, "See the plan" on the Result tab, no "Esc closes", "Classifying"; screenshots under `research/screenshots/phase10-owner-r2/`. |
+
 (The gate map's step-6 exit is this command; it is re-run after the owner-gated phases.)
 
 ## Checks beyond the build
@@ -75,7 +77,14 @@ tool and the gap measure are built and tested (Phase 0). The "before" captures m
   `research/screenshots/phase10/` (every scene, rounds 1 and 2, the four brief O missed
   included). Lead follow-ups after the pass: "just now" under a minute, no re-run line during a
   longlist walk, the strip's short section form. Annex polish log row 1 filled.
-- **Owner rounds (up to three, G6):** not started; they need the owner on the live app.
+- **Round 2, owner pass, round 1 of 3 (2026-11-05):** the owner's six notes on the live app
+  (annex § Owner pass, round 2): two were one bug (older stored turns failed validation on the
+  new `row` key; the transcript read now re-stamps stored steps with the server's copy, with a
+  test); the Plan control leaves the nav, "See plan" returns to the card and a small link to the
+  Result tab; "Esc closes" removed; no running card in the sidebar's pane; "Categorising" →
+  "Classifying". The owner's dev API (uvicorn `--reload`) stopped answering during the edits;
+  the fixes are verified in-process and by the tests, and the owner restarts `make dev` to see
+  them.
 
 ## Diff summary
 

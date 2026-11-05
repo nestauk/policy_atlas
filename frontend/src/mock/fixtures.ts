@@ -21,8 +21,8 @@ type StageKey = components["schemas"]["StageStartedFrame"]["stage"];
 export const STAGE_PRESENTATION: Record<StageKey, readonly [label: string, blurb: string]> = {
   acquire: ["Searching and screening", "Querying academic and policy databases."],
   screen: ["Searching and screening", "Checking each title and abstract against your question."],
-  classify: ["Categorising", "Labelling each source by its evidence type."],
-  appraise: ["Categorising", "Scoring how much weight each source can bear."],
+  classify: ["Classifying", "Labelling each source by its evidence type."],
+  appraise: ["Classifying", "Scoring how much weight each source can bear."],
   ingest: ["Reading the full texts", "Fetching each selected document and reading it into sections."],
   characterise: ["Mapping", "What the evidence covers, and where it is thin."],
   select: ["Shortlisting", "The strongest, most varied set for close reading."],
@@ -47,7 +47,7 @@ export const STAGE_PRESENTATION: Record<StageKey, readonly [label: string, blurb
 export const STAGE_COUNTS: Record<StageKey, ReadonlyArray<readonly [string, string]>> = {
   acquire: [["acquired", "found"]],
   screen: [["relevant", "relevant"]],
-  classify: [["classified", "categorised"]],
+  classify: [["classified", "classified"]],
   appraise: [],
   ingest: [["ingested", "read"]],
   characterise: [["theme_count", "themes"]],

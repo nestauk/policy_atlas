@@ -10,7 +10,7 @@ export type RowState = "done" | "progress" | "upcoming" | "failed" | "skipped";
 /**
  * One row of the running card (task 058, D5, direction C): one plan step, or
  * several stages the server says share a row ("Searching and screening" is
- * search plus screen; "Categorising" is classify plus appraise).
+ * search plus screen; "Classifying" is classify plus appraise).
  */
 export type CardRow = {
   /** The server's row key from `PlanStep.row`, or the frame label for a row

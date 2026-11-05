@@ -309,7 +309,7 @@ def test_an_evidence_search_mid_classify_shows_categorising(
         _stage_started(engine, task_id, walk, "acquire", minutes=1)
         _stage_started(engine, task_id, walk, "classify", minutes=2)
         active = _active(client, owner, task_id)
-        assert (active["stage"], active["stage_label"]) == ("classify", "Categorising")
+        assert (active["stage"], active["stage_label"]) == ("classify", "Classifying")
 
         # The full-text screen starts no stage of its own: the row keeps the last one.
         _stage_started(engine, task_id, walk, "screen_full", minutes=3)

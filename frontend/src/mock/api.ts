@@ -1314,12 +1314,12 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       });
 
       await walkStage(emit, emitTick, nextSequence, "classify", wait, [
-        { activity: "40 of 118 categorised", done: 40, total: 118, unit: "documents" },
-        { activity: "80 of 118 categorised", done: 80, total: 118, unit: "documents" },
-        { activity: "118 of 118 categorised", done: 118, total: 118, unit: "documents" },
+        { activity: "40 of 118 classified", done: 40, total: 118, unit: "documents" },
+        { activity: "80 of 118 classified", done: 80, total: 118, unit: "documents" },
+        { activity: "118 of 118 classified", done: 118, total: 118, unit: "documents" },
       ], { classified: 118 });
       await walkStage(emit, emitTick, nextSequence, "appraise", wait, [
-        { activity: "Categorising" },
+        { activity: "Classifying" },
       ], { quality_checked: 118 });
       await walkStage(emit, emitTick, nextSequence, "characterise", wait, [
         { activity: "Assigning themes · batch 1 of 3", done: 1, total: 3, unit: "batches" },

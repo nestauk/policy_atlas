@@ -653,6 +653,7 @@ export function TaskAgentPane({
   stream,
   isOwner,
   onReviewPlan,
+  compact = false,
   planOverlay,
   onOverlayApplied,
   onDiscardOverlay,
@@ -668,6 +669,8 @@ export function TaskAgentPane({
    *  every colleague the owner's mutation surface. */
   isOwner: boolean;
   onReviewPlan?: () => void;
+  /** The sidebar's pane: no running card (the run line is above it). */
+  compact?: boolean;
   planOverlay?: PlanOverlay;
   onOverlayApplied?: () => void;
   /** Clears the same overlay state as `onOverlayApplied` — wired to the
@@ -807,8 +810,10 @@ export function TaskAgentPane({
     return () => observer.disconnect();
   }, [liveRunId, threadHasLiveRun]);
 
+  // The sidebar's compact pane shows no card: the strip and the sidebar's
+  // run line already say where the run is (owner, polish round 2).
   const liveCard =
-    stream.run === null ? null : (
+    stream.run === null || compact ? null : (
       <div key="live-run" ref={cardRef}>
         <RunningCard
           taskId={taskId}
@@ -823,6 +828,7 @@ export function TaskAgentPane({
           onMinimisedChange={setRunMinimised}
           capability={planQuery.data?.capability}
           purpose={liveRunPurpose}
+          onSeePlan={onReviewPlan}
         />
       </div>
     );
