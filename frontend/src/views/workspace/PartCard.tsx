@@ -131,8 +131,14 @@ export function settledSummary(
     case "question":
       return plan?.question ?? scoping?.question ?? fallback;
     case "scope": {
-      const chips = (part.chips ?? []).map((chip) => chip.label);
-      return chips.length > 0 ? chips.join(" · ") : fallback;
+      const groups = chipGroups(part.chips ?? []);
+      if (groups.length === 0) return fallback;
+      return groups
+        .map((group) => {
+          const words = group.chips.map((chip) => chipText(chipDisplayLabel(chip)));
+          return group.heading === null ? words.join(" · ") : `${group.heading}: ${words.join(", ")}`;
+        })
+        .join(" · ");
     }
     case "thoroughness": {
       if (plan?.search_effort == null || plan.analysis_depth == null) return fallback;
@@ -149,6 +155,38 @@ export function settledSummary(
     default:
       return fallback;
   }
+}
+
+/** The planner prefixes a scope chip with what it constrains: "Screen: …"
+ *  is a screening criterion, "Search: …" a source filter. */
+const CHIP_PREFIXES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^screen(?:ing)?\s*:\s*/i, "Screening criteria"],
+  [/^search\s*:\s*/i, "Source filters"],
+];
+
+/** A chip's words without its "Screen:" / "Search:" prefix. */
+export function chipText(label: string): string {
+  for (const [prefix] of CHIP_PREFIXES) {
+    if (prefix.test(label)) return label.replace(prefix, "").trim();
+  }
+  return label;
+}
+
+/**
+ * The scope card's chips grouped by what they constrain (owner, 2026-11-05:
+ * screening criteria and source filters were mixed in one row). Chips with
+ * no recognised prefix form an unnamed group, first.
+ */
+export function chipGroups(chips: PartChip[]): Array<{ heading: string | null; chips: PartChip[] }> {
+  const groups = new Map<string | null, PartChip[]>();
+  for (const chip of chips) {
+    // `chipDisplayLabel` normalises the prefix from the chip's kind.
+    const match = CHIP_PREFIXES.find(([prefix]) => prefix.test(chipDisplayLabel(chip)));
+    const heading = match === undefined ? null : match[1];
+    groups.set(heading, [...(groups.get(heading) ?? []), chip]);
+  }
+  const order: Array<string | null> = [null, "Screening criteria", "Source filters"];
+  return order.filter((heading) => groups.has(heading)).map((heading) => ({ heading, chips: groups.get(heading) ?? [] }));
 }
 
 /** Chip edit staged on the scope card, batched into one task_agent turn. */
@@ -187,7 +225,8 @@ export function chipDisplayLabel(chip: Pick<PartChip, "kind" | "label">): string
         ? SCREEN_CHIP_PREFIX
         : null;
   if (prefix === null) return chip.label;
-  if (chip.label.startsWith(prefix)) return chip.label;
+  // A label that already says what it constrains keeps its own prefix.
+  if (chip.label.startsWith(SCREEN_CHIP_PREFIX) || chip.label.startsWith(SEARCH_CHIP_PREFIX)) return chip.label;
   return `${prefix} ${chip.label}`;
 }
 
@@ -221,7 +260,8 @@ function EditableChip({
   const range = chip.kind === "date_range" ? parseDateRange(chip.value) : null;
   const [after, setAfter] = useState(range?.after ?? "");
   const [before, setBefore] = useState(range?.before ?? "");
-  const displayLabel = chipDisplayLabel(chip);
+  const prefixed = chipDisplayLabel(chip);
+  const displayLabel = chipText(prefixed);
 
   if (editing && !disabled) {
     return (
@@ -286,7 +326,7 @@ function EditableChip({
         <>
           <button
             type="button"
-            aria-label={`Edit ${displayLabel}`}
+            aria-label={`Edit ${prefixed}`}
             className="cursor-pointer px-0.5 hover:text-navy"
             onClick={() => setEditing(true)}
           >
@@ -294,7 +334,7 @@ function EditableChip({
           </button>
           <button
             type="button"
-            aria-label={`Remove ${displayLabel}`}
+            aria-label={`Remove ${prefixed}`}
             className="cursor-pointer px-0.5 hover:text-navy"
             onClick={() => onStage({ kind: "remove", label: chip.label })}
           >
@@ -542,58 +582,48 @@ export function PartCard({
     state.confirmedOptionId === null
       ? null
       : part.options.find((option) => option.id === state.confirmedOptionId) ?? null;
-  // A confirmed question or scope names its outcome, not the option's words
-  // (owner, polish round 3): the summary the pane computed from the plan.
-  const confirmedWords =
-    confirmedOption === null ? null : summary !== undefined && summary !== null && summary !== "" ? summary : confirmedOption.label;
   const name = partName ?? part.title;
 
-  if (confirmedOption === null && (state.answered || !state.live)) {
-    // Answered in the user's own words: one settled line carrying what they
-    // wrote, nothing to change here (owner, polish round 2).
+  const settled = confirmedOption !== null || state.answered || !state.live;
+  if (settled) {
+    // Between the pre-task card and the one-line form (owner, 2026-11-05):
+    // a quiet block with a green rule, the part's name and a green tick line
+    // naming the outcome the plan settled on (`summary`), the recorded
+    // choice or the user's words.
+    const words = (() => {
+      if (summary !== undefined && summary !== null && summary !== "") return summary;
+      if (confirmedOption !== null) return confirmedOption.label;
+      return state.answer !== null && state.answer !== "" ? state.answer : null;
+    })();
     return (
-      <div data-testid="part-settled" className="anim-rise mr-8">
-        <p className="max-w-prose-measure text-lead text-grey">
-          <span className="font-semibold text-navy">{scrub(name)}</span>
-          {(() => {
-            const words = summary ?? state.answer;
-            return words !== null && words !== undefined && words !== "" ? ` · ${scrub(words)}` : " · answered";
-          })()}
-        </p>
-      </div>
-    );
-  }
-
-  if (confirmedOption !== null) {
-    return (
-      <div data-testid="part-settled" className="anim-rise mr-8">
-        <p className="max-w-prose-measure text-lead text-grey">
-          <span className="font-semibold text-navy">{scrub(name)}</span> · {scrub(confirmedWords ?? confirmedOption.label)}
-          {state.live && (
-            <>
-              {" · "}
+      <div className="anim-rise mr-8">
+        <div data-testid="part-settled" className="border-l-2 border-green bg-paper py-1 pl-4">
+          <p className="max-w-prose-measure text-lead font-semibold text-navy">{scrub(name)}</p>
+          <p className="mt-1 max-w-prose-measure text-lead font-bold text-green">
+            ✓ {words !== null ? scrub(words) : "Answered"}
+            {state.live && confirmedOption !== null && (
               <button
                 type="button"
                 aria-expanded={changing}
-                className="cursor-pointer font-semibold text-grey underline underline-offset-[3px] hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-default disabled:no-underline"
+                className="ml-2 cursor-pointer text-body font-semibold text-grey underline underline-offset-[3px] hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-default disabled:no-underline"
                 disabled={disabled}
                 onClick={() => setChanging((open) => !open)}
               >
                 Change
               </button>
-            </>
+            )}
+          </p>
+          {changing && state.live && (
+            <WordsInput
+              label={`Change ${name}`}
+              disabled={disabled}
+              onSend={(text) => {
+                onSend(`Change this part: ${text}`);
+                setChanging(false);
+              }}
+            />
           )}
-        </p>
-        {changing && state.live && (
-          <WordsInput
-            label={`Change ${name}`}
-            disabled={disabled}
-            onSend={(text) => {
-              onSend(`Change this part: ${text}`);
-              setChanging(false);
-            }}
-          />
-        )}
+        </div>
       </div>
     );
   }
@@ -609,15 +639,23 @@ export function PartCard({
         )}
 
         {chips.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            {chips.map((chip) => (
-              <EditableChip
-                key={chip.label}
-                chip={chip}
-                disabled={!interactive}
-                onStage={(edit) => setStaged((edits) => [...edits, edit])}
-              />
+          <div className="mt-3 space-y-2">
+            {chipGroups(chips).map((group) => (
+              <div key={group.heading ?? "chips"}>
+                {group.heading !== null && <p className={cn(LABEL_CLASS, "mb-1 text-grey")}>{group.heading}</p>}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {group.chips.map((chip) => (
+                    <EditableChip
+                      key={chip.label}
+                      chip={chip}
+                      disabled={!interactive}
+                      onStage={(edit) => setStaged((edits) => [...edits, edit])}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
+            <div className="flex flex-wrap items-center gap-1.5">
             {interactive && !adding && (
               <button
                 type="button"
@@ -652,6 +690,7 @@ export function PartCard({
                 </Button>
               </span>
             )}
+            </div>
           </div>
         )}
 

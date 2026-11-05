@@ -113,6 +113,14 @@ tool and the gap measure are built and tested (Phase 0). The "before" captures m
 - `runtime/task_agent_prompt.py`, third re-pin (owner correction, 2026-11-05): the subs say
   the total documents kept (150 / 300 / 600), the report's sections (3; up to 8) and that the
   Detailed report extracts findings; the caps paragraph says the totals. Tests pin the totals.
+- **Owner note, the settled card's look (2026-11-05):** between the pre-task card and the
+  one-line form: a quiet block with a green left rule, the part's name and a green
+  "✓ <outcome>" line; tests and the journeys follow.
+- **Owner note, the agent's working mark (2026-11-05):** the "Drafting the plan" line under a
+  streaming reply shows the Policy Atlas fold mark turning instead of the yellow dot (still
+  after a dropped connection and under reduced motion); the run's dots are unchanged.
+- **Owner note, the scope card (2026-11-05):** chips grouped under "Screening criteria" and
+  "Source filters" with the planner's prefix dropped; the settled line names the groups.
 
 ## Diff summary
 

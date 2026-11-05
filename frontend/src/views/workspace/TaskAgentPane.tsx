@@ -26,7 +26,8 @@ import type {
   StageEntry,
 } from "../../store";
 import { Button } from "../../ui/brand/Button";
-import { StatusDot } from "../../ui/brand/Card";
+import { BRAND_MARK_SIZE } from "../../ui/brand/foldMark";
+import { FoldMarkAnimated } from "../../ui/brand/FoldMarkAnimated";
 import { cn } from "../../ui/brand/cn";
 import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
 import { ReauthRedirect } from "../../ui/feedback";
@@ -318,13 +319,16 @@ function TaskAgentBubble({ text }: { text: string }) {
 }
 
 /** The grey action line under a streaming planner reply (task 058, N9;
- *  annex scene 10): what the planner is doing, with the breathing dot while
- *  the reply is arriving. After a dropped connection the dot holds still
- *  while the transcript is re-read. */
+ *  annex scene 10): what the planner is doing, with the Policy Atlas fold
+ *  mark turning while the reply is arriving (owner, 2026-11-05: the mark,
+ *  not the yellow dot, when the Task Agent is working). After a dropped
+ *  connection the mark holds still while the transcript is re-read. */
 function PlannerActionLine({ label, live }: { label: string; live: boolean }) {
   return (
     <p role="status" className="mr-8 flex items-center gap-2 text-body text-grey">
-      <StatusDot tone="running" className={cn(live && "anim-breathe")} />
+      <span className="inline-flex size-[17px] shrink-0 items-center justify-center" aria-hidden="true">
+        <FoldMarkAnimated size={BRAND_MARK_SIZE} onDark={false} reducedMotion={live ? undefined : true} />
+      </span>
       {scrub(label)}
     </p>
   );

@@ -144,9 +144,9 @@ test.describe("mock task-lifecycle journey", () => {
     // marker text never leaks as a visible bubble — and turn 2's scope part,
     // answered by turn 3, has settled to its chips (owner, polish round 2:
     // no open card once a later turn exists).
-    await expect(page.getByText(/^Question · .+ · Change$/)).toBeVisible();
+    await expect(page.getByTestId("part-settled").filter({ hasText: /^Question/ }).first()).toContainText("✓");
     await expect(page.getByText("[confirm part=question option=confirm]")).toHaveCount(0);
-    await expect(page.getByText(/^Scope · .*UK primary.*Since 2016|^Scope · .*Since 2016.*UK primary/)).toBeVisible();
+    await expect(page.getByTestId("part-settled").filter({ hasText: /^Scope/ })).toContainText(/UK primary|Since 2016/);
     await expect(page.getByRole("radio", { name: /^Looks right/ })).toHaveCount(0);
 
     // (f) The ready plan is two actions at the foot of the thread — review
@@ -887,7 +887,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await expect(page.getByText("Drafting the plan")).toHaveCount(0, { timeout: 15_000 });
 
     await page.getByRole("radio", { name: /^That's my question/ }).click();
-    await expect(page.getByText(/^Question · .+ · Change$/)).toBeVisible();
+    await expect(page.getByTestId("part-settled").filter({ hasText: /^Question/ }).first()).toContainText("✓");
     await expect(page.getByText("Plan · step 2 of 3 · Scope")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("button", { name: "Start the search" })).toBeVisible();
   });

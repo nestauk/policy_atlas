@@ -191,7 +191,7 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
     const onSend = renderPart(proposal("scope"), { live: true, answered: false, answer: null, confirmedOptionId: "confirm" }, vi.fn(), {
       partName: "Scope",
     });
-    expect(screen.getByTestId("part-settled")).toHaveTextContent(/^Scope · Looks right · Change$/);
+    expect(screen.getByTestId("part-settled")).toHaveTextContent(/Scope.*✓ Looks right.*Change/);
     expect(screen.queryByRole("radio")).toBeNull();
     expect(screen.queryByText(/Confirmed/)).toBeNull();
     await user.click(screen.getByRole("button", { name: "Change" }));
@@ -203,7 +203,7 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
   it("a superseded proposal collapses to <Part> · answered (owner, polish round 2)", () => {
     renderPart(proposal("scope"), { live: false, answered: true, answer: null, confirmedOptionId: null }, vi.fn(), { partName: "Scope" });
     expect(screen.queryByRole("radio")).toBeNull();
-    expect(screen.getByTestId("part-settled")).toHaveTextContent(/^Scope · answered$/);
+    expect(screen.getByTestId("part-settled")).toHaveTextContent(/Scope.*✓ Answered/);
   });
 
   it("stages chip edits and applies them as one batched turn", async () => {
@@ -226,7 +226,7 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
   it("labels the chip-edit commit Save, not Stage", async () => {
     const user = userEvent.setup();
     renderPart(proposal("scope", { chips: [{ label: "UK primary", kind: "text", value: "UK as the primary study setting" }] }));
-    expect(screen.getByText("Screen: UK primary")).toBeInTheDocument();
+    expect(screen.getByText("UK primary")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Edit Screen: UK primary" }));
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Stage" })).toBeNull();
@@ -327,7 +327,7 @@ describe("PartCard — an answered card settles (owner, polish round 2)", () => 
         onSend={vi.fn()}
       />,
     );
-    expect(screen.getByTestId("part-settled")).toHaveTextContent("Scope · Please go ahead with your recommended choices.");
+    expect(screen.getByTestId("part-settled")).toHaveTextContent("✓ Please go ahead with your recommended choices.");
     expect(screen.queryAllByRole("radio")).toHaveLength(0);
     expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
   });
@@ -357,12 +357,38 @@ describe("settledSummary — a settled part names the plan's outcome (owner, pol
   });
   it("names the scope's chips and the question's text; a recorded choice names itself", () => {
     const scope = proposal("scope", { chips: [{ label: "Since 2010", kind: "text" }, { label: "UK", kind: "text" }] as never });
-    expect(settledSummary(scope, answered, null, null)).toBe("Since 2010 · UK");
+    // Plain text chips are screening criteria by kind (`chipDisplayLabel`).
+    expect(settledSummary(scope, answered, null, null)).toBe("Screening criteria: Since 2010, UK");
     expect(settledSummary(proposal("question"), answered, { question: "What works?" } as never, null)).toBe("What works?");
     expect(settledSummary(proposal("question"), { ...answered, confirmedOptionId: "confirm" }, null, null)).toBe("Looks right");
   });
   it("falls back to the user's words when the plan names nothing", () => {
     expect(settledSummary(proposal("settings"), answered, null, null)).toBe("Please go ahead with your recommended choices.");
+  });
+});
+
+describe("scope chips grouped by what they constrain (owner, 2026-11-05)", () => {
+  it("renders screening criteria and source filters under their own headings, prefixes dropped", () => {
+    const part = proposal("scope", {
+      chips: [
+        { label: "Screen: Zonal electricity pricing", kind: "text" },
+        { label: "Search: OECD source origins", kind: "text" },
+        { label: "Screen: Bills or energy security", kind: "text" },
+      ] as never,
+    });
+    render(<PartCard part={part} state={{ live: true, answered: false, answer: null, confirmedOptionId: null }} disabled={false} onSend={vi.fn()} />);
+    expect(screen.getByText("Screening criteria")).toBeInTheDocument();
+    expect(screen.getByText("Source filters")).toBeInTheDocument();
+    expect(screen.getByText("Zonal electricity pricing")).toBeInTheDocument();
+    expect(screen.queryByText(/^Screen: /)).toBeNull();
+  });
+  it("names the settled scope by group", () => {
+    const part = proposal("scope", {
+      chips: [{ label: "Screen: Bills", kind: "text" }, { label: "Search: OECD", kind: "text" }] as never,
+    });
+    expect(settledSummary(part, { live: true, answered: true, answer: null, confirmedOptionId: null }, null, null)).toBe(
+      "Screening criteria: Bills · Source filters: OECD",
+    );
   });
 });
 

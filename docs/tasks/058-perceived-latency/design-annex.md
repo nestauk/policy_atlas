@@ -356,6 +356,24 @@ min, Detailed report ~20-30 min (`task_plan.TIME_BANDS`, the one table the plan 
 planner read). The off-diagonal cells (custom search × analysis pairs) keep their older values and
 are flagged for the owner: some now read longer than the deep preset.
 
+Owner, 2026-11-05 (after round 4): the settled part card sits between the pre-task card and
+the one-line form, which was too subtle: a quiet block with a 2 px green left rule, the part's
+name in navy, and under it one green bold tick line naming the outcome ("✓ Standard report ·
+~10-20 min"; the scope's chips; the question's text; the recorded choice or the user's words
+only where the plan names nothing), with Change beside it while the card is the newest
+proposal. No title repeat, no card frame.
+
+Owner, 2026-11-05: while the Task Agent is working (the "Drafting the plan" line under a
+streaming reply), the Policy Atlas fold mark turns in place of the yellow dot; it holds still
+after a dropped connection and under reduced motion. The run's dots (card rows, strip, Result
+tab) stay dots.
+
+Owner, 2026-11-05: the scope card's chips are grouped by what they constrain, each group
+under a small grey label: "Screening criteria" (the planner's "Screen: …" chips) and "Source
+filters" ("Search: …"), the prefix dropped from each chip; chips with no prefix come first with
+no label. The settled scope line reads the same way ("Screening criteria: a, b · Source
+filters: c").
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |
