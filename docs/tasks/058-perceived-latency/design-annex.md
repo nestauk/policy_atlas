@@ -344,10 +344,12 @@ Themes view (the Sources tab's first view), not the Landscape.
 ## Owner note after round 4 (2026-11-05): the thoroughness copy
 
 The three thoroughness sentences the planner writes are cut to the plain voice (one source, the
-planner prompt; hash re-pinned): "Abstracts only: themes, coverage and gaps. Up to 100 papers and
-50 policy documents."; "Reads about 15 of the strongest sources in full. Up to 200 papers and
-100 policy documents."; "Reads about 25 sources in full and extracts their findings. Up to 400
-papers and 200 policy documents." Each then its measured band. The mock says the same, shorter.
+planner prompt; hash re-pinned), corrected by the owner the same day (Rapid overview is not
+abstracts only; say the total documents, the report's sections, and that deep extracts): "Up
+to 150 documents. A short report of 3 sections."; "Up to 300 documents, about 15 read in full.
+A report of up to 8 sections."; "Up to 600 documents, about 25 read in full with their
+findings extracted. A report of up to 8 sections." Each then its band (~5-10, ~10-20, ~20-30
+min). The mock says the same.
 
 Owner, 2026-11-05: the three preset bands are Rapid overview ~5-10 min, Standard report ~10-20
 min, Detailed report ~20-30 min (`task_plan.TIME_BANDS`, the one table the plan document and the

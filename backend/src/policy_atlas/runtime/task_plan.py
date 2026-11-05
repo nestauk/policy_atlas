@@ -227,7 +227,8 @@ NAMED_PAIRINGS: dict[str, tuple[SearchEffort, AnalysisDepth]] = {
 # standard ~15-30 min, deeper ~90 min); the standard target-vs-measured gap
 # (~40 min measured) is the recorded depth-seam calibration item for 018/eval.
 TIME_BANDS: dict[tuple[SearchEffort, AnalysisDepth], str] = {
-    ("rapid", "landscape"): "~5-10 min",  # owner, 2026-11-05: the three presets read 5-10, 10-20, 20-30
+    # The three presets read 5-10, 10-20 and 20-30 (owner, 2026-11-05).
+    ("rapid", "landscape"): "~5-10 min",
     ("standard", "landscape"): "~15-20 min",
     ("deep", "landscape"): "~20-25 min",
     ("rapid", "standard"): "~30-45 min",

@@ -386,23 +386,22 @@ The two axes those presets compile are named on the plan panel as
 (Evidence overview / Full-text synthesis / Findings synthesis). Use
 those screen words if you name an axis; never the internal keys (rapid,
 landscape, analysis-depth "deep"). Search-scope caps — the maximum
-papers and policy documents kept — are Focused 100 papers and 50 policy
-documents, Broad 200 and 100, Broadest 400 and 200. Always include both
-numbers in the matching option's `sub`.
+documents kept (papers and policy documents together) — are Focused 150,
+Broad 300, Broadest 600. Always include the matching total in the option's
+`sub`.
 
 Emit the options with these labels and subs (the bands are measured; never
 invent other timing numbers):
 
-- id 'quick_look', label "Rapid overview", sub "Abstracts only: themes,
-  coverage and gaps. Up to 100 papers and 50 policy documents. · __BAND_QUICK__".
-  Compiles search_effort=rapid, analysis_depth=landscape, section_budget=3.
-- id 'standard_review', label "Standard report", sub "Reads about 15 of the
-  strongest sources in full. Up to 200 papers and 100 policy documents.
-  · __BAND_STANDARD__". Compiles standard × standard, section_budget null.
-  Primary by default.
-- id 'deep_analysis', label "Detailed report", sub "Reads about 25 sources in
-  full and extracts their findings. Up to 400 papers and 200 policy documents.
-  · __BAND_DEEP__". Compiles deep × deep with the findings chain,
+- id 'quick_look', label "Rapid overview", sub "Up to 150 documents. A
+  short report of 3 sections. · __BAND_QUICK__". Compiles
+  search_effort=rapid, analysis_depth=landscape, section_budget=3.
+- id 'standard_review', label "Standard report", sub "Up to 300 documents,
+  about 15 read in full. A report of up to 8 sections. · __BAND_STANDARD__".
+  Compiles standard × standard, section_budget null. Primary by default.
+- id 'deep_analysis', label "Detailed report", sub "Up to 600 documents,
+  about 25 read in full with their findings extracted. A report of up to 8
+  sections. · __BAND_DEEP__". Compiles deep × deep with the findings chain,
   section_budget null.
 
 Intent-awareness — binding:
@@ -410,8 +409,8 @@ Intent-awareness — binding:
 - The findings chain is anchored to named interventions. For questions
   that are NOT about interventions and their effects or delivery, Detailed
   report must NOT promise a findings database — re-describe the option
-  in plain language (e.g. "Reads about 25 sources in full from the widest
-  search. Up to 400 papers and 200 policy documents. · __BAND_DEEP__") and
+  in plain language (e.g. "Up to 600 documents, about 25 read in full. A
+  report of up to 8 sections. · __BAND_DEEP__") and
   compose the plan without the chain at any depth. In `reply`, say it
   will search more widely and write a deeper synthesis, not build a
   findings table. Never say "extraction chain" or "findings-database".

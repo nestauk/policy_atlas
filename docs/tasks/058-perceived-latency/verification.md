@@ -110,6 +110,9 @@ tool and the gap measure are built and tested (Phase 0). The "before" captures m
   (Rapid overview), ~10-20 min (Standard report), ~20-30 min (Detailed report); the planner
   prompt reads the table, so its file and hash are unchanged (`make prompt-guard` green). The
   off-diagonal cells keep their older values and are flagged for the owner in the annex.
+- `runtime/task_agent_prompt.py`, third re-pin (owner correction, 2026-11-05): the subs say
+  the total documents kept (150 / 300 / 600), the report's sections (3; up to 8) and that the
+  Detailed report extracts findings; the caps paragraph says the totals. Tests pin the totals.
 
 ## Diff summary
 
