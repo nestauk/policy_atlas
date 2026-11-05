@@ -4,7 +4,6 @@ import { Link, NavLink, useLocation } from "react-router";
 import { Tooltip } from "../radix/Tooltip";
 import { Chip } from "./Chip";
 import { cn } from "./cn";
-import { FoldMarkAnimated } from "./FoldMarkAnimated";
 import { FoldMarkIcon } from "./FoldMarkIcon";
 
 /** Hover copy for the BETA chip beside the wordmark. */
@@ -23,14 +22,14 @@ export function NavBar({ className, children, ...props }: HTMLAttributes<HTMLEle
 }
 
 /**
- * Wordmark: fold-mark diamond + "Policy" navy + "Atlas" electric blue.
- *
- * @param running - When true the mark animates, signalling an active run.
+ * Wordmark: fold-mark diamond + "Policy" navy + "Atlas" electric blue. The
+ * mark stays still during a run: the run's own live mark is the one turning
+ * logo on the screen (task 058, owner 2026-11-05).
  */
-export function NavLogo({ running = false }: { running?: boolean }) {
+export function NavLogo() {
   return (
     <span className="inline-flex items-center gap-1.25 whitespace-nowrap font-display text-heading font-extrabold tracking-[-0.02em] text-navy">
-      {running ? <FoldMarkAnimated onDark={false} /> : <FoldMarkIcon />}
+      <FoldMarkIcon />
       <span>
         Policy <b className="font-extrabold text-blue">Atlas</b>
       </span>
@@ -41,14 +40,12 @@ export function NavLogo({ running = false }: { running?: boolean }) {
 /**
  * Brand wordmark, always home. It is not a nav item — the active underline
  * is reserved for New / Tasks / Projects, so the logo never looks selected.
- *
- * @param running - When true the fold-mark animates (active run in progress).
  */
-export function NavHomeLink({ running = false }: { running?: boolean }) {
+export function NavHomeLink() {
   return (
     <div className="flex min-w-0 items-center gap-3">
       <Link to="/" className="min-w-0 no-underline">
-        <NavLogo running={running} />
+        <NavLogo />
       </Link>
       <Tooltip
         content={<p className="text-body leading-relaxed text-navy">{BETA_CHIP_HINT}</p>}

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -257,6 +260,56 @@ describe("ChatSidePanel", () => {
     expect(screen.getByTestId("draft-chat-pane")).toBeInTheDocument();
     expect(screen.getByText("New chat")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
+  });
+
+  // Owner, 2026-11-05: in the sidebar's pane, Lead-size text reads at Body
+  // size (16 px, the floor), for the Task Agent and the chats alike.
+  it.each([
+    ["the Task Agent", "plan-1", "task_agent-pane"],
+    ["a chat", "c1", "chat-pane"],
+    ["a draft chat", "new", "draft-chat-pane"],
+  ])("sets %s in the compact pane, where Lead reads at Body size", (_name, conversationId, testId) => {
+    state.activeConversationId = conversationId;
+    state.rows = [PLAN_ROW, CHAT_ROW];
+    render(<ChatSidePanel taskId="p1" isOwner />);
+    expect(screen.getByTestId(testId).parentElement).toHaveClass("compact-pane");
+  });
+
+  it("scopes the compact pane's rule to Lead alone, at the Body size and leading", () => {
+    // `index.css` is the rule's one home; Body and Meta are left as they are.
+    const css = readFileSync(join(__dirname, "../../../index.css"), "utf8");
+    const start = css.indexOf("@utility compact-pane {");
+    const rule = css.slice(start, css.indexOf("\n}", start));
+    expect(rule).toContain("--text-lead: var(--text-body);");
+    expect(rule).toContain("--text-lead--line-height: var(--text-body--line-height);");
+    expect(rule).not.toMatch(/--text-(body|meta|caption):/);
+  });
+
+  // Owner and lead, 2026-11-05: wherever a run is live its mark is the fold
+  // mark turning, in the rail at the rail's own size (no jump), and still on
+  // a tab whose page turns one already (Result).
+  it("turns the rail's Task Agent mark while a run is live, at the still mark's size", () => {
+    state.activeConversationId = null;
+    state.runStatus = "running";
+    const { unmount } = render(<ChatSidePanel taskId="p1" isOwner />);
+    const button = screen.getByRole("button", { name: "Task Agent" });
+    const live = button.querySelector("[data-live-mark]");
+    expect(live).toHaveStyle({ width: "11px" });
+    unmount();
+    state.runStatus = "succeeded";
+    const still = render(<ChatSidePanel taskId="p1" isOwner />);
+    expect(screen.getByRole("button", { name: "Task Agent" }).querySelector("svg")).toHaveAttribute("width", "11");
+    still.unmount();
+    state.runStatus = "running";
+    const onResult = render(<ChatSidePanel taskId="p1" isOwner railMarkTurns={false} />);
+    expect(screen.getByRole("button", { name: "Task Agent" }).querySelector("[data-live-mark]")).toBeNull();
+    onResult.unmount();
+    for (const status of ["paused", "succeeded"]) {
+      state.runStatus = status;
+      const view = render(<ChatSidePanel taskId="p1" isOwner />);
+      expect(screen.getByRole("button", { name: "Task Agent" }).querySelector("[data-live-mark]")).toBeNull();
+      view.unmount();
+    }
   });
 
   describe("the same agent as the Agent tab (task 058, N13)", () => {

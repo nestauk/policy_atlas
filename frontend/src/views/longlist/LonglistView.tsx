@@ -6,12 +6,11 @@ import { useAddOption } from "../../api/mutations";
 import { useLonglist, useOptions, usePlan, useTask } from "../../api/queries";
 import { actionFailedNotice } from "../../lib/errors";
 import { Figures } from "../../lib/figures";
-import { useFreshness } from "../../lib/freshness";
 import { scrub } from "../../lib/scrub";
 import { countOf } from "../../lib/vocabulary";
 import { useRunStream } from "../../store";
 import { Button } from "../../ui/brand/Button";
-import { StatusMark } from "../../ui/brand/Card";
+import { LiveMark, StatusMark } from "../../ui/brand/Card";
 import { Chip } from "../../ui/brand/Chip";
 import { cn } from "../../ui/brand/cn";
 import { cardRows, currentRow, rowDetail, rowLiveness } from "../workspace/runProgress";
@@ -489,9 +488,6 @@ export function LonglistBuilding({ taskId }: { taskId: string }) {
   const line = paused
     ? stageLineText(progress?.label ?? activeRun?.stage_label, null)
     : stageLineText(progress?.label ?? activeRun?.stage_label, rowDetail(tick));
-  const lineFresh = useFreshness(tick?.occurredAt);
-  // A searching row's dot breathes while the option searches report in.
-  const searchesFresh = useFreshness(stream.liveness.option_searches?.occurredAt);
 
   // Rows animate only while the list is flat: regrouping under themes
   // remounts them, and the theme sections carry that rise instead.
@@ -513,9 +509,8 @@ export function LonglistBuilding({ taskId }: { taskId: string }) {
               </span>
             </span>
           )}
-          {item.status.kind === "searching" && (
-            <StatusMark tone="running" breathing={searchesFresh} />
-          )}
+          {/* A live search's mark is the fold mark turning (lead, 2026-11-05). */}
+          {item.status.kind === "searching" && <LiveMark />}
           {item.status.kind === "failed" && <StatusMark tone="failed" />}
           <span>
             <Figures text={item.status.text} />
@@ -546,7 +541,7 @@ export function LonglistBuilding({ taskId }: { taskId: string }) {
         <h1 className={REPORT_TITLE_CLASS}>Longlist</h1>
         {line !== null && (
           <p className="mt-3 flex items-center gap-2 text-meta text-grey">
-            <StatusMark tone={paused ? "paused" : "running"} breathing={!paused && lineFresh} />
+            {paused ? <StatusMark tone="paused" /> : <LiveMark />}
             <span className="min-w-0">
               <Figures text={scrub(line)} />
             </span>

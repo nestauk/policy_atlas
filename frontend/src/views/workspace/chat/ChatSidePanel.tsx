@@ -115,10 +115,14 @@ export function ChatSidePanel({
   taskId,
   isOwner,
   onOpenPlan,
+  railMarkTurns = true,
 }: {
   taskId: string;
   isOwner: boolean;
   onOpenPlan?: () => void;
+  /** False on a tab whose page shows the run's own turning mark (Result):
+   *  one turning logo per screen. */
+  railMarkTurns?: boolean;
 }) {
   const { activeConversationId, draftEntryArtefactId, setActiveConversation, openDraftChat } = useActiveConversation();
   const [listOpen, setListOpen] = useState(false);
@@ -164,6 +168,10 @@ export function ChatSidePanel({
         onSelectTaskAgent={() => setActiveConversation(taskAgentId)}
         recent={recentChats(rows)}
         onSelectChat={setActiveConversation}
+        // Shut, the rail is where the sidebar shows a live run: its Task
+        // Agent mark turns, except on a tab whose page already turns one
+        // (the Result tab's writing section; owner and lead, 2026-11-05).
+        runLive={runStatus === "running" && railMarkTurns}
         className="h-full w-12 flex-col border-r py-2 max-md:hidden"
       />
     );
@@ -257,7 +265,9 @@ export function ChatSidePanel({
           <ConversationList taskId={taskId} onOpen={openRow} selectedId={taskAgentOpen ? taskAgentId : activeConversationId} />
         </div>
       ) : (
-        <div className="min-h-0 flex-1">
+        // `compact-pane`: Lead text reads at Body size in the sidebar (owner,
+        // 2026-11-05), for the Task Agent and the chats alike.
+        <div className="compact-pane min-h-0 flex-1">
           {taskAgentOpen ? (
             <TaskAgentPane
               taskId={taskId}

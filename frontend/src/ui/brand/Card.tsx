@@ -1,6 +1,7 @@
 import type { HTMLAttributes } from "react";
 
 import { cn } from "./cn";
+import { FoldMarkAnimated } from "./FoldMarkAnimated";
 
 /** Paper surface on the app ground (hifi.css .screen): 0 radius, hairline
  * border, the soft navy-tinted shadow. Composable — no configuration. */
@@ -77,5 +78,36 @@ export function StatusMark({
       )}
       {...props}
     />
+  );
+}
+
+/** The live mark's size in a line of text; the conversation rail uses the
+ *  brand size (17 px) instead. */
+export const LIVE_MARK_TEXT_SIZE = 14;
+
+/**
+ * The live mark (task 058; annex § Owner round after the trace, item 6):
+ * wherever a run is live, its mark is the Policy Atlas fold mark turning.
+ * It holds still (the shut blue diamond) under reduced motion. The static
+ * states keep the 6 px square (`StatusMark`).
+ *
+ * Args:
+ *   size: 14 px in a line of text (the default), 17 px in the rail.
+ */
+export function LiveMark({
+  size = LIVE_MARK_TEXT_SIZE,
+  className,
+  ...props
+}: HTMLAttributes<HTMLSpanElement> & { size?: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      data-live-mark=""
+      className={cn("inline-flex shrink-0 items-center justify-center", className)}
+      style={{ width: size, height: size }}
+      {...props}
+    >
+      <FoldMarkAnimated size={size} onDark={false} />
+    </span>
   );
 }

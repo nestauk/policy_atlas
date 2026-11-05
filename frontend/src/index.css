@@ -136,6 +136,15 @@
   }
 }
 
+/* The sidebar's conversation pane (task 058, owner 2026-11-05): Lead-size
+   text renders at Body size there (16 px, the floor), so the Task Agent and
+   the chats read at the narrow column's size. Body and Meta are unchanged.
+   The Lead utility reads these two variables, so the scope redefines them. */
+@utility compact-pane {
+  --text-lead: var(--text-body);
+  --text-lead--line-height: var(--text-body--line-height);
+}
+
 /* The Nesta signature: 0 radius with a 45° cut top-right corner.
    --cut is overridable per size (buttons use 10px, small buttons 8px). */
 @utility cutout {

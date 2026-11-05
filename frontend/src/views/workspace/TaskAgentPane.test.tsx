@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -822,6 +822,74 @@ describe("TaskAgentPane — the streaming planner turn", () => {
     expect(screen.getByRole("button", { name: "That's my question" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Narrow it" })).toBeInTheDocument();
   });
+
+  /** The question card as the planner proposes it. */
+  function questionCard(): TaskAgentThreadTurn {
+    return plannerTurn({
+      part: {
+        id: "question",
+        step_label: "Plan · step 1 of 3 · Question",
+        title: "What works to raise take-up of free childcare?",
+        body: null,
+        chips: null,
+        options: [
+          { id: "confirm", label: "That's my question", sub: null, primary: true, reason: null },
+          { id: "refine", label: "Refine it", sub: null, primary: false, reason: null },
+        ],
+      },
+    });
+  }
+
+  it("settles a part card the moment the user chooses, before the reply lands (owner, 2026-11-05)", async () => {
+    mockQueries([questionCard()]);
+    vi.mocked(queries.usePlan).mockReturnValue({
+      data: { capability: "evidence_search", plan: { question: "What works to raise take-up of free childcare?" }, status: "draft", version: 1 },
+    } as unknown as ReturnType<typeof queries.usePlan>);
+    // The reply never lands in this test: only the choice is on its way.
+    const mutateAsync = vi.fn(() => new Promise(() => undefined));
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    const user = userEvent.setup();
+    renderPane();
+    await user.click(screen.getByRole("radio", { name: /That's my question/ }));
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    const settled = screen.getByTestId("part-settled");
+    expect(settled).toHaveTextContent(/Question.*What works to raise take-up of free childcare\?/);
+    expect(screen.queryByTestId("part-card")).toBeNull();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+  });
+
+  it("settles on the user's words while they are on their way", async () => {
+    mockQueries([questionCard()]);
+    const mutateAsync = vi.fn(() => new Promise(() => undefined));
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    const user = userEvent.setup();
+    renderPane();
+    await user.click(screen.getByRole("radio", { name: /Refine it/ }));
+    await user.type(screen.getByRole("textbox", { name: "Refine it" }), "Only rural areas");
+    await user.click(within(screen.getByTestId("part-card")).getByRole("button", { name: "Send" }));
+    expect(screen.getByTestId("part-settled")).toHaveTextContent("Refine it: Only rural areas");
+  });
+
+  it("opens the card again when the choice could not be sent", async () => {
+    mockQueries([questionCard()]);
+    const mutateAsync = vi.fn(() => Promise.reject(new Error("boom")));
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    const user = userEvent.setup();
+    renderPane();
+    await user.click(screen.getByRole("radio", { name: /That's my question/ }));
+    expect(await screen.findByText("That turn couldn't be processed. Your draft so far is unchanged.")).toBeInTheDocument();
+    expect(screen.getByTestId("part-card")).toBeInTheDocument();
+    expect(screen.queryByTestId("part-settled")).toBeNull();
+  });
 });
 
 /**
@@ -906,7 +974,9 @@ describe("TaskAgentPane — the run trace", () => {
     renderPane();
     const trace = screen.getByRole("region", { name: "Analysis run" });
     expect(trace).toHaveTextContent("Searching and screening");
-    expect(trace.querySelector("[data-tone]")).toHaveClass("bg-blue");
+    // Live, the mark is the fold mark turning (owner, 2026-11-05).
+    expect(trace.querySelector("[data-live-mark]")).not.toBeNull();
+    expect(trace.querySelector("[data-tone]")).toBeNull();
     expect(screen.queryByRole("button", { name: "Minimise" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Show the analysis run" })).toBeNull();
     expect(screen.queryByText("RUNNING")).toBeNull();
@@ -943,7 +1013,7 @@ describe("TaskAgentPane — the run trace", () => {
       }),
     });
     const trace = screen.getByRole("region", { name: "Analysis run" });
-    expect(trace).toHaveTextContent("Report ready· 14 min· Read it →");
+    expect(trace).toHaveTextContent("Report ready ·14 min· Read it →");
     expect(screen.getByRole("link", { name: "Read it →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
     expect(screen.queryByText(/Evidence search is finished/)).toBeNull();
   });

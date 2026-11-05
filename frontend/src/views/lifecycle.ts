@@ -105,6 +105,53 @@ export function lifecycleTabs(
 }
 
 /**
+ * Which Sources view the Sources tab opens on (annex § Owner round after the
+ * trace, item 8): the view whose step has landed. While an Evidence search
+ * runs, All sources until classification completes, then Landscape, then
+ * Themes once mapping completes; with no run live, Themes (the Sources
+ * index) as before. A scoping walk keeps the index.
+ *
+ * Args:
+ *   status: The live run's status, if any.
+ *   stages: The live run's stage frames.
+ *   evidenceSearch: True when the task is an Evidence search.
+ *
+ * Returns:
+ *   The path after `/sources`: `"/all"`, `"/landscape"` or `""`.
+ */
+export function sourcesLanding(
+  status: RunStatus | null | undefined,
+  stages: readonly { stage: string; status: string }[],
+  evidenceSearch: boolean,
+): "" | "/all" | "/landscape" {
+  if (!evidenceSearch || (status !== "running" && status !== "paused")) return "";
+  const done = (stage: string) => stages.some((entry) => entry.stage === stage && entry.status === "completed");
+  if (done("characterise")) return "";
+  // Classifying is one step of two stages (classify, then appraise): it has
+  // completed once neither of them is still open.
+  const classifying = stages.filter((entry) => entry.stage === "classify" || entry.stage === "appraise");
+  const classified = done("classify") && classifying.every((entry) => entry.status !== "started");
+  return classified ? "/landscape" : "/all";
+}
+
+/** Point the Sources tab's link at `sourcesLanding`'s view, keeping any
+ *  `?chat=`; the tab stays marked on every Sources view. */
+export function withSourcesLanding<T extends { tab: string; to: string }>(
+  items: T[],
+  landing: "" | "/all" | "/landscape",
+): Array<T & { activePrefix?: string }> {
+  return items.map((item) => {
+    if (item.tab !== "sources") return item;
+    const [path, query] = item.to.split("?");
+    return {
+      ...item,
+      to: `${path}${landing}${query === undefined ? "" : `?${query}`}`,
+      activePrefix: path,
+    };
+  });
+}
+
+/**
  * Carry the Agent overlay's open chat (`?chat=`) onto the tab links, so a
  * move between tabs keeps the panel as it was (owner, 2026-09-05). The
  * Agent tab keeps its own default — the Task Agent — and never inherits it.

@@ -19,8 +19,8 @@ type PartOption = components["schemas"]["PartOptionOut"];
 export type TaskAgentTurn = components["schemas"]["TaskAgentTranscriptTurnOut"];
 
 /** The canned confirm marker a part button appends as the message's final
- *  line. The backend treats it as an ordinary turn; the thread derives ✓
- *  state and hides these bubbles from it. */
+ *  line. The backend treats it as an ordinary turn; the thread derives the
+ *  settled state and hides these bubbles from it. */
 const CONFIRM_MARKER = /^\[confirm part=([a-z_]+) option=([a-z0-9_]+)\]$/;
 
 /** Parse a user message's trailing confirm marker, if any. */
@@ -47,28 +47,56 @@ export interface PartState {
   answer: string | null;
   /** The option id a later (pre-supersession) confirm turn recorded, if any. */
   confirmedOptionId: string | null;
+  /** The confirming message itself: the scope's "Looks right" carries any
+   *  staged chip edits above its marker, and the settled lines apply them. */
+  confirmedMessage: string | null;
+  /** The answer is the user's turn still on its way (an optimistic turn):
+   *  the card settles on the choice at once (owner, 2026-11-05) and names
+   *  the user's words or choice until the durable turns catch up. */
+  pending: boolean;
 }
+
+/** The fields part-state derivation reads from a turn. */
+type PartTurn = Pick<TaskAgentTurn, "turn_index" | "user_message" | "part">;
 
 /**
  * Derive each part-bearing turn's card state from the turn sequence alone
  * (F34 rehydration rules): the latest proposal per part id is live; a confirm
  * marker binds to the newest proposal of its part id at the time it was sent;
  * a confirm referencing a superseded proposal never mis-binds.
+ *
+ * Args:
+ *   turns: The durable transcript.
+ *   pendingMessages: The user's messages still on their way (the optimistic
+ *     turns that have not failed), in order. They follow every durable turn,
+ *     so the newest card settles on the choice the moment it is made.
  */
-export function derivePartStates(turns: TaskAgentTurn[]): Map<number, PartState> {
-  const ordered = [...turns].sort((a, b) => a.turn_index - b.turn_index);
+export function derivePartStates(turns: PartTurn[], pendingMessages: readonly string[] = []): Map<number, PartState> {
+  const durable = [...turns].sort((a, b) => a.turn_index - b.turn_index);
+  const lastDurable = durable.length === 0 ? -1 : durable[durable.length - 1].turn_index;
+  const pendingFrom = lastDurable + 1;
+  const ordered: PartTurn[] = [
+    ...durable,
+    ...pendingMessages.map((message, offset) => ({ turn_index: pendingFrom + offset, user_message: message, part: null })),
+  ];
   const newestProposal = new Map<string, number>();
   for (const turn of ordered) {
     if (turn.part != null) newestProposal.set(turn.part.id, turn.turn_index);
   }
   // Walk forward, tracking the current proposal per part id, binding confirms.
   const currentProposal = new Map<string, number>();
-  const confirmed = new Map<number, string>();
+  const confirmed = new Map<number, { optionId: string; message: string; pending: boolean }>();
   for (const turn of ordered) {
     const target = confirmTarget(turn.user_message);
     if (target !== null) {
       const proposalIndex = currentProposal.get(target.partId);
-      if (proposalIndex !== undefined) confirmed.set(proposalIndex, target.optionId);
+      if (proposalIndex !== undefined) {
+        confirmed.set(proposalIndex, {
+          optionId: target.optionId,
+          message: turn.user_message,
+          pending: turn.turn_index >= pendingFrom,
+        });
+      }
     }
     if (turn.part != null) {
       currentProposal.set(turn.part.id, turn.turn_index);
@@ -79,11 +107,14 @@ export function derivePartStates(turns: TaskAgentTurn[]): Map<number, PartState>
   for (const [position, turn] of ordered.entries()) {
     if (turn.part == null) continue;
     const next = ordered[position + 1];
+    const confirm = confirmed.get(turn.turn_index);
     states.set(turn.turn_index, {
       live: newestProposal.get(turn.part.id) === turn.turn_index,
       answered: turn.turn_index < lastIndex,
       answer: next === undefined ? null : confirmTarget(next.user_message) !== null ? null : next.user_message.trim(),
-      confirmedOptionId: confirmed.get(turn.turn_index) ?? null,
+      confirmedOptionId: confirm?.optionId ?? null,
+      confirmedMessage: confirm?.message ?? null,
+      pending: confirm?.pending ?? (next !== undefined && next.turn_index >= pendingFrom),
     });
   }
   return states;
@@ -122,13 +153,22 @@ export function settledSummary(
   plan: PlanDraft | null | undefined,
   scoping: ScopingPlanDraft | null | undefined,
 ): SettledLine[] | null {
-  const confirmed =
-    state.confirmedOptionId === null ? null : (part.options.find((option) => option.id === state.confirmedOptionId)?.label ?? null);
+  const confirmedOption =
+    state.confirmedOptionId === null ? undefined : part.options.find((option) => option.id === state.confirmedOptionId);
+  const confirmed = confirmedOption?.label ?? null;
+  const words = state.answer !== null && state.answer !== "" ? state.answer : null;
   // The outcome first (owner, polish round 3: "what looks right?"); the
   // recorded choice's label, then the user's words, only where the plan
   // names nothing.
-  const fallbackText = confirmed ?? (state.answer !== null && state.answer !== "" ? state.answer : null);
+  const fallbackText = confirmed ?? words;
   const fallback = fallbackText === null ? null : [{ label: null, text: fallbackText }];
+  // While the answer is on its way the plan has not caught up with it: the
+  // user's words, or a choice other than the planner's own, name the part
+  // until the durable turns land (owner, 2026-11-05). Taking the planner's
+  // primary option keeps the draft as it stands, so its outcome reads now.
+  if (state.pending && (words !== null || (confirmedOption !== undefined && !confirmedOption.primary))) {
+    return fallback;
+  }
   const one = (text: string | null | undefined): SettledLine[] | null =>
     text == null || text === "" ? fallback : [{ label: null, text }];
   switch (part.id) {
@@ -136,13 +176,22 @@ export function settledSummary(
       return one(plan?.question ?? scoping?.question);
     case "scope": {
       // One line per group under its label (owner, 2026-11-05: on one line
-      // the criteria and the filters read as one jumble).
-      const groups = chipGroups(part.chips ?? []);
-      if (groups.length === 0) return fallback;
-      return groups.map((group) => ({
+      // the criteria and the filters read as one jumble), with the chip
+      // edits the "Looks right" carried already applied.
+      const edited = applyChipEdits(part.chips ?? [], state.confirmedMessage);
+      const groups = chipGroups(edited.chips);
+      const lines = groups.map((group) => ({
         label: group.heading,
         text: group.chips.map((chip) => chipText(chipDisplayLabel(chip))).join(" · "),
       }));
+      if (edited.added.length > 0) {
+        // An added constraint names no group: it joins the unnamed line.
+        const unnamed = lines.find((line) => line.label === null);
+        const added = edited.added.join(" · ");
+        if (unnamed !== undefined) unnamed.text = `${unnamed.text} · ${added}`;
+        else lines.unshift({ label: null, text: added });
+      }
+      return lines.length === 0 ? fallback : lines;
     }
     case "thoroughness": {
       if (plan?.search_effort == null || plan.analysis_depth == null) return fallback;
@@ -204,6 +253,42 @@ interface ChipEdit {
   kind: "change" | "remove" | "add";
   label: string;
   detail?: string;
+}
+
+/** One line of `chipEditMessage`, read back. */
+const CHIP_EDIT_LINE = /^- (?:Remove "(.*)"\.|Add: (.*)\.|Change "(.*)" to: (.*)\.)$/;
+
+/**
+ * The scope's chips with the edits a confirming message carried applied:
+ * removed chips dropped, changed chips relabelled, added constraints listed
+ * apart (they name no group).
+ *
+ * Args:
+ *   chips: The proposal's chips.
+ *   message: The confirming message (`chipEditMessage` lines above the
+ *     confirm marker), or null.
+ *
+ * Returns:
+ *   The chips as settled, and the added constraints' words.
+ */
+export function applyChipEdits(chips: PartChip[], message: string | null): { chips: PartChip[]; added: string[] } {
+  if (message === null) return { chips, added: [] };
+  const removed = new Set<string>();
+  const changed = new Map<string, string>();
+  const added: string[] = [];
+  for (const line of message.split("\n")) {
+    const match = CHIP_EDIT_LINE.exec(line.trim());
+    if (match === null) continue;
+    if (match[1] !== undefined) removed.add(match[1]);
+    else if (match[2] !== undefined && match[2].trim() !== "") added.push(match[2].trim());
+    else if (match[3] !== undefined && match[4] !== undefined) changed.set(match[3], match[4].trim());
+  }
+  return {
+    chips: chips
+      .filter((chip) => !removed.has(chip.label))
+      .map((chip) => (changed.has(chip.label) ? { ...chip, label: changed.get(chip.label) ?? chip.label } : chip)),
+    added,
+  };
 }
 
 /** Compose the single batched task_agent-turn message for staged chip edits. */
@@ -597,9 +682,11 @@ export function PartCard({
   const settled = confirmedOption !== null || state.answered || !state.live;
   if (settled) {
     // Between the pre-task card and the one-line form (owner, 2026-11-05):
-    // a quiet block with a green rule, the part's name and a green tick line
-    // naming the outcome the plan settled on (`summary`), the recorded
-    // choice or the user's words.
+    // a quiet block with the part's name and a green line naming the outcome
+    // the plan settled on (`summary`), the recorded choice or the user's
+    // words. It sits on the user's side, as their messages do: the user
+    // bubble's 32 px left indent and the green rule on its right edge, text
+    // still left-aligned. No tick: the rule and the green words say it.
     const lines: SettledLine[] = (() => {
       if (summary !== undefined && summary !== null && summary.length > 0) return summary;
       if (confirmedOption !== null) return [{ label: null, text: confirmedOption.label }];
@@ -618,8 +705,8 @@ export function PartCard({
         </button>
       ) : null;
     return (
-      <div className="anim-rise mr-8">
-        <div data-testid="part-settled" className="border-l-2 border-green bg-paper py-1 pl-4">
+      <div className="anim-rise ml-8">
+        <div data-testid="part-settled" className="border-r-2 border-green bg-paper py-1 pr-4">
           <p className="max-w-prose-measure text-lead font-semibold text-navy">{scrub(name)}</p>
           {/* The scope's groups each take a line under a grey label, so the
               criteria and the filters do not read as one list (owner,
@@ -627,8 +714,9 @@ export function PartCard({
           {lines.map((line, index) => (
             <div key={index} className={index === 0 ? "mt-1" : "mt-2"}>
               {line.label !== null && <p className={cn(LABEL_CLASS, "text-grey")}>{line.label}</p>}
-              <p className="max-w-prose-measure text-lead font-bold text-green">
-                {index === 0 ? "✓ " : ""}
+              {/* The deep green of the green tint's text, as the folded trace
+                  line: it passes contrast at the sidebar's Body size too. */}
+              <p className="max-w-prose-measure text-lead font-bold text-[#0c6b5a]">
                 {scrub(line.text)}
                 {index === lines.length - 1 && changeControl}
               </p>
@@ -650,6 +738,21 @@ export function PartCard({
   }
 
   const chips = part.chips ?? [];
+  // The scope changes through its chips alone (owner, 2026-11-05): the
+  // planner's words option is not shown, and the card's one choice is a
+  // "Looks right" button that records the planner's primary option and
+  // carries any staged chip edits with it, in one turn.
+  const primary = part.options.find((option) => option.primary);
+  const scopeButton = part.id === "scope" && primary !== undefined;
+  const looksRight = () => {
+    if (primary === undefined) return;
+    onSend(
+      staged.length === 0
+        ? confirmMessage(part, primary)
+        : `${chipEditMessage(staged)}\n\n[confirm part=${part.id} option=${primary.id}]`,
+    );
+    setStaged([]);
+  };
   return (
     <div className="anim-rise mr-8 space-y-2">
       {steps !== undefined && interactive && <PlanStepper steps={steps} activeId={part.id} />}
@@ -730,16 +833,19 @@ export function PartCard({
               ))}
             </ul>
             <div className="mt-2 flex gap-2">
-              <Button
-                size="sm"
-                disabled={disabled}
-                onClick={() => {
-                  onSend(chipEditMessage(staged));
-                  setStaged([]);
-                }}
-              >
-                Apply changes
-              </Button>
+              {/* On the scope card the staged edits go with "Looks right". */}
+              {!scopeButton && (
+                <Button
+                  size="sm"
+                  disabled={disabled}
+                  onClick={() => {
+                    onSend(chipEditMessage(staged));
+                    setStaged([]);
+                  }}
+                >
+                  Apply changes
+                </Button>
+              )}
               <Button size="sm" variant="secondary" onClick={() => setStaged([])}>
                 Discard
               </Button>
@@ -747,40 +853,52 @@ export function PartCard({
           </div>
         )}
 
-        <div role="radiogroup" aria-label={part.title} className="mt-3 flex max-w-prose-measure flex-col gap-1">
-          {orderedOptions(part.options).map((option) => {
-            const selected = pickedId === option.id;
-            const words = optionNeedsWords(option);
-            return (
-              <div key={option.id}>
-                <ChoiceRow
-                  label={option.label}
-                  sentences={[option.sub]}
-                  selected={selected}
-                  disabled={!interactive}
-                  data-option-id={option.id}
-                  data-part-option={option.primary ? "primary" : "secondary"}
-                  onChoose={() => {
-                    setPickedId(option.id);
-                    if (!words) onSend(confirmMessage(part, option));
-                  }}
-                />
-                {words && selected && interactive && (
-                  <div className="pl-7 max-sm:pl-0">
-                    <WordsInput
-                      label={option.label}
-                      disabled={disabled}
-                      onSend={(text) => {
-                        onSend(`${option.label}: ${text}`);
-                        setPickedId(null);
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        {scopeButton ? (
+          <Button
+            variant="secondary"
+            className="mt-4 border border-line-2"
+            disabled={!interactive}
+            data-part-option="primary"
+            onClick={looksRight}
+          >
+            Looks right
+          </Button>
+        ) : (
+          <div role="radiogroup" aria-label={part.title} className="mt-3 flex max-w-prose-measure flex-col gap-1">
+            {orderedOptions(part.options).map((option) => {
+              const selected = pickedId === option.id;
+              const words = optionNeedsWords(option);
+              return (
+                <div key={option.id}>
+                  <ChoiceRow
+                    label={option.label}
+                    sentences={[option.sub]}
+                    selected={selected}
+                    disabled={!interactive}
+                    data-option-id={option.id}
+                    data-part-option={option.primary ? "primary" : "secondary"}
+                    onChoose={() => {
+                      setPickedId(option.id);
+                      if (!words) onSend(confirmMessage(part, option));
+                    }}
+                  />
+                  {words && selected && interactive && (
+                    <div className="pl-7 max-sm:pl-0">
+                      <WordsInput
+                        label={option.label}
+                        disabled={disabled}
+                        onSend={(text) => {
+                          onSend(`${option.label}: ${text}`);
+                          setPickedId(null);
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
         {!state.live && (
           <p className="mt-2 text-body text-grey">Updated below — this version is kept for the record.</p>
         )}

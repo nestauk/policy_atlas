@@ -76,8 +76,6 @@ vi.mock("../api/queries", () => ({
       : undefined,
   }),
   useCheckIns: () => ({ data: { data: [{ check_in_id: "pending-1" }] } }),
-  // The nav logo checks all tasks for an active run outside a task.
-  useTasks: () => ({ data: { data: [] } }),
   // The chat side panel (029 rev 3.4) mounts on non-workspace task routes.
   useConversations: useConversationsState.mock,
   useArtefact: () => ({ data: undefined }),
@@ -349,6 +347,87 @@ describe("AppShell — new content marks its tab (task 058, N14)", () => {
     feed(stageFrame("stage.completed", "screen", "Searching and screening"));
     const taskNav = screen.getByRole("navigation", { name: TASK.one });
     expect(within(taskNav).getByRole("link", { name: /Sources/ })).toHaveTextContent("New content");
+  });
+});
+
+describe("AppShell — the Sources tab opens on the step that has landed (owner, 2026-11-05)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    taskState.isOwner = true;
+    taskState.access = "full";
+    taskState.latestRun = { status: "running" };
+    sseState.handlers = null;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    taskState.latestRun = null;
+  });
+
+  const sourcesLink = () =>
+    within(screen.getByRole("navigation", { name: TASK.one })).getByRole("link", { name: /Sources/ });
+
+  it("opens All sources, then Landscape once classified, then Themes once mapped", () => {
+    renderShell(`/tasks/${TASK_ID}/history`);
+    connect();
+    feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching and screening"));
+    expect(sourcesLink()).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
+    feed(
+      stageFrame("stage.completed", "acquire", "Searching and screening"),
+      stageFrame("stage.completed", "screen", "Searching and screening"),
+      stageFrame("stage.started", "classify", "Classifying"),
+    );
+    expect(sourcesLink()).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
+    feed(stageFrame("stage.completed", "classify", "Classifying"));
+    expect(sourcesLink()).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/landscape`);
+    feed(stageFrame("stage.started", "characterise", "Mapping"), stageFrame("stage.completed", "characterise", "Mapping"));
+    expect(sourcesLink()).toHaveAttribute("href", `/tasks/${TASK_ID}/sources`);
+  });
+
+  it("opens Themes once the run has ended", () => {
+    renderShell(`/tasks/${TASK_ID}/history`);
+    connect();
+    feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching and screening"));
+    feed(runStatus("succeeded"));
+    expect(sourcesLink()).toHaveAttribute("href", `/tasks/${TASK_ID}/sources`);
+  });
+
+  it("stays the current tab on every Sources view", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching and screening"));
+    // The link opens All sources, and the reader is on Themes: still Sources.
+    expect(sourcesLink()).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
+    expect(sourcesLink()).toHaveAttribute("aria-current", "page");
+    expect(sourcesLink()).toHaveClass("border-blue");
+  });
+});
+
+describe("AppShell — the rail's live mark (lead, 2026-11-05)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    taskState.isOwner = true;
+    taskState.access = "full";
+    taskState.latestRun = { status: "running" };
+    sseState.handlers = null;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    taskState.latestRun = null;
+  });
+
+  const railMark = () => screen.getByRole("button", { name: "Task Agent" }).querySelector("[data-live-mark]");
+
+  it("turns on Sources, and holds still on Result, where the writing section's mark turns", () => {
+    const sources = renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"));
+    expect(railMark()).not.toBeNull();
+    sources.unmount();
+    sseState.handlers = null;
+    renderShell(`/tasks/${TASK_ID}/result`);
+    connect();
+    feed(runStatus("running"));
+    expect(railMark()).toBeNull();
   });
 });
 
@@ -651,10 +730,10 @@ describe("AppShell — gates the run stream and chat panel until access is known
   });
 });
 
-// Task 045 (S15): a scoping task reads `active_run` for "running" — an option
-// search (a child walk) animates the logo — while the tabs stay on its
-// `latest_run` and the longlist's existence, so the child never opens or
-// locks one. An Evidence search keeps reading `latest_run` alone.
+// Task 045 (S15): a scoping task's tabs stay on its `latest_run` and the
+// longlist's existence, so a running child walk never opens or locks one.
+// Task 058 (owner, 2026-11-05): the nav wordmark holds still during a run;
+// the run's own live mark is the one turning logo on the screen.
 describe("AppShell — the scoping readers (task 045)", () => {
   afterEach(() => {
     taskState.capability = "evidence_search";
@@ -675,7 +754,7 @@ describe("AppShell — the scoping readers (task 045)", () => {
     );
   }
 
-  it("a running child animates the logo but opens and locks no tab", () => {
+  it("a running child opens and locks no tab, and the nav logo holds still", () => {
     taskState.capability = "options_scoping";
     taskState.latestRun = { status: "succeeded" };
     taskState.hasLonglist = true;
@@ -687,14 +766,16 @@ describe("AppShell — the scoping readers (task 045)", () => {
 
     taskState.activeRun = { status: "running" };
     renderShell(`/tasks/${TASK_ID}/sources`);
-    expect(logoAnimates()).toBe(true);
+    expect(logoAnimates()).toBe(false);
     expect(tabLocks()).toEqual(before);
   });
 
-  it("an Evidence search ignores active_run: latest_run alone drives the logo", () => {
-    taskState.latestRun = { status: "succeeded" };
-    taskState.activeRun = { status: "running" };
-    renderShell(`/tasks/${TASK_ID}/sources`);
+  it("holds the nav logo still while an Evidence search runs, inside the task and outside it", () => {
+    taskState.latestRun = { status: "running" };
+    const inside = renderShell(`/tasks/${TASK_ID}/sources`);
+    expect(logoAnimates()).toBe(false);
+    inside.unmount();
+    renderShell("/");
     expect(logoAnimates()).toBe(false);
   });
 });

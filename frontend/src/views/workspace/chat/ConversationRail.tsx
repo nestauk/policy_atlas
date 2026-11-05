@@ -3,12 +3,16 @@ import type { ReactNode } from "react";
 import { COPY } from "../../../lib/vocabulary";
 import { scrub } from "../../../lib/scrub";
 import { cn } from "../../../ui/brand/cn";
+import { LiveMark } from "../../../ui/brand/Card";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { Tooltip, TooltipProvider } from "../../../ui/radix/Tooltip";
 import { ChatIcon, PanelIcon, PlusIcon } from "./icons";
 
 const RAIL_BUTTON =
   "pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
+
+/** The Task Agent's mark in the rail, still or turning. */
+const RAIL_MARK_SIZE = 11;
 
 /** How many recent chats the rail marks. */
 export const RAIL_RECENT = 4;
@@ -82,7 +86,10 @@ function RailButton({
  *     `aria-expanded`; `toggleDisabled` holds it until the data it needs has
  *     resolved; `onTaskAgent` marks the Task Agent as current; `recent` and
  *     `currentId` are the chat marks and the one on show; `className` sets
- *     the rail's geometry (a column, or a bar that becomes a column at `lg`).
+ *     the rail's geometry (a column, or a bar that becomes a column at `lg`);
+ *     `runLive` turns the Task Agent's mark while a run is live (task 058,
+ *     owner 2026-11-05: the fold mark, at the rail's own size so nothing
+ *     jumps).
  */
 export function ConversationRail({
   toggleLabel,
@@ -97,6 +104,7 @@ export function ConversationRail({
   currentId = null,
   onSelectChat,
   className,
+  runLive = false,
 }: {
   toggleLabel: string;
   expanded: boolean;
@@ -110,6 +118,7 @@ export function ConversationRail({
   currentId?: string | null;
   onSelectChat?: (conversationId: string) => void;
   className?: string;
+  runLive?: boolean;
 }) {
   return (
     <TooltipProvider delayDuration={RAIL_TOOLTIP_DELAY_MS}>
@@ -129,7 +138,7 @@ export function ConversationRail({
           <PlusIcon size={16} />
         </RailButton>
         <RailButton label={COPY.taskAgent} current={onTaskAgent} onClick={onSelectTaskAgent}>
-          <FoldMarkIcon size={11} />
+          {runLive ? <LiveMark size={RAIL_MARK_SIZE} /> : <FoldMarkIcon size={RAIL_MARK_SIZE} />}
         </RailButton>
         {recent.map((chat) => (
           <RailButton

@@ -1,7 +1,11 @@
 import type { ReactNode } from "react";
-import { NavLink } from "react-router";
+import { Link, NavLink, useLocation } from "react-router";
 
 import { cn } from "./cn";
+
+const TAB_CLASS =
+  "inline-flex items-center gap-1.5 border-b-[3px] border-transparent pb-1 text-lead font-semibold leading-none text-grey no-underline hover:text-navy";
+const TAB_ACTIVE_CLASS = "border-blue text-navy";
 
 type LifecycleBarItem = {
   tab: string;
@@ -10,6 +14,9 @@ type LifecycleBarItem = {
   locked: boolean;
   /** Rendered beside the label when the tab wants attention (a pending check-in). */
   marker?: ReactNode;
+  /** When the link opens on a subview (Sources during a run), the tab still
+   *  reads as current anywhere under this path. */
+  activePrefix?: string;
 };
 
 /**
@@ -57,6 +64,8 @@ export function LifecycleBar({
   /** A control set before the tabs, behind a hairline (the "Plan" control). */
   lead?: ReactNode;
 }) {
+  const { pathname } = useLocation();
+  const under = (prefix: string) => pathname === prefix || pathname.startsWith(`${prefix}/`);
   return (
     <div className="flex items-end gap-5">
       {lead !== undefined && (
@@ -75,6 +84,17 @@ export function LifecycleBar({
             {item.label}
             <span className="sr-only"> — {hint}</span>
           </span>
+        ) : item.activePrefix !== undefined ? (
+          // The link opens a subview, so the tab's own match is the prefix.
+          <Link
+            key={item.tab}
+            to={item.to}
+            aria-current={under(item.activePrefix) ? "page" : undefined}
+            className={cn(TAB_CLASS, under(item.activePrefix) && TAB_ACTIVE_CLASS)}
+          >
+            {item.label}
+            {item.marker}
+          </Link>
         ) : (
           <NavLink
             key={item.tab}
@@ -82,12 +102,7 @@ export function LifecycleBar({
             // Agent is the bare task path, so without `end` it would stay
             // active on every stage beneath it.
             end={item.tab === "agent"}
-            className={({ isActive }) =>
-              cn(
-                "inline-flex items-center gap-1.5 border-b-[3px] border-transparent pb-1 text-lead font-semibold leading-none text-grey no-underline hover:text-navy",
-                isActive && "border-blue text-navy",
-              )
-            }
+            className={({ isActive }) => cn(TAB_CLASS, isActive && TAB_ACTIVE_CLASS)}
           >
             {item.label}
             {item.marker}

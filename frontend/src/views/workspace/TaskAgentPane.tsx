@@ -394,7 +394,7 @@ function DurableTurn({
   scopingPlan?: components["schemas"]["ScopingPlanDraft"] | null;
   onSend: (message: string) => void;
 }) {
-  // A button-confirm turn's record is the ✓ on its part card — the canned
+  // A button-confirm turn's record is its settled part card — the canned
   // marker bubble would only duplicate it (binding record: task_agent-stage).
   const isConfirmTurn = confirmTarget(turn.user_message) !== null;
   // A turn stored before task 044 carries no kind: it is a reply.
@@ -608,7 +608,14 @@ export function TaskAgentPane({
   );
   const latestTurnIndex =
     durableTurns.length > 0 ? Math.max(...durableTurns.map((turn) => turn.turn_index)) : null;
-  const partStates = derivePartStates(durableTurns);
+  // A part card settles the moment the user answers it (owner, 2026-11-05):
+  // the user's turns still on their way count as its answer until the
+  // durable turns catch up. A failed one does not: its choice was not
+  // recorded, so the card opens again beside the failure's Retry.
+  const partStates = derivePartStates(
+    durableTurns,
+    transcript.optimisticTurns.filter((turn) => turn.status !== "failed").map((turn) => turn.userMessage),
+  );
   const steps = planSteps(
     planQuery.data?.capability ?? durableTurns.at(-1)?.capability,
     durableTurns,
@@ -833,7 +840,7 @@ export function TaskAgentPane({
         {transcript.optimisticTurns.map((turn: OptimisticTaskAgentTurn) => (
           <div key={turn.clientTurnId} className="space-y-6">
             {/* Button-confirm turns never show a bubble — durable turns hide
-                them too; the ✓ on the part card is the record. */}
+                them too; the settled part card is the record. */}
             {confirmTarget(turn.userMessage) === null && <UserBubble text={turn.userMessage} rise />}
             {turn.reply !== undefined && turn.reply !== "" && <TaskAgentBubble text={turn.reply} />}
             {turn.status !== "failed" && turn.progressLabel !== undefined && (

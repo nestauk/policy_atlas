@@ -153,12 +153,15 @@ test.describe("mock task-lifecycle journey", () => {
     // (e) Pre-run, the workspace is a centred single-column chat (028 strand
     // 3): no task_agent rail, no two-pane split — the conversation itself is
     // the surface. The durable seed transcript renders as structured part
-    // cards rather than plain reply bubbles: turn 1's question part shows
-    // the ✓ confirm recorded via turn 2's canned marker message — the raw
-    // marker text never leaks as a visible bubble — and turn 2's scope part,
-    // answered by turn 3, has settled to its chips (owner, polish round 2:
-    // no open card once a later turn exists).
-    await expect(page.getByTestId("part-settled").filter({ hasText: /^Question/ }).first()).toContainText("✓");
+    // cards rather than plain reply bubbles: turn 1's question part is
+    // settled by turn 2's canned marker message — the raw marker text never
+    // leaks as a visible bubble, and the settled block carries no tick
+    // (owner, 2026-11-05) — and turn 2's scope part, answered by turn 3, has
+    // settled to its chips (owner, polish round 2: no open card once a later
+    // turn exists).
+    const settledQuestion = page.getByTestId("part-settled").filter({ hasText: /^Question/ }).first();
+    await expect(settledQuestion).toBeVisible();
+    await expect(settledQuestion).not.toContainText("✓");
     await expect(page.getByText("[confirm part=question option=confirm]")).toHaveCount(0);
     await expect(page.getByTestId("part-settled").filter({ hasText: /^Scope/ })).toContainText(/UK primary|Since 2016/);
     await expect(page.getByRole("radio", { name: /^Looks right/ })).toHaveCount(0);
@@ -470,7 +473,7 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
 
     await lifecycleNav(page).getByRole("link", { name: "History", exact: true }).click();
-    await expect(page.getByText("Paused · a check-in is waiting on you")).toHaveCount(0);
+    await expect(page.getByText(/Paused\s·\sa check-in is waiting on you/)).toHaveCount(0);
     await expect(page.getByText("The analysis is paused — a check-in is waiting on you")).toHaveCount(0);
     await page.getByRole("button", { name: "Open the Agent" }).click();
     const sidebar = page.getByRole("complementary", { name: "Agent" });
@@ -733,7 +736,9 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     // At the check-in the last finished line carries the counts and link;
     // open, upcoming rows are names only, in plan order.
     await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
-    await expect(runTrace(page).getByText(/312 found · 118 relevant/)).toBeVisible();
+    // The trace binds each "·" to the word before it with a no-break space
+    // (a separator never starts a line), so the match takes any space.
+    await expect(runTrace(page).getByText(/312 found\s·\s118 relevant/)).toBeVisible();
     await openSteps(page);
     const timeline = page.getByRole("list", { name: "Run steps" });
     const rows = await timeline.getByRole("listitem").allInnerTexts();
@@ -827,7 +832,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
     await taskNav(page).getByRole("link", { name: /^Sources/ }).click();
     // No strip under the tabs: nothing on the page names the run or its pause.
-    await expect(page.getByText(/^Searching and screening · /)).toHaveCount(0);
+    await expect(page.getByText(/^Searching and screening\s·\s/)).toHaveCount(0);
     await expect(page.getByText(/a check-in is waiting on you/)).toHaveCount(0);
 
     // The sidebar's trace is the run view: opening it lands on the waiting
@@ -851,7 +856,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
     await taskNav(page).getByRole("link", { name: "History", exact: true }).click();
 
-    await expect(page.getByText("Paused · a check-in is waiting on you")).toHaveCount(0);
+    await expect(page.getByText(/Paused\s·\sa check-in is waiting on you/)).toHaveCount(0);
     await expect(page.getByText("Go to the check-in")).toHaveCount(0);
     await expect(page.getByText("The analysis is paused — a check-in is waiting on you")).toHaveCount(0);
   });
@@ -928,8 +933,10 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await expect(page.getByText("Recommended")).toHaveCount(0);
     await expect(page.getByText("Drafting the plan")).toHaveCount(0, { timeout: 15_000 });
 
+    // The card settles on the choice at once, before the reply lands (owner, 2026-11-05).
     await page.getByRole("radio", { name: /^That's my question/ }).click();
-    await expect(page.getByTestId("part-settled").filter({ hasText: /^Question/ }).first()).toContainText("✓");
+    await expect(page.getByTestId("part-settled").filter({ hasText: /^Question/ }).first()).toBeVisible();
+    await expect(page.getByRole("radio", { name: /^That's my question/ })).toHaveCount(0);
     await expect(page.getByText("Plan · step 2 of 3 · Scope")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("button", { name: "Start the search" })).toBeVisible();
   });

@@ -77,6 +77,10 @@ function trace(props: Props = {}) {
 
 const header = () => within(screen.getByRole("region", { name: "Analysis run" })).getAllByRole("button")[0];
 const mark = () => screen.getByRole("region", { name: "Analysis run" }).querySelector("[data-tone]") as HTMLElement;
+/** Text with its no-break spaces read as spaces (the separators bind to the
+ *  word before them). */
+const flat = (text: string | null | undefined) => (text ?? "").replace(/\u00A0/g, " ");
+const liveMark = () => screen.getByRole("region", { name: "Analysis run" }).querySelector("[data-live-mark]");
 
 function rowOf(label: string): HTMLElement {
   const item = within(screen.getByRole("list", { name: "Run steps" }))
@@ -88,16 +92,31 @@ function rowOf(label: string): HTMLElement {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
+/** The system's reduced-motion setting, as `matchMedia` reports it. */
+function stubReducedMotion(reduce: boolean) {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: reduce && query.includes("reduce"),
+    media: query,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+}
+
 describe("RunTrace — live, closed (annex § The run trace)", () => {
-  it("is one header button: the blue mark, the step and what it is doing, the elapsed time, the step count", () => {
+  it("is one header button: the live mark, the step and what it is doing, the elapsed time, the step count", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     render(trace());
     const button = header();
     expect(button).toHaveAttribute("aria-expanded", "false");
-    expect(button).toHaveTextContent("Classifying · 40 of 118 classified· 6 min 12 s · 6 steps");
-    expect(mark()).toHaveClass("bg-blue", "size-1.5", "anim-breathe");
+    // The separator before the time ends the words' line, never starts one.
+    expect(button).toHaveTextContent("Classifying · 40 of 118 classified ·6 min 12 s · 6 steps");
+    // Live, the mark is the fold mark at 14 px, not the square (owner, 2026-11-05).
+    expect(within(button).getByText((_, el) => el?.hasAttribute("data-live-mark") === true)).toHaveStyle({ width: "14px" });
+    expect(mark()).toBeNull();
     expect(screen.queryByRole("list", { name: "Run steps" })).toBeNull();
     // No card frame, no state word in capitals, no Minimise.
     expect(screen.queryByText("RUNNING")).toBeNull();
@@ -117,7 +136,7 @@ describe("RunTrace — live, closed (annex § The run trace)", () => {
     render(trace());
     const last = screen.getByText((_, el) => el?.tagName === "P" && el.textContent?.startsWith("Searching and screening") === true);
     expect(last).toHaveTextContent("Searching and screening · 312 found · 118 relevant · 1 min 4 s · Sources →");
-    expect(last).toHaveClass("anim-rise", "border-l", "text-grey");
+    expect(last).toHaveClass("anim-rise", "border-l", "text-grey", "text-body");
     expect(within(last).getByRole("link", { name: "Sources →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
   });
 
@@ -160,21 +179,23 @@ describe("RunTrace — live, closed (annex § The run trace)", () => {
     expect(screen.getByRole("region", { name: "Analysis run" })).toHaveClass("@container");
     expect(words).toHaveClass("line-clamp-2", "@xl:truncate", "min-w-0");
     const clock = words.nextElementSibling as HTMLElement;
-    expect(clock).toHaveTextContent("· 6 min 12 s · 6 steps");
+    expect(clock).toHaveTextContent(/^6 min 12 s · 6 steps$/);
+    expect(words.textContent?.endsWith("\u00A0·")).toBe(true);
     expect(clock).toHaveClass("shrink-0", "whitespace-nowrap");
     expect(words.parentElement).toHaveClass("flex-wrap", "@xl:flex-nowrap");
   });
 
-  it("stops breathing 1.5 s after the last tick", () => {
-    vi.useFakeTimers({ now: NOW });
+  it("reads at the chat's size: the header's words Lead, the time and the step count grey", () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     render(trace());
-    expect(mark()).toHaveClass("anim-breathe");
-    act(() => {
-      vi.advanceTimersByTime(1_600);
-    });
-    expect(mark()).not.toHaveClass("anim-breathe");
-    expect(mark()).toHaveClass("bg-blue");
-    expect(header()).toHaveTextContent("40 of 118 classified");
+    const words = header().querySelector(".anim-rise") as HTMLElement;
+    expect(header().parentElement).toHaveClass("text-lead");
+    expect(words).toHaveClass("text-navy");
+    // The step's label semibold, what it is doing regular (lead, 2026-11-05).
+    expect(within(words).getByText("Classifying")).toHaveClass("font-semibold");
+    expect(words).not.toHaveClass("font-semibold");
+    expect(words.nextElementSibling).toHaveClass("text-grey");
+    expect(screen.getByRole("region", { name: "Analysis run" }).className).not.toMatch(/text-meta/);
   });
 
   it("reads 'Still working on this step' after two minutes with no tick, with no counter", () => {
@@ -201,9 +222,10 @@ describe("RunTrace — open", () => {
     expect(header()).toHaveAttribute("aria-expanded", "true");
     expect(header()).toHaveTextContent("· hide steps");
     const list = screen.getByRole("list", { name: "Run steps" });
-    expect(list.parentElement).toHaveClass("border-l", "border-line");
+    // The step rows are Body (owner, 2026-11-05).
+    expect(list.parentElement).toHaveClass("border-l", "border-line", "text-body");
     expect(header()).toHaveAttribute("aria-controls", list.parentElement?.id);
-    expect(within(list).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+    expect(within(list).getAllByRole("listitem").map((li) => flat(li.textContent))).toEqual([
       "Searching and screening · 312 found · 118 relevant · 1 min 4 s · Sources →, done",
       "Classifying, in progress · 1 min 15 s40 of 118 classified",
       "Reading the full texts, to come",
@@ -247,7 +269,7 @@ describe("RunTrace — open", () => {
       }),
     );
     await userEvent.click(header());
-    const lines = [...rowOf("Writing").querySelectorAll("p")].map((line) => line.textContent);
+    const lines = [...rowOf("Writing").querySelectorAll("p")].map((line) => flat(line.textContent));
     expect(lines).toEqual([
       "Writing, in progress · 30 s",
       "Section 3 of 7 · Costs and funding",
@@ -269,9 +291,10 @@ describe("RunTrace — paused", () => {
   it("turns the mark orange and tells the owner a check-in waits, and never stalls", () => {
     vi.useFakeTimers({ now: NOW });
     render(trace({ status: "paused" }));
-    expect(mark()).toHaveClass("bg-orange");
+    expect(mark()).toHaveClass("bg-orange", "size-1.5");
     expect(mark()).not.toHaveClass("anim-breathe");
-    expect(header()).toHaveTextContent(/^Paused · a check-in is waiting on you· 6 min 12 s · 6 steps$/);
+    expect(liveMark()).toBeNull();
+    expect(header()).toHaveTextContent(/^Paused · a check-in is waiting on you ·6 min 12 s · 6 steps$/);
     act(() => {
       vi.advanceTimersByTime(180_000);
     });
@@ -281,7 +304,7 @@ describe("RunTrace — paused", () => {
   it("tells a colleague where the run stopped instead", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     render(trace({ status: "paused", isOwner: false }));
-    expect(header()).toHaveTextContent(/^Paused · Classifying· 6 min 12 s/);
+    expect(header()).toHaveTextContent(/^Paused · Classifying ·6 min 12 s/);
     expect(header()).not.toHaveTextContent(/waiting on you/);
   });
 
@@ -302,9 +325,9 @@ describe("RunTrace — ended", () => {
     render(trace({ status: "succeeded", stages: WRITTEN, liveness: {}, endedAt: ago(0) }));
     const region = screen.getByRole("region", { name: "Analysis run" });
     // The screen reader's status line, then the folded line itself.
-    expect(region).toHaveTextContent(/^Report ready›Report ready· 6 min· Read it →$/);
-    expect(mark()).toHaveClass("bg-green");
-    expect(mark()).not.toHaveClass("anim-breathe");
+    expect(region).toHaveTextContent(/^Report ready›Report ready ·6 min· Read it →$/);
+    expect(mark()).toHaveClass("bg-green", "size-1.5");
+    expect(liveMark()).toBeNull();
     expect(within(region).getByRole("link", { name: "Read it →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
     expect(header()).toHaveTextContent("›");
     expect(header()).toHaveAttribute("aria-expanded", "false");
@@ -338,7 +361,7 @@ describe("RunTrace — ended", () => {
     ["interrupted", "Stopped"],
   ] as const)("reads a %s run as '%s' with the red mark and no link", (status, words) => {
     render(trace({ status, stages: SEARCHED, liveness: {}, endedAt: ago(0) }));
-    expect(header()).toHaveTextContent(new RegExp(`^›${words}· 6 min$`));
+    expect(header()).toHaveTextContent(new RegExp(`^›${words} ·6 min$`));
     expect(mark()).toHaveClass("bg-red");
     expect(screen.queryByRole("link", { name: "Read it →" })).toBeNull();
   });
@@ -358,7 +381,7 @@ describe("RunTrace — a degraded shortlist walk (lead ruling, 2026-11-05)", () 
       }),
     );
     expect(header()).toHaveTextContent(
-      /^›Policy Atlas could not propose a shortlist\. Your places are unchanged\.· 6 min$/,
+      /^›Policy Atlas could not propose a shortlist\. Your places are unchanged\. ·6 min$/,
     );
     expect(mark()).toHaveClass("bg-red");
     expect(screen.queryByRole("link", { name: "Read it →" })).toBeNull();
@@ -398,19 +421,48 @@ describe("PastRunLine — a run the stream is not following", () => {
 });
 
 describe("RunTrace — reduced motion", () => {
-  // The trace's motion is the breathing mark and the 300 ms rise; both are
-  // utilities that go still under prefers-reduced-motion (index.css).
+  // The trace's motion is the turning fold mark and the 300 ms rise; the
+  // mark holds still under prefers-reduced-motion, and the rise is a utility
+  // that goes still there too (index.css).
   const css = readFileSync(join(__dirname, "../../index.css"), "utf8");
   const utility = (name: string) => {
     const start = css.indexOf(`@utility ${name} {`);
     return css.slice(start, css.indexOf("\n}", start));
   };
 
-  it("holds the mark still", () => {
-    expect(utility("anim-breathe")).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*animation: none;/);
+  it("turns the live mark, and holds it still under reduced motion", () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    const frames = vi.spyOn(window, "requestAnimationFrame");
+    stubReducedMotion(false);
+    const { unmount } = render(trace());
+    expect(liveMark()).not.toBeNull();
+    expect(frames).toHaveBeenCalled();
+    unmount();
+    frames.mockClear();
+    stubReducedMotion(true);
+    render(trace());
+    // Still the fold mark (the shut diamond), but no frame loop runs.
+    expect(liveMark()?.querySelector("svg")).not.toBeNull();
+    expect(frames).not.toHaveBeenCalled();
   });
 
   it("swaps the words and the last finished line in at once", () => {
     expect(utility("anim-rise")).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*animation-duration: 1ms;/);
+  });
+});
+
+describe("RunTrace — a separator never starts a line (lead, 2026-11-05)", () => {
+  it("binds every · to the word before it, in the header, the last finished line and the step rows", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    render(trace());
+    const region = screen.getByRole("region", { name: "Analysis run" });
+    const visible = (el: Element) => (el.textContent ?? "").replace(/\s+$/, "");
+    // Every visible separator is preceded by a no-break space, so a line can
+    // break after it but never before it.
+    const check = (el: Element) => expect(visible(el)).not.toMatch(/ ·/);
+    check(header());
+    check(region.querySelector("p.anim-rise") as Element);
+    await userEvent.click(header());
+    for (const item of within(screen.getByRole("list", { name: "Run steps" })).getAllByRole("listitem")) check(item);
   });
 });

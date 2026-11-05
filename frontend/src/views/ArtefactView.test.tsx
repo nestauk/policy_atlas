@@ -171,21 +171,27 @@ describe("LiveArtefactBody", () => {
     expect(screen.queryByText(/Writing this section now/)).toBeNull();
   });
 
-  it("shows the writer's action line under the active heading until the first delta", () => {
+  it("shows the writer's action line under the active heading, its words beside the mark for the whole write", () => {
     const { rerender } = render(<LiveArtefactBody stream={writingStream()} />);
     const costs = screen.getByRole("heading", { name: "Costs" }).closest("section");
     expect(costs).not.toBeNull();
     const action = within(costs as HTMLElement).getByTestId("action-line");
     expect(action).toHaveTextContent("Looking for: evidence on subsidy uptake");
     expect(action).not.toHaveAttribute("aria-hidden");
-    // The section's mark is the run's blue 6 px square (task 058, owner 2026-11-05).
-    const mark = within(costs as HTMLElement).getByTestId("section-dot");
-    expect(mark).toHaveClass("bg-blue", "size-1.5");
-    expect(mark.className).not.toMatch(/rounded|bg-yellow/);
+    // The section's mark is the run's live mark, the fold mark turning, at
+    // the start of the action line, not beside the heading (owner, 2026-11-05).
+    const mark = within(action).getByTestId("section-mark");
+    expect(mark).toHaveAttribute("data-live-mark");
+    expect(mark.nextElementSibling).toHaveTextContent("Looking for: evidence on subsidy uptake");
+    expect(within(screen.getByRole("heading", { name: "Costs" })).queryByTestId("section-mark")).toBeNull();
 
     rerender(<LiveArtefactBody stream={writingStream({ draft: "Cost is the" }, "Writing")} />);
     const after = screen.getByRole("heading", { name: "Costs" }).closest("section") as HTMLElement;
-    expect(within(after).getByTestId("action-line")).toHaveAttribute("aria-hidden", "true");
+    // While the draft streams the line reads "◆ Writing" (lead, 2026-11-05).
+    const line = within(after).getByTestId("action-line");
+    expect(line).not.toHaveAttribute("aria-hidden");
+    expect(line).toHaveTextContent(/^Writing$/);
+    expect(within(line).getByTestId("section-mark").nextElementSibling).toHaveTextContent("Writing");
     expect(within(after).queryByTestId("placeholder-lines")).toBeNull();
     expect(within(after).getByText("Cost is the")).toBeInTheDocument();
   });
@@ -253,7 +259,7 @@ describe("LiveArtefactBody", () => {
     expect(costs).not.toHaveTextContent(FAILED);
     // A done section carries no marker of any kind.
     expect(costs.querySelector("[data-revising]")).toBeNull();
-    expect(within(costs).queryByTestId("section-dot")).toBeNull();
+    expect(within(costs).queryByTestId("section-mark")).toBeNull();
     expect(within(costs).getByTestId("action-line")).toHaveAttribute("aria-hidden", "true");
     expect(costs.querySelector(".underline, .border-dotted")).toBeNull();
   });
@@ -291,9 +297,9 @@ describe("LiveArtefactBody", () => {
     render(<LiveArtefactBody stream={stream} />);
     expect(screen.queryByText("Written last, after the sections are checked.")).toBeNull();
     const keyFindings = screen.getByRole("heading", { name: "Key findings" }).closest("section") as HTMLElement;
-    expect(within(keyFindings).getByTestId("section-dot")).toBeInTheDocument();
+    expect(within(keyFindings).getByTestId("section-mark")).toBeInTheDocument();
     // Owner, 2026-11-05: no "Checking claims and attaching citations" line;
-    // the key-findings heading's dot is the one signal.
+    // the key-findings section's live mark is the one signal.
     expect(screen.queryByText(/attaching citations/)).toBeNull();
     expect(screen.queryByText("Report ready")).toBeNull();
   });
@@ -313,7 +319,7 @@ describe("LiveArtefactBody", () => {
       );
       expect(screen.queryByText("Report ready")).toBeNull();
       expect(screen.queryByRole("button", { name: "Read the full report" })).toBeNull();
-      expect(screen.queryByTestId("section-dot")).toBeNull();
+      expect(screen.queryByTestId("section-mark")).toBeNull();
     },
   );
 
@@ -350,7 +356,7 @@ describe("LiveArtefactBody", () => {
       // Sections stay visible; nothing pulses or claims to be in progress.
       expect(screen.getByText(/Prose arrived/)).toBeInTheDocument();
       expect(screen.queryByTestId("placeholder-lines")).toBeNull();
-      expect(screen.queryByTestId("section-dot")).toBeNull();
+      expect(screen.queryByTestId("section-mark")).toBeNull();
     },
   );
 

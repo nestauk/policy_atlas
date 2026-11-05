@@ -5,7 +5,7 @@ import { Figures } from "../../lib/figures";
 import { STALL_AFTER_MS, useFreshness, useNow } from "../../lib/freshness";
 import { scrub } from "../../lib/scrub";
 import type { PlanDraft, RunStatus, StageEntry, StageLiveness, TaskAgentThreadRun } from "../../store";
-import { StatusMark, type StatusTone } from "../../ui/brand/Card";
+import { LiveMark, StatusMark, type StatusTone } from "../../ui/brand/Card";
 import { cn } from "../../ui/brand/cn";
 import { RUN_BLOCK_STATUS } from "./planVocabulary";
 import {
@@ -33,9 +33,25 @@ import {
 const QUIET_CONTROL_CLASS =
   "cursor-pointer text-meta font-semibold text-grey underline decoration-line-2 underline-offset-[3px] hover:text-navy hover:decoration-navy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue";
 
-/** The header's line box is Meta (14 px at 1.5, so 21 px tall): this drops
- *  the 6 px mark to the middle of the first line, also when the line wraps. */
-const MARK_ON_FIRST_LINE = "mt-[7.5px]";
+/** A box one line tall (`1lh`) and as wide as the live mark, that centres
+ *  the mark on the first line of the words beside it, also when they wrap,
+ *  at whatever size the line is set (Lead in the thread, Body in the
+ *  sidebar). The square sits in the same column, so the words do not move
+ *  when the run ends. */
+const FIRST_LINE_BOX = "flex h-[1lh] w-3.5 shrink-0 items-center justify-center";
+
+/** The step list's hairline runs down the middle of the mark's column. */
+const UNDER_THE_MARK = "ml-[6.5px] border-l border-line pl-3.5";
+
+/** The separator between items. A no-break space binds each "·" to the word
+ *  before it, so a separator never starts a line; the line breaks after it
+ *  (lead, 2026-11-05). */
+const SEP = "\u00A0· ";
+
+/** Server words with their separators bound the same way. */
+function bound(text: string): string {
+  return text.replaceAll(" · ", SEP);
+}
 
 /** The deep green of the green tint's text: green words that pass contrast. */
 const GREEN_TEXT = "text-[#0c6b5a]";
@@ -71,13 +87,13 @@ function FinishedLine({ row, context, quiet = false }: { row: CardRow; context: 
       <span className={quiet ? undefined : "text-navy"}>{scrub(row.label)}</span>
       {meta.length > 0 && (
         <>
-          {" · "}
-          <Figures text={meta.join(" · ")} />
+          {SEP}
+          <Figures text={meta.join(SEP)} />
         </>
       )}
       {link !== null && (
         <>
-          {" · "}
+          {SEP}
           <Link to={link.href} className="font-semibold whitespace-nowrap text-blue no-underline hover:underline">
             {link.label} →
           </Link>
@@ -133,15 +149,15 @@ function SpineRow({
         {state}
         {seconds !== null && (
           <span className="text-grey">
-            {" · "}
+            {SEP}
             <Figures text={formatElapsed(seconds)} />
           </span>
         )}
       </p>
-      {section && <p className="text-navy">{scrub(section)}</p>}
+      {section && <p className="text-navy">{bound(scrub(section))}</p>}
       {activity && (
         <p className="text-grey">
-          <Figures text={scrub(activity)} />
+          <Figures text={bound(scrub(activity))} />
         </p>
       )}
     </li>
@@ -208,7 +224,6 @@ export function RunTrace({
   const row = currentRow(rows);
   const progress = row !== null && row.state === "progress" ? row : null;
   const tick = progress === null ? undefined : rowLiveness(progress, liveness);
-  const fresh = useFreshness(tick?.occurredAt);
   // Silence is measured from the last tick, or from the step's start when
   // none has come yet; a paused run is waiting on a person, not stalled.
   const stamp = tick?.occurredAt ?? progress?.entries[0]?.startedAt;
@@ -223,19 +238,23 @@ export function RunTrace({
       ? ended.words
       : traceWords(row, rowDetail(tick), paused ? "paused" : stalled ? "stalled" : "live", isOwner);
   const time = ended !== null ? formatMinutes(seconds) : formatElapsed(seconds);
+  const [head = "", ...rest] = scrub(words).split(" · ");
+  const doing = rest.join(" · ");
   const lastFinished = [...rows]
     .reverse()
     .find((candidate) => candidate.state === "done" || candidate.state === "failed" || candidate.state === "skipped");
   const canOpen = rows.length > 0;
 
   return (
-    <div role="region" aria-label="Analysis run" className="@container mr-8 text-meta">
+    <div role="region" aria-label="Analysis run" className="@container mr-8">
       {/* The header's words for a screen reader, announced as they change;
           the ticking clock stays out of it. */}
       <p role="status" aria-live="polite" className="sr-only">
         {scrub(words)}
       </p>
-      <div className="flex min-w-0 items-start gap-x-1.5">
+      {/* The header reads at the chat's size (owner, 2026-11-05): Lead in the
+          thread, as the agent's prose and the settled parts are. */}
+      <div className="flex min-w-0 items-start gap-x-1.5 text-lead">
         <button
           type="button"
           aria-expanded={canOpen ? open : undefined}
@@ -244,7 +263,11 @@ export function RunTrace({
           onClick={() => setOpen((value) => !value)}
           className="group inline-flex max-w-full min-w-0 cursor-pointer items-start gap-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue disabled:cursor-default"
         >
-          <StatusMark tone={tone} breathing={!paused && fresh} className={MARK_ON_FIRST_LINE} />
+          {/* Live, the mark is the fold mark turning; paused or ended, the
+              6 px square in its state's colour (owner, 2026-11-05). */}
+          <span className={FIRST_LINE_BOX}>
+            {tone === "running" ? <LiveMark /> : <StatusMark tone={tone} />}
+          </span>
           {ended !== null && canOpen && (
             <span
               aria-hidden="true"
@@ -264,18 +287,30 @@ export function RunTrace({
             <span
               key={ended !== null ? "ended" : paused ? "paused" : (row?.key ?? "none")}
               className={cn(
-                "anim-rise line-clamp-2 max-w-full min-w-0 font-semibold @xl:line-clamp-none @xl:truncate",
+                "anim-rise line-clamp-2 max-w-full min-w-0 @xl:line-clamp-none @xl:truncate",
                 ended?.link ? GREEN_TEXT : "text-navy",
               )}
             >
-              <Figures text={scrub(words)} />
+              {/* The step's label semibold, what it is doing in regular
+                  weight (lead, 2026-11-05). */}
+              <span className="font-semibold">
+                <Figures text={head} />
+              </span>
+              {doing !== "" && (
+                <>
+                  {SEP}
+                  <Figures text={bound(doing)} />
+                </>
+              )}
+              {/* The separator before the time ends this line, so the time
+                  never opens one with a dot. */}
+              {words !== "" && <span aria-hidden="true" className="text-grey">{"\u00A0·"}</span>}
             </span>
             <span className="shrink-0 whitespace-nowrap text-grey">
-              {words !== "" && <span aria-hidden="true">· </span>}
               <Figures text={time} />
               {ended === null && canOpen && (
                 <span className="decoration-line-2 underline-offset-[3px] group-hover:text-navy group-hover:underline">
-                  {" · "}
+                  {SEP}
                   {open ? "hide steps" : stepCount(rows.length)}
                 </span>
               )}
@@ -293,7 +328,7 @@ export function RunTrace({
       </div>
 
       {open ? (
-        <div id={listId} className="mt-1.5 ml-[3px] border-l border-line pl-3">
+        <div id={listId} className={cn("mt-1.5 text-body", UNDER_THE_MARK)}>
           <ol aria-label="Run steps" className="space-y-1">
             {rows.map((step) => (
               <SpineRow
@@ -315,7 +350,7 @@ export function RunTrace({
         ended === null &&
         lastFinished !== undefined && (
           // The last finished step, rising in as each new one lands.
-          <p key={lastFinished.key} className="anim-rise mt-1 ml-[3px] border-l border-line pl-3 text-grey">
+          <p key={lastFinished.key} className={cn("anim-rise mt-1 text-body text-grey", UNDER_THE_MARK)}>
             <FinishedLine row={lastFinished} context={context} quiet />
           </p>
         )
@@ -339,13 +374,15 @@ export function PastRunLine({ run, capability }: { run: TaskAgentThreadRun; capa
   const time =
     run.ended_at == null ? null : formatMinutes(elapsedSeconds(run.started_at, run.ended_at, Date.parse(run.ended_at)));
   return (
-    <p className="mr-8 flex items-start gap-2 text-meta text-grey">
-      <StatusMark tone={tone} className={MARK_ON_FIRST_LINE} />
+    <p className="mr-8 flex items-start gap-2 text-lead text-grey">
+      <span className={FIRST_LINE_BOX}>
+        <StatusMark tone={tone} />
+      </span>
       <span className="min-w-0">
         <span className="font-semibold">{scrub(words)}</span>
         {time !== null && (
           <>
-            {" · "}
+            {SEP}
             <Figures text={time} />
           </>
         )}

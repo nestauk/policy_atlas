@@ -24,7 +24,7 @@ import type { TopSource } from "./artefactPresentation";
 import type { SidebarEntry } from "./ArtefactOutline";
 import { ArtefactDownload } from "./ArtefactDownload";
 import { errorCode } from "../lib/errors";
-import { useFreshness, useNow } from "../lib/freshness";
+import { useNow } from "../lib/freshness";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { COPY } from "../lib/vocabulary";
@@ -38,7 +38,7 @@ import { ShortlistView } from "./longlist/ShortlistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
-import { Card, StatusMark } from "../ui/brand/Card";
+import { Card, LiveMark } from "../ui/brand/Card";
 import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
@@ -1172,11 +1172,6 @@ export function isKeyFindingsSlot(section: Pick<LiveSection, "index" | "title">)
   return section.index === 0 && section.title === KEY_FINDINGS_SLOT_TITLE;
 }
 
-/** The writer's verb while prose is streaming. The action line stands aside
- *  for the draft while it reads this, and returns for the check and the
- *  repair ("Checking claims", "Revising 1 claim"). */
-const WRITING_VERB = "Writing";
-
 /** Placeholder line widths (percent of the measure), two or three lines a
  *  section, varied by index so the page does not read as a template. */
 const PLACEHOLDER_WIDTHS: readonly (readonly number[])[] = [
@@ -1273,14 +1268,12 @@ function LiveSectionBlock({
   section,
   active,
   activity,
-  breathing,
   terminal,
   reduceMotion,
 }: {
   section: LiveSection;
   active: boolean;
   activity: string | null;
-  breathing: boolean;
   terminal: boolean;
   reduceMotion: boolean;
 }) {
@@ -1317,31 +1310,35 @@ function LiveSectionBlock({
     return () => window.clearTimeout(done);
   }, [ghost]);
 
-  // The action line: before the first delta, then again for the check and
-  // the repair. It collapses with its last words when the section settles.
-  const showAction = active && !terminal && activity !== null && (draft === "" || activity !== WRITING_VERB);
-  const actionText = useLatched(showAction ? activity : null);
+  // The action line under the heading opens while the section is being
+  // written and carries the run's live mark at its start (owner,
+  // 2026-11-05: "◆ Looking for: …", "◆ Writing", "◆ Checking claims"). Its
+  // words stay beside the mark for the whole write, "Writing" included while
+  // the draft streams (lead, 2026-11-05). It collapses with its last words
+  // when the section settles.
+  const writing = active && !terminal;
+  const showWords = writing && activity !== null;
+  const actionText = useLatched(showWords ? activity : null);
 
   return (
-    <section className="mt-9" aria-busy={active && !terminal ? true : undefined}>
-      <h2 className={`flex items-center gap-2.5 ${REPORT_SECTION_HEADING_CLASS}`}>
-        <span>{scrub(section.title)}</span>
-        {active && !terminal && (
-          <StatusMark tone="running" breathing={breathing} data-testid="section-dot" data-breathing={breathing ? "true" : "false"} />
-        )}
-      </h2>
+    <section className="mt-9" aria-busy={writing ? true : undefined}>
+      <h2 className={REPORT_SECTION_HEADING_CLASS}>{scrub(section.title)}</h2>
       {keyFindings && !filled && !active && !terminal && (
         <p className="mt-1.5 text-body text-grey">Written last, after the sections are checked.</p>
       )}
       <div
-        className={`grid transition-[grid-template-rows] duration-300 ease-[var(--ease-out-strong)] ${showAction ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+        className={`grid transition-[grid-template-rows] duration-300 ease-[var(--ease-out-strong)] ${writing ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
       >
         <p
           data-testid="action-line"
-          aria-hidden={showAction ? undefined : true}
+          aria-hidden={showWords ? undefined : true}
           className="min-h-0 overflow-hidden text-body text-grey"
         >
-          <span className="block pt-1.5">{actionText === null ? "" : scrub(actionText)}</span>
+          <span className="flex items-center gap-2 pt-1.5">
+            {writing && <LiveMark data-testid="section-mark" />}
+            {/* Kept as the line closes. */}
+            {actionText !== null && <span className="min-w-0">{scrub(actionText)}</span>}
+          </span>
         </p>
       </div>
       {filled ? (
@@ -1409,9 +1406,6 @@ export function LiveArtefactBody({
     active !== undefined && writer !== undefined && tickNamesSection(writer.section, active.title)
       ? writer.activity
       : null;
-  const breathing = useFreshness(
-    active === undefined ? undefined : `${active.index}:${writer?.occurredAt ?? ""}:${(active.draft ?? "").length}`,
-  );
   return (
     <ReportPage>
       {terminalPartial && (
@@ -1437,7 +1431,6 @@ export function LiveArtefactBody({
           section={section}
           active={section === active}
           activity={section === active ? activity : null}
-          breathing={breathing}
           terminal={terminalPartial || finished}
           reduceMotion={reduceMotion}
         />

@@ -14,6 +14,16 @@ import {
   confirmTarget,
   derivePartStates, settledSummary } from "./PartCard";
 
+/** A card's state: an open card on the newest proposal, unless overridden. */
+const OPEN = {
+  live: true,
+  answered: false,
+  answer: null as string | null,
+  confirmedOptionId: null as string | null,
+  confirmedMessage: null as string | null,
+  pending: false,
+};
+
 function turn(
   index: number,
   message: string,
@@ -102,7 +112,7 @@ describe("chipEditMessage", () => {
 describe("PartCard (task 058, N18; annex scene 11)", () => {
   function renderPart(
     part: NonNullable<TaskAgentTurn["part"]>,
-    state = { live: true, answered: false, answer: null, confirmedOptionId: null as string | null },
+    state = OPEN,
     onSend = vi.fn(),
     extra: { partName?: string; steps?: PlanStep[] } = {},
   ) {
@@ -133,14 +143,14 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
 
   it("sends the canned confirm for a choice", async () => {
     const user = userEvent.setup();
-    const onSend = renderPart(proposal("scope"));
+    const onSend = renderPart(proposal("question"));
     await user.click(screen.getByRole("radio", { name: /Looks right/ }));
-    expect(onSend).toHaveBeenCalledWith("Looks right\n\n[confirm part=scope option=confirm]");
+    expect(onSend).toHaveBeenCalledWith("Looks right\n\n[confirm part=question option=confirm]");
   });
 
   it("an option that needs words opens an input in the card with its own Send, never the composer", async () => {
     const user = userEvent.setup();
-    const onSend = renderPart(proposal("scope"));
+    const onSend = renderPart(proposal("question"));
     await user.click(screen.getByRole("radio", { name: /Change it/ }));
     expect(onSend).not.toHaveBeenCalled();
     const input = screen.getByRole("textbox", { name: "Change it" });
@@ -188,10 +198,12 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
 
   it("a confirmed part collapses to <Part> · <choice> · Change, and Change opens a line in place", async () => {
     const user = userEvent.setup();
-    const onSend = renderPart(proposal("scope"), { live: true, answered: false, answer: null, confirmedOptionId: "confirm" }, vi.fn(), {
+    const onSend = renderPart(proposal("scope"), { ...OPEN, confirmedOptionId: "confirm" }, vi.fn(), {
       partName: "Scope",
     });
-    expect(screen.getByTestId("part-settled")).toHaveTextContent(/Scope.*✓ Looks right.*Change/);
+    expect(screen.getByTestId("part-settled")).toHaveTextContent(/Scope.*Looks right.*Change/);
+    // No tick (owner, 2026-11-05): the green rule and the green words say it.
+    expect(screen.getByTestId("part-settled")).not.toHaveTextContent("✓");
     expect(screen.queryByRole("radio")).toBeNull();
     expect(screen.queryByText(/Confirmed/)).toBeNull();
     await user.click(screen.getByRole("button", { name: "Change" }));
@@ -201,19 +213,51 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
   });
 
   it("a superseded proposal collapses to <Part> · answered (owner, polish round 2)", () => {
-    renderPart(proposal("scope"), { live: false, answered: true, answer: null, confirmedOptionId: null }, vi.fn(), { partName: "Scope" });
+    renderPart(proposal("scope"), { ...OPEN, live: false, answered: true }, vi.fn(), { partName: "Scope" });
     expect(screen.queryByRole("radio")).toBeNull();
-    expect(screen.getByTestId("part-settled")).toHaveTextContent(/Scope.*✓ Answered/);
+    expect(screen.getByTestId("part-settled")).toHaveTextContent(/Scope.*Answered/);
   });
 
-  it("stages chip edits and applies them as one batched turn", async () => {
+  it("sits on the user's side: the bubble's left indent and the green rule on its right edge", () => {
+    renderPart(proposal("question"), { ...OPEN, confirmedOptionId: "confirm" }, vi.fn(), { partName: "Question" });
+    const block = screen.getByTestId("part-settled");
+    expect(block).toHaveClass("border-r-2", "border-green");
+    expect(block.className).not.toMatch(/border-l/);
+    expect(block.parentElement).toHaveClass("ml-8");
+    expect(block.parentElement?.className).not.toMatch(/\bmr-8\b/);
+  });
+
+  it("the scope card's one choice is a secondary Looks right button, with no words option", async () => {
+    const user = userEvent.setup();
+    const onSend = renderPart(
+      proposal("scope", {
+        options: [
+          { id: "confirm", label: "Looks right", sub: null, primary: true, reason: null },
+          { id: "change", label: "Add or change a constraint", sub: "Opens a line to type the change.", primary: false, reason: null },
+        ],
+      }),
+    );
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    expect(screen.queryByText("Add or change a constraint")).toBeNull();
+    const button = screen.getByRole("button", { name: "Looks right" });
+    // Secondary: the plan card's green Start stays the one filled action.
+    expect(button.className).not.toMatch(/\bcutout|bg-blue/);
+    await user.click(button);
+    expect(onSend).toHaveBeenCalledWith("Looks right\n\n[confirm part=scope option=confirm]");
+  });
+
+  it("sends the staged chip edits with Looks right, as one turn that records the primary option", async () => {
     const user = userEvent.setup();
     const onSend = renderPart(
       proposal("scope", { chips: [{ label: "UK primary", kind: "text", value: "UK as the primary study setting" }] }),
     );
     await user.click(screen.getByRole("button", { name: "Remove Screen: UK primary" }));
-    await user.click(screen.getByRole("button", { name: "Apply changes" }));
-    expect(onSend).toHaveBeenCalledWith('Update the scope:\n- Remove "UK primary".');
+    // The edits go with the one choice; there is no second commit.
+    expect(screen.queryByRole("button", { name: "Apply changes" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Looks right" }));
+    const message = 'Update the scope:\n- Remove "UK primary".\n\n[confirm part=scope option=confirm]';
+    expect(onSend).toHaveBeenCalledWith(message);
+    expect(confirmTarget(message)).toEqual({ partId: "scope", optionId: "confirm" });
   });
 
   it("prefixes chips from kind and does not double-prefix", () => {
@@ -245,12 +289,12 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
       { id: "thoroughness", name: "Thoroughness", settled: false },
     ];
     const { unmount } = render(
-      <PartCard part={proposal("scope")} state={{ live: true, answered: false, answer: null, confirmedOptionId: null }} disabled={false} onSend={vi.fn()} steps={steps} />,
+      <PartCard part={proposal("scope")} state={OPEN} disabled={false} onSend={vi.fn()} steps={steps} />,
     );
     expect(screen.getByTestId("plan-stepper")).toHaveTextContent(/^Question ✓, done\s*Plan · step 2 of 3 · Scope$/);
     unmount();
     render(
-      <PartCard part={proposal("scope")} state={{ live: false, answered: true, answer: null, confirmedOptionId: null }} disabled={false} onSend={vi.fn()} steps={steps} />,
+      <PartCard part={proposal("scope")} state={{ ...OPEN, live: false, answered: true }} disabled={false} onSend={vi.fn()} steps={steps} />,
     );
     expect(screen.queryByTestId("plan-stepper")).toBeNull();
   });
@@ -297,7 +341,7 @@ describe("planSteps (task 058, N18)", () => {
             { id: "i_have_some", label: "I have some", sub: null, primary: false, reason: null },
           ],
         })}
-        state={{ live: true, answered: false, answer: null, confirmedOptionId: null }}
+        state={OPEN}
         disabled={false}
         onSend={vi.fn()}
         steps={steps}
@@ -322,12 +366,12 @@ describe("PartCard — an answered card settles (owner, polish round 2)", () => 
       <PartCard
         part={proposal("scope")}
         partName="Scope"
-        state={{ live: true, answered: true, answer: "Please go ahead with your recommended choices.", confirmedOptionId: null }}
+        state={{ ...OPEN, answered: true, answer: "Please go ahead with your recommended choices." }}
         disabled={false}
         onSend={vi.fn()}
       />,
     );
-    expect(screen.getByTestId("part-settled")).toHaveTextContent("✓ Please go ahead with your recommended choices.");
+    expect(screen.getByTestId("part-settled")).toHaveTextContent("Please go ahead with your recommended choices.");
     expect(screen.queryAllByRole("radio")).toHaveLength(0);
     expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
   });
@@ -343,7 +387,7 @@ describe("PartCard — an answered card settles (owner, polish round 2)", () => 
 });
 
 describe("settledSummary — a settled part names the plan's outcome (owner, polish round 2)", () => {
-  const answered = { live: true, answered: true, answer: "Please go ahead with your recommended choices.", confirmedOptionId: null };
+  const answered = { ...OPEN, answered: true, answer: "Please go ahead with your recommended choices." };
   it("names the thoroughness preset and its band from the plan", () => {
     const part = proposal("thoroughness", {
       options: [
@@ -382,7 +426,7 @@ describe("scope chips grouped by what they constrain (owner, 2026-11-05)", () =>
         { label: "Screen: Bills or energy security", kind: "text" },
       ] as never,
     });
-    render(<PartCard part={part} state={{ live: true, answered: false, answer: null, confirmedOptionId: null }} disabled={false} onSend={vi.fn()} />);
+    render(<PartCard part={part} state={OPEN} disabled={false} onSend={vi.fn()} />);
     expect(screen.getByText("Screening criteria")).toBeInTheDocument();
     expect(screen.getByText("Source filters")).toBeInTheDocument();
     expect(screen.getByText("Zonal electricity pricing")).toBeInTheDocument();
@@ -392,7 +436,7 @@ describe("scope chips grouped by what they constrain (owner, 2026-11-05)", () =>
     const part = proposal("scope", {
       chips: [{ label: "Screen: Bills", kind: "text" }, { label: "Search: OECD", kind: "text" }] as never,
     });
-    const state = { live: true, answered: true, answer: null, confirmedOptionId: null };
+    const state = { ...OPEN, answered: true };
     const lines = settledSummary(part, state, null, null);
     expect(lines).toEqual([
       { label: "Screening criteria", text: "Bills" },
@@ -400,10 +444,88 @@ describe("scope chips grouped by what they constrain (owner, 2026-11-05)", () =>
     ]);
     render(<PartCard part={part} state={state} summary={lines} disabled={false} onSend={vi.fn()} />);
     const settled = screen.getByTestId("part-settled");
-    expect(settled).toHaveTextContent(/Screening criteria.*✓ Bills.*Source filters.*OECD/);
-    // The label is grey; the words are green: two colours, two roles.
+    expect(settled).toHaveTextContent(/Screening criteria.*Bills.*Source filters.*OECD/);
+    // The label is grey; the words are the deep green (#0c6b5a, the green
+    // tint's text, lead 2026-11-05): two colours, two roles.
     expect(screen.getByText("Source filters").className).toContain("text-grey");
-    expect(screen.getByText("OECD").className).toContain("text-green");
+    expect(screen.getByText("OECD")).toHaveClass("text-[#0c6b5a]");
+    expect(screen.getByText("OECD").className).not.toMatch(/(^|\s)text-green(\s|$)/);
   });
 });
 
+
+describe("a part card settles on the choice (owner, 2026-11-05)", () => {
+  const scope = proposal("scope");
+
+  it("settles the newest card on a turn still on its way, before the reply lands", () => {
+    const turns = [turn(1, "opening", proposal("question"))];
+    // Nothing sent yet: the card is open.
+    expect(derivePartStates(turns).get(1)).toEqual(expect.objectContaining({ answered: false, pending: false }));
+    // A choice on its way: settled at once, on that choice.
+    const chose = derivePartStates(turns, ["Looks right\n\n[confirm part=question option=confirm]"]).get(1);
+    expect(chose).toEqual(expect.objectContaining({ answered: true, confirmedOptionId: "confirm", pending: true }));
+    // Words on their way: settled on the words.
+    const wrote = derivePartStates(turns, ["Only rural areas"]).get(1);
+    expect(wrote).toEqual(expect.objectContaining({ answered: true, answer: "Only rural areas", pending: true }));
+  });
+
+  it("is no longer pending once the durable turn has landed", () => {
+    const turns = [turn(1, "opening", proposal("question")), turn(2, "Looks right\n\n[confirm part=question option=confirm]")];
+    expect(derivePartStates(turns).get(1)).toEqual(expect.objectContaining({ confirmedOptionId: "confirm", pending: false }));
+  });
+
+  it("names the user's words, or a choice other than the planner's, until the plan catches up", () => {
+    const plan = { question: "What works to raise take-up?" } as never;
+    const question = proposal("question");
+    // Words on their way: the words, not the old question.
+    expect(settledSummary(question, { ...OPEN, answered: true, answer: "Only rural areas", pending: true }, plan, null)).toEqual([
+      { label: null, text: "Only rural areas" },
+    ]);
+    // The planner's own option keeps the draft: its outcome reads at once.
+    expect(settledSummary(question, { ...OPEN, answered: true, confirmedOptionId: "confirm", pending: true }, plan, null)).toEqual([
+      { label: null, text: "What works to raise take-up?" },
+    ]);
+    // Another option: its label, until the plan says what it became.
+    const thoroughness = proposal("thoroughness", {
+      options: [
+        { id: "standard_review", label: "Standard report", sub: null, primary: true },
+        { id: "quick_look", label: "Rapid overview", sub: null, primary: false },
+      ],
+    });
+    const drafted = { search_effort: "standard", analysis_depth: "standard", time_band: "~20 min" } as never;
+    expect(settledSummary(thoroughness, { ...OPEN, answered: true, confirmedOptionId: "quick_look", pending: true }, drafted, null)).toEqual([
+      { label: null, text: "Rapid overview" },
+    ]);
+  });
+
+  it("a scope settled with chip edits lists the chips as edited", () => {
+    const part = proposal("scope", {
+      chips: [
+        { label: "UK primary", kind: "text", value: "" },
+        { label: "Adults", kind: "text", value: "" },
+        { label: "Since 2010", kind: "date_range", value: "" },
+      ],
+    });
+    const message = chipEditMessage([
+      { kind: "remove", label: "UK primary" },
+      { kind: "change", label: "Adults", detail: "Older adults" },
+      { kind: "add", label: "exclude opinion pieces", detail: "exclude opinion pieces" },
+    ]);
+    const state = {
+      ...OPEN,
+      answered: true,
+      confirmedOptionId: "confirm",
+      confirmedMessage: `${message}\n\n[confirm part=scope option=confirm]`,
+      pending: true,
+    };
+    expect(settledSummary(part, state, null, null)).toEqual([
+      { label: null, text: "exclude opinion pieces" },
+      { label: "Screening criteria", text: "Older adults" },
+      { label: "Source filters", text: "Since 2010" },
+    ]);
+    // Without edits the proposal's chips stand.
+    expect(settledSummary(scope, { ...OPEN, answered: true, confirmedOptionId: "confirm" }, null, null)).toEqual([
+      { label: null, text: "Looks right" },
+    ]);
+  });
+});

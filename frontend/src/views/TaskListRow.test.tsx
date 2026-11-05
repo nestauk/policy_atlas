@@ -67,19 +67,26 @@ describe("TaskListRow — the running stage", () => {
   });
 });
 
-// Task 058 (owner, 2026-11-05): the row's status is the 6 px square mark,
-// blue while the run is live, orange while paused, green once done.
+// Task 058 (owner, 2026-11-05): while the run is live the row's mark is the
+// fold mark turning; otherwise the 6 px square, orange while paused, green
+// once done.
 describe("TaskListRow — the status mark", () => {
   const startedAt = new Date(Date.now() - 60_000).toISOString();
   const markOf = (container: HTMLElement) => container.querySelector("[data-tone]") as HTMLElement;
+  const liveMarkOf = (container: HTMLElement) => container.querySelector("[data-live-mark]") as HTMLElement | null;
 
-  it("is blue while the run is live", () => {
-    const { container } = renderRow({
+  it("is the fold mark while the run is live, with its stage known or not", () => {
+    const { container, unmount } = renderRow({
       latestRun: { capability_run_id: "r1", status: "running", started_at: startedAt },
       activeRun: { capability_run_id: "r1", status: "running", started_at: startedAt, stage: "acquire", stage_label: "Searching and screening" },
     });
-    expect(markOf(container)).toHaveClass("bg-blue", "size-1.5");
-    expect(markOf(container).className).not.toMatch(/rounded|bg-yellow/);
+    expect(liveMarkOf(container)).toHaveStyle({ width: "14px" });
+    expect(liveMarkOf(container)?.querySelector("svg")).not.toBeNull();
+    expect(markOf(container)).toBeNull();
+    unmount();
+    const before = renderRow({ latestRun: { capability_run_id: "r1", status: "running", started_at: startedAt } });
+    expect(liveMarkOf(before.container)).not.toBeNull();
+    expect(markOf(before.container)).toBeNull();
   });
 
   it.each([
@@ -88,6 +95,7 @@ describe("TaskListRow — the status mark", () => {
     ["failed", "bg-red"],
   ] as const)("is %s → %s", (status, colour) => {
     const { container } = renderRow({ latestRun: { capability_run_id: "r1", status, started_at: startedAt } });
-    expect(markOf(container)).toHaveClass(colour);
+    expect(markOf(container)).toHaveClass(colour, "size-1.5");
+    expect(liveMarkOf(container)).toBeNull();
   });
 });

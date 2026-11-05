@@ -2,7 +2,7 @@ import { useLayoutEffect, useState, type ReactNode } from "react";
 import { Outlet, useLocation, useParams } from "react-router";
 
 import { useArchiveTask, useUpdateTask } from "../api/mutations";
-import { useCheckIns, useMe, useTask, useTasks } from "../api/queries";
+import { useCheckIns, useMe, useTask } from "../api/queries";
 import { useAuth } from "../auth";
 import { capabilityLabel } from "../lib/capabilities";
 import { TitleMarkerProvider } from "../lib/title";
@@ -14,10 +14,10 @@ import { LifecycleBar, LifecycleBottomBar } from "../ui/brand/LifecycleBar";
 import { ReconnectingBanner } from "../ui/feedback/ReconnectingBanner";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
 import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
-import { lifecycleTabs, publicLifecycleTabs, withChat } from "./lifecycle";
+import { lifecycleTabs, publicLifecycleTabs, sourcesLanding, tabOfPath, withChat, withSourcesLanding } from "./lifecycle";
 import { PlanPanelProvider, usePlanPanel } from "./planPanel";
 import { PublicViewProvider } from "./publicView";
-import { activeRun, tabRunStatus } from "./scopingActivity";
+import { isScoping, tabRunStatus } from "./scopingActivity";
 import { TaskLiveProvider, useTaskLive, withTabMarks } from "./taskLive";
 import { useTabOptions } from "./taskResult";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
@@ -284,13 +284,18 @@ function TaskTabs({
   items,
   placement,
   lead,
+  evidenceSearch,
 }: {
   items: LifecycleItems;
   placement: "nav" | "bottom";
   lead?: ReactNode;
+  /** The Sources tab opens on the step that has landed during an Evidence
+   *  search run (annex, owner round after the trace, item 8). */
+  evidenceSearch: boolean;
 }) {
   const live = useTaskLive();
-  const marked = withTabMarks([...items], live?.marks ?? null);
+  const landing = sourcesLanding(live?.stream.run?.status, live?.stream.stages ?? [], evidenceSearch);
+  const marked = withTabMarks(withSourcesLanding([...items], landing), live?.marks ?? null);
   return placement === "nav" ? (
     <LifecycleBar hint={COPY.lockedHint} items={marked} lead={lead} />
   ) : (
@@ -349,18 +354,6 @@ export function AppShell() {
   // a public Task briefly opened the run stream and mounted the chat panel
   // before access was known. Both gate on the query having resolved.
   const taskResolved = task.data !== undefined;
-  // Outside a task, check all tasks so the nav logo animates even when the
-  // user has navigated away. Cost: one list fetch when the shell mounts (once
-  // per session — AppShell is the layout route), plus useTasks's own 15s
-  // poll while any run is active; the query is shared with TasksListView.
-  const allTasks = useTasks();
-  // Task 045 (S15): a scoping task is running when ANY of its walks is —
-  // an option search included — so `activeRun` reads `active_run` there and
-  // `latest_run` for an Evidence search, as before.
-  const anyRunning =
-    base !== null
-      ? activeRun(task.data)?.status === "running"
-      : (allTasks.data?.data.some((p) => activeRun(p)?.status === "running") ?? false);
   const inWorkspace = base !== null && location.pathname === base;
   // Every task tab but Agent (038 V8, owner ruling 2026-09-05): the Agent
   // tab lists the same conversations in its own sidebar and shows the
@@ -446,7 +439,7 @@ export function AppShell() {
       )}
     >
       <NavBar aria-label="App" className="shrink-0">
-        <NavHomeLink running={anyRunning} />
+        <NavHomeLink />
         {/* Below md the link group wraps to its own second row (order-last +
             w-full), left-justified, while the account icon stays on the logo
             row; from md up the DOM order and right grouping are unchanged
@@ -502,6 +495,7 @@ export function AppShell() {
             <TaskTabs
               placement="nav"
               items={lifecycleItems ?? []}
+              evidenceSearch={!isScoping(task.data)}
               lead={undefined}
             />
           </div>
@@ -524,7 +518,13 @@ export function AppShell() {
             out the rest of the shell (nav, the routed view). */}
         {showChatPanel && (
           <ErrorBoundary key={taskId}>
-            <ChatSidePanel taskId={taskId ?? ""} isOwner={isOwner} />
+            {/* The Agent tab has no overlay; on Result the writing section's
+                mark turns, so the rail's stays still there. */}
+            <ChatSidePanel
+              taskId={taskId ?? ""}
+              isOwner={isOwner}
+              railMarkTurns={base === null || tabOfPath(location.pathname, base) !== "result"}
+            />
           </ErrorBoundary>
         )}
         <div
@@ -551,6 +551,7 @@ export function AppShell() {
         <TaskTabs
           placement="bottom"
           items={lifecycleItems}
+          evidenceSearch={!isScoping(task.data)}
           lead={undefined}
         />
       )}

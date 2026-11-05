@@ -466,6 +466,57 @@ degraded shortlist walk's ended line keeps its sentence ("Policy Atlas could not
 shortlist. Your places are unchanged.") with the red mark and no link; the lifecycle tab's
 new-content mark is the same 6 px square, in navy.
 
+## Owner round after the trace (2026-11-05, evening): notes and rulings
+
+1. **A part card settles on the choice.** The moment the user picks an option or sends words,
+   the card takes its settled form; it does not wait for the agent's reply (today it waited
+   for the next turn to land).
+2. **No tick.** The green tick on the settled card goes (lead, after the owner's question: the
+   green rule and the green words already say the part is settled; the tick repeated them).
+3. **The rule sits on the user's side.** The settled card's green rule moves to its right edge
+   and the block keeps the user bubble's left indent (32 px), so a settled part reads as the
+   user's decision, as the user's messages do. Text stays left-aligned.
+4. **Smaller text in the sidebar.** In the sidebar's compact pane (the Task Agent and the chat
+   conversations) Lead-size text renders at Body size (16 px, the floor); Body and Meta are
+   unchanged.
+5. **One way to change the scope.** The chips (pencil, ×, "+ add") are how the scope changes.
+   The planner's "Add or change a constraint" option is not shown on the scope card; the
+   card's one choice is a "Looks right" button, which records the planner's primary option
+   and sends any staged chip edits with it.
+6. **The live mark is the fold mark.** Wherever a run is live, the mark is the Policy Atlas fold
+   mark turning (the animated one from the "Drafting the plan" line): the trace header, the
+   sidebar's Task Agent mark, the task list row and the Result tab's section being written. It
+   is 14 px in text lines and 17 px in the rail, and holds still under reduced motion. The
+   static states keep the 6 px square (green ended well, orange paused, red failed, Line 2
+   idle). The nav wordmark's mark no longer animates during a run: one animated logo per
+   screen (owner).
+7. **The writing section's mark moves into the action line.** On the Result tab the section
+   being written shows its mark at the start of the action line under the heading ("◆ Looking
+   for: …", "◆ Writing", "◆ Checking claims"), not after the heading's words.
+8. **The Sources tab opens on the step that has landed.** While a run is live: All sources
+   until classification completes, then Landscape, then Themes once mapping completes. After
+   the run, Themes as today.
+9. **The trace header reads at the chat's size.** The header's words are Lead (as the settled
+   cards and the agent's prose); the step rows are Body; the time and the step count keep
+   their grey.
+10. **Streaming.** The server streams every section now (Langfuse, the owner's 13:24 run: a
+    read turn, a 14-token ready turn, a 10 s streamed write per section). The page showed
+    nothing because the deltas carried the writer's loop index while the skeleton numbers
+    sections for display (Key findings first at 0, so each body section's display index is
+    one higher): the first section's text landed on the Key findings slot. Fixed on the
+    server: the deltas and the revising spans carry the display index (lead).
+
+Rulings on the build (lead, 2026-11-05, from the agent's proposals): the scope card's
+"Apply changes" goes, "Looks right" carries the staged chip edits (the staged list and
+"Discard" stay); a failed send reopens the card beside its Retry; while a choice is on its way
+the settled card shows the user's words or the chosen option's label (a primary confirm shows
+the plan's outcome at once); a settled scope lists its chips with the staged edits applied;
+the rail's Task Agent mark turns on every tab except Agent and Result (each has its own turning
+mark) and keeps its static size; the settled card's green words are the deep green #0c6b5a
+everywhere (AA at 16 px); the trace header's step label is semibold and its activity regular;
+a middot separator never starts a wrapped line; the scoping Result tab's live rows use the
+fold mark too; the writing section's action line reads "◆ Writing" for the whole write.
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |

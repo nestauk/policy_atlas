@@ -26,8 +26,9 @@ const cnSource = readFileSync("src/ui/brand/cn.ts", "utf8");
  */
 function tokensInCss(): string[] {
   const theme = cssSource.slice(cssSource.indexOf("@theme"));
-  // `--text-body: 16px` yes; `--text-body--line-height: 1.55` no.
-  return [...theme.matchAll(/--text-([a-z0-9]+):/g)].map((match) => match[1]);
+  // `--text-body: 16px` yes; `--text-body--line-height: 1.55` no. A token
+  // redefined in a scope (the sidebar's `compact-pane`) counts once.
+  return [...new Set([...theme.matchAll(/--text-([a-z0-9]+):/g)].map((match) => match[1]))];
 }
 
 function tokensInTailwindMerge(): string[] {

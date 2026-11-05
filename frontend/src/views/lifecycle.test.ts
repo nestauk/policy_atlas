@@ -5,9 +5,11 @@ import {
   isTabOpen,
   lifecycleTabs,
   resultView,
+  sourcesLanding,
   tabOfPath,
   taskDestination,
   withChat,
+  withSourcesLanding,
 } from "./lifecycle";
 import type { LifecycleTab } from "./lifecycle";
 import {
@@ -242,5 +244,39 @@ describe("the longlist and the scoping readers (task 045)", () => {
   it("a task row with a longlist lands on Result", () => {
     expect(taskDestination("t1", "running", { hasLonglist: true })).toBe("/tasks/t1/result");
     expect(taskDestination("t1", "running")).toBe("/tasks/t1");
+  });
+});
+
+describe("sourcesLanding (annex, owner round after the trace, item 8)", () => {
+  const frame = (stage: string, status: string) => ({ stage, status });
+
+  it("opens All sources while searching and classifying, Landscape once classified, Themes once mapped", () => {
+    expect(sourcesLanding("running", [], true)).toBe("/all");
+    expect(sourcesLanding("running", [frame("acquire", "completed"), frame("screen", "completed")], true)).toBe("/all");
+    expect(sourcesLanding("running", [frame("classify", "started")], true)).toBe("/all");
+    expect(sourcesLanding("running", [frame("classify", "completed")], true)).toBe("/landscape");
+    // Classifying is classify plus appraise: one still open keeps All sources.
+    expect(sourcesLanding("running", [frame("classify", "completed"), frame("appraise", "started")], true)).toBe("/all");
+    expect(sourcesLanding("paused", [frame("classify", "completed"), frame("appraise", "completed")], true)).toBe("/landscape");
+    expect(sourcesLanding("running", [frame("classify", "completed"), frame("characterise", "completed")], true)).toBe("");
+  });
+
+  it("opens Themes with no run live, and for a scoping walk", () => {
+    for (const status of [undefined, null, "succeeded", "degraded", "failed"] as const) {
+      expect(sourcesLanding(status, [frame("acquire", "started")], true)).toBe("");
+    }
+    expect(sourcesLanding("running", [frame("acquire", "started")], false)).toBe("");
+  });
+
+  it("points only the Sources link at the view, keeping ?chat=, and marks the tab on every Sources view", () => {
+    const items = withSourcesLanding(
+      [
+        { tab: "result", to: "/tasks/t/result?chat=c1" },
+        { tab: "sources", to: "/tasks/t/sources?chat=c1" },
+      ],
+      "/all",
+    );
+    expect(items[0]).toEqual({ tab: "result", to: "/tasks/t/result?chat=c1" });
+    expect(items[1]).toEqual({ tab: "sources", to: "/tasks/t/sources/all?chat=c1", activePrefix: "/tasks/t/sources" });
   });
 });

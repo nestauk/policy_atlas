@@ -1,8 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Card, Divider, PaneHeading, StatusMark, type StatusTone } from "./Card";
+import { Card, Divider, LiveMark, PaneHeading, StatusMark, type StatusTone } from "./Card";
 import { NavBar, NavItem, NavLogo } from "./Nav";
 
 describe("Card family", () => {
@@ -48,7 +48,56 @@ describe("StatusMark (task 058; DESIGN.md § Status mark)", () => {
   });
 });
 
+describe("LiveMark (task 058; owner 2026-11-05: the live mark is the fold mark)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function stubReducedMotion(reduce: boolean) {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: reduce && query.includes("reduce"),
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+  }
+
+  it("is the fold mark, 14 px in a line of text and 17 px in the rail, hidden from screen readers", () => {
+    const { container, rerender } = render(<LiveMark />);
+    const mark = container.firstElementChild as HTMLElement;
+    expect(mark).toHaveAttribute("aria-hidden", "true");
+    expect(mark).toHaveStyle({ width: "14px", height: "14px" });
+    expect(mark.querySelector("svg")).toHaveAttribute("width", "14");
+    rerender(<LiveMark size={17} />);
+    expect(mark.querySelector("svg")).toHaveAttribute("width", "17");
+    // Not the square: no tone, no fill class.
+    expect(mark).not.toHaveAttribute("data-tone");
+  });
+
+  it("turns, and holds still under reduced motion", () => {
+    const frames = vi.spyOn(window, "requestAnimationFrame");
+    stubReducedMotion(false);
+    const moving = render(<LiveMark />);
+    expect(frames).toHaveBeenCalled();
+    moving.unmount();
+    frames.mockClear();
+    stubReducedMotion(true);
+    const { container } = render(<LiveMark />);
+    expect(frames).not.toHaveBeenCalled();
+    expect(container.querySelector("svg path")).not.toBeNull();
+  });
+});
+
 describe("Nav", () => {
+  it("holds the wordmark's mark still: one turning logo per screen, the run's own (owner, 2026-11-05)", () => {
+    const frames = vi.spyOn(window, "requestAnimationFrame");
+    const { container } = render(<NavLogo />);
+    expect(container.querySelector("svg g[transform]")).toBeNull();
+    expect(frames).not.toHaveBeenCalled();
+    frames.mockRestore();
+  });
+
   it("marks the active route with the growing underline", () => {
     const router = createMemoryRouter(
       [

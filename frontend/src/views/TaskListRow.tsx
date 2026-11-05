@@ -3,9 +3,9 @@ import { Link } from "react-router";
 import type { components } from "../api/gen/types";
 import { capabilityLabel } from "../lib/capabilities";
 import { Figures } from "../lib/figures";
-import { useFreshness, useNow } from "../lib/freshness";
+import { useNow } from "../lib/freshness";
 import { scrub } from "../lib/scrub";
-import { StatusMark } from "../ui/brand/Card";
+import { LiveMark, StatusMark } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { taskStatus } from "./landingPresentation";
 import { taskListRowGridClass, taskListRowGridClassWithOwner } from "./listPageChrome";
@@ -52,8 +52,6 @@ export function TaskListRow({
   const status = taskStatus(latestRun);
   const running = activeRun?.status === "running" && Boolean(activeRun.stage_label);
   const nowMs = useNow(running);
-  // The mark breathes for a moment when the polled stage changes, then rests.
-  const fresh = useFreshness(running ? (activeRun?.stage_label ?? null) : null);
   const statusLabel = running
     ? `${activeRun?.stage_label} · ${formatMinutes(elapsedSeconds(activeRun?.started_at, undefined, nowMs))}`
     : status.label;
@@ -86,7 +84,8 @@ export function TaskListRow({
         {capabilityLabel(capabilityKey)}
       </Chip>
       <span className="inline-flex min-w-0 items-center gap-1.5 text-meta text-grey">
-        <StatusMark tone={running ? "running" : status.dot} breathing={running && fresh} />
+        {/* A live run's mark is the fold mark turning (owner, 2026-11-05). */}
+        {running || status.dot === "running" ? <LiveMark /> : <StatusMark tone={status.dot} />}
         <span className="truncate" title={statusLabel}>
           <Figures text={scrub(statusLabel)} />
         </span>
