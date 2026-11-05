@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { mockProject, mockTask } from "../src/mock/fixtures";
+import { MOCK_TASK_ID, mockProject, mockTask } from "../src/mock/fixtures";
 
 /** New task → Options scoping → the question → Prepare plan, landing on the
  *  Agent tab. */
@@ -17,13 +17,9 @@ async function openScopingTask(page: Page) {
 /** A new scoping task with its baseline walk started from the plan. */
 async function startScopingWalk(page: Page) {
   await openScopingTask(page);
-  await page.getByRole("button", { name: "Review the plan" }).click();
-  const plan = page.getByRole("dialog", { name: "Scoping plan" });
-  await plan.getByRole("button", { name: "Confirm and build baseline" }).click();
-  // A started walk closes the plan (WorkspaceView's onStarted). Task 045
-  // keeps the start area mounted while a walk runs, so the close is no
-  // longer lost to a race with the stream's first frame.
-  await expect(plan).toBeHidden();
+  // The plan card starts the baseline (task 058, annex block H).
+  await page.getByRole("button", { name: "Confirm and build the baseline" }).click();
+  await expect(page.getByRole("button", { name: "Confirm and build the baseline" })).toHaveCount(0);
 }
 
 /**
@@ -124,8 +120,8 @@ test.describe("mock options-scoping baseline gate", () => {
     await expect(
       thread.getByText("Careers advice reaches the young people already in school"),
     ).toBeVisible();
-    await expect(thread.getByRole("button", { name: "Confirm plan and build longlist" })).toBeVisible();
-    await expect(thread.getByRole("button", { name: "Change the plan" })).toBeVisible();
+    await expect(thread.getByRole("radio", { name: /^Confirm plan and build longlist/ })).toBeVisible();
+    await expect(thread.getByRole("radio", { name: /^Change the plan/ })).toBeVisible();
 
     // The composer is open at the gate, not fenced.
     const composer = page.getByLabel("Message the Task Agent");
@@ -144,7 +140,7 @@ test.describe("mock options-scoping baseline gate", () => {
     await startScopingWalk(page);
 
     const thread = page.getByRole("region", { name: "Task Agent conversation" });
-    await thread.getByRole("button", { name: "Change the plan" }).click();
+    await thread.getByRole("radio", { name: /^Change the plan/ }).click();
 
     await expect(thread.getByText("recorded")).toBeVisible();
 
@@ -166,13 +162,12 @@ test.describe("mock options-scoping longlist states (task 045)", () => {
   async function buildLonglist(page: Page) {
     await startScopingWalk(page);
     const thread = page.getByRole("region", { name: "Task Agent conversation" });
-    await thread.getByRole("button", { name: "Confirm plan and build longlist" }).click();
+    await thread.getByRole("radio", { name: /^Confirm plan and build longlist/ }).click();
   }
 
-  /** While a walk runs the plan opens from the run card's See plan; once
-   *  it has finished, from Review the plan. */
+  /** The plan opens from the task nav's Plan control at any time (task 058, N15). */
   async function openPlan(page: Page) {
-    await page.getByRole("button", { name: /^(Review the plan|See plan)$/ }).first().click();
+    await page.getByRole("navigation", { name: "Task" }).getByRole("button", { name: "Plan", exact: true }).click();
   }
 
   test("the plan document says the longlist is building, then built, and the Result opens on it", async ({
@@ -197,13 +192,18 @@ test.describe("mock options-scoping longlist states (task 045)", () => {
     ).toBeVisible();
   });
 
-  test("the longlist walk's beats show in the thread", async ({ page }) => {
+  test("the longlist walk's rows show on the run card, with the server's counts", async ({ page }) => {
     await buildLonglist(page);
     const thread = page.getByRole("region", { name: "Task Agent conversation" });
-    const step = thread.getByRole("button", { name: "Suggesting options" });
-    await expect(step).toBeVisible({ timeout: 10_000 });
-    await step.click();
-    await expect(thread.getByText("Suggested 6 options · 2 from your evidence search")).toBeVisible();
+    const card = thread.getByRole("list", { name: "Stage timeline" });
+    await expect(card.getByRole("listitem").filter({ hasText: /^Suggesting options/ })).toContainText(
+      "12 suggested",
+      { timeout: 15_000 },
+    );
+    await expect(card.getByRole("listitem").filter({ hasText: /^Searching for each option/ })).toContainText(
+      "12 searches",
+      { timeout: 15_000 },
+    );
   });
 
   test("an option search (a child walk) gets no block of its own in the thread", async ({ page }) => {
@@ -234,5 +234,142 @@ test.describe("mock options-scoping longlist states (task 045)", () => {
     ).toBeVisible();
     await plan.getByRole("button", { name: "Rebuild longlist" }).click();
     await expect(plan.getByText("Building the longlist")).toBeVisible();
+  });
+});
+
+// --- Task 058 (N26): the product gate and the longlist during the build ------
+//
+// The mock plays the longlist build in about ten seconds, so a state can be on
+// screen for less than one polling interval. `watchPage` keeps every distinct
+// line the page has shown, in order, and `seen` asserts on that record.
+
+async function watchPage(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const seenLines = new Set<string>();
+    const order: string[] = [];
+    (window as unknown as { __seenLines: string[] }).__seenLines = order;
+    let queued = false;
+    const scan = () => {
+      queued = false;
+      for (const raw of document.body.innerText.split("\n")) {
+        const line = raw.trim();
+        if (line !== "" && !seenLines.has(line)) {
+          seenLines.add(line);
+          order.push(line);
+        }
+      }
+    };
+    new MutationObserver(() => {
+      if (!queued) {
+        queued = true;
+        requestAnimationFrame(scan);
+      }
+    }).observe(document, { subtree: true, childList: true, characterData: true });
+  });
+}
+
+async function seenLines(page: Page): Promise<string[]> {
+  return page.evaluate(() => (window as unknown as { __seenLines?: string[] }).__seenLines ?? []);
+}
+
+async function seen(page: Page, wanted: string | RegExp, timeout = 30_000): Promise<void> {
+  const matches = (line: string) => (typeof wanted === "string" ? line === wanted : wanted.test(line));
+  await expect
+    .poll(async () => (await seenLines(page)).some(matches), {
+      timeout,
+      message: `the page never showed ${String(wanted)}`,
+    })
+    .toBe(true);
+}
+
+/** The options read, called the way the app calls it (through the mock). */
+async function optionRowCount(page: Page): Promise<number> {
+  return page.evaluate(async (taskId) => {
+    const response = await fetch(`/api/v1/tasks/${taskId}/options`);
+    const body = (await response.json()) as { options: unknown[] };
+    return body.options.length;
+  }, MOCK_TASK_ID);
+}
+
+function taskNav(page: Page) {
+  return page.getByRole("navigation", { name: "Task" });
+}
+
+test.describe("task 058 options scoping: the gate and the longlist build", () => {
+  test("the product gate: baseline, pause, no option rows, then suggestions", async ({ page }) => {
+    await watchPage(page);
+    await startScopingWalk(page);
+
+    // The baseline runs and the walk parks on the gate, which is answerable.
+    await seen(page, "Confirm the plan against the baseline");
+    const thread = page.getByRole("region", { name: "Task Agent conversation" });
+    await expect(thread.getByRole("radio", { name: /^Confirm plan and build longlist/ })).toBeVisible();
+
+    // No option rows exist before the answer: the read is empty and the
+    // Result tab shows the baseline, not a longlist.
+    expect(await optionRowCount(page)).toBe(0);
+    await taskNav(page).getByRole("link", { name: /^Result/ }).click();
+    await expect(page.getByRole("heading", { name: "Do nothing: current policy and trajectory" })).toBeVisible();
+    await expect(page.getByText("Youth guarantee with a job or training offer")).toHaveCount(0);
+    await taskNav(page).getByRole("link", { name: /^Agent/ }).click();
+
+    // The answer continues the walk: suggestions first, then rows.
+    await thread.getByRole("radio", { name: /^Confirm plan and build longlist/ }).click();
+    await seen(page, "Suggesting options");
+    await expect.poll(() => optionRowCount(page), { timeout: 30_000 }).toBeGreaterThanOrEqual(12);
+  });
+
+  test("the scoping card counts the option searches", async ({ page }) => {
+    await watchPage(page);
+    await startScopingWalk(page);
+    await page
+      .getByRole("region", { name: "Task Agent conversation" })
+      .getByRole("radio", { name: /^Confirm plan and build longlist/ })
+      .click();
+    await seen(page, /^\d+ of 12 searches done · [\d,]+ sources so far$/);
+  });
+
+  test("the longlist while it builds: rows search, fold, fill, group, and the strip announces it", async ({
+    page,
+  }) => {
+    await watchPage(page);
+    await startScopingWalk(page);
+    const thread = page.getByRole("region", { name: "Task Agent conversation" });
+    await expect(thread.getByRole("radio", { name: /^Confirm plan and build longlist/ })).toBeVisible();
+    await thread.getByRole("radio", { name: /^Confirm plan and build longlist/ }).click();
+    await taskNav(page).getByRole("link", { name: /^Result/ }).click();
+
+    // The stage line walks the build, with the server's words after the label.
+    await seen(page, /^Searching for each option · \d+ of 12 searches done · [\d,]+ sources so far$/);
+    await seen(page, /^Reading the abstracts · [\d,]+ of [\d,]+ abstracts read$/);
+    await seen(page, /^Clustering into options/);
+    await seen(page, /^Writing what each option would take/);
+    await seen(page, /^Applying your constraints/);
+    await seen(page, /^Grouping into themes/);
+    await seen(page, /^Shortlisting/);
+
+    // Rows: queued and searching while the fan-out runs, then a found count.
+    await seen(page, "Queued");
+    await seen(page, "Searching");
+    await seen(page, /^Searched · \d+ found$/);
+    // Clustering folds one row under another and adds two from the evidence.
+    await seen(page, /^Folded into Youth hubs co-located with Jobcentre Plus$/);
+    await seen(page, /found in the evidence$/);
+    await seen(page, /^Excluded · 2$/);
+
+    // The list carries no qualifier word, and the view then takes over.
+    const lines = await seenLines(page);
+    expect(lines.filter((line) => /provisional/i.test(line))).toEqual([]);
+    await expect(page.getByText("Longlist", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Shortlist", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("the strip reads The longlist is ready once the build ends", async ({ page }) => {
+    await startScopingWalk(page);
+    const thread = page.getByRole("region", { name: "Task Agent conversation" });
+    await expect(thread.getByRole("radio", { name: /^Confirm plan and build longlist/ })).toBeVisible();
+    await thread.getByRole("radio", { name: /^Confirm plan and build longlist/ }).click();
+    await taskNav(page).getByRole("link", { name: /^Sources/ }).click();
+    await expect(page.getByText("The longlist is ready · Read it →")).toBeVisible({ timeout: 40_000 });
   });
 });

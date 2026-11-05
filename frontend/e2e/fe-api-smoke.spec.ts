@@ -54,7 +54,7 @@ test.describe.serial("@fe-api-smoke built frontend against real API", () => {
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByLabel("Message the Task Agent").fill("landscape only");
     await page.getByRole("button", { name: "Send" }).click();
-    await page.getByRole("button", { name: "Start search" }).click();
+    await page.getByRole("button", { name: "Start the search" }).click();
 
     // "Searching" is the acquire stage — the one component every stub plan
     // starts with. Labels come from the plan-panel vocabulary, not SSE copy.

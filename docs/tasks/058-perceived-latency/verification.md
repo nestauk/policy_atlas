@@ -4,7 +4,7 @@ Evidence for one slice. Filled during the build (task-cycle-build, steps 5 and 6
 review stack adds **Review findings** and **Rubric status** at step 7. Public-safe: no
 secrets, no raw source text, no unredacted traces.
 
-> Status: **build in progress** (opened 2026-11-05 in a fresh conversation on plan Phase 0; backend Phases 0 to 4 committed the same day).
+> Status: **Phases 0 to 9 built and committed (2026-11-05); the build pauses at two owner gates.** (1) Phase 10, the polish cycle: the agent pass and up to three owner rounds on the live dev app, in their own conversation (D11). (2) Phase 11, the measures: the four fixed questions before and after on the laptop, and the staging baseline (P16), each a real run whose cost the owner approves (plan Phase 0). Step 6's exit (the measures, the Luna strict check, the polish log, live-dev screenshots) follows those; the review stack then runs in a fresh conversation. Everything deterministic is done: every need N1 to N24 and N26 is implemented and tested; `make verify` and the mock journeys are green at `HEAD`.
 
 ## Commands run
 
@@ -20,17 +20,51 @@ secrets, no raw source text, no unredacted traces.
 
 | Phases 6 to 8, surfaces (2026-11-05) | `make verify-fast` (backend test-fast, typecheck, lint, eval-check); `pnpm typecheck && pnpm exec eslint src e2e/<the four specs> && pnpm test && pnpm build`; `make drift-check` | pass | backend 4219 passed, 1 skipped (after two option-profile tests learned to skip verb lines); frontend 1064 tests in 93 files, build OK, `drift-check: OK`. The lint lane was run on `src` and the four committed specs because the Phase 9 agent's scratch `e2e/probe.spec.ts` was in the tree at that moment (deleted before Phase 9's gate). |
 
-(Later gates are appended as each phase closes.)
+| Phase 9, journeys (2026-11-05) | `make verify && cd frontend && pnpm e2e` | pass | **First fully green `make verify` on the branch:** backend 4257 passed, 1 skipped (7 min 59 s); mypy clean; ruff clean; prompt-guard 41 unchanged; infra 113; `drift-check: OK`; frontend 1064 tests in 93 files, build OK; Playwright 33 passed (1.1 min). |
+
+(The step-6 exit gate is the same command after the owner-gated phases; see § Status.)
 
 ## Checks beyond the build
 
 - **Deterministic tests** — per phase, listed with the gate row.
-- **Manual / browser / API** — the live-dev checks, the fixed-question captures and the
-  screenshots are recorded in § End-to-end and § N25 measures.
+- **Manual / browser / API** — `make fe-api-smoke` (2026-11-05): 3 passed in 5.5 s against a
+  real local API in stub mode (the authenticated task list; a task created through the real
+  POST; a stub run started and its progress rendered from the real SSE tail with the new tick
+  and frame shapes). The fixed-question captures and the live-dev screenshots are in § N25
+  measures and § Polish log (owner-gated).
 
 ## End-to-end command
 
-To be filled at step 6.
+The live check at the contracted scope (changed surfaces plus one cheap full-chain smoke):
+
+```
+make fe-api-smoke
+```
+
+(the built frontend against a real local API in stub mode: the task list, a real task POST,
+a stub run and its progress rendered from the real SSE tail with the new frames). The fixed
+questions on the laptop with the capture client are the N25 measure and need the owner's go on
+cost (plan Phase 0 and Phase 11); the command, once approved:
+
+```
+cd backend && uv run python -m policy_atlas.api.dev_issuer mint --dir <issuer dir> --sub <sub> --client-id policy-atlas-dev --ttl 7200
+uv run --project backend python scripts/stream_capture.py --task-id <task> --token-env PA_TOKEN --out research/captures/<name>.jsonl --until-terminal
+uv run --project backend python scripts/stage_walls.py --capture research/captures/<name>.jsonl --healthy true --format md
+```
+
+## N25 measures
+
+Not yet run: the four fixed questions before and after (laptop) and the staging baseline
+(P16) each run real model calls and were gated on the owner's go at plan time. The capture
+tool and the gap measure are built and tested (Phase 0). The "before" captures must run on
+`dev` (the old tick shape, mapped by the capture client), the "after" on this branch.
+
+## Polish log (D11)
+
+Not yet started: the agent pass and the owner pass run in their own conversation against the
+live dev app (`make dev`), after the owner's go on the live runs that give the app transient
+states to polish. The frontend passes' open proposals (§ Review handoff) are the agent pass's
+first input.
 
 ## Diff summary
 
@@ -44,11 +78,24 @@ Filled per phase as it lands; the flagged deviations are in § Review handoff.
 
 ## Known unverified items
 
-To be filled.
+- No run of either capability has been watched on the live app with the new code; every
+  surface is verified by unit tests, the mock journeys and screenshots of the mock. The first
+  live runs are the N25 "after" runs.
+- The strict `json_schema` final turn was proven on Terra in research (probe 4); the build-time
+  Luna check (D1) has not run (no live call yet in this phase).
+- The Codex spend cap means no Codex family-flip review happened in the build; conversation C's
+  adversarial lane covers it if the cap is lifted.
+- The `#000` design-hook findings in `frontend/src/index.css` are the pre-existing print
+  stylesheet (black ink); the ignore could not be persisted from this session (permission
+  denied) and is disclosed instead.
 
 ## Public safety
 
-To be filled.
+No secrets, no raw source text and no model output in this file or the commits. The research
+folder (briefs, screenshots, captures) is gitignored. Ticks carry the model's search query
+text, derived from the user's question: it goes only to the task's authenticated stream,
+normalised and bounded at 120 characters, never to a log line (`normalise_query`, and the
+writer's publisher never logs it).
 
 ## Review handoff (step-7/8 inputs)
 
@@ -72,6 +119,7 @@ To be filled.
 | P | Result tab before and while writing; the sidebar | frontend-designer | frontend-designer | done: 143 tests; `SidebarRun.tsx`; screenshots of every state (round 1 and 2). Lead after: three copy fixes (ended-early line, "just now", the tail shows the activity only). |
 | Q | planning conversation and check-ins (N9, N10, N18, N19, N20) | frontend-designer | frontend-designer | done: 956 tests across views, store and api; the turn stream reader, `planEdits.ts`, `Button variant="start"`, `LABEL_CLASS`; screenshots of scenes 10 to 12. Lead after: the server's check-in render starts with its question (`CHECK_IN_QUESTIONS`), and the client titles the card with it. |
 | R | the longlist during the build (N24) | frontend-designer | frontend-designer | done: 174 tests; `LonglistBuilding`, `useOptions`; no screenshots (two mock gaps, fixed by the follow-up to N). Lead after: the clustering note comes from the server tick. |
+| S | the mock journeys (N26 second half) | fast-worker | fast-worker | done: 31 Playwright tests pass (`pnpm exec playwright test e2e/journey.spec.ts e2e/scoping.spec.ts`, 1.1 min); scenarios selected by an init script that appends `mockScenario=` to the `/events` request; transient states asserted from a record of every distinct line the page showed. Mock gaps (private fixture, not product): the mock always serves a committed report so the early Result tab is tested with a shimmed 404; a literal reload resets the mock world, so the reload case asserts what a reconnect sees under `reload-mid-section`; the mock skeleton has two sections and no key-findings slot, so the footer and key-findings states are unit-tested only; no part cards on the mock's scoping task; the mock's check-in facts line still says "2 rounds". |
 | L | task-list stage, options read | codex | deep-reasoner (cap) | done; the `LatestRun.model_rebuild` workaround for the `StageKey` import cycle was replaced by the lead: `StageKey`/`STAGE_KEYS` now live in `contract/common.py` and are re-exported |
 
 **Executor substitution (memory rule, owner 2026-07-09):** the Codex workspace spend cap was

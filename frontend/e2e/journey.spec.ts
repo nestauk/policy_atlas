@@ -26,6 +26,9 @@ const SUGGESTED_OPTION_LABEL = (mockCheckIn.options ?? []).find(
 )?.label;
 if (!SUGGESTED_OPTION_LABEL) throw new Error("fixture check-in has no suggested option");
 
+/** The check-in's question as the mock's render carries it. */
+const CHECK_IN_QUESTION = "Does this look right before I assess the sources?";
+
 const CITED_SOURCE_TITLE = "Universal breakfast clubs and diet quality";
 const CITATION_QUOTE = "Breakfast participation increased when provision was universal.";
 
@@ -59,10 +62,10 @@ async function openWorkspaceFromLanding(page: Page): Promise<void> {
  *  lifecycle only opens once a run has finished. */
 async function driveRunToSuccess(page: Page): Promise<void> {
   await openWorkspaceFromLanding(page);
-  await page.getByRole("button", { name: "Start search" }).click();
-  await expect(page.getByText("Waiting on your input")).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: SUGGESTED_OPTION_LABEL }).click();
-  await expect(page.getByText("Waiting on your input")).toHaveCount(0);
+  await page.getByRole("button", { name: "Start the search" }).click();
+  await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("radio", { name: new RegExp(`^${SUGGESTED_OPTION_LABEL}`) }).click();
+  await expect(page.getByText(CHECK_IN_QUESTION)).toHaveCount(0);
   await expect(runCompletionLink(page)).toBeVisible({ timeout: 15_000 });
 }
 
@@ -140,30 +143,30 @@ test.describe("mock task-lifecycle journey", () => {
     // the ✓ confirm recorded via turn 2's canned marker message — the raw
     // marker text never leaks as a visible bubble — and turn 2's scope part
     // is still live, with its editable constraint chips and confirm options.
-    await expect(page.getByText("✓ Confirmed")).toBeVisible();
+    await expect(page.getByText("Question · That's my question · Change")).toBeVisible();
     await expect(page.getByText("[confirm part=question option=confirm]")).toHaveCount(0);
     await expect(page.getByText("UK primary")).toBeVisible();
     await expect(page.getByText("Since 2016")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Looks right" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Add or change a constraint" })).toBeVisible();
+    await expect(page.getByRole("radio", { name: /^Looks right/ })).toBeVisible();
+    await expect(page.getByRole("radio", { name: /^Add or change a constraint/ })).toBeVisible();
 
     // (f) The ready plan is two actions at the foot of the thread — review
     // in the side panel, or start. Locked-vocabulary labels live in the panel,
     // not in an expandable card in the chat.
     await expect(page.getByRole("button", { name: "Review the plan" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Start search" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Start the search" })).toBeVisible();
 
     // (g) Start the analysis — the workspace stays a single-column chat.
     // Progress is a green running card in the thread (not a right-hand
     // analysing pane). The mock races through every pre-synthesise stage
     // with no artificial delay, straight to the paused check-in (see step
     // (h)), so the card's paused heading and stage list are the robust checks.
-    await page.getByRole("button", { name: "Start search" }).click();
+    await page.getByRole("button", { name: "Start the search" }).click();
     const runCard = page.getByRole("region", { name: "Analysis run" });
     await expect(runCard).toBeVisible({ timeout: 15_000 });
     const timeline = page.getByRole("list", { name: "Stage timeline" });
-    await expect(timeline.getByText("Searching")).toBeVisible({ timeout: 15_000 });
-    await expect(timeline.getByText("Writing")).toBeVisible({ timeout: 15_000 });
+    await expect(timeline.getByText("Searching and screening").first()).toBeVisible({ timeout: 15_000 });
+    await expect(timeline.getByRole("listitem").filter({ hasText: /^Writing/ })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("link", { name: /Sources are ready/ })).toBeVisible();
     await expect(runCard.getByRole("link", { name: /Sources are ready/ })).toHaveCount(0);
     await expect(page.getByRole("region", { name: "Analysis progress" })).toHaveCount(0);
@@ -173,34 +176,40 @@ test.describe("mock task-lifecycle journey", () => {
     // salience) — the running card's heading changes. While paused,
     // Results is open so the in-progress write-up is reachable; Share and
     // Sources stay open; Plan/History stay open.
-    await expect(page.getByText("Waiting on your input")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(mockCheckIn.render)).toBeVisible();
-    await expect(runCard.getByRole("heading", { name: "Paused — waiting on you" })).toBeVisible();
+    await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("check-in-facts")).toContainText("312 sources · 118 relevant");
+    await expect(runCard.getByText(/^paused$/i)).toBeVisible();
 
     for (const label of ["Agent", "Result", "Sources", "Share", "History"]) {
-      await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();
+      await expect(nav.getByRole("link", { name: new RegExp(`^${label}`) })).toBeVisible();
     }
 
     // Answering the suggested option collapses the card to the "Answered" echo.
-    const suggestedButton = page.getByRole("button", { name: SUGGESTED_OPTION_LABEL });
-    await expect(suggestedButton).toBeVisible();
-    await suggestedButton.click();
-    await expect(page.getByText("Waiting on your input")).toHaveCount(0);
-    await expect(page.getByText("Answered")).toBeVisible();
+    const suggestedChoice = page.getByRole("radio", { name: new RegExp(`^${SUGGESTED_OPTION_LABEL}`) });
+    await expect(suggestedChoice).toBeVisible();
+    await suggestedChoice.click();
+    await expect(page.getByText(CHECK_IN_QUESTION)).toHaveCount(0);
+    await expect(page.getByText(/^You chose: /)).toBeVisible();
 
     // (i) The run has now reached "succeeded" — all five stages open. The
     // completion card's "Read the report" link is also on the page,
     // pointing at `/result`.
     await expect(runCompletionLink(page)).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole("button", { name: "See plan" })).toBeVisible();
+    // The plan is one click from the task nav; Escape closes it (task 058, N15).
+    await expect(page.getByRole("button", { name: "See plan" })).toHaveCount(0);
+    const planControl = nav.getByRole("button", { name: "Plan", exact: true });
+    await planControl.click();
+    await expect(planControl).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("Escape");
+    await expect(planControl).toHaveAttribute("aria-expanded", "false");
     for (const label of ["Agent", "Result", "Sources", "Share", "History"]) {
-      await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();
+      await expect(nav.getByRole("link", { name: new RegExp(`^${label}`) })).toBeVisible();
     }
 
     // (j) Result: the committed A4 report. The tab is reachable while
     // writing is in progress; a finished run must not replay the in-progress
     // view.
-    await nav.getByRole("link", { name: "Result", exact: true }).click();
+    await nav.getByRole("link", { name: /^Result/ }).click();
     await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/result$`));
     await expect(page.locator(".artefact-page")).toBeVisible();
     await expect(page.getByRole("heading", { name: "What appears to help" })).toBeVisible();
@@ -252,7 +261,7 @@ test.describe("mock task-lifecycle journey", () => {
     // (k) Sources: Themes is the index subview; Findings and All sources are
     // reached through the Sources layout's own subnav (task 032 folded the
     // old flat "Findings"/"Sources" tabs under one Sources stage).
-    await nav.getByRole("link", { name: "Sources", exact: true }).click();
+    await nav.getByRole("link", { name: /^Sources/ }).click();
     await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/sources$`));
     await expect(page.getByText("School food environments")).toBeVisible();
 
@@ -371,9 +380,9 @@ test.describe("mock task-lifecycle journey", () => {
     await openWorkspaceFromLanding(page);
     // Pre-run: the centred single-column chat, not the two-pane layout — no
     // rail or right-hand pane exists until a run starts.
-    await expect(page.getByRole("button", { name: "Start search" })).toBeVisible();
-    await page.getByRole("button", { name: "Start search" }).click();
-    await expect(page.getByText("Waiting on your input")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "Start the search" })).toBeVisible();
+    await page.getByRole("button", { name: "Start the search" }).click();
+    await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
 
     expect(pageErrors).toEqual([]);
   });
@@ -401,7 +410,7 @@ test.describe("mock task-lifecycle journey", () => {
 
       // Start a run: the workspace stays a single column (no analysing pane,
       // no rail). The running card is the progress surface.
-      await page.getByRole("button", { name: "Start search" }).click();
+      await page.getByRole("button", { name: "Start the search" }).click();
       await expect(page.getByRole("region", { name: "Analysis run" })).toBeVisible({ timeout: 15_000 });
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -413,7 +422,7 @@ test.describe("mock task-lifecycle journey", () => {
   // (q) The running card's Minimise control is keyboard-operable.
   test("keyboard: the running card minimises via Enter and restores via Space", async ({ page }) => {
     await openWorkspaceFromLanding(page);
-    await page.getByRole("button", { name: "Start search" }).click();
+    await page.getByRole("button", { name: "Start the search" }).click();
     const minimise = page.getByRole("button", { name: "Minimise" });
     await expect(minimise).toBeVisible({ timeout: 15_000 });
     await minimise.focus();
@@ -435,13 +444,13 @@ test.describe("mock task-lifecycle journey", () => {
   // observe the banner from elsewhere.
   test("paused run: the cross-tab banner appears on other tabs while a check-in waits", async ({ page }) => {
     await openWorkspaceFromLanding(page);
-    await page.getByRole("button", { name: "Start search" }).click();
-    await expect(page.getByText("Waiting on your input")).toBeVisible({ timeout: 15_000 });
+    await page.getByRole("button", { name: "Start the search" }).click();
+    await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
 
     await lifecycleNav(page).getByRole("link", { name: "History", exact: true }).click();
-    await expect(
-      page.getByText("The analysis is paused — a check-in is waiting on you"),
-    ).toBeVisible();
+    // The run strip carries the pause (task 058, N12); there is no banner.
+    await expect(page.getByText("Paused · a check-in is waiting on you")).toBeVisible();
+    await expect(page.getByText("The analysis is paused — a check-in is waiting on you")).toHaveCount(0);
   });
 
   // (s) Task 029 chat leg: from the completed results page, open a chat via
@@ -583,10 +592,309 @@ test.describe("mock task-lifecycle journey", () => {
   test("below the lg breakpoint, the running card is the progress surface", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 900 });
     await openWorkspaceFromLanding(page);
-    await page.getByRole("button", { name: "Start search" }).click();
+    await page.getByRole("button", { name: "Start the search" }).click();
     await expect(page.getByRole("region", { name: "Analysis run" })).toBeVisible({
       timeout: 15_000,
     });
     await expect(page.getByRole("button", { name: "Collapse the Task Agent rail" })).toHaveCount(0);
+  });
+});
+
+// --- Task 058 (N26): the annex's states, asserted against the mock ----------
+//
+// The mock plays the run in a few seconds, so a state can be on screen for
+// well under one polling interval of `expect`. `watchPage` therefore keeps
+// every distinct line the page has shown, in order; `seen` asserts on that
+// record. The mock reads its scenario from the `/events` request's query
+// string, which the app's own stream client never sets, so `useScenario`
+// adds it on the way to the mock (the mock installs its fetch at start-up,
+// so a Playwright route cannot see these calls).
+
+type Scenario = "default" | "paused" | "failed-partial" | "reload-mid-section" | "paused-strip";
+
+/** Select the mock's scenario for the `/events` request. */
+async function useScenario(page: Page, scenario: Scenario): Promise<void> {
+  await page.addInitScript((name) => {
+    let inner: typeof fetch = window.fetch.bind(window);
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      get() {
+        return ((input: RequestInfo | URL, init?: RequestInit) => {
+          const url = input instanceof Request ? input.url : String(input);
+          if (url.includes("/events")) {
+            return inner(`${url}${url.includes("?") ? "&" : "?"}mockScenario=${name}`, init);
+          }
+          return inner(input as RequestInfo, init);
+        }) as typeof fetch;
+      },
+      set(next: typeof fetch) {
+        inner = next;
+      },
+    });
+  }, scenario);
+}
+
+/** Record every distinct line the page shows, in the order first seen. */
+async function watchPage(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const seenLines = new Set<string>();
+    const order: string[] = [];
+    (window as unknown as { __seenLines: string[] }).__seenLines = order;
+    let queued = false;
+    const scan = () => {
+      queued = false;
+      for (const raw of document.body.innerText.split("\n")) {
+        const line = raw.trim();
+        if (line !== "" && !seenLines.has(line)) {
+          seenLines.add(line);
+          order.push(line);
+        }
+      }
+    };
+    new MutationObserver(() => {
+      if (!queued) {
+        queued = true;
+        requestAnimationFrame(scan);
+      }
+    }).observe(document, { subtree: true, childList: true, characterData: true });
+  });
+}
+
+async function seenLines(page: Page): Promise<string[]> {
+  return page.evaluate(() => (window as unknown as { __seenLines?: string[] }).__seenLines ?? []);
+}
+
+/** Wait until a line matching `wanted` has been on the page at some point. */
+async function seen(page: Page, wanted: string | RegExp, timeout = 20_000): Promise<void> {
+  const matches = (line: string) => (typeof wanted === "string" ? line === wanted : wanted.test(line));
+  await expect
+    .poll(async () => (await seenLines(page)).some(matches), {
+      timeout,
+      message: `the page never showed ${String(wanted)}`,
+    })
+    .toBe(true);
+}
+
+async function neverSeen(page: Page, unwanted: RegExp): Promise<void> {
+  expect((await seenLines(page)).filter((line) => unwanted.test(line))).toEqual([]);
+}
+
+function taskNav(page: Page) {
+  return page.getByRole("navigation", { name: "Task" });
+}
+
+async function startRun(page: Page): Promise<void> {
+  await openWorkspaceFromLanding(page);
+  await page.getByRole("button", { name: "Start the search" }).click();
+}
+
+async function answerCheckIn(page: Page): Promise<void> {
+  await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("radio", { name: new RegExp(`^${SUGGESTED_OPTION_LABEL}`) }).click();
+}
+
+test.describe("task 058 live run states (annex scenes, evidence search)", () => {
+  test("scene 1: the running card, one row per step, counts in the line under it", async ({ page }) => {
+    await watchPage(page);
+    await startRun(page);
+
+    const timeline = page.getByRole("list", { name: "Stage timeline" });
+    await expect(timeline.getByRole("listitem").first()).toContainText("Searching and screening", { timeout: 15_000 });
+    await seen(page, /^searching · \d+ found so far$/);
+    await seen(page, /^screening \d+ new abstracts · \d+ relevant so far$/);
+
+    // At the check-in the done row carries its counts and link; upcoming
+    // rows are names only, in plan order.
+    await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("312 found · 118 relevant")).toBeVisible();
+    const rows = await timeline.getByRole("listitem").allInnerTexts();
+    const order = ["Searching and screening", "Categorising", "Mapping", "Writing"].map((label) =>
+      rows.findIndex((row) => row.startsWith(label)),
+    );
+    expect(order).toEqual([0, 1, 2, 3]);
+    for (const upcoming of ["Categorising", "Mapping", "Writing"]) {
+      const row = rows.find((text) => text.startsWith(upcoming)) ?? "";
+      expect(row).not.toContain("·");
+      expect(row).not.toMatch(/\d/);
+    }
+
+    await answerCheckIn(page);
+    await seen(page, /^\d+ of 118 categorised$/);
+    await seen(page, /Assigning themes · batch \d of 3/);
+    await expect(runCompletionLink(page)).toBeVisible({ timeout: 20_000 });
+
+    await neverSeen(page, /Round \d/i);
+    await neverSeen(page, /Shortlist →/);
+  });
+
+  test("scene 5: the Result tab before writing is the question and one sentence", async ({ page }) => {
+    // The mock always serves a committed report, which would take the
+    // page over; answer "no report yet" the way the server does.
+    await page.addInitScript(() => {
+      let inner: typeof fetch = window.fetch.bind(window);
+      Object.defineProperty(window, "fetch", {
+        configurable: true,
+        get() {
+          return ((input: RequestInfo | URL, init?: RequestInit) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (new URL(url, window.location.origin).pathname.endsWith("/artefact")) {
+              return Promise.resolve(
+                new Response(JSON.stringify({ error: { code: "not_found", message: "No report yet." } }), {
+                  status: 404,
+                  headers: { "Content-Type": "application/json" },
+                }),
+              );
+            }
+            return inner(input as RequestInfo, init);
+          }) as typeof fetch;
+        },
+        set(next: typeof fetch) {
+          inner = next;
+        },
+      });
+    });
+    await startRun(page);
+    await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
+    await taskNav(page).getByRole("link", { name: /^Result/ }).click();
+
+    await expect(page.getByRole("heading", { name: mockTask.question ?? "" })).toBeVisible();
+    await expect(page.getByText("The report's sections are set out when writing begins.")).toBeVisible();
+    await expect(page.getByText("Preparing your results")).toHaveCount(0);
+  });
+
+  test("scene 6: the Result tab while writing streams the prose, then settles it", async ({ page }) => {
+    await watchPage(page);
+    await startRun(page);
+    await answerCheckIn(page);
+    await taskNav(page).getByRole("link", { name: /^Result/ }).click();
+
+    await expect(page.getByRole("heading", { name: mockTask.question ?? "" })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("heading", { name: "What appears to help" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Implications for local action" })).toBeVisible();
+    // The action line, then the streamed prose growing, then the check.
+    await seen(page, "Looking for: evidence on subsidy uptake among low-income households");
+    await seen(page, "Checking claims");
+    await seen(page, "Revising 1 claim");
+    await seen(page, /walking bus saw 6 more children arrive on foot in every 100\.$/, 30_000);
+
+    const growing = (await seenLines(page)).filter((line) => line.startsWith("Pair school food action with"));
+    expect(new Set(growing.map((line) => line.length)).size).toBeGreaterThan(3);
+
+    // Nothing marks a section as revised once it is done.
+    await neverSeen(page, /being revised|^revised$/i);
+    await expect(page.getByText("Report ready")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Read the full report" })).toBeVisible();
+  });
+
+  test("scene 7: the run strip on Sources runs, then pauses, then reads Report ready", async ({ page }) => {
+    await watchPage(page);
+    await startRun(page);
+    await expect(page.getByRole("region", { name: "Analysis run" })).toBeVisible({ timeout: 15_000 });
+    await taskNav(page).getByRole("link", { name: /^Sources/ }).click();
+    await seen(page, /^Searching and screening · .*· \d+ s$/);
+
+    // Answer from the sidebar, then watch the strip to the end.
+    await expect(page.getByText("Paused · a check-in is waiting on you")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Go to the check-in")).toHaveCount(0);
+    await page.getByRole("button", { name: "Open the Agent" }).click();
+    const sidebar = page.getByRole("complementary", { name: "Agent" });
+    await sidebar.getByRole("radio", { name: new RegExp(`^${SUGGESTED_OPTION_LABEL}`) }).click();
+    await expect(page.getByText("Report ready · Read it →")).toBeVisible({ timeout: 30_000 });
+    await seen(page, /^Writing · Section \d of \d/);
+  });
+
+  test("scene 7: the strip reads Paused while a check-in waits, with no banner", async ({ page }) => {
+    await useScenario(page, "paused-strip");
+    await startRun(page);
+    await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
+    await taskNav(page).getByRole("link", { name: "History", exact: true }).click();
+
+    await expect(page.getByText("Paused · a check-in is waiting on you")).toBeVisible();
+    await expect(page.getByText("Go to the check-in")).toHaveCount(0);
+    await expect(page.getByText("The analysis is paused — a check-in is waiting on you")).toHaveCount(0);
+  });
+
+  test("scene 8: a reconnect mid-section shows the prose so far at once", async ({ page }) => {
+    // The mock keeps its world in the page, so a literal `page.reload()`
+    // would restart the task. This scenario is what the stream sends a
+    // reconnecting page: the durable frames at once, then the first half of
+    // the section's prose in one `replace`, then the rest.
+    await useScenario(page, "reload-mid-section");
+    await watchPage(page);
+    await startRun(page);
+    await taskNav(page).getByRole("link", { name: /^Result/ }).click();
+
+    await seen(page, /^Pair school food action with/, 20_000);
+    const lines = (await seenLines(page)).filter((line) => line.startsWith("Pair school food action with"));
+    expect(lines[0].length).toBeGreaterThan(80);
+    await seen(page, /walking bus saw 6 more children arrive on foot in every 100\.$/, 30_000);
+  });
+
+  test("scene 14: a section landing marks Result, visiting clears it, the title announces the report", async ({
+    page,
+  }) => {
+    await startRun(page);
+    await answerCheckIn(page);
+    const nav = taskNav(page);
+    await nav.getByRole("link", { name: /^Sources/ }).click();
+
+    await expect(nav.getByRole("link", { name: /^Result New content/ })).toBeVisible({ timeout: 30_000 });
+    await nav.getByRole("link", { name: /^Result/ }).click();
+    await expect(nav.getByRole("link", { name: "Result", exact: true })).toBeVisible();
+    await nav.getByRole("link", { name: /^Sources/ }).click();
+    await expect(page).toHaveTitle(/^● Report ready/, { timeout: 30_000 });
+  });
+
+  test("scene 13: the sidebar is the same agent, with the check-in answerable in it", async ({ page }) => {
+    await useScenario(page, "paused-strip");
+    await startRun(page);
+    await expect(page.getByRole("region", { name: "Analysis run" })).toBeVisible({ timeout: 15_000 });
+    await taskNav(page).getByRole("link", { name: /^Sources/ }).click();
+    await page.getByRole("button", { name: "Open the Agent" }).click();
+
+    const sidebar = page.getByRole("complementary", { name: "Agent" });
+    await expect(sidebar.getByText("Task Agent").first()).toBeVisible();
+    await expect(sidebar.getByPlaceholder("Replanning unlocks when this run finishes.")).toBeDisabled();
+    await expect(sidebar.getByText("Paused · check-in after searching and screening")).toBeVisible({ timeout: 15_000 });
+    await expect(sidebar.getByText(CHECK_IN_QUESTION)).toBeVisible();
+    const choice = sidebar.getByRole("radio", { name: new RegExp(`^${SUGGESTED_OPTION_LABEL}`) });
+    await choice.click();
+    await expect(choice).toBeChecked();
+  });
+
+  test("scene 11: the planning conversation streams, one step at a time", async ({ page }) => {
+    await watchPage(page);
+    await page.goto("/new");
+    await page.getByRole("button", { name: /Evidence search/ }).click();
+    await page
+      .getByLabel("Your question")
+      .fill("What works to raise take-up of free childcare places among low-income families?");
+    await page.getByRole("button", { name: "Start", exact: true }).click();
+
+    // The reply grows before its card appears; "Drafting the plan" holds the place.
+    await seen(page, "Drafting the plan");
+    await seen(page, "I can search for this. First, is the question as you want it, or do you want to narrow it?");
+    const growing = (await seenLines(page)).filter((line) => "I can search for this. First, is the question as you want it, or do you want to narrow it?".startsWith(line) && line.length > 5);
+    expect(growing.length).toBeGreaterThan(2);
+
+    await expect(page.getByText("Plan · step 1 of 3 · Question")).toBeVisible();
+    await expect(page.getByRole("radio", { name: /^That's my question/ })).toBeVisible();
+    await expect(page.getByText("Recommended")).toHaveCount(0);
+    await expect(page.getByText("Drafting the plan")).toHaveCount(0, { timeout: 15_000 });
+
+    await page.getByRole("radio", { name: /^That's my question/ }).click();
+    await expect(page.getByText("Question · That's my question · Change")).toBeVisible();
+    await expect(page.getByText("Plan · step 2 of 3 · Scope")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "Start the search" })).toBeVisible();
+  });
+
+  test("scene 12: the check-in reads as a question, with one way to stop", async ({ page }) => {
+    await startRun(page);
+    await expect(page.getByRole("heading", { name: CHECK_IN_QUESTION })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "Stop the run" })).toHaveCount(1);
+    await expect(page.getByText("Waiting on your input")).toHaveCount(0);
+
+    await page.getByRole("radio", { name: new RegExp(`^${SUGGESTED_OPTION_LABEL}`) }).click();
+    await expect(page.getByText(/^You chose: .* · /)).toBeVisible();
   });
 });
