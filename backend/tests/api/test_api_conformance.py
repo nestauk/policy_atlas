@@ -27,6 +27,16 @@ from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import capability_run, evidence_scope
 from tests.api.resource_support import api_client, create_task
 
+
+@pytest.fixture(autouse=True)
+def _migrated(engine: Engine) -> None:
+    """Run the migrations on this worker's database before any request hits it.
+
+    Each pytest worker gets its own empty database (task 056); only the ``engine``
+    fixture migrates it, so a test that skips it would hit missing tables.
+    """
+    del engine
+
 # Routes that intentionally sit outside the bearer-token boundary: process
 # liveness/readiness probes, checked before any agent or auth I/O.
 # `/api/v1/waitlist` is the splash-page Request-access intake — the first

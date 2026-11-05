@@ -33,7 +33,7 @@ class _Client:
 def test_the_judge_call_carries_the_step_s_effort_and_timeout() -> None:
     client = _Client()
     backend = OpenAITocBackend.__new__(OpenAITocBackend)
-    backend._client = client
+    backend._client = client  # type: ignore[assignment]
     backend._langfuse_client = None
     backend._session_id = None
     backend.judge(

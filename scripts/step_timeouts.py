@@ -122,6 +122,8 @@ AGENT = "runtime/agent_backend.py"
 TASK_AGENT = "runtime/task_agent.py"
 TASK_AGENT_SCOPING = "runtime/task_agent_scoping.py"
 SCOPING = "options_scoping/scoping_backend.py"
+TOC = "theory_of_change/backend.py"
+TASK_AGENT_TOC = "runtime/task_agent_toc.py"
 
 # Every traced model call site, read from the code on 2026-11-03 (task 057 Phase 0).
 # Module paths are under backend/src/policy_atlas; the timeout is the one passed to
@@ -200,6 +202,23 @@ SITES: tuple[Site, ...] = (
     Site("option_profile:setting", "option_profile_setting", 60, SCOPING),
     Site("option_profile:fold", "option_profile_fold", 60, SCOPING),
     Site("option_profile:place_sentences", "option_profile_place_sentences", 60, SCOPING),
+    # --- Theory of change (task 054): one client, the timeout read from the route file;
+    # the observation is built as f"toc:{step without toc_}" in backend.py ---
+    Site("toc:draft", "toc_draft", 300, TOC),
+    Site("toc:discover", "toc_discover", 300, TOC),
+    Site("toc:merge", "toc_merge", 300, TOC),
+    Site("toc:pick", "toc_pick", 300, TOC),
+    Site("toc:judge", "toc_judge", 300, TOC),
+    Site("toc:figures", "toc_figures", 300, TOC),
+    Site("toc:choose", "toc_choose", 300, TOC),
+    Site("toc:summarise", "toc_summarise", 300, TOC),
+    Site("toc:review", "toc_review", 300, TOC),
+    Site("toc:sense_check", "toc_sense_check", 300, TOC),
+    Site("toc:verdict", "toc_verdict", 300, TOC),
+    Site("toc:import", "toc_import", 300, TOC),
+    Site("toc:report", "toc_report", 300, TOC),
+    # the ToC profile runs on the same OpenAITaskAgentBackend client (runtime/task_agent.py)
+    Site("task_agent_toc:turn", "task_agent_toc", 180, TASK_AGENT_TOC),
 )
 
 
