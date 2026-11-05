@@ -48,7 +48,7 @@ export function NavHomeLink() {
         <NavLogo />
       </Link>
       <Tooltip
-        content={<p className="text-body leading-relaxed text-navy">{BETA_CHIP_HINT}</p>}
+        content={<p className="text-body text-navy">{BETA_CHIP_HINT}</p>}
       >
         <span tabIndex={0} className="inline-flex">
           <Chip tone="blue">BETA</Chip>
@@ -59,16 +59,24 @@ export function NavHomeLink() {
 }
 
 /**
- * The growing underline (task 058, owner round 9): on hover and keyboard
- * focus a 3 px Electric Blue rule grows from the item's centre to its full
- * width over 200 ms on the strong ease-out, over the item's transparent
- * bottom border, and shrinks back on leave; the active item's own rule is
- * the border, full and still. Hover is gated to fine pointers (Tailwind's
- * `hover:`); under reduced motion the rule appears without growing. Shared
- * by the top nav and the lifecycle tabs.
+ * The growing underline (task 058; owner round 9, reshaped in the
+ * consistency pass): one 3 px Electric Blue rule under the item, anchored at
+ * its left edge. On hover (fine pointers, Tailwind's `hover:`) and keyboard
+ * focus it grows from the left edge to the item's centre (half width, 200 ms,
+ * the strong ease-out) and shrinks back on leave. The active item's rule is
+ * the same rule at full width, so a click carries the half rule on from the
+ * centre to the right edge instead of restarting it. Under reduced motion the
+ * half and the full rule appear without growing. Shared by the top nav and
+ * the lifecycle tabs; the item keeps a transparent 3 px bottom border so the
+ * rule never moves the text.
  */
 export const GROWING_RULE_CLASS =
-  "relative after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-[3px] after:h-[3px] after:origin-center after:scale-x-0 after:bg-blue after:transition-transform after:duration-200 after:ease-[var(--ease-out-strong)] hover:after:scale-x-100 focus-visible:after:scale-x-100 motion-reduce:after:transition-none";
+  "relative after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-[3px] after:h-[3px] after:origin-left after:scale-x-0 after:bg-blue after:transition-transform after:duration-200 after:ease-[var(--ease-out-strong)] hover:after:scale-x-50 focus-visible:after:scale-x-50 motion-reduce:after:transition-none";
+
+/** The active item: the growing rule at full width, held there on hover and
+ *  focus. Pair with `GROWING_RULE_CLASS` through `cn`. */
+export const GROWING_RULE_ACTIVE_CLASS =
+  "after:scale-x-100 hover:after:scale-x-100 focus-visible:after:scale-x-100";
 
 /** Growing-underline nav link: active item gets a 3px Nesta-blue rule. */
 export function NavItem({
@@ -93,7 +101,7 @@ export function NavItem({
         return cn(
           "inline-block border-b-[3px] border-transparent pb-1 text-lead font-semibold text-navy no-underline",
           GROWING_RULE_CLASS,
-          active && "border-blue font-extrabold",
+          active && cn(GROWING_RULE_ACTIVE_CLASS, "font-extrabold"),
         );
       }}
     >

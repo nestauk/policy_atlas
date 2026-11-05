@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LifecycleBar } from "../brand/LifecycleBar";
-import { GROWING_RULE_CLASS, NavItem } from "../brand/Nav";
+import { GROWING_RULE_ACTIVE_CLASS, GROWING_RULE_CLASS, NavItem } from "../brand/Nav";
 import { Arrival, ArrivalProvider, useFirstPaintDone } from "./arrivals";
 import { Collapse } from "./Collapse";
 
@@ -94,19 +94,26 @@ describe("Collapse", () => {
 });
 
 describe("the growing underline (owner, round 9)", () => {
-  it("grows a blue rule from the centre on hover and focus, over 200 ms, still under reduced motion", () => {
+  it("grows a blue rule from the left edge to the centre on hover and focus, over 200 ms, still under reduced motion", () => {
     for (const name of [
       "after:scale-x-0",
-      "after:origin-center",
+      "after:origin-left",
       "after:bg-blue",
       "after:h-[3px]",
       "after:duration-200",
       "after:ease-[var(--ease-out-strong)]",
-      "hover:after:scale-x-100",
-      "focus-visible:after:scale-x-100",
+      "hover:after:scale-x-50",
+      "focus-visible:after:scale-x-50",
       "motion-reduce:after:transition-none",
     ]) {
       expect(GROWING_RULE_CLASS).toContain(name);
+    }
+    expect(GROWING_RULE_CLASS).not.toContain("after:origin-center");
+  });
+
+  it("holds the active item's rule at full width, the same rule continuing past the centre", () => {
+    for (const name of ["after:scale-x-100", "hover:after:scale-x-100", "focus-visible:after:scale-x-100"]) {
+      expect(GROWING_RULE_ACTIVE_CLASS).toContain(name);
     }
   });
 
@@ -124,11 +131,17 @@ describe("the growing underline (owner, round 9)", () => {
         />
       </MemoryRouter>,
     );
-    expect(screen.getByRole("link", { name: "Tasks" })).toHaveClass("border-blue", "hover:after:scale-x-100");
-    expect(screen.getByRole("link", { name: "Projects" })).toHaveClass("border-transparent", "hover:after:scale-x-100");
-    expect(screen.getByRole("link", { name: "Agent" })).toHaveClass("hover:after:scale-x-100");
+    // The active item's rule is the growing rule at full width (not a
+    // border), so a click continues the hover's half rule.
+    const tasks = screen.getByRole("link", { name: "Tasks" });
+    expect(tasks).toHaveClass("border-transparent", "after:scale-x-100", "hover:after:scale-x-100");
+    expect(tasks).not.toHaveClass("after:scale-x-0", "hover:after:scale-x-50");
+    const projects = screen.getByRole("link", { name: "Projects" });
+    expect(projects).toHaveClass("border-transparent", "after:scale-x-0", "hover:after:scale-x-50");
+    const agent = screen.getByRole("link", { name: "Agent" });
+    expect(agent).toHaveClass("after:scale-x-0", "hover:after:scale-x-50");
     // A locked stage has no rule to grow.
-    expect(screen.getByText("Share").closest("[aria-disabled]")).not.toHaveClass("hover:after:scale-x-100");
+    expect(screen.getByText("Share").closest("[aria-disabled]")).not.toHaveClass("hover:after:scale-x-50");
   });
 });
 

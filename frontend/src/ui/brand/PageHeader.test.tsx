@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
+import { Button } from "./Button";
 import { PageBackLink, PageHeader, PagePrimary, PAGE_CONTROL_CLASS } from "./PageHeader";
 
 function renderHeader(props: Partial<Parameters<typeof PageHeader>[0]> = {}) {
@@ -94,9 +95,22 @@ describe("PagePrimary — one primary, built one way", () => {
 });
 
 describe("header controls", () => {
-  it("are 40 px at Meta size", () => {
+  it("are 40 px at Body size, the primary's label size", () => {
     expect(PAGE_CONTROL_CLASS).toContain("h-10");
-    expect(PAGE_CONTROL_CLASS).toContain("text-meta");
+    expect(PAGE_CONTROL_CLASS).toContain("text-body");
+    expect(PAGE_CONTROL_CLASS).not.toContain("text-meta");
+    render(
+      <MemoryRouter>
+        <PagePrimary to="/new">New task</PagePrimary>
+        <Button variant="ghost" className={PAGE_CONTROL_CLASS}>
+          Find a task
+        </Button>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("link", { name: "New task" })).toHaveClass("text-body");
+    const find = screen.getByRole("button", { name: "Find a task" });
+    expect(find).toHaveClass("text-body", "font-semibold", "h-10");
+    expect(find).not.toHaveClass("text-meta");
   });
 
   it("the back link is a 40 px target drawn in the 24 px context row", () => {

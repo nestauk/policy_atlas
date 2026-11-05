@@ -38,7 +38,27 @@
   min-height: 30px;
   margin-inline: -8px;
   padding-inline: 8px;
-  transition: background-color 150ms ease;
+  position: relative;
+}
+
+/* The row's link stretches over the whole row, so the bar and the value are
+   pointer targets too; the focus ring is drawn round the row. */
+.ranked-bars__link {
+  color: inherit;
+  text-decoration: none;
+  outline: none;
+}
+.ranked-bars__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.ranked-bars__row:has(.ranked-bars__link:focus-visible) {
+  outline: 2px solid var(--color-blue);
+  outline-offset: 2px;
+}
+.ranked-bars__row:has(.ranked-bars__link:focus-visible) .ranked-bars__bar {
+  background-color: var(--color-blue);
 }
 
 .ranked-bars__label {
@@ -78,6 +98,7 @@
 }
 
 .ranked-bars__value {
+  transition: color 150ms ease;
   font-size: var(--text-meta);
   line-height: var(--text-meta--line-height);
   color: var(--color-grey);
@@ -90,11 +111,12 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .ranked-bars__row:hover {
-    background-color: var(--color-blue-tint-2);
-  }
-  .ranked-bars__row:hover .ranked-bars__bar {
+  .ranked-bars__row[data-link]:hover .ranked-bars__bar {
     background-color: var(--color-blue);
+  }
+  .ranked-bars__row[data-link]:hover .ranked-bars__label,
+  .ranked-bars__row[data-link]:hover .ranked-bars__value {
+    color: var(--color-navy);
   }
 }
 

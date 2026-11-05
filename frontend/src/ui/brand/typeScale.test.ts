@@ -28,13 +28,13 @@ function tokensInCss(): string[] {
   const theme = cssSource.slice(cssSource.indexOf("@theme"));
   // `--text-body: 16px` yes; `--text-body--line-height: 1.55` no. A token
   // redefined in a scope (the sidebar's `compact-pane`) counts once.
-  return [...new Set([...theme.matchAll(/--text-([a-z0-9]+):/g)].map((match) => match[1]))];
+  return [...new Set([...theme.matchAll(/--text-([a-z0-9]+(?:-[a-z0-9]+)*):/g)].map((match) => match[1]))];
 }
 
 function tokensInTailwindMerge(): string[] {
   const group = /"font-size":\s*\[\s*\{\s*text:\s*\[([^\]]*)\]/s.exec(cnSource);
   if (group === null) throw new Error("could not find the font-size class group in cn.ts");
-  return [...group[1].matchAll(/"([a-z0-9]+)"/g)].map((match) => match[1]);
+  return [...group[1].matchAll(/"([a-z0-9-]+)"/g)].map((match) => match[1]);
 }
 
 describe("type scale registration", () => {
@@ -47,5 +47,11 @@ describe("type scale registration", () => {
     expect(tokens.length).toBeGreaterThanOrEqual(6);
     expect(tokens).toContain("body");
     expect(tokens).toContain("display");
+  });
+
+  it("reads hyphenated token names whole (`--text-hero-2`), not cut at the hyphen", () => {
+    expect(tokensInCss()).toContain("hero-2");
+    expect(tokensInTailwindMerge()).toContain("hero-2");
+    expect(tokensInCss()).not.toContain("body--line-height");
   });
 });

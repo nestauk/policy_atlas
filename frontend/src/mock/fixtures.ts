@@ -186,7 +186,11 @@ export const MOCK_THEME_ID_HIGH_STREETS = "30000000-0000-4000-8000-000000000003"
  *  characterisation predating 028 strand 8, which the sources theme filter
  *  must omit rather than offer a selection that can never round-trip. */
 export const mockLandscape: components["schemas"]["LandscapeOut"] = {
-  evidence_types: { "Systematic review": 20, "Local evaluation": 14, "Policy analysis": 12 },
+  evidence_types: {
+    "Systematic Review and Meta-Analysis": 20,
+    "Observational Research Studies": 14,
+    "Policy Syntheses & Guidance Documents": 12,
+  },
   years: { "2019": 6, "2020": 7, "2021": 9, "2022": 10, "2023": 8, "2024": 6 },
   themes: [
     { name: "School food environments", size: 19, description: "Meal standards, free breakfast, and food access.", theme_id: MOCK_THEME_ID_SCHOOL_FOOD },

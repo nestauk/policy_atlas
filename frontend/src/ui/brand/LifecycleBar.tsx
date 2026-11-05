@@ -2,13 +2,13 @@ import type { ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 
 import { cn } from "./cn";
-import { GROWING_RULE_CLASS } from "./Nav";
+import { GROWING_RULE_ACTIVE_CLASS, GROWING_RULE_CLASS } from "./Nav";
 
 const TAB_CLASS = cn(
   "inline-flex items-center gap-1.5 border-b-[3px] border-transparent pb-1 text-lead font-semibold leading-none text-grey no-underline transition-colors duration-150 hover:text-navy",
   GROWING_RULE_CLASS,
 );
-const TAB_ACTIVE_CLASS = "border-blue text-navy";
+const TAB_ACTIVE_CLASS = cn(GROWING_RULE_ACTIVE_CLASS, "text-navy");
 
 type LifecycleBarItem = {
   tab: string;

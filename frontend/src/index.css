@@ -75,6 +75,14 @@
   --text-display: 36px; /* the one statement per page: report and entry titles */
   --text-display--line-height: 1.15;
 
+  /* The splash page's two responsive headline sizes (task 058 consistency
+     pass, lead ruling P5): named so no view writes a size by hand. The splash
+     persuades rather than operates, so these two scale with the viewport. */
+  --text-hero: clamp(40px, 5.4vw, 68px); /* the splash h1 */
+  --text-hero--line-height: 1.02;
+  --text-hero-2: clamp(28px, 3vw, 40px); /* the splash feature-step headings */
+  --text-hero-2--line-height: 1.1;
+
   /* Prose line-length cap. Retuned from 72ch to the prototype's 44em (032
      G15): at the 16px floor, 72ch runs wider than a comfortable read. */
   --container-prose-measure: 44em;
@@ -84,6 +92,8 @@
 
   /* Nesta core palette */
   --color-blue: #0000ff; /* hero — one hero colour per layout */
+  --color-blue-pressed: #0000d6; /* the primary's hover and press */
+  --color-green-pressed: #147a6c; /* the start button's hover */
   --color-navy: #0f294a; /* structural text */
   --color-navy-muted: #c8d6e6; /* body on navy (splash) */
   --color-grey: #646363; /* secondary text (AAA on white) */
@@ -110,6 +120,14 @@
   --color-green-tint: #e7f5f2;
   --color-yellow-tint: #fff6e3;
   --color-red-tint: #fde8ed;
+  /* The dark plan panel (task 058 consistency pass): the Navy sheet the
+     plan document docks as, and the text and rules that sit on it. */
+  --color-navy-deep: #0a1f38; /* inputs and wells sunk into the navy panel */
+  --color-navy-line: #1a3a5c; /* hairlines on the navy panel */
+  --color-on-navy: #e8edf2; /* primary text on the navy panel */
+  --color-on-navy-soft: #c5d0dc; /* secondary text on the navy panel */
+  --color-on-navy-muted: #97a8bc; /* labels and meta on the navy panel */
+
   --color-violet-tint: #efedfc; /* the higher level word on a profile line (046) */
   --color-aqua-tint: #e6f5f7; /* the lower level word on a profile line (046) */
 
@@ -213,6 +231,41 @@
   animation: rise 300ms var(--ease-out-strong) both;
   @media (prefers-reduced-motion: reduce) {
     animation-duration: 1ms;
+  }
+}
+
+/* A menu under its trigger (task 058 consistency pass, the account menu):
+   it arrives from the trigger, 4 px above its place, fading and settling
+   over 200 ms on the strong ease-out, and leaves the same way in 150 ms.
+   Radix holds the closed menu mounted until the exit animation ends. Under
+   reduced motion the base layer's 0.01 ms rule makes both a cut. */
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes menu-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+@utility anim-menu {
+  transform-origin: var(--radix-popover-content-transform-origin);
+  &[data-state="open"] {
+    animation: menu-in 200ms var(--ease-out-strong) both;
+  }
+  &[data-state="closed"] {
+    animation: menu-out 150ms var(--ease-out-strong) both;
   }
 }
 
@@ -373,6 +426,16 @@
     color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+  }
+  /* The house focus ring (task 058 consistency pass; DESIGN.md § Shapes): a
+     2px Electric Blue outline offset 2px on every control reached from the
+     keyboard, so no control falls back to the browser's own ring. It sits in
+     the base layer, so a control that must draw its ring inside its box (a
+     cut-corner button, whose clip-path clips anything outside it; a row flush
+     against its frame) overrides it with a utility. */
+  :where(a[href], button, summary, input, textarea, select, [role="tab"], [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: 2px;
   }
   /* Motion budget: everything quiets under prefers-reduced-motion. */
   @media (prefers-reduced-motion: reduce) {

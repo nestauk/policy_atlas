@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useMemo, useState } from "react
 import type { ReactNode } from "react";
 
 import { cn } from "../brand/cn";
+import { CloseButton } from "../brand/CloseButton";
 
 /*
  * Toast (Radix copy-in) — the 500-error surface and transient confirmations.
@@ -84,11 +85,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 </button>
               </ToastPrimitive.Action>
             )}
-            <ToastPrimitive.Close
-              aria-label="Dismiss"
-              className="cursor-pointer text-grey hover:text-navy"
-            >
-              ✕
+            <ToastPrimitive.Close asChild>
+              <CloseButton aria-label="Dismiss" className="-my-1.5 -mr-2" />
             </ToastPrimitive.Close>
           </ToastPrimitive.Root>
         ))}

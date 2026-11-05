@@ -1,10 +1,14 @@
 import { useId, useState, type CSSProperties, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
+import { Link, useNavigate } from "react-router";
+
 import { scrub } from "../lib/scrub";
 import { cn } from "../ui/brand/cn";
 import { fillYearRange, humaniseLabel, normaliseGeographies } from "../ui/charts/EvidenceDistributionChart";
 import "./landscape.css";
+import { PANE_LABEL_CLASS } from "../ui/brand/label";
+import { LINK_CLASS } from "../ui/brand/inlineActions";
 
 /* ---------------------------------------------------------------------------
  * Landscape charts (task 058, landscape polish; lead rulings 2026-11-05).
@@ -28,6 +32,10 @@ export type RankedRow = {
   pending?: boolean;
   /** The label in Grey: a stage still to come. */
   muted?: boolean;
+  /** Where the row leads: All sources (or Findings) filtered to its value.
+   *  Absent on rows that lead nowhere (folded tails, "Not reported", the
+   *  funnel), which then take no hover either (owner, consistency pass). */
+  href?: string;
 };
 
 /** Placeholder lengths (percent of the bar track), cycling down the rows. */
@@ -87,9 +95,18 @@ export function RankedBars({ caption, rows, busy = false }: { caption: string; r
               className="ranked-bars__row"
               data-tone={row.tone ?? "navy"}
               data-muted={row.muted ? "" : undefined}
+              data-link={row.href !== undefined ? "" : undefined}
             >
               <th role="rowheader" scope="row" className="ranked-bars__label">
-                {row.label}
+                {row.href !== undefined ? (
+                  // The link stretches over the whole row (ranked-bars__link),
+                  // so the bar is a pointer target too.
+                  <Link to={row.href} className="ranked-bars__link">
+                    {row.label}
+                  </Link>
+                ) : (
+                  row.label
+                )}
               </th>
               <td role="cell" className="ranked-bars__cell">
                 {row.count !== null ? (
@@ -373,9 +390,19 @@ const CHART_TEXT = { fontSize: 14, fill: "var(--color-grey)" } as const;
  * with explicit year labels. The chart is hidden from assistive technology;
  * a visually hidden table beside it carries one row per year.
  */
-export function PublicationYears({ data, caption }: { data: Record<string, number>; caption: string }) {
+export function PublicationYears({
+  data,
+  caption,
+  yearHref,
+}: {
+  data: Record<string, number>;
+  caption: string;
+  /** Where a year leads (All sources filtered to it); none when absent. */
+  yearHref?: (year: string) => string;
+}) {
   const rows = fillYearRange(data);
   const [narrow, setNarrow] = useState(false);
+  const navigate = useNavigate();
   if (rows.length === 0) return null;
   const ticks = yearTicks(
     rows.map((row) => Number(row.label)),
@@ -408,11 +435,23 @@ export function PublicationYears({ data, caption }: { data: Record<string, numbe
               activeBar={{ fill: "var(--color-blue)" }}
               isAnimationActive={false}
               maxBarSize={24}
+              cursor={yearHref !== undefined ? "pointer" : undefined}
+              onClick={
+                yearHref !== undefined
+                  ? (entry: { payload?: { label?: string; count?: number } }) => {
+                      const year = entry.payload?.label;
+                      if (year !== undefined && (entry.payload?.count ?? 0) > 0) void navigate(yearHref(year));
+                    }
+                  : undefined
+              }
             />
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <table className="sr-only">
+      {/* The chart's table for assistive technology. With links it is also
+          the keyboard's way in: hidden until a link in it takes focus, then
+          shown under the chart so the focus is visible. */}
+      <table className={yearHref !== undefined ? "sr-only focus-within:not-sr-only focus-within:mt-3 focus-within:text-meta" : "sr-only"}>
         <caption>{caption}</caption>
         <thead>
           <tr>
@@ -423,8 +462,16 @@ export function PublicationYears({ data, caption }: { data: Record<string, numbe
         <tbody>
           {rows.map((row) => (
             <tr key={row.label}>
-              <th scope="row">{row.label}</th>
-              <td>{row.count}</td>
+              <th scope="row" className="pr-4 text-left font-normal">
+                {yearHref !== undefined && row.count > 0 ? (
+                  <Link to={yearHref(row.label)} className={LINK_CLASS}>
+                    {row.label}
+                  </Link>
+                ) : (
+                  row.label
+                )}
+              </th>
+              <td className="tabular-nums text-grey">{row.count}</td>
             </tr>
           ))}
         </tbody>
@@ -455,7 +502,7 @@ export function LandscapeSection({
   return (
     <section aria-labelledby={headingId} className="landscape-section min-w-0">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-line pb-2.5 pt-3.5">
-        <h2 id={headingId} className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
+        <h2 id={headingId} className={PANE_LABEL_CLASS}>
           {title}
         </h2>
         {figure ? <p className="text-meta text-grey">{figure}</p> : null}

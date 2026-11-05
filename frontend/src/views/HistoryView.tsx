@@ -11,6 +11,10 @@ import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { mergeHistory } from "./historyPresentation";
 import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
+import { LABEL_CLASS } from "../ui/brand/label";
+import { ChevronIcon } from "../ui/brand/icons";
+import { cn } from "../ui/brand/cn";
+import { RetryCard } from "../ui/feedback/RetryCard";
 
 const PAGE_SIZE = 200;
 
@@ -48,19 +52,10 @@ export function HistoryView() {
       )}
 
       {isError && (
-        <Card role="alert" className="p-8 text-center text-body text-navy">
-          The history couldn't be loaded.{" "}
-          <button
-            type="button"
-            className="cursor-pointer font-bold text-blue hover:underline"
-            onClick={() => {
+        <RetryCard copy="The history couldn't be loaded." onRetry={() => {
               void decisions.refetch();
               void turns.refetch();
-            }}
-          >
-            Retry
-          </button>
-        </Card>
+            }} />
       )}
 
       {!isPending && !isError && rows.length === 0 && (
@@ -86,7 +81,7 @@ export function HistoryView() {
                   }}
                   className={`flex w-full items-baseline gap-3 px-4 py-3 text-left ${
                     expandable
-                      ? "cursor-pointer hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue"
+                      ? "cursor-pointer hover:bg-blue-tint-2"
                       : "cursor-default"
                   }`}
                 >
@@ -99,16 +94,14 @@ export function HistoryView() {
                   <Chip tone={row.tone}>{row.category}</Chip>
                   <span className="min-w-0 flex-1 text-body text-ink">{scrub(row.sentence)}</span>
                   {expandable && (
-                    <span aria-hidden="true" className="text-body text-grey">
-                      {expanded ? "▾" : "▸"}
-                    </span>
+                    <ChevronIcon size={12} className={cn("shrink-0 text-grey transition-transform duration-200 ease-[var(--ease-out-strong)]", expanded && "rotate-90")} />
                   )}
                 </button>
                 {expanded && (
                   <dl className="border-t border-line bg-paper-2 px-4 py-3">
                     {(row.details ?? []).map((detail) => (
                       <div key={detail.label}>
-                        <dt className="text-meta font-bold uppercase tracking-[0.06em] text-grey">
+                        <dt className={LABEL_CLASS}>
                           {detail.label}
                         </dt>
                         <dd className="mt-1 whitespace-pre-wrap text-body text-navy">

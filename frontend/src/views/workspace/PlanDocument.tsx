@@ -23,7 +23,7 @@ import {
   screeningOverlayError,
   type PlanOverlay,
 } from "./planOverlay";
-import { START_SEARCH_CLASS, scopingStatusLine, usePlanStart, useScopingPlanStart } from "./planStart";
+import { scopingStatusLine, usePlanStart, useScopingPlanStart } from "./planStart";
 import {
   ANALYSIS_DEPTH_LABEL,
   ANALYSIS_QUESTION,
@@ -71,9 +71,9 @@ const panelLabelClass = "text-lead font-bold text-white";
 const panelEditButtonClass =
   "cursor-pointer border border-white/25 px-3 py-1.5 text-body font-semibold text-white hover:bg-white/10";
 const panelFieldClass =
-  "w-full border border-white/25 bg-[#0a1f38] px-3 py-2.5 text-lead text-white focus-visible:outline-2 focus-visible:outline-blue";
+  "w-full border border-white/25 bg-navy-deep px-3 py-2.5 text-lead text-white";
 const panelValueClass = "mt-0.5 text-lead text-white";
-const panelHintClass = "text-body text-[#c5d0dc]";
+const panelHintClass = "text-body text-on-navy-soft";
 
 function InfoHint({ label, hint }: { label: string; hint: string }) {
   return (
@@ -81,7 +81,7 @@ function InfoHint({ label, hint }: { label: string; hint: string }) {
       <button
         type="button"
         aria-label={`About ${label}`}
-        className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center text-[#97a8bc] hover:text-white focus-visible:outline-2 focus-visible:outline-blue"
+        className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center text-on-navy-muted hover:text-white"
       >
         <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4" fill="none">
           <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.25" />
@@ -147,7 +147,7 @@ function PanelSection({
             </button>
             <button
               type="button"
-              className={cn(panelEditButtonClass, "border-blue bg-blue text-white hover:bg-[#0000d6]")}
+              className={cn(panelEditButtonClass, "border-blue bg-blue text-white hover:bg-blue-pressed")}
               onClick={onSave}
             >
               Save
@@ -202,13 +202,13 @@ function PlanPicker({
             aria-haspopup="listbox"
             aria-expanded={open}
             aria-labelledby={`${id}-label`}
-            className="flex w-full cursor-pointer items-center justify-between gap-3 border border-white/25 bg-[#0a1f38] px-3 py-2.5 text-left text-lead font-normal text-white hover:border-white/50 focus-visible:outline-2 focus-visible:outline-blue"
+            className="flex w-full cursor-pointer items-center justify-between gap-3 border border-white/25 bg-navy-deep px-3 py-2.5 text-left text-lead font-normal text-white hover:border-white/50"
           >
             <span className="min-w-0 flex-1 text-pretty">{selected}</span>
             <svg
               aria-hidden="true"
               viewBox="0 0 24 24"
-              className="h-4 w-4 shrink-0 text-[#97a8bc]"
+              className="h-4 w-4 shrink-0 text-on-navy-muted"
               fill="none"
               stroke="currentColor"
               strokeWidth={2}
@@ -230,7 +230,7 @@ function PlanPicker({
                   onClick={() => pick(key)}
                   className={cn(
                     "block w-full cursor-pointer px-3 py-2.5 text-left text-lead font-normal text-pretty text-navy hover:bg-blue-tint-2 hover:text-blue",
-                    value === key && "bg-blue-tint-2 font-medium",
+                    value === key && "bg-blue-tint-2 font-semibold",
                   )}
                 >
                   {optionLabel}
@@ -288,7 +288,7 @@ function PlanChrome({
   className?: string;
 }) {
   const controlClass =
-    "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center p-0 text-[#97a8bc] hover:text-white focus-visible:outline-2 focus-visible:outline-blue";
+    "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center p-0 text-on-navy-muted hover:text-white";
   return (
     <div className={cn("flex h-8 items-center", className)}>
       {showDock && onDock !== undefined && (
@@ -350,7 +350,7 @@ function ScopingSection({
 
 /** The grey "Not decided yet" an unset field shows. */
 function NotDecided() {
-  return <span className="text-[#97a8bc] italic">{COPY.notDecided}</span>;
+  return <span className="text-on-navy-muted italic">{COPY.notDecided}</span>;
 }
 
 /** One provenance-tagged field, rendered with its origin words. */
@@ -530,7 +530,7 @@ function ConstraintsSection({
   return (
     <ScopingSection label="Constraints and preferences" onEdit={onEdit} readOnly={readOnly}>
       {constraints.length === 0 ? (
-        <p className="text-lead text-[#97a8bc] italic">{COPY.notDecided}</p>
+        <p className="text-lead text-on-navy-muted italic">{COPY.notDecided}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-lead text-white">
@@ -569,7 +569,7 @@ function ConstraintsSection({
                       </button>
                     )}
                   </td>
-                  <td className="py-2 pr-3 text-[#e8edf2]">
+                  <td className="py-2 pr-3 text-on-navy">
                     {constraintEffectLines(constraint).map((line) => (
                       <span key={line} className="block">
                         {line}
@@ -606,7 +606,7 @@ function YourOptionsSection({
   return (
     <ScopingSection label={YOUR_OPTIONS_TITLE} onEdit={onEdit} readOnly={readOnly}>
       {options.length === 0 ? (
-        <p className="text-lead text-[#97a8bc] italic">{YOUR_OPTIONS_NONE}</p>
+        <p className="text-lead text-on-navy-muted italic">{YOUR_OPTIONS_NONE}</p>
       ) : (
         <ul className="space-y-4 text-lead text-white">
           {options.map((option, index) => (
@@ -617,7 +617,7 @@ function YourOptionsSection({
                   <p className={panelHintClass}>
                     {YOUR_OPTIONS_DESIGN_LABEL}: {scrub(option.design.name)}
                   </p>
-                  <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[#e8edf2]">
+                  <ul className="mt-1 list-disc space-y-0.5 pl-5 text-on-navy">
                     {option.design.design_features.map((feature, featureIndex) => (
                       <li key={`${feature}-${featureIndex}`}>
                         {scrub(feature)}
@@ -678,7 +678,7 @@ function ScopingStepsSection({ steps }: { steps: ScopingPlanDraft["steps"] }) {
   if (list.length === 0) return null;
   return (
     <ScopingSection label="Steps and check-ins">
-      <ol className="list-none space-y-2 pl-1 text-lead text-[#e8edf2]">
+      <ol className="list-none space-y-2 pl-1 text-lead text-on-navy">
         {list.map((step, index) => (
           <li key={step.stage} className="flex gap-1.5">
             <span aria-hidden="true" className="w-4 shrink-0 tabular-nums">
@@ -723,7 +723,7 @@ function ScopingStartActions({
     return (
       <div className="space-y-3">
         {lineElement}
-        <Button className={cn(START_SEARCH_CLASS)} disabled={state.action.disabled} onClick={state.action.onClick}>
+        <Button variant="start" size="entry" disabled={state.action.disabled} onClick={state.action.onClick}>
           {state.action.label}
         </Button>
         {state.notice != null && (
@@ -738,11 +738,11 @@ function ScopingStartActions({
   if (state.kind === "build") {
     return (
       <div>
-        <Button className={cn(START_SEARCH_CLASS)} disabled={state.action.disabled} onClick={state.action.onClick}>
+        <Button variant="start" size="entry" disabled={state.action.disabled} onClick={state.action.onClick}>
           {state.action.label}
         </Button>
         {state.timeBand != null && state.timeBand !== "" && (
-          <p className="mt-2 text-body text-[#97a8bc]">{scrub(state.timeBand)}</p>
+          <p className="mt-2 text-body text-on-navy-muted">{scrub(state.timeBand)}</p>
         )}
         {state.notice != null && (
           <p role="alert" className="mt-2 text-body text-red-tint">
@@ -755,7 +755,7 @@ function ScopingStartActions({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button className={cn(START_SEARCH_CLASS)} disabled={state.rebuild.disabled} onClick={state.rebuild.onClick}>
+      <Button variant="start" size="entry" disabled={state.rebuild.disabled} onClick={state.rebuild.onClick}>
         {state.rebuild.label}
       </Button>
       <Button variant="secondary" disabled={state.confirm.disabled} onClick={state.confirm.onClick}>
@@ -1020,7 +1020,7 @@ export function PlanDocument({
         // sweep's proposal 3): docked, from the edge it docks to; centred,
         // rising in place. A cut under reduced motion.
         placement === "side"
-          ? cn("anim-dock-in min-w-0 flex-1 border-l border-[#1a3a5c]", READING_COLUMN_MAX_W)
+          ? cn("anim-dock-in min-w-0 flex-1 border-l border-navy-line", READING_COLUMN_MAX_W)
           : "anim-centre-in w-full",
       )}
     >
@@ -1046,7 +1046,7 @@ export function PlanDocument({
                 {scopingPlan ? "Scoping plan" : "Search plan"}
               </h2>
               {!scopingPlan && expectedRunTime != null && expectedRunTime !== "" && (
-                <p className="mt-1 text-body text-[#97a8bc]">
+                <p className="mt-1 text-body text-on-navy-muted">
                   Expected run time: {scrub(expectedRunTime)}
                 </p>
               )}
@@ -1061,7 +1061,7 @@ export function PlanDocument({
             )}
           </div>
 
-          {planQuery.isPending && <p className="text-body text-[#c5d0dc]">Loading the plan…</p>}
+          {planQuery.isPending && <p className="text-body text-on-navy-soft">Loading the plan…</p>}
           {planQuery.isError && (
             <p role="alert" className="text-body text-red-tint">
               The plan couldn't be loaded.
@@ -1222,7 +1222,7 @@ export function PlanDocument({
                   </div>
                   <div>
                     <dt className={panelHintClass}>Publication years</dt>
-                    <dd className={`${panelValueClass} text-[#e8edf2]`}>
+                    <dd className={`${panelValueClass} text-on-navy`}>
                       {yearAfter === "" && yearBefore === ""
                         ? "No preference"
                         : yearAfter !== "" && yearBefore !== ""
@@ -1234,7 +1234,7 @@ export function PlanDocument({
                   </div>
                   <div>
                     <dt className={panelHintClass}>Source geography</dt>
-                    <dd className={`${panelValueClass} text-[#e8edf2]`}>
+                    <dd className={`${panelValueClass} text-on-navy`}>
                       {geography !== "" ? scrub(geography) : "None selected"}
                     </dd>
                   </div>
@@ -1317,13 +1317,13 @@ export function PlanDocument({
               }}
               view={
                 screening.length > 0 ? (
-                  <ul className="list-disc space-y-1.5 pl-5 text-lead text-[#e8edf2]">
+                  <ul className="list-disc space-y-1.5 pl-5 text-lead text-on-navy">
                     {screening.map((criterion) => (
                       <li key={criterion}>{scrub(criterion)}</li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-lead text-[#97a8bc] italic">{COPY.notDecided}</p>
+                  <p className="text-lead text-on-navy-muted italic">{COPY.notDecided}</p>
                 )
               }
             >
@@ -1361,7 +1361,7 @@ export function PlanDocument({
             {agreedSteps.length > 0 && (
               <section className="border-b border-white/15 pb-6 last:border-b-0">
                 <h3 className={panelLabelClass}>Plan steps</h3>
-                <ol className="mt-3 list-none space-y-2 pl-1 text-lead text-[#e8edf2]">
+                <ol className="mt-3 list-none space-y-2 pl-1 text-lead text-on-navy">
                   {agreedSteps.map((step, index) => (
                     <li key={step.row} className="flex gap-1.5">
                       <span aria-hidden="true" className="w-4 shrink-0 tabular-nums">
@@ -1381,7 +1381,7 @@ export function PlanDocument({
 
           {!scopingPlan && !readOnly && (
           <div className="pt-8">
-            <Button className={cn(START_SEARCH_CLASS)} disabled={startDisabled} onClick={start}>
+            <Button variant="start" size="entry" disabled={startDisabled} onClick={start}>
               {startLabel}
             </Button>
             {startNotice != null && (

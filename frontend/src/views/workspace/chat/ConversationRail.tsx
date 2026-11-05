@@ -5,10 +5,9 @@ import { scrub } from "../../../lib/scrub";
 import { cn } from "../../../ui/brand/cn";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { Tooltip, TooltipProvider } from "../../../ui/radix/Tooltip";
-import { ChatIcon, PanelIcon, PlusIcon } from "./icons";
+import { ChatIcon, PanelIcon, PlusIcon, iconButtonClass } from "../../../ui/brand/icons";
 
-const RAIL_BUTTON =
-  "pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
+const RAIL_BUTTON = iconButtonClass("chrome");
 
 /** The Task Agent's mark in the rail: the still fold mark, always (owner,
  *  round 8). */
@@ -125,7 +124,7 @@ export function ConversationRail({
         className={cn("flex shrink-0 items-center gap-1 border-line bg-paper-2", className)}
       >
         <RailButton label={toggleLabel} tip="Open sidebar" aria-expanded={expanded} disabled={toggleDisabled} onClick={onToggle}>
-          <PanelIcon size={16} />
+          <PanelIcon />
         </RailButton>
         <RailButton
           label={COPY.newChat}
@@ -133,7 +132,7 @@ export function ConversationRail({
           disabled={!chatsEnabled}
           onClick={onNewChat}
         >
-          <PlusIcon size={16} />
+          <PlusIcon />
         </RailButton>
         <RailButton label={COPY.taskAgent} current={onTaskAgent} onClick={onSelectTaskAgent}>
           <FoldMarkIcon size={RAIL_MARK_SIZE} />
@@ -145,7 +144,7 @@ export function ConversationRail({
             current={chat.id === currentId}
             onClick={() => onSelectChat?.(chat.id)}
           >
-            <ChatIcon size={15} />
+            <ChatIcon />
           </RailButton>
         ))}
       </aside>

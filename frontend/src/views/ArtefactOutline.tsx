@@ -5,6 +5,8 @@ import { Link } from "react-router";
 import { useFunnel, useLandscape } from "../api/queries";
 import { scrub } from "../lib/scrub";
 import { REPORT_SECTION_HEADING_CLASS } from "./artefactPresentation";
+import { LABEL_CLASS } from "../ui/brand/label";
+import { LINK_CLASS } from "../ui/brand/inlineActions";
 
 /** Minimal section shape the outline consumes (mirrors SectionOut). */
 export interface OutlineSection {
@@ -46,7 +48,7 @@ export function sectionAnchor(title: string, index: number): string {
 
 const OPEN_SECTION_EVENT = "artefact-open-section";
 /** Matches the per-section Expand + / Collapse − affordance. */
-export const SECTION_EXPAND_LINK_CLASS = "print-hide shrink-0 text-meta font-bold text-blue";
+export const SECTION_EXPAND_LINK_CLASS = `${LINK_CLASS} print-hide shrink-0 text-meta`;
 /** Leave a little air under the scrollport top after a contents jump. */
 const SECTION_SCROLL_OFFSET_PX = 8;
 /** Ignore the spy while a click-driven scroll is settling. */
@@ -285,7 +287,7 @@ export function ContentsSidebar({
                   setActiveId(entry.id);
                   requestScrollToSection(entry.id);
                 }}
-                className={`block border-l-2 py-0.5 pl-3 text-meta font-bold uppercase tracking-[0.06em] leading-snug hover:text-navy ${
+                className={`block border-l-2 py-0.5 pl-3 text-meta font-bold uppercase tracking-label leading-snug hover:text-navy ${
                   activeId === entry.id
                     ? "border-l-blue text-navy"
                     : "border-l-transparent text-grey"
@@ -498,7 +500,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
         onClick={() => setOpen((value) => !value)}
         className="flex w-full cursor-pointer items-baseline gap-2 text-left"
       >
-        <h2 className="flex-1 text-heading font-bold text-navy max-md:text-[20px]">
+        <h2 className={`flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>
           How the evidence was gathered
         </h2>
         <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
@@ -517,7 +519,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
               <span className="text-grey">
                 {" "}
                 · this section covers only the cited sources —{" "}
-                <Link to={`/tasks/${taskId}/sources/landscape`} className="text-blue hover:underline">
+                <Link to={`/tasks/${taskId}/sources/landscape`} className={LINK_CLASS}>
                   the Landscape tab
                 </Link>{" "}
                 shows the whole search
@@ -526,7 +528,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
           )}
           {distributions.map((row) => (
             <div key={row.label}>
-              <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">{row.label}</p>
+              <p className={LABEL_CLASS}>{row.label}</p>
               <ul className="mt-1 space-y-0.5">
                 {row.entries.slice(0, 8).map(([label, count]) => (
                   <li key={label} className="flex items-baseline gap-2 text-body text-navy">
@@ -547,7 +549,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
           ))}
           {(cited?.themes ?? []).length > 0 && (
             <div>
-              <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">Key themes</p>
+              <p className={LABEL_CLASS}>Key themes</p>
               <ul className="mt-1 space-y-0.5">
                 {(cited?.themes ?? []).map((theme) => (
                   <li key={theme.name} className="flex items-baseline gap-2 text-body text-navy">
@@ -555,7 +557,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
                     {theme.theme_id != null ? (
                       <Link
                         to={`/tasks/${taskId}/sources/all?theme=${theme.theme_id}`}
-                        className="shrink-0 text-caption text-blue hover:underline"
+                        className={`${LINK_CLASS} shrink-0 text-caption`}
                       >
                         {theme.size === 1 ? "1 document →" : `${theme.size} documents →`}
                       </Link>

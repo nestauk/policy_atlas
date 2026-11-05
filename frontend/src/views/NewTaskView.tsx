@@ -14,6 +14,7 @@ import { Button } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
 import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
+import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
 
 /** Step one: pick a kind of work. Two of the four can run. */
 function CapabilityList({ onPick }: { onPick: (key: SelectableCapabilityKey) => void }) {
@@ -25,7 +26,7 @@ function CapabilityList({ onPick }: { onPick: (key: SelectableCapabilityKey) => 
             <button
               type="button"
               onClick={() => onPick(capability.key as SelectableCapabilityKey)}
-              className="flex w-full cursor-pointer items-center justify-between gap-4 border-b border-line px-0.5 py-3.5 text-left text-lead font-normal leading-[25px] text-navy max-md:text-body max-md:leading-snug hover:text-blue focus-visible:outline-2 focus-visible:outline-blue"
+              className="flex w-full cursor-pointer items-center justify-between gap-4 border-b border-line px-0.5 py-3.5 text-left text-lead font-normal leading-[25px] text-navy max-md:text-body max-md:leading-snug hover:text-blue"
             >
               <span>{capability.name}</span>
               <span aria-hidden="true" className="shrink-0 text-blue">
@@ -42,7 +43,7 @@ function CapabilityList({ onPick }: { onPick: (key: SelectableCapabilityKey) => 
               className="flex items-center justify-between gap-4 border-b border-line px-0.5 py-3.5 select-none"
             >
               <span className="text-lead font-normal leading-[25px] text-grey max-md:text-body max-md:leading-snug">{capability.name}</span>
-              <span className="shrink-0 text-caption font-semibold uppercase tracking-[0.06em] text-grey">
+              <span className={cn(CAPTION_LABEL_CLASS, "shrink-0")}>
                 {COPY.comingSoon}
               </span>
             </div>
@@ -84,7 +85,7 @@ function ProjectPicker({
           id={id}
           aria-haspopup="listbox"
           aria-expanded={open}
-          className="inline-flex min-w-[14rem] cursor-pointer items-center justify-between gap-3 border border-line-2 bg-paper px-3 py-2 text-body font-normal text-navy hover:border-navy focus-visible:outline-2 focus-visible:outline-blue"
+          className="inline-flex min-w-[14rem] cursor-pointer items-center justify-between gap-3 border border-line-2 bg-paper px-3 py-2 text-body font-normal text-navy hover:border-navy"
         >
           <span className="truncate">{label}</span>
           <svg
@@ -111,7 +112,7 @@ function ProjectPicker({
               onClick={() => pick("")}
               className={cn(
                 "block w-full cursor-pointer px-3 py-2 text-left text-body font-normal text-navy hover:bg-blue-tint-2 hover:text-blue",
-                value === "" && "bg-blue-tint-2 font-medium",
+                value === "" && "bg-blue-tint-2 font-semibold",
               )}
             >
               {COPY.noProject}
@@ -126,7 +127,7 @@ function ProjectPicker({
                 onClick={() => pick(project.project_id)}
                 className={cn(
                   "block w-full cursor-pointer px-3 py-2 text-left text-body font-normal text-navy hover:bg-blue-tint-2 hover:text-blue",
-                  value === project.project_id && "bg-blue-tint-2 font-medium",
+                  value === project.project_id && "bg-blue-tint-2 font-semibold",
                 )}
               >
                 {project.name}
@@ -280,7 +281,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
         submit();
       }}
     >
-      <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey max-md:text-meta">
+      <p className="text-body font-semibold uppercase tracking-label text-grey max-md:text-meta">
         {copy.eyebrow}
       </p>
       <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title">
@@ -309,12 +310,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
           }}
           className="min-h-[5.5rem] min-w-0 flex-1 resize-none border-0 bg-transparent p-0 text-lead leading-[25px] text-ink focus-visible:outline-none"
         />
-        <Button
-          type="submit"
-          size="md"
-          disabled={!canSend}
-          className="shrink-0 px-6 py-3.5 text-body"
-        >
+        <Button type="submit" size="entry" disabled={!canSend} className="shrink-0">
           {create.isPending ? "Starting…" : copy.submitLabel}
         </Button>
       </div>
@@ -367,16 +363,13 @@ export function NewTaskView() {
   const picked = isSelectableCapability(requested) ? requested : null;
 
   return (
-    <main className="mx-auto flex max-w-[1180px] justify-center px-6 py-9 max-md:px-4 max-md:py-6">
+    <main className="mx-auto flex max-w-[1180px] justify-center px-6 pt-11 pb-9 max-md:px-4 max-md:py-6">
       <div className="w-full max-w-[50vw] min-w-0 max-md:max-w-full">
         {picked !== null ? (
           <QuestionForm capability={picked} />
         ) : (
           <>
-            <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey max-md:text-meta">
-              {COPY.newTask}
-            </p>
-            <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title">
+            <h1 className="text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title">
               {COPY.newTaskPrompt}
             </h1>
             <CapabilityList

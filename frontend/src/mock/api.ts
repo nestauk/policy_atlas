@@ -191,7 +191,7 @@ function compareMockEvidenceSort(
  * frames, and the introduction streams into its slot (index 3, role `intro`)
  * and completes (round 8). `"paused-strip"` runs
  * to the check-in after searching and screening and holds there for good,
- * for the run strip's paused state. Selected via a
+ * for the run status bar's paused state. Selected via a
  * `?mockScenario=` query param on the `/events` request itself — a direct
  * mock-layer fixture switch (see `mock/api.test.ts`), not something the real
  * SSE client currently forwards from the page URL.
@@ -1347,7 +1347,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       emit({ type: "checkin.pending", check_in: mockCheckIn, occurred_at: FRAME_TIME, sequence: nextSequence() });
 
       if (scenario === "paused-strip") {
-        // Holds at the check-in for good: the run strip's paused state.
+        // Holds at the check-in for good: the run status bar's paused state.
         await new Promise<void>(() => {});
         return;
       }

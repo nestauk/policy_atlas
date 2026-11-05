@@ -58,7 +58,7 @@ describe("Sheet", () => {
     expect(dialog.className.split(" ")).toContain("overflow-y-auto");
   });
 
-  it("renders the close control at the larger 042 size with the bigger padding box", () => {
+  it("closes with the one CloseButton: a 16 px glyph in a 32 px box", () => {
     render(
       <Sheet open>
         <SheetContent title="Source dossier">
@@ -67,9 +67,13 @@ describe("Sheet", () => {
       </Sheet>,
     );
     const close = screen.getByRole("button", { name: "Close panel" });
-    for (const token of ["p-2", "text-lead", "leading-none"]) {
+    for (const token of ["h-8", "w-8", "pressable", "hover:bg-blue-tint-2"]) {
       expect(close.className.split(" ")).toContain(token);
     }
+    const glyph = close.querySelector("svg");
+    expect(glyph).not.toBeNull();
+    expect(glyph).toHaveAttribute("width", "16");
+    expect(close).not.toHaveTextContent("✕");
   });
 });
 

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -412,7 +412,7 @@ describe("AppShell — the Sources tab opens on the step that has landed (owner,
     // The link opens All sources, and the reader is on Themes: still Sources.
     expect(sourcesLink()).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
     expect(sourcesLink()).toHaveAttribute("aria-current", "page");
-    expect(sourcesLink()).toHaveClass("border-blue");
+    expect(sourcesLink()).toHaveClass("after:scale-x-100");
   });
 });
 
@@ -496,7 +496,7 @@ describe("AppShell — global chrome", () => {
     expect(screen.getByRole("link", { name: TASK.many })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Projects" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Account" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Sign out" })).not.toBeInTheDocument();
   });
 
   it("explains the BETA chip on hover", async () => {
@@ -508,17 +508,63 @@ describe("AppShell — global chrome", () => {
 
   it("underlines the active global nav item", () => {
     renderShell("/projects");
-    expect(screen.getByRole("link", { name: "Projects" }).className).toContain("border-blue");
-    expect(screen.getByRole("link", { name: "New" }).className).not.toContain("border-blue");
-    expect(screen.getByRole("link", { name: TASK.many }).className).not.toContain("border-blue");
+    expect(screen.getByRole("link", { name: "Projects" })).toHaveClass("after:scale-x-100");
+    expect(screen.getByRole("link", { name: "New" })).not.toHaveClass("after:scale-x-100");
+    expect(screen.getByRole("link", { name: TASK.many })).not.toHaveClass("after:scale-x-100");
   });
 
   it("opens Sign out from the account icon", async () => {
     const user = userEvent.setup();
     renderShell("/");
     await user.click(screen.getByRole("button", { name: "Account" }));
-    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
     expect(authState.signOut).toHaveBeenCalledOnce();
+  });
+
+  it("opens the account menu with focus on its first item and the trigger pressed", async () => {
+    const user = userEvent.setup();
+    renderShell("/");
+    const trigger = screen.getByRole("button", { name: "Account" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(trigger).toHaveAttribute("data-state", "open");
+    expect(trigger).toHaveClass("data-[state=open]:bg-blue-tint-2");
+    const menu = screen.getByRole("menu", { name: "Account" });
+    const signOut = screen.getByRole("menuitem", { name: "Sign out" });
+    expect(menu).toContainElement(signOut);
+    expect(signOut).toHaveFocus();
+    expect(signOut).toHaveClass("h-10", "text-meta", "hover:bg-blue-tint-2");
+  });
+
+  it("moves between items with the arrow keys and Home and End", async () => {
+    const user = userEvent.setup();
+    renderShell("/");
+    await user.click(screen.getByRole("button", { name: "Account" }));
+    const signOut = screen.getByRole("menuitem", { name: "Sign out" });
+    await user.keyboard("{ArrowDown}");
+    expect(signOut).toHaveFocus();
+    await user.keyboard("{ArrowUp}{End}{Home}");
+    expect(signOut).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(authState.signOut).toHaveBeenCalledOnce();
+  });
+
+  it("closes on Escape and on an outside press, giving focus back to the button", async () => {
+    const user = userEvent.setup();
+    renderShell("/");
+    const trigger = screen.getByRole("button", { name: "Account" });
+    await user.click(trigger);
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(trigger);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    await user.click(document.body);
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
   });
 
   it("puts the task name and lifecycle tabs on a second bar, not the global one", () => {

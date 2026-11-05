@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -274,12 +275,33 @@ describe("yearTicks", () => {
 
 describe("PublicationYears", () => {
   it("hides the chart from assistive technology and carries every year, zeros included, in a hidden table", () => {
-    render(<PublicationYears data={{ "2019": 6, "2021": 3, "2022": 1 }} caption="Publication years" />);
+    render(
+      <MemoryRouter>
+        <PublicationYears data={{ "2019": 6, "2021": 3, "2022": 1 }} caption="Publication years" />
+      </MemoryRouter>,
+    );
     expect(screen.getByTestId("years-chart")).toHaveAttribute("aria-hidden", "true");
     const table = screen.getByRole("table", { name: "Publication years" });
     expect(table).toHaveClass("sr-only");
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows.map((row) => row.textContent)).toEqual(["20196", "20200", "20213", "20221"]);
+  });
+
+  it("links each year with sources to All sources for that year, the table showing while a link has focus", () => {
+    render(
+      <MemoryRouter>
+        <PublicationYears
+          data={{ "2019": 6, "2021": 3 }}
+          caption="Publication years"
+          yearHref={(year) => `/all?year_from=${year}&year_to=${year}`}
+        />
+      </MemoryRouter>,
+    );
+    const table = screen.getByRole("table", { name: "Publication years" });
+    expect(table).toHaveClass("sr-only", "focus-within:not-sr-only");
+    expect(within(table).getByRole("link", { name: "2019" })).toHaveAttribute("href", "/all?year_from=2019&year_to=2019");
+    // A year with no sources leads nowhere.
+    expect(within(table).queryByRole("link", { name: "2020" })).toBeNull();
   });
 });
 

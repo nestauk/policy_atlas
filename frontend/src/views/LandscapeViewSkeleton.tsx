@@ -1,4 +1,5 @@
 import "./landscape.css";
+import { PANE_LABEL_CLASS } from "../ui/brand/label";
 
 /** Placeholder bar lengths (percent of the track), longest first. */
 const SKELETON_BARS = [88, 64, 47, 31] as const;
@@ -27,7 +28,7 @@ export function LandscapeSkeleton() {
       {SKELETON_SECTIONS.map((title) => (
         <section key={title} className="landscape-section" aria-hidden="true">
           <div className="border-b border-line pb-2.5 pt-3.5">
-            <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">{title}</p>
+            <p className={PANE_LABEL_CLASS}>{title}</p>
           </div>
           <div className="ranked-bars pt-4">
             {SKELETON_BARS.map((length) => (

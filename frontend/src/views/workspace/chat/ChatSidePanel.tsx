@@ -10,7 +10,6 @@ import { usePlanPanel } from "../../planPanel";
 import { useChatsEnabled } from "../../taskResult";
 import { TaskAgentPane } from "../TaskAgentPane";
 import { ChatPane } from "./ChatPane";
-import { ChatsIcon } from "./ChatsIcon";
 import { Tooltip, TooltipProvider } from "../../../ui/radix/Tooltip";
 import { ConversationList, type ConversationRow } from "./ConversationList";
 import { ConversationRail, RAIL_TOOLTIP_CLASS, RAIL_TOOLTIP_DELAY_MS } from "./ConversationRail";
@@ -22,7 +21,7 @@ import {
   useActiveConversation,
 } from "./conversationState";
 import { DraftChatPane } from "./DraftChatPane";
-import { ExpandIcon, PanelCloseIcon, PlusIcon } from "./icons";
+import { ChatsIcon, ExpandIcon, PanelCloseIcon, PlusIcon, iconButtonClass } from "../../../ui/brand/icons";
 
 /** Resize bounds (px) — the workspace rail's own clamp. */
 const PANEL_MIN = 280;
@@ -79,8 +78,7 @@ function usePanelWidth() {
   };
 }
 
-const HEADER_BUTTON =
-  "pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
+const HEADER_BUTTON = iconButtonClass("chrome");
 
 /** The Agent overlay: side-by-side chat on every task view but the Agent tab
  *  (038 V8).
@@ -190,7 +188,7 @@ export function ChatSidePanel({
     >
       <div
         {...panel.separatorProps}
-        className="absolute inset-y-0 -right-1 z-10 hidden w-2 cursor-col-resize hover:bg-blue-tint focus-visible:bg-blue-tint focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue lg:block"
+        className="absolute inset-y-0 -right-1 z-10 hidden w-2 cursor-col-resize hover:bg-blue-tint focus-visible:bg-blue-tint lg:block"
       />
       {/* The Agent tab's sidebar header, folded: list toggle · the
           conversation on show · New chat · close. */}
@@ -205,7 +203,7 @@ export function ChatSidePanel({
             onClick={() => setListOpen((open) => !open)}
             className={cn(HEADER_BUTTON, listOpen && "bg-blue-tint text-navy")}
           >
-            <ChatsIcon size={15} />
+            <ChatsIcon />
           </button>
         </Tooltip>
         {/* The name is the way to the conversation's full-width home (owner,
@@ -216,7 +214,7 @@ export function ChatSidePanel({
           <Link
             to={taskAgentOpen ? `/tasks/${taskId}` : `/tasks/${taskId}?chat=${encodeURIComponent(activeConversationId)}`}
             aria-label={`View in Agent tab: ${currentTitle}`}
-            className="group/name flex min-w-0 flex-1 items-center gap-2 px-1 text-meta font-semibold text-navy hover:underline focus-visible:outline-2 focus-visible:outline-blue"
+            className="group/name flex min-w-0 flex-1 items-center gap-2 px-1 text-meta font-semibold text-navy hover:underline"
           >
             {taskAgentOpen && <FoldMarkIcon size={10} />}
             <span className="truncate">{currentTitle}</span>
@@ -238,7 +236,7 @@ export function ChatSidePanel({
               }}
               className={HEADER_BUTTON}
             >
-              <PlusIcon size={14} />
+              <PlusIcon />
             </button>
           </span>
         </Tooltip>
@@ -249,7 +247,7 @@ export function ChatSidePanel({
             onClick={() => setActiveConversation(null)}
             className={HEADER_BUTTON}
           >
-            <PanelCloseIcon size={16} />
+            <PanelCloseIcon />
           </button>
         </Tooltip>
       </div>

@@ -21,6 +21,9 @@ import {
 } from "./LandscapeViewCharts";
 import { LandscapeSkeleton } from "./LandscapeViewSkeleton";
 import { feedsSources, liveStages, useLiveRefetch } from "./sourcesPresentation";
+import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
+import { cn } from "../ui/brand/cn";
+import { RetryCard } from "../ui/feedback/RetryCard";
 
 const TITLES = {
   funnel: "From search to citation",
@@ -71,7 +74,16 @@ export function LandscapeView() {
   const showTypes = classifying || Object.values(evidenceTypes).some((count) => count > 0);
   const typeSentence = classifying ? null : singleTypeSentence(typeRows);
   const withYear = sum(years);
-  const yearsFigure = relevant !== null && withYear < relevant ? population.withYear(withYear) : relevantFigure;
+  // The relevant count is said once, at the top of the page; a heading
+  // carries a count only when it differs from it (owner, consistency pass).
+  const yearsFigure = relevant !== null && withYear < relevant ? population.withYear(withYear) : null;
+  const allSources = `/tasks/${taskId}/sources/all`;
+  const typeHref = (label: string) => `${allSources}?${new URLSearchParams({ type: label }).toString()}`;
+  const yearHref = (year: string) => `${allSources}?${new URLSearchParams({ year_from: year, year_to: year }).toString()}`;
+  const groupHref = (facet: string, group: string) =>
+    `/tasks/${taskId}/sources/findings?${new URLSearchParams({ facet, group }).toString()}`;
+  // A row leads somewhere only when it has sources to show.
+  const linkTypes = typeRows.map((row) => (row.count ? { ...row, href: typeHref(row.key) } : row));
 
   // `not_found` is the server's honest shape for "no landscape/funnel yet"
   // (screening hasn't run) — that's the expected empty state below, not a
@@ -95,19 +107,10 @@ export function LandscapeView() {
         (isUnauthenticated ? (
           <ReauthRedirect />
         ) : (
-          <div role="alert" className="mx-auto max-w-3xl py-8 text-center text-body text-navy">
-            The landscape couldn't be loaded.{" "}
-            <button
-              type="button"
-              className="cursor-pointer font-bold text-blue hover:underline"
-              onClick={() => {
+          <RetryCard className="mx-auto mt-8 max-w-3xl" copy="The landscape couldn't be loaded." onRetry={() => {
                 void landscape.refetch();
                 void funnel.refetch();
-              }}
-            >
-              Retry
-            </button>
-          </div>
+              }} />
         ))}
 
       {noData && (
@@ -118,6 +121,11 @@ export function LandscapeView() {
 
       {!isPending && (
         <div className="mx-auto w-full max-w-3xl">
+          {relevantFigure !== null && !noData && (
+            <p className="text-meta text-grey" data-testid="landscape-population">
+              {relevantFigure}
+            </p>
+          )}
           {funnelTable.length > 0 && (
             <LandscapeSection title={TITLES.funnel}>
               <RankedBars caption={TITLES.funnel} rows={funnelTable} busy={funnelTable.some((row) => row.pending)} />
@@ -125,7 +133,7 @@ export function LandscapeView() {
           )}
 
           {showTypes && (
-            <LandscapeSection title={TITLES.types} figure={relevantFigure}>
+            <LandscapeSection title={TITLES.types}>
               {classifying && relevant !== null && (
                 <p className="mb-3 text-meta text-grey" data-testid="classified-so-far">
                   {population.classifiedSoFar(sum(evidenceTypes), relevant)}
@@ -134,19 +142,19 @@ export function LandscapeView() {
               {typeSentence !== null ? (
                 <p className="text-meta text-navy">{typeSentence}</p>
               ) : (
-                <RankedBars caption={TITLES.types} rows={typeRows} busy={classifying} />
+                <RankedBars caption={TITLES.types} rows={linkTypes} busy={classifying} />
               )}
             </LandscapeSection>
           )}
 
           {withYear > 0 && (
             <LandscapeSection title={TITLES.years} figure={yearsFigure}>
-              {fewYearsSentence(years) ?? <PublicationYears data={years} caption={TITLES.years} />}
+              {fewYearsSentence(years) ?? <PublicationYears data={years} caption={TITLES.years} yearHref={yearHref} />}
             </LandscapeSection>
           )}
 
           {Object.keys(geographies).length > 0 && (
-            <LandscapeSection title={TITLES.geographies} figure={relevantFigure}>
+            <LandscapeSection title={TITLES.geographies}>
               {onlyNotReported(geographies) ? (
                 <p className="text-meta text-navy">No publisher country was reported for these sources.</p>
               ) : (
@@ -168,10 +176,15 @@ export function LandscapeView() {
               <div className="flex flex-col gap-6">
                 {facets.map((facet) => (
                   <div key={facet.facet}>
-                    <h3 className="mb-2 text-caption font-bold uppercase tracking-[0.06em] text-grey">
+                    <h3 className={cn(CAPTION_LABEL_CLASS, "mb-2")}>
                       {scrub(facet.facet)}
                     </h3>
-                    <RankedBars caption={scrub(facet.facet)} rows={facetRows(facet.groups ?? [], facet.ungrouped)} />
+                    <RankedBars
+                      caption={scrub(facet.facet)}
+                      rows={facetRows(facet.groups ?? [], facet.ungrouped).map((row) =>
+                        row.key !== "ungrouped" && row.count ? { ...row, href: groupHref(facet.facet, row.key) } : row,
+                      )}
+                    />
                   </div>
                 ))}
               </div>

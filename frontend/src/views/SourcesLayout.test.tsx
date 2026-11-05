@@ -95,15 +95,27 @@ describe("SourcesLayout — the four Sources subview tabs", () => {
     expect(screen.getByRole("link", { name: "Landscape" })).toHaveClass("flex-1");
   });
 
-  it("marks the active subtab with a 2px blue rule, not a filled Navy block", () => {
+  it("marks the active subtab with the app's growing rule held full, not a filled Navy block", () => {
     mockFunnel(34);
     renderLayout(`/tasks/${TASK_ID}/sources/landscape`);
     const active = screen.getByRole("link", { name: "Landscape" });
     expect(active).toHaveAttribute("aria-current", "page");
-    expect(active).toHaveClass("border-b-2", "border-blue", "font-extrabold", "text-navy");
+    expect(active).toHaveClass("after:scale-x-100", "hover:after:scale-x-100", "font-extrabold", "text-navy");
     expect(active).not.toHaveClass("bg-navy");
     const idle = screen.getByRole("link", { name: "Themes" });
     expect(idle).toHaveClass("border-transparent", "font-semibold", "text-grey");
+    // The same rule as the lifecycle tabs: left edge to centre on hover.
+    expect(idle).toHaveClass("after:origin-left", "after:scale-x-0", "hover:after:scale-x-50", "after:duration-200");
+  });
+
+  it("sets an idle subtab in the Grey token, Navy on hover, never a faded tint (owner)", () => {
+    mockFunnel(34);
+    renderLayout(`/tasks/${TASK_ID}/sources/landscape`);
+    const idle = screen.getByRole("link", { name: "Themes" });
+    expect(idle).toHaveClass("text-grey", "hover:text-navy");
+    for (const name of idle.className.split(" ")) {
+      expect(name).not.toMatch(/opacity|text-grey\/|text-line|text-navy\//);
+    }
   });
 
   it("keeps the subtabs on one line and scrolls them sideways when they do not fit", () => {

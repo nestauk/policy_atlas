@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 
+import { buttonVariants } from "./Button";
 import { cn } from "./cn";
 
 /*
@@ -38,24 +39,18 @@ export const PAGE_COLUMN_CLASS =
 export const PAGE_TITLE_CLASS =
   "min-h-[1lh] text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title";
 
-/** Every header control that is not the primary: 40 px, Meta Semibold. Pair
- *  with `<Button variant="ghost">` (its grey, its navy hover, its press). */
-export const PAGE_CONTROL_CLASS = "h-10 whitespace-nowrap px-3 py-0 text-meta";
+/** Every header control that is not the primary: 40 px, Body Semibold, the
+ *  primary's label size so the two read as one row (lead ruling, task 058
+ *  consistency pass). Pair with `<Button variant="ghost">` (its grey, its
+ *  navy hover, its press); the ghost elsewhere stays Meta. */
+export const PAGE_CONTROL_CLASS = "h-10 whitespace-nowrap px-3 py-0 text-body";
 
 /*
- * The page's one primary (DESIGN.md § Buttons, entry size), built one way
- * whether it is a link or a button: 52 px tall, at least 144 px wide, the
- * label centred and never wrapped, the cut corner, and the 3% press. The
- * cut corner's clip also clips anything drawn outside the box, so the focus
- * ring sits inside it, in white on the blue fill.
+ * The page's one primary: the Button's primary at the entry size (52 px tall,
+ * at least 144 px wide, never wrapped, the cut corner, the inset white focus
+ * ring), built from the same classes whether it is a link or a button.
  */
-const PAGE_PRIMARY_CLASS = cn(
-  "pressable cutout inline-flex h-13 min-w-36 cursor-pointer items-center justify-center",
-  "whitespace-nowrap bg-blue px-6 font-sans text-body font-bold leading-none text-white no-underline",
-  "hover:bg-[#0000d6]",
-  "focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-white",
-  "disabled:cursor-default disabled:bg-line-2 disabled:hover:bg-line-2",
-);
+const PAGE_PRIMARY_CLASS = buttonVariants({ variant: "primary", size: "entry" });
 
 type PagePrimaryProps = {
   children: ReactNode;
@@ -89,7 +84,6 @@ export function PageBackLink({ to, children }: { to: string; children: ReactNode
       className={cn(
         "-my-2 inline-flex h-10 items-center whitespace-nowrap text-meta font-semibold text-grey no-underline",
         "transition-colors duration-150 ease-[ease] hover:text-navy",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue",
       )}
     >
       {children}

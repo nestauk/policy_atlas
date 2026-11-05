@@ -7,10 +7,13 @@
  * label and some citations — that is all they ask for.
  */
 
-/** Typography shared across the report body (034 presentation). */
+/** Typography shared across the report body (034 presentation). The part
+ *  heading ("Executive summary", "Full report") is Heading, uppercase,
+ *  Extrabold and tracked (lead ruling, task 058 consistency pass); a section
+ *  heading is Heading, Lead below md. Both are on the named scale. */
 export const REPORT_PART_HEADING_CLASS =
-  "text-[28px] font-extrabold uppercase tracking-[0.06em] leading-[1.2] text-navy max-md:text-[22px]";
-export const REPORT_SECTION_HEADING_CLASS = "text-heading font-bold text-navy max-md:text-[20px]";
+  "text-heading font-extrabold uppercase tracking-label text-navy";
+export const REPORT_SECTION_HEADING_CLASS = "text-heading font-bold text-navy max-md:text-lead";
 export const REPORT_BODY_CLASS = "text-lead text-ink max-md:text-body";
 
 /** Contents-sidebar anchors for report part headings. */

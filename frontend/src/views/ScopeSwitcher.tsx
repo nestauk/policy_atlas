@@ -40,7 +40,6 @@ export function ScopeSwitcher({
           className={cn(
             "inline-grid cursor-pointer items-center border-b-2 pt-0.5 text-meta",
             "transition-colors duration-150 ease-[ease]",
-            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue",
             scope === value
               ? "border-blue font-extrabold text-navy"
               : "border-transparent font-semibold text-grey hover:text-navy",

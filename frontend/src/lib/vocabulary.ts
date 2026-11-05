@@ -58,6 +58,7 @@ export const COPY = {
   /** Capability-picker heading on /new. */
   newTaskPrompt: "What would you like to do?",
   findTask: `Find a ${TASK.lower}`,
+  findProject: `Find a ${PROJECT.lower}`,
   allTasks: `All ${TASK.lowerMany}`,
   noTasks: `No ${TASK.lowerMany} yet`,
   noProject: `No ${PROJECT.lower}`,

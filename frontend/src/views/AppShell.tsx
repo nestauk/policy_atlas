@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Outlet, useLocation, useParams } from "react-router";
 
 import { useArchiveTask, useUpdateTask } from "../api/mutations";
@@ -24,12 +24,15 @@ import { useTabOptions } from "./taskResult";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { RunStreamProvider } from "../store";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
+import { MENU_ITEM_CLASS, moveMenuFocus } from "../ui/radix/menu";
+import { iconButtonClass } from "../ui/brand/icons";
 import { AppFooter } from "./AppFooter";
 import { SensitiveInfoBanner } from "./SensitiveInfoBanner";
 import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
 import { PlanDocument } from "./workspace/PlanDocument";
 import { ToastProvider, useToast } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
+import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
 
 /** Task settings affordance (028 F.5): rename + archive, wired to the
  *  existing task mutations — the task-card pattern,
@@ -96,7 +99,7 @@ function TaskSettingsMenu({
           type="button"
           aria-label={COPY.taskSettings}
           title={COPY.taskSettings}
-          className="cursor-pointer text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
+          className="cursor-pointer text-grey hover:text-navy"
         >
           <svg
             aria-hidden="true"
@@ -131,7 +134,7 @@ function TaskSettingsMenu({
               onKeyDown={(event) => {
                 if (event.key === "Escape") reset();
               }}
-              className="w-full border border-line-2 bg-paper px-2 py-1.5 text-meta font-bold text-navy focus-visible:outline-2 focus-visible:outline-blue"
+              className="w-full border border-line-2 bg-paper px-2 py-1.5 text-meta font-bold text-navy"
             />
             {update.isError && (
               <p role="alert" className="mt-2 text-body text-red">
@@ -224,14 +227,21 @@ function TaskSettingsMenu({
  */
 function AccountMenu({ signOut }: { signOut: () => void }) {
   const me = useMe();
+  const menuRef = useRef<HTMLDivElement>(null);
   return (
     <Popover>
       <PopoverTrigger asChild>
+        {/* The open state shows on the trigger (the pressed look: Blue Wash,
+            Navy) while the menu is open; Radix sets `aria-expanded`. */}
         <button
           type="button"
           aria-label="Account"
+          aria-haspopup="menu"
           title="Account"
-          className="flex h-8 w-8 cursor-pointer items-center justify-center text-navy hover:text-blue focus-visible:outline-2 focus-visible:outline-blue"
+          className={cn(
+            iconButtonClass("chrome"),
+            "text-navy hover:text-navy data-[state=open]:bg-blue-tint-2 data-[state=open]:text-navy",
+          )}
         >
           <svg
             aria-hidden="true"
@@ -248,9 +258,24 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
           </svg>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-56 p-1">
+      {/* The account menu (task 058 consistency pass, lead rulings): the
+          popover's tokens (Paper, Line 2 hairline, the overlay lift), as wide
+          as its content and at least 240 px, right-aligned under the button.
+          Who you are first, a hairline, then the items as 40 px Meta rows
+          with the menu-item wash; Sign out, the one destructive item, last.
+          Focus goes to the first item on open and back to the button on
+          close; Escape and an outside press close it; the arrow keys move
+          between items. */}
+      <PopoverContent
+        align="end"
+        className="anim-menu w-auto min-w-60 p-0 transition-none"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+        }}
+      >
         {me.data !== undefined && (
-          <div className="min-w-0 border-b border-line px-3 py-2">
+          <div className="min-w-0 max-w-80 p-4 pb-3">
             <p className="truncate text-meta font-bold text-navy">{scrub(me.data.display_name)}</p>
             {me.data.email != null && (
               <p className="truncate text-caption text-grey">{scrub(me.data.email)}</p>
@@ -265,13 +290,23 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
             )}
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => signOut()}
-          className="block w-full cursor-pointer px-3 py-2 text-left text-meta font-semibold text-navy hover:bg-blue-tint-2 hover:text-blue"
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label="Account"
+          aria-orientation="vertical"
+          className="border-t border-line py-1"
+          onKeyDown={(event) => moveMenuFocus(event, menuRef.current)}
         >
-          Sign out
-        </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => signOut()}
+            className={MENU_ITEM_CLASS}
+          >
+            Sign out
+          </button>
+        </div>
       </PopoverContent>
     </Popover>
   );
@@ -479,7 +514,7 @@ export function AppShell() {
                     "Options scoping" or "Evidence search", read straight off
                     the row so a colleague never has to open the plan to tell
                     the two kinds apart. */}
-                <span className="shrink-0 text-caption font-semibold uppercase tracking-[0.06em] text-grey">
+                <span className={cn(CAPTION_LABEL_CLASS, "shrink-0")}>
                   {capabilityLabel(task.data.capability)}
                 </span>
                 <TaskSettingsMenu

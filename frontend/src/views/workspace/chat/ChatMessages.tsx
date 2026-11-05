@@ -21,6 +21,8 @@ import {
   TIER_LABEL,
   TIER_TEXT,
 } from "../../ArtefactView";
+import { LABEL_CLASS } from "../../../ui/brand/label";
+import { cn } from "../../../ui/brand/cn";
 
 interface ChatCitation {
   id?: string;
@@ -283,7 +285,7 @@ function resolveCitation(citations: ChatCitation[], n: number): ChatCitation | n
 // support (Enter/Space on the summary) for free, styled to the footer's
 // existing caption typography.
 function References({ citations, turn, onCitation, onOpenDossier }: { citations: ChatCitation[]; turn: ChatConversationRow; onCitation: (citation: ChatCitation) => void; onOpenDossier: (sourceRef: string) => void }) {
-  return <footer className="border-t border-line pt-2"><details><summary className="cursor-pointer text-meta font-bold uppercase tracking-[0.06em] text-grey">References ({citations.length})</summary><div className="mt-2 space-y-2">{citations.map((citation, index) => {
+  return <footer className="border-t border-line pt-2"><details><summary className={cn(LABEL_CLASS, "cursor-pointer")}>References ({citations.length})</summary><div className="mt-2 space-y-2">{citations.map((citation, index) => {
     const sourceRef = citation.source_id ?? citation.source_title ?? null;
     const titleText = scrub(citation.source_title ?? citation.title ?? citationId(citation) ?? "Citation");
     return <div key={citationId(citation) || index} className="text-caption text-ink"><button type="button" onClick={() => onCitation(citation)} className={CITATION_MARKER_CLASS}>[{citation.n ?? index + 1}]</button>{" "}

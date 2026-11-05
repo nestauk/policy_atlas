@@ -11,6 +11,8 @@ import {
   checkInReadingListHeading,
   checkInThemesHeading,
 } from "./checkInPresentation";
+import { LINK_CLASS } from "../../ui/brand/inlineActions";
+import { cn } from "../../ui/brand/cn";
 
 /** One staged P2 theme rename (batched into the single check-in response). */
 export interface ThemeRename {
@@ -399,7 +401,7 @@ export function CheckInBundle({
           ) : (
             <button
               type="button"
-              className="mt-1.5 cursor-pointer text-meta font-semibold text-blue hover:text-navy"
+              className={cn(LINK_CLASS, "mt-1.5 text-meta")}
               onClick={() => {
                 setRowTitle("");
                 setRowFocus("");

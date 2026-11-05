@@ -5,6 +5,7 @@ import { AppShell } from "./views/AppShell";
 import { ArtefactView } from "./views/ArtefactView";
 import { FindingsView } from "./views/FindingsView";
 import { HistoryView } from "./views/HistoryView";
+import { LandscapeSkeleton } from "./views/LandscapeViewSkeleton";
 import { LifecycleRoute, RedirectToPath } from "./views/LifecycleRoute";
 import { OptionCard } from "./views/longlist/OptionCard";
 import { NewTaskView } from "./views/NewTaskView";
@@ -27,10 +28,12 @@ const LandscapeView = lazy(() =>
   import("./views/LandscapeView").then((module) => ({ default: module.LandscapeView })),
 );
 
+/** While the Landscape chunk loads: the view's own skeleton in the view's
+ *  own frame, so the page does not change shape when the chunk lands. */
 function LandscapeFallback() {
   return (
-    <main aria-busy="true" aria-label="Loading landscape" className="mx-auto max-w-5xl px-6 py-10">
-      <div className="h-64 anim-breathe border border-line bg-paper-2" />
+    <main className="py-8">
+      <LandscapeSkeleton />
     </main>
   );
 }

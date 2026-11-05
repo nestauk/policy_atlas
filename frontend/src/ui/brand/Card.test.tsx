@@ -119,8 +119,10 @@ describe("Nav", () => {
     render(<RouterProvider router={router} />);
     const active = screen.getByRole("link", { name: "Workspace" });
     const inactive = screen.getByRole("link", { name: "Sources" });
-    expect(active.className).toContain("border-blue");
-    expect(inactive.className).not.toContain("border-blue");
+    // The active rule is the growing rule held at full width.
+    expect(active).toHaveClass("after:scale-x-100", "font-extrabold");
+    expect(inactive).not.toHaveClass("after:scale-x-100");
+    expect(inactive).toHaveClass("after:scale-x-0");
     expect(screen.getByRole("navigation").className).toContain("w-full");
     expect(screen.getByRole("navigation").innerHTML).not.toContain("max-w-[1180px]");
   });

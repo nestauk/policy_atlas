@@ -4,6 +4,7 @@ import { useFunnel } from "../api/queries";
 import { cn } from "../ui/brand/cn";
 import { SOURCES_LABELS } from "../lib/vocabulary";
 import { WIDE_PAGE_CLASS } from "./listPageChrome";
+import { GROWING_RULE_ACTIVE_CLASS, GROWING_RULE_CLASS } from "../ui/brand/Nav";
 
 /**
  * Sources layout: Themes, Landscape and All sources always render; Findings
@@ -28,10 +29,10 @@ export function SourcesLayout() {
   ];
 
   return (
-    <div className={`${WIDE_PAGE_CLASS} min-h-full py-6`}>
+    <div className={`${WIDE_PAGE_CLASS} min-h-full py-8`}>
       <div className="bg-paper">
-        {/* DESIGN.md § Navigation, Radix tabs: Meta Semibold Grey, the
-            active tab Extrabold Navy over a 2px Electric Blue rule, a Line
+        {/* DESIGN.md § Navigation: Meta Semibold Grey, the active tab
+            Extrabold Navy over the growing 3px Electric Blue rule, a Line
             hairline under the row (an inset shadow, so the rule sits on it
             without overflowing the scroller); one line, scrolling sideways
             when it does not fit (task 058, landscape polish entry 16). */}
@@ -46,11 +47,15 @@ export function SourcesLayout() {
               end={tab.end}
               className={({ isActive }) =>
                 cn(
-                  "flex-1 shrink-0 whitespace-nowrap border-b-2 px-4 py-2.5 text-center text-meta no-underline max-md:px-2.5",
+                  "flex-1 shrink-0 whitespace-nowrap border-b-[3px] border-transparent px-4 py-2.5 text-center text-meta no-underline max-md:px-2.5",
                   "transition-colors duration-150 ease-[ease] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue",
+                  // The tab language of the whole app (owner, consistency
+                  // pass): the rule grows from the left edge to the centre
+                  // on hover and focus, and runs full width when active.
+                  GROWING_RULE_CLASS,
                   isActive
-                    ? "border-blue font-extrabold text-navy"
-                    : "border-transparent font-semibold text-grey hover:text-navy",
+                    ? cn(GROWING_RULE_ACTIVE_CLASS, "font-extrabold text-navy")
+                    : "font-semibold text-grey hover:text-navy",
                 )
               }
             >

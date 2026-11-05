@@ -6,7 +6,7 @@ import { Tooltip, TooltipProvider } from "../../../ui/radix/Tooltip";
 import { ConversationRail, RAIL_TOOLTIP_CLASS, RAIL_TOOLTIP_DELAY_MS } from "./ConversationRail";
 import { useConversations } from "../../../api/queries";
 import { recentChats, taskAgentConversationId } from "./conversationState";
-import { PanelCloseIcon, PlusIcon } from "./icons";
+import { PanelCloseIcon, PlusIcon, iconButtonClass } from "../../../ui/brand/icons";
 
 const STORAGE_KEY = "policy-atlas:chats-sidebar";
 
@@ -98,9 +98,9 @@ export function ConversationSidebar({
           aria-expanded={open}
           aria-controls="chats-sidebar-list"
           onClick={toggle}
-          className="pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
+          className={iconButtonClass("chrome")}
         >
-          <PanelCloseIcon size={16} />
+          <PanelCloseIcon />
         </button>
       </Tooltip>
     </TooltipProvider>
@@ -136,9 +136,9 @@ export function ConversationSidebar({
           title={newChatTitle}
           disabled={!chatsEnabled}
           onClick={onNewChat}
-          className="pressable flex h-8 items-center gap-1.5 px-2.5 text-meta font-semibold text-navy hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+          className="pressable flex h-8 items-center gap-1.5 px-2.5 text-meta font-semibold text-navy hover:bg-blue-tint-2 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
         >
-          <PlusIcon size={14} />
+          <PlusIcon />
           {COPY.newChat}
         </button>
       </div>

@@ -261,7 +261,8 @@ Nesta's core palette at tool density: one hero, a structural navy, warm-neutral 
 - **Electric Blue Wash** (#f5f5ff): the palest blue. User message bubbles, citation marker fill, menu-item hover. Reads as "touched by the reader".
 
 ### Secondary
-- **Navy** (#0f294a): structural text. Headings, nav links, button labels on secondary buttons, the "Policy" half of the wordmark, sheet titles. Also the splash page ground, where **Navy Muted** (#c8d6e6) carries body copy and **Aqua** (#b6e3e8) replaces blue as the accent.
+- **Navy** (#0f294a): structural text. Headings, nav links, button labels on secondary buttons, the "Policy" half of the wordmark, sheet titles. Also the splash page ground, where **Navy Muted** (#c8d6e6) carries body copy and **Aqua** (#b6e3e8) replaces blue as the accent (and is the focus ring on the navy hero).
+- **The dark plan panel** (task 058 consistency pass): the plan document's Navy sheet names its own tokens, so no view writes a hex: **Navy Deep** (#0a1f38, wells and inputs sunk into the panel), **Navy Line** (#1a3a5c, its hairlines), **On Navy** (#e8edf2, its text), **On Navy Soft** (#c5d0dc, its secondary text) and **On Navy Muted** (#97a8bc, its labels and meta). **Electric Blue Pressed** (#0000d6) and **Green Pressed** (#147a6c) are tokens too (`bg-blue-pressed`, `bg-green-pressed`).
 
 ### Tertiary (status and category)
 - **Green** (#18a48c): complete. As a solid fill only on the "go" action that starts a run; otherwise as **Green Tint** (#e7f5f2) with deep green text (#0c6b5a).
@@ -306,17 +307,23 @@ Both faces are licensed. Their binaries are never committed to the public reposi
 - **Caption** (400 to 600, 12px, 1.4): eyebrows, fine print, tooltip text, citation markers, user email in the account menu.
 - **Label** (700 or 800, 14px, uppercase, tracking 0.06em, Grey): pane headings (Extrabold), plan-step and check-in eyebrows (Bold; the check-in eyebrow is Electric Blue), report outline headings. The conversation list and the settled scope card's group labels use the same treatment at Caption size.
 - **Chip** (600, 11.5px): a deliberate off-scale token. Chips sit below caption text by owner ruling.
+- **Hero** (`text-hero`, clamp 40 to 68px, 1.02) and **Hero 2** (`text-hero-2`, clamp 28 to 40px, 1.1): the splash page's two responsive headlines, named tokens because the splash persuades rather than operates (lead ruling P5). Splash prose is Lead.
+- **Report part heading** ("Executive summary", "Full report"): Heading, Extrabold, uppercase, tracked on the label token, Navy, at every width; a section heading is Heading, Lead below `md` (task 058 consistency pass).
 
 ### Named Rules
 **The Sixteen Floor Rule.** Body prose never renders below 16px. Meta and caption sizes are for labels, cells and markers, never for sentences a reader must read.
 
 **The Brand Voice Rule.** Zosia Display speaks as Nesta: wordmark, splash, sheet titles, system-state headings. Page and report titles are Averta Extrabold at Display size. Do not set page titles in Zosia.
 
-**The Named Size Rule.** Every text size is one of the named scale tokens (`text-caption` through `text-display`). No ad-hoc pixel sizes in views; the one exception is the 11.5px chip.
+**The Named Size Rule.** Every text size is one of the named scale tokens (`text-caption` through `text-display`, and the splash's `text-hero` and `text-hero-2`). No ad-hoc pixel sizes in views; the one exception is the 11.5px chip. Uppercase labels use `LABEL_CLASS`, `PANE_LABEL_CLASS` or `CAPTION_LABEL_CLASS` (`ui/brand/label.ts`) and the `tracking-label` token, never a hand-written tracking. Averta has no 500 weight: a selected row is Semibold, never `font-medium`.
 
 ## Layout
 
 The app is full-bleed. A 64px top nav runs the viewport width with a 24px gutter, brand group left and links right; below `md` it wraps to a two-row nav at 16px gutters. Inside a task a second, grey-ground nav bar carries the task title and the five lifecycle tabs (Agent · Result · Sources · Share · History), spaced 20px apart; below `md` the tabs move to a bottom bar that scrolls horizontally and respects the safe-area inset.
+
+**List pages** (Tasks, Projects, a Project) share one header with fixed slots (task 058, lists polish): a 24 px context row (the way back on a project, empty on the lists), a 52 px title row with the actions right-aligned, and a filters row always reserved at 40 px, so the title and the list start at the same height on every page. Below `md` the actions sit above the title and the gutters are 16 px. A list row is 56 px; on phones it is two fixed lines, 84 px, without the owner and the source count. The New page's title starts where the lists' titles start (44 px top padding, no eyebrow above it).
+
+**Task tabs** pad their page `py-8` (32 px, the report sheet's margin) and keep 24 px gutters from `md` up, 16 px below.
 
 Content lives in a centred reading column of 780px on list pages and the report. The report page is a paper sheet with 40px horizontal and 36px vertical padding, 32px vertical margin, a hairline Line ring and Tailwind's small shadow (not the card shadow); below `md` it loses margin, ring and shadow and pads at 16px, so the paper becomes the screen. Prose inside caps at a 44em measure.
 
@@ -330,7 +337,7 @@ Flat paper with ambient lift only. Surfaces sit on the grey ground and are separ
 
 ### Shadow Vocabulary
 - **Paper weight** (`box-shadow: 0 1px 3px rgba(15,41,74,0.05), 0 8px 24px rgba(15,41,74,0.04)`): cards at rest. Navy-tinted, near-invisible.
-- **Sheet edge** (`--shadow-paper`: `0 1px 3px rgba(15, 41, 74, 0.05), 0 8px 24px rgba(15, 41, 74, 0.04)`, the Card's navy ambient shadow, plus a 1px Line ring): the report page. It disappears below `md` and in print. (Task 058 moved it off Tailwind's grey `shadow-sm`; four other surfaces still carry the grey one and are a later sweep.)
+- **Sheet edge** (`--shadow-paper`: `0 1px 3px rgba(15, 41, 74, 0.05), 0 8px 24px rgba(15, 41, 74, 0.04)`, the Card's navy ambient shadow, plus a 1px Line ring): the report page and the Findings table. It disappears below `md` and in print. No surface carries Tailwind's grey `shadow-sm` or `shadow-lg` (task 058 consistency pass: the find dialog and jump-to-end take the overlay lift).
 - **Tooltip lift** (`box-shadow: 0 4px 16px rgba(15,41,74,0.12)`): tooltips only.
 - **Overlay lift** (`box-shadow: 0 10px 30px rgba(15,41,74,0.14)`): popovers, sheets, toasts.
 - **Check-in glow** (`0 0 0 6px rgb(255 110 71 / 0.25)` at the animation midpoint): a one-shot Orange ring marking a newly arrived check-in; it fades to nothing. Orange is the one "waiting on you" colour (task 058, D15): the paused mark on the trace and the Agent tab, the check-in's rule and this glow.
@@ -338,29 +345,40 @@ Flat paper with ambient lift only. Surfaces sit on the grey ground and are separ
 ### Named Rules
 **The Hairline First Rule.** Regions are separated by a 1px Line border. A shadow is added only when the surface is temporary and sits above the page.
 
-**The Navy Shadow Rule.** Every custom shadow is tinted with Navy (`rgba(15,41,74,…)`), never neutral black, so lift stays in the palette. The report sheet's Tailwind `shadow-sm` is the recorded exception.
+**The Navy Shadow Rule.** Every shadow is tinted with Navy (`rgba(15,41,74,…)`), never neutral black, so lift stays in the palette.
 
 ## Shapes
 
 Zero radius everywhere. Buttons, cards, chips, inputs, popovers, sheets, toasts and tooltips all have square corners, and so does the status mark: a 6px square (task 058; owner 2026-11-05, replacing the 8px circle), small enough to read as a mark and not a chip.
 
+**The one radius exception** (lead ruling P4): the plan card's radio is round, a 16 px ring with an 8 px dot, because a round radio is how people recognise a single choice. Nothing else is rounded.
+
 The signature form is the Nesta cut corner: a 45° clip removing 10px from the top-right of the primary button (8px on the small size). The composer's send button doubles it, cutting both top-right and bottom-left. The green run-start button shares the cut. No other element carries it, which is why the eye can find the way forward on any screen.
 
-Borders are 1px hairlines. Active and selected states are expressed as a 3px bottom rule in Electric Blue (nav, lifecycle tabs) or a 2px rule (Radix tabs), never as a filled pill. Focus is a 2px Electric Blue outline offset 2px.
+Borders are 1px hairlines. Active and selected states are expressed as a 3px bottom rule in Electric Blue (nav, lifecycle tabs, Sources subtabs) or a 2px rule (the Mine/Organisation switcher), never as a filled pill.
+
+**The Focus Rule** (task 058 consistency pass). Focus is a 2px Electric Blue outline offset 2px, set once in `index.css` for every link, button, field, tab and focusable element, so no control falls back to the browser's ring. A control that cannot show an outside ring draws it inside: the cut-corner buttons (the primary, the start button, the send button) carry a 2px white ring inset 4px, because their clip-path clips anything outside the box; a row flush against its frame insets the blue ring 2px; the white splash button insets a Navy ring; controls on the navy splash hero ring in Aqua.
 
 The fold-mark logo is the one piece of geometry with personality: a 17px diamond, a square sheet whose four corners have folded to the centre. It sits before the wordmark in the nav, marks each chat in the conversation rail, and forms the animated constellation on the splash page. While a run is live it turns through 36 frames of folding and rotating in its own pastels (sand, teal, salmon, pink), snapping shut to solid blue between sheets, as the live mark in the trace's top line, the run status bar and the section being written (14 px in text lines). The nav wordmark's mark and the rail's Task Agent mark hold still during a run, and a running task's row in the task list takes the breathing 6px blue square, so every row's mark is one size (owner, round 8). It holds still under reduced motion.
 
 ## Components
 
-Precise and unadorned. Hard edges, hairline borders, no decoration. The cut corner is the only flourish. Feedback is a 3% press scale over 160ms on a strong ease-out and a 150ms colour ease; hover states never snap. A nav item or lifecycle tab grows its blue rule from the centre on hover and focus (200ms, strong ease-out).
+Precise and unadorned. Hard edges, hairline borders, no decoration. The cut corner is the only flourish. Feedback is a 3% press scale over 160ms on a strong ease-out and a 150ms colour ease; hover states never snap. A nav item, lifecycle tab or Sources subtab grows its blue rule from its left edge to its centre on hover and focus (200ms, strong ease-out); the active item's rule is full width, and a click carries the half rule on to the right edge.
 
 ### Buttons
 - **Shape:** square with a 10px top-right cut on primary (8px on small). Secondary and ghost have no cut.
 - **Primary:** Electric Blue fill, white Averta Bold at Meta size, 18px horizontal and 11px vertical padding. Hover deepens to #0000d6. Disabled is Line 2 fill with white text, present but inert. One per view.
-- **Entry size:** list-page "New task" and the New Task submit use the same cut shape at Body size with 24px by 14px padding.
+- **Entry size:** the list pages' primary ("New task", "New project"), the New Task submit and Start run use the same cut shape at Body size: 52 px tall, at least 144 px wide, 24 px side padding, the label centred and never wrapped. `PagePrimary` is the `Button`'s own classes (`buttonVariants`), link or button.
+- **Header controls:** every list-page header control that is not the primary is the ghost at 40 px, Body Semibold, the primary's label size (lead ruling, consistency pass); the ghost elsewhere stays Meta.
 - **Start run:** the one action that starts a search is the entry-size cut shape in Green (#18a48c), hover #147a6c. It is the only green fill in the system and the only non-blue cut corner.
 - **Secondary:** transparent, Navy Semibold, 14px horizontal padding, hover fills #f0f0f3.
+- **Outline** (lead ruling P1): the secondary with a 1px Line 2 border on Paper, Navy Semibold Meta, hover #f0f0f3, at the secondary's heights. Pagination, the Download trigger, and the bordered actions inside a check-in or plan card.
 - **Ghost:** transparent, Grey Semibold, 12px by 9px padding, hover turns Navy. For Cancel and Back to top.
+- **Retry:** a standalone Retry is always `Button` secondary small, under the sentence that says what failed (`RetryCard`).
+- **Inline actions** (`ui/brand/inlineActions.ts`), three styles and no others, each at the size of its line: **Link**, Electric Blue Semibold, underlined on hover 3 px below ("Sources →", "Read it →", "Expand all", "Ask about this analysis" at Meta, "Review the plan"); **Quiet control**, Grey Semibold over a Line 2 underline that turns Navy ("See the plan", "Show steps", "See plan", "Change" at Caption); **Prose link**, Navy, always underlined, blue on hover (legal pages, a source title in the Findings table, a project named on Share).
+- **Icon buttons** (`ui/brand/icons.tsx`, the one icon module, one 1.5 stroke): a 16 px glyph in a 32 px box for chrome (the rail, panel headers, close, the longlist's option actions, jump to end) and a 13 px glyph in a 28 px box for row actions (rename and archive on a conversation row). One hover, Blue Wash with Navy, and the 3% press.
+- **Close** (`CloseButton`): the chrome icon button with a 16 px ×, Grey turning Navy. Sheets, toasts, the sensitive-information banner (white glyph, white ring) and any dialog close with it; no × glyph in text.
+- **Disclosure:** the chevron glyph at 12 px, turning down over 200 ms when open; never a text triangle.
 - **Hover / Focus:** colour eases 150ms; active scales to 0.97; focus is a 2px blue outline offset 2px.
 - **Labels:** sentence case, action-oriented ("Start search", "Looks right", "Review the plan"). Default `type="button"`.
 
@@ -376,9 +394,10 @@ Precise and unadorned. Hard edges, hairline borders, no decoration. The cut corn
 - **Border:** 1px Line 2.
 - **Internal Padding:** 16px; pane heading is 14px top, 10px bottom, 16px sides.
 - **Pane heading:** Label style (uppercase, Extrabold, tracked, Grey) with an optional right-aligned control.
+- **A list loading** sits inside its own frame (Paper, Line 2 hairline): five rows at the real row height, each with a placeholder bar where the name will be. **An empty list** is the same frame with a label and one plain sentence, left-aligned at the list's edge. A list that fails is the frame, the sentence and a 40 px ghost Try again.
 - **Divider:** 1px Line.
 - **Status mark:** 6px square, always followed by a word, for the still states: Green complete, Orange paused, Line 2 idle, Red failed. Blue and breathing for a step in progress and a running task's row. The trace's top line, the status bar and the section being written show the turning fold mark instead (see Shapes).
-- **Placeholder bar** (owner, round 8): a short Line 2 bar, 10px tall, breathing on the status mark's 1.6s rhythm, in the cell or row a running stage will fill. Only while that stage runs and only where the value is absent; still under reduced motion. The Sources table pulses Relevant while screening, Evidence type and Evidence strength (relevant sources) while classifying, and Status (relevant sources not yet read) while the full texts are read; the Themes subtab shows three placeholder theme rows while mapping until the themes are found, then the found themes in their final layout, name and description, with a bar where each document count will be; the counts fade in place when the committed landscape lands, nothing reordering or remounting (owner, round 9) and the Landscape subtab placeholder bars in place of the evidence-types chart while classifying. While a stage that feeds the Sources tab runs, its views refetch every 5s so the values replace their bars as they land.
+- **Placeholder bar** (owner, round 8): a short Line 2 bar, 10px tall, breathing on the status mark's 1.6s rhythm, in the cell or row a running stage will fill. Only while that stage runs and only where the value is absent; still under reduced motion. The Sources table pulses Relevant while screening, Evidence type and Evidence strength (relevant sources) while classifying, and Status (relevant sources not yet read) while the full texts are read; the Themes subtab shows three placeholder theme rows while mapping until the themes are found, then the found themes in their final layout, name and description, with a bar where each document count will be; the counts fade in place when the committed landscape lands, nothing reordering or remounting (owner, round 9) and the Landscape subtab placeholder bars in the chart's own rows while classifying. While a stage that feeds the Sources tab runs, its views refetch every 5s so the values replace their bars as they land.
 
 ### Inputs / Fields
 - **Style:** Paper fill, 1px Line 2 border, 12px by 10px padding, Lead size, square. The composer textarea grows with content (`field-sizing: content`) between 56px and 240px.
@@ -388,14 +407,17 @@ Precise and unadorned. Hard edges, hairline borders, no decoration. The cut corn
 
 ### Navigation
 - **Top nav:** 64px, Paper, hairline bottom border. Wordmark left (fold mark, "Policy" Navy, "Atlas" Electric Blue, display face at Heading size, tracked -0.02em) with a blue BETA chip carrying a tooltip. Links right at Lead Semibold Navy.
-- **Growing underline:** the active link is Extrabold with a 3px Electric Blue bottom rule; inactive links have a transparent rule so nothing shifts. On hover (fine pointers) and keyboard focus a 3px Electric Blue rule grows from the item's centre to its full width over 200ms on the strong ease-out and shrinks back on leave; the active item's rule is full and still (owner, round 9). Under reduced motion the rule appears without growing.
+- **Growing underline** (owner, round 9, reshaped in the consistency pass): one 3px Electric Blue rule under the item, anchored at its left edge, over a transparent 3px border so nothing shifts. On hover (fine pointers) and keyboard focus it grows from the left edge to the item's centre (half width, 200ms, strong ease-out) and shrinks back on leave. The active item is Extrabold and its rule is full width; clicking carries the half rule on from the centre to the right edge rather than restarting it. Under reduced motion the half and the full rule appear without growing. The top nav, the lifecycle tabs and the Sources subtabs share it (`GROWING_RULE_CLASS`, `GROWING_RULE_ACTIVE_CLASS`).
 - **Lifecycle tabs:** same rule language at Lead Semibold. Inactive is Grey, hover Navy with the growing rule, active Navy with the blue rule; a locked stage has no rule to grow. Locked stages render in Line 2 with a not-allowed cursor and `aria-disabled`, so the whole lifecycle is visible from the first moment.
 - **Mobile:** nav wraps to two rows; lifecycle tabs move to a bottom bar with horizontal scroll.
-- **Radix tabs:** Meta Semibold Grey, 2px rule, active Extrabold Navy.
+- **Sources subtabs:** Meta Semibold in the Grey token (never a faded tint), Navy on hover, the active one Extrabold Navy, with the growing rule above.
+- **The Mine/Organisation switcher** uses the tab language: Meta, a 2px Electric Blue rule under the active choice, no fill.
 
 ### Overlays
 - **Tooltip:** Paper, Line 2 border, 10px by 6px padding, Caption Navy, tooltip lift. Scales in from its trigger over 125ms.
-- **Popover:** Paper, Line 2 border, 16px padding, Meta Ink, 384px wide, overlay lift. Scales in from its trigger over 150ms. Menu items hover to Blue Wash with blue text.
+- **Popover:** Paper, Line 2 border, 16px padding, Meta Ink, 384px wide (capped at 92vw), overlay lift. Scales in from its trigger over 150ms. Menu items hover to Blue Wash with blue text.
+- **Find a task / Find a project** (owner and lead, consistency pass): the header control opens a popover under itself, right-aligned. The field is focused on open, its placeholder "Search your tasks by name" ("…projects…"); with nothing typed it shows no result line, only the five most recent as a starting list. Results follow the typing 150 ms after the last key; "No tasks match “<words>”" appears only once there are words. The field is a combobox: the arrow keys move the highlight (the Blue Wash, never blue text, and the matched words are not marked), Enter opens the row, Escape or an outside press closes and returns focus to the control. Rows are 40 px, Body Navy, one line, truncated.
+- **Menu** (the account menu, consistency pass): the popover's tokens with no inner padding, as wide as its content and at least 240 px, right-aligned under its button. Who you are first (name in Meta Bold, email and organisation in Caption Grey, 16 px padding), a hairline, then the items as 40 px Meta Semibold rows with the menu-item wash; Sign out, the one destructive item, last. It arrives from the button, 4 px above its place, fading and settling over 200 ms on the strong ease-out, and leaves the same way in 150 ms; a cut under reduced motion. The button shows the open state (Blue Wash) with `aria-expanded`; focus moves to the first item on open and back to the button on close; the arrow keys, Home and End move between items; Escape and an outside press close it.
 - **Sheet:** slides from the right on the drawer curve over 260ms behind a 40% Navy scrim; title in the display face at Lead Bold. Becomes a bottom sheet below `md`.
 - **Toast:** Paper, Line 2 border (Red for errors), 16px padding, overlay lift, bottom-right, rises 8px into place over 200ms.
 
@@ -424,6 +446,9 @@ A plan step is a Paper card under one small stepper line the client computes ("P
 
 ### The search queries (Sources, signature of round 9)
 At the top of All sources (owner, round 9). While the search runs it is open under "Search queries" (Lead Semibold Navy): one table at Meta size with hairline rows, the Query and Results columns headed in the table-header label style, each backend once per group as a row-group label (Label treatment at Caption size, Grey), each query as it goes out (a citation pass's or lookup's description in Grey, a query in Navy), its Results cell a placeholder bar until the count returns and then the count right-aligned in tabular figures; a row that goes out fades in over 300ms. Queries wrap on words. The sources table and its count line stay hidden until the first results land, then rise in together. Once the search has ended the block folds to one Meta Grey line, "12 search queries · 312 results · Show", whose chevron opens the table over 200ms ("Hide" when open); the committed coverage replaces the live rows in place. Below `md` the same block spans the column.
+
+### Charts (Landscape)
+Ranked bars are a real table: label, Navy bar, the value at the bar's end; Grey for missing data and folded tails. A row leads somewhere when it can (owner, consistency pass): an evidence type opens All sources filtered to it (`?type=`), a finding group opens Findings filtered to it, a year's column opens All sources for that year (`?year_from=&year_to=`); folded rows, "Not reported", "Ungrouped", rows at zero, the funnel and the publisher countries (All sources has no country filter) lead nowhere and take no hover. One hover: the bar turns Electric Blue and the row's words go Navy, no row wash; the link covers the whole row and a keyboard focus rings the row. The relevant-source count is said once, in a Meta Grey line at the top of the page ("118 relevant sources"); a section heading carries a count only when it differs ("112 with a year", "34 findings", "Classified so far: 18 of 118").
 
 ## Motion
 

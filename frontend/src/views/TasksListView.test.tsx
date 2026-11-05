@@ -272,7 +272,7 @@ describe("TasksListView — the page header", () => {
     const primary = screen.getByRole("link", { name: "New task" });
     expect(actions).toContainElement(find);
     expect(actions).toContainElement(primary);
-    expect(find).toHaveClass("h-10", "text-meta", "font-semibold");
+    expect(find).toHaveClass("h-10", "text-body", "font-semibold");
     expect(primary).toHaveClass("h-13", "min-w-36");
     // The primary is last: rightmost in the cluster.
     expect(actions.lastElementChild).toBe(primary);

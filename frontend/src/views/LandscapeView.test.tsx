@@ -115,20 +115,43 @@ describe("LandscapeView — finished", () => {
     expect(within(table).queryByText("Findings")).toBeNull();
   });
 
-  it("puts each heading's population on its right: relevant sources, with a year, findings", () => {
+  it("says the relevant count once, at the top; a heading counts only what differs from it", () => {
     reads({ landscape: { ...mockLandscape, years: { "2021": 20, "2022": 20 } as Record<string, number> } });
     renderLandscape();
+    expect(screen.getAllByText("46 relevant sources")).toHaveLength(1);
+    expect(screen.getByTestId("landscape-population")).toHaveTextContent("46 relevant sources");
     const within_ = (name: string) => within(screen.getByRole("region", { name }));
-    expect(within_("Evidence types").getByText("46 relevant sources")).toBeInTheDocument();
+    expect(within_("Evidence types").queryByText(/relevant source/)).toBeNull();
     expect(within_("Publication years").getByText("40 with a year")).toBeInTheDocument();
-    expect(within_("Where sources were published").getByText("46 relevant sources")).toBeInTheDocument();
+    expect(within_("Where sources were published").queryByText(/relevant source/)).toBeNull();
     expect(within_("Finding groups").getByText("34 findings")).toBeInTheDocument();
   });
 
-  it("says 'relevant sources' on the years heading when every source has a year", () => {
+  it("puts no count on the years heading when every source has a year", () => {
     reads();
     renderLandscape();
-    expect(within(screen.getByRole("region", { name: "Publication years" })).getByText("46 relevant sources")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Publication years" })).queryByText(/relevant source|with a year/)).toBeNull();
+  });
+
+  it("makes each evidence type with sources a link to All sources filtered to it; zero rows lead nowhere", () => {
+    reads({ landscape: { ...mockLandscape, evidence_types: REALISTIC_TYPES } });
+    renderLandscape();
+    const table = screen.getByRole("table", { name: "Evidence types" });
+    const review = within(table).getByRole("link", { name: "Systematic Review and Meta-Analysis" });
+    expect(review.getAttribute("href")).toBe(
+      `/tasks/${TASK_ID}/sources/all?type=Systematic+Review+and+Meta-Analysis`,
+    );
+    expect(review.closest("tr")).toHaveAttribute("data-link");
+    const modelling = within(table).getByRole("rowheader", { name: "Modelling & Simulation" });
+    expect(within(modelling).queryByRole("link")).toBeNull();
+    expect(modelling.closest("tr")).not.toHaveAttribute("data-link");
+  });
+
+  it("leaves the geography rows unlinked (All sources has no country filter)", () => {
+    reads({ landscape: { ...mockLandscape, geographies: { "Not reported": 49, GB: 37, US: 12 } } });
+    renderLandscape();
+    const table = screen.getByRole("table", { name: "Where sources were published" });
+    expect(within(table).queryAllByRole("link")).toHaveLength(0);
   });
 
   it("orders evidence types by the classifier's vocabulary, zeros shown, Unknown last", () => {
@@ -205,7 +228,8 @@ describe("LandscapeView — small counts become sentences", () => {
     expect(screen.queryByText(/The country of the publishing venue/)).toBeNull();
     expect(screen.queryByRole("table", { name: "Evidence types" })).toBeNull();
     expect(screen.queryByTestId("years-chart")).toBeNull();
-    expect(within(screen.getByRole("region", { name: "Evidence types" })).getByText("1 relevant source")).toBeInTheDocument();
+    expect(screen.getByTestId("landscape-population")).toHaveTextContent("1 relevant source");
+    expect(within(screen.getByRole("region", { name: "Evidence types" })).queryByText("1 relevant source")).toBeNull();
   });
 });
 

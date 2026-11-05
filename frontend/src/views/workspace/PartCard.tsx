@@ -13,6 +13,7 @@ import {
   researchApproachId,
   researchApproachLabel,
 } from "./planVocabulary";
+import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
 
 type PartProposal = components["schemas"]["PartProposalOut"];
 type PartChip = components["schemas"]["PartChipOut"];
@@ -561,7 +562,7 @@ export function ChoiceRow({
       role="radio"
       aria-checked={selected}
       disabled={disabled}
-      className="-mx-2 flex w-[calc(100%+1rem)] cursor-pointer items-start gap-3 px-2 py-2 text-left transition-colors duration-150 hover:bg-paper-2 focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-default disabled:hover:bg-transparent"
+      className="-mx-2 flex w-[calc(100%+1rem)] cursor-pointer items-start gap-3 px-2 py-2 text-left transition-colors duration-150 hover:bg-paper-2 disabled:cursor-default disabled:hover:bg-transparent"
       onClick={onChoose}
       {...data}
     >
@@ -621,13 +622,12 @@ export function WordsInput({
         placeholder="What should change?"
         aria-label={label}
         disabled={disabled}
-        className="min-w-0 flex-1 border border-line-2 bg-paper px-3 py-2 text-body text-ink focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground"
+        className="min-w-0 flex-1 border border-line-2 bg-paper px-3 py-2 text-body text-ink disabled:bg-ground"
       />
       <Button
         type="submit"
         size="sm"
-        variant="secondary"
-        className="border border-line-2"
+        variant="outline"
         disabled={disabled || text.trim() === ""}
       >
         {sendLabel}
@@ -808,7 +808,7 @@ export function PartCard({
         <button
           type="button"
           aria-expanded={changing}
-          className="mt-1.5 block cursor-pointer text-caption font-semibold text-grey underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:text-navy hover:decoration-navy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue disabled:cursor-default disabled:no-underline disabled:hover:text-grey"
+          className={cn(QUIET_CONTROL_CLASS, "mt-1.5 block text-caption")}
           disabled={disabled}
           onClick={() => setChanging((open) => !open)}
         >

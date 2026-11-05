@@ -11,6 +11,8 @@ import { Card } from "../ui/brand/Card";
 import { useToast } from "../ui/radix/Toast";
 import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
 import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
+import { PROSE_LINK_CLASS } from "../ui/brand/inlineActions";
+import { cn } from "../ui/brand/cn";
 
 type Visibility = components["schemas"]["TaskOut"]["visibility"];
 
@@ -139,14 +141,13 @@ export function ShareView() {
                 <li key={projectId} className="flex items-center justify-between gap-3 py-3">
                   <Link
                     to={`/projects/${projectId}`}
-                    className="text-body text-navy hover:text-blue hover:underline"
+                    className={cn(PROSE_LINK_CLASS, "text-body")}
                   >
                     {projectName.get(projectId) ?? projectId}
                   </Link>
                   <Button
                     type="button"
                     variant="ghost"
-                    className="text-body"
                     onClick={() =>
                       setMembership(memberIds.filter((candidate) => candidate !== projectId))
                     }

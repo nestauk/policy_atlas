@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { components } from "../api/gen/types";
 import { useRunStream } from "../store";
+import { PANE_LABEL_CLASS } from "../ui/brand/label";
 
 type EvidenceItem = components["schemas"]["EvidenceItemOut"];
 
@@ -32,11 +33,19 @@ export const SOURCE_SORT_COLUMNS: ReadonlyArray<{
 
 /** Status/cited/kind chips on All sources and Findings — same size as table headers. */
 export const FILTER_CHIP_CLASS =
-  "cursor-pointer border px-3 py-1.5 text-meta font-semibold focus-visible:outline-2 focus-visible:outline-blue max-md:px-2 max-md:py-1 max-md:text-caption";
+  "cursor-pointer border px-3 py-1.5 text-meta font-semibold max-md:px-2 max-md:py-1 max-md:text-caption";
+
+/** A filter toggle chip, on or off: one look on Sources, Findings and the
+ *  longlist (task 058 consistency pass). On is the blue tint; off is Paper
+ *  with a Line 2 border, its grey label turning Navy on hover. */
+export function filterChipClass(active: boolean): string {
+  return `${FILTER_CHIP_CLASS} transition-colors ${
+    active ? "border-blue bg-blue-tint text-blue" : "border-line-2 bg-paper text-grey hover:text-navy"
+  }`;
+}
 
 /** All-caps table header type — matches `PaneHeading` / `text-meta`. */
-export const TABLE_HEADER_TEXT_CLASS =
-  "text-meta font-extrabold uppercase tracking-[0.06em] text-grey max-md:text-caption";
+export const TABLE_HEADER_TEXT_CLASS = `${PANE_LABEL_CLASS} max-md:text-caption`;
 
 /** Cycle a sources-table header click: none → the column's own default
  *  direction → the opposite direction → none. */

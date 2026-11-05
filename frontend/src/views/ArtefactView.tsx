@@ -39,7 +39,7 @@ import { ShortlistView } from "./longlist/ShortlistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveCitation, LiveClaim, LiveSection, LiveSourceNote, RunStreamState } from "../store";
-import { Card, LiveMark } from "../ui/brand/Card";
+import { LiveMark } from "../ui/brand/Card";
 import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
@@ -66,6 +66,9 @@ import { referenceAuthorsLine } from "./artefactPresentation";
 import { useActiveConversation } from "./workspace/chat/conversationState";
 import "./artefact.css";
 import { scrollPane, useEasedHeight, useFollowTail, useHoldHeightWhileShorter, useRevealedText } from "./streamPacing";
+import { RetryCard } from "../ui/feedback/RetryCard";
+import { LINK_CLASS, QUIET_CONTROL_CLASS } from "../ui/brand/inlineActions";
+import { cn } from "../ui/brand/cn";
 
 type CitationOut = components["schemas"]["CitationOut"];
 type GapOut = components["schemas"]["GapOut"];
@@ -150,7 +153,7 @@ const SPAN_STYLE: Partial<Record<ClaimLike["claim_type"], string>> = {
  *  type (marker hook + hover chrome + the tint above) — chat's claim spans
  *  render as this one type (design point 4), so this is exported rather than
  *  re-typed on the chat side. */
-export const CITATION_SPAN_CLASS = `citation-marker cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-blue ${CITATION_TINT}`;
+export const CITATION_SPAN_CLASS = `citation-marker cursor-pointer transition-colors ${CITATION_TINT}`;
 
 /** The report's [n] citation-number marker's boxed-chip class (marker hook +
  *  border/bg chrome, `disabled:` variants for a muted look) — exported so
@@ -280,7 +283,7 @@ export function HighlightedContext({ text, quote }: { text: string; quote: strin
   return (
     <>
       {scrub(parts.before)}
-      <mark className="bg-yellow-tint font-medium text-navy">{scrub(parts.match)}</mark>
+      <mark className="bg-yellow-tint text-navy">{scrub(parts.match)}</mark>
       {scrub(parts.after)}
     </>
   );
@@ -379,7 +382,7 @@ export function CitationProvenanceBlock({
       )}
       <InstitutionsLine authorships={context.data?.authorships} className="mt-0.5 text-caption text-grey" />
       <div className="mt-2 flex flex-wrap gap-1.5">{chips}</div>
-      <div className="mt-3 space-y-2 text-body leading-relaxed">
+      <div className="mt-3 space-y-2 text-body">
         {context.isPending && (
           <p role="status" className="anim-breathe text-body text-grey">
             Loading surrounding context…
@@ -514,7 +517,7 @@ export function ProvenanceSheet({
             .map((text, index) => (
               <p
                 key={index}
-                className="border-l-2 border-l-blue pl-3 text-body font-medium leading-snug text-navy"
+                className="border-l-2 border-l-blue pl-3 text-body leading-snug text-navy"
               >
                 {scrub(text)}
               </p>
@@ -547,7 +550,7 @@ function ClaimPanel({
   const extras = (
     <>
       {claim.claim_type === "gap" && (
-        <div className="border-l-[3px] border-yellow bg-yellow-tint p-3 text-body leading-relaxed text-navy">
+        <div className="border-l-[3px] border-yellow bg-yellow-tint p-3 text-body text-navy">
           <p>
             This is a recorded evidence gap: the analysis looked and found the base thin here.
             Gaps are part of the answer, never glossed over.
@@ -585,7 +588,7 @@ function ClaimPanel({
             <div key={index} className={index > 0 ? "mt-2.5" : undefined}>
               <p className="text-body font-semibold text-navy">{scrub(item.name ?? "")}</p>
               {typeof item.description === "string" && item.description !== "" && (
-                <p className="mt-0.5 text-body leading-relaxed text-navy">
+                <p className="mt-0.5 text-body text-navy">
                   {scrub(item.description)}
                 </p>
               )}
@@ -619,7 +622,7 @@ function ClaimPanel({
               {typeof item.facet === "string" && item.facet !== "" && item.name ? (
                 <p className="mt-0.5 text-caption">
                   <Link
-                    className="font-semibold text-blue hover:underline"
+                    className={LINK_CLASS}
                     to={`/tasks/${taskId}/sources/findings?facet=${encodeURIComponent(item.facet)}&group=${encodeURIComponent(item.name)}`}
                     onClick={onClose}
                   >
@@ -808,7 +811,7 @@ function ClaimSpan({
           className={
             claim.claim_type === "citation"
               ? CITATION_SPAN_CLASS
-              : `citation-marker cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-blue ${SPAN_STYLE[claim.claim_type] ?? ""}`
+              : `citation-marker cursor-pointer transition-colors ${SPAN_STYLE[claim.claim_type] ?? ""}`
           }
         >
           {scrub(text)}
@@ -2492,7 +2495,7 @@ function useLiveReport(
       {terminalPartial && (
         <div
           role="alert"
-          className="mb-8 border-l-[3px] border-l-red bg-red-tint px-3.5 py-2.5 text-body leading-relaxed text-navy"
+          className="mb-8 border-l-[3px] border-l-red bg-red-tint px-3.5 py-2.5 text-body text-navy"
         >
           <p className="font-bold">This run ended before the write-up completed.</p>
           <p className="mt-0.5">
@@ -2629,7 +2632,7 @@ export function ReportToBe({
 /** The Result tab's small link to the plan document. */
 function SeePlanLink({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="mt-2 cursor-pointer text-meta text-grey underline-offset-4 hover:text-navy hover:underline">
+    <button type="button" onClick={onClick} className={cn(QUIET_CONTROL_CLASS, "mt-2 text-meta")}>
       See the plan
     </button>
   );
@@ -2907,7 +2910,7 @@ function ScopingResult({ taskId, building }: { taskId: string; building: boolean
           <LonglistView taskId={taskId} longlist={longlist.data} />
         )
       ) : longlist.isPending ? (
-        <main aria-busy="true" aria-label="Loading the longlist" className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
+        <main aria-busy="true" aria-label="Loading the longlist" className={`${LIFECYCLE_PAGE_CLASS} py-8`}>
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="mb-4 h-16 anim-breathe border border-line bg-paper-2" />
           ))}
@@ -3110,7 +3113,7 @@ function ArtefactReport() {
 
   if (artefact.isPending) {
     return (
-      <main aria-busy="true" aria-label="Loading the report" className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
+      <main aria-busy="true" aria-label="Loading the report" className={`${LIFECYCLE_PAGE_CLASS} py-8`}>
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="mb-4 h-24 anim-breathe border border-line bg-paper-2" />
         ))}
@@ -3126,17 +3129,8 @@ function ArtefactReport() {
     // that is the expected empty state, not a failure to surface.
     if (code !== "not_found") {
       return (
-        <main className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
-          <Card role="alert" className="p-8 text-center text-body text-navy">
-            The report couldn't be loaded.{" "}
-            <button
-              type="button"
-              className="cursor-pointer font-bold text-blue hover:underline"
-              onClick={() => void artefact.refetch()}
-            >
-              Retry
-            </button>
-          </Card>
+        <main className={`${LIFECYCLE_PAGE_CLASS} py-8`}>
+          <RetryCard copy="The report couldn't be loaded." onRetry={() => void artefact.refetch()} />
         </main>
       );
     }
@@ -3315,7 +3309,7 @@ function ArtefactReport() {
                 onClick={askAboutAnalysis}
                 disabled={!chatsEnabled}
                 title={chatsEnabled ? undefined : COPY.newChatUnavailable}
-                className={`print-hide mt-3 text-caption font-bold text-blue hover:underline disabled:text-grey disabled:no-underline ${arriving}`}
+                className={cn(LINK_CLASS, "print-hide mt-3 text-meta", arriving)}
               >
                 Ask about this analysis
               </button>

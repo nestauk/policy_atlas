@@ -97,12 +97,13 @@ describe("NewTaskView — capability step", () => {
     expect(screen.getByLabelText(/Add to a project/)).toHaveTextContent("Housing");
   });
 
-  it("shows the capability-picker eyebrow and prompt", () => {
+  it("opens on the prompt with no eyebrow restating the page (owner, 2026-11-04)", () => {
     renderNewTask();
-    expect(screen.getByText("New task")).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "What would you like to do?" }),
-    ).toBeInTheDocument();
+    expect(screen.queryByText("New task")).toBeNull();
+    const heading = screen.getByRole("heading", { name: "What would you like to do?" });
+    expect(heading).toBeInTheDocument();
+    // The title is the page's first line: nothing sits above it in its column.
+    expect(heading.previousElementSibling).toBeNull();
   });
 });
 

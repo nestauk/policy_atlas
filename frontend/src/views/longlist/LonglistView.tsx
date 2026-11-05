@@ -24,7 +24,7 @@ import {
 } from "../ArtefactOutline";
 import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage } from "../reportPage";
 import { isRunActive } from "../scopingActivity";
-import { FILTER_CHIP_CLASS } from "../sourcesPresentation";
+import { filterChipClass } from "../sourcesPresentation";
 import { LonglistGrid } from "./LonglistGrid";
 import {
   SCOPING_PASS_SENTENCE,
@@ -73,14 +73,6 @@ const ADD_OPTION_ANCHOR = "add-option";
 const EXCLUDED_ANCHOR = "excluded-options";
 
 /** The facet chips share the Sources view's filter language (is-EB). */
-function facetChipClass(active: boolean): string {
-  return cn(
-    FILTER_CHIP_CLASS,
-    "transition-colors",
-    active ? "border-blue bg-blue-tint text-blue" : "border-line-2 bg-paper text-grey hover:text-navy",
-  );
-}
-
 const FACET_LABEL_CLASS = "w-20 flex-none pt-1.5 text-meta font-semibold text-grey max-md:w-full max-md:pt-0";
 
 /**
@@ -272,7 +264,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
                 type="button"
                 aria-pressed={mode === choice.key}
                 onClick={() => setMode(choice.key)}
-                className={facetChipClass(mode === choice.key)}
+                className={filterChipClass(mode === choice.key)}
               >
                 {choice.label}
               </button>
@@ -282,7 +274,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
                 type="button"
                 aria-pressed={showExcludedInGrid}
                 onClick={() => setShowExcludedInGrid((value) => !value)}
-                className={cn(facetChipClass(showExcludedInGrid), "ml-3")}
+                className={cn(filterChipClass(showExcludedInGrid), "ml-3")}
               >
                 Show excluded
                 <span className="ml-1.5 font-normal tabular-nums">{longlist.counts.excluded}</span>
@@ -319,7 +311,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
                 type="button"
                 aria-pressed={groupBy === choice.key}
                 onClick={() => setGroupBy(choice.key)}
-                className={facetChipClass(groupBy === choice.key)}
+                className={filterChipClass(groupBy === choice.key)}
               >
                 {choice.label}
               </button>

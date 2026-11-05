@@ -721,6 +721,51 @@ Rulings on the build (agent, for the lead to confirm):
   the animation inside its own delivery and the browser reported a "ResizeObserver loop" on every
   arrival.
 
+## Consistency pass (build, 2026-11-05): the sweep, the lead's rulings and the owner's additions
+
+From `research/consistency-sweep.md` (entries 1 to 8 and § 3) with the lead's rulings on § 4, the
+carried items, and the owner's additions during the pass. DESIGN.md carries each rule.
+
+- **Focus:** one rule in `index.css`, a 2px Electric Blue outline offset 2px on every control; the
+  cut-corner primary, start and send buttons draw a 2px white ring inset 4px (their clip clipped the
+  outside ring, so they showed none). `PagePrimary` is `buttonVariants` primary at the entry size.
+- **Buttons:** an `outline` variant (Line 2 border on Paper, Navy Semibold Meta) for pagination,
+  Download and the bordered card actions; the entry size is 52 px tall, at least 144 px wide, never
+  wrapped; Start search is `variant="start" size="entry"`; Retry is always `Button` secondary small.
+- **Inline actions:** three styles, Link, Quiet control, Prose link; "Ask about this analysis" at Meta.
+- **Close and icons:** one `CloseButton`; one icon module, 16 px in 32 px boxes for chrome and 13 px in
+  28 px boxes for row actions, one hover.
+- **Type:** the report part heading is Heading, uppercase, Extrabold; section headings Lead below
+  `md`; system-state headings Bold; labels on the label constants and token; no `font-medium`; the
+  splash's two headlines are named tokens (`text-hero`, `text-hero-2`) and its prose is Lead.
+- **Shape:** the plan card's round radio is the one radius exception (P4).
+- **Layout:** every task tab pads `py-8`; task-tab gutters 16 px below `md`. List pages share one
+  header: a 24 px context row, a 52 px title row with the actions right-aligned, a filters row always
+  reserved at 40 px; actions above the title below `md`; 16 px gutters below `md`; 56 px rows, two
+  fixed lines of 84 px on phones without owner and source count.
+- **Header controls:** 40 px, Body Semibold, ghost (the primary's label size); "Find a project" on
+  Projects, built as "Find a task". The Find popover: focused field, the recent five with nothing
+  typed and no result line, results 150 ms after the last key, "No tasks match “…”" only once there
+  are words, arrow keys and Enter, Escape closes, the popover tokens.
+- **Navigation:** the growing rule grows from the left edge to the centre on hover and focus, runs
+  full width when active, and a click continues it; the Sources subtabs take the same rule, their idle
+  labels in the Grey token. The Mine/Organisation switcher uses the tab language: a 2px blue rule
+  when active, no fill.
+- **Account menu:** anchored under its button, rises in over 200 ms and leaves in 150 ms, the popover
+  tokens, the identity then 40 px Meta rows, Sign out last; the button shows the open state; focus in
+  on open and back on close; arrow keys; Escape and an outside press close it.
+- **Containers:** a list loads inside its own frame with placeholder bars at the real row height; an
+  empty list is the frame with a label and one sentence, left-aligned. The Landscape subtab's
+  placeholder bars sit in the chart's own rows.
+- **Landscape:** each ranked row with sources is a link to All sources (or Findings) filtered to its
+  value, and each year to that year; folded rows, "Not reported", rows at zero, the funnel and the
+  publisher countries are not links. One hover: the bar turns blue and the words go Navy, no row
+  wash. The relevant count is one line at the top; headings count only what differs.
+- **Sources table:** every filterable header keeps its label and filter on one line.
+- **New page:** no "New task" eyebrow; the title starts where the lists' titles start.
+- **Carried:** `LandscapeFallback` renders `LandscapeSkeleton`; the dead chart exports removed; the
+  mock landscape uses the classifier's labels; "run status bar" in the mock comments.
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |
@@ -734,6 +779,7 @@ Rulings on the build (agent, for the lead to confirm):
 | 7 | build, owner round 7 (live-run notes) | 2026-11-05 | citation marks while streaming are the final marker's muted chip, and checked markers stay; the live page is the final page and the swap updates it in place; streamed prose paced with word snapping, frozen paragraphs and a 150 ms fade per batch; the trace is the running card again; the step note withdrawn and the run status bar returns | owner |
 | 8 | build, owner round 8 (live-run notes) | 2026-11-05 | the ended trace is the same card (finish on the top line, rows behind "Show steps"); the card reads as a table with right-aligned counts, times and links; the running step links to its page and its activity line breathes; Searching and Screening as two rows; "Change" on its own line; one container for the decision card's settle; the status bar starts after the rail and opens the Task Agent; the rail's mark static with no status or timer; one mark size in the task list; no Sources tab mark; pulsing placeholders on the Sources tab keyed to the live stage, with a 5 s refetch | owner |
 | 9 | build, owner round 9 (live-run notes) | 2026-11-05 | the search queries at the top of All sources, live as they go out and folded once the search ends, the sources table waiting for the first results; the activity line names the query that is out; the run status bar (renamed from the run strip) links to the running step's view; the checking chips run a blue wave; the found themes show while their documents are assigned; the nav and lifecycle tabs grow their blue rule on hover; arrivals: only what arrives after a view's first paint rises, the thread makes room for it, a decision card lays itself out, the reply comes at a steady pace, values land with a fade, the check-in settles on the choice, the trace eases its steps and its fold, the plan card leaves as the trace arrives, sheets leave the way they came, the plan document arrives from its edge; "Read in full" becomes "Full text" | owner |
+| 9b | build, consistency pass | 2026-11-05 | the sweep's entries 1 to 8 and § 3, the lead's rulings on § 4 and the owner's additions (above): one focus rule and the inset ring on the cut corner; the outline variant, the entry size, Retry as a button; three inline-action styles; one close button and one icon module; the report part heading at Heading; the radio as the one radius exception; splash tokens; `py-8` on every tab; the nav and subtab rule from the left edge; Find a project and the Find popover; header controls at Body; the account menu; no New page eyebrow; Landscape rows as links with one hover and one count line; one header rule on the Sources table | lead |
 | 10 | review, agent pass | | | lead |
 | 11 | review, owner pass | | | owner |
 

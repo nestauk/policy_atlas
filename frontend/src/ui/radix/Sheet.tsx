@@ -3,6 +3,7 @@ import { useEffect, useState, type ComponentPropsWithoutRef, type ReactNode } fr
 
 import { cn } from "../brand/cn";
 import { prefersReducedMotion } from "../motion/motion";
+import { CloseButton } from "../brand/CloseButton";
 
 /*
  * Slide-over sheet (shadcn-style copy-in over Radix Dialog) — the source
@@ -99,11 +100,8 @@ export function SheetContent({
               </DialogPrimitive.Description>
             )}
           </div>
-          <DialogPrimitive.Close
-            aria-label="Close panel"
-            className="cursor-pointer p-2 text-lead leading-none text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
-          >
-            ✕
+          <DialogPrimitive.Close asChild>
+            <CloseButton aria-label="Close panel" />
           </DialogPrimitive.Close>
         </div>
         <div className="flex-1 px-5 py-4">{children}</div>

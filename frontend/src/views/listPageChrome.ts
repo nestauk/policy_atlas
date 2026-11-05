@@ -7,11 +7,13 @@ const PAGE_COLUMN_MAX_W = "max-w-[1180px]";
  *  uses the list-page column — see `WIDE_PAGE_CLASS`. */
 export const READING_COLUMN_MAX_W = "max-w-[780px]";
 
-/** Centered lifecycle content: same width as the report paper. */
-export const LIFECYCLE_PAGE_CLASS = `mx-auto w-full px-6 ${READING_COLUMN_MAX_W}`;
+/** Centered lifecycle content: same width as the report paper. 24 px gutters
+ *  from md up, 16 px below, as on the list pages and the report. Every task
+ *  tab pads its page `py-8` (32 px, the report sheet's margin). */
+export const LIFECYCLE_PAGE_CLASS = `mx-auto w-full px-6 max-md:px-4 ${READING_COLUMN_MAX_W}`;
 
 /** Centered list-page column, reused by Sources. */
-export const WIDE_PAGE_CLASS = `mx-auto w-full px-6 ${PAGE_COLUMN_MAX_W}`;
+export const WIDE_PAGE_CLASS = `mx-auto w-full px-6 max-md:px-4 ${PAGE_COLUMN_MAX_W}`;
 
 /*
  * One row recipe for the task list and the project list (task 058, lists

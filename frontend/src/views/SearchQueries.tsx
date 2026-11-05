@@ -6,8 +6,9 @@ import { scrub } from "../lib/scrub";
 import type { LiveSearchQuery } from "../store";
 import { cn } from "../ui/brand/cn";
 import { Collapse } from "../ui/motion/Collapse";
-import { ChevronIcon } from "./workspace/chat/icons";
+import { ChevronIcon } from "../ui/brand/icons";
 import { TABLE_HEADER_TEXT_CLASS } from "./sourcesPresentation";
+import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
 
 /** One row of the block, from the stream or the committed coverage. */
 export type QueryRow = {
@@ -122,7 +123,7 @@ export function SearchQueries({ groups, searching }: { groups: readonly QueryGro
             aria-expanded={open}
             aria-controls={open ? tableId : undefined}
             onClick={() => setOpen((value) => !value)}
-            className="group inline-flex cursor-pointer items-center gap-1 text-left text-grey focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue"
+            className="group inline-flex cursor-pointer items-center gap-1 text-left text-grey"
           >
             <ChevronIcon
               size={12}
@@ -160,7 +161,7 @@ export function SearchQueries({ groups, searching }: { groups: readonly QueryGro
                   <th
                     scope="rowgroup"
                     colSpan={2}
-                    className="pt-3 pb-1 text-caption font-bold uppercase tracking-label text-grey"
+                    className={cn(CAPTION_LABEL_CLASS, "pt-3 pb-1")}
                   >
                     {scrub(group.backend)}
                   </th>

@@ -41,6 +41,7 @@ import {
   TaskListActions,
   TaskListPanel,
 } from "./TaskListPanel";
+import { FindPopover } from "./FindPopover";
 import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
 
 /**
@@ -94,9 +95,20 @@ export function ProjectsView() {
           // Stays in its slot while the form is open, disabled, so the
           // header does not reflow and the form's Create is the one blue
           // fill on the page.
-          <PagePrimary onClick={() => setCreating(true)} disabled={creating}>
-            New {PROJECT.lower}
-          </PagePrimary>
+          <>
+            <FindPopover
+              items={rows.map((project) => ({
+                id: project.project_id,
+                label: project.name,
+                href: `/projects/${project.project_id}`,
+                updatedAt: projectLastUpdated(project, taskUpdatedAt),
+              }))}
+              copy={{ label: COPY.findProject, noun: PROJECT.lowerMany }}
+            />
+            <PagePrimary onClick={() => setCreating(true)} disabled={creating}>
+              New {PROJECT.lower}
+            </PagePrimary>
+          </>
         }
         filters={hasSwitcher ? <ScopeSwitcher scope={scope} onChange={setScope} /> : null}
         aside={
@@ -135,7 +147,7 @@ export function ProjectsView() {
               autoFocus
               value={name}
               onChange={(event) => setName(event.target.value)}
-              className="border border-line-2 bg-paper px-3 py-2.5 text-body focus-visible:outline-2 focus-visible:outline-blue"
+              className="border border-line-2 bg-paper px-3 py-2.5 text-body"
             />
             {create.isError && (
               <p role="alert" className="text-body text-red">

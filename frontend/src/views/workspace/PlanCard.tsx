@@ -10,6 +10,7 @@ import { isScoping } from "../scopingActivity";
 import type { PlanOverlay } from "./planOverlay";
 import { usePlanStart, useScopingPlanStart } from "./planStart";
 import { researchApproachLabel } from "./planVocabulary";
+import { LINK_CLASS } from "../../ui/brand/inlineActions";
 
 type PlanDraft = components["schemas"]["PlanDraft"];
 
@@ -115,7 +116,7 @@ export function PlanCard({
         <button
           type="button"
           onClick={() => onReviewPlan?.()}
-          className="cursor-pointer text-body font-semibold text-navy underline-offset-[3px] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue"
+          className={cn(LINK_CLASS, "text-body")}
         >
           Review the plan
         </button>

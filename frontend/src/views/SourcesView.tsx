@@ -29,11 +29,11 @@ import {
   screeningDetails,
   sourceStatusLabel,
   strengthHint,
-  FILTER_CHIP_CLASS,
   ORIGIN_FILTER_OPTIONS,
   SOURCE_SORT_COLUMNS,
   STRENGTH_FILTER_OPTIONS,
   TABLE_HEADER_TEXT_CLASS,
+  filterChipClass,
   type CellPulses,
   type EvidenceSortField,
   type SortOrder,
@@ -43,6 +43,8 @@ import {
 import { numberedAuthorships } from "./artefactPresentation";
 import { isScoping } from "./scopingActivity";
 import { isFinished } from "./workspace/runProgress";
+import { PANE_LABEL_CLASS } from "../ui/brand/label";
+import { RetryCard } from "../ui/feedback/RetryCard";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -179,11 +181,7 @@ export function SourcesView() {
                 next.set("status", filter.key);
                 next.delete("page");
               })}
-              className={`${FILTER_CHIP_CLASS} ${
-                statusFilter === filter.key
-                  ? "border-blue bg-blue-tint text-blue"
-                  : "border-line-2 bg-paper text-grey hover:text-navy"
-              }`}
+              className={filterChipClass(statusFilter === filter.key)}
             >
               {filter.label}
             </button>
@@ -196,11 +194,7 @@ export function SourcesView() {
               else next.set("cited", "true");
               next.delete("page");
             })}
-            className={`${FILTER_CHIP_CLASS} ${
-              citedFilter
-                ? "border-blue bg-blue-tint text-blue"
-                : "border-line-2 bg-paper text-grey hover:text-navy"
-            }`}
+            className={filterChipClass(citedFilter)}
           >
             Cited
           </button>
@@ -276,6 +270,9 @@ export function SourcesView() {
                   />
                 </SortableColumnHeader>
                 <th className="px-3 py-3 max-md:px-2 max-md:py-2.5">
+                  {/* One header rule (owner, consistency pass): the label
+                      and its filter on one line, never wrapping. */}
+                  <span className="flex items-end gap-1 whitespace-nowrap" data-testid="origin-header">
                   Origin
                   <HeaderFilter
                     label="Filter by origin"
@@ -288,6 +285,7 @@ export function SourcesView() {
                       next.delete("page");
                     })}
                   />
+                  </span>
                 </th>
                 <SortableColumnHeader
                   column={SOURCE_SORT_COLUMNS[2]}
@@ -362,7 +360,7 @@ export function SourcesView() {
                       <span className={fade("type")}>{
                       item.classification_reason ? (
                         <Tooltip content={<p>{scrub(item.classification_reason)}</p>}>
-                          <button type="button" aria-label={`${item.evidence_type}: why this type`} className="cursor-help focus-visible:outline-2 focus-visible:outline-blue">
+                          <button type="button" aria-label={`${item.evidence_type}: why this type`} className="cursor-help">
                             <Chip tone="soft">{scrub(item.evidence_type)}</Chip>
                           </button>
                         </Tooltip>
@@ -377,7 +375,7 @@ export function SourcesView() {
                     {item.appraisal_tier && (
                       <span className={fade("strength")}>
                       <Tooltip content={<p>{scrub(strengthHint(item))}</p>}>
-                        <button type="button" aria-label={`${item.appraisal_tier}: how strength is appraised`} className="cursor-help focus-visible:outline-2 focus-visible:outline-blue">
+                        <button type="button" aria-label={`${item.appraisal_tier}: how strength is appraised`} className="cursor-help">
                           <Chip tone="soft">{scrub(item.appraisal_tier)}</Chip>
                         </button>
                       </Tooltip>
@@ -395,7 +393,7 @@ export function SourcesView() {
                         <Chip tone="blue">{readDepthLabel(item)}</Chip>
                       ) : (
                         <Tooltip content={<p>{scrub(readDepthHint(item) ?? "")}</p>}>
-                          <button type="button" aria-label="Abstract only: why" className="cursor-help focus-visible:outline-2 focus-visible:outline-blue">
+                          <button type="button" aria-label="Abstract only: why" className="cursor-help">
                             <Chip tone="yellow">{readDepthLabel(item)}</Chip>
                           </button>
                         </Tooltip>
@@ -418,23 +416,23 @@ export function SourcesView() {
 
       {evidence.data !== undefined && totalPages > 1 && (
         <nav aria-label="Pages" className="mt-5 flex items-center gap-2">
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             disabled={page <= 1}
             onClick={() => updateParams((next) => next.set("page", String(page - 1)))}
-            className="cursor-pointer border border-line-2 px-3 py-2 text-caption font-semibold text-navy disabled:cursor-default disabled:text-line-2"
           >
             Previous
-          </button>
+          </Button>
           <span className="text-caption text-grey">Page {page} of {totalPages}</span>
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             disabled={page >= totalPages}
             onClick={() => updateParams((next) => next.set("page", String(page + 1)))}
-            className="cursor-pointer border border-line-2 px-3 py-2 text-caption font-semibold text-navy disabled:cursor-default disabled:text-line-2"
           >
             Next
-          </button>
+          </Button>
         </nav>
       )}
 
@@ -460,7 +458,7 @@ function TitleWithDescription({ item, onOpen }: { item: Parameters<typeof screen
     <button
       type="button"
       onClick={onOpen}
-      className="cursor-pointer text-left text-body font-semibold leading-snug text-navy hover:text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue max-md:text-meta"
+      className="cursor-pointer text-left text-body font-semibold leading-snug text-navy hover:text-blue hover:underline max-md:text-meta"
     >
       {scrub(item.title)}
     </button>
@@ -594,12 +592,14 @@ function SortableColumnHeader({
   const ariaSort = order === "asc" ? "ascending" : order === "desc" ? "descending" : "none";
   return (
     <th className={className} aria-sort={ariaSort}>
-      <span className="flex items-center gap-1">
+      {/* The filter sits beside the label's last word: a label that wraps
+          by design ("Evidence strength") keeps it on its second line. */}
+      <span className="flex items-end gap-1">
         <button
           type="button"
           aria-label={`Sort by ${column.label.toLowerCase()}`}
           onClick={() => onSort(column.key)}
-          className={`flex cursor-pointer items-center gap-1 ${TABLE_HEADER_TEXT_CLASS} hover:text-navy focus-visible:outline-2 focus-visible:outline-blue`}
+          className={`flex cursor-pointer items-center gap-1 ${TABLE_HEADER_TEXT_CLASS} hover:text-navy`}
         >
           {column.label}
           {order !== null && <span aria-hidden="true">{order === "asc" ? "↑" : "↓"}</span>}
@@ -642,13 +642,13 @@ function HeaderFilter({
   onChange: (value: string) => void;
 }) {
   return (
-    <span className="relative inline-flex h-5 w-5 items-center justify-center">
+    <span className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center">
       <FunnelIcon active={value !== ""} />
       <select
         aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="absolute inset-0 h-full w-full cursor-pointer opacity-0 focus-visible:outline-2 focus-visible:outline-blue"
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
       >
         <option value="">{allLabel}</option>
         {options.map((option) => (
@@ -680,7 +680,7 @@ function YearRangeFilter({
     <Popover>
       <PopoverTrigger
         aria-label="Filter by year range"
-        className="inline-flex h-5 w-5 cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-blue"
+        className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center"
       >
         <FunnelIcon active={from !== undefined || to !== undefined} />
       </PopoverTrigger>
@@ -700,7 +700,7 @@ function YearRangeFilter({
                 if (event.key === "Enter") event.currentTarget.blur();
               }}
               placeholder="Any"
-              className="mt-1 w-full border border-line-2 bg-paper px-2 py-1 text-meta font-medium text-navy focus-visible:outline-2 focus-visible:outline-blue"
+              className="mt-1 w-full border border-line-2 bg-paper px-2 py-1 text-meta text-navy"
             />
           </label>
           <label className="flex-1 text-caption font-semibold normal-case tracking-normal text-grey">
@@ -715,7 +715,7 @@ function YearRangeFilter({
                 if (event.key === "Enter") event.currentTarget.blur();
               }}
               placeholder="Any"
-              className="mt-1 w-full border border-line-2 bg-paper px-2 py-1 text-meta font-medium text-navy focus-visible:outline-2 focus-visible:outline-blue"
+              className="mt-1 w-full border border-line-2 bg-paper px-2 py-1 text-meta text-navy"
             />
           </label>
         </div>
@@ -733,13 +733,6 @@ function YearRangeFilter({
   );
 }
 
-function RetryCard({ copy, onRetry }: { copy: string; onRetry: () => void }) {
-  return (
-    <Card role="alert" className="p-8 text-center text-body text-navy">
-      {copy} <button type="button" className="cursor-pointer font-bold text-blue hover:underline" onClick={onRetry}>Retry</button>
-    </Card>
-  );
-}
 
 /** One facet dropdown in the sources filter row. */
 function FilterSelect({
@@ -792,7 +785,7 @@ function FilterSelect({
   const optionClass = (active: boolean) =>
     cn(
       "block w-full cursor-pointer px-3 py-2 text-left text-body font-normal text-navy hover:bg-blue-tint-2 hover:text-blue max-md:text-meta",
-      active && "bg-blue-tint-2 font-medium",
+      active && "bg-blue-tint-2 font-semibold",
     );
   return (
     <span className="flex min-w-0 max-w-full items-center gap-1.5 text-meta font-semibold text-grey max-md:text-caption">
@@ -807,7 +800,7 @@ function FilterSelect({
             aria-haspopup="listbox"
             aria-expanded={open}
             aria-labelledby={`${labelId} ${valueId}`}
-            className="inline-flex min-w-0 cursor-pointer items-center justify-between gap-2 border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy focus-visible:outline-2 focus-visible:outline-blue max-md:max-w-52 max-md:px-2 max-md:py-1 max-md:text-caption"
+            className="inline-flex min-w-0 cursor-pointer items-center justify-between gap-2 border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy max-md:max-w-52 max-md:px-2 max-md:py-1 max-md:text-caption"
           >
             <span id={valueId} className="truncate">{selected?.label ?? allLabel}</span>
             <svg
@@ -903,7 +896,7 @@ function RelevantCell({ item }: { item: Parameters<typeof screeningDetails>[0] }
       <button
         type="button"
         aria-label={`${label}: screening details`}
-        className="flex cursor-help items-baseline gap-1.5 focus-visible:outline-2 focus-visible:outline-blue"
+        className="flex cursor-help items-baseline gap-1.5"
       >
         <span aria-hidden="true" className={`text-meta font-bold ${relevant ? "text-green" : "text-red"}`}>
           {relevant ? "✓" : "✕"}
@@ -1121,7 +1114,7 @@ export function SourceDossierBody({
       {source.abstract && (
         <DossierSection title="About">
           {abstractSourceLabel(source.abstract_source) && <Chip tone="yellow">AI description</Chip>}
-          <p className="mt-2 max-w-prose-measure text-body leading-relaxed text-grey">{scrub(source.abstract)}</p>
+          <p className="mt-2 max-w-prose-measure text-body text-grey">{scrub(source.abstract)}</p>
         </DossierSection>
       )}
       {statusLabel && (
@@ -1157,7 +1150,7 @@ export function SourceDossierBody({
         <DossierSection title="Tags">
           {[...byAsserter.entries()].map(([asserter, tags]) => (
             <div key={asserter} className="mb-3">
-              <p className="mb-1 text-meta font-extrabold uppercase tracking-[0.06em] text-grey">Asserted by {scrub(asserter)}</p>
+              <p className={cn(PANE_LABEL_CLASS, "mb-1")}>Asserted by {scrub(asserter)}</p>
               <div className="flex flex-wrap gap-1.5">{tags.map((tag) => <Chip key={`${tag.tag_type}-${tag.tag}`} tone="soft">{scrub(tag.tag)}</Chip>)}</div>
             </div>
           ))}
@@ -1169,7 +1162,7 @@ export function SourceDossierBody({
             <div key={`${citation.section_title}-${index}`} className="border-l-2 border-blue pl-3">
               <p className="text-body leading-snug text-navy">{scrub(citation.claim)}</p>
               <p className="mt-1 text-body italic text-grey">“{scrub(citation.quote)}”</p>
-              <p className="mt-1 text-meta font-extrabold uppercase tracking-[0.06em] text-grey">{scrub(citation.section_title)}</p>
+              <p className={cn(PANE_LABEL_CLASS, "mt-1")}>{scrub(citation.section_title)}</p>
             </div>
           ))}</div>
         </DossierSection>

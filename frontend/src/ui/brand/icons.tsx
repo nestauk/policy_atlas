@@ -1,13 +1,40 @@
-/** The conversation surfaces' icon set: one 16-unit grid, one 1.5 stroke,
- *  round joins — the same family as `ChatsIcon`, so the sidebar, the overlay
- *  strip and the library read as one instrument. */
+import type { ReactNode } from "react";
+
+import { cn } from "./cn";
+
+/*
+ * The app's one icon module (task 058 consistency pass): every glyph on one
+ * 16-unit grid, one 1.5 stroke, round joins, `currentColor`, drawn here (the
+ * app carries no icon library). Two sizes, each in its own button box
+ * (DESIGN.md § Buttons, Icon buttons):
+ *
+ * - chrome: a 16 px glyph in a 32 px box (the rail, panel headers, close,
+ *   the longlist's option actions, jump to end)
+ * - row: a 13 px glyph in a 28 px box (actions revealed on a list row)
+ */
+
+/** Glyph size for chrome icon buttons. */
+export const ICON_CHROME = 16;
+/** Glyph size for row icon buttons. */
+export const ICON_ROW = 13;
+
+const ICON_BUTTON_BASE =
+  "pressable inline-flex shrink-0 cursor-pointer items-center justify-center p-0 text-grey " +
+  "hover:bg-blue-tint-2 hover:text-navy " +
+  "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
+
+/** The icon button's box, hover (Blue Wash, Navy) and press, at either size. */
+export function iconButtonClass(size: "chrome" | "row" = "chrome"): string {
+  return cn(ICON_BUTTON_BASE, size === "chrome" ? "h-8 w-8" : "h-7 w-7");
+}
 
 type IconProps = { size?: number; className?: string };
 
-function Glyph({ size = 16, className, children }: IconProps & { children: React.ReactNode }) {
+function Glyph({ size = ICON_CHROME, className, children }: IconProps & { children: ReactNode }) {
   return (
     <svg
       aria-hidden="true"
+      focusable="false"
       width={size}
       height={size}
       viewBox="0 0 16 16"
@@ -23,10 +50,40 @@ function Glyph({ size = 16, className, children }: IconProps & { children: React
   );
 }
 
+/** Add: new chat, add to shortlist. */
 export function PlusIcon(props: IconProps) {
   return (
     <Glyph {...props}>
       <path d="M8 3v10M3 8h10" />
+    </Glyph>
+  );
+}
+
+/** Remove from shortlist. */
+export function MinusIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M3 8h10" />
+    </Glyph>
+  );
+}
+
+/** Exclude: a circle with a bar. */
+export function BanIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <circle cx="8" cy="8" r="5.5" />
+      <path d="M4.2 4.2l7.6 7.6" />
+    </Glyph>
+  );
+}
+
+/** Include again: an arrow turning back. */
+export function UndoIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M6 4.5L3.5 7l2.5 2.5" />
+      <path d="M3.5 7h5.25a3.25 3.25 0 010 6.5H7" />
     </Glyph>
   );
 }
@@ -83,6 +140,16 @@ export function ChatIcon(props: IconProps) {
   return (
     <Glyph {...props}>
       <path d="M2.5 3.5h11v7.5H7l-3 2.5v-2.5H2.5v-7.5Z" />
+    </Glyph>
+  );
+}
+
+/** Stacked speech bubbles: the conversation-list glyph on the overlay's header. */
+export function ChatsIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M5 4h9v7h-3l-2 2-2-2H5z" />
+      <path d="M3 8H2V1h9v1" />
     </Glyph>
   );
 }

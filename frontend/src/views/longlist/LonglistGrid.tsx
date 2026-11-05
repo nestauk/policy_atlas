@@ -115,7 +115,7 @@ export function LonglistGrid({
           id="longlist-grid-columns"
           value={line}
           onChange={(event) => setLine(event.target.value as GridLine)}
-          className="border border-line-2 bg-paper px-2 py-1 text-body text-ink focus-visible:outline-2 focus-visible:outline-blue"
+          className="border border-line-2 bg-paper px-2 py-1 text-body text-ink"
         >
           {GRID_COLUMN_LINES.map((key) => (
             <option key={key} value={key}>

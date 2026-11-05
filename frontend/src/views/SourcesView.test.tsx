@@ -505,9 +505,9 @@ describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", 
 
     // Evidence-type options come from the landscape distribution.
     const typeSelect = screen.getByRole("combobox", { name: "Filter by evidence type" });
-    expect(within(typeSelect).getByRole("option", { name: "Local evaluation" })).toBeInTheDocument();
-    await user.selectOptions(typeSelect, "Systematic review");
-    expect(lastEvidenceQuery()).toMatchObject({ evidence_type: "Systematic review" });
+    expect(within(typeSelect).getByRole("option", { name: "Observational Research Studies" })).toBeInTheDocument();
+    await user.selectOptions(typeSelect, "Systematic Review and Meta-Analysis");
+    expect(lastEvidenceQuery()).toMatchObject({ evidence_type: "Systematic Review and Meta-Analysis" });
 
     const strengthSelect = screen.getByRole("combobox", { name: "Filter by evidence strength" });
     await user.selectOptions(strengthSelect, "Moderate");
@@ -735,5 +735,19 @@ describe("SourcesView — the dossier's records on a scoping task", () => {
     expect(screen.getByText(finding.statement)).toBeInTheDocument();
     expect(screen.queryByText("Records")).toBeNull();
     expect(screen.queryByText("youth guarantee")).toBeNull();
+  });
+});
+
+describe("SourcesView — one header rule (owner, consistency pass)", () => {
+  it("keeps Origin and its filter on one line, the filter never shrinking", () => {
+    renderSources();
+    const origin = screen.getByTestId("origin-header");
+    expect(origin).toHaveClass("flex", "whitespace-nowrap");
+    const filter = screen.getByRole("combobox", { name: "Filter by origin" }).parentElement as HTMLElement;
+    expect(filter).toHaveClass("shrink-0");
+    const strength = screen.getByRole("combobox", { name: "Filter by evidence strength" }).parentElement as HTMLElement;
+    expect(strength).toHaveClass("shrink-0");
+    // A wrapping label keeps the filter beside its last word.
+    expect(strength.parentElement).toHaveClass("items-end");
   });
 });

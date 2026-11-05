@@ -13,12 +13,15 @@ export const PopoverTrigger = PopoverPrimitive.Trigger;
 
 export function PopoverContent({
   className,
+  collisionPadding = 16,
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
         sideOffset={6}
+        // Keeps the page's 16 px gutter on a phone.
+        collisionPadding={collisionPadding}
         className={cn(
           "z-50 w-96 max-w-[92vw] border border-line-2 bg-paper p-4",
           "text-meta text-ink shadow-[0_10px_30px_rgba(15,41,74,0.14)]",

@@ -11,7 +11,7 @@ import { Collapse } from "../../ui/motion/Collapse";
 import { prefersReducedMotion } from "../../ui/motion/motion";
 import { useEasedHeight } from "../streamPacing";
 import { useRegisterTrace } from "../taskLive";
-import { ChevronIcon } from "./chat/icons";
+import { ChevronIcon } from "../../ui/brand/icons";
 import { RUN_BLOCK_STATUS } from "./planVocabulary";
 import {
   STALLED_LINE,
@@ -32,11 +32,10 @@ import {
   type CardRow,
   type WalkKind,
 } from "./runProgress";
+import { LINK_CLASS, QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
 
 /** Quiet grey text control ("See plan", "Show steps"): a link in look, a
  *  button in kind. */
-const QUIET_CONTROL_CLASS =
-  "cursor-pointer text-meta font-semibold text-grey underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:text-navy hover:decoration-navy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue";
 
 /**
  * Every line of the card shares one line box (owner, round 8: equal row
@@ -95,8 +94,8 @@ function bound(text: string): string {
  *  grey), as the running card first had it. */
 const TOP_LINE_LABEL = "font-extrabold uppercase tracking-label text-grey";
 
-/** A link in the table's last column: blue, semibold, right-aligned. */
-const LINK_CLASS = "font-semibold whitespace-nowrap text-blue no-underline hover:underline";
+/** A link in the table's last column: the Link style, never wrapped. */
+const TRACE_LINK_CLASS = `${LINK_CLASS} whitespace-nowrap`;
 
 /** Screen-reader word for a row's state, which the list shows by its mark,
  *  colour and counts. */
@@ -206,7 +205,7 @@ function SpineRow({
   const link = rowLink(row, context.rows, context.taskId, context.kind, context.hasFindings);
   const linkNode =
     link === null ? null : (
-      <Link to={link.href} className={LINK_CLASS}>
+      <Link to={link.href} className={TRACE_LINK_CLASS}>
         {link.label} →
       </Link>
     );
@@ -429,7 +428,7 @@ export function RunTrace({
   const mark =
     ended !== null ? <StatusMark tone={ended.tone} /> : paused ? <StatusMark tone="paused" /> : <LiveMark />;
   const readIt = ended?.link ? (
-    <Link to={resultHref(taskId, kind)} className={LINK_CLASS}>
+    <Link to={resultHref(taskId, kind)} className={TRACE_LINK_CLASS}>
       Read it →
     </Link>
   ) : null;
@@ -464,7 +463,7 @@ export function RunTrace({
       </div>
       </div>
       {onSeePlan !== undefined && (
-        <button type="button" className={cn(QUIET_CONTROL_CLASS, "mt-2", WORDS_INDENT)} onClick={onSeePlan}>
+        <button type="button" className={cn(QUIET_CONTROL_CLASS, "mt-2 text-meta", WORDS_INDENT)} onClick={onSeePlan}>
           See plan
         </button>
       )}
@@ -501,7 +500,7 @@ export function RunTrace({
             aria-expanded={open}
             aria-controls={open ? listId : undefined}
             onClick={() => setOpen((value) => !value)}
-            className={cn(QUIET_CONTROL_CLASS, "mt-0.5 inline-flex items-center gap-1", WORDS_INDENT)}
+            className={cn(QUIET_CONTROL_CLASS, "mt-0.5 inline-flex text-meta items-center gap-1", WORDS_INDENT)}
           >
             {/* The conversation surfaces' chevron (one stroke family), turning
                 down as the steps open. */}

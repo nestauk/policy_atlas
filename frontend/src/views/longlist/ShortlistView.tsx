@@ -20,12 +20,13 @@ import {
   maturityPhrase,
 } from "./longlistPresentation";
 import { ShortlistActionButton, useOptionActions } from "./optionActions";
+import { CAPTION_LABEL_CLASS } from "../../ui/brand/label";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
 
 const SELECT_CLASS =
-  "max-w-full border border-line-2 bg-paper px-2 py-1 text-meta font-semibold text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:bg-paper-2 disabled:text-grey";
+  "max-w-full border border-line-2 bg-paper px-2 py-1 text-meta font-semibold text-navy disabled:bg-paper-2 disabled:text-grey";
 
 /** The risk appetite as a `<select>` over the three approved answers. It
  *  patches the plan directly (no chat seeding); the server re-proposes when
@@ -60,7 +61,7 @@ export function RiskAppetiteSelect({
 }
 
 /** The small label over a line Policy Atlas wrote (its reason, its note). */
-const VOICE_LABEL_CLASS = "text-caption font-bold uppercase tracking-[0.06em] text-grey";
+const VOICE_LABEL_CLASS = CAPTION_LABEL_CLASS;
 
 function byName(a: OptionSummaryOut, b: OptionSummaryOut): number {
   return a.name.localeCompare(b.name);

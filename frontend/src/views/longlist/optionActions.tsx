@@ -3,15 +3,14 @@ import { useState, type ReactNode } from "react";
 import type { components } from "../../api/gen/types";
 import { useOptionVerb, useShortlistVerb } from "../../api/mutations";
 import { actionFailedNotice } from "../../lib/errors";
-import { BanIcon, MinusIcon, PlusIcon, UndoIcon } from "../../ui/brand/ActionIcons";
+import { BanIcon, MinusIcon, PlusIcon, UndoIcon, iconButtonClass } from "../../ui/brand/icons";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { Tooltip, TooltipProvider } from "../../ui/radix/Tooltip";
 
 /** The reason and add-option inputs share one look. */
 export const REASON_INPUT_CLASS =
-  "min-w-0 flex-1 border border-line-2 bg-paper px-3 py-1.5 text-body text-ink placeholder:text-grey/80 " +
-  "focus-visible:outline-2 focus-visible:outline-blue";
+  "min-w-0 flex-1 border border-line-2 bg-paper px-3 py-1.5 text-body text-ink placeholder:text-grey/80";
 
 /** A refused action's notice, next to the control it came from (task 045,
  *  F15); `optionId` null is the list's add row. */
@@ -101,7 +100,6 @@ type OptionActions = ReturnType<typeof useOptionActions>;
  *  as the accessible label and as a hover tooltip in the system's own skin
  *  (owner, 2026-10-27: icons, not words; hover tooltips). The provider sits
  *  on each button so the rows need no wrapper. */
-const ICON_BUTTON_CLASS = "h-8 w-8 justify-center px-0 py-0 text-grey hover:text-navy";
 
 function IconAction({
   label,
@@ -119,16 +117,15 @@ function IconAction({
   return (
     <TooltipProvider delayDuration={250}>
       <Tooltip content={<p>{label}</p>}>
-        <Button
-          variant="secondary"
-          size="sm"
+        <button
+          type="button"
           aria-label={label}
-          className={cn(ICON_BUTTON_CLASS, className)}
+          className={cn(iconButtonClass("chrome"), className)}
           disabled={disabled}
           onClick={onClick}
         >
           {children}
-        </Button>
+        </button>
       </Tooltip>
     </TooltipProvider>
   );

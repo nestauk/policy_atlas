@@ -4,6 +4,8 @@ import { Link } from "react-router";
 import { scrub } from "../lib/scrub";
 import { ContentsSidebar, type SidebarEntry } from "./ArtefactOutline";
 import { READING_COLUMN_MAX_W } from "./listPageChrome";
+import { LABEL_CLASS, PANE_LABEL_CLASS } from "../ui/brand/label";
+import { cn } from "../ui/brand/cn";
 
 /*
  * The report's page chrome, shared by the Evidence search report and the
@@ -44,7 +46,7 @@ export function ReportPage({
 export function ReportKindRow({ kind, tag, children }: { kind: string; tag?: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <p className="flex items-center gap-2.5 text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
+      <p className={cn(PANE_LABEL_CLASS, "flex items-center gap-2.5")}>
         <span>{kind}</span>
         {tag !== undefined && <span className="normal-case tracking-normal">{tag}</span>}
       </p>
@@ -55,7 +57,7 @@ export function ReportKindRow({ kind, tag, children }: { kind: string; tag?: Rea
 
 /** The page title under the kind row. */
 export const REPORT_TITLE_CLASS =
-  "mt-1 text-display font-extrabold leading-tight tracking-[-0.5px] text-navy max-md:text-title";
+  "mt-1 text-display font-extrabold tracking-[-0.5px] text-navy max-md:text-title";
 
 export type SnapshotCell = [label: string, value: string, href: string | null];
 
@@ -68,8 +70,8 @@ export function SnapshotCells({ cells }: { cells: SnapshotCell[] }) {
       {cells.map(([label, value, href]) => {
         const content = (
           <>
-            <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">{label}</p>
-            <p className="mt-1 text-body font-medium leading-snug text-navy">{scrub(value)}</p>
+            <p className={LABEL_CLASS}>{label}</p>
+            <p className="mt-1 text-body leading-snug text-navy">{scrub(value)}</p>
           </>
         );
         return href !== null ? (

@@ -297,6 +297,15 @@ describe("ProjectsView — the page header and list (lists polish)", () => {
     expect(screen.getByLabelText("Project name")).toBeInTheDocument();
   });
 
+  it("puts Find a project before New project in the actions slot, built as Find a task is", () => {
+    const { container } = renderList();
+    const actions = container.querySelector('[data-slot="actions"]') as HTMLElement;
+    const find = screen.getByRole("button", { name: "Find a project" });
+    expect(actions).toContainElement(find);
+    expect(find).toHaveClass("h-10", "text-body", "font-semibold");
+    expect(actions.lastElementChild).toBe(screen.getByRole("button", { name: "New project" }));
+  });
+
   it("shows an empty list in the list's frame, left-aligned, without the card shadow", () => {
     renderList();
     const empty = screen.getByRole("status");
@@ -372,7 +381,7 @@ describe("ProjectDetailView — the page header and list (lists polish)", () => 
     expect(container.querySelector('[data-slot="context"]')).toContainElement(back);
     const makePrivate = screen.getByRole("button", { name: "Make private" });
     expect(container.querySelector('[data-slot="filters"]')).toContainElement(makePrivate);
-    expect(makePrivate).toHaveClass("h-10", "text-meta");
+    expect(makePrivate).toHaveClass("h-10", "text-body");
   });
 
   it("shows the description in the filters row", () => {

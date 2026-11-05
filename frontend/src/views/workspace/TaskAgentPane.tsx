@@ -264,7 +264,7 @@ export function Composer({
           }}
           placeholder={placeholder}
           disabled={disabled}
-          className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-lead [field-sizing:content] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
+          className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-lead [field-sizing:content] disabled:bg-ground disabled:text-grey"
         />
         <Button
           type="submit"
@@ -923,7 +923,7 @@ export function TaskAgentPane({
                 key={suggestion}
                 type="button"
                 onClick={() => send({ message: suggestion, clientTurnId: crypto.randomUUID() })}
-                className="cursor-pointer border border-blue-tint bg-blue-tint px-2.5 py-1 text-caption font-semibold text-blue hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue"
+                className="cursor-pointer border border-blue-tint bg-blue-tint px-2.5 py-1 text-caption font-semibold text-blue hover:bg-blue-tint-2"
               >
                 {scrub(suggestion)}
               </button>

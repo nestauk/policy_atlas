@@ -2,6 +2,7 @@ import type { HTMLAttributes } from "react";
 
 import { cn } from "./cn";
 import { FoldMarkAnimated } from "./FoldMarkAnimated";
+import { PANE_LABEL_CLASS } from "./label";
 
 /** Paper surface on the app ground (hifi.css .screen): 0 radius, hairline
  * border, the soft navy-tinted shadow. Composable — no configuration. */
@@ -24,7 +25,7 @@ export function PaneHeading({ className, ...props }: HTMLAttributes<HTMLDivEleme
     <div
       className={cn(
         "flex items-center justify-between px-4 pb-2.5 pt-3.5",
-        "text-meta font-extrabold uppercase tracking-[0.06em] text-grey",
+        PANE_LABEL_CLASS,
         className,
       )}
       {...props}

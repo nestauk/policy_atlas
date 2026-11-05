@@ -12,6 +12,7 @@ import { cn } from "../ui/brand/cn";
 import { ReauthRedirect } from "../ui/feedback";
 import { ArrivalProvider, useArrives, useFirstPaintDone } from "../ui/motion/arrivals";
 import { feedsSources, liveStages, useLiveRefetch } from "./sourcesPresentation";
+import { RetryCard } from "../ui/feedback/RetryCard";
 
 /** One row of the list: a committed theme, or a discovered one whose count
  *  is on its way (`size` null). */
@@ -108,7 +109,7 @@ function ThemeRow({
       {to !== undefined ? (
         <Link
           to={to}
-          className="block py-4 no-underline hover:bg-paper-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue"
+          className="block py-4 no-underline hover:bg-paper-2"
         >
           {body}
         </Link>
@@ -204,18 +205,9 @@ export function ThemesView() {
         (isUnauthenticated ? (
           <ReauthRedirect />
         ) : (
-          <Card role="alert" className="p-8 text-center text-body text-navy">
-            Themes couldn't be loaded.{" "}
-            <button
-              type="button"
-              className="cursor-pointer font-bold text-blue hover:underline"
-              onClick={() => {
+          <RetryCard copy="Themes couldn't be loaded." onRetry={() => {
                 void landscape.refetch();
-              }}
-            >
-              Retry
-            </button>
-          </Card>
+              }} />
         ))}
 
       {isEmpty && mapping && <ThemesPending />}

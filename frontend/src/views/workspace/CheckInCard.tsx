@@ -27,6 +27,7 @@ import {
 } from "./checkInPresentation";
 import { ChoiceRow, WordsInput } from "./PartCard";
 import { STEERING_MODE_LABEL, vocabLabel } from "./planVocabulary";
+import { LINK_CLASS } from "../../ui/brand/inlineActions";
 
 interface CompiledSteer {
   render: string;
@@ -206,7 +207,7 @@ function CheckInCardBody({
         <p className="mt-2 text-body font-semibold text-navy">
           Here's what that would change — apply it?
         </p>
-        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-body leading-relaxed text-ink">
+        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-body text-ink">
           {scrub(compiled.render)}
         </pre>
         <p className="mt-1.5 text-body text-grey">
@@ -357,7 +358,7 @@ function CheckInCardBody({
               {" · "}
               <Link
                 to={`/tasks/${taskId}/sources`}
-                className="font-semibold text-blue underline-offset-[3px] hover:underline"
+                className={LINK_CLASS}
               >
                 Sources →
               </Link>
@@ -434,7 +435,7 @@ function CheckInCardBody({
                     id={`change-mode-${checkIn.check_in_id}`}
                     value={changeModeValue}
                     onChange={(event) => setChangeModeValue(event.target.value as ChangeModeValue)}
-                    className="min-w-0 flex-1 border border-line-2 bg-paper px-2.5 py-2 text-body focus-visible:outline-2 focus-visible:outline-blue"
+                    className="min-w-0 flex-1 border border-line-2 bg-paper px-2.5 py-2 text-body"
                   >
                     {CHANGE_MODE_VALUES.flatMap((value) => {
                       const label = vocabLabel(STEERING_MODE_LABEL, value);
@@ -447,7 +448,7 @@ function CheckInCardBody({
                           ];
                     })}
                   </select>
-                  <Button type="submit" size="sm" variant="secondary" className="border border-line-2" disabled={answer.isPending}>
+                  <Button type="submit" size="sm" variant="outline" disabled={answer.isPending}>
                     Send
                   </Button>
                 </form>
@@ -467,7 +468,7 @@ function CheckInCardBody({
       </div>
 
       <details className="group mt-3 border-t border-line pt-3">
-        <summary className="cursor-pointer text-body font-semibold text-grey marker:text-line-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue">
+        <summary className="cursor-pointer text-body font-semibold text-grey marker:text-line-2 hover:text-navy">
           Or steer in your own words
         </summary>
         <form
@@ -488,13 +489,12 @@ function CheckInCardBody({
               value={freeText}
               onChange={(event) => setFreeText(event.target.value)}
               placeholder="e.g. prioritise UK school-based studies"
-              className="min-w-0 flex-1 border border-line-2 bg-paper px-3 py-2 text-body focus-visible:outline-2 focus-visible:outline-blue"
+              className="min-w-0 flex-1 border border-line-2 bg-paper px-3 py-2 text-body"
             />
             <Button
               type="submit"
-              variant="secondary"
+              variant="outline"
               size="sm"
-              className="border border-line-2"
               disabled={answer.isPending || freeText.trim().length === 0}
             >
               Compile

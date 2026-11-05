@@ -1,11 +1,10 @@
-import { type ReactNode, useState } from "react";
-import { useNavigate } from "react-router";
+import type { ReactNode } from "react";
 
 import type { components } from "../api/gen/types";
-import { scrub } from "../lib/scrub";
 import { COPY, TASK } from "../lib/vocabulary";
 import { Button } from "../ui/brand/Button";
-import { PAGE_CONTROL_CLASS, PagePrimary } from "../ui/brand/PageHeader";
+import { PagePrimary } from "../ui/brand/PageHeader";
+import { FindPopover, type FindItem } from "./FindPopover";
 import { taskDestination } from "./lifecycle";
 import { listFrameClass } from "./listPageChrome";
 import { TaskListRow } from "./TaskListRow";
@@ -53,91 +52,6 @@ function projectPrefix(
   return projectNameList(ids, names).join(" · ");
 }
 
-function FindTask({
-  rows,
-  projectNames,
-  showProjectPrefix,
-  onClose,
-}: {
-  rows: readonly TaskListItem[];
-  projectNames?: ReadonlyMap<string, string>;
-  showProjectPrefix?: boolean;
-  onClose: () => void;
-}) {
-  const [term, setTerm] = useState("");
-  const navigate = useNavigate();
-  const needle = term.trim().toLowerCase();
-  const matches =
-    needle === ""
-      ? rows
-      : rows.filter((row) => {
-          const project =
-            showProjectPrefix ? projectPrefix(row.project_ids, projectNames) : "";
-          const haystack = `${project} ${row.name}`.toLowerCase();
-          return haystack.includes(needle);
-        });
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={COPY.findTask}
-      className="fixed inset-x-0 top-24 z-30 mx-auto max-w-xl border border-line bg-paper p-4 shadow-lg"
-    >
-      <div className="flex items-center gap-3">
-        <label className="sr-only" htmlFor="find-task">
-          {COPY.findTask}
-        </label>
-        <input
-          id="find-task"
-          autoFocus
-          value={term}
-          onChange={(event) => setTerm(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") onClose();
-          }}
-          placeholder={`Search ${TASK.lowerMany} by name`}
-          className="flex-1 border border-line-2 bg-paper px-3 py-2 text-body text-navy focus-visible:outline-2 focus-visible:outline-blue"
-        />
-        <button
-          type="button"
-          aria-label="Close search"
-          onClick={onClose}
-          className="cursor-pointer text-heading leading-none text-grey hover:text-navy"
-        >
-          ×
-        </button>
-      </div>
-      <ul role="list" className="mt-3 max-h-80 overflow-y-auto">
-        {matches.length === 0 && (
-          <li className="px-1 py-3 text-body text-grey">Nothing matches “{scrub(term)}”.</li>
-        )}
-        {matches.map((row) => {
-          const projectName = showProjectPrefix
-            ? projectPrefix(row.project_ids, projectNames) || null
-            : null;
-          const label =
-            projectName != null ? `${projectName} / ${row.name}` : row.name;
-          return (
-            <li key={row.task_id}>
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  void navigate(rowDestination(row));
-                }}
-                className="w-full cursor-pointer border-b border-line px-1 py-2.5 text-left text-body text-navy last:border-b-0 hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue"
-              >
-                {scrub(label)}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
 /** Find-a-task and New-task controls shared by the Tasks and Project page
  *  headers: drop them straight into `PageHeader`'s actions slot. */
 export function TaskListActions({
@@ -151,22 +65,20 @@ export function TaskListActions({
   showProjectPrefix?: boolean;
   newTaskHref: string;
 }) {
-  const [finding, setFinding] = useState(false);
+  const items: FindItem[] = rows.map((row) => {
+    const projectName = showProjectPrefix ? projectPrefix(row.project_ids, projectNames) : "";
+    return {
+      id: row.task_id,
+      label: projectName !== "" ? `${projectName} / ${row.name}` : row.name,
+      href: rowDestination(row),
+      updatedAt: row.updated_at,
+    };
+  });
 
   return (
     <>
-      <Button variant="ghost" className={PAGE_CONTROL_CLASS} onClick={() => setFinding(true)}>
-        {COPY.findTask}
-      </Button>
+      <FindPopover items={items} copy={{ label: COPY.findTask, noun: TASK.lowerMany }} />
       <PagePrimary to={newTaskHref}>{COPY.newTask}</PagePrimary>
-      {finding && (
-        <FindTask
-          rows={rows}
-          projectNames={projectNames}
-          showProjectPrefix={showProjectPrefix}
-          onClose={() => setFinding(false)}
-        />
-      )}
     </>
   );
 }
@@ -230,6 +142,10 @@ export function ListEmpty({ label, children }: { label: string; children?: React
   );
 }
 
+/** A control inside the list's frame: the 40 px ghost at the ghost's own
+ *  Meta size (the header's controls are Body; this one is not in the header). */
+const LIST_CONTROL_CLASS = "h-10 whitespace-nowrap px-3 py-0 text-meta";
+
 /**
  * A list that failed to load: the list's frame, the sentence, and a 40 px
  * ghost that asks again (lead ruling, 2026-11-05).
@@ -249,7 +165,7 @@ export function ListError({
       className={`${listFrameClass} flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-4 pl-4 pr-1`}
     >
       <p className="text-body text-navy">{children}</p>
-      <Button variant="ghost" className={PAGE_CONTROL_CLASS} onClick={onRetry}>
+      <Button variant="ghost" className={LIST_CONTROL_CLASS} onClick={onRetry}>
         {actionLabel}
       </Button>
     </div>

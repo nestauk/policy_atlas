@@ -43,6 +43,8 @@ import {
   servesOutcome,
 } from "./longlistPresentation";
 import { ExcludeReasonForm, OptionActionButton, ShortlistActionButton, useOptionActions } from "./optionActions";
+import { RetryCard } from "../../ui/feedback/RetryCard";
+import { LINK_CLASS, PROSE_LINK_CLASS } from "../../ui/brand/inlineActions";
 
 type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
 
@@ -113,7 +115,7 @@ function DocumentLine({
       {qualityLine !== "" && <p className="text-meta text-grey">{qualityLine}</p>}
       {dossier !== null && more > 0 && (
         <p className="text-meta">
-          <Link className="text-blue underline underline-offset-2" to={dossier}>
+          <Link className={PROSE_LINK_CLASS} to={dossier}>
             +{more} more
           </Link>
         </p>
@@ -278,16 +280,7 @@ export function OptionCard() {
     if (code === "unauthenticated") return <ReauthRedirect />;
     return (
       <main className={PAGE_CLASS}>
-        <Card role="alert" className="p-8 text-center text-body text-navy">
-          This option couldn't be loaded.{" "}
-          <button
-            type="button"
-            className="cursor-pointer font-bold text-blue hover:underline"
-            onClick={() => void option.refetch()}
-          >
-            Retry
-          </button>
-        </Card>
+        <RetryCard copy="This option couldn't be loaded." onRetry={() => void option.refetch()} />
       </main>
     );
   }
@@ -345,7 +338,7 @@ export function OptionCard() {
   return (
     <ReportPage entries={sidebarEntries(item.profile != null)}>
       <nav aria-label="Breadcrumb" className="print-hide mb-4 text-meta text-grey">
-        <Link to={`/tasks/${taskId}/result?view=longlist`} className="font-semibold text-blue underline-offset-4 hover:underline">
+        <Link to={`/tasks/${taskId}/result?view=longlist`} className={LINK_CLASS}>
           Longlist
         </Link>
         <span aria-hidden="true" className="mx-2">/</span>
