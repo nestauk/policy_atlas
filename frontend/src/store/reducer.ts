@@ -22,14 +22,16 @@ import {
  * That set resets whenever the sequence actually advances. Together this
  * makes folding the same frame stream twice, or resuming the fold from
  * any mid-stream cursor (however the redelivery is sliced), produce the
- * same final state. The five ephemeral frame types are the deliberate
+ * same final state. The six ephemeral frame types are the deliberate
  * exception: they carry no `sequence` at all and never advance
  * `lastSequence`. `tick` updates only the transient `liveness` slice;
  * `artefact.section_delta` and `artefact.section_revising` update only a
  * section's `draft` and `revising` (task 058, N7);
  * `artefact.section_sources` and `artefact.section_claim` update only its
- * `sources` and `claims` (task 058, evidence shown live). A replay carries
- * none of them, so folding a replay rebuilds `prose` alone.
+ * `sources` and `claims` (task 058, evidence shown live);
+ * `artefact.section_card` appends to its `cards` (task 058, round 7). A
+ * replay carries none of them, so folding a replay rebuilds `prose` and
+ * `citations` alone.
  */
 /** Task 045 (A3): a stage frame names its walk; one from a different walk
  *  than the tracked run (a longlist walk's option search) is not this
@@ -73,8 +75,12 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
     if (section.state === "filled") return state;
     const draft = frame.mode === "append" ? (section.draft ?? "") + frame.text : frame.text;
     const next: LiveSection = { ...section, draft };
-    // A replaced draft is new text: citations bound to the old one go.
-    if (frame.mode === "replace") delete next.claims;
+    // A replaced draft is new text: citations bound to the old one, and
+    // cards from the old reply, go.
+    if (frame.mode === "replace") {
+      delete next.claims;
+      delete next.cards;
+    }
     return {
       ...state,
       liveSections: { ...state.liveSections, [frame.index]: next },
@@ -102,6 +108,19 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       liveSections: {
         ...state.liveSections,
         [frame.index]: { ...section, claims: [...(section.claims ?? []), claim] },
+      },
+    };
+  }
+
+  if (frame.type === "artefact.section_card") {
+    const section = state.liveSections[frame.index];
+    if (section === undefined || section.state === "filled") return state;
+    const card = { title: frame.title, prose: frame.prose };
+    return {
+      ...state,
+      liveSections: {
+        ...state.liveSections,
+        [frame.index]: { ...section, cards: [...(section.cards ?? []), card] },
       },
     };
   }
@@ -255,6 +274,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
               index: section.index,
               title: section.title,
               focus: section.focus,
+              role: section.role,
               state: "planned",
             };
             if (held !== undefined) live.draft = held;
@@ -293,6 +313,20 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       delete settled.revising;
       delete settled.sources;
       delete settled.claims;
+      delete settled.cards;
+      // The checked citations stay until the committed report replaces the
+      // live view (task 058, round 7). A section with none carries none.
+      delete settled.citations;
+      if (frame.citations !== undefined && frame.citations.length > 0) {
+        settled.citations = frame.citations.map((citation) => ({
+          start: citation.start,
+          end: citation.end,
+          n: citation.n,
+          sourceId: citation.source_id,
+          title: citation.title,
+          tier: citation.tier,
+        }));
+      }
       return {
         ...base,
         liveSections: {

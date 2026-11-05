@@ -9,7 +9,9 @@ last tick per stage and the section text written so far (task 058, N4).
 While a section is written the hub also passes on the sources the writer has
 just read and, as each of the writer's citations closes, the stretch of text it
 marks; it remembers both beside the section text, so a newly connected browser
-sees them too (task 058, "evidence shown live", owner 2026-11-05).
+sees them too (task 058, "evidence shown live", owner 2026-11-05). The
+case-study cards are passed on the same way, each as it closes (task 058,
+round 7).
 
 Nothing here is saved to the database. The durable record stays in
 ``event_log``; these messages may be lost (a full queue drops its oldest
@@ -164,7 +166,29 @@ class SectionClaim:
     occurred_at: datetime
 
 
-type HubMessage = Tick | SectionDelta | SectionRevising | SectionSources | SectionClaim
+@dataclass(frozen=True, slots=True)
+class SectionCard:
+    """One case-study card as it closes in the streamed reply (task 058, round 7).
+
+    Display-only: the card is still to be checked; the completed section
+    brings the checked cards.
+
+    Attributes:
+        index: The section's position in the report.
+        title: The card's title.
+        prose: The card's text.
+        occurred_at: When the message was sent.
+    """
+
+    index: int
+    title: str
+    prose: str
+    occurred_at: datetime
+
+
+type HubMessage = (
+    Tick | SectionDelta | SectionRevising | SectionSources | SectionClaim | SectionCard
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,13 +216,14 @@ class _StageMemory:
 
 @dataclass(slots=True)
 class _Draft:
-    """The section being written: its text so far, sources read and citations bound."""
+    """The section being written: its text, sources read, citations bound and cards."""
 
     index: int
     text: str
     updated_at: float
     sources: tuple[SourceRef, ...] = ()
     claims: list[SectionClaim] = field(default_factory=list)
+    cards: list[SectionCard] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -294,7 +319,8 @@ class TickHub:
             (in the order the stages first appeared), then, if a section is
             being written, one ``replace`` delta carrying its text so far
             (when there is any), the sources read so far (when there are
-            any) and each citation bound so far.
+            any), each citation bound so far and each case-study card closed
+            so far.
         """
         queue: asyncio.Queue[HubMessage] = asyncio.Queue(maxsize=self._queue_size)
         subscriber = _Subscriber(asyncio.get_running_loop(), queue)
@@ -333,6 +359,7 @@ class TickHub:
                             )
                         )
                     snapshot.extend(draft.claims)
+                    snapshot.extend(draft.cards)
         return queue, snapshot
 
     async def unsubscribe(self, task_id: uuid.UUID, queue: asyncio.Queue[HubMessage]) -> None:
@@ -485,7 +512,8 @@ class TickHub:
             if mode == "replace":
                 self._emit_pending_delta(task_id, memory)
                 kept = memory.draft
-                # The sources read stay; citations bound to the old text go.
+                # The sources read stay; citations bound to the old text and
+                # cards from the old reply go.
                 memory.draft = _Draft(
                     index,
                     text[:DRAFT_MAX_CHARS],
@@ -619,8 +647,31 @@ class TickHub:
             draft.updated_at = now
             self._fan_out(task_id, claim)
 
+    def publish_card(
+        self, task_id: uuid.UUID, *, index: int, title: str, prose: str
+    ) -> None:
+        """Send one case-study card, and remember it beside the draft for a reconnect.
+
+        Args:
+            task_id: The task.
+            index: The section's position in the report.
+            title: The card's title.
+            prose: The card's text.
+        """
+        card = SectionCard(index=index, title=title, prose=prose, occurred_at=_now_utc())
+        with self._lock:
+            now = self._clock()
+            memory = self._tasks.setdefault(task_id, _TaskMemory())
+            draft = memory.draft
+            if draft is None or draft.index != index:
+                self._emit_pending_delta(task_id, memory)
+                draft = memory.draft = _Draft(index, "", now)
+            draft.cards.append(card)
+            draft.updated_at = now
+            self._fan_out(task_id, card)
+
     def clear_draft(self, task_id: uuid.UUID) -> None:
-        """Forget the section draft, its sources and citations, and any held append.
+        """Forget the section draft, its sources, citations and cards, and any held append.
 
         Called when a section has finished.
 
@@ -685,8 +736,8 @@ class TickHub:
     def end_stage(self, task_id: uuid.UUID, stage: str) -> None:
         """Forget one stage's tick, held tick and open calls.
 
-        Ending ``synthesise`` also forgets the section draft (with its sources
-        and citations) and held text.
+        Ending ``synthesise`` also forgets the section draft (with its sources,
+        citations and cards) and held text.
 
         Args:
             task_id: The task.
@@ -1033,6 +1084,19 @@ def publish_section_claim(
     task_id = _task_id.get()
     if task_id is not None:
         tick_hub.publish_claim(task_id, index=index, start=start, end=end, sources=sources)
+
+
+def publish_section_card(index: int, title: str, prose: str) -> None:
+    """Publish one case-study card for the bound task (no-op when unbound).
+
+    Args:
+        index: The section's position in the report.
+        title: The card's title.
+        prose: The card's text.
+    """
+    task_id = _task_id.get()
+    if task_id is not None:
+        tick_hub.publish_card(task_id, index=index, title=title, prose=prose)
 
 
 def clear_section_draft() -> None:

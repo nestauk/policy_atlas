@@ -41,6 +41,14 @@ NOT_WRAPPED: dict[tuple[str, str], str] = {
         "its timeout bounds the gap between chunks; one non-streamed re-run on failure, "
         "in section_emit_stream"
     ),
+    (
+        "evidence_search/synthesis/synthesis_backend.py",
+        "OpenAISynthesisBackend.write_case_studies_stream",
+    ): (
+        "exempt-stream: the case-study cards reach the user as each closes (task 058, "
+        "round 7); its timeout bounds the gap between chunks; one non-streamed run of "
+        "write_case_studies (with its own retries) on failure"
+    ),
     ("runtime/task_agent.py", "OpenAITaskAgentBackend._stream_attempt"): (
         "exempt-stream: the planner reply reaches the user as it arrives; one traced "
         "pre-token retry; the timeout bounds the gap between chunks"

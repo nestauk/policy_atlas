@@ -146,6 +146,7 @@ from .read_models import (
 )
 from .runs import RunCreate, RunOut, RunStatus
 from .sse import (
+    ArtefactSectionCardFrame,
     ArtefactSectionClaimFrame,
     ArtefactSectionCompletedFrame,
     ArtefactSectionDeltaFrame,
@@ -159,6 +160,7 @@ from .sse import (
     DecidedBy,
     PlanUpdatedFrame,
     RunStatusFrame,
+    SectionCitation,
     SectionSourceRef,
     SectionSpan,
     SseFrame,
@@ -287,6 +289,7 @@ __all__ = [
     "PROJECT_NAME_MAX",
     "TASK_NAME_MAX",
     "STAGE_KEYS",
+    "ArtefactSectionCardFrame",
     "ArtefactSectionClaimFrame",
     "ArtefactSectionCompletedFrame",
     "ArtefactSectionDeltaFrame",
@@ -432,6 +435,7 @@ __all__ = [
     "SourceDossierOut",
     "SourceRecordsOut",
     "SourceTagOut",
+    "SectionCitation",
     "SectionSourceRef",
     "SectionSpan",
     "SseFrame",

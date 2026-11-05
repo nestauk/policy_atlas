@@ -27,6 +27,7 @@ from policy_atlas.api import continuation
 from policy_atlas.api.app import create_app
 from policy_atlas.api.contract import SseFrame
 from policy_atlas.api.contract.sse import (
+    ArtefactSectionCardFrame,
     ArtefactSectionClaimFrame,
     ArtefactSectionDeltaFrame,
     ArtefactSectionRevisingFrame,
@@ -1003,6 +1004,74 @@ def test_encode_ephemeral_names_the_sources_and_claim_frames() -> None:
     assert "id:" not in sources and "id:" not in claim
     assert '"sources":[{"source_id":"tss-1","title":"Smith 2023"}]' in sources
     assert '"start":1,"end":9' in claim
+
+
+def test_sse_card_frames_have_no_id_line_and_a_snapshot_sends_them_after_the_draft(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Task 058, round 7: each case-study card arrives as a validated cursor-free
+    frame, and a reconnect gets the cards remembered so far."""
+
+    async def exercise() -> None:
+        task_id: uuid.UUID | None = None
+        try:
+            async with _api_session(tmp_path) as api:
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                stream = await api.open_stream(task_id)
+                await _subscribed(task_id)
+                tick_hub.publish_card(task_id, index=1, title="Leeds", prose="Breakfast.")
+                tick_hub.publish_card(task_id, index=1, title="Bristol", prose="Walking buses.")
+                items = await stream.collect_until(
+                    lambda item: item.event == "artefact.section_card"
+                    and item.data is not None
+                    and item.data.get("title") == "Bristol"
+                )
+                await stream.aclose()
+                frames = _frames(items)
+                assert [item.event for item in frames] == [
+                    "artefact.section_card",
+                    "artefact.section_card",
+                ]
+                assert all(item.sequence is None for item in frames)
+                adapter: TypeAdapter[SseFrame] = TypeAdapter(SseFrame)
+                validated = [adapter.validate_python(item.data) for item in frames]
+                assert all(isinstance(frame, ArtefactSectionCardFrame) for frame in validated)
+                assert [
+                    (frame.index, frame.title, frame.prose)
+                    for frame in validated
+                    if isinstance(frame, ArtefactSectionCardFrame)
+                ] == [(1, "Leeds", "Breakfast."), (1, "Bristol", "Walking buses.")]
+
+                # A reconnect: the cards so far, in order.
+                stream = await api.open_stream(task_id)
+                items = await stream.collect_until(
+                    lambda item: item.event == "artefact.section_card"
+                    and item.data is not None
+                    and item.data.get("title") == "Bristol"
+                )
+                await stream.aclose()
+                assert [item.data["title"] for item in _frames(items) if item.data] == [
+                    "Leeds",
+                    "Bristol",
+                ]
+        finally:
+            _cleanup(engine, task_id)
+
+    asyncio.run(exercise())
+
+
+def test_encode_ephemeral_names_the_card_frame() -> None:
+    """The hub's card message becomes `artefact.section_card`, with no id line."""
+    from datetime import UTC, datetime
+
+    from policy_atlas.core.liveness import SectionCard
+
+    encoded = _encode_ephemeral(
+        SectionCard(index=1, title="Leeds", prose="Breakfast.", occurred_at=datetime.now(UTC))
+    )
+    assert encoded.startswith("event: artefact.section_card\ndata: ")
+    assert "id:" not in encoded
+    assert '"index":1,"title":"Leeds","prose":"Breakfast."' in encoded
 
 
 def test_sse_drains_every_queued_message_in_one_poll(

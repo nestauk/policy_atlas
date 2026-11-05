@@ -189,6 +189,41 @@ def _metadata_text(metadata: Mapping[str, Any], key: str) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+#: Roles saved after the body sections, in the order they are saved.
+_LATE_SAVED_ROLES = ("key_findings", "case_studies")
+
+
+def _save_rank(
+    parsed_specs: Sequence[tuple[Mapping[str, Any], uuid.UUID]],
+) -> dict[uuid.UUID, tuple[int, int]]:
+    """Rank each block by the order synthesis saved it (task 058, round 7).
+
+    The roll-up lists blocks in page order (key findings and case studies
+    first); synthesis saves the body sections first, in that order, then the
+    key findings, then the case studies.
+    """
+    ranks: dict[uuid.UUID, tuple[int, int]] = {}
+    for position, (spec, block_id) in enumerate(parsed_specs):
+        role = spec.get("role")
+        group = _LATE_SAVED_ROLES.index(role) + 1 if role in _LATE_SAVED_ROLES else 0
+        ranks[block_id] = (group, position)
+    return ranks
+
+
+def _annotation_order(
+    row: Any, rank_by_block: Mapping[uuid.UUID, tuple[int, int]]
+) -> tuple[tuple[int, int], int, int, str]:
+    """Sort key for an annotation: its block's save rank, then its span, then its id."""
+    locator = row.locator if isinstance(row.locator, Mapping) else {}
+    start, end = locator.get("start"), locator.get("end")
+    return (
+        rank_by_block.get(row.block_id, (3, 0)),
+        start if isinstance(start, int) else -1,
+        end if isinstance(end, int) else -1,
+        str(row.annotation_id),
+    )
+
+
 def _title(metadata: Mapping[str, Any], locator: str) -> str:
     title = _metadata_text(metadata, "title")
     return html.unescape(title) if title else locator
@@ -1870,6 +1905,17 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
     citations_by_annotation: dict[uuid.UUID, list[Any]] = {}
     for row in citation_rows:
         citations_by_annotation.setdefault(row.annotation_id, []).append(row)
+    # Reference numbers go to documents in order of first citation, so the
+    # walk below must be in one fixed order or a report could renumber between
+    # two loads (task 058, round 7). The order is the order the run saved and
+    # numbered its sections live: body sections in report order, then the key
+    # findings, then the case studies (``_save_rank``); within a block, claims
+    # by their span; within a claim, citations by chunk, quote and id. The live
+    # mirror is ``evidence_search/synthesis/live_citations.py``.
+    rank_by_block = _save_rank(parsed_specs)
+    annotations = sorted(annotations, key=lambda row: _annotation_order(row, rank_by_block))
+    for rows in citations_by_annotation.values():
+        rows.sort(key=lambda row: (row.chunk_id, row.quote, row.citation_id))
     refs: dict[uuid.UUID, int] = {}
     reference_order: list[uuid.UUID] = []
     claims_by_block: dict[uuid.UUID, list[ClaimOut]] = {block_id: [] for block_id in ids}

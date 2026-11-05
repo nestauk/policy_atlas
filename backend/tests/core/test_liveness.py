@@ -24,6 +24,7 @@ from policy_atlas.core.liveness import (
     HEARTBEAT_SECONDS,
     MEMORY_TTL_SECONDS,
     HubMessage,
+    SectionCard,
     SectionClaim,
     SectionDelta,
     SectionRevising,
@@ -695,5 +696,126 @@ def test_context_helpers_publish_sources_and_claims_for_the_bound_task(
             liveness.publish_section_claim(0, 0, 1, [("a", "A 2020")])
         sent = await _drain(queue)
         assert [type(m) for m in sent] == [SectionSources, SectionClaim]
+
+    _run(body)
+
+
+# --- Case studies streamed card by card (task 058, round 7) -----------------------
+
+
+def test_cards_are_sent_and_remembered_in_order_and_a_snapshot_sends_them_after_the_draft() -> (
+    None
+):
+    async def body() -> None:
+        hub, _clock = _hub()
+        queue = await hub.subscribe(TASK)
+        hub.publish_card(TASK, index=1, title="Leeds", prose="Breakfast in every primary.")
+        hub.publish_card(TASK, index=1, title="Bristol", prose="Walking buses.")
+        sent = await _drain(queue)
+        assert [type(m) for m in sent] == [SectionCard, SectionCard]
+        assert [(m.index, m.title) for m in sent if isinstance(m, SectionCard)] == [
+            (1, "Leeds"),
+            (1, "Bristol"),
+        ]
+        await hub.unsubscribe(TASK, queue)
+
+        queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+        await hub.unsubscribe(TASK, queue)
+        # No text was streamed for the slot: only the cards, in order.
+        assert [m.title for m in snapshot if isinstance(m, SectionCard)] == ["Leeds", "Bristol"]
+        assert len(snapshot) == 2
+
+        # A draft for the same slot comes first, then the cards.
+        hub.publish_delta(TASK, index=1, text="Some text.")
+        queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+        await hub.unsubscribe(TASK, queue)
+        assert isinstance(snapshot[0], SectionDelta) and snapshot[0].mode == "replace"
+        assert [type(m) for m in snapshot[1:]] == [SectionCard, SectionCard]
+
+    _run(body)
+
+
+def test_a_card_for_another_section_starts_a_fresh_draft_and_flushes_held_text() -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        queue = await hub.subscribe(TASK)
+        hub.publish_delta(TASK, index=2, text="Held text.")
+        hub.publish_card(TASK, index=1, title="Leeds", prose="Breakfast.")
+        sent = await _drain(queue)
+        assert isinstance(sent[0], SectionDelta) and sent[0].text == "Held text."
+        assert isinstance(sent[1], SectionCard)
+        draft = hub._tasks[TASK].draft
+        assert draft is not None and draft.index == 1 and draft.text == ""
+        assert [card.title for card in draft.cards] == ["Leeds"]
+
+    _run(body)
+
+
+def test_a_replace_and_the_forgetting_rules_drop_the_cards() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+
+        async def snapshot() -> list[HubMessage]:
+            queue, messages = await hub.subscribe_with_snapshot(TASK)
+            await hub.unsubscribe(TASK, queue)
+            return messages
+
+        def fill() -> None:
+            hub.publish_card(TASK, index=1, title="Leeds", prose="Breakfast.")
+
+        fill()
+        # The streamed reply fell back: the slot is reset and the cards go.
+        hub.publish_delta(TASK, index=1, text="", mode="replace")
+        draft = hub._tasks[TASK].draft
+        assert draft is not None and draft.cards == []
+
+        fill()
+        hub.clear_draft(TASK)
+        assert await snapshot() == []
+
+        fill()
+        hub.end_stage(TASK, "synthesise")
+        assert await snapshot() == []
+
+        run = uuid.uuid4()
+        hub.begin_run(TASK, run)
+        fill()
+        hub.end_run(TASK, run)
+        assert await snapshot() == []
+
+        fill()
+        clock.now = MEMORY_TTL_SECONDS + 1
+        assert await snapshot() == []
+
+    _run(body)
+
+
+def test_cards_count_as_dropped_on_a_full_queue() -> None:
+    async def body() -> None:
+        hub, _clock = _hub(queue_size=1)
+        await hub.subscribe(TASK)
+        hub.publish_card(TASK, index=1, title="A", prose="a")
+        hub.publish_card(TASK, index=1, title="B", prose="b")
+        hub.publish_card(TASK, index=1, title="C", prose="c")
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert hub.dropped(TASK) == 2
+
+    _run(body)
+
+
+def test_context_helper_publishes_a_card_for_the_bound_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        monkeypatch.setattr(liveness, "tick_hub", hub)
+        queue = await hub.subscribe(TASK)
+        liveness.publish_section_card(1, "Leeds", "Breakfast.")
+        assert await _drain(queue) == []
+        with liveness.task_liveness(TASK, stage="synthesise"):
+            liveness.publish_section_card(1, "Leeds", "Breakfast.")
+        [card] = await _drain(queue)
+        assert isinstance(card, SectionCard) and (card.index, card.title) == (1, "Leeds")
 
     _run(body)

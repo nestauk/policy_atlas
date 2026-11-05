@@ -33,6 +33,7 @@ from policy_atlas.api.contract import (
     TurnDecisionOut,
 )
 from policy_atlas.api.contract.sse import (
+    ArtefactSectionCardFrame,
     ArtefactSectionClaimFrame,
     ArtefactSectionCompletedFrame,
     ArtefactSectionDeltaFrame,
@@ -571,6 +572,72 @@ def test_section_sources_and_claim_frames_are_ephemeral() -> None:
                 "sources": [],
             }
         )
+
+
+def test_section_completed_carries_citations_and_the_card_frame_is_ephemeral() -> None:
+    """Task 058, round 7: the completed frame's citations, and the card frame."""
+    source_id = uuid.uuid4()
+    completed = _adapter().validate_python(
+        {
+            "type": "artefact.section_completed",
+            "sequence": 9,
+            "occurred_at": _now().isoformat(),
+            "index": 2,
+            "title": "Costs",
+            "prose": "Costs fall.",
+            "citations": [
+                {
+                    "start": 0,
+                    "end": 11,
+                    "n": 3,
+                    "source_id": str(source_id),
+                    "title": "Breakfast clubs",
+                    "tier": "tier_1",
+                },
+                {
+                    "start": 0,
+                    "end": 11,
+                    "n": 4,
+                    "source_id": None,
+                    "title": "Unknown source",
+                    "tier": None,
+                },
+            ],
+        }
+    )
+    assert isinstance(completed, ArtefactSectionCompletedFrame)
+    assert [(c.n, c.source_id, c.tier) for c in completed.citations] == [
+        (3, source_id, "tier_1"),
+        (4, None, None),
+    ]
+    dumped = completed.model_dump(mode="json")
+    assert dumped["citations"][0]["source_id"] == str(source_id)
+    # A frame recorded before the field existed still validates, with none.
+    older = _adapter().validate_python(
+        {
+            "type": "artefact.section_completed",
+            "sequence": 3,
+            "occurred_at": _now().isoformat(),
+            "index": 1,
+            "title": "Evidence",
+            "prose": "Prose.",
+        }
+    )
+    assert isinstance(older, ArtefactSectionCompletedFrame) and older.citations == []
+
+    card = _adapter().validate_python(
+        {
+            "type": "artefact.section_card",
+            "occurred_at": _now().isoformat(),
+            "index": 1,
+            "title": "Leeds",
+            "prose": "Breakfast in every primary.",
+        }
+    )
+    assert isinstance(card, ArtefactSectionCardFrame)
+    assert not hasattr(card, "sequence")
+    assert card.ephemeral is True
+    assert (card.index, card.title) == (1, "Leeds")
 
 
 def test_sse_frame_unknown_type_rejected() -> None:

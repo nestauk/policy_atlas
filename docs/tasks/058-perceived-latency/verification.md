@@ -39,6 +39,7 @@ secrets, no raw source text, no unredacted traces.
 | Owner round 5, item 10 (the display index) | `make verify-fast` | pass | backend 4234 passed, 1 skipped; mypy and ruff clean. |
 | The streaming fix (owner go, 2026-11-05) | `make verify-fast` + `make prompt-guard` | pass | backend 4233 passed, 1 skipped (7 min 12 s); mypy "no issues found in 464 source files"; ruff clean; prompt guard green on the v12 pin. Focused first: 227 tests across the prompt-pin, prompts, shape, backend, loop and call-site files. |
 | Owner round 6 + evidence shown live (2026-11-05, `b69bf869` and the next commit) | `make frontend-verify && make drift-check && pnpm e2e` on the combined tree (frontend-designer, second pass); `make -C backend verify` on the evidence-live tree (deep-reasoner, own test database); lead: `make prompt-guard && make drift-check && make audit-paths` | pass | frontend 93 files / 1,142 passed, build; Playwright 33 passed; backend 4,302 passed, 1 skipped, mypy 465 files, ruff clean; prompt-guard 41 unchanged; drift-check OK; audit-paths 215. The first frontend run of round 6 had one 5 s timeout in an untouched error-boundary test (passed alone and on the rerun); the evidence-live agent's `pnpm e2e` failed only journey scene 1, the trace header the concurrent polish pass was rewriting, green once both landed. `fe-api-smoke.spec.ts` updated, not run (needs the real API). |
+| Owner round 7 (live-run notes, 2026-11-05): citations on completion, case studies streamed, markers in the final style, live page = report page with an in-place swap, paced streaming with a per-batch fade, the trace as the card again, the run strip back and the step note withdrawn | lead: `make verify` on the combined tree; agents: the same lanes on their own trees, `pnpm e2e` on the combined tree | pass | backend 4,322 passed, 1 skipped (9 min 7 s), mypy 467 files, ruff; okf-validate 200; infra 113; prompt-guard 41 unchanged; drift-check OK; frontend 94 files / 1,174 passed, build; Playwright 33 passed (designer's final run; one earlier full run had three journeys time out under parallel load, all green alone and after). The mock streaming measure before/after (research note § 6 method): 10 → 32 visible updates, longest gap 2,101 → 1,517 ms, median 21 → 7 characters per update, layout-shift total 0.135 → 0.140, no long animation frames. |
 
 (The gate map's step-6 exit is this command; it is re-run after the owner-gated phases.)
 
@@ -206,6 +207,73 @@ new is persisted or judged, no prompt text changed.
   frontend `store/reducer.test.ts`, `views/ArtefactView.test.tsx` (5 tests),
   `mock/api.test.ts`, `e2e/journey.spec.ts` scene 6.
 
+## Round 7 backend: citations on completion, case studies streamed
+
+Built by a deep-reasoner agent from `research/briefs/round-7-backend.md` (owner notes from a
+live run, 2026-11-05), with two lead decisions applied after the first report (case-studies
+slot last with a `role` on every skeleton slot; a fixed order in the read model). No prompt
+text changed; nothing new is judged.
+
+- **Citations on completion (item A).** `artefact.section_completed` gains `citations:
+  [{start, end, n, source_id, title, tier}]` (`SectionCitation`; default empty, so frames
+  recorded before it still replay). One entry per citation row of the section's persisted
+  claims; `[start, end)` is the claim's span in the frame's `prose` (code points, the span
+  `_write_section` stores); `title` as the read model's `_title` (envelope snapshot title,
+  HTML-unescaped, else locator, else "Unknown source"); `tier` the claim's verdict. Key
+  findings and case studies carry theirs; the baseline Sources foot carries an empty list.
+- **One fixed reference order (lead decision).** Before this round `artefact_out` numbered
+  references in whatever row order Postgres returned (no `ORDER BY`), so a report could
+  renumber between loads. No column carries the save order (every block, annotation and citation
+  of a run shares one `created_at`; ids are random), so the order is computed, with no
+  migration: `artefact_out` sorts its annotations by the block's save rank (`_save_rank`: body
+  sections in roll-up order, the Sources foot with them, then key findings, then case studies),
+  then the claim's span (start, end), then annotation id; and each claim's citations by chunk
+  id, quote, citation id. The sort runs in Python, so no database collation enters it.
+  `synthesis/live_citations.ReferenceNumbering` walks the same order as each section is saved,
+  so the live numbers are the saved report's numbers. Claims inside a block are now listed by
+  span (reading order) in the read model too. Reports saved before this change may show
+  different numbers from before (once; then stable).
+- **Case studies streamed (item B).** The skeleton has a case-studies slot when the Evidence
+  search passes run, placed **last** (key findings 0, body 1..n, case studies n+1), so body
+  indexes do not move. Every skeleton slot now carries `role` (`key_findings`, `body`,
+  `case_studies`; `ArtefactSectionSkeleton.role`, default `body` for skeletons recorded before
+  it), so the page orders live sections by role as it orders the saved report. The pass emits
+  `section_started` for the slot, publishes "Writing the case studies" with section line "Case
+  studies", and calls `OpenAISynthesisBackend.write_case_studies_stream` (the structured call's
+  request and schema, streamed; `JsonArrayObjectDecoder("cards")`; each closed card with a title
+  and text published as hub `SectionCard` → ephemeral `artefact.section_card {index, title,
+  prose, occurred_at}`; the whole reply parsed as `CaseStudyWire`; on any failure an empty
+  `replace` delta resets the slot, `stream_fallbacks` counts, `write_case_studies` runs once).
+  The hub keeps cards beside the draft (snapshot: draft, sources, claims, then cards; a
+  `replace` drops them; the usual forgetting rules; they count in `dropped`). The draft is
+  cleared after the pass; `case_studies_completed` sends the block prose (each card as its bold
+  title line and text) with its citations, or empty prose when no cards survive (the store then
+  removes the slot). Before this round no `section_completed` was sent for case studies.
+- **Deviation: case studies are now streamed.** The earlier rule, pinned by the test
+  `test_progress_emitter_has_no_case_studies_stream_surface` ("Contract F6: case studies are
+  post-run only and never streamed"), is superseded by the owner's note from the live run on
+  2026-11-05: "the case studies section is being written but isn't streamed". The test is
+  replaced by one that pins the slot, the role and the citations through replay.
+- **Store and mock.** `LiveSection.role?: string` (from the skeleton),
+  `LiveSection.citations?: LiveCitation[]` (set on completion when non-empty, kept),
+  `LiveSection.cards?: LiveCard[]` (appended, cleared on completion and on a `replace` delta).
+  The mock skeleton is key findings 0, the streamed body section 1, case studies 2, each with its
+  role; the walk ends with the slot started, two cards and the completion. Completed sections
+  carry citations that equal `mockArtefact`'s: key findings reference 1; the body section
+  references 2, then 2 and 3; the case studies reference 2. `mockArtefact` gains a case-studies
+  section (the first card cites reference 2) and references 2 and 3.
+- **Tests.** `tests/evidence_search/synthesis/test_live_citations_and_cards.py` (a whole stub
+  run whose completed citations equal `artefact_out`'s per section; the slot last with roles,
+  the stream call, the section line and the draft clear; the non-streaming backend; absent case
+  studies; the card decoder at four chunk sizes, a card without a title, the fallback; the read
+  model's walk order whatever the row order); `tests/core/test_liveness.py` (5 card tests);
+  `tests/api/test_sse.py` (card frames live and on reconnect, the encoder);
+  `tests/api/test_contract_models.py`; `tests/runtime/test_progress.py` (slot layout and roles,
+  citations through replay, an old frame without citations); `test_synthesise_baseline.py`
+  (Conclusions then Case studies end the skeleton); `test_step_timeout_sites.py` lists the new
+  exempt stream; frontend `store/reducer.test.ts`, `mock/api.test.ts` (citations equal the
+  committed report's, section by section).
+
 ## Diff summary
 
 Filled per phase as it lands; the flagged deviations are in § Review handoff.
@@ -269,6 +337,7 @@ writer's publisher never logs it).
 | S | the mock journeys (N26 second half) | fast-worker | fast-worker | done: 31 Playwright tests pass (`pnpm exec playwright test e2e/journey.spec.ts e2e/scoping.spec.ts`, 1.1 min); scenarios selected by an init script that appends `mockScenario=` to the `/events` request; transient states asserted from a record of every distinct line the page showed. Mock gaps (private fixture, not product): the mock always serves a committed report so the early Result tab is tested with a shimmed 404; a literal reload resets the mock world, so the reload case asserts what a reconnect sees under `reload-mid-section`; the mock skeleton has two sections and no key-findings slot, so the footer and key-findings states are unit-tested only; no part cards on the mock's scoping task; the mock's check-in facts line still says "2 rounds". |
 | L | task-list stage, options read | codex | deep-reasoner (cap) | done; the `LatestRun.model_rebuild` workaround for the `StageKey` import cycle was replaced by the lead: `StageKey`/`STAGE_KEYS` now live in `contract/common.py` and are re-exported |
 | evidence-live | sources read and citations as they close (two ephemeral frames, hub, Result tab) | deep-reasoner | deep-reasoner (Opus) | done 2026-11-05: `make -C backend verify` "4302 passed, 1 skipped", mypy "Success: no issues found in 465 source files", ruff "All checks passed!"; `make frontend-verify` "Test Files 93 passed (93)", "Tests 1141 passed (1141)", build ok; `make drift-check` "drift-check: OK" (after `make openapi-sync`); `make prompt-guard` "41 prompt file(s) unchanged"; `pnpm e2e` "32 passed", 1 failed: journey scene 1 (the run trace header, `RunTrace.tsx`, being rewritten by the concurrent polish pass); scene 6 passed. A first `pnpm e2e` run beside the backend suite had 5 `page.goto` timeouts (load). |
+| round-7-backend | citations on `section_completed`; case studies streamed card by card (slot last with roles, frame, hub, store, mock); a fixed reference order in `artefact_out` | deep-reasoner | deep-reasoner (Opus) | done 2026-11-05 after two lead decisions: `make -C backend verify` "4322 passed, 1 skipped", mypy "Success: no issues found in 467 source files", ruff "All checks passed!", build ok; `make drift-check` "drift-check: OK" (after `make openapi-sync`); `make prompt-guard` "41 prompt file(s) unchanged"; `pnpm vitest run src/store src/api src/mock` "Tests 165 passed (165)"; `pnpm exec tsc -b` clean on the combined tree. An earlier full run had `test_option_searches_run_at_the_configured_width` fail once under load (passes alone and on every rerun). |
 
 **Executor substitution (memory rule, owner 2026-07-09):** the Codex workspace spend cap was
 hit at about 09:30 on 2026-11-05 during Phase 1. Every Codex-marked seam from that point

@@ -5,6 +5,8 @@ export { useChatConversation, useComposerDraft } from "./conversations";
 export { RunStreamProvider, useRunStream } from "./useRunStream";
 export { createInitialRunStreamState } from "./types";
 export type {
+  LiveCard,
+  LiveCitation,
   LiveClaim,
   LiveSection,
   LiveSource,

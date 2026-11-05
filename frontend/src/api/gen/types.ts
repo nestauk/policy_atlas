@@ -1383,6 +1383,39 @@ export interface components {
             title: string;
         };
         /**
+         * ArtefactSectionCardFrame
+         * @description Ephemeral: one case-study card as it closes in the streamed reply (task 058).
+         *
+         *     Cards arrive in order and add to the ones before; a `replace`
+         *     `artefact.section_delta` for the same section clears them (the reply is
+         *     being written again). `artefact.section_completed` brings the checked
+         *     section. Display-only: never persisted, no `id:` line, no `sequence`.
+         */
+        ArtefactSectionCardFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Prose */
+            prose: string;
+            /** Title */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_card";
+        };
+        /**
          * ArtefactSectionClaimFrame
          * @description Ephemeral: one of the writer's citations, bound to the draft (task 058).
          *
@@ -1420,8 +1453,15 @@ export interface components {
         /**
          * ArtefactSectionCompletedFrame
          * @description A live-artefact section's whole prose is available.
+         *
+         *     Args:
+         *         citations: The section's checked citations over `prose` (task 058,
+         *             round 7); empty when it has none, and on frames recorded before
+         *             the field existed.
          */
         ArtefactSectionCompletedFrame: {
+            /** Citations */
+            citations?: components["schemas"]["SectionCitation"][];
             /** Index */
             index: number;
             /**
@@ -1514,13 +1554,27 @@ export interface components {
         };
         /**
          * ArtefactSectionSkeleton
-         * @description One planned live-artefact section in presentation order.
+         * @description One planned live-artefact section.
+         *
+         *     Args:
+         *         index: The section's display identity (the key findings at 0 when the
+         *             report has them, the body sections next, the case studies last).
+         *         title: The section's title.
+         *         focus: What the section covers.
+         *         role: `key_findings`, `case_studies` or `body`; skeletons recorded
+         *             before the field existed read as `body`.
          */
         ArtefactSectionSkeleton: {
             /** Focus */
             focus: string;
             /** Index */
             index: number;
+            /**
+             * Role
+             * @default body
+             * @enum {string}
+             */
+            role: "key_findings" | "case_studies" | "body";
             /** Title */
             title: string;
         };
@@ -4885,6 +4939,39 @@ export interface components {
             steer_point: string;
         };
         /**
+         * SectionCitation
+         * @description One checked citation on a completed live section (task 058, round 7).
+         *
+         *     One entry per citation row of the section's judged claims, so a claim
+         *     citing two sources gives two entries over the same span.
+         *
+         *     Args:
+         *         start: First code point of the cited claim's text in `prose`.
+         *         end: One past its last code point.
+         *         n: The report-wide reference number, numbered as the committed
+         *             report numbers its references (by source, in order of first
+         *             citation).
+         *         source_id: The source's id in this task, or `null` when the cited
+         *             text is not one of the task's sources.
+         *         title: The source's title as the committed report's references name it.
+         *         tier: The checker's verdict on the claim (`tier_1` ... `tier_4`,
+         *             `unsupported_mis_cited`), or `null` when it was not checked.
+         */
+        SectionCitation: {
+            /** End */
+            end: number;
+            /** N */
+            n: number;
+            /** Source Id */
+            source_id: string | null;
+            /** Start */
+            start: number;
+            /** Tier */
+            tier: string | null;
+            /** Title */
+            title: string;
+        };
+        /**
          * SectionOut
          * @description One artefact section.
          *
@@ -5101,7 +5188,7 @@ export interface components {
             /** Tag Type */
             tag_type: string;
         };
-        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"] | components["schemas"]["ArtefactSectionDeltaFrame"] | components["schemas"]["ArtefactSectionRevisingFrame"] | components["schemas"]["ArtefactSectionSourcesFrame"] | components["schemas"]["ArtefactSectionClaimFrame"];
+        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"] | components["schemas"]["ArtefactSectionDeltaFrame"] | components["schemas"]["ArtefactSectionRevisingFrame"] | components["schemas"]["ArtefactSectionSourcesFrame"] | components["schemas"]["ArtefactSectionClaimFrame"] | components["schemas"]["ArtefactSectionCardFrame"];
         /**
          * StageCompletedFrame
          * @description A component reached its terminal (successful) outcome.

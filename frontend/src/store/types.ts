@@ -93,6 +93,10 @@ export interface LiveSection {
   title: string;
   focus: string;
   state: "planned" | "writing" | "filled";
+  /** What the section is (`key_findings`, `case_studies` or `body`), from the
+   *  skeleton, so the page orders live sections by the same rule as the
+   *  saved report (task 058, round 7). */
+  role?: string;
   prose?: string;
   /** The prose streamed so far for a section being written, from the
    *  ephemeral `artefact.section_delta` frames. Kept apart from `prose`
@@ -110,6 +114,33 @@ export interface LiveSection {
    *  `draft` and the sources it cites (`artefact.section_claim`). Not yet
    *  checked; cleared on completion and when the draft is replaced. */
   claims?: LiveClaim[];
+  /** The checked section's citations (`artefact.section_completed`), each a
+   *  code-point span of `prose` with its report-wide reference number. Set
+   *  on completion when the section has any, and kept until the committed
+   *  report replaces the live view (task 058, round 7). */
+  citations?: LiveCitation[];
+  /** Case-study cards as each one closes in the streamed reply
+   *  (`artefact.section_card`), in order; cleared on completion and when the
+   *  draft is replaced (task 058, round 7). */
+  cards?: LiveCard[];
+}
+
+/** One checked citation on a completed live section (task 058, round 7).
+ *  `[start, end)` counts code points of the section's `prose`; `n` is the
+ *  report-wide reference number; `tier` is the judge's verdict, or null. */
+export interface LiveCitation {
+  start: number;
+  end: number;
+  n: number;
+  sourceId: string | null;
+  title: string;
+  tier: string | null;
+}
+
+/** One case-study card as it closes in the streamed reply (task 058, round 7). */
+export interface LiveCard {
+  title: string;
+  prose: string;
 }
 
 /** A source named on the page while a section is written. */

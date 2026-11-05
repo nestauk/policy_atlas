@@ -3,9 +3,9 @@
 Frame `type` names and the nineteen pinned `stage` keys are contract (spec §
 SSE) — Hyrum hygiene means nothing else internal (module names, model ids,
 raw payload keys) is ever observable through a frame. Every frame except the
-five ephemeral ones (`tick`, `artefact.section_delta`,
+six ephemeral ones (`tick`, `artefact.section_delta`,
 `artefact.section_revising`, `artefact.section_sources`,
-`artefact.section_claim`) carries a `sequence` (the `event_log` sequence,
+`artefact.section_claim`, `artefact.section_card`) carries a `sequence` (the `event_log` sequence,
 doubling as the client's reconnect cursor); the ephemeral frames carry
 neither `sequence` nor an `id:` line and are never replayed.
 """
@@ -103,12 +103,27 @@ class StageFailedFrame(_StageFrameBase):
     skipped: bool
 
 
+#: What a live-artefact section is, so the page orders live sections by the
+#: same rule as the saved report (task 058, round 7).
+LiveSectionRole = Literal["key_findings", "case_studies", "body"]
+
+
 class ArtefactSectionSkeleton(BaseModel):
-    """One planned live-artefact section in presentation order."""
+    """One planned live-artefact section.
+
+    Args:
+        index: The section's display identity (the key findings at 0 when the
+            report has them, the body sections next, the case studies last).
+        title: The section's title.
+        focus: What the section covers.
+        role: `key_findings`, `case_studies` or `body`; skeletons recorded
+            before the field existed read as `body`.
+    """
 
     index: int
     title: str
     focus: str
+    role: LiveSectionRole = "body"
 
 
 class ArtefactSkeletonFrame(_PersistedFrameBase):
@@ -125,13 +140,47 @@ class ArtefactSectionStartedFrame(_PersistedFrameBase):
     index: int
 
 
+class SectionCitation(BaseModel):
+    """One checked citation on a completed live section (task 058, round 7).
+
+    One entry per citation row of the section's judged claims, so a claim
+    citing two sources gives two entries over the same span.
+
+    Args:
+        start: First code point of the cited claim's text in `prose`.
+        end: One past its last code point.
+        n: The report-wide reference number, numbered as the committed
+            report numbers its references (by source, in order of first
+            citation).
+        source_id: The source's id in this task, or `null` when the cited
+            text is not one of the task's sources.
+        title: The source's title as the committed report's references name it.
+        tier: The checker's verdict on the claim (`tier_1` ... `tier_4`,
+            `unsupported_mis_cited`), or `null` when it was not checked.
+    """
+
+    start: int
+    end: int
+    n: int
+    source_id: uuid.UUID | None
+    title: str
+    tier: str | None
+
+
 class ArtefactSectionCompletedFrame(_PersistedFrameBase):
-    """A live-artefact section's whole prose is available."""
+    """A live-artefact section's whole prose is available.
+
+    Args:
+        citations: The section's checked citations over `prose` (task 058,
+            round 7); empty when it has none, and on frames recorded before
+            the field existed.
+    """
 
     type: Literal["artefact.section_completed"]
     index: int
     title: str
     prose: str
+    citations: list[SectionCitation] = Field(default_factory=list)
 
 
 class CheckinPendingFrame(_PersistedFrameBase):
@@ -296,6 +345,23 @@ class ArtefactSectionClaimFrame(BaseModel):
     occurred_at: datetime
 
 
+class ArtefactSectionCardFrame(BaseModel):
+    """Ephemeral: one case-study card as it closes in the streamed reply (task 058).
+
+    Cards arrive in order and add to the ones before; a `replace`
+    `artefact.section_delta` for the same section clears them (the reply is
+    being written again). `artefact.section_completed` brings the checked
+    section. Display-only: never persisted, no `id:` line, no `sequence`.
+    """
+
+    type: Literal["artefact.section_card"]
+    ephemeral: Literal[True] = True
+    index: int
+    title: str
+    prose: str
+    occurred_at: datetime
+
+
 #: Discriminated union of every SSE frame type, keyed on `type`.
 SseFrame = Annotated[
     RunStatusFrame
@@ -313,6 +379,7 @@ SseFrame = Annotated[
     | ArtefactSectionDeltaFrame
     | ArtefactSectionRevisingFrame
     | ArtefactSectionSourcesFrame
-    | ArtefactSectionClaimFrame,
+    | ArtefactSectionClaimFrame
+    | ArtefactSectionCardFrame,
     Field(discriminator="type"),
 ]

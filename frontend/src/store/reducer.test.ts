@@ -350,8 +350,8 @@ describe("reduceRunStreamFrame — live artefact sections", () => {
       {
         type: "artefact.skeleton",
         sections: [
-          { index: 0, title: "Key findings", focus: "The headline evidence." },
-          { index: 3, title: "Conclusion", focus: "What the evidence means." },
+          { index: 0, title: "Key findings", focus: "The headline evidence.", role: "key_findings" },
+          { index: 3, title: "Conclusion", focus: "What the evidence means.", role: "body" },
         ],
         occurred_at: "2026-07-28T10:01:00Z",
         sequence: 2,
@@ -376,8 +376,8 @@ describe("reduceRunStreamFrame — live artefact sections", () => {
   it("builds planned, writing, and filled display-indexed sections", () => {
     const skeleton = fold(createInitialRunStreamState(), liveFrames().slice(0, 2));
     expect(skeleton.liveSections).toEqual({
-      0: { index: 0, title: "Key findings", focus: "The headline evidence.", state: "planned" },
-      3: { index: 3, title: "Conclusion", focus: "What the evidence means.", state: "planned" },
+      0: { index: 0, title: "Key findings", focus: "The headline evidence.", role: "key_findings", state: "planned" },
+      3: { index: 3, title: "Conclusion", focus: "What the evidence means.", role: "body", state: "planned" },
     });
 
     const writing = fold(skeleton, liveFrames().slice(2, 3));
@@ -388,6 +388,7 @@ describe("reduceRunStreamFrame — live artefact sections", () => {
       index: 3,
       title: "Conclusion",
       focus: "What the evidence means.",
+      role: "body",
       state: "filled",
       prose: "The available evidence supports the intervention.",
     });
@@ -413,7 +414,7 @@ describe("reduceRunStreamFrame — live artefact sections", () => {
       liveFrames()[0],
       {
         type: "artefact.skeleton",
-        sections: titles.map((title, index) => ({ index, title, focus: `${title} focus.` })),
+        sections: titles.map((title, index) => ({ index, title, focus: `${title} focus.`, role: "body" as const })),
         occurred_at: "2026-07-28T10:01:00Z",
         sequence: 2,
       },
@@ -507,8 +508,8 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
       {
         type: "artefact.skeleton",
         sections: [
-          { index: 0, title: "Key findings", focus: "The headline evidence." },
-          { index: 3, title: "Conclusion", focus: "What the evidence means." },
+          { index: 0, title: "Key findings", focus: "The headline evidence.", role: "key_findings" },
+          { index: 3, title: "Conclusion", focus: "What the evidence means.", role: "body" },
         ],
         occurred_at: "2026-07-28T10:01:00Z",
         sequence: 2,
@@ -555,6 +556,7 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
       index: 3,
       title: "Conclusion",
       focus: "What the evidence means.",
+      role: "body",
       state: "filled",
       prose: "The evidence supports the intervention.",
     });
@@ -613,6 +615,69 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
     expect(late.liveSections).toEqual(state.liveSections);
     const unknown = reduceRunStreamFrame(base, { ...claim(0, 3, "X"), index: 9 } as SseFrame);
     expect(unknown).toBe(base);
+  });
+
+  it("completion sets the checked citations and keeps them; a replay rebuilds them (round 7)", () => {
+    const withCitations: SseFrame = {
+      ...completed,
+      citations: [
+        { start: 0, end: 12, n: 2, source_id: "tss-a", title: "Breakfast clubs", tier: "tier_2" },
+        { start: 0, end: 12, n: 5, source_id: null, title: "Unknown source", tier: null },
+      ],
+    } as SseFrame;
+    const live = fold(createInitialRunStreamState(), [...writingFrames(), delta(3, "The evidence")]);
+    const state = reduceRunStreamFrame(live, withCitations);
+    const expected = [
+      { start: 0, end: 12, n: 2, sourceId: "tss-a", title: "Breakfast clubs", tier: "tier_2" },
+      { start: 0, end: 12, n: 5, sourceId: null, title: "Unknown source", tier: null },
+    ];
+    expect(state.liveSections[3].citations).toEqual(expected);
+    // Kept: a late ephemeral frame or the next section's frames leave them.
+    const later = fold(state, [delta(3, "late"), {
+      type: "artefact.section_card",
+      index: 3,
+      title: "Late",
+      prose: "Late card.",
+      occurred_at: "2026-07-28T10:01:30Z",
+      ephemeral: true,
+    }]);
+    expect(later.liveSections[3].citations).toEqual(expected);
+    // A replay (durable frames only) rebuilds the same citations.
+    const replayed = fold(createInitialRunStreamState(), [...writingFrames(), withCitations]);
+    expect(replayed.liveSections[3].citations).toEqual(expected);
+    // A section with no citations, or a frame recorded before the field
+    // existed, carries none.
+    const older = reduceRunStreamFrame(live, completed);
+    expect(older.liveSections[3].citations).toBeUndefined();
+  });
+
+  it("cards append in order, a replace clears them, completion clears them (round 7)", () => {
+    const card = (title: string, prose: string, index = 3): SseFrame => ({
+      type: "artefact.section_card",
+      index,
+      title,
+      prose,
+      occurred_at: "2026-07-28T10:01:10Z",
+      ephemeral: true,
+    });
+    const base = fold(createInitialRunStreamState(), writingFrames());
+    let state = fold(base, [card("Leeds", "Breakfast in every primary."), card("Bristol", "Walking buses.")]);
+    expect(state.liveSections[3].cards).toEqual([
+      { title: "Leeds", prose: "Breakfast in every primary." },
+      { title: "Bristol", prose: "Walking buses." },
+    ]);
+    // Cards never move the cursor.
+    expect(state.lastSequence).toBe(base.lastSequence);
+    expect(state.appliedTypesAtLastSequence).toEqual(base.appliedTypesAtLastSequence);
+    // The reply is written again: the old cards go.
+    const replaced = reduceRunStreamFrame(state, delta(3, "", "replace"));
+    expect(replaced.liveSections[3].cards).toBeUndefined();
+    state = reduceRunStreamFrame(state, completed);
+    expect(state.liveSections[3].cards).toBeUndefined();
+    expect(state.liveSections[3].state).toBe("filled");
+    // A late card never reopens the section, and an unknown index is ignored.
+    expect(reduceRunStreamFrame(state, card("Late", "x")).liveSections).toEqual(state.liveSections);
+    expect(reduceRunStreamFrame(base, card("X", "y", 9))).toBe(base);
   });
 
   it("a late delta never reopens a completed section", () => {

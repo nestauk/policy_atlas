@@ -20,6 +20,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.check_ins_read import _check_in
 from policy_atlas.api.contract import (
+    ArtefactSectionCardFrame,
     ArtefactSectionClaimFrame,
     ArtefactSectionCompletedFrame,
     ArtefactSectionDeltaFrame,
@@ -70,6 +71,7 @@ from policy_atlas.api.stage_vocabulary import (
 from policy_atlas.core import events
 from policy_atlas.core.liveness import (
     HubMessage,
+    SectionCard,
     SectionDelta,
     SectionRevising,
     SectionSources,
@@ -648,6 +650,7 @@ def _encode_ephemeral(message: HubMessage) -> str:
             | ArtefactSectionRevisingFrame
             | ArtefactSectionSourcesFrame
             | ArtefactSectionClaimFrame
+            | ArtefactSectionCardFrame
         ) = (
             TickFrame(
                 type="tick",
@@ -682,6 +685,14 @@ def _encode_ephemeral(message: HubMessage) -> str:
             type="artefact.section_sources",
             index=message.index,
             sources=_source_refs(message.sources),
+            occurred_at=message.occurred_at,
+        )
+    elif isinstance(message, SectionCard):
+        frame = ArtefactSectionCardFrame(
+            type="artefact.section_card",
+            index=message.index,
+            title=message.title,
+            prose=message.prose,
             occurred_at=message.occurred_at,
         )
     else:

@@ -459,6 +459,100 @@ export const mockSectionOneClaims: { start: number; end: number; sources: { sour
   },
 ];
 
+/** The case-study cards the writer streams (task 058, round 7), as
+ *  `artefact.section_card` carries them, and as the committed report keeps
+ *  them. */
+export const mockCaseStudyCards: { title: string; prose: string }[] = [
+  {
+    title: "Leeds — Breakfast in every primary",
+    prose: "Leeds offered a free breakfast in all primary schools from 2019. More pupils ate breakfast at school in the first year.",
+  },
+  {
+    title: "Bristol — Walking bus pilots",
+    prose: "Bristol ran walking buses at twelve schools for two terms. Parents reported calmer mornings and more children arriving on foot.",
+  },
+];
+
+/** The case-studies block's prose as `artefact.section_completed` carries it:
+ *  each card as its bold title line and text, cards a blank line apart. */
+export const mockCaseStudiesProse = mockCaseStudyCards
+  .map((card) => `**${card.title}**\n${card.prose}`)
+  .join("\n\n");
+
+/** One citation claim of the mock report, with the span and reference number
+ *  the live page shows before the swap (task 058, round 7). */
+interface MockCitedClaim {
+  claimId: string;
+  text: string;
+  span: [number, number];
+  cites: { citationId: string; n: number; source: components["schemas"]["EvidenceItemOut"]; quote: string }[];
+}
+
+function mockSpan(prose: string, text: string): [number, number] {
+  const start = prose.indexOf(text);
+  if (start < 0) throw new Error(`mock span not found: ${text}`);
+  return [start, start + text.length];
+}
+
+/** The streamed body section's citations: the end of the lead sentence cites
+ *  reference 2; the repaired sentence cites references 2 and 3. */
+const MOCK_BODY_CITED: MockCitedClaim[] = [
+  {
+    claimId: "40000000-0000-4000-8000-000000000003",
+    text: "while monitoring local reach",
+    span: mockSpan(mockArtefactSectionRepairedProse[1], "while monitoring local reach"),
+    cites: [{ citationId: "50000000-0000-4000-8000-000000000002", n: 2, source: mockEvidence[4], quote: "Effects depended on how many eligible children took the meal up." }],
+  },
+  {
+    claimId: "40000000-0000-4000-8000-000000000004",
+    text: MOCK_SECTION_ONE_REPAIRED,
+    span: mockSpan(mockArtefactSectionRepairedProse[1], MOCK_SECTION_ONE_REPAIRED),
+    cites: [
+      { citationId: "50000000-0000-4000-8000-000000000003", n: 2, source: mockEvidence[4], quote: "Walking-bus schools reported six more pupils in every hundred arriving on foot." },
+      { citationId: "50000000-0000-4000-8000-000000000004", n: 3, source: mockEvidence[3], quote: "Safer routes raised the share of children walking to school." },
+    ],
+  },
+];
+
+/** The case studies' one citation: the first card's result cites reference 2. */
+const MOCK_CASE_STUDY_RESULT = "More pupils ate breakfast at school in the first year.";
+const MOCK_CASE_STUDIES_CITED: MockCitedClaim = {
+  claimId: "40000000-0000-4000-8000-000000000005",
+  text: MOCK_CASE_STUDY_RESULT,
+  span: mockSpan(mockCaseStudiesProse, MOCK_CASE_STUDY_RESULT),
+  cites: [{ citationId: "50000000-0000-4000-8000-000000000005", n: 2, source: mockEvidence[4], quote: "Breakfast uptake rose in the first year of universal provision." }],
+};
+
+function mockClaimOut(claim: MockCitedClaim, span: [number, number] = claim.span): components["schemas"]["ClaimOut"] {
+  return {
+    claim_id: claim.claimId,
+    claim_type: "citation",
+    text: claim.text,
+    span,
+    citations: claim.cites.map((cite) => ({
+      citation_id: cite.citationId,
+      n: cite.n,
+      source_id: cite.source.source_id,
+      source_title: cite.source.title,
+      quote: cite.quote,
+      grounding_tier: "tier_2",
+    })),
+  };
+}
+
+function mockLiveCitations(claims: MockCitedClaim[]): components["schemas"]["SectionCitation"][] {
+  return claims.flatMap((claim) =>
+    claim.cites.map((cite) => ({
+      start: claim.span[0],
+      end: claim.span[1],
+      n: cite.n,
+      source_id: cite.source.source_id,
+      title: cite.source.title,
+      tier: "tier_2",
+    })),
+  );
+}
+
 export const mockArtefact: components["schemas"]["ArtefactOut"] = {
   artefact_id: "00000000-0000-4000-8000-00000000a001",
   title: "Policy options for healthier childhoods",
@@ -476,12 +570,31 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
       }],
     },
     {
+      title: "Case studies",
+      role: "case_studies",
+      blocks: [{
+        block_id: "30000000-0000-4000-8000-000000000003",
+        prose: mockCaseStudiesProse,
+        claims: [mockClaimOut(MOCK_CASE_STUDIES_CITED)],
+      }],
+      cards: mockCaseStudyCards.map((card, position) => ({
+        card_id: `60000000-0000-4000-8000-00000000000${position + 1}`,
+        title: card.title,
+        prose: card.prose,
+        claims:
+          position === 0
+            ? [mockClaimOut(MOCK_CASE_STUDIES_CITED, mockSpan(card.prose, MOCK_CASE_STUDY_RESULT))]
+            : [],
+        result_claim_id: position === 0 ? MOCK_CASE_STUDIES_CITED.claimId : null,
+      })),
+    },
+    {
       title: "Implications for local action",
       role: "conclusions",
       blocks: [{
         block_id: "30000000-0000-4000-8000-000000000002",
         prose: mockArtefactSectionRepairedProse[1],
-        claims: [{ claim_id: "40000000-0000-4000-8000-000000000002", claim_type: "pattern", text: "Pair school food action with safer active-travel routes", span: [0, 56], theme: { source: "grouping", base: "Co-occurrence across the screened-in corpus", items: [{ name: "Active-travel offers", description: "Route-safety and arrival-routine measures that families adopt alongside food provision.", size: 5, facet: "Intervention type", sources: [{ source_id: mockEvidence[0].source_id, title: mockEvidence[0].title }, { source_id: mockEvidence[1].source_id, title: mockEvidence[1].title }] }] } }],
+        claims: [{ claim_id: "40000000-0000-4000-8000-000000000002", claim_type: "pattern", text: "Pair school food action with safer active-travel routes", span: [0, 56], theme: { source: "grouping", base: "Co-occurrence across the screened-in corpus", items: [{ name: "Active-travel offers", description: "Route-safety and arrival-routine measures that families adopt alongside food provision.", size: 5, facet: "Intervention type", sources: [{ source_id: mockEvidence[0].source_id, title: mockEvidence[0].title }, { source_id: mockEvidence[1].source_id, title: mockEvidence[1].title }] }] } }, ...MOCK_BODY_CITED.map((claim) => mockClaimOut(claim))],
       }],
     },
   ],
@@ -492,16 +605,55 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
     venue: "BMJ Open",
     url: null,
     authorships: mockAuthorships,
+  }, {
+    n: 2,
+    title: mockEvidence[4].title,
+    year: mockEvidence[4].year,
+    venue: mockEvidence[4].venue,
+    url: null,
+  }, {
+    n: 3,
+    title: mockEvidence[3].title,
+    year: mockEvidence[3].year,
+    venue: mockEvidence[3].venue,
+    url: null,
   }],
 };
 
 /** The live-artefact skeleton (contract strand 13), display-index ordered —
  *  same titles/prose as `mockArtefact` so the streamed and committed pages
- *  read as one continuous document. */
-export const mockArtefactSkeleton: Array<{ index: number; title: string; focus: string }> = [
-  { index: 0, title: "What appears to help", focus: "What the evidence shows helps, headline first." },
-  { index: 1, title: "Implications for local action", focus: "What this means for local decisions." },
+ *  read as one continuous document. Each slot names its role; the
+ *  case-studies slot comes last, as the server puts it (task 058, round 7). */
+export const mockArtefactSkeleton: components["schemas"]["ArtefactSectionSkeleton"][] = [
+  { index: 0, title: "What appears to help", focus: "What the evidence shows helps, headline first.", role: "key_findings" },
+  { index: 1, title: "Implications for local action", focus: "What this means for local decisions.", role: "body" },
+  { index: 2, title: "Case studies", focus: "Relevant examples from the cited evidence.", role: "case_studies" },
 ];
+
+/** The case-studies slot's display index in the mock skeleton. */
+export const MOCK_CASE_STUDIES_INDEX = 2;
+/** The display index of the section the mock writer streams (its prose is
+ *  `mockArtefactSectionProse[1]`). */
+export const MOCK_STREAMED_SECTION_INDEX = 1;
+
+/** Each completed section's checked citations, as `artefact.section_completed`
+ *  carries them (task 058, round 7), keyed by display index. The numbers and
+ *  spans match `mockArtefact`: the key findings cite reference 1; the
+ *  implications cite 2, then 2 and 3; the case studies cite 2. */
+export const mockSectionCitations: Record<number, components["schemas"]["SectionCitation"][]> = {
+  0: [
+    {
+      start: 34,
+      end: 79,
+      n: 1,
+      source_id: mockEvidence[2].source_id,
+      title: mockEvidence[2].title,
+      tier: "tier_2",
+    },
+  ],
+  [MOCK_STREAMED_SECTION_INDEX]: mockLiveCitations(MOCK_BODY_CITED),
+  [MOCK_CASE_STUDIES_INDEX]: mockLiveCitations([MOCK_CASE_STUDIES_CITED]),
+};
 
 
 /**

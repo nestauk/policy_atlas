@@ -39,10 +39,15 @@ from typing import Any, Literal, NotRequired, Protocol, TypedDict
 
 import structlog
 from langfuse import Langfuse
+from openai.lib._pydantic import to_strict_json_schema
 from pydantic import ValidationError
 
 from policy_atlas.core import tracing
-from policy_atlas.core.liveness import publish_section_claim, publish_section_delta
+from policy_atlas.core.liveness import (
+    publish_section_card,
+    publish_section_claim,
+    publish_section_delta,
+)
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import (
     JsonArrayObjectDecoder,
@@ -614,6 +619,56 @@ class StreamedClaimMarker:
                 if finding_id in by_finding
             ]
         return name_sources(found)
+
+
+class StreamedCardPublisher:
+    """Send each case-study card to the page as it closes in the reply (task 058).
+
+    In plain terms: the case-studies reply is one JSON object,
+    ``{"cards": [{"title": ..., "prose": ..., ...}, ...]}``, arriving in
+    pieces. As each card object closes it is read on its own and, when it has
+    a title and some text, sent through :func:`publish_section_card`.
+
+    Display-only: a card that does not parse or lacks a title or text is
+    skipped; nothing here can raise or change what the final parse returns.
+
+    Args:
+        index: The page's index for the case-studies slot.
+    """
+
+    def __init__(self, index: int) -> None:
+        self._index = index
+        self._cards = JsonArrayObjectDecoder("cards")
+        self._broken = False
+
+    def feed(self, fragment: str) -> None:
+        """Take one streamed piece of the reply.
+
+        Args:
+            fragment: The raw streamed JSON text.
+        """
+        if self._broken:
+            return
+        try:
+            for raw in self._cards.feed(fragment):
+                self._card(raw)
+        except Exception as exc:  # noqa: BLE001 - display-only, never fails the call
+            self._broken = True
+            log.warning("synthesis.streamed_card_publisher.failed", error=type(exc).__name__)
+
+    def _card(self, raw: str) -> None:
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(payload, dict):
+            return
+        title, prose = payload.get("title"), payload.get("prose")
+        if not isinstance(title, str) or not isinstance(prose, str):
+            return
+        if not title.strip() or not prose.strip():
+            return
+        publish_section_card(self._index, title, prose)
 
 
 def _salvage_repairs(arguments: str) -> SectionRepairWire:
@@ -1575,6 +1630,102 @@ class OpenAISynthesisBackend:
             update=_update,
         )
         return wire, usage
+
+    def write_case_studies_stream(
+        self, seed: dict[str, Any], *, index: int
+    ) -> UsageResult[CaseStudyWire]:
+        """Write the case-study cards as one streamed reply (task 058, round 7).
+
+        The request is the one :meth:`write_case_studies` sends (the same
+        messages and the same structured-output schema), streamed. As each
+        card object in the reply's ``cards`` array closes, its title and text
+        are sent to the page through :func:`publish_section_card`
+        (display-only: a card that does not read as one is skipped). The
+        whole reply is then parsed into :class:`CaseStudyWire` exactly as the
+        structured call is, so the result goes on to the card checks
+        unchanged.
+
+        The call runs once, outside the retry loop, because a retry would
+        repeat cards the user has already seen. On any failure the page's
+        cards for the slot are cleared with an empty ``replace`` delta,
+        :attr:`stream_fallbacks` is counted, and :meth:`write_case_studies`
+        runs once more without streaming (with its own retries).
+
+        Args:
+            seed: The case-studies seed.
+            index: The page's index for the case-studies slot.
+
+        Returns:
+            Raw structurally parsed cards plus token usage.
+        """
+        step = "synthesise_write_case_studies"
+        messages = build_case_studies_messages(seed)
+        metadata = {"step": step, "attempt": 1, "prompt_version": CASE_STUDIES_PROMPT_VERSION}
+
+        def _stream(span: Any | None = None) -> UsageResult[CaseStudyWire]:
+            if span is not None:
+                span.update(input={"messages": messages}, metadata=metadata)
+            completions: Any = self._client.chat.completions
+            stream = completions.create(
+                **_step_kwargs(step),
+                messages=_cache_messages(step, messages),
+                # The schema ``parse`` sends for the same wire.
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "schema": to_strict_json_schema(CaseStudyWire),
+                        "name": CaseStudyWire.__name__,
+                        "strict": True,
+                    },
+                },
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+            cards = StreamedCardPublisher(index)
+            text = ""
+            provider_usage: Any | None = None
+            for chunk in stream:
+                choices = getattr(chunk, "choices", None)
+                if choices:
+                    delta = getattr(choices[0], "delta", None)
+                    fragment = getattr(delta, "content", None)
+                    if isinstance(fragment, str):
+                        text += fragment
+                        cards.feed(fragment)
+                chunk_usage = getattr(chunk, "usage", None)
+                if chunk_usage is not None:
+                    provider_usage = chunk_usage
+            log_usage("synthesis.case_studies.usage", provider_usage)
+            wire = CaseStudyWire.model_validate_json(_strip_code_fence(text))
+            usage = token_usage_from_provider(provider_usage)
+            if span is not None:
+                span.update(
+                    usage_details=usage_details(usage),
+                    output=wire.model_dump(),
+                    model=CASE_STUDIES_MODEL,
+                    metadata={**metadata, **usage_metadata(usage)},
+                )
+            return wire, usage
+
+        try:
+            if self._langfuse_client is None:
+                return _stream()
+            with tracing._observation(
+                self._langfuse_client,
+                name="synthesise:write_case_studies",
+                as_type="generation",
+            ) as span:
+                return _stream(span)
+        except Exception as exc:
+            log.warning(
+                "synthesis.case_studies_stream.fallback",
+                section_index=index,
+                error=type(exc).__name__,
+            )
+            publish_section_delta(index, "", mode="replace")
+            with self._lock:
+                self.stream_fallbacks += 1
+            return self.write_case_studies(seed)
 
     def write_source_note(
         self, seed: dict[str, Any]

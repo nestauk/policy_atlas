@@ -91,6 +91,7 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     GroundingJudgeBackend,
     build_envelope,
 )
+from policy_atlas.evidence_search.synthesis.live_citations import ReferenceNumbering
 from policy_atlas.evidence_search.synthesis.section_prompt import (
     CASE_STUDIES_PROMPT_VERSION,
     FULL_REPORT_INTRO_PROMPT_VERSION,
@@ -5405,20 +5406,34 @@ def _case_studies_pass(
     cs_section_index: int,
     created_at: datetime,
     doc_meta: dict[str, dict[str, Any]],
+    display_index: int | None = None,
 ) -> dict[str, Any]:
     """Run the case-studies pass.
 
+    When the backend can stream (``write_case_studies_stream``) and the page
+    has a case-studies slot (``display_index``), each card is sent to the
+    page as it closes in the reply (task 058, round 7); the parsed reply is
+    the same either way.
+
     Returns a result dict: ``present`` plus, when present, the minted
-    ``block_id``, its ``claims``, ``block_rollup`` and the ``call_counts``/
-    ``usage`` of the pass; when absent, ``reason``.
+    ``block_id``, its ``claims``, the block's ``prose``, ``block_rollup`` and
+    the ``call_counts``/``usage`` of the pass; when absent, ``reason``.
     """
     cs_available = CASE_STUDIES_CLAIM_TYPES & available_claim_types
     seed = _case_studies_seed(
         intent, section_claim_groups, run_chunk_content, doc_meta,
     )
     usage_totals = UsageAccumulator()
-    liveness.publish_progress(activity=activity("synthesise.case_studies"))
-    raw_wire, cs_usage = synthesis_backend.write_case_studies(seed)
+    # The section line names the slot, so the page's mark and action line
+    # show on it as on the ordinary sections (task 058, round 7).
+    liveness.publish_progress(
+        activity=activity("synthesise.case_studies"), section=CASE_STUDIES_TITLE
+    )
+    stream_cards = getattr(synthesis_backend, "write_case_studies_stream", None)
+    if stream_cards is not None and display_index is not None:
+        raw_wire, cs_usage = stream_cards(seed, index=display_index)
+    else:
+        raw_wire, cs_usage = synthesis_backend.write_case_studies(seed)
     usage_totals.add(cs_usage)
 
     survivors, absence_reason = _validate_case_study_cards(raw_wire)
@@ -5592,6 +5607,7 @@ def _case_studies_pass(
         "emission_calls": 1,
         "call_counts": call_counts,
         "usage": usage_totals.payload(),
+        "prose": final_prose,
     }
 
 
@@ -6102,6 +6118,8 @@ def synthesise_scope(
         progress_emitter.emit_skeleton(
             [{"title": section.title, "focus": section.focus} for section in sections],
             key_findings=es_passes,
+            # Task 058, round 7: the case studies stream into their own slot.
+            case_studies=es_passes,
         )
 
     assigned_groups = {group_id for section in sections for group_id in section.group_ids}
@@ -6161,6 +6179,9 @@ def synthesise_scope(
     repair_unparseable_any = False
 
     source_labeller = make_source_labeller(conn, task_id=task_id)
+    # Task 058, round 7: each completed section carries its citations, with
+    # the reference numbers the saved report will give them.
+    reference_numbering = ReferenceNumbering(conn, task_id=task_id)
     for section_index, section in enumerate(written_sections):
         if progress_emitter is not None:
             progress_emitter.section_started(section_index)
@@ -6312,8 +6333,11 @@ def synthesise_scope(
             created_at=created_at,
         )
         blocks_written.append(block_id)
+        section_citations = reference_numbering.citations(claims)
         if progress_emitter is not None:
-            progress_emitter.section_completed(section_index, prose=final_prose)
+            progress_emitter.section_completed(
+                section_index, prose=final_prose, citations=section_citations
+            )
         total_chunk_rejections += accounting.chunk_claims_rejected
         total_structural_rejections += accounting.claims_rejected_structural
         total_gap_degraded += accounting.gap_claims_degraded
@@ -6481,9 +6505,10 @@ def synthesise_scope(
             all_claims.extend(kf_claims)
             key_findings_present = True
             key_findings_rollup = {"present": True}
+            kf_citations = reference_numbering.citations(kf_claims)
             if progress_emitter is not None:
                 progress_emitter.key_findings_completed(
-                    prose=key_findings_result["prose"]
+                    prose=key_findings_result["prose"], citations=kf_citations
                 )
         else:
             key_findings_rollup = {
@@ -6503,6 +6528,8 @@ def synthesise_scope(
         "reason": "template_has_no_case_studies",
     }
     if es_passes:
+        if progress_emitter is not None:
+            progress_emitter.case_studies_started()
         try:
             case_studies_result = _case_studies_pass(
                 conn,
@@ -6518,6 +6545,11 @@ def synthesise_scope(
                 cs_section_index=len(sections) + 1,
                 created_at=created_at,
                 doc_meta=doc_meta,
+                display_index=(
+                    progress_emitter.case_studies_display_index()
+                    if progress_emitter is not None
+                    else None
+                ),
             )
         except Exception:  # noqa: BLE001 - case studies fail-soft
             log.warning("synthesis.case_studies.failed", exc_info=True)
@@ -6527,6 +6559,9 @@ def synthesise_scope(
                 "emission_calls": 0,
                 "usage": UsageAccumulator().payload(),
             }
+        # The streamed cards were the reply still to be checked; the
+        # completed section below brings the checked ones (task 058, round 7).
+        liveness.clear_section_draft()
         call_counts["case_studies"] += int(case_studies_result.get("emission_calls", 0))
         usage_totals.add_payload(
             case_studies_result.get("usage", UsageAccumulator().payload())
@@ -6547,11 +6582,18 @@ def synthesise_scope(
             repair_path_taken = repair_path_taken or cs_accounting.repair_taken
             all_claims.extend(cs_claims)
             case_studies_rollup = {"present": True}
+            cs_citations = reference_numbering.citations(cs_claims)
+            if progress_emitter is not None:
+                progress_emitter.case_studies_completed(
+                    prose=case_studies_result["prose"], citations=cs_citations
+                )
         else:
             case_studies_rollup = {
                 "present": False,
                 "reason": case_studies_result.get("reason", "unknown"),
             }
+            if progress_emitter is not None:
+                progress_emitter.case_studies_completed(prose="")
 
 
     # --- Most-relevant-source notes (task 034 S5) ---

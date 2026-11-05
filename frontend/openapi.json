@@ -184,6 +184,48 @@
         "title": "ArtefactOut",
         "type": "object"
       },
+      "ArtefactSectionCardFrame": {
+        "description": "Ephemeral: one case-study card as it closes in the streamed reply (task 058).\n\nCards arrive in order and add to the ones before; a `replace`\n`artefact.section_delta` for the same section clears them (the reply is\nbeing written again). `artefact.section_completed` brings the checked\nsection. Display-only: never persisted, no `id:` line, no `sequence`.",
+        "properties": {
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "prose": {
+            "title": "Prose",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "artefact.section_card",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "index",
+          "title",
+          "prose",
+          "occurred_at"
+        ],
+        "title": "ArtefactSectionCardFrame",
+        "type": "object"
+      },
       "ArtefactSectionClaimFrame": {
         "description": "Ephemeral: one of the writer's citations, bound to the draft (task 058).\n\nThe span `[start, end)` counts code points of the section draft, as\n`artefact.section_revising` does. The citation is still to be checked;\n`artefact.section_completed` brings the checked section. Display-only:\nnever persisted, no `id:` line, no `sequence`.",
         "properties": {
@@ -235,8 +277,15 @@
         "type": "object"
       },
       "ArtefactSectionCompletedFrame": {
-        "description": "A live-artefact section's whole prose is available.",
+        "description": "A live-artefact section's whole prose is available.\n\nArgs:\n    citations: The section's checked citations over `prose` (task 058,\n        round 7); empty when it has none, and on frames recorded before\n        the field existed.",
         "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/SectionCitation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
           "index": {
             "title": "Index",
             "type": "integer"
@@ -362,7 +411,7 @@
         "type": "object"
       },
       "ArtefactSectionSkeleton": {
-        "description": "One planned live-artefact section in presentation order.",
+        "description": "One planned live-artefact section.\n\nArgs:\n    index: The section's display identity (the key findings at 0 when the\n        report has them, the body sections next, the case studies last).\n    title: The section's title.\n    focus: What the section covers.\n    role: `key_findings`, `case_studies` or `body`; skeletons recorded\n        before the field existed read as `body`.",
         "properties": {
           "focus": {
             "title": "Focus",
@@ -371,6 +420,16 @@
           "index": {
             "title": "Index",
             "type": "integer"
+          },
+          "role": {
+            "default": "body",
+            "enum": [
+              "key_findings",
+              "case_studies",
+              "body"
+            ],
+            "title": "Role",
+            "type": "string"
           },
           "title": {
             "title": "Title",
@@ -7088,6 +7147,60 @@
         "title": "ScopingSteerPointDefaultOut",
         "type": "object"
       },
+      "SectionCitation": {
+        "description": "One checked citation on a completed live section (task 058, round 7).\n\nOne entry per citation row of the section's judged claims, so a claim\nciting two sources gives two entries over the same span.\n\nArgs:\n    start: First code point of the cited claim's text in `prose`.\n    end: One past its last code point.\n    n: The report-wide reference number, numbered as the committed\n        report numbers its references (by source, in order of first\n        citation).\n    source_id: The source's id in this task, or `null` when the cited\n        text is not one of the task's sources.\n    title: The source's title as the committed report's references name it.\n    tier: The checker's verdict on the claim (`tier_1` ... `tier_4`,\n        `unsupported_mis_cited`), or `null` when it was not checked.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "n",
+          "source_id",
+          "title",
+          "tier"
+        ],
+        "title": "SectionCitation",
+        "type": "object"
+      },
       "SectionOut": {
         "description": "One artefact section.\n\nArgs:\n    title: Section title.\n    role: Section role (determines page position).\n    nav_label: Short scannable name for the contents list, or `None` for\n        an artefact produced before the label existed. Absence is a normal\n        state: the client falls back to a shortened title.\n    blocks: The section's prose blocks, in order.\n    cards: Case-study cards (populated only for ``case_studies`` sections).\n    summary: Verified summary for a single-block section, if available.\n    summary_status: Summary production state for a single-block section.",
         "properties": {
@@ -7634,6 +7747,7 @@
       "SseFrame": {
         "discriminator": {
           "mapping": {
+            "artefact.section_card": "#/components/schemas/ArtefactSectionCardFrame",
             "artefact.section_claim": "#/components/schemas/ArtefactSectionClaimFrame",
             "artefact.section_completed": "#/components/schemas/ArtefactSectionCompletedFrame",
             "artefact.section_delta": "#/components/schemas/ArtefactSectionDeltaFrame",
@@ -7701,6 +7815,9 @@
           },
           {
             "$ref": "#/components/schemas/ArtefactSectionClaimFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSectionCardFrame"
           }
         ]
       },
