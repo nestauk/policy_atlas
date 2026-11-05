@@ -8,6 +8,21 @@ const DEFAULT_BASE_URL = "";
 const MIN_BACKOFF_MS = 1000;
 /** Maximum reconnect backoff. */
 const MAX_BACKOFF_MS = 30000;
+/**
+ * How long the stream may go without a single byte before the client treats
+ * the connection as dead, drops it and reconnects at its cursor (task 058,
+ * N15). The server sends a keep-alive comment every 15 s and repeats the
+ * current tick every 10 s while a model call runs, so 45 s of silence means
+ * the connection is gone even if the browser has not noticed.
+ */
+export const READ_INACTIVITY_MS = 45_000;
+
+/** Display-only frames: never replayed, so they never move the cursor. */
+const EPHEMERAL_FRAME_TYPES: ReadonlySet<SseFrame["type"]> = new Set([
+  "tick",
+  "artefact.section_delta",
+  "artefact.section_revising",
+] satisfies SseFrame["type"][]);
 
 interface ConnectEventStreamOptions {
   /** Project whose event stream to open. */
@@ -45,6 +60,8 @@ interface ConnectEventStreamOptions {
   minBackoffMs?: number;
   /** Injectable for tests — overrides the 30s cap. */
   maxBackoffMs?: number;
+  /** Injectable for tests — overrides the 45 s read-inactivity watchdog. */
+  readInactivityMs?: number;
 }
 
 interface EventStreamConnection {
@@ -77,6 +94,7 @@ export function connectEventStream(options: ConnectEventStreamOptions): EventStr
     sleepImpl = defaultSleep,
     minBackoffMs = MIN_BACKOFF_MS,
     maxBackoffMs = MAX_BACKOFF_MS,
+    readInactivityMs = READ_INACTIVITY_MS,
   } = options;
 
   const controller = new AbortController();
@@ -91,37 +109,55 @@ export function connectEventStream(options: ConnectEventStreamOptions): EventStr
     return `${baseUrl}/api/v1/tasks/${taskId}/events?cursor=${cursor}`;
   }
 
-  async function fetchWithToken(token: string | null): Promise<Response> {
+  async function fetchWithToken(token: string | null, signal: AbortSignal): Promise<Response> {
     const headers: Record<string, string> = { Accept: "text/event-stream" };
     if (token) headers.Authorization = `Bearer ${token}`;
-    return fetchImpl(buildUrl(), { headers, signal: controller.signal });
+    return fetchImpl(buildUrl(), { headers, signal });
   }
 
   /** One connect attempt (with the single 401-refresh-retry), consuming the
-   *  stream to completion. Returns why the attempt ended. */
+   *  stream to completion. Returns why the attempt ended. Each attempt has
+   *  its own abort controller, chained to the outer one, so a dead
+   *  connection can be dropped without closing the whole stream. */
   async function connectOnce(): Promise<"stream-ended" | "unauthenticated" | "access-ended"> {
-    const token = await getAccessToken();
-    let response = await fetchWithToken(token);
+    const attempt = new AbortController();
+    const abortAttempt = () => attempt.abort();
+    controller.signal.addEventListener("abort", abortAttempt, { once: true });
+    try {
+      const token = await getAccessToken();
+      let response = await fetchWithToken(token, attempt.signal);
 
-    if (response.status === 401) {
-      const refreshed = await getAccessToken(true);
-      if (refreshed === null) return "unauthenticated";
-      response = await fetchWithToken(refreshed);
-      if (response.status === 401) return "unauthenticated";
+      if (response.status === 401) {
+        const refreshed = await getAccessToken(true);
+        if (refreshed === null) return "unauthenticated";
+        response = await fetchWithToken(refreshed, attempt.signal);
+        if (response.status === 401) return "unauthenticated";
+      }
+
+      // A revoked or gone task: the backend ends an active stream cleanly
+      // on revocation, and any reconnect after that gets a 403/404 — a state
+      // no amount of backoff-and-retry will ever clear.
+      if (response.status === 403 || response.status === 404) return "access-ended";
+
+      if (!response.ok || !response.body) {
+        throw new Error(`SSE connect failed with status ${response.status}`);
+      }
+
+      onConnected?.();
+      cursor = await consumeEventStream(
+        response.body,
+        cursor,
+        onFrame,
+        attempt.signal,
+        readInactivityMs,
+      );
+      return "stream-ended";
+    } finally {
+      // Tears down this attempt's request, whether it ended cleanly, went
+      // silent past the watchdog, or failed.
+      controller.signal.removeEventListener("abort", abortAttempt);
+      attempt.abort();
     }
-
-    // A revoked or gone task: the backend ends an active stream cleanly
-    // on revocation, and any reconnect after that gets a 403/404 — a state
-    // no amount of backoff-and-retry will ever clear.
-    if (response.status === 403 || response.status === 404) return "access-ended";
-
-    if (!response.ok || !response.body) {
-      throw new Error(`SSE connect failed with status ${response.status}`);
-    }
-
-    onConnected?.();
-    cursor = await consumeEventStream(response.body, cursor, onFrame, controller.signal);
-    return "stream-ended";
   }
 
   void (async () => {
@@ -137,6 +173,7 @@ export function connectEventStream(options: ConnectEventStreamOptions): EventStr
           onAccessEnded?.();
           return;
         }
+        if (controller.signal.aborted) return;
         onDisconnected?.();
         attempt = 0; // a full connect+stream cycle succeeded — reset backoff
       } catch (error) {
@@ -159,13 +196,28 @@ export function connectEventStream(options: ConnectEventStreamOptions): EventStr
  * (comment lines and blank heartbeats are ignored) and dispatching one
  * frame per blank-line-terminated event. Tolerant of chunk boundaries that
  * split a line in the middle. Returns the last frame `id:` seen (the new
- * reconnect cursor) — `tick` frames carry no `id:` and never advance it.
+ * reconnect cursor) — the ephemeral frames (`tick`, the section deltas and
+ * revising marks) carry no `id:` and never advance it.
+ *
+ * Args:
+ *   body: The response body to read.
+ *   startCursor: The cursor to return if no frame with an `id:` arrives.
+ *   onFrame: Called for every parsed frame, in arrival order.
+ *   signal: Stops reading when aborted.
+ *   readInactivityMs: The watchdog (task 058, N15). When set, reading stops
+ *     and the function returns the cursor so far if no bytes at all (frames,
+ *     ticks or keep-alive comments) arrive for this long. The caller then
+ *     reconnects at that cursor as for any ended stream.
+ *
+ * Returns:
+ *   The last frame `id:` seen, or `startCursor`.
  */
 export async function consumeEventStream(
   body: ReadableStream<Uint8Array>,
   startCursor: number,
   onFrame: (frame: SseFrame) => void,
   signal?: AbortSignal,
+  readInactivityMs?: number,
 ): Promise<number> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -193,17 +245,46 @@ export async function consumeEventStream(
     }
     const frame = narrowSseFrame(payload);
     if (!frame) return;
-    if (frame.type !== "tick" && pendingId !== undefined) {
+    if (!EPHEMERAL_FRAME_TYPES.has(frame.type) && pendingId !== undefined) {
       const parsed = Number(pendingId);
       if (Number.isFinite(parsed)) cursor = parsed;
     }
     onFrame(frame);
   }
 
+  // Resolves when reading should stop without more bytes: the watchdog ran
+  // out (no bytes for `readInactivityMs`) or the caller aborted. A new
+  // timer starts for every read, so every chunk resets it.
+  let stopTimer: ReturnType<typeof setTimeout> | undefined;
+  let removeAbortListener: (() => void) | undefined;
+  function stopSignal(): Promise<"stop"> {
+    return new Promise((resolve) => {
+      const stop = () => resolve("stop");
+      if (readInactivityMs !== undefined) stopTimer = setTimeout(stop, readInactivityMs);
+      if (signal) {
+        signal.addEventListener("abort", stop, { once: true });
+        removeAbortListener = () => signal.removeEventListener("abort", stop);
+      }
+    });
+  }
+  function clearStopSignal() {
+    if (stopTimer !== undefined) clearTimeout(stopTimer);
+    stopTimer = undefined;
+    removeAbortListener?.();
+    removeAbortListener = undefined;
+  }
+
+  let stopped = false;
   try {
     while (true) {
       if (signal?.aborted) break;
-      const { value, done } = await reader.read();
+      const result = await Promise.race([reader.read(), stopSignal()]);
+      clearStopSignal();
+      if (result === "stop") {
+        stopped = true;
+        break;
+      }
+      const { value, done } = result;
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
 
@@ -237,6 +318,12 @@ export async function consumeEventStream(
       }
     }
   } finally {
+    clearStopSignal();
+    if (stopped) {
+      // A read is still pending; cancelling ends it and frees the body.
+      // Nothing to do if the stream has already gone away.
+      await reader.cancel().catch(() => undefined);
+    }
     reader.releaseLock();
   }
 

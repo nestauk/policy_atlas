@@ -119,6 +119,37 @@ function fold(state: RunStreamState, frames: SseFrame[]): RunStreamState {
   return frames.reduce(reduceRunStreamFrame, state);
 }
 
+type TickFrame = Extract<SseFrame, { type: "tick" }>;
+
+/** A tick with every optional field at its wire default. */
+function tick(overrides: Partial<TickFrame> = {}): TickFrame {
+  return {
+    type: "tick",
+    activity: "Screening abstracts",
+    stage: "screen",
+    done: null,
+    total: null,
+    unit: null,
+    section: null,
+    heartbeat: false,
+    dropped: 0,
+    occurred_at: "2026-07-21T10:02:00Z",
+    ephemeral: true,
+    ...overrides,
+  };
+}
+
+function delta(index: number, text: string, mode: "append" | "replace" = "append"): SseFrame {
+  return {
+    type: "artefact.section_delta",
+    index,
+    text,
+    mode,
+    occurred_at: "2026-07-28T10:01:05Z",
+    ephemeral: true,
+  };
+}
+
 describe("reduceRunStreamFrame — replay idempotence", () => {
   it("applying the same frame stream twice leaves state unchanged after the first pass", () => {
     const frames = sampleFrames();
@@ -214,16 +245,10 @@ describe("reduceRunStreamFrame — new-run reset", () => {
       occurred_at: "2026-07-21T10:00:01Z",
       sequence: 2,
     });
-    state = reduceRunStreamFrame(state, {
-      type: "tick",
-      note: "Still working...",
-      stage: "acquire",
-      occurred_at: "2026-07-21T10:00:02Z",
-      ephemeral: true,
-      fetched: null,
-      parsed: null,
-      total: null,
-    });
+    state = reduceRunStreamFrame(
+      state,
+      tick({ activity: "Searching", stage: "acquire", occurred_at: "2026-07-21T10:00:02Z" }),
+    );
     // The run is interrupted before finishing.
     state = reduceRunStreamFrame(state, {
       type: "run.status",
@@ -465,6 +490,157 @@ describe("reduceRunStreamFrame — live artefact sections", () => {
   });
 });
 
+// Task 058, N7: the ephemeral delta and revising frames build a draft beside
+// the durable prose.
+describe("reduceRunStreamFrame — streamed drafts", () => {
+  const OTHER_RUN_ID = "33333333-3333-3333-3333-333333333333";
+
+  function writingFrames(): SseFrame[] {
+    return [
+      {
+        type: "run.status",
+        capability_run_id: TASK_RUN_ID,
+        status: "running",
+        occurred_at: "2026-07-28T10:00:00Z",
+        sequence: 1,
+      },
+      {
+        type: "artefact.skeleton",
+        sections: [
+          { index: 0, title: "Key findings", focus: "The headline evidence." },
+          { index: 3, title: "Conclusion", focus: "What the evidence means." },
+        ],
+        occurred_at: "2026-07-28T10:01:00Z",
+        sequence: 2,
+      },
+      { type: "artefact.section_started", index: 3, occurred_at: "2026-07-28T10:01:01Z", sequence: 3 },
+    ];
+  }
+
+  const completed: SseFrame = {
+    type: "artefact.section_completed",
+    index: 3,
+    title: "Conclusion",
+    prose: "The evidence supports the intervention.",
+    occurred_at: "2026-07-28T10:01:20Z",
+    sequence: 4,
+  };
+
+  it("append concatenates onto the draft and replace resets it", () => {
+    let state = fold(createInitialRunStreamState(), writingFrames());
+    state = fold(state, [delta(3, "The evidence "), delta(3, "supports")]);
+    expect(state.liveSections[3].draft).toBe("The evidence supports");
+    expect(state.liveSections[3].prose).toBeUndefined();
+
+    state = reduceRunStreamFrame(state, delta(3, "Restarted", "replace"));
+    expect(state.liveSections[3].draft).toBe("Restarted");
+    state = reduceRunStreamFrame(state, delta(3, "", "replace"));
+    expect(state.liveSections[3].draft).toBe("");
+  });
+
+  it("revising marks spans of the draft; completion sets prose and clears draft and revising", () => {
+    let state = fold(createInitialRunStreamState(), writingFrames());
+    state = reduceRunStreamFrame(state, delta(3, "The evidence supports it. It costs little."));
+    state = reduceRunStreamFrame(state, {
+      type: "artefact.section_revising",
+      index: 3,
+      spans: [{ start: 26, end: 42 }],
+      occurred_at: "2026-07-28T10:01:10Z",
+      ephemeral: true,
+    });
+    expect(state.liveSections[3].revising).toEqual([{ start: 26, end: 42 }]);
+
+    state = reduceRunStreamFrame(state, completed);
+    expect(state.liveSections[3]).toEqual({
+      index: 3,
+      title: "Conclusion",
+      focus: "What the evidence means.",
+      state: "filled",
+      prose: "The evidence supports the intervention.",
+    });
+  });
+
+  it("a late delta never reopens a completed section", () => {
+    const state = fold(createInitialRunStreamState(), [...writingFrames(), completed, delta(3, "late")]);
+    expect(state.liveSections[3].draft).toBeUndefined();
+    expect(state.liveSections[3].state).toBe("filled");
+  });
+
+  it("a delta before the skeleton is held and folded in by the skeleton", () => {
+    const [runStatus, skeleton, started] = writingFrames();
+    let state = fold(createInitialRunStreamState(), [runStatus, delta(3, "So far "), delta(3, "so good")]);
+    expect(state.liveSections).toEqual({});
+    expect(state.pendingDrafts).toEqual({ 3: "So far so good" });
+
+    state = fold(state, [skeleton, started, delta(3, ".")]);
+    expect(state.liveSections[3].draft).toBe("So far so good.");
+    expect(state.liveSections[0].draft).toBeUndefined();
+    expect(state.pendingDrafts).toEqual({});
+  });
+
+  it("a reload mid-section: the replay then a replace delta restores the prose so far", () => {
+    // The snapshot sends the replay (which has the skeleton), then the hub's
+    // draft as one replace delta, then live appends.
+    const state = fold(createInitialRunStreamState(), [
+      ...writingFrames(),
+      delta(3, "Written before the reload", "replace"),
+      delta(3, ", and after."),
+    ]);
+    expect(state.liveSections[3].draft).toBe("Written before the reload, and after.");
+  });
+
+  it("the ephemeral frames never advance lastSequence or the applied-types set", () => {
+    const base = fold(createInitialRunStreamState(), writingFrames());
+    const after = fold(base, [
+      delta(3, "text"),
+      delta(9, "held"),
+      {
+        type: "artefact.section_revising",
+        index: 3,
+        spans: [{ start: 0, end: 4 }],
+        occurred_at: "2026-07-28T10:01:10Z",
+        ephemeral: true,
+      },
+    ]);
+    expect(after.lastSequence).toBe(base.lastSequence);
+    expect(after.appliedTypesAtLastSequence).toEqual(base.appliedTypesAtLastSequence);
+  });
+
+  it("a replay with no deltas rebuilds prose only", () => {
+    const live = fold(createInitialRunStreamState(), [...writingFrames(), delta(3, "draft"), completed]);
+    const replayed = fold(createInitialRunStreamState(), [...writingFrames(), completed]);
+    expect(replayed.liveSections).toEqual(live.liveSections);
+    expect(replayed.liveSections[3].draft).toBeUndefined();
+  });
+
+  it("a new run clears drafts, held drafts and liveness", () => {
+    let state = fold(createInitialRunStreamState(), [
+      ...writingFrames(),
+      delta(3, "draft"),
+      delta(7, "held"),
+      tick({ stage: "synthesise" }),
+      {
+        type: "run.status",
+        capability_run_id: TASK_RUN_ID,
+        status: "interrupted",
+        occurred_at: "2026-07-28T10:02:00Z",
+        sequence: 4,
+      },
+    ]);
+    expect(state.liveSections[3].draft).toBe("draft");
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: OTHER_RUN_ID,
+      status: "running",
+      occurred_at: "2026-07-28T10:05:00Z",
+      sequence: 5,
+    });
+    expect(state.liveSections).toEqual({});
+    expect(state.pendingDrafts).toEqual({});
+    expect(state.liveness).toEqual({});
+  });
+});
+
 describe("reduceRunStreamFrame — check-in pending/resolved lifecycle", () => {
   it("checkin.pending sets pendingCheckIn; its checkin.resolved clears it into decisions", () => {
     const pending = reduceRunStreamFrame(createInitialRunStreamState(), {
@@ -523,97 +699,75 @@ describe("reduceRunStreamFrame — tick transience", () => {
   it("updates only the transient liveness slice and never touches lastSequence", () => {
     const base = fold(createInitialRunStreamState(), sampleFrames());
 
-    const withTick = reduceRunStreamFrame(base, {
-      type: "tick",
-      note: "Still screening batch 4 of 9...",
-      stage: "screen",
-      occurred_at: "2026-07-21T10:02:00Z",
-      ephemeral: true,
-      fetched: null,
-      parsed: null,
-      total: null,
-    });
+    const withTick = reduceRunStreamFrame(base, tick());
 
     expect(withTick.liveness.screen).toEqual({
-      note: "Still screening batch 4 of 9...",
+      activity: "Screening abstracts",
+      heartbeat: false,
+      dropped: 0,
       occurredAt: "2026-07-21T10:02:00Z",
     });
     expect(withTick.lastSequence).toBe(base.lastSequence);
     expect({ ...withTick, liveness: {} }).toEqual({ ...base, liveness: {} });
   });
 
-  it("an ingest tick's document counts are kept beside its note (task 056)", () => {
-    const withCounts = reduceRunStreamFrame(createInitialRunStreamState(), {
-      type: "tick",
-      note: "3 of 10 read, 5 fetched.",
-      stage: "ingest",
-      occurred_at: "2026-11-02T10:00:00Z",
-      ephemeral: true,
-      fetched: 5,
-      parsed: 3,
-      total: 10,
+  it("keeps a tick's counts, unit, section line, heartbeat and dropped counter (task 058, N5)", () => {
+    const state = reduceRunStreamFrame(
+      createInitialRunStreamState(),
+      tick({
+        activity: "Writing",
+        stage: "synthesise",
+        done: 3,
+        total: 7,
+        unit: "sections",
+        section: "Section 3 of 7 · Costs",
+        heartbeat: true,
+        dropped: 2,
+      }),
+    );
+    expect(state.liveness.synthesise).toEqual({
+      activity: "Writing",
+      done: 3,
+      total: 7,
+      unit: "sections",
+      section: "Section 3 of 7 · Costs",
+      heartbeat: true,
+      dropped: 2,
+      occurredAt: "2026-07-21T10:02:00Z",
     });
-    expect(withCounts.liveness.ingest).toEqual({
-      note: "3 of 10 read, 5 fetched.",
-      occurredAt: "2026-11-02T10:00:00Z",
-      fetched: 5,
-      parsed: 3,
-      total: 10,
-    });
-    // The wire omits absent counts; the slice then has no count keys.
-    const bare = reduceRunStreamFrame(createInitialRunStreamState(), {
-      type: "tick",
-      note: "n",
-      stage: "ingest",
-      occurred_at: "2026-11-02T10:00:00Z",
-      ephemeral: true,
-    } as unknown as Parameters<typeof reduceRunStreamFrame>[1]);
-    expect(bare.liveness.ingest).toEqual({ note: "n", occurredAt: "2026-11-02T10:00:00Z" });
+  });
+
+  it("stores heartbeats per stage, each stage keeping its own latest tick", () => {
+    let state = createInitialRunStreamState();
+    state = reduceRunStreamFrame(state, tick({ stage: "screen", activity: "Screening abstracts" }));
+    state = reduceRunStreamFrame(state, tick({ stage: "classify", activity: "Categorising" }));
+    state = reduceRunStreamFrame(
+      state,
+      tick({ stage: "screen", activity: "Screening abstracts", heartbeat: true, occurred_at: "2026-07-21T10:02:10Z" }),
+    );
+    expect(state.liveness.screen).toMatchObject({ heartbeat: true, occurredAt: "2026-07-21T10:02:10Z" });
+    expect(state.liveness.classify).toMatchObject({ activity: "Categorising", heartbeat: false });
   });
 
   it("a stage-less tick lands under the global liveness key", () => {
-    const withTick = reduceRunStreamFrame(createInitialRunStreamState(), {
-      type: "tick",
-      note: "Warming up...",
-      stage: null,
-      occurred_at: "2026-07-21T10:00:00Z",
-      ephemeral: true,
-      fetched: null,
-      parsed: null,
-      total: null,
-    });
-
+    const withTick = reduceRunStreamFrame(
+      createInitialRunStreamState(),
+      tick({ stage: null, activity: "Warming up", occurred_at: "2026-07-21T10:00:00Z" }),
+    );
     expect(withTick.liveness._global).toEqual({
-      note: "Warming up...",
+      activity: "Warming up",
+      heartbeat: false,
+      dropped: 0,
       occurredAt: "2026-07-21T10:00:00Z",
     });
   });
 
-  it("repeated ticks for the same stage overwrite (last note wins), never accumulate", () => {
+  it("repeated ticks for the same stage overwrite (last tick wins), never accumulate", () => {
     let state = createInitialRunStreamState();
-    state = reduceRunStreamFrame(state, {
-      type: "tick",
-      note: "First note",
-      stage: "extract",
-      occurred_at: "2026-07-21T10:00:00Z",
-      ephemeral: true,
-      fetched: null,
-      parsed: null,
-      total: null,
-    });
-    state = reduceRunStreamFrame(state, {
-      type: "tick",
-      note: "Second note",
-      stage: "extract",
-      occurred_at: "2026-07-21T10:00:05Z",
-      ephemeral: true,
-      fetched: null,
-      parsed: null,
-      total: null,
-    });
-
+    state = reduceRunStreamFrame(state, tick({ stage: "extract", activity: "First" }));
+    state = reduceRunStreamFrame(state, tick({ stage: "extract", activity: "Second" }));
     expect(Object.keys(state.liveness)).toEqual(["extract"]);
-    expect(state.liveness.extract.note).toBe("Second note");
+    expect(state.liveness.extract.activity).toBe("Second");
   });
 });
 
@@ -644,7 +798,52 @@ describe("reduceRunStreamFrame — stage lifecycle", () => {
       status: "completed",
       summary: { included: 10 },
       seconds: 5,
+      startedAt: "2026-07-21T10:00:00Z",
     });
+  });
+
+  it("records startedAt from stage.started and keeps it through completion and failure (task 058, N5)", () => {
+    let state = fold(createInitialRunStreamState(), [
+      {
+        type: "stage.started", capability_run_id: null,
+        stage: "acquire", label: "Searching", blurb: "",
+        occurred_at: "2026-07-21T10:00:00Z", sequence: 1,
+      },
+      {
+        type: "stage.started", capability_run_id: null,
+        stage: "screen", label: "Screening", blurb: "",
+        occurred_at: "2026-07-21T10:01:00Z", sequence: 2,
+      },
+    ]);
+    expect(state.stages.map((entry) => entry.startedAt)).toEqual([
+      "2026-07-21T10:00:00Z",
+      "2026-07-21T10:01:00Z",
+    ]);
+    state = fold(state, [
+      {
+        type: "stage.completed", capability_run_id: null,
+        stage: "acquire", label: "Searching", summary: {}, seconds: 64,
+        occurred_at: "2026-07-21T10:01:04Z", sequence: 3,
+      },
+      {
+        type: "stage.failed", capability_run_id: null,
+        stage: "screen", label: "Screening", reason: "boom", skipped: false,
+        occurred_at: "2026-07-21T10:02:00Z", sequence: 4,
+      },
+    ]);
+    expect(state.stages.map((entry) => [entry.status, entry.startedAt])).toEqual([
+      ["completed", "2026-07-21T10:00:00Z"],
+      ["failed", "2026-07-21T10:01:00Z"],
+    ]);
+  });
+
+  it("a completion with no started entry dates its start back by its seconds", () => {
+    const state = reduceRunStreamFrame(createInitialRunStreamState(), {
+      type: "stage.completed", capability_run_id: null,
+      stage: "group", label: "Grouping", summary: {}, seconds: 30,
+      occurred_at: "2026-07-21T10:00:30Z", sequence: 1,
+    });
+    expect(state.stages[0].startedAt).toBe("2026-07-21T10:00:00.000Z");
   });
 
   it("stage.failed with skipped=true records status skipped and carries the reason", () => {

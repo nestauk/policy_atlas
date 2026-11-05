@@ -15,6 +15,11 @@ export interface StageEntry {
   summary?: Record<string, number | string>;
   seconds?: number | null;
   blurb?: string;
+  /** When the stage started: the `occurred_at` of its `stage.started`
+   *  frame, kept through `stage.completed` / `stage.failed` so the card can
+   *  show the in-progress row's elapsed time and a merged row's span
+   *  (task 058, N5). */
+  startedAt: string;
 }
 
 /** The current run, as far as the reducer needs to track it. */
@@ -55,14 +60,27 @@ interface TaskSummary {
   status?: "active" | "archived" | null;
 }
 
-/** Last tick note for one stage (or the global key, for stage-less ticks).
- *  The full-text reading stage's ticks also carry document counts (task 056). */
+/** The latest tick for one stage (or the global key, for stage-less
+ *  ticks) — what the model is doing now (task 058, D2). Null counts on the
+ *  wire are left out here. The view decides from `occurredAt` whether the
+ *  activity dot still breathes. */
 export interface StageLiveness {
-  note: string;
-  occurredAt: string;
-  fetched?: number;
-  parsed?: number;
+  /** The activity line, in the server's words; shown as it is. */
+  activity: string;
+  /** Items finished so far, when the stage has an honest count. */
+  done?: number;
+  /** The total known before the stage's loop started. */
   total?: number;
+  /** What `done` and `total` count (`documents`, `batches`, ...). */
+  unit?: string;
+  /** The writer's section line ("Section 3 of 7 · Costs"), while writing. */
+  section?: string;
+  /** True when the server repeated the tick because a model call is still
+   *  running, not because anything changed. */
+  heartbeat: boolean;
+  /** The server's dropped-tick counter for this task. */
+  dropped: number;
+  occurredAt: string;
 }
 
 /** One presentation-only artefact section received through the live SSE
@@ -74,6 +92,14 @@ export interface LiveSection {
   focus: string;
   state: "planned" | "writing" | "filled";
   prose?: string;
+  /** The prose streamed so far for a section being written, from the
+   *  ephemeral `artefact.section_delta` frames. Kept apart from `prose`
+   *  (the durable record) and cleared when the section completes
+   *  (task 058, N7). */
+  draft?: string;
+  /** Character spans of `draft` the checker failed and the writer is now
+   *  revising (`artefact.section_revising`); cleared on completion. */
+  revising?: { start: number; end: number }[];
 }
 
 /** Liveness key used for `tick` frames with no `stage`. */
@@ -105,7 +131,11 @@ export interface RunStreamState {
   /** Presentation-only live artefact sections, keyed by their display
    * index. They are not the persisted evidence-search artefact. */
   liveSections: Record<number, LiveSection>;
-  /** Transient: last note per stage. Never sequence-gated, never replayed
+  /** Transient: streamed drafts for section indices the store has no
+   *  skeleton for yet. The next `artefact.skeleton` folds them into its
+   *  sections, so no streamed prose is lost (task 058, N7). */
+  pendingDrafts: Record<number, string>;
+  /** Transient: latest tick per stage. Never sequence-gated, never replayed
    *  (a fresh mount/reconnect starts this slice empty regardless of
    *  cursor). */
   liveness: Record<string, StageLiveness>;
@@ -125,6 +155,7 @@ export function createInitialRunStreamState(): RunStreamState {
     plan: null,
     task: {},
     liveSections: {},
+    pendingDrafts: {},
     liveness: {},
   };
 }

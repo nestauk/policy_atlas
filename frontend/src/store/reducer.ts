@@ -21,9 +21,12 @@ import {
  * That set resets whenever the sequence actually advances. Together this
  * makes folding the same frame stream twice, or resuming the fold from
  * any mid-stream cursor (however the redelivery is sliced), produce the
- * same final state. `tick` frames are the deliberate exception: they
- * carry no `sequence` at all, update only the transient `liveness` slice,
- * and never advance `lastSequence`.
+ * same final state. The three ephemeral frame types are the deliberate
+ * exception: they carry no `sequence` at all and never advance
+ * `lastSequence`. `tick` updates only the transient `liveness` slice;
+ * `artefact.section_delta` and `artefact.section_revising` update only a
+ * section's `draft` and `revising` (task 058, N7). A replay carries none of
+ * them, so folding a replay rebuilds `prose` alone.
  */
 /** Task 045 (A3): a stage frame names its walk; one from a different walk
  *  than the tracked run (a longlist walk's option search) is not this
@@ -35,12 +38,51 @@ export function isOtherRunsStage(state: RunStreamState, runId: string | null): b
 export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): RunStreamState {
   if (frame.type === "tick") {
     const key = frame.stage ?? GLOBAL_LIVENESS_KEY;
-    const entry: StageLiveness = { note: frame.note, occurredAt: frame.occurred_at };
-    // The counts are omitted from the wire when a tick carries none.
-    if (typeof frame.fetched === "number") entry.fetched = frame.fetched;
-    if (typeof frame.parsed === "number") entry.parsed = frame.parsed;
-    if (typeof frame.total === "number") entry.total = frame.total;
+    const entry: StageLiveness = {
+      activity: frame.activity,
+      heartbeat: frame.heartbeat,
+      dropped: frame.dropped,
+      occurredAt: frame.occurred_at,
+    };
+    // Null on the wire means "no such value for this tick"; leave it out.
+    if (frame.done !== null) entry.done = frame.done;
+    if (frame.total !== null) entry.total = frame.total;
+    if (frame.unit !== null) entry.unit = frame.unit;
+    if (frame.section !== null) entry.section = frame.section;
     return { ...state, liveness: { ...state.liveness, [key]: entry } };
+  }
+
+  if (frame.type === "artefact.section_delta") {
+    const section = state.liveSections[frame.index];
+    if (section === undefined) {
+      // No skeleton yet: hold the text until the skeleton arrives.
+      const held = state.pendingDrafts[frame.index] ?? "";
+      return {
+        ...state,
+        pendingDrafts: {
+          ...state.pendingDrafts,
+          [frame.index]: frame.mode === "append" ? held + frame.text : frame.text,
+        },
+      };
+    }
+    // A completed section's prose is the record; a late delta never
+    // reopens it.
+    if (section.state === "filled") return state;
+    const draft = frame.mode === "append" ? (section.draft ?? "") + frame.text : frame.text;
+    return {
+      ...state,
+      liveSections: { ...state.liveSections, [frame.index]: { ...section, draft } },
+    };
+  }
+
+  if (frame.type === "artefact.section_revising") {
+    const section = state.liveSections[frame.index];
+    if (section === undefined || section.state === "filled") return state;
+    const revising = frame.spans.map(({ start, end }) => ({ start, end }));
+    return {
+      ...state,
+      liveSections: { ...state.liveSections, [frame.index]: { ...section, revising } },
+    };
   }
 
   if (frame.sequence < state.lastSequence) {
@@ -111,6 +153,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         stages: isNewRun ? [] : base.stages,
         liveness: isNewRun ? {} : base.liveness,
         liveSections: isNewRun ? {} : base.liveSections,
+        pendingDrafts: isNewRun ? {} : base.pendingDrafts,
       };
     }
 
@@ -120,7 +163,13 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         ...base,
         stages: [
           ...base.stages,
-          { stage: frame.stage, label: frame.label, status: "started", blurb: frame.blurb },
+          {
+            stage: frame.stage,
+            label: frame.label,
+            status: "started",
+            blurb: frame.blurb,
+            startedAt: frame.occurred_at,
+          },
         ],
       };
 
@@ -128,13 +177,18 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       if (isOtherRunsStage(base, frame.capability_run_id)) return base;
       return {
         ...base,
-        stages: replaceStartedStage(base.stages, frame.stage, {
-          stage: frame.stage,
-          label: frame.label,
-          status: "completed",
-          summary: frame.summary,
-          seconds: frame.seconds,
-        }),
+        stages: replaceStartedStage(
+          base.stages,
+          frame.stage,
+          {
+            stage: frame.stage,
+            label: frame.label,
+            status: "completed",
+            summary: frame.summary,
+            seconds: frame.seconds,
+          },
+          frame.occurred_at,
+        ),
       };
 
     case "stage.failed":
@@ -144,28 +198,38 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       if (isOtherRunsStage(base, frame.capability_run_id)) return base;
       return {
         ...base,
-        stages: replaceStartedStage(base.stages, frame.stage, {
-          stage: frame.stage,
-          label: frame.label,
-          status: frame.skipped ? "skipped" : "failed",
-          summary: { reason: frame.reason },
-        }),
+        stages: replaceStartedStage(
+          base.stages,
+          frame.stage,
+          {
+            stage: frame.stage,
+            label: frame.label,
+            status: frame.skipped ? "skipped" : "failed",
+            summary: { reason: frame.reason },
+          },
+          frame.occurred_at,
+        ),
       };
 
     case "artefact.skeleton":
+      // Drafts that streamed in before the skeleton (held in
+      // `pendingDrafts`) are folded into their sections here.
       return {
         ...base,
         liveSections: Object.fromEntries(
-          frame.sections.map((section) => [
-            section.index,
-            {
+          frame.sections.map((section) => {
+            const held = base.pendingDrafts[section.index];
+            const live: LiveSection = {
               index: section.index,
               title: section.title,
               focus: section.focus,
               state: "planned",
-            } satisfies LiveSection,
-          ]),
+            };
+            if (held !== undefined) live.draft = held;
+            return [section.index, live];
+          }),
         ),
+        pendingDrafts: {},
       };
 
     case "artefact.section_started": {
@@ -192,12 +256,15 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         delete remainingSections[frame.index];
         return { ...base, liveSections: remainingSections };
       }
+      const settled: LiveSection = { ...section };
+      delete settled.draft;
+      delete settled.revising;
       return {
         ...base,
         liveSections: {
           ...base.liveSections,
           [frame.index]: {
-            ...section,
+            ...settled,
             title: frame.title,
             prose: frame.prose,
             state: "filled",
@@ -266,21 +333,29 @@ export function hasTerminalPartialLiveArtefact(state: RunStreamState): boolean {
 }
 
 /** Find the most recent `started` entry for `stage` and replace it in
- *  place; append instead if none is found (defensive — shouldn't happen
- *  given the server's start-before-terminal ordering). */
+ *  place, keeping its `startedAt`; append instead if none is found
+ *  (defensive — shouldn't happen given the server's start-before-terminal
+ *  ordering), dating the start back by `seconds` when the frame has them. */
 function replaceStartedStage(
   stages: StageEntry[],
   stage: StageEntry["stage"],
-  replacement: StageEntry,
+  replacement: Omit<StageEntry, "startedAt">,
+  occurredAt: string,
 ): StageEntry[] {
   for (let index = stages.length - 1; index >= 0; index--) {
     if (stages[index].stage === stage && stages[index].status === "started") {
       const next = stages.slice();
-      next[index] = replacement;
+      next[index] = { ...replacement, startedAt: stages[index].startedAt };
       return next;
     }
   }
-  return [...stages, replacement];
+  return [...stages, { ...replacement, startedAt: fallbackStartedAt(occurredAt, replacement.seconds) }];
+}
+
+function fallbackStartedAt(occurredAt: string, seconds: number | null | undefined): string {
+  const ended = Date.parse(occurredAt);
+  if (typeof seconds !== "number" || Number.isNaN(ended)) return occurredAt;
+  return new Date(ended - seconds * 1000).toISOString();
 }
 
 function assertNever(value: never): never {

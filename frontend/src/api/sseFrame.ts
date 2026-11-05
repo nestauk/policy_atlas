@@ -15,6 +15,8 @@ const SSE_FRAME_TYPES: ReadonlySet<SseFrame["type"]> = new Set([
   "plan.updated",
   "task.updated",
   "tick",
+  "artefact.section_delta",
+  "artefact.section_revising",
 ] satisfies SseFrame["type"][]);
 
 /**
