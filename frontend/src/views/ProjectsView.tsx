@@ -1,27 +1,46 @@
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
-import { useMe, useProject, useProjects, useTasks } from "../api/queries";
+import type { components } from "../api/gen/types";
+import { queryKeys, useMe, useProject, useProjects, useTasks } from "../api/queries";
 import { useCreateProject, useUpdateProject } from "../api/mutations";
 import { isConflictCode, conflictSentences } from "../lib/errors";
+import { Figures } from "../lib/figures";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
-import { PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
+import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
 import { Button } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
+import {
+  PAGE_COLUMN_CLASS,
+  PAGE_CONTROL_CLASS,
+  PageBackLink,
+  PageHeader,
+  PagePrimary,
+} from "../ui/brand/PageHeader";
 import { useToast } from "../ui/radix/Toast";
 import {
-  listPageTitleClass,
-  listSecondaryActionClass,
+  listFrameClass,
   newTaskHref,
   newestTaskUpdateByProject,
   projectLastUpdated,
+  projectListRowGridClass,
+  projectListRowGridClassWithOwner,
+  rowFigureCellClass,
+  rowNameCellClass,
   showOwnerColumn,
   sortProjectsByLastUpdated,
 } from "./listPageChrome";
 import type { Scope } from "./ScopeSwitcher";
 import { ScopeSwitcher } from "./ScopeSwitcher";
-import { TaskListActions, TaskListPanel } from "./TaskListPanel";
+import {
+  ListEmpty,
+  ListError,
+  ListSkeleton,
+  TaskListActions,
+  TaskListPanel,
+} from "./TaskListPanel";
 import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
 
 /**
@@ -68,27 +87,29 @@ export function ProjectsView() {
   const ownerlessLabel = isAdminWideList ? TENANCY_COPY.noOrganisation : TENANCY_COPY.ownerlessRow;
 
   return (
-    <main className="mx-auto max-w-[1180px] px-6 py-10">
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
-        <h1 className={listPageTitleClass}>{PROJECT.many}</h1>
-        <div className="flex items-center gap-4">
-          {hasSwitcher && <ScopeSwitcher scope={scope} onChange={setScope} />}
-          {!creating && (
-            <Button className="px-6 py-3.5 text-body" onClick={() => setCreating(true)}>
-              New {PROJECT.lower}
-            </Button>
-          )}
-        </div>
-      </header>
-
-      {isAdminWideList && (
-        <p role="status" className="mb-4 text-meta font-semibold text-grey">
-          {TENANCY_COPY.adminWiderList}
-        </p>
-      )}
+    <main className={PAGE_COLUMN_CLASS}>
+      <PageHeader
+        title={PROJECT.many}
+        actions={
+          // Stays in its slot while the form is open, disabled, so the
+          // header does not reflow and the form's Create is the one blue
+          // fill on the page.
+          <PagePrimary onClick={() => setCreating(true)} disabled={creating}>
+            New {PROJECT.lower}
+          </PagePrimary>
+        }
+        filters={hasSwitcher ? <ScopeSwitcher scope={scope} onChange={setScope} /> : null}
+        aside={
+          isAdminWideList ? (
+            <p role="status" className="text-meta font-semibold text-grey">
+              {TENANCY_COPY.adminWiderList}
+            </p>
+          ) : null
+        }
+      />
 
       {creating && (
-        <Card className="mb-8 max-w-md p-5">
+        <Card className="mt-4 max-w-md p-5">
           <form
             className="flex flex-col gap-3"
             onSubmit={(event) => {
@@ -133,67 +154,93 @@ export function ProjectsView() {
         </Card>
       )}
 
-      {projects.isPending && (
-        <div aria-busy="true" aria-label={`Loading ${PROJECT.lowerMany}`} className="space-y-2">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="h-14 animate-pulse border border-line bg-paper-2" />
-          ))}
-        </div>
-      )}
+      <div className="mt-4">
+        {projects.isPending && <ListSkeleton label={`Loading ${PROJECT.lowerMany}`} />}
 
-      {projects.data !== undefined && projects.data.data.length === 0 && !creating && (
-        <Card role="status" className="mx-auto max-w-md p-8 text-center">
-          <h2 className="text-heading font-extrabold text-navy">No {PROJECT.lowerMany} yet</h2>
-          <p className="mt-1.5 text-body text-grey">
+        {projects.isError && (
+          <ListError actionLabel="Try again" onRetry={() => void projects.refetch()}>
+            Couldn&apos;t load your {PROJECT.lowerMany}.
+          </ListError>
+        )}
+
+        {projects.data !== undefined && projects.data.data.length === 0 && !creating && (
+          <ListEmpty label={`No ${PROJECT.lowerMany} yet`}>
             A {PROJECT.lower} groups related {TASK.lowerMany} under one name.
-          </p>
-        </Card>
-      )}
+          </ListEmpty>
+        )}
 
-      {(projects.data?.data.length ?? 0) > 0 && (
-        <ul role="list" className="border border-line-2 bg-paper">
-          {rows.map((project) => {
-            const lastUpdated = projectLastUpdated(project, taskUpdatedAt);
-            return (
-              <li key={project.project_id} className="border-b border-line last:border-b-0">
-                <Link
-                  to={`/projects/${project.project_id}`}
-                  className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3.5 no-underline hover:bg-blue-tint-2"
-                >
-                  <span className="min-w-0 flex-1 text-body font-semibold text-navy max-md:w-full max-md:flex-none">
-                    {scrub(project.name)}
-                  </span>
-                  {showOwner && (
-                    <span className="text-meta text-grey">
-                      {project.owner_display !== null ? scrub(project.owner_display) : ownerlessLabel}
-                    </span>
-                  )}
-                  <span className="text-meta text-grey">
-                    {project.task_count === 1
-                      ? `1 ${TASK.lower}`
-                      : `${project.task_count} ${TASK.lowerMany}`}
-                  </span>
-                  <time
-                    dateTime={lastUpdated}
-                    className="w-28 shrink-0 text-right text-caption tabular-nums text-grey max-md:w-auto max-md:text-left"
+        {(projects.data?.data.length ?? 0) > 0 && (
+          <ul role="list" className={listFrameClass}>
+            {rows.map((project) => {
+              const lastUpdated = projectLastUpdated(project, taskUpdatedAt);
+              return (
+                <li key={project.project_id} className="border-b border-line last:border-b-0">
+                  <Link
+                    to={`/projects/${project.project_id}`}
+                    className={showOwner ? projectListRowGridClassWithOwner : projectListRowGridClass}
                   >
-                    {new Date(lastUpdated).toLocaleDateString()}
-                  </time>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                    <span
+                      className={`${rowNameCellClass} font-semibold text-navy max-md:col-span-2`}
+                    >
+                      {scrub(project.name)}
+                    </span>
+                    {showOwner && (
+                      <span className={`${rowFigureCellClass} text-meta max-md:hidden`}>
+                        {project.owner_display !== null
+                          ? scrub(project.owner_display)
+                          : ownerlessLabel}
+                      </span>
+                    )}
+                    <span className={`${rowFigureCellClass} text-meta max-md:text-left`}>
+                      <Figures
+                        text={
+                          project.task_count === 1
+                            ? `1 ${TASK.lower}`
+                            : `${project.task_count} ${TASK.lowerMany}`
+                        }
+                      />
+                    </span>
+                    <time dateTime={lastUpdated} className={`${rowFigureCellClass} text-caption tabular-nums`}>
+                      {new Date(lastUpdated).toLocaleDateString()}
+                    </time>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </main>
   );
 }
 
-/** One task: its tasks, with the same list chrome as the Tasks page. */
+type ProjectRow = components["schemas"]["ProjectOut"];
+
+/**
+ * The project's row from any Projects list already in the cache (every
+ * scope), so a project opened from the Projects page has its name,
+ * description and visibility on the first frame instead of after its own
+ * request: the header is whole before anything below it draws, and nothing
+ * moves when the detail lands and replaces it.
+ */
+function listedProject(client: QueryClient, projectId: string): ProjectRow | undefined {
+  const lists = client.getQueriesData<{ data: ProjectRow[] }>({
+    queryKey: queryKeys.projects().slice(0, 2),
+  });
+  for (const [, page] of lists) {
+    const row = page?.data.find((candidate) => candidate.project_id === projectId);
+    if (row !== undefined) return row;
+  }
+  return undefined;
+}
+
+/** One project: its tasks, with the same list chrome as the Tasks page. */
 export function ProjectDetailView() {
   const { projectId = "" } = useParams();
   const me = useMe();
   const project = useProject(projectId);
+  const queryClient = useQueryClient();
+  const shown = project.data ?? listedProject(queryClient, projectId);
   // Server-side `project_id` filter (task 033 phase 10a) — this used to
   // filter the global 50-row tasks page client-side, silently
   // under-reporting once a project's membership (or the caller's visible
@@ -207,7 +254,7 @@ export function ProjectDetailView() {
   });
   const updateProject = useUpdateProject(projectId);
   const toast = useToast();
-  useDocumentTitle(project.data?.name, PROJECT.one);
+  useDocumentTitle(shown?.name, PROJECT.one);
 
   const tasks = tasksQuery.data?.data ?? [];
   const hasSwitcher = me.data?.organisation != null;
@@ -234,46 +281,51 @@ export function ProjectDetailView() {
   };
 
   return (
-    <main className="mx-auto max-w-[1180px] px-6 py-10">
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <Link to="/projects" className={listSecondaryActionClass}>
-            ← {PROJECT.many}
-          </Link>
-          <h1 className={`${listPageTitleClass} mt-2`}>
-            {project.data === undefined ? "" : scrub(project.data.name)}
-          </h1>
-          {project.data?.description != null && (
-            <p className="mt-2 max-w-prose text-body text-grey">
-              {scrub(project.data.description)}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          {project.data !== undefined && (
+    <main className={PAGE_COLUMN_CLASS}>
+      <PageHeader
+        context={<PageBackLink to="/projects">← {PROJECT.many}</PageBackLink>}
+        // From the Projects list's cache when we came from there; otherwise
+        // empty while the project loads, keeping its line box.
+        title={shown === undefined ? "" : scrub(shown.name)}
+        actions={<TaskListActions rows={tasks} newTaskHref={newTaskHref(projectId)} />}
+        filters={
+          shown?.description != null ? (
+            <p className="max-w-prose text-body text-grey">{scrub(shown.description)}</p>
+          ) : null
+        }
+        aside={
+          shown !== undefined ? (
             <VisibilityControl
-              visibility={project.data.visibility}
-              isOwner={project.data.is_owner}
+              visibility={shown.visibility}
+              isOwner={shown.is_owner}
               pending={updateProject.isPending}
               onChange={changeVisibility}
+              // -mr-3: the label's right edge on the column's, under the primary.
+              className={`${PAGE_CONTROL_CLASS} -mr-3`}
             />
-          )}
-          <TaskListActions rows={tasks} newTaskHref={newTaskHref(projectId)} />
-        </div>
-      </header>
-
-      <TaskListPanel
-        rows={tasks}
-        isPending={project.isPending || tasksQuery.isPending}
-        isError={project.isError || tasksQuery.isError}
-        onRetry={() => {
-          void project.refetch();
-          void tasksQuery.refetch();
-        }}
-        loaded={project.data !== undefined && tasksQuery.data !== undefined}
-        showOwner={showOwner}
-        ownerlessLabel={ownerlessLabel}
+          ) : null
+        }
       />
+
+      <div className="mt-4">
+        <TaskListPanel
+          rows={tasks}
+          isPending={project.isPending || tasksQuery.isPending}
+          isError={project.isError || tasksQuery.isError}
+          onRetry={() => {
+            void project.refetch();
+            void tasksQuery.refetch();
+          }}
+          loaded={project.data !== undefined && tasksQuery.data !== undefined}
+          showOwner={showOwner}
+          ownerlessLabel={ownerlessLabel}
+          empty={
+            <ListEmpty label={COPY.noTasks}>
+              {TASK.many} you start here join this {PROJECT.lower}.
+            </ListEmpty>
+          }
+        />
+      </div>
     </main>
   );
 }

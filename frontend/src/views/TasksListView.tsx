@@ -5,12 +5,20 @@ import { Navigate } from "react-router";
 import { useMe, useProjects, useTasks } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { useDocumentTitle } from "../lib/title";
-import { TASK, TENANCY_COPY } from "../lib/vocabulary";
+import { COPY, TASK, TENANCY_COPY } from "../lib/vocabulary";
+import { PAGE_COLUMN_CLASS, PageHeader } from "../ui/brand/PageHeader";
 import { ReauthRedirect } from "../ui/feedback";
-import { showOwnerColumn, listPageTitleClass, newTaskHref } from "./listPageChrome";
+import { showOwnerColumn, newTaskHref } from "./listPageChrome";
 import type { Scope } from "./ScopeSwitcher";
 import { ScopeSwitcher } from "./ScopeSwitcher";
-import { TaskListActions, TaskListPanel } from "./TaskListPanel";
+import { ListEmpty, TaskListActions, TaskListPanel } from "./TaskListPanel";
+
+type TasksPage = ReturnType<typeof useTasks>;
+
+/** Loaded, and no rows. */
+function loadedEmpty(query: TasksPage): boolean {
+  return !query.isPending && !query.isError && (query.data?.data ?? []).length === 0;
+}
 
 /** Every task, with where it got to and what it belongs to. */
 export function TasksListView() {
@@ -20,11 +28,33 @@ export function TasksListView() {
   // a merge gate): an unenrolled caller's list stays byte-identical to
   // today, including the query itself — no `scope` param is sent.
   const hasSwitcher = me.data?.organisation != null;
-  const [scope, setScope] = useState<Scope>("mine");
-  const tasks = useTasks(hasSwitcher ? { scope } : undefined);
-  const archived = useTasks(
-    hasSwitcher ? { scope, status: "archived" } : { status: "archived" },
+  // `chosen` is the caller's own pick; until they pick, the page opens on
+  // Mine, or on Organisation when Mine is empty and colleagues have tasks
+  // (lead ruling, 2026-11-05: the owner's point was that colleagues' tasks
+  // were unreachable from an empty Mine).
+  const [chosen, setChosen] = useState<Scope | null>(null);
+
+  // Each scope is asked for once and the open one is shown, so the first-run
+  // redirect below can look at every list the caller can open, not only the
+  // one on screen. Organisation is asked for only when it is open or Mine is
+  // empty, so a caller with tasks of their own sends no extra request.
+  const ownTasks = useTasks(hasSwitcher ? { scope: "mine" } : undefined);
+  const ownArchived = useTasks(
+    hasSwitcher ? { scope: "mine", status: "archived" } : { status: "archived" },
   );
+  const ownActiveEmpty = loadedEmpty(ownTasks);
+  const ownEmpty = ownActiveEmpty && loadedEmpty(ownArchived);
+  const organisationTasks = useTasks(hasSwitcher ? { scope: "all" } : undefined, {
+    enabled: hasSwitcher && (chosen === "all" || ownActiveEmpty),
+  });
+  const organisationHasRows = (organisationTasks.data?.data ?? []).length > 0;
+  const scope: Scope =
+    chosen ?? (hasSwitcher && ownActiveEmpty && organisationHasRows ? "all" : "mine");
+  // Mine is empty and Organisation is still on its way: hold the list's
+  // loading frame rather than flash "No tasks yet" before switching.
+  const choosingScope =
+    hasSwitcher && chosen === null && ownActiveEmpty && organisationTasks.isPending;
+  const tasks = scope === "all" ? organisationTasks : ownTasks;
   const projects = useProjects(hasSwitcher ? { scope } : undefined);
 
   const rows = tasks.data?.data ?? [];
@@ -38,58 +68,53 @@ export function TasksListView() {
     return <ReauthRedirect />;
   }
 
+  // Wait for /me: until it lands an enrolled caller looks unenrolled, and
+  // their empty Mine list would redirect before Organisation was asked.
+  const meKnown = me.data !== undefined || me.isError === true;
   const homeIsEmpty =
-    !tasks.isPending &&
-    !archived.isPending &&
-    !tasks.isError &&
-    !archived.isError &&
-    (tasks.data?.data ?? []).length === 0 &&
-    (archived.data?.data ?? []).length === 0;
+    meKnown && ownEmpty && (!hasSwitcher || loadedEmpty(organisationTasks));
   if (homeIsEmpty) {
     return <Navigate to="/new" replace />;
   }
 
   return (
-    <main className="mx-auto max-w-[1180px] px-6 py-10">
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
-        <h1 className={listPageTitleClass}>{TASK.many}</h1>
-        {hasSwitcher ? (
-          <div className="flex items-center gap-4">
-            <ScopeSwitcher scope={scope} onChange={setScope} />
-            <TaskListActions
-              rows={rows}
-              projectNames={projectName}
-              showProjectPrefix
-              newTaskHref={newTaskHref()}
-            />
-          </div>
-        ) : (
+    <main className={PAGE_COLUMN_CLASS}>
+      <PageHeader
+        title={TASK.many}
+        actions={
           <TaskListActions
             rows={rows}
             projectNames={projectName}
             showProjectPrefix
             newTaskHref={newTaskHref()}
           />
-        )}
-      </header>
-
-      {isAdminWideList && (
-        <p role="status" className="mb-4 text-meta font-semibold text-grey">
-          {TENANCY_COPY.adminWiderList}
-        </p>
-      )}
-
-      <TaskListPanel
-        rows={rows}
-        projectNames={projectName}
-        showProjectPrefix
-        isPending={tasks.isPending}
-        isError={tasks.isError}
-        onRetry={() => void tasks.refetch()}
-        loaded={tasks.data !== undefined}
-        showOwner={showOwner}
-        ownerlessLabel={isAdminWideList ? TENANCY_COPY.noOrganisation : undefined}
+        }
+        filters={hasSwitcher ? <ScopeSwitcher scope={scope} onChange={setChosen} /> : null}
+        aside={
+          isAdminWideList ? (
+            <p role="status" className="text-meta font-semibold text-grey">
+              {TENANCY_COPY.adminWiderList}
+            </p>
+          ) : null
+        }
       />
+
+      <div className="mt-4">
+        <TaskListPanel
+          rows={rows}
+          projectNames={projectName}
+          showProjectPrefix
+          isPending={tasks.isPending || choosingScope}
+          isError={tasks.isError}
+          onRetry={() => void tasks.refetch()}
+          loaded={tasks.data !== undefined}
+          showOwner={showOwner}
+          ownerlessLabel={isAdminWideList ? TENANCY_COPY.noOrganisation : undefined}
+          empty={
+            <ListEmpty label={COPY.noTasks}>{TASK.many} you start appear here.</ListEmpty>
+          }
+        />
+      </div>
     </main>
   );
 }

@@ -24,8 +24,12 @@ export function ScopeSwitcher({
     { value: "mine", label: TENANCY_COPY.scopeMine },
     { value: "all", label: TENANCY_COPY.scopeOrganisation },
   ];
+  // The active option is a 2 px Electric Blue rule, never a fill (lead
+  // ruling P4; DESIGN.md § Shapes): the page's one blue fill is its primary.
+  // Each label reserves its Extrabold width, so choosing one never nudges
+  // the other sideways.
   return (
-    <div role="tablist" aria-label="Scope" className="inline-flex border border-line-2">
+    <div role="tablist" aria-label="Scope" className="flex h-10 items-stretch gap-5">
       {options.map(({ value, label }) => (
         <button
           key={value}
@@ -34,13 +38,18 @@ export function ScopeSwitcher({
           aria-selected={scope === value}
           onClick={() => onChange(value)}
           className={cn(
-            "px-3.5 py-2 text-meta font-semibold",
+            "inline-grid cursor-pointer items-center border-b-2 pt-0.5 text-meta",
+            "transition-colors duration-150 ease-[ease]",
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue",
             scope === value
-              ? "bg-blue text-white"
-              : "bg-paper text-navy hover:bg-blue-tint-2",
+              ? "border-blue font-extrabold text-navy"
+              : "border-transparent font-semibold text-grey hover:text-navy",
           )}
         >
-          {label}
+          <span className="col-start-1 row-start-1">{label}</span>
+          <span aria-hidden="true" className="invisible col-start-1 row-start-1 font-extrabold">
+            {label}
+          </span>
         </button>
       ))}
     </div>

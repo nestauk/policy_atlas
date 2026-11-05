@@ -98,3 +98,47 @@ describe("TaskListRow — the status mark", () => {
     expect(liveMarkOf(container)).toBeNull();
   });
 });
+
+// Task 058, lists polish: the project prefix never hides the task's own
+// name, several projects read as the first and a count (lead ruling P2),
+// and phone rows are two fixed lines without owner or sources (P3).
+describe("TaskListRow — layout (lists polish)", () => {
+  it("shows the first project and a count, with every project in the hover text", () => {
+    renderRow({
+      showProjectPrefix: true,
+      projectNames: ["Child health, Tower Hamlets", "Net zero homes"],
+    });
+    expect(screen.getByText("Child health, Tower Hamlets")).toBeInTheDocument();
+    expect(screen.getByText("+1")).toBeInTheDocument();
+    expect(screen.queryByText("Net zero homes")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Child health, Tower Hamlets · Net zero homes")).toBeInTheDocument();
+    // The accessible name still carries every project, then the task.
+    expect(
+      screen.getByRole("link", { name: "Child health, Tower Hamlets · Net zero homes, Youth employment" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no count for a task in one project", () => {
+    renderRow({ showProjectPrefix: true, projectNames: ["Net zero homes"] });
+    expect(screen.queryByText(/^\+\d/)).not.toBeInTheDocument();
+  });
+
+  it("caps the prefix so the task's own name always shows", () => {
+    renderRow({ showProjectPrefix: true, projectNames: ["Child health, Tower Hamlets"] });
+    expect(screen.getByTitle("Child health, Tower Hamlets")).toHaveClass("max-w-[45%]", "shrink", "min-w-0");
+    expect(screen.getByText("Youth employment")).toHaveClass("min-w-0", "flex-1", "truncate");
+  });
+
+  it("is one 56 px line from md up and two fixed lines below, without owner and sources", () => {
+    renderRow({ sourceCount: 46, ownerDisplay: "Ada Lovelace", updatedAt: "2026-07-21T09:00:00Z" });
+    expect(screen.getByRole("link")).toHaveClass("min-h-14", "py-3.5");
+    expect(screen.getByText("Youth employment").parentElement).toHaveClass("max-md:col-span-3", "leading-7", "max-md:leading-6");
+    const sources = screen.getByText("46").parentElement as HTMLElement;
+    expect(sources).toHaveTextContent("46 sources");
+    expect(sources).toHaveClass("max-md:hidden");
+    // Only the digits take tabular figures; the space keeps its width.
+    expect(screen.getByText("46")).toHaveClass("tabular-nums");
+    expect(sources).not.toHaveClass("tabular-nums");
+    expect(screen.getByText("Ada Lovelace")).toHaveClass("max-md:hidden");
+  });
+});

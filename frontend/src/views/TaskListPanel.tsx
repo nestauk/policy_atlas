@@ -1,13 +1,13 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { type ReactNode, useState } from "react";
+import { useNavigate } from "react-router";
 
 import type { components } from "../api/gen/types";
 import { scrub } from "../lib/scrub";
 import { COPY, TASK } from "../lib/vocabulary";
 import { Button } from "../ui/brand/Button";
-import { Card } from "../ui/brand/Card";
+import { PAGE_CONTROL_CLASS, PagePrimary } from "../ui/brand/PageHeader";
 import { taskDestination } from "./lifecycle";
-import { listNewButtonClass } from "./listPageChrome";
+import { listFrameClass } from "./listPageChrome";
 import { TaskListRow } from "./TaskListRow";
 import { hasLonglist, statusRun } from "./scopingActivity";
 
@@ -37,12 +37,20 @@ function rowDestination(row: TaskListItem): string {
   return taskDestination(row.task_id, row.latest_run?.status, { hasLonglist: hasLonglist(row) });
 }
 
+/** The names of a task's projects, in order, skipping any not in the map. */
+function projectNameList(
+  ids: readonly string[] | null | undefined,
+  names?: ReadonlyMap<string, string>,
+): string[] {
+  if (ids == null || ids.length === 0) return [];
+  return ids.map((id) => names?.get(id) ?? "").filter((name) => name !== "");
+}
+
 function projectPrefix(
-  ids: readonly string[] | undefined,
+  ids: readonly string[] | null | undefined,
   names?: ReadonlyMap<string, string>,
 ): string {
-  if (ids == null || ids.length === 0) return "";
-  return ids.map((id) => names?.get(id) ?? "").filter((name) => name !== "").join(" · ");
+  return projectNameList(ids, names).join(" · ");
 }
 
 function FindTask({
@@ -130,7 +138,8 @@ function FindTask({
   );
 }
 
-/** Find-a-task and New-task controls shared by Tasks and task-detail headers. */
+/** Find-a-task and New-task controls shared by the Tasks and Project page
+ *  headers: drop them straight into `PageHeader`'s actions slot. */
 export function TaskListActions({
   rows,
   projectNames,
@@ -146,18 +155,10 @@ export function TaskListActions({
 
   return (
     <>
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          className="px-3 py-2.5 text-lead font-normal"
-          onClick={() => setFinding(true)}
-        >
-          {COPY.findTask}
-        </Button>
-        <Link to={newTaskHref} className={listNewButtonClass}>
-          {COPY.newTask}
-        </Link>
-      </div>
+      <Button variant="ghost" className={PAGE_CONTROL_CLASS} onClick={() => setFinding(true)}>
+        {COPY.findTask}
+      </Button>
+      <PagePrimary to={newTaskHref}>{COPY.newTask}</PagePrimary>
       {finding && (
         <FindTask
           rows={rows}
@@ -183,7 +184,77 @@ type TaskListPanelProps = {
    *  the admin-wide-list's "No organisation" when the caller passes it). */
   showOwner?: boolean;
   ownerlessLabel?: string;
+  /** What an empty list shows, in the list's frame; nothing when absent. */
+  empty?: ReactNode;
 };
+
+/**
+ * The list loading: the list's own frame and row shape (lead ruling), so
+ * the rows arrive into it rather than replacing a different page. Five rows
+ * of the real row's height, 56 px (84 px below md, two lines), each with
+ * the system's placeholder bar where the name will sit. The bars breathe,
+ * and hold still under reduced motion.
+ */
+export function ListSkeleton({ label }: { label: string }) {
+  return (
+    <ul role="list" aria-busy="true" aria-label={label} className={listFrameClass}>
+      {Array.from({ length: 5 }).map((_, index) => (
+        <li
+          key={index}
+          aria-hidden="true"
+          className="flex h-14 flex-col justify-center gap-y-1 border-b border-line px-4 last:border-b-0 max-md:h-21"
+        >
+          <span className="flex h-7 items-center max-md:h-6">
+            <span className="placeholder-bar h-2.5 w-2/5" />
+          </span>
+          <span className="hidden h-7 items-center max-md:flex">
+            <span className="placeholder-bar h-2.5 w-1/4" />
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * An empty list: the list's frame with nothing in it, left-aligned at the
+ * list's edge, hairline only (no card shadow). A label, then one plain
+ * sentence when there is one. The page's primary stays the way forward.
+ */
+export function ListEmpty({ label, children }: { label: string; children?: ReactNode }) {
+  return (
+    <div role="status" className={`${listFrameClass} px-4 py-6`}>
+      <p className="text-body font-semibold text-navy">{label}</p>
+      {children != null && <p className="mt-1 text-body text-grey">{children}</p>}
+    </div>
+  );
+}
+
+/**
+ * A list that failed to load: the list's frame, the sentence, and a 40 px
+ * ghost that asks again (lead ruling, 2026-11-05).
+ */
+export function ListError({
+  children,
+  actionLabel,
+  onRetry,
+}: {
+  children: ReactNode;
+  actionLabel: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      className={`${listFrameClass} flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-4 pl-4 pr-1`}
+    >
+      <p className="text-body text-navy">{children}</p>
+      <Button variant="ghost" className={PAGE_CONTROL_CLASS} onClick={onRetry}>
+        {actionLabel}
+      </Button>
+    </div>
+  );
+}
 
 /** Shared task list body: loading, empty, and rows. */
 export function TaskListPanel({
@@ -196,46 +267,32 @@ export function TaskListPanel({
   loaded = true,
   showOwner = false,
   ownerlessLabel,
+  empty,
 }: TaskListPanelProps) {
   if (isPending) {
-    return (
-      <div aria-busy="true" aria-label={`Loading ${TASK.lowerMany}`} className="space-y-2">
-        {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="h-14 animate-pulse border border-line bg-paper-2" />
-        ))}
-      </div>
-    );
+    return <ListSkeleton label={`Loading ${TASK.lowerMany}`} />;
   }
 
   if (isError) {
     return (
-      <Card role="alert" className="max-w-md p-5 text-body text-navy">
-        Your {TASK.lowerMany} couldn't be loaded.{" "}
-        <button
-          type="button"
-          className="cursor-pointer font-bold text-blue hover:underline"
-          onClick={() => onRetry?.()}
-        >
-          Retry
-        </button>
-      </Card>
+      <ListError actionLabel="Retry" onRetry={() => onRetry?.()}>
+        Your {TASK.lowerMany} couldn't be loaded.
+      </ListError>
     );
   }
 
-  if (loaded && rows.length === 0) return null;
-
-  if (rows.length === 0) return null;
+  if (rows.length === 0) return loaded ? (empty ?? null) : null;
 
   return (
-    <ul role="list" className="border border-line-2 bg-paper">
+    <ul role="list" className={listFrameClass}>
       {rows.map((row) => (
         <li key={row.task_id} className="border-b border-line last:border-b-0">
           <TaskListRow
             to={rowDestination(row)}
             name={row.name}
             capabilityKey={row.capability}
-            projectName={
-              showProjectPrefix ? projectPrefix(row.project_ids, projectNames) || null : null
+            projectNames={
+              showProjectPrefix ? projectNameList(row.project_ids, projectNames) : null
             }
             showProjectPrefix={showProjectPrefix}
             sourceCount={row.source_count}
