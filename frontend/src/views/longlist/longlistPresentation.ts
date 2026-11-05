@@ -584,7 +584,7 @@ export const SHORTLIST_WORD = "Shortlist";
 /** A longlist walk's stages (the server's keys). "shortlist" is left out on
  *  purpose: a walk that runs only that stage is the standalone shortlist
  *  walk, which leaves the built longlist on screen. */
-const LONGLIST_WALK_STAGES: ReadonlySet<string> = new Set([
+export const LONGLIST_WALK_STAGES: ReadonlySet<string> = new Set([
   "inherit",
   "suggest",
   "option_searches",

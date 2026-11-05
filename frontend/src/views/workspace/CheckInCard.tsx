@@ -384,7 +384,7 @@ export function CheckInCard({
                 </form>
               )}
               {selected && option.id !== "change_mode" && option.requires_user_input && (
-                <div className="pl-7">
+                <div className="pl-7 max-sm:pl-0">
                   <WordsInput
                     label={option.label}
                     disabled={answer.isPending}

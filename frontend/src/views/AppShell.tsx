@@ -314,16 +314,17 @@ function PlanControl() {
   );
 }
 
-/** The plan document beside a non-Agent tab (the Agent tab mounts its own,
+/** The plan document over a non-Agent tab (the Agent tab mounts its own,
  *  with the plan's edits). Read-only here: edits and starts belong to the
- *  Agent tab. Below `md` it covers the page. */
+ *  Agent tab. It lies over the right of the page with the overlay lift, so
+ *  the report under it keeps its width; below `md` it covers the page. */
 function ShellPlanPanel({ taskId }: { taskId: string }) {
   const plan = usePlanPanel();
   const live = useTaskLive();
   const status = live?.stream.run?.status;
   if (!plan.open) return null;
   return (
-    <div className="flex min-h-0 shrink-0 max-md:absolute max-md:inset-0 max-md:z-30 md:w-[min(46rem,55%)]">
+    <div className="absolute inset-y-0 right-0 z-30 flex min-h-0 w-[min(46rem,55%)] shadow-[0_10px_30px_rgba(15,41,74,0.14)] max-md:left-0 max-md:w-auto">
       <PlanDocument
         taskId={taskId}
         placement="side"
@@ -511,7 +512,9 @@ export function AppShell() {
               </>
             )}
           </div>
-          <div className="max-md:hidden">
+          {/* Never shrinks: a long task name truncates instead, and keeps a
+              gutter's width from the Plan control. */}
+          <div className="shrink-0 pl-6 max-md:hidden">
             <TaskTabs
               placement="nav"
               items={lifecycleItems ?? []}

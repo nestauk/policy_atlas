@@ -260,12 +260,21 @@ export function RunStrip() {
     );
   }
 
-  const parts = [row?.label, rowDetail(tick), elapsed].filter((part): part is string => Boolean(part));
+  const parts = [row?.label, rowDetail(tick, { short: true })].filter((part): part is string => Boolean(part));
   return (
     <p className={cn(STRIP_CLASS, "text-navy")}>
       <StatusDot tone="running" className={cn(fresh && "anim-breathe")} />
-      <span className="min-w-0 truncate">
-        <Figures text={scrub(parts.join(" · "))} />
+      {/* A long line truncates its words; the elapsed time stays in view. */}
+      <span className="flex min-w-0 whitespace-pre">
+        <span className="min-w-0 truncate">
+          <Figures text={scrub(parts.join(" · "))} />
+        </span>
+        {elapsed !== "" && (
+          <span className="shrink-0">
+            {parts.length > 0 ? " · " : ""}
+            <Figures text={elapsed} />
+          </span>
+        )}
       </span>
     </p>
   );

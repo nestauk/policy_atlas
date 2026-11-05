@@ -32,7 +32,7 @@ import { RESULT_VIEWS, resultView } from "./lifecycle";
 import { hasLonglist, isBaselineArtefact, statusRun } from "./scopingActivity";
 import { useChatsEnabled } from "./taskResult";
 import { LonglistBuilding, LonglistView } from "./longlist/LonglistView";
-import { isLonglistBuilding } from "./longlist/longlistPresentation";
+import { isLonglistBuilding, LONGLIST_WALK_STAGES } from "./longlist/longlistPresentation";
 import { ShortlistView } from "./longlist/ShortlistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
@@ -1517,7 +1517,7 @@ export function reportDateLabel(iso: string, now: Date = new Date()): string {
 
 /** Whole minutes since `iso`, never below one. */
 export function minutesSince(iso: string, nowMs: number): number {
-  return Math.max(1, Math.floor((nowMs - new Date(iso).getTime()) / 60_000));
+  return Math.max(0, Math.floor((nowMs - new Date(iso).getTime()) / 60_000));
 }
 
 /**
@@ -1826,6 +1826,8 @@ function ArtefactReport() {
     task.data !== undefined &&
     stream.run !== null &&
     (stream.run.status === "running" || stream.run.status === "paused") &&
+    // A longlist walk does not rewrite the report, so no re-run line over the baseline.
+    !stream.stages.some((entry) => LONGLIST_WALK_STAGES.has(entry.stage)) &&
     !(latestRun?.capability_run_id === stream.run.id && latestRun.ended_at != null);
   const rerunStartedAt =
     latestRun?.capability_run_id === stream.run?.id ? latestRun?.started_at : stream.run?.startedAt;

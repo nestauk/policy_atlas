@@ -61,10 +61,17 @@ tool and the gap measure are built and tested (Phase 0). The "before" captures m
 
 ## Polish log (D11)
 
-Not yet started: the agent pass and the owner pass run in their own conversation against the
-live dev app (`make dev`), after the owner's go on the live runs that give the app transient
-states to polish. The frontend passes' open proposals (§ Review handoff) are the agent pass's
-first input.
+- **Round 1, agent pass (2026-11-05):** `frontend-designer` reviewed every changed surface on
+  the mock-driven app against its annex scene at 1280 and 400 (the live runs are owner-gated,
+  so the mock supplied the transient states). Five layout fixes within the annex: the plan side
+  panel lies over the page instead of squeezing the report; the tab group no longer collides
+  with the task name; the in-progress row's clock stays on the label's line on a phone; the
+  strip's elapsed time never truncates; in-card inputs drop their indent below `sm`. Gate:
+  typecheck clean, eslint 0 errors, 1064 tests. Screenshots under
+  `research/screenshots/phase10/` (every scene, rounds 1 and 2, the four brief O missed
+  included). Lead follow-ups after the pass: "just now" under a minute, no re-run line during a
+  longlist walk, the strip's short section form. Annex polish log row 1 filled.
+- **Owner rounds (up to three, G6):** not started; they need the owner on the live app.
 
 ## Diff summary
 
@@ -81,8 +88,15 @@ Filled per phase as it lands; the flagged deviations are in § Review handoff.
 - No run of either capability has been watched on the live app with the new code; every
   surface is verified by unit tests, the mock journeys and screenshots of the mock. The first
   live runs are the N25 "after" runs.
-- The strict `json_schema` final turn was proven on Terra in research (probe 4); the build-time
-  Luna check (D1) has not run (no live call yet in this phase).
+- **D1 build-time check, done 2026-11-05** (`research/exp-luna-strict-check.md`, two live calls,
+  cents): Luna accepted the streamed strict `json_schema` response with the raw
+  `SectionProseWire` schema (what the section call sends) and with the strict-transformed one
+  (what the planner sends); both streamed `prose` ahead of `claims` (first payload 1.031 s and
+  0.896 s, last chunk 1.824 s and 1.783 s), validated, and carried usage on the last chunk. The
+  strict-transformed schema makes the model fill every optional claim field with `[]`/`null`
+  (230 against 260 output tokens); the raw schema leaves them out. Neither Luna call shows how
+  strictly Bedrock enforces the two strict-mode rules the schema breaks (`default` keys, the
+  open map on `PatternPayloadWire.stated`): the once-only fallback (N6) covers a refusal.
 - The Codex spend cap means no Codex family-flip review happened in the build; conversation C's
   adversarial lane covers it if the cap is lifted.
 - The `#000` design-hook findings in `frontend/src/index.css` are the pre-existing print

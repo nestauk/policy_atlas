@@ -330,10 +330,11 @@ export function rowLink(
 
 /** The run strip's middle part: the writer's section while writing, else the
  *  activity line, in the server's words. */
-export function rowDetail(tick: StageLiveness | undefined): string | null {
+export function rowDetail(tick: StageLiveness | undefined, options: { short?: boolean } = {}): string | null {
   if (tick === undefined) return null;
   const section = tick.section?.trim();
-  if (section) return section;
+  // The strip's short form keeps "Section 3 of 7" and drops the title (annex scene 7).
+  if (section) return options.short ? section.split(" · ")[0] : section;
   const activity = tick.activity.trim();
   return activity === "" ? null : activity;
 }

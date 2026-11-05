@@ -128,9 +128,13 @@ function SpineRow({
           row.state === "upcoming" ? "py-1.5" : "py-2.5",
         )}
       >
+        {/* On a phone a done row's counts drop under its label, beside the
+            link; the step in progress keeps its clock on the label's line,
+            so the label, then what it is doing, read as one block. */}
         <span
           className={cn(
-            "col-span-2 min-w-0 sm:col-span-1",
+            "min-w-0",
+            !progress && "col-span-2 sm:col-span-1",
             progress ? "text-lead font-semibold text-navy max-sm:text-body" : "text-body",
             row.state === "upcoming" ? "text-grey" : "text-navy",
           )}
@@ -139,11 +143,11 @@ function SpineRow({
           <span className="sr-only">, {STATE_WORD[row.state]}</span>
         </span>
         {row.state !== "upcoming" && (
-          <span className="text-meta text-grey sm:text-right">
+          <span className={cn("text-meta text-grey", progress ? "text-right" : "sm:text-right")}>
             <Figures text={meta} />
           </span>
         )}
-        {row.state !== "upcoming" && (
+        {row.state !== "upcoming" && (link !== null || !progress) && (
           <span className="text-right text-meta">
             {link !== null && (
               <Link

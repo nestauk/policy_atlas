@@ -601,7 +601,7 @@ export function PartCard({
                   }}
                 />
                 {words && selected && interactive && (
-                  <div className="pl-7">
+                  <div className="pl-7 max-sm:pl-0">
                     <WordsInput
                       label={option.label}
                       disabled={disabled}

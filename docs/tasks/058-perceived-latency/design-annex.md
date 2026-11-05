@@ -278,11 +278,18 @@ Nesta palette from `index.css`: navy `#0f294a` structural text, grey `#646363` s
   decided: …". A dropped connection mid-reply keeps "Drafting the plan" with a still dot.
 - A turn that carries a part card shows no question or chips beside it.
 
+- Polish round 1 (agent) follow-ups by the lead: "A new run started just now" under one minute
+  (the minute count may be zero); no re-run line over the baseline while a longlist walk runs
+  (it does not rewrite the report); the strip's writing state keeps "Section n of M" and drops
+  the title. A check-in option shows the server's sentence and the planner's reason on two
+  lines; the annex's reason-only form is the mock's shape. The mid-write failure banner's copy
+  and the plan panel's arrival motion are deferred to the owner pass.
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |
 |---|---|---|---|---|
-| 1 | build, agent pass | | | lead |
+| 1 | build, agent pass | 2026-11-05 | Plan side panel lies over the page instead of squeezing the report; task nav keeps a gutter before Plan; the card's step in progress keeps its clock on the label line on phones; the strip's elapsed time never truncates; in-card inputs span the card on phones | lead |
 | 2 | build, owner pass | | | owner |
 | 3 | review, agent pass | | | lead |
 | 4 | review, owner pass | | | owner |
