@@ -725,6 +725,7 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
                 "decision": None,
                 # Task 045's applied longlist verb: absent on a planning turn.
                 "action": None,
+                "sources": [],
             }
         ]
         retried = client.post(

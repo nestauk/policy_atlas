@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from collections.abc import Callable
 from typing import Any
@@ -31,6 +32,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core import events
 from policy_atlas.core.schema import event_log
+from policy_atlas.evidence_search.extract.quote_verify import QuoteMatcher, build_basis
 from policy_atlas.evidence_search.sourcing.acquire import _reconstruct_abstract
 from policy_atlas.theory_of_change.backend import TocBackend
 
@@ -97,17 +99,82 @@ def _documents(fields: dict[str, str], search: Search) -> list[dict[str, str]]:
     return list(found.values())
 
 
-def note(payload: dict[str, Any]) -> str | None:
+class CitedNote(str):
+    """A Task Agent line whose ``[n]`` markers point at ``sources``, for the citation sidebar."""
+
+    sources: list[dict[str, Any]]
+
+    def __new__(cls, text: str, sources: list[dict[str, Any]]) -> CitedNote:
+        line = super().__new__(cls, text)
+        line.sources = sources
+        return line
+
+
+_AFTER_STOP = re.compile(r"([.!?]) \[(\d+(?:,\d+)*)\]")
+_MARKER = re.compile(r"\s*\[([A-Za-z0-9_]+(?:\s*,\s*[A-Za-z0-9_]+)*)\]")
+
+
+def _verified_quotes(response_quotes: list[Any], documents: list[dict[str, str]]) -> dict[str, str]:
+    """The quotes found word for word in their document's title or abstract, by id."""
+    texts = {d["id"]: f"{d['title']}. {d['abstract']}" for d in documents}
+    return {
+        q.id: q.quote
+        for q in response_quotes
+        if q.id in texts
+        and q.quote.strip()
+        and QuoteMatcher(build_basis([(None, texts[q.id])])).find(q.quote).status != "failed"
+    }
+
+
+def _cite(text: str, payload: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+    """Number the ``[id]`` markers with a verified quote; drop the others."""
+    docs = {d["id"]: d for d in payload.get("documents", [])}
+    quotes = payload.get("quotes") or {}
+    numbers: dict[str, int] = {}
+    sources: list[dict[str, Any]] = []
+
+    def number(match: re.Match[str]) -> str:
+        found = []
+        for key in (part.strip() for part in match.group(1).split(",")):
+            if key not in docs or key not in quotes:
+                continue
+            if key not in numbers:
+                numbers[key] = len(numbers) + 1
+                doc = docs[key]
+                sources.append(
+                    {
+                        "n": numbers[key],
+                        "title": doc["title"],
+                        "url": doc.get("url") or None,
+                        "year": doc.get("year") or None,
+                        "quote": quotes[key],
+                    }
+                )
+            found.append(numbers[key])
+        return f" [{','.join(map(str, found))}]" if found else ""
+
+    cited = _MARKER.sub(number, text)
+    # "found it. [1]" reads as the report does: "found it [1]."
+    return _AFTER_STOP.sub(r" [\2]\1", cited), sources
+
+
+def note(payload: dict[str, Any]) -> CitedNote | None:
     """What the Task Agent adds: a warning (implausible), a note (evidence against), or nothing.
 
-    Each lists the documents its reasons cite.
+    Its ``[id]`` markers become numbers that open the chat's citation sidebar
+    (``CitedNote.sources``). A check stored before quotes were asked for lists
+    the documents its reasons cite instead.
     """
     if payload.get("mechanism") == "implausible" and payload.get("warning"):
-        lines = [f"Before I draft it: {payload['warning']}"]
+        lead = f"Before I draft it: {payload['warning']}"
     elif payload.get("evidence") == "against" and payload.get("note"):
-        lines = [f"Before you start: {payload['note']}"]
+        lead = f"Before you start: {payload['note']}"
     else:
         return None
+    text, sources = _cite(lead, payload)
+    if sources:
+        return CitedNote(text, sources)
+    lines = [text]
     reasons = f"{payload.get('mechanism_reason', '')} {payload.get('evidence_reason', '')}"
     cited = [doc for doc in payload.get("documents", []) if f"[{doc['id']}]" in reasons]
     if cited:
@@ -119,12 +186,12 @@ def note(payload: dict[str, Any]) -> str | None:
             )
             + "."
         )
-    return "\n\n".join(lines)
+    return CitedNote("\n\n".join(lines), [])
 
 
 def run_sense_check(
     engine: Engine, *, task_id: uuid.UUID, plan: Any, backend: TocBackend, search: Search
-) -> str | None:
+) -> CitedNote | None:
     """Check the plan once, store the result, and return the chat warning if any.
 
     Args:
@@ -157,8 +224,10 @@ def run_sense_check(
         return None
     payload = {
         "key": key,
-        **response.model_dump(),
+        **response.model_dump(exclude={"quotes"}),
         "documents": [{k: d[k] for k in ("id", "title", "year", "url")} for d in documents],
+        # Only quotes found word for word in their document count (C20).
+        "quotes": _verified_quotes(response.quotes, documents),
     }
     with engine.begin() as conn:
         events.append(

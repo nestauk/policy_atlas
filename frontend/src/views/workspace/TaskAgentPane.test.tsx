@@ -35,6 +35,8 @@ vi.mock("../../api/queries", async (importOriginal) => {
     useToc: vi.fn(() => ({ data: undefined })),
     useTocUploadFile: vi.fn(() => ({ data: undefined })),
     useTocUploads: vi.fn(() => ({ data: [] })),
+    // A sense-check source has no stored passage: the sidebar shows its quote alone.
+    useTocDocumentContext: vi.fn(() => ({ isPending: false, isError: true, data: undefined })),
   };
 });
 vi.mock("../../api/mutations", async (importOriginal) => {
@@ -667,6 +669,30 @@ describe("TaskAgentPane — the options-scoping baseline gate", () => {
     expect(screen.getByText("Excluded Mentoring schemes", { selector: "span" })).toBeInTheDocument();
     expect(screen.getByText(/recorded/)).toBeInTheDocument();
     expect(screen.queryByText(/plan version/)).not.toBeInTheDocument();
+  });
+
+  // Task 054: the sense check's note cites its sources with [n], as the Evidence
+  // search does: the marker opens the citation sidebar, and the sources are listed.
+  it("renders a cited reply with markers that open the citation sidebar and linked sources", async () => {
+    const cited: TaskAgentThreadTurn = {
+      turn_index: 5,
+      client_turn_id: "00000000-0000-0000-0000-0000000000a5",
+      user_message: "Universal free school meals",
+      reply: "Before you start: A secondary-school pilot found no effect on food insecurity [1].",
+      suggestions: [],
+      part: null,
+      sources: [
+        { n: 1, title: "A Secondary School Universal Free School Meals Pilot", url: "https://doi.org/10.1/x", year: "2023", quote: "No effects were seen on food insecurity." },
+      ],
+      status: "completed",
+      created_at: "2026-11-05T10:14:00Z",
+      completed_at: "2026-11-05T10:14:01Z",
+    };
+    mockPane({ turns: [cited] });
+    renderPane({ runStatus: "succeeded", stream: createInitialRunStreamState() });
+    expect(screen.getByRole("link", { name: "A Secondary School Universal Free School Meals Pilot" })).toHaveAttribute("href", "https://doi.org/10.1/x");
+    await userEvent.click(screen.getByRole("button", { name: "Citations 1" }));
+    expect(await screen.findAllByText(/No effects were seen on food insecurity/)).not.toHaveLength(0);
   });
 
   // A8: a finished run's block takes its kind from its own run, not from

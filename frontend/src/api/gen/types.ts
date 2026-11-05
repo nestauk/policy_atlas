@@ -2464,6 +2464,29 @@ export interface components {
             section_title: string;
         };
         /**
+         * CitedSourceOut
+         * @description One source a Task Agent line cites with ``[n]`` (task 054: the sense check).
+         *
+         *     Args:
+         *         n: The marker's number.
+         *         title: The document's title.
+         *         url: Where to read it, when known.
+         *         year: Its publication year, when known.
+         *         quote: The passage that supports the line, checked against the document.
+         */
+        CitedSourceOut: {
+            /** N */
+            n: number;
+            /** Quote */
+            quote: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url?: string | null;
+            /** Year */
+            year?: string | null;
+        };
+        /**
          * ClaimOut
          * @description One span-anchored claim annotation within a block.
          *
@@ -5524,6 +5547,8 @@ export interface components {
          *         answer: The cited answer, on an `answer` turn.
          *         decision: The recorded gate decision, on a `decision` turn.
          *         action: The applied longlist verb, on an `action` turn.
+         *         sources: The sources the reply's `[n]` markers cite, on a theory-of-change
+         *             turn whose sense check found evaluations (task 054).
          */
         TaskAgentTranscriptTurnOut: {
             action?: components["schemas"]["TurnActionOut"] | null;
@@ -5550,6 +5575,8 @@ export interface components {
             part?: components["schemas"]["PartProposalOut"] | null;
             /** Reply */
             reply: string | null;
+            /** Sources */
+            sources?: components["schemas"]["CitedSourceOut"][];
             /**
              * Status
              * @enum {string}
@@ -5611,6 +5638,8 @@ export interface components {
          *         answer: The cited answer, on an `answer` turn.
          *         decision: The recorded gate decision, on a `decision` turn.
          *         action: The applied longlist verb, on an `action` turn.
+         *         sources: The sources the reply's `[n]` markers cite, on a theory-of-change
+         *             turn whose sense check found evaluations (task 054).
          */
         TaskAgentTurnOut: {
             action?: components["schemas"]["TurnActionOut"] | null;
@@ -5627,6 +5656,8 @@ export interface components {
             /** Reply */
             reply: string;
             scoping_plan?: components["schemas"]["ScopingPlanDraft"] | null;
+            /** Sources */
+            sources?: components["schemas"]["CitedSourceOut"][];
             /** Suggestions */
             suggestions?: string[];
             toc_plan?: components["schemas"]["TocPlanDraft"] | null;

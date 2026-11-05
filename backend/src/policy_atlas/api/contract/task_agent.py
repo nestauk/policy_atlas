@@ -673,6 +673,24 @@ class TurnActionOut(BaseModel):
     capability_run_id: uuid.UUID | None = None
 
 
+class CitedSourceOut(BaseModel):
+    """One source a Task Agent line cites with ``[n]`` (task 054: the sense check).
+
+    Args:
+        n: The marker's number.
+        title: The document's title.
+        url: Where to read it, when known.
+        year: Its publication year, when known.
+        quote: The passage that supports the line, checked against the document.
+    """
+
+    n: int
+    title: str
+    url: str | None = None
+    year: str | None = None
+    quote: str
+
+
 class TaskAgentTurnOut(BaseModel):
     """Response body for one task_agent turn.
 
@@ -702,6 +720,8 @@ class TaskAgentTurnOut(BaseModel):
         answer: The cited answer, on an `answer` turn.
         decision: The recorded gate decision, on a `decision` turn.
         action: The applied longlist verb, on an `action` turn.
+        sources: The sources the reply's `[n]` markers cite, on a theory-of-change
+            turn whose sense check found evaluations (task 054).
     """
 
     reply: str
@@ -716,6 +736,7 @@ class TaskAgentTurnOut(BaseModel):
     answer: AnswerPayloadOut | None = None
     decision: TurnDecisionOut | None = None
     action: TurnActionOut | None = None
+    sources: list[CitedSourceOut] = Field(default_factory=list)
 
 
 class TaskAgentTranscriptTurnOut(BaseModel):
@@ -739,6 +760,8 @@ class TaskAgentTranscriptTurnOut(BaseModel):
         answer: The cited answer, on an `answer` turn.
         decision: The recorded gate decision, on a `decision` turn.
         action: The applied longlist verb, on an `action` turn.
+        sources: The sources the reply's `[n]` markers cite, on a theory-of-change
+            turn whose sense check found evaluations (task 054).
     """
 
     turn_index: int
@@ -756,6 +779,7 @@ class TaskAgentTranscriptTurnOut(BaseModel):
     answer: AnswerPayloadOut | None = None
     decision: TurnDecisionOut | None = None
     action: TurnActionOut | None = None
+    sources: list[CitedSourceOut] = Field(default_factory=list)
 
 
 class PlanOut(BaseModel):

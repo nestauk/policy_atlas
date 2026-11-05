@@ -837,6 +837,7 @@ class StubTocBackend:
                 evidence_reason="No document evaluates it.",
                 warning=None,
                 note=None,
+                quotes=[],
             )
         ), None
 

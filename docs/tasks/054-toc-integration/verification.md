@@ -561,3 +561,27 @@ Full `make verify`, three runs on the same tree:
 3. **Pass.** Backend 4,405 passed, 1 skipped (6 min 43 s); mypy clean (525 files); ruff clean;
    prompt-hash guard 55 files unchanged; drift check OK; okf-validate 211 concepts, 0 violations;
    frontend 1,032 tests in 94 files; `vite build` passed.
+
+## The sense check cites its sources (2026-11-05, owner request after the review stack)
+
+The plan-stage sense check's chat line listed its sources as plain titles. It now cites them
+as the Evidence search does:
+
+- **Prompt** `toc_sense_check_v3` (lead; re-pinned): the warning or note puts `[id]` after the
+  sentence each document supports, and the response gives one quote per cited document, copied
+  from its title or abstract.
+- **Code** keeps only quotes the shared quote matcher finds in their document, numbers the
+  markers `[1]`, `[2]`, moves a marker written after a full stop to before it, and drops a marker
+  with no checked quote. A check stored before this keeps the old "What this rests on" line.
+- **Wire**: the Task Agent turn gains `sources` (number, title, link, year, quote), additive;
+  `make openapi-sync` regenerated the types.
+- **Chat**: each marker opens the citation sidebar with the quote and "Open the source"; a
+  numbered, linked source list sits under the line.
+
+Tests: `test_a_note_cites_its_sources_by_number_with_checked_quotes` (backend) and "renders a
+cited reply with markers that open the citation sidebar and linked sources" (frontend).
+Live, on the `openai-direct` route: a Scared Straight plan got "Before you start: A review of US
+trials found that prison visits increased offending compared with doing nothing. [1] …", citing
+the 2013 Campbell systematic review with a quote found in its abstract. That run came before the
+marker move; the unit test covers the moved form. A free school meals plan
+the same evening was judged "supports" and, correctly, got no note.

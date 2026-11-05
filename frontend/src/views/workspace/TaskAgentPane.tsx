@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { components } from "../../api/gen/types";
 import { Link, useLocation, useNavigate } from "react-router";
 
 import { UPLOAD_MESSAGE, uploadMessage, useTocUpload, useTocUploading } from "../../api/mutations";
@@ -48,6 +49,7 @@ import { COMPONENT_LABEL, RUN_BLOCK_STATUS } from "./planVocabulary";
 import { RunningCard, RunningCardDock } from "./RunningCard";
 import { TocTrace } from "./TocTrace";
 import { TocCodeText } from "../toc/codeLinks";
+import { CitationMarker } from "../toc/Documents";
 import { AttachFileButton, UploadPreview } from "../toc/uploads";
 import {
   completedSignposts,
@@ -375,14 +377,80 @@ function UserBubble({ text }: { text: string }) {
 
 /** TaskAgent replies are plain text — no box (binding record: task_agent-stage
  *  `.task_agent`); only part cards and the plan card are bordered. */
-function TaskAgentBubble({ text, taskId, tocCodes }: { text: string; taskId?: string; tocCodes?: ReadonlySet<string> }) {
+type CitedSource = components["schemas"]["CitedSourceOut"];
+
+/** "[1]" or "[1,2]" in a reply that cites its sources (task 054: the sense check). */
+const SOURCE_MARKER = /\[(\d+(?:,\d+)*)\]/g;
+
+function TaskAgentBubble({
+  text,
+  taskId,
+  tocCodes,
+  sources = [],
+}: {
+  text: string;
+  taskId?: string;
+  tocCodes?: ReadonlySet<string>;
+  sources?: CitedSource[];
+}) {
+  const plain = (piece: string) =>
+    tocCodes !== undefined && taskId !== undefined ? <TocCodeText text={piece} taskId={taskId} codes={tocCodes} /> : scrub(piece);
+  const cited = sources.length > 0 && taskId !== undefined;
   return (
     <div className="anim-rise mr-8">
       <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">
-        {tocCodes !== undefined && taskId !== undefined ? <TocCodeText text={text} taskId={taskId} codes={tocCodes} /> : scrub(text)}
+        {cited ? <CitedText text={text} taskId={taskId} sources={sources} plain={plain} /> : plain(text)}
       </p>
+      {cited && (
+        <ol className="mt-3 max-w-prose-measure space-y-1 text-body text-ink-2">
+          {sources.map((source) => (
+            <li key={source.n}>
+              <span className="mr-1 text-grey">[{source.n}]</span>
+              {source.url ? (
+                <a href={source.url} target="_blank" rel="noreferrer" className="text-blue hover:underline">
+                  {scrub(source.title)}
+                </a>
+              ) : (
+                scrub(source.title)
+              )}
+              {source.year && <span className="text-grey"> ({source.year})</span>}
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
+}
+
+/** The reply with each "[n]" marker as a button that opens the citation sidebar. */
+function CitedText({
+  text,
+  taskId,
+  sources,
+  plain,
+}: {
+  text: string;
+  taskId: string;
+  sources: CitedSource[];
+  plain: (piece: string) => ReactNode;
+}) {
+  const byNumber = new Map(sources.map((source) => [source.n, source]));
+  const pieces: ReactNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(SOURCE_MARKER)) {
+    const index = match.index ?? 0;
+    const sentenceStart = Math.max(text.lastIndexOf(". ", index) + 2, text.lastIndexOf("\n", index) + 1, 0);
+    const citations = match[1]
+      .split(",")
+      .map((n) => byNumber.get(Number(n)))
+      .filter((source): source is CitedSource => source !== undefined)
+      .map((source) => ({ n: source.n, evidenceId: null, title: source.title, url: source.url ?? null, quote: source.quote, fallbackQuote: source.quote }));
+    pieces.push(<Fragment key={`t${last}`}>{plain(text.slice(last, index))}</Fragment>);
+    pieces.push(<CitationMarker key={`c${index}`} taskId={taskId} claim={text.slice(sentenceStart, index).trim() || null} citations={citations} />);
+    last = index + match[0].length;
+  }
+  pieces.push(<Fragment key={`t${last}`}>{plain(text.slice(last))}</Fragment>);
+  return <>{pieces}</>;
 }
 
 /** One recorded gate decision, as a quiet line rather than a card: the
@@ -490,7 +558,7 @@ function DurableTurn({
     return (
       <div className="space-y-6">
         <UserBubble text={turn.user_message} />
-        {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} taskId={taskId} tocCodes={tocCodes} />}
+        {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} taskId={taskId} tocCodes={tocCodes} sources={turn.sources} />}
         <DecisionLine label={actionLine(turn.action)} planVersion={null} />
       </div>
     );
@@ -498,7 +566,7 @@ function DurableTurn({
   return (
     <div className="space-y-6">
       {!isConfirmTurn && <UserBubble text={turn.user_message} />}
-      {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} taskId={taskId} tocCodes={tocCodes} />}
+      {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} taskId={taskId} tocCodes={tocCodes} sources={turn.sources} />}
       {turn.part != null && partState !== undefined && (
         <PartCard
           part={turn.part}

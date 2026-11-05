@@ -9,7 +9,7 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.api.routers.toc import toc_graph_out
 from policy_atlas.theory_of_change.backend import StubTocBackend
-from policy_atlas.theory_of_change.plausibility_prompt import SenseCheckResponse
+from policy_atlas.theory_of_change.plausibility_prompt import SenseCheckResponse, SenseQuote
 from policy_atlas.theory_of_change.sense_check import for_verdict, latest, run_sense_check
 from tests.helpers import seed_toc_task
 from tests.theory_of_change.test_check_steps import _run
@@ -28,6 +28,7 @@ DOUBTFUL = SenseCheckResponse(
     evidence_reason="Nothing evaluates it.",
     warning="There is no credible route from door colour to diabetes.",
     note=None,
+    quotes=[],
 )
 AGAINST = SenseCheckResponse(
     active_ingredient="Prison visits.",
@@ -38,6 +39,16 @@ AGAINST = SenseCheckResponse(
     evidence_reason="Trials found more offending [W2].",
     warning=None,
     note="Trials of this programme found it increased offending.",
+    quotes=[],
+)
+CITED = AGAINST.model_copy(
+    update={
+        "note": "Trials found it increased offending. [W2] A second claim cites [W1, W9].",
+        "quotes": [
+            SenseQuote(id="W2", quote="Hospital wayfinding"),
+            SenseQuote(id="W1", quote="a phrase that is not in the document"),
+        ],
+    }
 )
 
 
@@ -153,3 +164,26 @@ def test_a_warning_replaces_the_invitation_to_start() -> None:
     assert toc_merge_note(reply, "Before I draft it: no route.") == (
         "The plan is ready. It covers England.\n\nBefore I draft it: no route."
     )
+
+
+def test_a_note_cites_its_sources_by_number_with_checked_quotes(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    task_id = _task(engine, cleanup)
+    backend = StubTocBackend({"sense_check": [CITED]})
+    note = run_sense_check(engine, task_id=task_id, plan=PLAN, backend=backend, search=_search)
+    assert note is not None
+    # W2's quote is in its title, so it becomes [1]; W1's quote is not in W1, and W9 is
+    # no document, so their marker goes.
+    assert note == (
+        "Before you start: Trials found it increased offending [1]. A second claim cites."
+    )
+    assert note.sources == [
+        {
+            "n": 1,
+            "title": "Hospital wayfinding",
+            "url": "https://openalex.org/W2",
+            "year": None,
+            "quote": "Hospital wayfinding",
+        }
+    ]
