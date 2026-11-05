@@ -286,8 +286,8 @@ describe("ChatSidePanel", () => {
   });
 
   // Owner and lead, 2026-11-05: wherever a run is live its mark is the fold
-  // mark turning, in the rail at the rail's own size (no jump), and still on
-  // a tab whose page turns one already (Result).
+  // mark turning, in the rail at the rail's own size (no jump), on every tab
+  // that mounts the sidebar (owner, round 6: the Result tab's exception went).
   it("turns the rail's Task Agent mark while a run is live, at the still mark's size", () => {
     state.activeConversationId = null;
     state.runStatus = "running";
@@ -300,10 +300,6 @@ describe("ChatSidePanel", () => {
     const still = render(<ChatSidePanel taskId="p1" isOwner />);
     expect(screen.getByRole("button", { name: "Task Agent" }).querySelector("svg")).toHaveAttribute("width", "11");
     still.unmount();
-    state.runStatus = "running";
-    const onResult = render(<ChatSidePanel taskId="p1" isOwner railMarkTurns={false} />);
-    expect(screen.getByRole("button", { name: "Task Agent" }).querySelector("[data-live-mark]")).toBeNull();
-    onResult.unmount();
     for (const status of ["paused", "succeeded"]) {
       state.runStatus = status;
       const view = render(<ChatSidePanel taskId="p1" isOwner />);

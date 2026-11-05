@@ -511,11 +511,28 @@ Rulings on the build (lead, 2026-11-05, from the agent's proposals): the scope c
 "Discard" stay); a failed send reopens the card beside its Retry; while a choice is on its way
 the settled card shows the user's words or the chosen option's label (a primary confirm shows
 the plan's outcome at once); a settled scope lists its chips with the staged edits applied;
-the rail's Task Agent mark turns on every tab except Agent and Result (each has its own turning
-mark) and keeps its static size; the settled card's green words are the deep green #0c6b5a
-everywhere (AA at 16 px); the trace header's step label is semibold and its activity regular;
+the rail's Task Agent mark turns on every tab that mounts the sidebar; the Result tab's own
+writing mark may turn beside it (owner, 2026-11-05, round 6); the rail's mark keeps its static
+size; the settled card's green words are the deep green #0c6b5a everywhere (AA at 16 px); the trace header's step label is semibold and its activity regular;
 a middot separator never starts a wrapped line; the scoping Result tab's live rows use the
 fold mark too; the writing section's action line reads "◆ Writing" for the whole write.
+
+- lead, 2026-11-05, round 6: while live, the trace's header is the turning fold mark and the
+  run's elapsed time only ("6 min 12 s"); paused it keeps "Paused · a check-in is waiting on
+  you · 6 min 12 s" (a colleague: "Paused · <row label> · <time>"). The step in progress takes
+  the 6 px blue square, breathing while updates arrive, so one mark turns per block; the step's
+  words and activity live only on its row; the screen-reader status keeps the header's words.
+- lead, 2026-11-05, round 6: the live trace stays borderless, with the spine and the hairline
+  rules (the agent's view: the rules already make the list one object, and a Card frame would
+  make the trace the heaviest block in a thread that already holds the settled cards and the
+  check-in card; the folded green ended line already makes a finished run easy to find).
+- lead, 2026-11-05, round 6: no green pulse on the rail's mark when a step note arrives.
+- lead, 2026-11-05, round 6: a step note for every step except Writing finishing (the title
+  marker, the tab mark and the swap to the report already say it).
+- lead, 2026-11-05, round 6: in a settled scope card the group labels are Caption size (same
+  face, uppercase, grey); the part's name stays the Meta label.
+- lead, 2026-11-05, round 6: the step note reads without the wall time ("Searching and
+  screening · 312 found · 118 relevant · Sources →").
 
 ## Polish log
 
@@ -526,8 +543,9 @@ fold mark too; the writing section's action line reads "◆ Writing" for the who
 | 3 | build, owner pass (round 2 of 3) | 2026-11-05 | settled part cards name the plan's outcome at the conversation's text size; stage signposts under the card removed; Mapping links to Themes | owner |
 | 4 | build, owner pass (round 3 of 3) | 2026-11-05 | option order as the planner gives it; no reason line; settled lines show the question and the chips; settled lines rise in | owner |
 | 5 | build, owner questions on a live run | 2026-11-05 | no Result footer; automatic swap to the report; no event-log echoes in the thread; settled scope lines per group; the streaming fix; the run trace with the blue square mark in place of the card, dock and strip | owner |
-| 6 | review, agent pass | | | lead |
-| 7 | review, owner pass | | | owner |
+| 6 | build, owner round 6 (live-run notes) | 2026-11-05 | settled part cards take the user bubble's surface, the part's name a grey label; the live trace is the running card's body (rows in plan order on a spine, hairline rules, the fold mark on the step in progress, no step count or last-finished line); the shut rail shows the run's elapsed minutes under its mark and a step note slides out of it as each step finishes; the rail's mark turns on the Result tab too | owner |
+| 7 | review, agent pass | | | lead |
+| 8 | review, owner pass | | | owner |
 
 ## Deferred polish
 

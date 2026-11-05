@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Link } from "react-router";
 
-import { useArtefact, useConversations } from "../../../api/queries";
+import { useArtefact, useConversations, useTask } from "../../../api/queries";
 import { COPY } from "../../../lib/vocabulary";
 import { useRunStream } from "../../../store";
 import { cn } from "../../../ui/brand/cn";
@@ -22,6 +22,7 @@ import {
   useActiveConversation,
 } from "./conversationState";
 import { DraftChatPane } from "./DraftChatPane";
+import { StepNote, useRailRun } from "./StepNote";
 import { ExpandIcon, PanelCloseIcon, PlusIcon } from "./icons";
 
 /** Resize bounds (px) — the workspace rail's own clamp. */
@@ -115,14 +116,10 @@ export function ChatSidePanel({
   taskId,
   isOwner,
   onOpenPlan,
-  railMarkTurns = true,
 }: {
   taskId: string;
   isOwner: boolean;
   onOpenPlan?: () => void;
-  /** False on a tab whose page shows the run's own turning mark (Result):
-   *  one turning logo per screen. */
-  railMarkTurns?: boolean;
 }) {
   const { activeConversationId, draftEntryArtefactId, setActiveConversation, openDraftChat } = useActiveConversation();
   const [listOpen, setListOpen] = useState(false);
@@ -138,6 +135,10 @@ export function ChatSidePanel({
   const stream = useRunStream(taskId);
   const runStatus = stream.run?.status;
   const checkInWaiting = stream.pendingCheckIn != null;
+  const task = useTask(taskId);
+  // Shut, the rail says what the run is doing and notes each step as it
+  // finishes (owner, round 6); open, the sidebar's own trace does.
+  const railRun = useRailRun(taskId, stream, task.data?.capability, isOwner, activeConversationId === null);
   const openLatestOrTaskAgent = () => {
     // The launcher's decision needs the chats list resolved first — before
     // then "no chats" is read off `undefined` data.
@@ -169,9 +170,13 @@ export function ChatSidePanel({
         recent={recentChats(rows)}
         onSelectChat={setActiveConversation}
         // Shut, the rail is where the sidebar shows a live run: its Task
-        // Agent mark turns, except on a tab whose page already turns one
-        // (the Result tab's writing section; owner and lead, 2026-11-05).
-        runLive={runStatus === "running" && railMarkTurns}
+        // Agent mark turns on every tab that mounts the sidebar; the Result
+        // tab's own writing mark may turn beside it (owner, 2026-11-05,
+        // round 6).
+        runLive={runStatus === "running"}
+        runWords={railRun.words}
+        runStartedAt={stream.run?.startedAt}
+        besideTaskAgent={<StepNote row={railRun.note} context={railRun.context} onDone={railRun.dismiss} />}
         className="h-full w-12 flex-col border-r py-2 max-md:hidden"
       />
     );

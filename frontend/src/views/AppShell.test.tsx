@@ -402,7 +402,7 @@ describe("AppShell — the Sources tab opens on the step that has landed (owner,
   });
 });
 
-describe("AppShell — the rail's live mark (lead, 2026-11-05)", () => {
+describe("AppShell — the rail's live mark (lead, 2026-11-05; owner, round 6)", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     taskState.isOwner = true;
@@ -417,7 +417,10 @@ describe("AppShell — the rail's live mark (lead, 2026-11-05)", () => {
 
   const railMark = () => screen.getByRole("button", { name: "Task Agent" }).querySelector("[data-live-mark]");
 
-  it("turns on Sources, and holds still on Result, where the writing section's mark turns", () => {
+  // Owner, 2026-11-05 (round 6): the Result tab turns nothing before writing
+  // starts, so the exception went; the rail's mark turns on every tab that
+  // mounts the sidebar, Result included.
+  it("turns on Sources and on Result alike", () => {
     const sources = renderShell(`/tasks/${TASK_ID}/sources`);
     connect();
     feed(runStatus("running"));
@@ -427,7 +430,7 @@ describe("AppShell — the rail's live mark (lead, 2026-11-05)", () => {
     renderShell(`/tasks/${TASK_ID}/result`);
     connect();
     feed(runStatus("running"));
-    expect(railMark()).toBeNull();
+    expect(railMark()).not.toBeNull();
   });
 });
 

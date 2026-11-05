@@ -234,6 +234,44 @@
   }
 }
 
+/* The step note (task 058, owner round 6): slides out of the rail's Task
+   Agent mark into the page, a reveal from its left edge plus a short travel,
+   on the strong ease-out; it retracts the same way, faster. The clip reaches
+   past the box so the overlay lift's shadow is not cut off. A transition, not
+   keyframes, so a note that is held or replaced mid-slide retargets.
+   Under reduced motion it appears and goes without sliding. */
+@utility step-note {
+  clip-path: inset(-16px -48px -48px -16px);
+  transform: translateX(0);
+  opacity: 1;
+  transition:
+    clip-path 240ms var(--ease-out-strong),
+    transform 240ms var(--ease-out-strong),
+    opacity 120ms ease;
+  @starting-style {
+    clip-path: inset(-16px 100% -48px -16px);
+    transform: translateX(-12px);
+    opacity: 0;
+  }
+  &[data-shown="false"] {
+    clip-path: inset(-16px 100% -48px -16px);
+    transform: translateX(-12px);
+    opacity: 0;
+    transition-duration: 160ms, 160ms, 160ms;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &,
+    &[data-shown="false"] {
+      clip-path: none;
+      transform: none;
+    }
+    @starting-style {
+      clip-path: none;
+      transform: none;
+    }
+  }
+}
+
 @keyframes breathe {
   0%,
   100% {

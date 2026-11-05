@@ -974,9 +974,10 @@ describe("TaskAgentPane — the run trace", () => {
     renderPane();
     const trace = screen.getByRole("region", { name: "Analysis run" });
     expect(trace).toHaveTextContent("Searching and screening");
-    // Live, the mark is the fold mark turning (owner, 2026-11-05).
-    expect(trace.querySelector("[data-live-mark]")).not.toBeNull();
-    expect(trace.querySelector("[data-tone]")).toBeNull();
+    // Live, the header's mark is the fold mark turning (owner, 2026-11-05),
+    // and it is the block's one turning mark (lead, round 6).
+    expect(trace.querySelectorAll("[data-live-mark]")).toHaveLength(1);
+    expect(trace.querySelector('[data-testid="trace-header"] [data-tone]')).toBeNull();
     expect(screen.queryByRole("button", { name: "Minimise" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Show the analysis run" })).toBeNull();
     expect(screen.queryByText("RUNNING")).toBeNull();

@@ -43,14 +43,23 @@ function runTrace(page: Page) {
   return page.getByRole("region", { name: "Analysis run" });
 }
 
-/** The trace's header: a button that opens and closes the step list. */
+/** The trace's header line (owner round 6): live or paused a line over the
+ *  open step list; ended, a button whose chevron opens the list. */
 function traceHeader(page: Page) {
-  return runTrace(page).getByRole("button").first();
+  return runTrace(page).getByTestId("trace-header");
 }
 
-/** Open the trace's step list (it stays open until closed). */
+/** The ended trace's fold: the header's button. */
+function traceFold(page: Page) {
+  return traceHeader(page).getByRole("button");
+}
+
+/** Show the trace's step list: open already while the run is live or
+ *  paused; once it has ended, opened from the header's chevron. */
 async function openSteps(page: Page): Promise<void> {
-  if ((await traceHeader(page).getAttribute("aria-expanded")) !== "true") await traceHeader(page).click();
+  if ((await traceFold(page).count()) > 0 && (await traceFold(page).getAttribute("aria-expanded")) !== "true") {
+    await traceFold(page).click();
+  }
   await expect(page.getByRole("list", { name: "Run steps" })).toBeVisible();
 }
 
@@ -180,8 +189,10 @@ test.describe("mock task-lifecycle journey", () => {
     await page.getByRole("button", { name: "Start the search" }).click();
     const runCard = runTrace(page);
     await expect(runCard).toBeVisible({ timeout: 15_000 });
-    await expect(traceHeader(page)).toHaveAttribute("aria-expanded", "false");
-    await openSteps(page);
+    // Live, the steps are the trace's body and stay open (owner, round 6):
+    // the header is a line, not a control.
+    await expect(page.getByRole("list", { name: "Run steps" })).toBeVisible();
+    await expect(traceFold(page)).toHaveCount(0);
     const timeline = page.getByRole("list", { name: "Run steps" });
     await expect(timeline.getByText("Searching and screening").first()).toBeVisible({ timeout: 15_000 });
     await expect(timeline.getByRole("listitem").filter({ hasText: /^Writing/ })).toBeVisible({ timeout: 15_000 });
@@ -445,20 +456,25 @@ test.describe("mock task-lifecycle journey", () => {
     }
   });
 
-  // (q) The run trace's header is a real button: keyboard-operable.
-  test("keyboard: the trace's header opens the steps via Enter and closes them via Space", async ({ page }) => {
+  // (q) The ended trace's fold is a real button: keyboard-operable. Live,
+  // the steps are open and the header is not a control (owner, round 6).
+  test("keyboard: the ended trace's chevron opens the steps via Enter and closes them via Space", async ({ page }) => {
     await openWorkspaceFromLanding(page);
     await page.getByRole("button", { name: "Start the search" }).click();
-    const header = traceHeader(page);
-    await expect(header).toBeVisible({ timeout: 15_000 });
-    await header.focus();
+    await expect(page.getByRole("list", { name: "Run steps" })).toBeVisible({ timeout: 15_000 });
+    await expect(traceFold(page)).toHaveCount(0);
+    await answerCheckIn(page);
+    await expect(runCompletionLink(page)).toBeVisible({ timeout: 30_000 });
+    const fold = traceFold(page);
+    await expect(fold).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("list", { name: "Run steps" })).toHaveCount(0);
+    await fold.focus();
     await page.keyboard.press("Enter");
-    await expect(header).toHaveAttribute("aria-expanded", "true");
+    await expect(fold).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByRole("list", { name: "Run steps" })).toBeVisible();
-    await expect(header).toContainText("hide steps");
-    await header.focus();
+    await fold.focus();
     await page.keyboard.press("Space");
-    await expect(header).toHaveAttribute("aria-expanded", "false");
+    await expect(fold).toHaveAttribute("aria-expanded", "false");
     await expect(page.getByRole("list", { name: "Run steps" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Minimise" })).toHaveCount(0);
   });
@@ -477,7 +493,7 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(page.getByText("The analysis is paused — a check-in is waiting on you")).toHaveCount(0);
     await page.getByRole("button", { name: "Open the Agent" }).click();
     const sidebar = page.getByRole("complementary", { name: "Agent" });
-    await expect(sidebar.getByRole("region", { name: "Analysis run" }).getByRole("button").first()).toContainText(
+    await expect(sidebar.getByRole("region", { name: "Analysis run" }).getByTestId("trace-header")).toContainText(
       "Paused · a check-in is waiting on you",
     );
     await expect(sidebar.getByText(CHECK_IN_QUESTION)).toBeVisible();
@@ -724,12 +740,16 @@ async function answerCheckIn(page: Page): Promise<void> {
 }
 
 test.describe("task 058 live run states (annex scenes, evidence search)", () => {
-  test("scene 1: the run trace, the step and its counts in the header, one row per step when open", async ({ page }) => {
+  test("scene 1: the run trace, the step and its counts on its row, one row per step", async ({ page }) => {
     await watchPage(page);
     await startRun(page);
 
-    // Closed, the header names the step and what it is doing now.
-    await expect(traceHeader(page)).toContainText("Searching and screening", { timeout: 15_000 });
+    // Live, the header is the turning mark and the elapsed time; the step
+    // in progress names itself and what it is doing on its row (lead,
+    // round 6), and a screen reader hears the same words from the header.
+    await expect(page.getByRole("list", { name: "Run steps" }).getByText("Searching and screening").first()).toBeVisible({
+      timeout: 15_000,
+    });
     await seen(page, /^Searching and screening · searching · \d+ found so far/);
     await seen(page, /^Searching and screening · screening \d+ new abstracts · \d+ relevant so far/);
 
@@ -807,6 +827,13 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await expect(page.getByRole("heading", { name: "Implications for local action" })).toBeVisible();
     // The action line, then the streamed prose growing, then the check.
     await seen(page, "Looking for: evidence on subsidy uptake among low-income households");
+    // The sources the writer reads are named under the heading as the reads
+    // land, and its own citations show as hollow marks once they close
+    // (task 058, evidence shown live).
+    await seen(page, "Drawing on 2 sources · Smith 2023 · DfE 2022");
+    await seen(page, "Drawing on 5 sources · Smith 2023 · DfE 2022 · Nesta 2021 · and 2 more");
+    await expect(page.getByRole("img", { name: /^Cited, being checked: / })).toHaveCount(2, { timeout: 20_000 });
+    await expect(page.getByRole("img", { name: "Cited, being checked: Sustrans 2020" })).toBeVisible();
     await seen(page, "Checking claims");
     await seen(page, "Revising 1 claim");
     await seen(page, /walking bus saw 6 more children arrive on foot in every 100\.$/, 30_000);
@@ -817,6 +844,8 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     // Nothing marks a section as revised once it is done. When the run ends
     // the committed report takes the page by itself (owner, 2026-11-05).
     await neverSeen(page, /being revised|^revised$/i);
+    await expect(page.getByTestId("drawing-on")).toHaveCount(0);
+    await expect(page.getByTestId("provisional-mark")).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Policy options for healthier childhoods" })).toBeVisible({
       timeout: 30_000,
     });
@@ -840,14 +869,14 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await page.getByRole("button", { name: "Open the Agent" }).click();
     const sidebar = page.getByRole("complementary", { name: "Agent" });
     const trace = sidebar.getByRole("region", { name: "Analysis run" });
-    await expect(trace.getByRole("button").first()).toContainText("Paused · a check-in is waiting on you", {
+    await expect(trace.getByTestId("trace-header")).toContainText("Paused · a check-in is waiting on you", {
       timeout: 15_000,
     });
     await expect(page.getByText("Go to the check-in")).toHaveCount(0);
     await sidebar.getByRole("radio", { name: new RegExp(`^${SUGGESTED_OPTION_LABEL}`) }).click();
     await seen(page, /^Writing · Section \d of \d/, 30_000);
     await expect(trace.getByRole("link", { name: "Read it →" })).toBeVisible({ timeout: 30_000 });
-    await expect(trace.getByRole("button").first()).toContainText("Report ready");
+    await expect(trace.getByTestId("trace-header")).toContainText("Report ready");
   });
 
   test("scene 7: no strip and no banner on another tab while a check-in waits", async ({ page }) => {
@@ -903,7 +932,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await expect(sidebar.getByText("Task Agent").first()).toBeVisible();
     await expect(sidebar.getByPlaceholder("Replanning unlocks when this run finishes.")).toBeDisabled();
     // The run trace in the sidebar's thread is its run view: no separate run line.
-    await expect(sidebar.getByRole("region", { name: "Analysis run" }).getByRole("button").first()).toContainText(
+    await expect(sidebar.getByRole("region", { name: "Analysis run" }).getByTestId("trace-header")).toContainText(
       "Paused · a check-in is waiting on you",
       { timeout: 15_000 },
     );

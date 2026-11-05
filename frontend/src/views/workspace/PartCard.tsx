@@ -682,11 +682,14 @@ export function PartCard({
   const settled = confirmedOption !== null || state.answered || !state.live;
   if (settled) {
     // Between the pre-task card and the one-line form (owner, 2026-11-05):
-    // a quiet block with the part's name and a green line naming the outcome
-    // the plan settled on (`summary`), the recorded choice or the user's
-    // words. It sits on the user's side, as their messages do: the user
-    // bubble's 32 px left indent and the green rule on its right edge, text
-    // still left-aligned. No tick: the rule and the green words say it.
+    // the part's name and a green line naming the outcome the plan settled
+    // on (`summary`), the recorded choice or the user's words. It reads as
+    // the user's (owner, round 6): the user bubble's surface (Blue Wash fill,
+    // Blue Tint border, padding, 32 px left indent), text left-aligned. It
+    // reads as a decision by the green rule on its right edge, over the
+    // bubble's own border, the deep green words and the part's name as a
+    // small grey label (the scope groups' style). No tick: the rule and the
+    // green words say it.
     const lines: SettledLine[] = (() => {
       if (summary !== undefined && summary !== null && summary.length > 0) return summary;
       if (confirmedOption !== null) return [{ label: null, text: confirmedOption.label }];
@@ -706,14 +709,21 @@ export function PartCard({
       ) : null;
     return (
       <div className="anim-rise ml-8">
-        <div data-testid="part-settled" className="border-r-2 border-green bg-paper py-1 pr-4">
-          <p className="max-w-prose-measure text-lead font-semibold text-navy">{scrub(name)}</p>
+        <div
+          data-testid="part-settled"
+          className="border border-r-2 border-blue-tint border-r-green bg-blue-tint-2 px-3.5 py-2.5"
+        >
+          <p className={cn(LABEL_CLASS, "text-grey")}>{scrub(name)}</p>
           {/* The scope's groups each take a line under a grey label, so the
               criteria and the filters do not read as one list (owner,
               2026-11-05). */}
           {lines.map((line, index) => (
-            <div key={index} className={index === 0 ? "mt-1" : "mt-2"}>
-              {line.label !== null && <p className={cn(LABEL_CLASS, "text-grey")}>{line.label}</p>}
+            // A first line under its own group label stands a step below the
+            // part's name.
+            <div key={index} className={index > 0 || line.label !== null ? "mt-2" : "mt-0.5"}>
+              {/* The group labels a step smaller than the part's name, so
+                  the name leads (lead, round 6). */}
+              {line.label !== null && <p className={cn(LABEL_CLASS, "text-caption text-grey")}>{line.label}</p>}
               {/* The deep green of the green tint's text, as the folded trace
                   line: it passes contrast at the sidebar's Body size too. */}
               <p className="max-w-prose-measure text-lead font-bold text-[#0c6b5a]">

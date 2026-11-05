@@ -60,10 +60,13 @@ test.describe.serial("@fe-api-smoke built frontend against real API", () => {
     // starts with. Labels come from the plan-panel vocabulary, not SSE copy.
     // (Never assert discretionary stages such as "Mapping"/characterise: the
     // agent may omit them.)
-    // The run trace (task 058) lists every step once its header is opened,
-    // live or ended, so this assertion has no race against the stub's
-    // near-instant execution.
-    await page.getByRole("region", { name: "Analysis run" }).getByRole("button").first().click({ timeout: 30_000 });
+    // The run trace (task 058) lists every step: open while the run is live
+    // (owner, round 6), and from the header's chevron once it has ended, so
+    // this assertion has no race against the stub's near-instant execution.
+    const header = page.getByRole("region", { name: "Analysis run" }).getByTestId("trace-header");
+    await expect(header).toBeVisible({ timeout: 30_000 });
+    const fold = header.getByRole("button");
+    if ((await fold.count()) > 0 && (await fold.getAttribute("aria-expanded")) !== "true") await fold.click();
     await expect(page.getByRole("list", { name: "Run steps" }).getByText("Searching").first()).toBeVisible({
       timeout: 30_000,
     });

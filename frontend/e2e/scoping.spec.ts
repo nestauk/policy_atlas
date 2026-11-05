@@ -170,11 +170,14 @@ test.describe("mock options-scoping longlist states (task 045)", () => {
     return page.getByRole("region", { name: "Task Agent conversation" }).getByRole("region", { name: "Analysis run" });
   }
 
-  /** Open the trace's step list (it stays open until closed). */
+  /** Show the trace's step list: open already while the run is live or
+   *  paused (owner, round 6); once it has ended, opened from the header's
+   *  chevron. */
   async function openSteps(page: Page) {
-    const header = runTrace(page).getByRole("button").first();
+    const header = runTrace(page).getByTestId("trace-header");
     await expect(header).toBeVisible({ timeout: 15_000 });
-    if ((await header.getAttribute("aria-expanded")) !== "true") await header.click();
+    const fold = header.getByRole("button");
+    if ((await fold.count()) > 0 && (await fold.getAttribute("aria-expanded")) !== "true") await fold.click();
     await expect(page.getByRole("list", { name: "Run steps" })).toBeVisible();
   }
 
@@ -389,7 +392,7 @@ test.describe("task 058 options scoping: the gate and the longlist build", () =>
     await expect(thread.getByRole("radio", { name: /^Confirm plan and build longlist/ })).toBeVisible();
     await thread.getByRole("radio", { name: /^Confirm plan and build longlist/ }).click();
     const trace = thread.getByRole("region", { name: "Analysis run" });
-    await expect(trace.getByRole("button").first()).toContainText("The longlist is ready", { timeout: 40_000 });
+    await expect(trace.getByTestId("trace-header")).toContainText("The longlist is ready", { timeout: 40_000 });
     await expect(trace.getByRole("link", { name: "Read it →" })).toHaveAttribute("href", /\/result\?view=longlist$/);
     await taskNav(page).getByRole("link", { name: /^Sources/ }).click();
     await expect(page.getByText(/The longlist is ready/)).toHaveCount(0);

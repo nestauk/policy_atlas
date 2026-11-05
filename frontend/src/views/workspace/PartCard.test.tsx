@@ -221,10 +221,23 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
   it("sits on the user's side: the bubble's left indent and the green rule on its right edge", () => {
     renderPart(proposal("question"), { ...OPEN, confirmedOptionId: "confirm" }, vi.fn(), { partName: "Question" });
     const block = screen.getByTestId("part-settled");
-    expect(block).toHaveClass("border-r-2", "border-green");
+    expect(block).toHaveClass("border-r-2", "border-r-green");
     expect(block.className).not.toMatch(/border-l/);
     expect(block.parentElement).toHaveClass("ml-8");
     expect(block.parentElement?.className).not.toMatch(/\bmr-8\b/);
+  });
+
+  // Owner, round 6: a settled part reads as the user's (the user bubble's
+  // surface) and as a decision (the green rule, the deep green words and
+  // the part's name as a small grey label).
+  it("takes the user bubble's surface, with the part's name as a small grey label", () => {
+    renderPart(proposal("question"), { ...OPEN, confirmedOptionId: "confirm" }, vi.fn(), { partName: "Question" });
+    const block = screen.getByTestId("part-settled");
+    expect(block).toHaveClass("border", "border-blue-tint", "bg-blue-tint-2", "px-3.5", "py-2.5");
+    const name = screen.getByText("Question");
+    expect(name).toHaveClass("uppercase", "text-meta", "text-grey");
+    expect(name).not.toHaveClass("text-navy");
+    expect(screen.getByText("Looks right")).toHaveClass("text-[#0c6b5a]");
   });
 
   it("the scope card's one choice is a secondary Looks right button, with no words option", async () => {
@@ -448,6 +461,9 @@ describe("scope chips grouped by what they constrain (owner, 2026-11-05)", () =>
     // The label is grey; the words are the deep green (#0c6b5a, the green
     // tint's text, lead 2026-11-05): two colours, two roles.
     expect(screen.getByText("Source filters").className).toContain("text-grey");
+    // The group labels a step smaller than the part's name (lead, round 6).
+    expect(screen.getByText("Source filters")).toHaveClass("text-caption", "uppercase");
+    expect(screen.getByText("Source filters")).not.toHaveClass("text-meta");
     expect(screen.getByText("OECD")).toHaveClass("text-[#0c6b5a]");
     expect(screen.getByText("OECD").className).not.toMatch(/(^|\s)text-green(\s|$)/);
   });

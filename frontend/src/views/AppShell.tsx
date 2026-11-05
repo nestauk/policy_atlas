@@ -14,7 +14,7 @@ import { LifecycleBar, LifecycleBottomBar } from "../ui/brand/LifecycleBar";
 import { ReconnectingBanner } from "../ui/feedback/ReconnectingBanner";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
 import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
-import { lifecycleTabs, publicLifecycleTabs, sourcesLanding, tabOfPath, withChat, withSourcesLanding } from "./lifecycle";
+import { lifecycleTabs, publicLifecycleTabs, sourcesLanding, withChat, withSourcesLanding } from "./lifecycle";
 import { PlanPanelProvider, usePlanPanel } from "./planPanel";
 import { PublicViewProvider } from "./publicView";
 import { isScoping, tabRunStatus } from "./scopingActivity";
@@ -518,13 +518,8 @@ export function AppShell() {
             out the rest of the shell (nav, the routed view). */}
         {showChatPanel && (
           <ErrorBoundary key={taskId}>
-            {/* The Agent tab has no overlay; on Result the writing section's
-                mark turns, so the rail's stays still there. */}
-            <ChatSidePanel
-              taskId={taskId ?? ""}
-              isOwner={isOwner}
-              railMarkTurns={base === null || tabOfPath(location.pathname, base) !== "result"}
-            />
+            {/* The Agent tab has no overlay. */}
+            <ChatSidePanel taskId={taskId ?? ""} isOwner={isOwner} />
           </ErrorBoundary>
         )}
         <div

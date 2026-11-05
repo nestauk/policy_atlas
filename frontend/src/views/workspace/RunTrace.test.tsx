@@ -75,12 +75,15 @@ function trace(props: Props = {}) {
   );
 }
 
-const header = () => within(screen.getByRole("region", { name: "Analysis run" })).getAllByRole("button")[0];
-const mark = () => screen.getByRole("region", { name: "Analysis run" }).querySelector("[data-tone]") as HTMLElement;
+/** The header line: a button only once the run has ended (its chevron opens
+ *  the rows); live or paused it is a line, with the rows open under it. */
+const header = () => screen.getByTestId("trace-header");
+const headerButton = () => within(header()).getByRole("button");
+const mark = () => header().querySelector("[data-tone]") as HTMLElement;
 /** Text with its no-break spaces read as spaces (the separators bind to the
  *  word before them). */
 const flat = (text: string | null | undefined) => (text ?? "").replace(/\u00A0/g, " ");
-const liveMark = () => screen.getByRole("region", { name: "Analysis run" }).querySelector("[data-live-mark]");
+const liveMark = () => header().querySelector("[data-live-mark]");
 
 function rowOf(label: string): HTMLElement {
   const item = within(screen.getByRole("list", { name: "Run steps" }))
@@ -106,21 +109,21 @@ function stubReducedMotion(reduce: boolean) {
   }));
 }
 
-describe("RunTrace — live, closed (annex § The run trace)", () => {
-  it("is one header button: the live mark, the step and what it is doing, the elapsed time, the step count", () => {
+describe("RunTrace — live (annex § The run trace; owner round 6: the card's body)", () => {
+  it("has a header line, not a button: the turning mark and the run's elapsed time only", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     render(trace());
-    const button = header();
-    expect(button).toHaveAttribute("aria-expanded", "false");
-    // The separator before the time ends the words' line, never starts one.
-    expect(button).toHaveTextContent("Classifying · 40 of 118 classified ·6 min 12 s · 6 steps");
+    expect(within(header()).queryByRole("button")).toBeNull();
+    // The step's words live on its row (lead, round 6). No step count and
+    // no "hide steps": the rows are open under it.
+    expect(flat(header().textContent)).toBe("6 min 12 s");
     // Live, the mark is the fold mark at 14 px, not the square (owner, 2026-11-05).
-    expect(within(button).getByText((_, el) => el?.hasAttribute("data-live-mark") === true)).toHaveStyle({ width: "14px" });
+    expect(liveMark()).toHaveStyle({ width: "14px" });
     expect(mark()).toBeNull();
-    expect(screen.queryByRole("list", { name: "Run steps" })).toBeNull();
     // No card frame, no state word in capitals, no Minimise.
     expect(screen.queryByText("RUNNING")).toBeNull();
     expect(screen.queryByRole("button", { name: "Minimise" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Analysis run" }).className).not.toMatch(/\bborder\b|shadow/);
   });
 
   it("announces the header's words politely, without the ticking clock", () => {
@@ -131,16 +134,57 @@ describe("RunTrace — live, closed (annex § The run trace)", () => {
     expect(status).toHaveTextContent(/^Classifying · 40 of 118 classified$/);
   });
 
-  it("shows the last finished step's one line under the header, with its link", () => {
+  it("lists every plan step under the header, in plan order, top to bottom, and keeps the list open", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     render(trace());
-    const last = screen.getByText((_, el) => el?.tagName === "P" && el.textContent?.startsWith("Searching and screening") === true);
-    expect(last).toHaveTextContent("Searching and screening · 312 found · 118 relevant · 1 min 4 s · Sources →");
-    expect(last).toHaveClass("anim-rise", "border-l", "text-grey", "text-body");
-    expect(within(last).getByRole("link", { name: "Sources →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
+    const list = screen.getByRole("list", { name: "Run steps" });
+    expect(within(list).getAllByRole("listitem").map((li) => flat(li.textContent))).toEqual([
+      "Searching and screening · 312 found · 118 relevant · 1 min 4 s · Sources →, done",
+      "Classifying, in progress · 1 min 15 s40 of 118 classified",
+      "Reading the full texts, to come",
+      "Mapping, to come",
+      "Shortlisting, to come",
+      "Writing, to come",
+    ]);
+    // The finished step shows once, in its place in the list: no line under
+    // the header repeats it.
+    const region = screen.getByRole("region", { name: "Analysis run" });
+    expect(region.textContent?.match(/312 found/g)).toHaveLength(1);
+    expect(screen.queryByText(/hide steps|6 steps/)).toBeNull();
   });
 
-  it("reads Writing's section in the header", () => {
+  it("marks each row on a spine: the square in its tone, the blue square breathing on the step in progress", () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    render(trace());
+    const done = rowOf("Searching and screening");
+    expect(done.querySelector("[data-tone]")).toHaveClass("bg-green", "size-1.5");
+    const now = rowOf("Classifying");
+    // One mark turns per block, the header's (lead, round 6): the step in
+    // progress takes the 6 px blue square, breathing while updates arrive.
+    expect(now.querySelector("[data-live-mark]")).toBeNull();
+    expect(now.querySelector("[data-tone]")).toHaveClass("bg-blue", "size-1.5", "anim-breathe");
+    expect(screen.getByRole("region", { name: "Analysis run" }).querySelectorAll("[data-live-mark]")).toHaveLength(1);
+    expect(rowOf("Writing").querySelector("[data-tone]")).toHaveClass("bg-line-2");
+    // A hairline spine through the marks, and a hairline rule between rows.
+    expect(done.querySelector("span.w-px.bg-line-2")).not.toBeNull();
+    expect(done.lastElementChild?.className).not.toMatch(/border-t/);
+    expect(now.lastElementChild).toHaveClass("border-t", "border-line");
+  });
+
+  it("shows a done row as label, counts, wall time and link; upcoming rows as names only, grey and smaller", () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    render(trace());
+    const done = rowOf("Searching and screening");
+    expect(within(done).getByRole("link", { name: "Sources →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
+    expect(within(done).getByText("Searching and screening")).toHaveClass("text-navy");
+    expect(done).toHaveClass("text-body");
+    const upcoming = rowOf("Shortlisting");
+    expect(upcoming.textContent).toBe("Shortlisting, to come");
+    expect(upcoming).toHaveClass("text-grey", "text-meta");
+    expect(within(upcoming).queryByRole("link")).toBeNull();
+  });
+
+  it("reads Writing's section above the action line in its row, and in the screen reader's words", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     render(
       trace({
@@ -156,45 +200,66 @@ describe("RunTrace — live, closed (annex § The run trace)", () => {
         },
       }),
     );
-    expect(header()).toHaveTextContent(/^Writing · Section 3 of 7 · Costs and funding/);
+    expect(within(screen.getByRole("region", { name: "Analysis run" })).getByRole("status")).toHaveTextContent(
+      /^Writing · Section 3 of 7 · Costs and funding$/,
+    );
+    expect(header()).not.toHaveTextContent("Writing");
+    const lines = [...rowOf("Writing").querySelectorAll("p")].map((line) => flat(line.textContent));
+    expect(lines).toEqual([
+      "Writing, in progress · 30 s",
+      "Section 3 of 7 · Costs and funding",
+      "Looking for: childcare cost as a barrier to take-up",
+    ]);
   });
 
-  it("re-mounts the header's words when the step changes, so they rise in", () => {
+  it("re-mounts the header's words as the run pauses, so they rise in", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
-    const { rerender } = render(trace({ stages: SEARCHED.map((e) => ({ ...e, status: e.stage === "screen" ? "started" : e.status })), liveness: {} }));
-    const before = header().querySelector(".anim-rise");
-    expect(before).toHaveTextContent("Searching and screening");
+    const { rerender } = render(trace());
+    expect(header().querySelector(".anim-rise")).toBeNull();
+    rerender(trace({ status: "paused" }));
+    expect(header().querySelector(".anim-rise")).toHaveTextContent("Paused · a check-in is waiting on you");
+  });
+
+  it("rises a row in once as it lands, and holds rows that were done before still", () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    const running = SEARCHED.map((e) => ({ ...e, status: e.stage === "screen" ? ("started" as const) : e.status }));
+    const { rerender } = render(trace({ stages: running, liveness: {} }));
+    expect(rowOf("Searching and screening")).not.toHaveClass("anim-rise");
     rerender(trace());
-    const after = header().querySelector(".anim-rise");
-    expect(after).toHaveTextContent("Classifying · 40 of 118 classified");
-    expect(after).not.toBe(before);
+    expect(rowOf("Searching and screening")).toHaveClass("anim-rise");
+    // A trace that mounts with the step already done does not replay it.
+    render(trace(), { container: document.body.appendChild(document.createElement("div")) });
+    const lists = screen.getAllByRole("list", { name: "Run steps" });
+    const fresh = within(lists[1]).getAllByRole("listitem")[0];
+    expect(fresh).not.toHaveClass("anim-rise");
   });
 
   it("keeps the elapsed time out of the words, so it stays in view on a phone and in the sidebar", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
-    render(trace());
+    render(trace({ status: "paused" }));
     const words = header().querySelector(".anim-rise") as HTMLElement;
     // Narrow: up to two lines of words, then the line wraps; wide: one
     // truncated line. The trace's own width decides (a container query).
     expect(screen.getByRole("region", { name: "Analysis run" })).toHaveClass("@container");
     expect(words).toHaveClass("line-clamp-2", "@xl:truncate", "min-w-0");
     const clock = words.nextElementSibling as HTMLElement;
-    expect(clock).toHaveTextContent(/^6 min 12 s · 6 steps$/);
+    expect(clock).toHaveTextContent(/^6 min 12 s$/);
     expect(words.textContent?.endsWith("\u00A0·")).toBe(true);
     expect(clock).toHaveClass("shrink-0", "whitespace-nowrap");
     expect(words.parentElement).toHaveClass("flex-wrap", "@xl:flex-nowrap");
   });
 
-  it("reads at the chat's size: the header's words Lead, the time and the step count grey", () => {
+  it("reads at the chat's size: the header's words Lead, the time grey, the rows Body", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
-    render(trace());
+    render(trace({ status: "paused", isOwner: false }));
     const words = header().querySelector(".anim-rise") as HTMLElement;
-    expect(header().parentElement).toHaveClass("text-lead");
+    expect(header()).toHaveClass("text-lead");
     expect(words).toHaveClass("text-navy");
-    // The step's label semibold, what it is doing regular (lead, 2026-11-05).
-    expect(within(words).getByText("Classifying")).toHaveClass("font-semibold");
+    // The first word semibold, the rest regular (lead, 2026-11-05).
+    expect(within(words).getByText("Paused")).toHaveClass("font-semibold");
     expect(words).not.toHaveClass("font-semibold");
     expect(words.nextElementSibling).toHaveClass("text-grey");
+    expect(rowOf("Classifying")).toHaveClass("text-body");
     expect(screen.getByRole("region", { name: "Analysis run" }).className).not.toMatch(/text-meta/);
   });
 
@@ -204,97 +269,45 @@ describe("RunTrace — live, closed (annex § The run trace)", () => {
     act(() => {
       vi.advanceTimersByTime(119_000);
     });
-    expect(header()).toHaveTextContent("Classifying · 40 of 118 classified");
+    expect(rowOf("Classifying")).toHaveTextContent("40 of 118 classified");
     act(() => {
       vi.advanceTimersByTime(2_000);
     });
-    expect(header()).toHaveTextContent("Classifying · Still working on this step");
-    expect(header()).not.toHaveTextContent("40 of 118");
-  });
-});
-
-describe("RunTrace — open", () => {
-  it("lists every plan step under a hairline rule, and closes again", async () => {
-    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
-    const user = userEvent.setup();
-    render(trace());
-    await user.click(header());
-    expect(header()).toHaveAttribute("aria-expanded", "true");
-    expect(header()).toHaveTextContent("· hide steps");
-    const list = screen.getByRole("list", { name: "Run steps" });
-    // The step rows are Body (owner, 2026-11-05).
-    expect(list.parentElement).toHaveClass("border-l", "border-line", "text-body");
-    expect(header()).toHaveAttribute("aria-controls", list.parentElement?.id);
-    expect(within(list).getAllByRole("listitem").map((li) => flat(li.textContent))).toEqual([
-      "Searching and screening · 312 found · 118 relevant · 1 min 4 s · Sources →, done",
-      "Classifying, in progress · 1 min 15 s40 of 118 classified",
-      "Reading the full texts, to come",
-      "Mapping, to come",
-      "Shortlisting, to come",
-      "Writing, to come",
-    ]);
-    // The last finished line is in the list now, not under the header.
-    const region = screen.getByRole("region", { name: "Analysis run" });
-    expect(region.textContent?.match(/312 found/g)).toHaveLength(1);
-    await user.click(header());
-    expect(screen.queryByRole("list", { name: "Run steps" })).toBeNull();
-  });
-
-  it("shows a done row as label, counts, wall time and link; upcoming rows as names only", async () => {
-    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
-    render(trace());
-    await userEvent.click(header());
-    const done = rowOf("Searching and screening");
-    expect(within(done).getByRole("link", { name: "Sources →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
-    const upcoming = rowOf("Shortlisting");
-    expect(upcoming.textContent).toBe("Shortlisting, to come");
-    expect(upcoming).toHaveClass("text-grey");
-    expect(within(upcoming).queryByRole("link")).toBeNull();
-  });
-
-  it("shows Writing's section line above its activity line", async () => {
-    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
-    render(
-      trace({
-        stages: [...SEARCHED, entry({ stage: "synthesise", label: "Writing", status: "started", startedAt: ago(30) })],
-        liveness: {
-          synthesise: {
-            activity: "Looking for: childcare cost as a barrier to take-up",
-            section: "Section 3 of 7 · Costs and funding",
-            heartbeat: false,
-            dropped: 0,
-            occurredAt: ago(0),
-          },
-        },
-      }),
+    expect(rowOf("Classifying")).toHaveTextContent("Still working on this step");
+    expect(rowOf("Classifying")).not.toHaveTextContent("40 of 118");
+    expect(within(screen.getByRole("region", { name: "Analysis run" })).getByRole("status")).toHaveTextContent(
+      "Classifying · Still working on this step",
     );
-    await userEvent.click(header());
-    const lines = [...rowOf("Writing").querySelectorAll("p")].map((line) => flat(line.textContent));
-    expect(lines).toEqual([
-      "Writing, in progress · 30 s",
-      "Section 3 of 7 · Costs and funding",
-      "Looking for: childcare cost as a barrier to take-up",
-    ]);
   });
 
   it("puts See plan at the foot of the list", async () => {
     const onSeePlan = vi.fn();
     render(trace({ onSeePlan }));
-    expect(screen.queryByRole("button", { name: "See plan" })).toBeNull();
-    await userEvent.click(header());
     await userEvent.click(screen.getByRole("button", { name: "See plan" }));
     expect(onSeePlan).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the mark and the time only before the first stage frame, with the plan's steps to come", () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    render(trace({ stages: [], liveness: {} }));
+    expect(flat(header().textContent)).toBe("6 min 12 s");
+    expect(within(screen.getByRole("list", { name: "Run steps" })).getAllByRole("listitem")).toHaveLength(6);
   });
 });
 
 describe("RunTrace — paused", () => {
-  it("turns the mark orange and tells the owner a check-in waits, and never stalls", () => {
+  it("turns the mark orange and tells the owner a check-in waits, with the rows under it, and never stalls", () => {
     vi.useFakeTimers({ now: NOW });
     render(trace({ status: "paused" }));
     expect(mark()).toHaveClass("bg-orange", "size-1.5");
     expect(mark()).not.toHaveClass("anim-breathe");
     expect(liveMark()).toBeNull();
-    expect(header()).toHaveTextContent(/^Paused · a check-in is waiting on you ·6 min 12 s · 6 steps$/);
+    expect(flat(header().textContent)).toMatch(/^Paused · a check-in is waiting on you ·6 min 12 s$/);
+    // Nothing turns while the run waits on a person: the step's mark is the
+    // orange square too.
+    expect(screen.getByRole("list", { name: "Run steps" })).toBeVisible();
+    expect(rowOf("Classifying").querySelector("[data-tone]")).toHaveClass("bg-orange");
+    expect(screen.getByRole("region", { name: "Analysis run" }).querySelector("[data-live-mark]")).toBeNull();
     act(() => {
       vi.advanceTimersByTime(180_000);
     });
@@ -304,7 +317,7 @@ describe("RunTrace — paused", () => {
   it("tells a colleague where the run stopped instead", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     render(trace({ status: "paused", isOwner: false }));
-    expect(header()).toHaveTextContent(/^Paused · Classifying ·6 min 12 s/);
+    expect(flat(header().textContent)).toMatch(/^Paused · Classifying ·6 min 12 s/);
     expect(header()).not.toHaveTextContent(/waiting on you/);
   });
 
@@ -329,12 +342,14 @@ describe("RunTrace — ended", () => {
     expect(mark()).toHaveClass("bg-green", "size-1.5");
     expect(liveMark()).toBeNull();
     expect(within(region).getByRole("link", { name: "Read it →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
-    expect(header()).toHaveTextContent("›");
-    expect(header()).toHaveAttribute("aria-expanded", "false");
+    expect(headerButton()).toHaveTextContent("›");
+    expect(headerButton()).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("list", { name: "Run steps" })).toBeNull();
     // No last-finished line and no step count on the folded line.
     expect(region).not.toHaveTextContent("312 found");
     expect(region).not.toHaveTextContent("steps");
-    await userEvent.click(header());
+    await userEvent.click(headerButton());
+    expect(headerButton()).toHaveAttribute("aria-expanded", "true");
     expect(within(rowOf("Writing")).getByRole("link", { name: "Report →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
     expect(rowOf("Writing")).toHaveTextContent("Writing · 7 sections · 5 min");
   });
@@ -352,7 +367,7 @@ describe("RunTrace — ended", () => {
       }),
     );
     expect(screen.getByRole("link", { name: "Read it →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result?view=longlist`);
-    expect(header()).toHaveTextContent("The longlist is ready");
+    expect(headerButton()).toHaveTextContent("The longlist is ready");
   });
 
   it.each([
@@ -361,7 +376,7 @@ describe("RunTrace — ended", () => {
     ["interrupted", "Stopped"],
   ] as const)("reads a %s run as '%s' with the red mark and no link", (status, words) => {
     render(trace({ status, stages: SEARCHED, liveness: {}, endedAt: ago(0) }));
-    expect(header()).toHaveTextContent(new RegExp(`^›${words} ·6 min$`));
+    expect(headerButton()).toHaveTextContent(new RegExp(`^›${words} ·6 min$`));
     expect(mark()).toHaveClass("bg-red");
     expect(screen.queryByRole("link", { name: "Read it →" })).toBeNull();
   });
@@ -380,7 +395,7 @@ describe("RunTrace — a degraded shortlist walk (lead ruling, 2026-11-05)", () 
         endedAt: ago(0),
       }),
     );
-    expect(header()).toHaveTextContent(
+    expect(headerButton()).toHaveTextContent(
       /^›Policy Atlas could not propose a shortlist\. Your places are unchanged\. ·6 min$/,
     );
     expect(mark()).toHaveClass("bg-red");
@@ -446,23 +461,20 @@ describe("RunTrace — reduced motion", () => {
     expect(frames).not.toHaveBeenCalled();
   });
 
-  it("swaps the words and the last finished line in at once", () => {
+  it("swaps the words and a landed row in at once", () => {
     expect(utility("anim-rise")).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*animation-duration: 1ms;/);
   });
 });
 
 describe("RunTrace — a separator never starts a line (lead, 2026-11-05)", () => {
-  it("binds every · to the word before it, in the header, the last finished line and the step rows", async () => {
+  it("binds every · to the word before it, in the header and the step rows", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     render(trace());
-    const region = screen.getByRole("region", { name: "Analysis run" });
     const visible = (el: Element) => (el.textContent ?? "").replace(/\s+$/, "");
     // Every visible separator is preceded by a no-break space, so a line can
     // break after it but never before it.
     const check = (el: Element) => expect(visible(el)).not.toMatch(/ ·/);
     check(header());
-    check(region.querySelector("p.anim-rise") as Element);
-    await userEvent.click(header());
     for (const item of within(screen.getByRole("list", { name: "Run steps" })).getAllByRole("listitem")) check(item);
   });
 });
