@@ -42,10 +42,12 @@ from policy_atlas.api.contract.sse import (
     ArtefactSectionStartedFrame,
     ArtefactSkeletonFrame,
     ArtefactSourceNoteFrame,
+    CharacteriseThemesFrame,
     CheckinPendingFrame,
     CheckinResolvedFrame,
     PlanUpdatedFrame,
     RunStatusFrame,
+    SearchQueryFrame,
     StageCompletedFrame,
     StageFailedFrame,
     StageStartedFrame,
@@ -460,7 +462,7 @@ def test_tick_frame_fields_are_one_set_for_every_stage() -> None:
             "type": "tick",
             "stage": "ingest",
             "occurred_at": _now().isoformat(),
-            "activity": "1 of 4 read",
+            "activity": "collecting 1 of 4",
             "done": 1,
             "total": 4,
             "unit": "documents",
@@ -699,6 +701,49 @@ def test_round8_citation_ids_the_intro_role_and_the_source_note_frame() -> None:
     assert not hasattr(note, "sequence")
     assert note.ephemeral is True
     assert (note.source_id, note.title) == ("tss-1", "Breakfast clubs")
+
+
+def test_sse_round9_search_query_and_themes_frames() -> None:
+    """Task 058, round 9: the search's queries and the themes found are ephemeral frames."""
+    query = _adapter().validate_python(
+        {
+            "type": "search.query",
+            "occurred_at": _now().isoformat(),
+            "backend": "openalex",
+            "query": "Following citations from 50 sources",
+            "kind": "citations",
+            "results": None,
+        }
+    )
+    assert isinstance(query, SearchQueryFrame)
+    assert not hasattr(query, "sequence")
+    assert query.ephemeral is True
+    assert (query.kind, query.results) == ("citations", None)
+    with pytest.raises(ValidationError):
+        _adapter().validate_python(
+            {
+                "type": "search.query",
+                "occurred_at": _now().isoformat(),
+                "backend": "openalex",
+                "query": "q",
+                "kind": "ids",
+                "results": 3,
+            }
+        )
+
+    themes = _adapter().validate_python(
+        {
+            "type": "characterise.themes",
+            "occurred_at": _now().isoformat(),
+            "themes": [
+                {"label": "Attendance", "description": "Who comes."},
+                {"label": "Costs", "description": None},
+            ],
+        }
+    )
+    assert isinstance(themes, CharacteriseThemesFrame)
+    assert not hasattr(themes, "sequence")
+    assert [theme.label for theme in themes.themes] == ["Attendance", "Costs"]
 
 
 def test_sse_frame_unknown_type_rejected() -> None:

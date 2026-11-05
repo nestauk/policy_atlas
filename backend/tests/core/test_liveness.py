@@ -24,12 +24,14 @@ from policy_atlas.core.liveness import (
     HEARTBEAT_SECONDS,
     MEMORY_TTL_SECONDS,
     HubMessage,
+    SearchQuery,
     SectionCard,
     SectionClaim,
     SectionDelta,
     SectionRevising,
     SectionSources,
     SourceNote,
+    ThemesFound,
     Tick,
     TickHub,
 )
@@ -915,5 +917,129 @@ def test_context_helper_publishes_a_source_note_for_the_bound_task(
             liveness.publish_source_note("s1", "T", "N.")
         [message] = await _drain(queue)
         assert isinstance(message, SourceNote) and message.source_id == "s1"
+
+    _run(body)
+
+
+# --- Search queries and themes as they happen (task 058, round 9) ------------------
+
+
+def test_a_query_comes_back_in_place_and_a_snapshot_sends_each_in_its_latest_state() -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        queue = await hub.subscribe(TASK)
+        hub.publish_search_query(TASK, backend="openalex", query="q1", kind="topic", results=None)
+        hub.publish_search_query(TASK, backend="overton", query="q1", kind="topic", results=None)
+        hub.publish_search_query(TASK, backend="openalex", query="q1", kind="topic", results=40)
+        sent = await _drain(queue)
+        assert [(m.backend, m.results) for m in sent if isinstance(m, SearchQuery)] == [
+            ("openalex", None),
+            ("overton", None),
+            ("openalex", 40),
+        ]
+        await hub.unsubscribe(TASK, queue)
+
+        # One entry per (backend, query, kind), in the order first sent, then
+        # the ticks; the queries go with the run, not the stage.
+        hub.publish_tick(TASK, stage="acquire", activity="searching · 40 found")
+        hub.end_stage(TASK, "acquire")
+        hub.publish_tick(TASK, stage="screen", activity="screening")
+        queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+        await hub.unsubscribe(TASK, queue)
+        queries = [m for m in snapshot if isinstance(m, SearchQuery)]
+        assert [(m.backend, m.query, m.kind, m.results) for m in queries] == [
+            ("openalex", "q1", "topic", 40),
+            ("overton", "q1", "topic", None),
+        ]
+        assert snapshot.index(queries[-1]) < next(
+            i for i, m in enumerate(snapshot) if isinstance(m, Tick)
+        )
+
+    _run(body)
+
+
+def test_themes_are_sent_once_found_and_a_snapshot_sends_the_latest() -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        queue = await hub.subscribe(TASK)
+        hub.publish_themes(TASK, themes=[("Attendance", "Who comes."), ("Costs", None)])
+        [message] = await _drain(queue)
+        assert isinstance(message, ThemesFound)
+        assert message.themes == (("Attendance", "Who comes."), ("Costs", None))
+        await hub.unsubscribe(TASK, queue)
+        hub.publish_themes(TASK, themes=[("Attendance", None)])
+        hub.end_stage(TASK, "characterise")
+        queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+        await hub.unsubscribe(TASK, queue)
+        [themes] = [m for m in snapshot if isinstance(m, ThemesFound)]
+        assert themes.themes == (("Attendance", None),)
+
+    _run(body)
+
+
+def test_queries_and_themes_are_forgotten_with_the_run_and_when_stale() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+
+        async def snapshot() -> list[HubMessage]:
+            queue, messages = await hub.subscribe_with_snapshot(TASK)
+            await hub.unsubscribe(TASK, queue)
+            return messages
+
+        def publish() -> None:
+            hub.publish_search_query(TASK, backend="openalex", query="q", kind="topic", results=1)
+            hub.publish_themes(TASK, themes=[("A", None)])
+
+        run = uuid.uuid4()
+        hub.begin_run(TASK, run)
+        publish()
+        assert len(await snapshot()) == 2
+        hub.end_run(TASK, run)
+        assert await snapshot() == []
+
+        publish()
+        hub.begin_run(TASK, uuid.uuid4())
+        assert await snapshot() == []
+
+        hub.end_run(TASK, hub._tasks[TASK].run_id or uuid.uuid4())
+        publish()
+        clock.now = MEMORY_TTL_SECONDS + 1
+        assert await snapshot() == []
+        hub.sweep()
+        assert TASK not in hub._tasks
+
+    _run(body)
+
+
+def test_queries_count_as_dropped_on_a_full_queue() -> None:
+    async def body() -> None:
+        hub, _clock = _hub(queue_size=1)
+        await hub.subscribe(TASK)
+        for n in range(3):
+            hub.publish_search_query(
+                TASK, backend="openalex", query=f"q{n}", kind="semantic", results=None
+            )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert hub.dropped(TASK) == 2
+
+    _run(body)
+
+
+def test_context_helpers_publish_queries_and_themes_for_the_bound_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        monkeypatch.setattr(liveness, "tick_hub", hub)
+        queue = await hub.subscribe(TASK)
+        liveness.publish_search_query("openalex", "q", "topic", None)
+        liveness.publish_themes([("A", None)])
+        assert await _drain(queue) == []
+        with liveness.task_liveness(TASK, stage="acquire"):
+            liveness.publish_search_query("openalex", "q", "topic", None)
+            liveness.publish_themes([("A", None)])
+        sent = await _drain(queue)
+        assert [type(m) for m in sent] == [SearchQuery, ThemesFound]
 
     _run(body)

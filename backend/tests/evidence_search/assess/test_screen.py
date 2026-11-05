@@ -1660,7 +1660,7 @@ def test_stage1_publishes_screened_and_relevant_so_far(
     assert all(c["total"] is None and c["unit"] == "abstracts" for c in calls)
     last = max(calls, key=lambda c: c["done"])
     assert last["done"] == 4
-    assert last["activity"] == "screening 0 new abstracts · 2 relevant so far"
+    assert last["activity"] == "screening 0 abstracts · 2 relevant"
 
 
 def test_stage1_retry_does_not_move_the_count(monkeypatch: pytest.MonkeyPatch) -> None:

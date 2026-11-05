@@ -160,7 +160,7 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     run_section_loop,
     source_labelling,
 )
-from policy_atlas.runtime.progress import INTRO_SLOT_TITLE, ProgressEmitter
+from policy_atlas.runtime.progress import INTRO_SECTION_LINE, ProgressEmitter
 
 log = structlog.get_logger()
 
@@ -5826,8 +5826,11 @@ def _write_full_report_intro(
         ],
     }
     try:
-        # The section line names the slot (task 058, round 8).
-        liveness.publish_progress(activity=activity("synthesise.intro"), section=INTRO_SLOT_TITLE)
+        # The section line names the introduction, not its "Full report" slot
+        # title (task 058, round 9).
+        liveness.publish_progress(
+            activity=activity("synthesise.intro"), section=INTRO_SECTION_LINE
+        )
         stream_intro = getattr(synthesis_backend, "write_full_report_intro_stream", None)
         if stream_intro is not None and display_index is not None:
             intro_wire, intro_usage = stream_intro(seed, index=display_index)

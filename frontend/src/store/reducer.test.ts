@@ -729,6 +729,95 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
     expect(state.liveSourceNotes).toBeUndefined();
   });
 
+  it("search queries go out, come back in place, never move the cursor, and go with the run (round 9)", () => {
+    const query = (
+      text: string,
+      results: number | null,
+      kind: "topic" | "semantic" | "citations" | "lookup" = "topic",
+      backend = "openalex",
+    ): SseFrame => ({
+      type: "search.query",
+      backend,
+      query: text,
+      kind,
+      results,
+      occurred_at: "2026-07-28T10:00:10Z",
+      ephemeral: true,
+    });
+    const base = fold(createInitialRunStreamState(), writingFrames());
+    expect(base.liveSearchQueries).toBeUndefined();
+    let state = fold(base, [
+      query("school breakfast attainment", null),
+      query("school breakfast attainment", null, "semantic"),
+      query("school breakfast attainment", null, "topic", "overton"),
+      query("school breakfast attainment", 40),
+      query("Following citations from 50 sources", null, "citations"),
+    ]);
+    expect(state.liveSearchQueries).toEqual([
+      { backend: "openalex", query: "school breakfast attainment", kind: "topic", results: 40 },
+      { backend: "openalex", query: "school breakfast attainment", kind: "semantic", results: null },
+      { backend: "overton", query: "school breakfast attainment", kind: "topic", results: null },
+      { backend: "openalex", query: "Following citations from 50 sources", kind: "citations", results: null },
+    ]);
+    expect(state.lastSequence).toBe(base.lastSequence);
+    expect(state.appliedTypesAtLastSequence).toEqual(base.appliedTypesAtLastSequence);
+    // A reconnect's snapshot repeats the rows in their latest state: never doubled.
+    state = fold(state, [query("school breakfast attainment", 40), query("Following citations from 50 sources", 212, "citations")]);
+    expect(state.liveSearchQueries).toHaveLength(4);
+    expect(state.liveSearchQueries?.[3].results).toBe(212);
+    // The run ends; the next top-level run starts without them.
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: TASK_RUN_ID,
+      status: "succeeded",
+      occurred_at: "2026-07-28T10:04:00Z",
+      sequence: 98,
+    });
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: OTHER_RUN_ID,
+      status: "running",
+      occurred_at: "2026-07-28T10:05:00Z",
+      sequence: 99,
+    });
+    expect(state.liveSearchQueries).toBeUndefined();
+  });
+
+  it("themes arrive once found, a repeat replaces them, and they go with the run (round 9)", () => {
+    const themes = (labels: string[]): SseFrame => ({
+      type: "characterise.themes",
+      themes: labels.map((label, i) => ({ label, description: i === 0 ? null : `About ${label}.` })),
+      occurred_at: "2026-07-28T10:00:40Z",
+      ephemeral: true,
+    });
+    const base = fold(createInitialRunStreamState(), writingFrames());
+    expect(base.liveThemes).toBeUndefined();
+    let state = reduceRunStreamFrame(base, themes(["Attendance", "Attainment"]));
+    expect(state.liveThemes).toEqual([
+      { label: "Attendance", description: null },
+      { label: "Attainment", description: "About Attainment." },
+    ]);
+    expect(state.lastSequence).toBe(base.lastSequence);
+    state = reduceRunStreamFrame(state, themes(["Attendance", "Attainment", "Costs"]));
+    expect(state.liveThemes?.map((theme) => theme.label)).toEqual(["Attendance", "Attainment", "Costs"]);
+    // The run ends; the next top-level run starts without them.
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: TASK_RUN_ID,
+      status: "succeeded",
+      occurred_at: "2026-07-28T10:04:00Z",
+      sequence: 98,
+    });
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: OTHER_RUN_ID,
+      status: "running",
+      occurred_at: "2026-07-28T10:05:00Z",
+      sequence: 99,
+    });
+    expect(state.liveThemes).toBeUndefined();
+  });
+
   it("an intro slot keeps its role and completes with its prose (round 8)", () => {
     const state = fold(createInitialRunStreamState(), [
       writingFrames()[0],

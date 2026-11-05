@@ -11,6 +11,7 @@ import structlog
 from sqlalchemy import exists, func, select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.core import liveness
 from policy_atlas.core.clustering_engine import (
     AssignmentOutput,
     ClusteringBackend,
@@ -646,7 +647,13 @@ def _characterise_clustering_policy(*, min_themes: int, max_themes: int) -> Clus
         log_event_prefix="characterise",
         max_concurrent_batches=theme_grouping.MAX_CONCURRENT_BATCHES,
         progress_key="characterise.batches",
+        on_labels=_publish_themes,
     )
+
+
+def _publish_themes(labels: list[ClusterLabel]) -> None:
+    """Show the themes found while sources are assigned to them (task 058, round 9)."""
+    liveness.publish_themes([(label.label, label.description or None) for label in labels])
 
 
 def _forbidden_theme_reason(index: int, label: str) -> str | None:

@@ -824,6 +824,41 @@
         "title": "CaseStudyCardOut",
         "type": "object"
       },
+      "CharacteriseThemesFrame": {
+        "description": "Ephemeral: the themes found, before sources are assigned to them (round 9).\n\nSent once the characterise stage has found its themes, in the order\nfound; the saved characterisation brings them with their document counts\nwhen the stage ends. A reconnect gets them again. Display-only: never\npersisted, no `id:` line, no `sequence`.",
+        "properties": {
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "themes": {
+            "items": {
+              "$ref": "#/components/schemas/LiveTheme"
+            },
+            "title": "Themes",
+            "type": "array"
+          },
+          "type": {
+            "const": "characterise.themes",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "themes",
+          "occurred_at"
+        ],
+        "title": "CharacteriseThemesFrame",
+        "type": "object"
+      },
       "ChatTurnCreate": {
         "additionalProperties": false,
         "description": "One idempotent question submitted to an active chat conversation.",
@@ -3655,6 +3690,32 @@
           "definition"
         ],
         "title": "LeverTypeOut",
+        "type": "object"
+      },
+      "LiveTheme": {
+        "description": "One theme as the characterise stage found it (task 058, round 9).\n\nArgs:\n    label: The theme's name.\n    description: Its one-line description, or null.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "description"
+        ],
+        "title": "LiveTheme",
         "type": "object"
       },
       "LonglistCountsOut": {
@@ -7190,6 +7251,66 @@
         "title": "ScopingSteerPointDefaultOut",
         "type": "object"
       },
+      "SearchQueryFrame": {
+        "description": "Ephemeral: one search query as it goes out, and again when it comes back (round 9).\n\nA query is identified by `(backend, query, kind)`: the frame sent when it\ncomes back (with `results`) replaces the one sent when it went out\n(`results` null). A reconnect gets the run's queries so far, each in its\nlatest state. Display-only: never persisted, no `id:` line, no\n`sequence`; the saved search record lists the queries after the stage.\n\nArgs:\n    backend: The database searched, `openalex` or `overton`.\n    query: The query text for a `topic` or `semantic` query; for a\n        `citations` or `lookup` pass a short description (\"Following\n        citations from 50 sources\"), never the ids.\n    kind: `topic`, `semantic`, `citations` or `lookup`.\n    results: Null while the query is out; the number of records it\n        returned once it is back.",
+        "properties": {
+          "backend": {
+            "title": "Backend",
+            "type": "string"
+          },
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "topic",
+              "semantic",
+              "citations",
+              "lookup"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "results": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Results"
+          },
+          "type": {
+            "const": "search.query",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "backend",
+          "query",
+          "kind",
+          "results",
+          "occurred_at"
+        ],
+        "title": "SearchQueryFrame",
+        "type": "object"
+      },
       "SectionCitation": {
         "description": "One checked citation on a completed live section (task 058, round 7).\n\nOne entry per citation row of the section's judged claims, so a claim\nciting two sources gives two entries over the same span.\n\nArgs:\n    start: First code point of the cited claim's text in `prose`.\n    end: One past its last code point.\n    n: The report-wide reference number, numbered as the committed\n        report numbers its references (by source, in order of first\n        citation).\n    source_id: The source's id in this task, or `null` when the cited\n        text is not one of the task's sources.\n    title: The source's title as the committed report's references name it.\n    tier: The checker's verdict on the claim (`tier_1` ... `tier_4`,\n        `unsupported_mis_cited`), or `null` when it was not checked.\n    citation_id: The saved citation's id, the one the committed report's\n        citation carries, so the page can ask for its chunk context while\n        the run is live (round 8); `null` on frames recorded before the\n        field existed.\n    claim_id: The saved claim's id, the one the committed report's claim\n        carries; `null` on older frames.\n    quote: The checked quote the citation rests on; empty on older frames.",
         "properties": {
@@ -7830,10 +7951,12 @@
             "artefact.section_started": "#/components/schemas/ArtefactSectionStartedFrame",
             "artefact.skeleton": "#/components/schemas/ArtefactSkeletonFrame",
             "artefact.source_note": "#/components/schemas/ArtefactSourceNoteFrame",
+            "characterise.themes": "#/components/schemas/CharacteriseThemesFrame",
             "checkin.pending": "#/components/schemas/CheckinPendingFrame",
             "checkin.resolved": "#/components/schemas/CheckinResolvedFrame",
             "plan.updated": "#/components/schemas/PlanUpdatedFrame",
             "run.status": "#/components/schemas/RunStatusFrame",
+            "search.query": "#/components/schemas/SearchQueryFrame",
             "stage.completed": "#/components/schemas/StageCompletedFrame",
             "stage.failed": "#/components/schemas/StageFailedFrame",
             "stage.started": "#/components/schemas/StageStartedFrame",
@@ -7896,6 +8019,12 @@
           },
           {
             "$ref": "#/components/schemas/ArtefactSourceNoteFrame"
+          },
+          {
+            "$ref": "#/components/schemas/SearchQueryFrame"
+          },
+          {
+            "$ref": "#/components/schemas/CharacteriseThemesFrame"
           }
         ]
       },

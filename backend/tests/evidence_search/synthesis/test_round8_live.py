@@ -113,9 +113,11 @@ def test_key_findings_intro_and_notes_are_live(
     intro = _completed(emitter)["Full report"]
     assert intro["prose"] == report.full_report_intro
     assert intro["citations"] == []
+    # Round 9: the slot keeps its "Full report" title; the line names the
+    # introduction, so the card and the strip read "Writing · Introduction".
     assert {
         "activity": "Writing the introduction",
-        "section": "Full report",
+        "section": "Introduction",
     } in recorded["progress"]
 
     # B4: each kept note is sent as it is written, in the report's order,

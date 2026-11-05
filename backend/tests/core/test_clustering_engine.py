@@ -288,3 +288,53 @@ def test_each_caller_names_its_progress_key() -> None:
     assert _group_policy(unit_count=10).progress_key == "group.batches"
     assert _option_policy(8).progress_key == "longlist.batches"
     assert _theme_policy(4).progress_key == "theme.batches"
+
+
+def test_labels_are_handed_over_after_discovery_and_before_assignment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task 058, round 9: the characterise stage shows its themes while it assigns."""
+    order: list[str] = []
+    units = [ClusterUnit(unit_id="u1", payload={})]
+    labels = [
+        ClusterLabel(label="A", description="Alpha"),
+        ClusterLabel(label="B", description="Beta"),
+    ]
+
+    class _Ordered(_Backend):
+        def assign(
+            self, batch: list[ClusterUnit], *, labels: list[ClusterLabel]
+        ) -> UsageResult[AssignmentOutput]:
+            order.append("assign")
+            return super().assign(batch, labels=labels)
+
+    backend = _Ordered(
+        discovery_outputs=[labels],
+        assignment_outputs=[[ClusterAssignment(unit_id="u1", label="A")]],
+    )
+    seen: list[list[str]] = []
+
+    def on_labels(found: list[ClusterLabel]) -> None:
+        order.append("labels")
+        seen.append([label.label for label in found])
+
+    cluster_units(units, backend=backend, policy=replace(_policy(), on_labels=on_labels))
+    assert order == ["labels", "assign"]
+    assert seen == [["A", "B"]]
+
+    # The characterise stage publishes them as the themes found; the others do not.
+    from policy_atlas.core import liveness
+    from policy_atlas.evidence_search.corpus.characterise import _characterise_clustering_policy
+    from policy_atlas.evidence_search.group.group import _group_policy
+    from policy_atlas.options_scoping.longlist.longlist import _option_policy
+    from policy_atlas.options_scoping.theme.theme import _theme_policy
+
+    published: list[list[tuple[str, str | None]]] = []
+    monkeypatch.setattr(liveness, "publish_themes", lambda themes: published.append(list(themes)))
+    policy = _characterise_clustering_policy(min_themes=2, max_themes=6)
+    assert policy.on_labels is not None
+    policy.on_labels([labels[0], ClusterLabel(label="B", description="")])
+    assert published == [[("A", "Alpha"), ("B", None)]]
+    assert _group_policy(unit_count=10).on_labels is None
+    assert _option_policy(8).on_labels is None
+    assert _theme_policy(4).on_labels is None

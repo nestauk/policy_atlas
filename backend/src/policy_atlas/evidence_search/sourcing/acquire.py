@@ -537,13 +537,23 @@ class _Candidate(NamedTuple):
     chash: str
 
 
-def publish_acquire_progress(found: int, round_index: int) -> None:
+def publish_acquire_progress(
+    found: int, round_index: int, *, candidates: int | None = None
+) -> None:
     """Publish the acquire stage's running count (task 058, N2).
 
     Args:
         found: Records acquired so far on this pass.
         round_index: 1 for the first search on a scope, 2 or more after.
+        candidates: The distinct records the search's calls returned, when
+            the search counted them as it ran (round 9). The line then reads
+            "keeping {kept} of {found} candidates", counting ``done`` against
+            that ``total``, so the count the search showed never reads as a drop.
     """
+    if candidates is not None:
+        line = activity("acquire.keeping", kept=found, found=candidates)
+        liveness.publish_progress(activity=line, done=found, total=candidates, unit="documents")
+        return
     if round_index >= 2:
         line = activity("acquire.searching_again", pass_number=round_index, found=found)
     else:
@@ -566,6 +576,7 @@ def acquire_sources(
     pools: dict[str, list[tuple[dict[str, Any], str, str]]] | None = None,
     caps: dict[str, int] | None = None,
     round_index: int = 1,
+    search_found: int | None = None,
 ) -> dict[str, Any]:
     """Acquire metadata-only sources for an evidence scope over the given backends.
 
@@ -598,6 +609,9 @@ def acquire_sources(
             caller that only has executed calls gets.
         round_index: 1 on a fresh scope, 2 or more when the search is run
             again on the same scope; it picks the progress line's wording.
+        search_found: The distinct records the search returned, when it
+            counted them (round 9); the progress line then reads "keeping
+            {kept} of {search_found} candidates".
 
     Returns:
         Counts dict: ``acquired``, ``already_acquired``, ``skipped_unusable``,
@@ -843,7 +857,7 @@ def acquire_sources(
         acquired_tss_by_verb.setdefault(verb, []).append(str(tss_id))
         # Task 058, N2: the running count of records kept so far.
         found = sum(b["acquired"] for b in by_backend.values())
-        publish_acquire_progress(found, round_index)
+        publish_acquire_progress(found, round_index, candidates=search_found)
 
     for call in executed_calls:
         backend = backend_by_name[call.backend_name]

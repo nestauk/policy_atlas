@@ -20,6 +20,8 @@ import {
   MOCK_INTRO_INDEX,
   mockKeyFindingsClaim,
   mockSourceNotes,
+  mockSearchQueries,
+  mockLiveThemes,
   MOCK_STREAMED_SECTION_INDEX,
   mockSectionOneRevisingSpan,
   mockSectionOneClaims,
@@ -172,7 +174,10 @@ function compareMockEvidenceSort(
 /**
  * Scripted event-stream variants (contract strand 13 fixture requirement):
  * `"default"` is the full skeleton -> writing -> filled -> succeeded flow the
- * main journey drives; `"paused"` holds indefinitely at a mid-synthesis
+ * main journey drives (round 9: the search first says it is writing its
+ * queries, then sends five topic queries and one citations pass as
+ * `search.query` frames, each out then back with its count; the characterise
+ * stage sends its four themes as `characterise.themes` before its batches); `"paused"` holds indefinitely at a mid-synthesis
  * "writing" state (a demo/screenshot fixture — the run never resolves);
  * `"failed-partial"` streams both sections then ends the run `failed`, the
  * terminal-partial banner fixture the contract names. `"reload-mid-section"`
@@ -1296,16 +1301,44 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       emit(runStatus("running", nextSequence()));
       // The approved plan's steps give the card its rows to come (task 058, N5).
       emit({ type: "plan.updated", plan: currentPlan, scoping: null, version: 1, occurred_at: frameTime(), sequence: nextSequence() });
-      await walkStage(emit, emitTick, nextSequence, "acquire", wait, [
-        { activity: "searching · 62 found so far" },
-        { activity: "searching · 184 found so far" },
-        { activity: "searching · 267 found so far" },
-        { activity: "searching · 312 found so far" },
-      ], { acquired: 312 });
+      // The search (round 9): the queries are written, then each goes out
+      // and comes back with its count, the line naming the query out; then
+      // one citations pass, described in words.
+      emit(stageStarted("acquire", nextSequence()));
+      setLiveStage("acquire");
+      emitTick(tick("acquire", "Writing search queries"));
+      // The hub repeats the line while the query-writing call is open.
+      emitTick(tick("acquire", "Writing search queries", { heartbeat: true }));
+      await wait(MOCK_TICK_MS);
+      let found = 0;
+      for (const entry of mockSearchQueries) {
+        const pass = entry.kind === "citations" || entry.kind === "lookup";
+        const query = (results: number | null): SseFrame => ({
+          type: "search.query",
+          ephemeral: true,
+          backend: entry.backend,
+          query: entry.query,
+          kind: entry.kind,
+          results,
+          occurred_at: frameTime(),
+        });
+        emitTick(query(null));
+        emitTick(
+          tick("acquire", pass ? `following citations · ${withCommas(found)} found` : `searching · ${withCommas(found)} found · ${entry.query}`, {
+            done: found,
+            unit: "documents",
+          }),
+        );
+        await wait(MOCK_TICK_MS);
+        found = entry.found;
+        emitTick(query(entry.results));
+        emitTick(tick("acquire", `searching · ${withCommas(found)} found`, { done: found, unit: "documents" }));
+      }
+      emit(stageCompleted("acquire", { acquired: found }, nextSequence()));
       await walkStage(emit, emitTick, nextSequence, "screen", wait, [
-        { activity: "screening 87 new abstracts · 104 relevant so far" },
-        { activity: "screening 61 new abstracts · 107 relevant so far" },
-        { activity: "screening 23 new abstracts · 112 relevant so far" },
+        { activity: "screening 87 abstracts · 104 relevant" },
+        { activity: "screening 61 abstracts · 107 relevant" },
+        { activity: "screening 23 abstracts · 112 relevant" },
       ], { relevant: 118, screened_out: 317 });
       // The run genuinely parks at this boundary (028 pause salience: paused
       // must read distinct from executing on every tab) — an explicit
@@ -1338,11 +1371,18 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       await walkStage(emit, emitTick, nextSequence, "appraise", wait, [
         { activity: "Classifying" },
       ], { quality_checked: 118 });
-      await walkStage(emit, emitTick, nextSequence, "characterise", wait, [
-        { activity: "Assigning themes · batch 1 of 3", done: 1, total: 3, unit: "batches" },
-        { activity: "Assigning themes · batch 2 of 3", done: 2, total: 3, unit: "batches" },
-        { activity: "Assigning themes · batch 3 of 3", done: 3, total: 3, unit: "batches" },
-      ], { theme_count: 7 });
+      // The themes show once found, while the sources are assigned (round 9).
+      emit(stageStarted("characterise", nextSequence()));
+      setLiveStage("characterise");
+      emitTick(tick("characterise", "Finding themes"));
+      emitTick(tick("characterise", "Finding themes", { heartbeat: true }));
+      await wait(MOCK_TICK_MS);
+      emitTick({ type: "characterise.themes", ephemeral: true, themes: mockLiveThemes, occurred_at: frameTime() });
+      for (const done of [1, 2, 3]) {
+        emitTick(tick("characterise", `Assigning themes · batch ${done} of 3`, { done, total: 3, unit: "batches" }));
+        await wait(MOCK_TICK_MS);
+      }
+      emit(stageCompleted("characterise", { theme_count: mockLiveThemes.length }, nextSequence()));
       emit(stageStarted("synthesise", nextSequence()));
       setLiveStage("synthesise");
 
@@ -1510,7 +1550,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       }
       // The introduction streams into its own slot (round 8).
       emit({ type: "artefact.section_started", index: MOCK_INTRO_INDEX, occurred_at: FRAME_TIME, sequence: nextSequence() });
-      emitTick(tick("synthesise", "Writing the introduction", { section: "Full report" }));
+      emitTick(tick("synthesise", "Writing the introduction", { section: "Introduction" }));
       for (const chunk of chunkWords(MOCK_FULL_REPORT_INTRO)) {
         await pace(100);
         emit({ type: "artefact.section_delta", ephemeral: true, index: MOCK_INTRO_INDEX, mode: "append", text: chunk, occurred_at: frameTime() });

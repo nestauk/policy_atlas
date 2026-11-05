@@ -155,6 +155,26 @@ export interface LiveSourceNote {
   note: string;
 }
 
+/** One search query as the search sends it (`search.query`, task 058,
+ *  round 9): `results` is null while it is out and the records it returned
+ *  once back. A topic or semantic query carries its text; a citations or
+ *  lookup pass carries a short description, never ids. Display-only: the
+ *  saved search record lists the queries after the stage. */
+export interface LiveSearchQuery {
+  backend: string;
+  query: string;
+  kind: "topic" | "semantic" | "citations" | "lookup";
+  results: number | null;
+}
+
+/** One theme as the characterise stage found it, before sources are
+ *  assigned (`characterise.themes`, task 058, round 9). Display-only: the
+ *  saved characterisation brings the themes with their document counts. */
+export interface LiveTheme {
+  label: string;
+  description: string | null;
+}
+
 /** One case-study card as it closes in the streamed reply (task 058, round 7). */
 export interface LiveCard {
   title: string;
@@ -212,6 +232,16 @@ export interface RunStreamState {
    *  Absent until the first note; cleared when a new run starts (task 058,
    *  round 8). */
   liveSourceNotes?: LiveSourceNote[];
+  /** The run's search queries, in the order first sent, one row per
+   *  (backend, query, kind): the frame sent when a query comes back updates
+   *  its row in place, and a reconnect's repeat replaces, never doubles.
+   *  Absent until the first query; cleared when a new run starts (task 058,
+   *  round 9). */
+  liveSearchQueries?: LiveSearchQuery[];
+  /** The characterise stage's themes once found, in order, before sources
+   *  are assigned to them (`characterise.themes`). Absent until then;
+   *  cleared when a new run starts (task 058, round 9). */
+  liveThemes?: LiveTheme[];
   /** Transient: latest tick per stage. Never sequence-gated, never replayed
    *  (a fresh mount/reconnect starts this slice empty regardless of
    *  cursor). */

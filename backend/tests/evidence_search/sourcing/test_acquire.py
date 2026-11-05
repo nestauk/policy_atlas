@@ -1195,7 +1195,7 @@ def test_acquire_publishes_records_found_so_far(
     assert counts["acquired"] == 24
     assert [c["done"] for c in calls] == list(range(1, 25))
     assert all(c["total"] is None and c["unit"] == "documents" for c in calls)
-    assert calls[-1]["activity"] == "searching · 24 found so far"
+    assert calls[-1]["activity"] == "searching · 24 found"
 
 
 def test_acquire_on_a_second_pass_names_the_pass(
@@ -1216,4 +1216,28 @@ def test_acquire_on_a_second_pass_names_the_pass(
         round_index=2,
     )
 
-    assert calls[-1]["activity"] == "Search 2 · 12 found so far"
+    assert calls[-1]["activity"] == "Search 2 · 12 found"
+
+
+def test_acquire_counts_kept_records_against_the_search_candidates(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lead ruling, round 9: "keeping {kept} of {found} candidates", done against total."""
+    calls = progress_recorder.install(monkeypatch)
+    pid, rid = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    context = make_context(scope_id)
+    backends = [OpenAlexFixtureBackend()]
+    acquire_sources(
+        conn,
+        task_id=pid,
+        run_id=rid,
+        context=context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, context.intent),
+        search_found=40,
+    )
+
+    assert [c["done"] for c in calls] == list(range(1, 13))
+    assert all(c["total"] == 40 and c["unit"] == "documents" for c in calls)
+    assert calls[-1]["activity"] == "keeping 12 of 40 candidates"

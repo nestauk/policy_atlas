@@ -27,8 +27,8 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
     "classify": ("Classifying", "Labelling each source by its evidence type."),
     "appraise": ("Classifying", "Scoring how much weight each source can bear."),
     "ingest": (
-        "Reading the full texts",
-        "Fetching each selected document and reading it into sections.",
+        "Collecting the full texts",
+        "Fetching each full text and making it searchable.",
     ),
     "characterise": ("Mapping", "What the evidence covers, and where it is thin."),
     "select": ("Shortlisting", "The strongest, most varied set for close reading."),
@@ -89,7 +89,7 @@ STAGE_COUNTS: dict[StageKey, tuple[tuple[str, str], ...]] = {
     "screen": (("relevant", "relevant"),),
     "classify": (("classified", "classified"),),
     "appraise": (),
-    "ingest": (("ingested", "read"),),
+    "ingest": (("ingested", "collected"),),
     "characterise": (("theme_count", "themes"),),
     "select": (("selected_count", "selected"),),
     "extract": (("finding_count", "findings"),),
@@ -175,14 +175,33 @@ STEP_VERBS: dict[str, str] = {
 #: own counts and publish the result as the tick's ``activity``; the client
 #: renders the string as it is. Field names are the ``str.format`` keys.
 ACTIVITY: dict[str, str] = {
-    # acquire and screen stage 1: no honest total, so "so far" (N2)
-    "acquire.searching": "searching · {found:,} found so far",
-    "acquire.searching_again": "Search {pass_number} · {found:,} found so far",
-    "screen.abstracts": "screening {remaining:,} new abstracts · {relevant:,} relevant so far",
+    # acquire and screen stage 1: no honest total, so a running count (N2;
+    # "new" and "so far" dropped, owner round 9)
+    "search.writing_queries": "Writing search queries",
+    "acquire.searching": "searching · {found:,} found",
+    "acquire.searching_again": "Search {pass_number} · {found:,} found",
+    # round 9: the topic or semantic query out last, cut on a word
+    "acquire.searching_query": "searching · {found:,} found · {query}",
+    "acquire.searching_again_query": "Search {pass_number} · {found:,} found · {query}",
+    # round 9: the passes that look works up by id
+    "acquire.following": "following citations · {found:,} found",
+    # round 9 (lead ruling): while the ranked pool is kept, counted against
+    # the search's candidates, so the count never reads as a drop
+    "acquire.keeping": "keeping {kept:,} of {found:,} candidates",
+    "screen.abstracts": "screening {remaining:,} abstracts · {relevant:,} relevant",
+    # round 9: how a citations or lookup pass is named in the search's query
+    # list (``search.query``), never by its ids
+    "search.citations_from": "Following citations from {count:,} sources",
+    "search.citations_from_one": "Following citations from 1 source",
+    "search.lookup_works": "Looking up {count:,} cited works",
+    "search.lookup_works_one": "Looking up 1 cited work",
+    "search.lookup_documents": "Looking up {count:,} cited documents",
+    "search.lookup_documents_one": "Looking up 1 cited document",
     # loops with a known total: "n of M <unit>"
     "screen.full_texts": "reading {done} of {total} full texts for relevance",
     "classify.progress": "{done:,} of {total:,} classified",
-    "ingest.progress": "{done} of {total} read",
+    # owner round 9: the stage fetches and indexes; it does not read
+    "ingest.progress": "collecting {done} of {total}",
     "extract.progress": "{done} of {total} read for findings",
     "extract_interventions.progress": "{done:,} of {total:,} abstracts read",
     # batch stages: "batch n of M" (N2)

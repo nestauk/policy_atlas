@@ -1824,6 +1824,35 @@ export interface components {
             title: string;
         };
         /**
+         * CharacteriseThemesFrame
+         * @description Ephemeral: the themes found, before sources are assigned to them (round 9).
+         *
+         *     Sent once the characterise stage has found its themes, in the order
+         *     found; the saved characterisation brings them with their document counts
+         *     when the stage ends. A reconnect gets them again. Display-only: never
+         *     persisted, no `id:` line, no `sequence`.
+         */
+        CharacteriseThemesFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Themes */
+            themes: components["schemas"]["LiveTheme"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "characterise.themes";
+        };
+        /**
          * ChatTurnCreate
          * @description One idempotent question submitted to an active chat conversation.
          */
@@ -3157,6 +3186,20 @@ export interface components {
             definition: string;
             /** Key */
             key: string;
+        };
+        /**
+         * LiveTheme
+         * @description One theme as the characterise stage found it (task 058, round 9).
+         *
+         *     Args:
+         *         label: The theme's name.
+         *         description: Its one-line description, or null.
+         */
+        LiveTheme: {
+            /** Description */
+            description: string | null;
+            /** Label */
+            label: string;
         };
         /**
          * LonglistCountsOut
@@ -4978,6 +5021,54 @@ export interface components {
             steer_point: string;
         };
         /**
+         * SearchQueryFrame
+         * @description Ephemeral: one search query as it goes out, and again when it comes back (round 9).
+         *
+         *     A query is identified by `(backend, query, kind)`: the frame sent when it
+         *     comes back (with `results`) replaces the one sent when it went out
+         *     (`results` null). A reconnect gets the run's queries so far, each in its
+         *     latest state. Display-only: never persisted, no `id:` line, no
+         *     `sequence`; the saved search record lists the queries after the stage.
+         *
+         *     Args:
+         *         backend: The database searched, `openalex` or `overton`.
+         *         query: The query text for a `topic` or `semantic` query; for a
+         *             `citations` or `lookup` pass a short description ("Following
+         *             citations from 50 sources"), never the ids.
+         *         kind: `topic`, `semantic`, `citations` or `lookup`.
+         *         results: Null while the query is out; the number of records it
+         *             returned once it is back.
+         */
+        SearchQueryFrame: {
+            /** Backend */
+            backend: string;
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "topic" | "semantic" | "citations" | "lookup";
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Query */
+            query: string;
+            /** Results */
+            results: number | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "search.query";
+        };
+        /**
          * SectionCitation
          * @description One checked citation on a completed live section (task 058, round 7).
          *
@@ -5249,7 +5340,7 @@ export interface components {
             /** Tag Type */
             tag_type: string;
         };
-        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"] | components["schemas"]["ArtefactSectionDeltaFrame"] | components["schemas"]["ArtefactSectionRevisingFrame"] | components["schemas"]["ArtefactSectionSourcesFrame"] | components["schemas"]["ArtefactSectionClaimFrame"] | components["schemas"]["ArtefactSectionCardFrame"] | components["schemas"]["ArtefactSourceNoteFrame"];
+        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"] | components["schemas"]["ArtefactSectionDeltaFrame"] | components["schemas"]["ArtefactSectionRevisingFrame"] | components["schemas"]["ArtefactSectionSourcesFrame"] | components["schemas"]["ArtefactSectionClaimFrame"] | components["schemas"]["ArtefactSectionCardFrame"] | components["schemas"]["ArtefactSourceNoteFrame"] | components["schemas"]["SearchQueryFrame"] | components["schemas"]["CharacteriseThemesFrame"];
         /**
          * StageCompletedFrame
          * @description A component reached its terminal (successful) outcome.

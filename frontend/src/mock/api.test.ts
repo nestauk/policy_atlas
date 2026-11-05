@@ -25,6 +25,9 @@ import {
   mockKeyFindingsClaim,
   mockSectionOneRevisingSpan,
   mockSourceNotes,
+  mockSearchQueries,
+  mockLiveThemes,
+  mockLandscape,
   mockEvidenceThemeIds,
   mockMeEnrolled,
   foldMockOptionRows,
@@ -665,8 +668,13 @@ describe("mock API", () => {
       }
       const lines = ticks.map((entry) => entry.activity);
       expect(lines).toEqual(expect.arrayContaining([
-        "searching · 184 found so far",
-        "screening 61 new abstracts · 107 relevant so far",
+        "Writing search queries",
+        "searching · 34 found · primary school food environment obesity",
+        "searching · 128 found",
+        "following citations · 128 found",
+        "searching · 312 found",
+        "screening 61 abstracts · 107 relevant",
+        "Finding themes",
         "40 of 118 classified",
         "Assigning themes · batch 1 of 3",
         "Looking for: evidence on subsidy uptake among low-income households",
@@ -680,6 +688,36 @@ describe("mock API", () => {
       // One heartbeat per stage with ticks.
       const heartbeats = ticks.filter((entry): entry is Tick => entry.heartbeat);
       expect(heartbeats.map((entry) => entry.stage)).toEqual(["acquire", "screen", "classify", "appraise", "characterise"]);
+    });
+
+    it("sends each search query out then back, then the citations pass, before the stage completes (round 9)", async () => {
+      const frames = await playEvidenceWalk();
+      const queries = ofType(frames, "search.query");
+      expect(queries).toHaveLength(mockSearchQueries.length * 2);
+      mockSearchQueries.forEach((entry, i) => {
+        expect(queries[2 * i]).toMatchObject({ backend: entry.backend, query: entry.query, kind: entry.kind, results: null, ephemeral: true });
+        expect(queries[2 * i + 1]).toMatchObject({ backend: entry.backend, query: entry.query, kind: entry.kind, results: entry.results });
+        expect(queries[2 * i]).not.toHaveProperty("sequence");
+      });
+      const writing = ofType(frames, "tick").find((entry) => entry.activity === "Writing search queries")!;
+      const done = ofType(frames, "stage.completed").find((entry) => entry.stage === "acquire")!;
+      expect(frames.indexOf(writing)).toBeLessThan(frames.indexOf(queries[0]));
+      expect(frames.indexOf(queries.at(-1)!)).toBeLessThan(frames.indexOf(done));
+      expect(done.summary).toMatchObject({ acquired: mockSearchQueries.at(-1)!.found });
+    });
+
+    it("sends the themes once found, before the assignment batches (round 9)", async () => {
+      const frames = await playEvidenceWalk();
+      const [themes] = ofType(frames, "characterise.themes");
+      expect(themes.themes).toEqual(mockLiveThemes);
+      // The saved landscape names the same four, in the same order, with counts.
+      expect(mockLiveThemes.map((theme) => theme.label)).toEqual(mockLandscape.themes?.map((theme) => theme.name));
+      expect(mockLiveThemes).toHaveLength(4);
+      expect(mockLandscape.themes?.every((theme) => theme.size > 0)).toBe(true);
+      const done = ofType(frames, "stage.completed").find((entry) => entry.stage === "characterise")!;
+      expect(done.summary).toMatchObject({ theme_count: 4 });
+      const firstBatch = ofType(frames, "tick").find((entry) => entry.activity === "Assigning themes · batch 1 of 3")!;
+      expect(frames.indexOf(themes)).toBeLessThan(frames.indexOf(firstBatch));
     });
 
     it("streams section 1 as deltas, then the revising span, then the repaired section", async () => {
@@ -861,7 +899,8 @@ describe("mock API", () => {
       const [skeleton] = ofType(frames, "artefact.skeleton");
       expect(skeleton.sections.at(-1)).toEqual({ index: MOCK_INTRO_INDEX, title: "Full report", focus: "", role: "intro" });
       const line = ofType(frames, "tick").find((entry) => entry.activity === "Writing the introduction");
-      expect(line?.section).toBe("Full report");
+      // The slot keeps its title; the line names the introduction (round 9).
+      expect(line?.section).toBe("Introduction");
     });
 
     it("serves the planner turn as a stream: progress, deltas, one completed last", async () => {

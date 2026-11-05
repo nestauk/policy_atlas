@@ -13,7 +13,11 @@ sees them too (task 058, "evidence shown live", owner 2026-11-05). The
 case-study cards are passed on the same way, each as it closes (task 058,
 round 7). After the sections, each most-relevant-source note is passed on as
 it is written; the hub keeps the run's notes for a newly connected browser
-until the run ends (task 058, round 8).
+until the run ends (task 058, round 8). While the search runs, each query is
+passed on as it goes out and again when it comes back, and after the
+characterise stage finds its themes, their names are passed on before the
+sources are assigned to them; the hub keeps both for a newly connected
+browser until the run ends (task 058, round 9).
 
 Nothing here is saved to the database. The durable record stays in
 ``event_log``; these messages may be lost (a full queue drops its oldest
@@ -207,6 +211,52 @@ class SourceNote:
     occurred_at: datetime
 
 
+#: What a search query is: a written topic query, a meaning-based
+#: (semantic) query, a pass following citations, or a pass looking up works
+#: by id (task 058, round 9).
+type SearchQueryKind = Literal["topic", "semantic", "citations", "lookup"]
+
+
+@dataclass(frozen=True, slots=True)
+class SearchQuery:
+    """One search query as it goes out, and again when it comes back (task 058, round 9).
+
+    Display-only: the saved search record lists the queries after the stage.
+
+    Attributes:
+        backend: The database searched (``"openalex"`` or ``"overton"``).
+        query: The query text for a topic or semantic query; a short
+            description for a citations or lookup pass (never the ids).
+        kind: ``"topic"``, ``"semantic"``, ``"citations"`` or ``"lookup"``.
+        results: ``None`` while the query is out; the number of records it
+            returned once it is back.
+        occurred_at: When the message was sent.
+    """
+
+    backend: str
+    query: str
+    kind: SearchQueryKind
+    results: int | None
+    occurred_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ThemesFound:
+    """The characterise stage's themes, found before sources are assigned to them (round 9).
+
+    Display-only: the saved characterisation brings the themes with their
+    document counts.
+
+    Attributes:
+        themes: ``(label, description)`` pairs in the order found; the
+            description may be ``None``.
+        occurred_at: When the message was sent.
+    """
+
+    themes: tuple[tuple[str, str | None], ...]
+    occurred_at: datetime
+
+
 type HubMessage = (
     Tick
     | SectionDelta
@@ -215,6 +265,8 @@ type HubMessage = (
     | SectionClaim
     | SectionCard
     | SourceNote
+    | SearchQuery
+    | ThemesFound
 )
 
 
@@ -274,6 +326,17 @@ class _TaskMemory:
     #: The run's source notes so far, in the order written (round 8).
     source_notes: list[SourceNote] = field(default_factory=list)
     source_notes_at: float = 0.0
+    #: The run's search queries so far, keyed by (backend, query, kind), in
+    #: the order first sent; each holds its latest message (round 9).
+    search_queries: dict[tuple[str, str, str], SearchQuery] = field(default_factory=dict)
+    search_queries_at: float = 0.0
+    #: The characterise stage's themes, once found (round 9).
+    themes: ThemesFound | None = None
+    themes_at: float = 0.0
+
+    def keeps_run_lists(self) -> bool:
+        """Whether the run's source notes, search queries or themes are remembered."""
+        return bool(self.source_notes or self.search_queries or self.themes is not None)
 
 
 def _now_utc() -> datetime:
@@ -345,12 +408,14 @@ class TickHub:
             task_id: The task to follow.
 
         Returns:
-            The queue, and the remembered state: the last tick of each stage
-            (in the order the stages first appeared), then, if a section is
-            being written, one ``replace`` delta carrying its text so far
-            (when there is any), the sources read so far (when there are
-            any), each citation bound so far and each case-study card closed
-            so far; then the run's source notes so far, in order.
+            The queue, and the remembered state: the run's search queries
+            so far (each in its latest state, in the order first sent) and
+            its themes once found; then the last tick of each stage (in the
+            order the stages first appeared), then, if a section is being
+            written, one ``replace`` delta carrying its text so far (when
+            there is any), the sources read so far (when there are any),
+            each citation bound so far and each case-study card closed so
+            far; then the run's source notes so far, in order.
         """
         queue: asyncio.Queue[HubMessage] = asyncio.Queue(maxsize=self._queue_size)
         subscriber = _Subscriber(asyncio.get_running_loop(), queue)
@@ -364,6 +429,13 @@ class TickHub:
             self._subscribers.setdefault(task_id, []).append(subscriber)
             snapshot: list[HubMessage] = []
             if memory is not None:
+                if (
+                    memory.search_queries
+                    and now - memory.search_queries_at < MEMORY_TTL_SECONDS
+                ):
+                    snapshot.extend(memory.search_queries.values())
+                if memory.themes is not None and now - memory.themes_at < MEMORY_TTL_SECONDS:
+                    snapshot.append(memory.themes)
                 for stage_memory in memory.stages.values():
                     last = stage_memory.last
                     if last is None or now - stage_memory.updated_at >= MEMORY_TTL_SECONDS:
@@ -725,6 +797,52 @@ class TickHub:
             memory.source_notes_at = self._clock()
             self._fan_out(task_id, message)
 
+    def publish_search_query(
+        self,
+        task_id: uuid.UUID,
+        *,
+        backend: str,
+        query: str,
+        kind: SearchQueryKind,
+        results: int | None,
+    ) -> None:
+        """Send one search query's state, and remember it for a reconnect until the run ends.
+
+        A query is keyed by ``(backend, query, kind)``: the message sent when
+        it comes back replaces the one sent when it went out.
+
+        Args:
+            task_id: The task.
+            backend: The database searched.
+            query: The query text, or a short description of an id pass.
+            kind: What the query is.
+            results: ``None`` while out; the records returned once back.
+        """
+        message = SearchQuery(
+            backend=backend, query=query, kind=kind, results=results, occurred_at=_now_utc()
+        )
+        with self._lock:
+            memory = self._tasks.setdefault(task_id, _TaskMemory())
+            memory.search_queries[(backend, query, kind)] = message
+            memory.search_queries_at = self._clock()
+            self._fan_out(task_id, message)
+
+    def publish_themes(
+        self, task_id: uuid.UUID, *, themes: Sequence[tuple[str, str | None]]
+    ) -> None:
+        """Send the themes found, and remember them for a reconnect until the run ends.
+
+        Args:
+            task_id: The task.
+            themes: ``(label, description)`` pairs in the order found.
+        """
+        message = ThemesFound(themes=tuple(themes), occurred_at=_now_utc())
+        with self._lock:
+            memory = self._tasks.setdefault(task_id, _TaskMemory())
+            memory.themes = message
+            memory.themes_at = self._clock()
+            self._fan_out(task_id, message)
+
     def clear_draft(self, task_id: uuid.UUID) -> None:
         """Forget the section draft, its sources, citations and cards, and any held append.
 
@@ -758,7 +876,7 @@ class TickHub:
 
         A top-level run forgets everything the task's earlier run left
         (ticks, held ticks, open calls, draft, held text, source notes,
-        dropped count). A
+        search queries, themes, dropped count). A
         child run (one with a parent) changes nothing, so a parent's and its
         children's activity never wipe each other out.
 
@@ -841,7 +959,8 @@ class TickHub:
 
         A stage with an open model call whose last tick went out at least
         :data:`HEARTBEAT_SECONDS` ago gets that tick again with
-        ``heartbeat=True``. Ticks, drafts and source notes not updated for
+        ``heartbeat=True``. Ticks, drafts, source notes, search queries and
+        themes not updated for
         :data:`MEMORY_TTL_SECONDS` are forgotten. While any call is open,
         another sweep is arranged.
         """
@@ -878,10 +997,17 @@ class TickHub:
                 ):
                     memory.source_notes = []
                 if (
+                    memory.search_queries
+                    and now - memory.search_queries_at >= MEMORY_TTL_SECONDS
+                ):
+                    memory.search_queries = {}
+                if memory.themes is not None and now - memory.themes_at >= MEMORY_TTL_SECONDS:
+                    memory.themes = None
+                if (
                     not memory.stages
                     and memory.draft is None
                     and memory.pending_delta is None
-                    and not memory.source_notes
+                    and not memory.keeps_run_lists()
                 ):
                     # Nothing left to remember: drop the task (and its run id) for good.
                     del self._tasks[task_id]
@@ -964,7 +1090,7 @@ class TickHub:
             not memory.stages
             and memory.draft is None
             and memory.pending_delta is None
-            and not memory.source_notes
+            and not memory.keeps_run_lists()
             and memory.run_id is None
         ):
             self._tasks.pop(task_id, None)
@@ -1177,6 +1303,35 @@ def publish_source_note(source_id: str, title: str, note: str) -> None:
     task_id = _task_id.get()
     if task_id is not None:
         tick_hub.publish_source_note(task_id, source_id=source_id, title=title, note=note)
+
+
+def publish_search_query(
+    backend: str, query: str, kind: SearchQueryKind, results: int | None
+) -> None:
+    """Publish one search query's state for the bound task (no-op when unbound).
+
+    Args:
+        backend: The database searched.
+        query: The query text, or a short description of an id pass.
+        kind: What the query is.
+        results: ``None`` while out; the records returned once back.
+    """
+    task_id = _task_id.get()
+    if task_id is not None:
+        tick_hub.publish_search_query(
+            task_id, backend=backend, query=query, kind=kind, results=results
+        )
+
+
+def publish_themes(themes: Sequence[tuple[str, str | None]]) -> None:
+    """Publish the themes found for the bound task (no-op when unbound).
+
+    Args:
+        themes: ``(label, description)`` pairs in the order found.
+    """
+    task_id = _task_id.get()
+    if task_id is not None:
+        tick_hub.publish_themes(task_id, themes=themes)
 
 
 def clear_section_draft() -> None:

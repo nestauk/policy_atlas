@@ -204,6 +204,11 @@ class ClusteringPolicy:
         progress_key: ``ACTIVITY`` key (a ``"<stage>.batches"`` line) the
             first assignment round publishes as each batch finishes, or
             ``None`` to publish nothing (task 058, N2).
+        on_labels: Called once with the discovered labels, in order, after
+            discovery and before assignment (when there are any), or
+            ``None``. The characterise stage publishes its themes this way,
+            so the page shows them while sources are assigned (task 058,
+            round 9).
     """
 
     min_labels: int
@@ -223,6 +228,7 @@ class ClusteringPolicy:
     rejection_reason_cap: int = _DEFAULT_REJECTION_REASON_CAP
     rejection_detail_max_len: int = _DEFAULT_REJECTION_DETAIL_MAX_LEN
     progress_key: str | None = None
+    on_labels: Callable[[list[ClusterLabel]], None] | None = None
 
 
 @dataclass(frozen=True)
@@ -473,6 +479,8 @@ def cluster_units(
             usage_totals=usage_totals.payload(),
         )
 
+    if policy.on_labels is not None:
+        policy.on_labels(labels)
     assignments, repair_calls_used = _assign_units(
         backend=backend,
         units=units,

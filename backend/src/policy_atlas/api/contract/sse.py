@@ -3,9 +3,10 @@
 Frame `type` names and the nineteen pinned `stage` keys are contract (spec §
 SSE) — Hyrum hygiene means nothing else internal (module names, model ids,
 raw payload keys) is ever observable through a frame. Every frame except the
-seven ephemeral ones (`tick`, `artefact.section_delta`,
+nine ephemeral ones (`tick`, `artefact.section_delta`,
 `artefact.section_revising`, `artefact.section_sources`,
-`artefact.section_claim`, `artefact.section_card`, `artefact.source_note`)
+`artefact.section_claim`, `artefact.section_card`, `artefact.source_note`,
+`search.query`, `characterise.themes`)
 carries a `sequence` (the `event_log` sequence,
 doubling as the client's reconnect cursor); the ephemeral frames carry
 neither `sequence` nor an `id:` line and are never replayed.
@@ -398,6 +399,67 @@ class ArtefactSourceNoteFrame(BaseModel):
     occurred_at: datetime
 
 
+#: What a search query is (task 058, round 9): a written topic query, a
+#: meaning-based (semantic) query, a pass following citations, or a pass
+#: looking up cited works by id.
+SearchQueryKind = Literal["topic", "semantic", "citations", "lookup"]
+
+
+class SearchQueryFrame(BaseModel):
+    """Ephemeral: one search query as it goes out, and again when it comes back (round 9).
+
+    A query is identified by `(backend, query, kind)`: the frame sent when it
+    comes back (with `results`) replaces the one sent when it went out
+    (`results` null). A reconnect gets the run's queries so far, each in its
+    latest state. Display-only: never persisted, no `id:` line, no
+    `sequence`; the saved search record lists the queries after the stage.
+
+    Args:
+        backend: The database searched, `openalex` or `overton`.
+        query: The query text for a `topic` or `semantic` query; for a
+            `citations` or `lookup` pass a short description ("Following
+            citations from 50 sources"), never the ids.
+        kind: `topic`, `semantic`, `citations` or `lookup`.
+        results: Null while the query is out; the number of records it
+            returned once it is back.
+    """
+
+    type: Literal["search.query"]
+    ephemeral: Literal[True] = True
+    backend: str
+    query: str
+    kind: SearchQueryKind
+    results: int | None
+    occurred_at: datetime
+
+
+class LiveTheme(BaseModel):
+    """One theme as the characterise stage found it (task 058, round 9).
+
+    Args:
+        label: The theme's name.
+        description: Its one-line description, or null.
+    """
+
+    label: str
+    description: str | None
+
+
+class CharacteriseThemesFrame(BaseModel):
+    """Ephemeral: the themes found, before sources are assigned to them (round 9).
+
+    Sent once the characterise stage has found its themes, in the order
+    found; the saved characterisation brings them with their document counts
+    when the stage ends. A reconnect gets them again. Display-only: never
+    persisted, no `id:` line, no `sequence`.
+    """
+
+    type: Literal["characterise.themes"]
+    ephemeral: Literal[True] = True
+    themes: list[LiveTheme]
+    occurred_at: datetime
+
+
 #: Discriminated union of every SSE frame type, keyed on `type`.
 SseFrame = Annotated[
     RunStatusFrame
@@ -417,6 +479,8 @@ SseFrame = Annotated[
     | ArtefactSectionSourcesFrame
     | ArtefactSectionClaimFrame
     | ArtefactSectionCardFrame
-    | ArtefactSourceNoteFrame,
+    | ArtefactSourceNoteFrame
+    | SearchQueryFrame
+    | CharacteriseThemesFrame,
     Field(discriminator="type"),
 ]

@@ -23,7 +23,7 @@ export const STAGE_PRESENTATION: Record<StageKey, readonly [label: string, blurb
   screen: ["Screening", "Reading each abstract against the question."],
   classify: ["Classifying", "Labelling each source by its evidence type."],
   appraise: ["Classifying", "Scoring how much weight each source can bear."],
-  ingest: ["Reading the full texts", "Fetching each selected document and reading it into sections."],
+  ingest: ["Collecting the full texts", "Fetching each full text and making it searchable."],
   characterise: ["Mapping", "What the evidence covers, and where it is thin."],
   select: ["Shortlisting", "The strongest, most varied set for close reading."],
   extract: ["Extracting findings", "Each finding is pulled out with its exact quote."],
@@ -47,7 +47,7 @@ export const STAGE_COUNTS: Record<StageKey, ReadonlyArray<readonly [string, stri
   screen: [["relevant", "relevant"]],
   classify: [["classified", "classified"]],
   appraise: [],
-  ingest: [["ingested", "read"]],
+  ingest: [["ingested", "collected"]],
   characterise: [["theme_count", "themes"]],
   select: [["selected_count", "selected"]],
   extract: [["finding_count", "findings"]],
@@ -179,6 +179,7 @@ export const mockFunnel: components["schemas"]["FunnelOut"] = {
 
 export const MOCK_THEME_ID_SCHOOL_FOOD = "30000000-0000-4000-8000-000000000001";
 export const MOCK_THEME_ID_ACTIVE_TRAVEL = "30000000-0000-4000-8000-000000000002";
+export const MOCK_THEME_ID_HIGH_STREETS = "30000000-0000-4000-8000-000000000003";
 
 /** Every landscape distribution totals 46: the screened-in, not found, count.
  *  "Family support" carries no `theme_id` on purpose — a legacy
@@ -190,7 +191,10 @@ export const mockLandscape: components["schemas"]["LandscapeOut"] = {
   themes: [
     { name: "School food environments", size: 19, description: "Meal standards, free breakfast, and food access.", theme_id: MOCK_THEME_ID_SCHOOL_FOOD },
     { name: "Active travel", size: 15, description: "Safer walking and cycling for the school journey.", theme_id: MOCK_THEME_ID_ACTIVE_TRAVEL },
-    { name: "Family support", size: 12, description: "Affordable cooking and community referral support." },
+    { name: "Family support", size: 6, description: "Affordable cooking and community referral support." },
+    // Round 9 (lead ruling): the four themes the live `characterise.themes`
+    // frame names, in its order, so the handover neither reorders nor drops one.
+    { name: "Healthy high streets", size: 6, description: "Food outlets and advertising around schools.", theme_id: MOCK_THEME_ID_HIGH_STREETS },
   ],
   geographies: { "Tower Hamlets": 22, "London": 14, "Comparable UK cities": 10 },
 };
@@ -217,6 +221,7 @@ export const mockEvidenceThemeIds: Record<string, string[]> = {
   [mockEvidence[4].source_id]: [MOCK_THEME_ID_SCHOOL_FOOD],
   [mockEvidence[7].source_id]: [MOCK_THEME_ID_SCHOOL_FOOD],
   [mockEvidence[6].source_id]: [MOCK_THEME_ID_ACTIVE_TRAVEL],
+  [mockEvidence[3].source_id]: [MOCK_THEME_ID_HIGH_STREETS],
 };
 
 /** Shared + distinct institutions: markers 1, 1-2 — the D5 numbering path.
@@ -562,6 +567,33 @@ function mockLiveCitations(claims: MockCitedClaim[]): components["schemas"]["Sec
  *  slot and as the committed report keeps it (task 058, round 8). */
 export const MOCK_FULL_REPORT_INTRO =
   "The report first sets out what local action the evidence supports, then turns to the programmes that show it working in practice.";
+
+/** The search's queries as `search.query` carries them (task 058, round 9):
+ *  the five topic queries the coverage record lists after the stage, each
+ *  sent then back with its count, then one citations pass described in
+ *  words. `found` is the activity line's running count once each is back. */
+export const mockSearchQueries: {
+  backend: "openalex" | "overton";
+  query: string;
+  kind: "topic" | "semantic" | "citations" | "lookup";
+  results: number;
+  found: number;
+}[] = [
+  { backend: "openalex", query: "childhood obesity school intervention UK", kind: "topic", results: 34, found: 34 },
+  { backend: "openalex", query: "primary school food environment obesity", kind: "topic", results: 28, found: 62 },
+  { backend: "overton", query: "Tower Hamlets school food policy", kind: "topic", results: 19, found: 81 },
+  { backend: "openalex", query: "active travel school children obesity", kind: "topic", results: 24, found: 105 },
+  { backend: "overton", query: "UK childhood obesity local strategy", kind: "topic", results: 23, found: 128 },
+  { backend: "openalex", query: "Following citations from 50 sources", kind: "citations", results: 184, found: 312 },
+];
+
+/** The themes as `characterise.themes` carries them once found, before the
+ *  sources are assigned (task 058, round 9): the saved landscape's four, in
+ *  its order and with its words, so the handover to the saved themes (with
+ *  their counts) neither reorders nor drops one. */
+export const mockLiveThemes: { label: string; description: string | null }[] = (mockLandscape.themes ?? []).map(
+  (theme) => ({ label: theme.name, description: theme.description ?? null }),
+);
 
 /** The most-relevant-source notes as `artefact.source_note` carries them, in
  *  the order written, and as the committed report keeps them (round 8). Each

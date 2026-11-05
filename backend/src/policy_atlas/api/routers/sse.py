@@ -29,11 +29,14 @@ from policy_atlas.api.contract import (
     ArtefactSectionStartedFrame,
     ArtefactSkeletonFrame,
     ArtefactSourceNoteFrame,
+    CharacteriseThemesFrame,
     CheckinPendingFrame,
     CheckinResolvedFrame,
+    LiveTheme,
     PlanUpdatedFrame,
     RunStatus,
     RunStatusFrame,
+    SearchQueryFrame,
     SectionSourceRef,
     SectionSpan,
     StageCompletedFrame,
@@ -72,12 +75,14 @@ from policy_atlas.api.stage_vocabulary import (
 from policy_atlas.core import events
 from policy_atlas.core.liveness import (
     HubMessage,
+    SearchQuery,
     SectionCard,
     SectionDelta,
     SectionRevising,
     SectionSources,
     SourceNote,
     SourceRef,
+    ThemesFound,
     Tick,
     tick_hub,
 )
@@ -654,6 +659,8 @@ def _encode_ephemeral(message: HubMessage) -> str:
             | ArtefactSectionClaimFrame
             | ArtefactSectionCardFrame
             | ArtefactSourceNoteFrame
+            | SearchQueryFrame
+            | CharacteriseThemesFrame
         ) = (
             TickFrame(
                 type="tick",
@@ -704,6 +711,24 @@ def _encode_ephemeral(message: HubMessage) -> str:
             source_id=message.source_id,
             title=message.title,
             note=message.note,
+            occurred_at=message.occurred_at,
+        )
+    elif isinstance(message, SearchQuery):
+        frame = SearchQueryFrame(
+            type="search.query",
+            backend=message.backend,
+            query=message.query,
+            kind=message.kind,
+            results=message.results,
+            occurred_at=message.occurred_at,
+        )
+    elif isinstance(message, ThemesFound):
+        frame = CharacteriseThemesFrame(
+            type="characterise.themes",
+            themes=[
+                LiveTheme(label=label, description=description)
+                for label, description in message.themes
+            ],
             occurred_at=message.occurred_at,
         )
     else:

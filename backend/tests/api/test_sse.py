@@ -33,6 +33,8 @@ from policy_atlas.api.contract.sse import (
     ArtefactSectionRevisingFrame,
     ArtefactSectionSourcesFrame,
     ArtefactSourceNoteFrame,
+    CharacteriseThemesFrame,
+    SearchQueryFrame,
 )
 from policy_atlas.api.dev_issuer import init, mint_token
 from policy_atlas.api.routers import access, sse
@@ -2042,6 +2044,97 @@ def test_sse_source_notes_stream_and_a_reconnect_gets_them(
                 assert [item.data["note"] for item in _frames(items) if item.data] == [
                     "One.",
                     "Two.",
+                ]
+        finally:
+            if task_id is not None:
+                tick_hub._tasks.pop(task_id, None)
+            _cleanup(engine, task_id)
+
+    asyncio.run(exercise())
+
+
+def test_encode_ephemeral_names_the_search_query_and_themes_frames() -> None:
+    """Task 058, round 9: a search query and the themes found become cursor-free frames."""
+    from datetime import UTC, datetime
+
+    from policy_atlas.core.liveness import SearchQuery, ThemesFound
+
+    adapter: TypeAdapter[SseFrame] = TypeAdapter(SseFrame)
+    encoded = _encode_ephemeral(
+        SearchQuery(
+            backend="openalex",
+            query="school breakfast attainment",
+            kind="topic",
+            results=None,
+            occurred_at=datetime.now(UTC),
+        )
+    )
+    assert encoded.startswith("event: search.query\ndata: ")
+    assert "id:" not in encoded
+    query = adapter.validate_python(json.loads(encoded.split("data: ", 1)[1]))
+    assert isinstance(query, SearchQueryFrame)
+    assert (query.backend, query.query, query.kind, query.results) == (
+        "openalex",
+        "school breakfast attainment",
+        "topic",
+        None,
+    )
+
+    encoded = _encode_ephemeral(
+        ThemesFound(
+            themes=(("Attendance", "Who comes."), ("Costs", None)),
+            occurred_at=datetime.now(UTC),
+        )
+    )
+    assert encoded.startswith("event: characterise.themes\ndata: ")
+    themes = adapter.validate_python(json.loads(encoded.split("data: ", 1)[1]))
+    assert isinstance(themes, CharacteriseThemesFrame)
+    assert [(t.label, t.description) for t in themes.themes] == [
+        ("Attendance", "Who comes."),
+        ("Costs", None),
+    ]
+
+
+def test_sse_search_queries_and_themes_stream_and_a_reconnect_gets_them(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Task 058, round 9: each query arrives out then back, the themes once found,
+    and a reconnect gets the queries in their latest state and the themes."""
+
+    async def exercise() -> None:
+        task_id: uuid.UUID | None = None
+        try:
+            async with _api_session(tmp_path) as api:
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                stream = await api.open_stream(task_id)
+                await _subscribed(task_id)
+                for results in (None, 12):
+                    tick_hub.publish_search_query(
+                        task_id, backend="openalex", query="q1", kind="topic", results=results
+                    )
+                tick_hub.publish_themes(task_id, themes=[("Attendance", None)])
+                items = await stream.collect_until(
+                    lambda item: item.event == "characterise.themes"
+                )
+                await stream.aclose()
+                frames = _frames(items)
+                assert [item.event for item in frames] == [
+                    "search.query",
+                    "search.query",
+                    "characterise.themes",
+                ]
+                assert all(item.sequence is None for item in frames)
+
+                stream = await api.open_stream(task_id)
+                items = await stream.collect_until(
+                    lambda item: item.event == "characterise.themes"
+                )
+                await stream.aclose()
+                live = ("search.query", "characterise.themes")
+                again = [item for item in _frames(items) if item.event in live]
+                assert [(item.event, (item.data or {}).get("results")) for item in again] == [
+                    ("search.query", 12),
+                    ("characterise.themes", None),
                 ]
         finally:
             if task_id is not None:

@@ -1,6 +1,7 @@
 import type { SseFrame } from "../api/sseFrame";
 import {
   GLOBAL_LIVENESS_KEY,
+  type LiveSearchQuery,
   type LiveSection,
   type LiveSource,
   type LiveSourceNote,
@@ -23,7 +24,7 @@ import {
  * That set resets whenever the sequence actually advances. Together this
  * makes folding the same frame stream twice, or resuming the fold from
  * any mid-stream cursor (however the redelivery is sliced), produce the
- * same final state. The seven ephemeral frame types are the deliberate
+ * same final state. The nine ephemeral frame types are the deliberate
  * exception: they carry no `sequence` at all and never advance
  * `lastSequence`. `tick` updates only the transient `liveness` slice;
  * `artefact.section_delta` and `artefact.section_revising` update only a
@@ -32,7 +33,8 @@ import {
  * `sources` and `claims` (task 058, evidence shown live);
  * `artefact.section_card` appends to its `cards` (task 058, round 7);
  * `artefact.source_note` adds to the run's `liveSourceNotes`, one per source
- * (round 8). A replay carries none of them, so folding a replay rebuilds
+ * (round 8); `search.query` adds or updates a row of `liveSearchQueries` and
+ * `characterise.themes` sets `liveThemes` (round 9). A replay carries none of them, so folding a replay rebuilds
  * `prose` and `citations` alone.
  */
 /** Task 045 (A3): a stage frame names its walk; one from a different walk
@@ -137,6 +139,26 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
     return { ...state, liveSourceNotes: next };
   }
 
+  if (frame.type === "search.query") {
+    // One row per (backend, query, kind), in the order first sent: the frame
+    // sent when the query comes back updates its row, and a reconnect's
+    // snapshot repeats rows rather than doubling them.
+    const row: LiveSearchQuery = { backend: frame.backend, query: frame.query, kind: frame.kind, results: frame.results };
+    const rows = state.liveSearchQueries ?? [];
+    const at = rows.findIndex(
+      (existing) => existing.backend === row.backend && existing.query === row.query && existing.kind === row.kind,
+    );
+    const next = at === -1 ? [...rows, row] : rows.map((existing, i) => (i === at ? row : existing));
+    return { ...state, liveSearchQueries: next };
+  }
+
+  if (frame.type === "characterise.themes") {
+    return {
+      ...state,
+      liveThemes: frame.themes.map((theme) => ({ label: theme.label, description: theme.description })),
+    };
+  }
+
   if (frame.type === "artefact.section_revising") {
     const section = state.liveSections[frame.index];
     if (section === undefined || section.state === "filled") return state;
@@ -217,8 +239,13 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         liveSections: isNewRun ? {} : base.liveSections,
         pendingDrafts: isNewRun ? {} : base.pendingDrafts,
       };
-      // A new run's notes start empty (task 058, round 8).
-      if (isNewRun) delete next.liveSourceNotes;
+      // A new run's notes, queries and themes start empty (task 058, rounds
+      // 8 and 9).
+      if (isNewRun) {
+        delete next.liveSourceNotes;
+        delete next.liveSearchQueries;
+        delete next.liveThemes;
+      }
       return next;
     }
 

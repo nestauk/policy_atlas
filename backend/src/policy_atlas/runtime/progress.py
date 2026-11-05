@@ -19,6 +19,10 @@ CASE_STUDIES_SLOT_FOCUS = "Relevant examples from the cited evidence."
 #: The introduction's slot: the saved report shows the intro under its "Full
 #: report" heading, so the slot carries that title and no focus (round 8).
 INTRO_SLOT_TITLE = "Full report"
+#: The introduction's section line while it is written: the card and the
+#: strip read "Writing · Introduction", while the slot keeps its "Full report"
+#: title (owner round 9, 2026-11-05).
+INTRO_SECTION_LINE = "Introduction"
 
 
 class ProgressEmitter:
