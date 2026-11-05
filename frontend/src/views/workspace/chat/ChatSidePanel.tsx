@@ -22,7 +22,6 @@ import {
   useActiveConversation,
 } from "./conversationState";
 import { DraftChatPane } from "./DraftChatPane";
-import { useRunWords } from "../runWords";
 import { ExpandIcon, PanelCloseIcon, PlusIcon } from "./icons";
 
 /** Resize bounds (px) — the workspace rail's own clamp. */
@@ -133,12 +132,7 @@ export function ChatSidePanel({
   const artefact = useArtefact(taskId);
   const chatsEnabled = useChatsEnabled(taskId);
   const stream = useRunStream(taskId);
-  const runStatus = stream.run?.status;
   const checkInWaiting = stream.pendingCheckIn != null;
-  // Shut, the rail's mark carries what the run is doing in its hover words;
-  // open, the sidebar's own trace does (the step note is withdrawn: owner,
-  // round 7).
-  const railRun = useRunWords(stream, isOwner);
   const openLatestOrTaskAgent = () => {
     // The launcher's decision needs the chats list resolved first — before
     // then "no chats" is read off `undefined` data.
@@ -169,13 +163,9 @@ export function ChatSidePanel({
         onSelectTaskAgent={() => setActiveConversation(taskAgentId)}
         recent={recentChats(rows)}
         onSelectChat={setActiveConversation}
-        // Shut, the rail is where the sidebar shows a live run: its Task
-        // Agent mark turns on every tab that mounts the sidebar; the Result
-        // tab's own writing mark may turn beside it (owner, 2026-11-05,
-        // round 6).
-        runLive={runStatus === "running"}
-        runWords={railRun.words}
-        runStartedAt={stream.run?.startedAt}
+        // The rail's Task Agent mark holds still and carries no run status
+        // (owner, round 8): the run strip beside it says what the run is
+        // doing, and opens the Task Agent.
         className="h-full w-12 flex-col border-r py-2 max-md:hidden"
       />
     );
@@ -275,7 +265,7 @@ export function ChatSidePanel({
           {taskAgentOpen ? (
             <TaskAgentPane
               taskId={taskId}
-              runStatus={runStatus}
+              runStatus={stream.run?.status}
               stream={stream}
               isOwner={isOwner}
               onReviewPlan={openPlan}

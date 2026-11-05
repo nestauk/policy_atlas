@@ -251,26 +251,42 @@ export function rowLiveness(
 }
 
 /**
- * Where a done row points (annex § The running card, kept by the trace):
- * the Sources table after searching and screening, the landscape after mapping (and after
- * categorising once mapping is done), the findings once there are any, the
- * report after writing. Shortlisting and reading have nowhere to point. Only
- * an Evidence search's rows link.
+ * Where a row points (annex § The running card, kept by the trace).
+ *
+ * A done row: the Sources table after searching or screening, the themes
+ * after mapping, the landscape after classifying (at once: lead, round 8,
+ * superseding round 4's "after Mapping"), the findings once there are any,
+ * the report after writing. Shortlisting and reading have nowhere to point.
+ *
+ * The step in progress points where its output is landing (owner, round 8):
+ * Searching and Screening to Sources, Classifying to the landscape, Mapping
+ * to the themes, Writing to the report.
+ *
+ * Only an Evidence search's rows link.
  */
 export function rowLink(
   row: CardRow,
-  rows: CardRow[],
+  // The other rows: no link waits on another step since round 8; kept so
+  // callers need not change.
+  _rows: CardRow[],
   taskId: string,
   kind: WalkKind,
   hasFindings: boolean,
 ): { href: string; label: string } | null {
-  if (kind !== "evidence_search" || row.state !== "done") return null;
+  if (kind !== "evidence_search") return null;
   const has = (stage: string) => row.stages.includes(stage);
-  const mapped = rows.some((other) => other.stages.includes("characterise") && other.state === "done");
+  if (row.state === "progress") {
+    if (has("acquire") || has("screen")) return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
+    if (has("classify") || has("appraise")) return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
+    if (has("characterise")) return { href: `/tasks/${taskId}/sources`, label: "Themes" };
+    if (has("synthesise")) return { href: `/tasks/${taskId}/result`, label: "Report" };
+    return null;
+  }
+  if (row.state !== "done") return null;
   if (has("acquire") || has("screen")) return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
   // Mapping's output is the themes (the Sources tab's first view; owner, polish round 2).
   if (has("characterise")) return { href: `/tasks/${taskId}/sources`, label: "Themes" };
-  if ((has("classify") || has("appraise")) && mapped) {
+  if (has("classify") || has("appraise")) {
     return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
   }
   if (has("extract") && hasFindings) return { href: `/tasks/${taskId}/sources/findings`, label: "Findings" };

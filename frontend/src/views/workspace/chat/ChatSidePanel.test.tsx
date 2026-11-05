@@ -288,22 +288,15 @@ describe("ChatSidePanel", () => {
   // Owner and lead, 2026-11-05: wherever a run is live its mark is the fold
   // mark turning, in the rail at the rail's own size (no jump), on every tab
   // that mounts the sidebar (owner, round 6: the Result tab's exception went).
-  it("turns the rail's Task Agent mark while a run is live, at the still mark's size", () => {
+  it("keeps the rail's Task Agent mark still and plainly named, whatever the run is doing (owner, round 8)", () => {
     state.activeConversationId = null;
-    state.runStatus = "running";
-    const { unmount } = render(<ChatSidePanel taskId="p1" isOwner />);
-    const button = screen.getByRole("button", { name: "Task Agent" });
-    const live = button.querySelector("[data-live-mark]");
-    expect(live).toHaveStyle({ width: "11px" });
-    unmount();
-    state.runStatus = "succeeded";
-    const still = render(<ChatSidePanel taskId="p1" isOwner />);
-    expect(screen.getByRole("button", { name: "Task Agent" }).querySelector("svg")).toHaveAttribute("width", "11");
-    still.unmount();
-    for (const status of ["paused", "succeeded"]) {
+    for (const status of ["running", "paused", "succeeded"]) {
       state.runStatus = status;
       const view = render(<ChatSidePanel taskId="p1" isOwner />);
-      expect(screen.getByRole("button", { name: "Task Agent" }).querySelector("[data-live-mark]")).toBeNull();
+      const button = screen.getByRole("button", { name: "Task Agent" });
+      expect(button.querySelector("[data-live-mark]")).toBeNull();
+      expect(button.querySelector("svg")).toHaveAttribute("width", "11");
+      expect(screen.queryByTestId("rail-elapsed")).toBeNull();
       view.unmount();
     }
   });

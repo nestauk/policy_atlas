@@ -588,7 +588,7 @@ describe("TaskAgentPane — the options-scoping baseline gate", () => {
     renderPane({ runStatus: "succeeded", stream: createInitialRunStreamState() });
     // A past run folds to its own walk's finish words and its wall time.
     expect(screen.getByText("The longlist is ready")).toBeInTheDocument();
-    expect(screen.getByText("The longlist is ready").parentElement).toHaveTextContent(/^The longlist is ready · 30 min$/);
+    expect(screen.getByTestId("past-run")).toHaveTextContent(/^The longlist is ready30 min$/);
     expect(screen.queryByText(/The baseline is ready/)).not.toBeInTheDocument();
   });
 
@@ -985,9 +985,11 @@ describe("TaskAgentPane — the run trace", () => {
 
   it("folds a past run to its status word and wall time, with no link", () => {
     renderPane();
-    const past = screen.getByText("Report ready");
-    expect(past.parentElement).toHaveTextContent(/^Report ready · 14 min$/);
-    expect(past.closest("p")?.querySelector("a")).toBeNull();
+    // Owner, round 8: the same card as a run that ended in view, folded.
+    const past = screen.getByTestId("past-run");
+    expect(past).toHaveTextContent(/^Report ready14 min$/);
+    expect(past.querySelector("a")).toBeNull();
+    expect(past.querySelector("button")).toBeNull();
     expect(screen.queryByText(/Analysis run —/)).toBeNull();
   });
 
@@ -1014,7 +1016,7 @@ describe("TaskAgentPane — the run trace", () => {
       }),
     });
     const trace = screen.getByRole("region", { name: "Analysis run" });
-    expect(trace).toHaveTextContent("Report ready ·14 min· Read it →");
+    expect(trace).toHaveTextContent("Report ready14 min ·Read it →");
     expect(screen.getByRole("link", { name: "Read it →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
     expect(screen.queryByText(/Evidence search is finished/)).toBeNull();
   });

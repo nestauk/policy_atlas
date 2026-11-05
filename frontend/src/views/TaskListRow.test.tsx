@@ -67,26 +67,25 @@ describe("TaskListRow — the running stage", () => {
   });
 });
 
-// Task 058 (owner, 2026-11-05): while the run is live the row's mark is the
-// fold mark turning; otherwise the 6 px square, orange while paused, green
-// once done.
+// Task 058 (owner, round 8): every row's mark is the 6 px square, so a
+// running row's mark is the same size as a finished one's: blue and
+// breathing while the run is live, orange while paused, green once done.
 describe("TaskListRow — the status mark", () => {
   const startedAt = new Date(Date.now() - 60_000).toISOString();
   const markOf = (container: HTMLElement) => container.querySelector("[data-tone]") as HTMLElement;
   const liveMarkOf = (container: HTMLElement) => container.querySelector("[data-live-mark]") as HTMLElement | null;
 
-  it("is the fold mark while the run is live, with its stage known or not", () => {
+  it("is the breathing blue square while the run is live, with its stage known or not", () => {
     const { container, unmount } = renderRow({
       latestRun: { capability_run_id: "r1", status: "running", started_at: startedAt },
-      activeRun: { capability_run_id: "r1", status: "running", started_at: startedAt, stage: "acquire", stage_label: "Searching and screening" },
+      activeRun: { capability_run_id: "r1", status: "running", started_at: startedAt, stage: "acquire", stage_label: "Searching" },
     });
-    expect(liveMarkOf(container)).toHaveStyle({ width: "14px" });
-    expect(liveMarkOf(container)?.querySelector("svg")).not.toBeNull();
-    expect(markOf(container)).toBeNull();
+    expect(markOf(container)).toHaveClass("bg-blue", "size-1.5", "anim-breathe");
+    expect(liveMarkOf(container)).toBeNull();
     unmount();
     const before = renderRow({ latestRun: { capability_run_id: "r1", status: "running", started_at: startedAt } });
-    expect(liveMarkOf(before.container)).not.toBeNull();
-    expect(markOf(before.container)).toBeNull();
+    expect(markOf(before.container)).toHaveClass("bg-blue", "size-1.5", "anim-breathe");
+    expect(liveMarkOf(before.container)).toBeNull();
   });
 
   it.each([

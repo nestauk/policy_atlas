@@ -15,6 +15,7 @@ import {
   PublicationYearsChart,
 } from "../ui/charts/EvidenceDistributionChart";
 import { ReauthRedirect } from "../ui/feedback";
+import { feedsSources, useLiveRefetch, useLiveStages } from "./sourcesPresentation";
 
 const FUNNEL_ORDER = [
   ["found", "Found"],
@@ -36,6 +37,31 @@ const CHART_TOKENS = {
 /** One centred plot per row so classification labels stay readable. */
 const LANDSCAPE_PLOT_CLASS = "mx-auto w-full max-w-3xl";
 
+/** Placeholder bar lengths (percent of the plot), longest first, as the
+ *  chart sorts its bars. */
+const PENDING_BARS = [88, 64, 47, 31, 18] as const;
+
+/**
+ * The evidence types on their way (owner, round 8): while Classifying runs
+ * and no type has landed, the chart's place holds its shape (a label column
+ * and a bar per row, longest first) with the bars breathing on the status
+ * mark's 1.6 s rhythm. Still under reduced motion.
+ */
+function EvidenceTypesPending() {
+  return (
+    <div aria-hidden="true" data-testid="evidence-types-pending" className="flex flex-col gap-4 py-2">
+      {PENDING_BARS.map((length, index) => (
+        <div key={index} className="flex items-center gap-4">
+          <span className="placeholder-bar h-2.5 w-28 shrink-0 max-sm:w-20" />
+          <span className="min-w-0 flex-1">
+            <span className="placeholder-bar h-3.5" style={{ width: `${length}%` }} />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Landscape: distributions over the screened-in set ONLY (the funnel is the
  * one surface spanning the full flow). Surfaces without data are hidden,
@@ -48,6 +74,16 @@ export function LandscapeView() {
   const landscape = useLandscape(taskId);
   const funnel = useFunnel(taskId);
   const groups = useGroups(taskId);
+  // While a stage that feeds the landscape runs, its reads refetch every
+  // 5 s; while Classifying runs and no type has landed, the chart's place
+  // pulses (owner, round 8).
+  const live = useLiveStages(taskId);
+  const classifying = live.has("classify") || live.has("appraise");
+  useLiveRefetch(feedsSources(live), () => {
+    void landscape.refetch();
+    void funnel.refetch();
+  });
+  const typesPending = classifying && Object.keys(landscape.data?.evidence_types ?? {}).length === 0;
 
   const funnelRows = FUNNEL_ORDER.flatMap(([key, label]) => {
     const count = funnel.data?.[key];
@@ -66,6 +102,7 @@ export function LandscapeView() {
     (funnel.isError && funnelErrorCode !== "not_found");
 
   const noData =
+    !typesPending &&
     !landscape.isPending &&
     !funnel.isPending &&
     !isError &&
@@ -131,6 +168,16 @@ export function LandscapeView() {
                   <Bar dataKey="count" fill={CHART_TOKENS.navy} isAnimationActive={false} barSize={14} />
                 </BarChart>
               </ResponsiveContainer>
+            </div>
+          </Card>
+        )}
+
+        {typesPending && (
+          <Card className={`min-w-0 ${LANDSCAPE_PLOT_CLASS}`}>
+            <PaneHeading>Evidence types</PaneHeading>
+            <Divider />
+            <div className="min-w-0 p-4">
+              <EvidenceTypesPending />
             </div>
           </Card>
         )}

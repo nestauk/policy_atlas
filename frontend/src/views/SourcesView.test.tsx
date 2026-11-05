@@ -1,7 +1,7 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mockCoverage, mockEvidence, mockFunnel, mockLandscape, mockSourceDossiers } from "../mock/fixtures";
 import { createInitialRunStreamState, type RunStreamState, type StageEntry } from "../store";
@@ -133,6 +133,101 @@ describe("SourcesView — the default filter during a run (task 058, N16)", () =
   it("keeps Included for a task with no live stream and no run in flight", () => {
     renderSources();
     expect(screen.getByRole("button", { name: "Included" })).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+// Owner, round 8: while a stage runs, the cells it will fill pulse where
+// their value is absent, and the table refetches every 5 s until it ends.
+describe("SourcesView — pulsing cells while a stage runs (owner, round 8)", () => {
+  afterEach(() => vi.useRealTimers());
+  const running = (stage: StageEntry["stage"], status: StageEntry["status"] = "started", run = "running" as const) => ({
+    ...createInitialRunStreamState(),
+    run: { id: "run-1", status: run, startedAt: "2026-11-05T10:00:00Z" },
+    stages: [{ stage, label: "Screening", status, startedAt: "2026-11-05T10:00:00Z", counts: [] }],
+  }) as RunStreamState;
+  const row = (overrides: Partial<(typeof mockEvidence)[number]>) => ({ ...mockEvidence[0], ...overrides });
+  const rows = (items: typeof mockEvidence, refetch = vi.fn()) =>
+    vi.mocked(queries.useEvidence).mockReturnValue({
+      data: evidencePage(items),
+      isPending: false,
+      isError: false,
+      refetch,
+    } as unknown as ReturnType<typeof queries.useEvidence>);
+  /** The pulse in a row's cell under the column headed `header`. */
+  const pulseIn = (title: string, header: string) => {
+    const table = screen.getAllByRole("table")[0];
+    const headers = within(table).getAllByRole("columnheader");
+    const column = headers.findIndex((th) => th.textContent?.startsWith(header));
+    const tr = within(table).getAllByRole("row").find((r) => r.textContent?.includes(title)) as HTMLElement;
+    return tr.querySelectorAll("td")[column].querySelector("[data-testid='cell-pulse']");
+  };
+
+  it("pulses Relevant on a source not yet screened while screening runs, and not on a screened one", () => {
+    streamState = running("screen");
+    rows([
+      row({ source_id: "a", title: "Waiting source", screen_status: null }),
+      row({ source_id: "b", title: "Screened source", screen_status: "relevant", screen_confidence: 0.9 }),
+    ]);
+    renderSources();
+    expect(pulseIn("Waiting source", "Relevant")).not.toBeNull();
+    expect(pulseIn("Screened source", "Relevant")).toBeNull();
+    expect(pulseIn("Waiting source", "Relevant")).toHaveAttribute("aria-hidden", "true");
+    expect(pulseIn("Waiting source", "Relevant")?.querySelector(".placeholder-bar")).not.toBeNull();
+  });
+
+  it("pulses the evidence type and strength of relevant sources lacking them while classifying runs", () => {
+    streamState = running("classify");
+    rows([
+      row({ source_id: "a", title: "Unclassified source", screen_status: "relevant", evidence_type: null, appraisal_tier: null }),
+      row({ source_id: "b", title: "Off-topic source", screen_status: "not_relevant", evidence_type: null, appraisal_tier: null }),
+    ]);
+    renderSources();
+    expect(pulseIn("Unclassified source", "Evidence type")).not.toBeNull();
+    expect(pulseIn("Unclassified source", "Evidence strength")).not.toBeNull();
+    expect(pulseIn("Off-topic source", "Evidence type")).toBeNull();
+  });
+
+  it("pulses Status on a relevant source not yet read while the full texts are read, in place of its label", () => {
+    streamState = running("ingest");
+    rows([
+      row({ source_id: "a", title: "Unread source", screen_status: "relevant", read_in_full: false, status: "relevant" }),
+      row({ source_id: "b", title: "Read source", screen_status: "relevant", read_in_full: true, status: "read_in_full" }),
+    ]);
+    renderSources();
+    expect(pulseIn("Unread source", "Status")).not.toBeNull();
+    expect(screen.queryByText("Abstract only")).toBeNull();
+    expect(pulseIn("Read source", "Status")).toBeNull();
+    expect(screen.getByText("Read in full")).toBeInTheDocument();
+  });
+
+  it("pulses nothing once the stage has ended, or while the run waits on a check-in", () => {
+    streamState = running("screen", "completed");
+    rows([row({ source_id: "a", title: "Waiting source", screen_status: null })]);
+    const ended = renderSources();
+    expect(screen.queryByTestId("cell-pulse")).toBeNull();
+    ended.unmount();
+    streamState = running("screen", "started", "paused" as never);
+    renderSources();
+    expect(screen.queryByTestId("cell-pulse")).toBeNull();
+  });
+
+  it("refetches every 5 s while a stage that feeds the table runs, and not otherwise", () => {
+    vi.useFakeTimers();
+    const refetch = vi.fn();
+    vi.mocked(queries.useLandscape).mockReturnValue(
+      { data: mockLandscape, refetch: vi.fn() } as unknown as ReturnType<typeof queries.useLandscape>,
+    );
+    streamState = running("screen");
+    rows([row({ source_id: "a", title: "Waiting source", screen_status: null })], refetch);
+    const view = renderSources();
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(refetch).toHaveBeenCalledTimes(2);
+    view.unmount();
+    refetch.mockClear();
+    streamState = running("synthesise");
+    renderSources();
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(refetch).not.toHaveBeenCalled();
   });
 });
 

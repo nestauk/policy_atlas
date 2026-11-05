@@ -18,6 +18,9 @@ import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { Tooltip } from "../ui/radix/Tooltip";
 import {
   abstractSourceLabel,
+  cellPulses,
+  feedsSources,
+  liveStages,
   nextEvidenceSort,
   readDepthHint,
   readDepthLabel,
@@ -31,6 +34,7 @@ import {
   TABLE_HEADER_TEXT_CLASS,
   type EvidenceSortField,
   type SortOrder,
+  useLiveRefetch,
 } from "./sourcesPresentation";
 import { numberedAuthorships } from "./artefactPresentation";
 import { isScoping } from "./scopingActivity";
@@ -115,6 +119,13 @@ export function SourcesView() {
   const queryBackends = (coverage.data?.backends_detail ?? []).filter(
     (backend) => (backend.queries ?? []).length > 0,
   );
+  // While a stage that feeds this table runs, the table refetches every 5 s
+  // and the cells it will fill pulse until their values land (owner, round 8).
+  const live = liveStages(stream);
+  useLiveRefetch(feedsSources(live), () => {
+    void evidence.refetch();
+    void landscape.refetch();
+  });
   const totalPages = evidence.data === undefined
     ? 0
     : Math.ceil(evidence.data.pagination.total_items / evidence.data.pagination.page_size);
@@ -311,7 +322,9 @@ export function SourcesView() {
               </tr>
             </thead>
             <tbody>
-              {evidence.data.data.map((item) => (
+              {evidence.data.data.map((item) => {
+                const pulse = cellPulses(item, live);
+                return (
                 <tr key={item.source_id} className="border-b border-line last:border-b-0">
                   <td className="max-w-md px-4 py-3 align-top max-md:px-3 max-md:py-2.5">
                     <TitleWithDescription item={item} onOpen={() => updateParams((next) => { next.set("source", item.source_id); next.delete("option"); })} />
@@ -320,6 +333,7 @@ export function SourcesView() {
                   <td className="px-3 py-3 align-top text-body text-navy max-md:px-2 max-md:py-2.5 max-md:text-meta">{item.year ?? ""}</td>
                   <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5"><Chip tone="soft">{scrub(item.origin)}</Chip></td>
                   <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
+                    {pulse.type && <CellPulse width="w-20" />}
                     {item.evidence_type && (
                       item.classification_reason ? (
                         <Tooltip content={<p>{scrub(item.classification_reason)}</p>}>
@@ -333,6 +347,7 @@ export function SourcesView() {
                     )}
                   </td>
                   <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
+                    {pulse.strength && <CellPulse width="w-14" />}
                     {item.appraisal_tier && (
                       <Tooltip content={<p>{scrub(strengthHint(item))}</p>}>
                         <button type="button" aria-label={`${item.appraisal_tier}: how strength is appraised`} className="cursor-help focus-visible:outline-2 focus-visible:outline-blue">
@@ -341,9 +356,12 @@ export function SourcesView() {
                       </Tooltip>
                     )}
                   </td>
-                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5"><RelevantCell item={item} /></td>
                   <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
-                    {readDepthLabel(item) !== null && (
+                    {pulse.relevant ? <CellPulse width="w-10" /> : <RelevantCell item={item} />}
+                  </td>
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
+                    {pulse.status && <CellPulse width="w-16" />}
+                    {!pulse.status && readDepthLabel(item) !== null && (
                       item.read_in_full ? (
                         <Chip tone="blue">{readDepthLabel(item)}</Chip>
                       ) : (
@@ -359,7 +377,8 @@ export function SourcesView() {
                     {item.cited && <Chip tone="green">Cited</Chip>}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
           </Card>
@@ -859,6 +878,17 @@ function FilterSelect({
           </ul>
         </PopoverContent>
       </Popover>
+    </span>
+  );
+}
+
+/** A value on its way (owner, round 8): a short grey bar, breathing on the
+ *  status mark's 1.6 s rhythm, in the cell the running stage will fill. It
+ *  sits where the value's chip will, and holds still under reduced motion. */
+function CellPulse({ width }: { width: string }) {
+  return (
+    <span aria-hidden="true" data-testid="cell-pulse" className="flex h-[1.625rem] items-center">
+      <span className={`placeholder-bar h-2.5 ${width}`} />
     </span>
   );
 }

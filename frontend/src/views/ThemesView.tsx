@@ -7,6 +7,7 @@ import { useDocumentTitle } from "../lib/title";
 import { Card } from "../ui/brand/Card";
 import { orderThemes } from "../ui/charts/EvidenceDistributionChart";
 import { ReauthRedirect } from "../ui/feedback";
+import { feedsSources, useLiveRefetch, useLiveStages } from "./sourcesPresentation";
 
 function documentCount(size: number): string {
   return size === 1 ? "1 document" : `${size} documents`;
@@ -48,6 +49,44 @@ function ThemeRow({
   );
 }
 
+/** Placeholder widths per row (the name, then the description), varied so
+ *  the rows do not read as a template. */
+const PENDING_ROWS = [
+  [44, 86],
+  [36, 72],
+  [52, 64],
+] as const;
+
+/**
+ * The themes on their way (owner, round 8): while Mapping runs and no theme
+ * has landed, three placeholder rows in the themes' own shape (a name, a
+ * count at the right, a line of description) breathe on the status mark's
+ * 1.6 s rhythm. A screen reader hears when themes appear. Still under
+ * reduced motion.
+ */
+function ThemesPending() {
+  return (
+    <section>
+      <p role="status" className="sr-only">
+        Themes appear once the Mapping step has finished.
+      </p>
+      <ul aria-hidden="true" data-testid="themes-pending">
+        {PENDING_ROWS.map(([name, description], index) => (
+          <li key={index} className="border-b border-line py-4 last:border-b-0">
+            <div className="flex h-[1.5lh] items-center justify-between gap-3 text-lead">
+              <span className="placeholder-bar h-3" style={{ width: `${name}%` }} />
+              <span className="placeholder-bar h-2.5 w-20 shrink-0" />
+            </div>
+            <div className="mt-1 flex h-[1lh] items-center text-body">
+              <span className="placeholder-bar h-2.5" style={{ width: `${description}%` }} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /**
  * Themes: the reader-facing landscape themes, built only from the existing
  * `landscape.themes` read model — no new text is generated here (rubric 25).
@@ -58,6 +97,11 @@ export function ThemesView() {
   const task = useTask(taskId);
   useDocumentTitle(task.data?.name, "Themes");
   const landscape = useLandscape(taskId);
+  // While Mapping runs the themes refetch every 5 s, and until the first
+  // lands their rows pulse in place (owner, round 8).
+  const live = useLiveStages(taskId);
+  const mapping = live.has("characterise");
+  useLiveRefetch(feedsSources(live), () => void landscape.refetch());
 
   // `not_found` is the server's honest shape for "no landscape yet"
   // (screening hasn't run) — the expected empty state below, not a failure
@@ -98,7 +142,9 @@ export function ThemesView() {
           </Card>
         ))}
 
-      {isEmpty && (
+      {isEmpty && mapping && <ThemesPending />}
+
+      {isEmpty && !mapping && (
         <Card role="status" className="p-8 text-center text-body text-grey">
           Themes appear once the Mapping step has finished.
         </Card>

@@ -251,6 +251,60 @@
   }
 }
 
+/* The words beside a breathing mark breathe with it, more softly (task 058,
+   owner round 8): the same 1.6 s rhythm, down to 0.6 so the line stays
+   readable at its trough. Started in the same render as the mark's, so the
+   two keep time. Still under reduced motion. */
+@keyframes breathe-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+@utility anim-breathe-soft {
+  animation: breathe-soft 1.6s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* A value that is on its way (task 058, owner round 8): a short grey bar in
+   the cell or row it will fill, breathing on the mark's 1.6 s rhythm while
+   the stage that fills it runs, a step darker than the Result tab's
+   placeholder lines (Line 2): a short bar in a table cell needs the extra
+   weight to read at the breathe's trough. Shown only while that stage is
+   live and only where the value is absent. Still under reduced motion. */
+@utility placeholder-bar {
+  display: block;
+  background-color: var(--color-line-2);
+  animation: breathe 1.6s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* What leaves as a decision settles (task 058, owner round 8): the options
+   and controls fade out over 150 ms while the card eases to its settled
+   height. The view skips it under reduced motion (a cut). */
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@utility anim-fade-out {
+  animation: fade-out 150ms var(--ease-out-strong) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 /* Print stylesheet (027 strand 14, 032 download): the report page
    via the browser print dialog (Save as PDF). Chrome outside the paper is
    hidden; the app-shell scroll lock is released so the full report prints. */

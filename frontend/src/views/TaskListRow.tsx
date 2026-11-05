@@ -5,7 +5,7 @@ import { capabilityLabel } from "../lib/capabilities";
 import { Figures } from "../lib/figures";
 import { useNow } from "../lib/freshness";
 import { scrub } from "../lib/scrub";
-import { LiveMark, StatusMark } from "../ui/brand/Card";
+import { StatusMark } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { taskStatus } from "./landingPresentation";
 import { taskListRowGridClass, taskListRowGridClassWithOwner } from "./listPageChrome";
@@ -84,8 +84,10 @@ export function TaskListRow({
         {capabilityLabel(capabilityKey)}
       </Chip>
       <span className="inline-flex min-w-0 items-center gap-1.5 text-meta text-grey">
-        {/* A live run's mark is the fold mark turning (owner, 2026-11-05). */}
-        {running || status.dot === "running" ? <LiveMark /> : <StatusMark tone={status.dot} />}
+        {/* Every row's mark is the 6 px square, so a running row's is the
+            same size as a finished one's (owner, round 8): blue and
+            breathing while the run is live. */}
+        {running || status.dot === "running" ? <StatusMark tone="running" breathing /> : <StatusMark tone={status.dot} />}
         <span className="truncate" title={statusLabel}>
           <Figures text={scrub(statusLabel)} />
         </span>

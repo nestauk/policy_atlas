@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Button } from "../brand/Button";
 import { Popover, PopoverContent, PopoverTrigger } from "./Popover";
@@ -121,6 +121,61 @@ describe("Tooltip", () => {
     );
     await userEvent.tab();
     expect(await screen.findAllByText("Grounded quote")).not.toHaveLength(0);
+  });
+
+  // Round 8 (the Result designer's report): while the run is live, sections
+  // fill in above the one being read and move the pane; Radix closes a
+  // tooltip on any scroll of its trigger's ancestors. A scroll the reader did
+  // not make leaves it open; the reader's own scroll, Escape or focus loss
+  // closes it.
+  describe("across a scroll the page made", () => {
+    const shown = () => screen.queryAllByText("Grounded quote").length > 0;
+    // Earlier tests' presses must not read as this reader's scroll intent.
+    beforeEach(() => {
+      const real = performance.now.bind(performance);
+      vi.spyOn(performance, "now").mockImplementation(() => real() + 60_000);
+    });
+    afterEach(() => vi.restoreAllMocks());
+    async function openTooltip() {
+      render(
+        <TooltipProvider delayDuration={0}>
+          <Tooltip content="Grounded quote">
+            <Button variant="ghost">[1]</Button>
+          </Tooltip>
+          <Button variant="ghost">elsewhere</Button>
+        </TooltipProvider>,
+      );
+      await userEvent.tab();
+      await screen.findAllByText("Grounded quote");
+    }
+    const scrollPage = () => act(() => document.dispatchEvent(new Event("scroll")));
+
+    it("stays open when content growing above it scrolls the pane", async () => {
+      await openTooltip();
+      scrollPage();
+      scrollPage();
+      expect(shown()).toBe(true);
+    });
+
+    it("closes on the reader's own scroll", async () => {
+      await openTooltip();
+      act(() => {
+        window.dispatchEvent(new WheelEvent("wheel", { deltaY: 40 }));
+      });
+      scrollPage();
+      await waitFor(() => expect(shown()).toBe(false));
+    });
+
+    it("closes on Escape and on focus loss", async () => {
+      await openTooltip();
+      await userEvent.keyboard("{Escape}");
+      await waitFor(() => expect(shown()).toBe(false));
+      await userEvent.tab();
+      await userEvent.tab({ shift: true });
+      await screen.findAllByText("Grounded quote");
+      await userEvent.tab();
+      await waitFor(() => expect(shown()).toBe(false));
+    });
   });
 });
 

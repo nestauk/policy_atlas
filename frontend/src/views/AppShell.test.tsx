@@ -246,14 +246,18 @@ describe("AppShell — the live layer without a strip (task 058; owner 2026-11-0
     taskState.latestRun = null;
   });
 
-  it("shows the run strip under the tabs on Sources: the step and what it is doing, status only", () => {
+  it("shows the run strip at the top of the page's column on Sources: the step and what it is doing, as the way to the Task Agent", () => {
     renderShell(`/tasks/${TASK_ID}/sources`);
     connect();
-    feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching and screening"), tickFrame("acquire", "searching · 184 found so far"));
+    feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching"), tickFrame("acquire", "searching · 184 found so far"));
     const strip = screen.getByTestId("run-strip");
     expect(strip).toHaveAttribute("data-open", "true");
-    expect(strip).toHaveTextContent(/Searching and screening.*184 found so far/);
+    expect(strip).toHaveTextContent(/Searching.*184 found so far/);
     expect(within(strip).queryByRole("link")).toBeNull();
+    // Owner, round 8: the strip opens the Task Agent (it starts after the
+    // rail, in the column the routed view scrolls in).
+    expect(within(strip).getByRole("button", { name: /^Open the Task Agent: Searching/ })).toBeInTheDocument();
+    expect(strip.parentElement?.querySelector(":scope > [data-testid='task-scroll-pane']")).not.toBeNull();
   });
 
   it("shows the paused strip and no paused banner while a check-in waits", () => {
@@ -344,14 +348,14 @@ describe("AppShell — new content marks its tab (task 058, N14)", () => {
     expect(mark.className).not.toMatch(/rounded/);
   });
 
-  it("dots Sources when sources land while the user is elsewhere", () => {
+  it("never dots Sources, whatever lands (owner, round 8: the mark was not useful)", () => {
     renderShell(`/tasks/${TASK_ID}/history`);
     connect();
     feed(runStatus("running"));
     settle();
-    feed(stageFrame("stage.completed", "screen", "Searching and screening"));
+    feed(stageFrame("stage.completed", "screen", "Screening"));
     const taskNav = screen.getByRole("navigation", { name: TASK.one });
-    expect(within(taskNav).getByRole("link", { name: /Sources/ })).toHaveTextContent("New content");
+    expect(within(taskNav).getByRole("link", { name: /Sources/ })).not.toHaveTextContent("New content");
   });
 });
 
@@ -407,7 +411,7 @@ describe("AppShell — the Sources tab opens on the step that has landed (owner,
   });
 });
 
-describe("AppShell — the rail's live mark (lead, 2026-11-05; owner, round 6)", () => {
+describe("AppShell — the rail's Task Agent holds still (owner, round 8)", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     taskState.isOwner = true;
@@ -420,22 +424,21 @@ describe("AppShell — the rail's live mark (lead, 2026-11-05; owner, round 6)",
     taskState.latestRun = null;
   });
 
-  const railMark = () => screen.getByRole("button", { name: "Task Agent" }).querySelector("[data-live-mark]");
-
-  // Owner, 2026-11-05 (round 6): the Result tab turns nothing before writing
-  // starts, so the exception went; the rail's mark turns on every tab that
-  // mounts the sidebar, Result included.
-  it("turns on Sources and on Result alike", () => {
+  // Owner, round 8: the rail's mark is the still fold mark, its name "Task
+  // Agent", with no hover status and no timer, whatever the run is doing.
+  it("keeps the still mark and the plain name on Sources and Result while a run is live", () => {
     const sources = renderShell(`/tasks/${TASK_ID}/sources`);
     connect();
-    feed(runStatus("running"));
-    expect(railMark()).not.toBeNull();
+    feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching"));
+    const mark = screen.getByRole("button", { name: "Task Agent" });
+    expect(mark.querySelector("[data-live-mark]")).toBeNull();
+    expect(screen.queryByTestId("rail-elapsed")).toBeNull();
     sources.unmount();
     sseState.handlers = null;
     renderShell(`/tasks/${TASK_ID}/result`);
     connect();
     feed(runStatus("running"));
-    expect(railMark()).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Task Agent" }).querySelector("[data-live-mark]")).toBeNull();
   });
 });
 

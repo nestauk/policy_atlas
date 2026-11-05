@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { components } from "../../api/gen/types";
 import { scrub } from "../../lib/scrub";
@@ -635,6 +635,84 @@ export function WordsInput({
   );
 }
 
+/** How long what leaves a settling card takes to fade (owner, round 8). */
+const SETTLE_FADE_MS = 150;
+/** How long the card takes to ease to its settled height and place. */
+const SETTLE_MS = 300;
+/** The strong ease-out (`--ease-out-strong`), for the script-driven part. */
+const EASE_OUT_STRONG = "cubic-bezier(0.23, 1, 0.32, 1)";
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+}
+
+/**
+ * The settle's motion (owner, round 8: "make the transition from the decision
+ * card to the decided card smoother"). One card across the two states: when
+ * it settles, the box eases from its open height to its settled height and
+ * from the thread's side to the user's (the 32 px indent) over 300 ms on the
+ * strong ease-out, while the open form fades out over it for 150 ms and the
+ * settled words rise in. A card that mounts settled (the history) holds
+ * still. Under reduced motion it is a cut.
+ *
+ * Args:
+ *   settled: Whether the card shows its settled form.
+ *
+ * Returns:
+ *   Refs for the outer shell and the box, `leaving` while the open form
+ *   fades out over the settled one, `justSettled` when the settle happened
+ *   in front of the reader, and `hadOpenForm` when the card was ever open
+ *   here (so the stepper's line can fold away rather than vanish).
+ */
+function useSettleMotion(settled: boolean) {
+  const shellRef = useRef<HTMLDivElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const lastHeight = useRef<number | null>(null);
+  const [hadOpenForm] = useState(!settled);
+  const [seen, setSeen] = useState(settled);
+  const [leaving, setLeaving] = useState(false);
+  const [justSettled, setJustSettled] = useState(false);
+  const [flip, setFlip] = useState(0);
+  // Derived during render, so the fading form and the settled words land in
+  // the same commit.
+  if (seen !== settled) {
+    setSeen(settled);
+    if (settled && !prefersReducedMotion()) {
+      setLeaving(true);
+      setJustSettled(true);
+      setFlip((count) => count + 1);
+    }
+  }
+
+  useEffect(() => {
+    if (!leaving) return undefined;
+    const id = window.setTimeout(() => setLeaving(false), SETTLE_FADE_MS + 10);
+    return () => window.clearTimeout(id);
+  }, [leaving]);
+
+  // After every commit, remember the box's height; on the settle's commit,
+  // ease from the remembered open height to the settled one, and slide the
+  // shell from the thread's side to the user's.
+  const animated = useRef(0);
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (box === null) return;
+    const height = box.offsetHeight;
+    const from = lastHeight.current;
+    lastHeight.current = height;
+    if (flip === animated.current) return;
+    animated.current = flip;
+    if (typeof box.animate !== "function") return;
+    const timing = { duration: SETTLE_MS, easing: EASE_OUT_STRONG };
+    if (from !== null && from !== height) {
+      box.animate([{ height: `${from}px` }, { height: `${height}px` }], timing);
+    }
+    shellRef.current?.animate([{ transform: "translateX(-2rem)" }, { transform: "translateX(0)" }], timing);
+  });
+
+  return { shellRef, boxRef, leaving, justSettled, hadOpenForm };
+}
+
 /**
  * One structured part proposal in the task_agent thread (task 058, N18;
  * annex scene 11). A radio list: each option's label, then its one plain
@@ -680,72 +758,64 @@ export function PartCard({
   const name = partName ?? part.title;
 
   const settled = confirmedOption !== null || state.answered || !state.live;
-  if (settled) {
-    // Between the pre-task card and the one-line form (owner, 2026-11-05):
-    // the part's name and a green line naming the outcome the plan settled
-    // on (`summary`), the recorded choice or the user's words. It reads as
-    // the user's (owner, round 6): the user bubble's surface (Blue Wash fill,
-    // Blue Tint border, padding, 32 px left indent), text left-aligned. It
-    // reads as a decision by the green rule on its right edge, over the
-    // bubble's own border, the deep green words and the part's name as a
-    // small grey label (the scope groups' style). No tick: the rule and the
-    // green words say it.
-    const lines: SettledLine[] = (() => {
-      if (summary !== undefined && summary !== null && summary.length > 0) return summary;
-      if (confirmedOption !== null) return [{ label: null, text: confirmedOption.label }];
-      return [{ label: null, text: state.answer !== null && state.answer !== "" ? state.answer : "Answered" }];
-    })();
-    const changeControl =
-      state.live && confirmedOption !== null ? (
+  const { shellRef, boxRef, leaving, justSettled, hadOpenForm } = useSettleMotion(settled);
+
+  // The settled form (owner, 2026-11-05, rounds 6 and 8): the part's name
+  // and a green line naming the outcome the plan settled on (`summary`), the
+  // recorded choice or the user's words. It reads as the user's: the user
+  // bubble's surface (Blue Wash fill, Blue Tint border, 32 px left indent),
+  // text left-aligned, with the green rule on its right edge over the
+  // bubble's own border, the deep green words and the part's name as a small
+  // grey label. No tick: the rule and the green words say it.
+  const lines: SettledLine[] = (() => {
+    if (summary !== undefined && summary !== null && summary.length > 0) return summary;
+    if (confirmedOption !== null) return [{ label: null, text: confirmedOption.label }];
+    return [{ label: null, text: state.answer !== null && state.answer !== "" ? state.answer : "Answered" }];
+  })();
+  const settledBody = (
+    <div key="settled" className={cn("px-3.5 py-2.5", justSettled && "anim-rise")}>
+      <p className={cn(LABEL_CLASS, "text-grey")}>{scrub(name)}</p>
+      {/* The scope's groups each take a line under a grey label, so the
+          criteria and the filters do not read as one list (owner,
+          2026-11-05). */}
+      {lines.map((line, index) => (
+        // A first line under its own group label stands a step below the
+        // part's name.
+        <div key={index} className={index > 0 || line.label !== null ? "mt-2" : "mt-0.5"}>
+          {/* The group labels a step smaller than the part's name, so the
+              name leads (lead, round 6). */}
+          {line.label !== null && <p className={cn(LABEL_CLASS, "text-caption text-grey")}>{line.label}</p>}
+          {/* The deep green of the green tint's text: it passes contrast at
+              the sidebar's Body size too. */}
+          <p className="max-w-prose-measure text-lead font-bold text-[#0c6b5a]">{scrub(line.text)}</p>
+        </div>
+      ))}
+      {/* "Change" takes its own line under the green words, left-aligned,
+          as a quiet control at Caption size (owner, round 8): never inline
+          with the words it would change. */}
+      {state.live && confirmedOption !== null && (
         <button
           type="button"
           aria-expanded={changing}
-          className="ml-2 cursor-pointer text-body font-semibold text-grey underline underline-offset-[3px] hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-default disabled:no-underline"
+          className="mt-1.5 block cursor-pointer text-caption font-semibold text-grey underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:text-navy hover:decoration-navy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue disabled:cursor-default disabled:no-underline disabled:hover:text-grey"
           disabled={disabled}
           onClick={() => setChanging((open) => !open)}
         >
           Change
         </button>
-      ) : null;
-    return (
-      <div className="anim-rise ml-8">
-        <div
-          data-testid="part-settled"
-          className="border border-r-2 border-blue-tint border-r-green bg-blue-tint-2 px-3.5 py-2.5"
-        >
-          <p className={cn(LABEL_CLASS, "text-grey")}>{scrub(name)}</p>
-          {/* The scope's groups each take a line under a grey label, so the
-              criteria and the filters do not read as one list (owner,
-              2026-11-05). */}
-          {lines.map((line, index) => (
-            // A first line under its own group label stands a step below the
-            // part's name.
-            <div key={index} className={index > 0 || line.label !== null ? "mt-2" : "mt-0.5"}>
-              {/* The group labels a step smaller than the part's name, so
-                  the name leads (lead, round 6). */}
-              {line.label !== null && <p className={cn(LABEL_CLASS, "text-caption text-grey")}>{line.label}</p>}
-              {/* The deep green of the green tint's text, as the folded trace
-                  line: it passes contrast at the sidebar's Body size too. */}
-              <p className="max-w-prose-measure text-lead font-bold text-[#0c6b5a]">
-                {scrub(line.text)}
-                {index === lines.length - 1 && changeControl}
-              </p>
-            </div>
-          ))}
-          {changing && state.live && (
-            <WordsInput
-              label={`Change ${name}`}
-              disabled={disabled}
-              onSend={(text) => {
-                onSend(`Change this part: ${text}`);
-                setChanging(false);
-              }}
-            />
-          )}
-        </div>
-      </div>
-    );
-  }
+      )}
+      {changing && state.live && (
+        <WordsInput
+          label={`Change ${name}`}
+          disabled={disabled}
+          onSend={(text) => {
+            onSend(`Change this part: ${text}`);
+            setChanging(false);
+          }}
+        />
+      )}
+    </div>
+  );
 
   const chips = part.chips ?? [];
   // The scope changes through its chips alone (owner, 2026-11-05): the
@@ -763,154 +833,197 @@ export function PartCard({
     );
     setStaged([]);
   };
-  return (
-    <div className="anim-rise mr-8 space-y-2">
-      {steps !== undefined && interactive && <PlanStepper steps={steps} activeId={part.id} />}
-      <div data-testid="part-card" className="border border-line-2 bg-paper px-5 py-4">
-        <h3 className="max-w-prose-measure text-lead font-bold text-navy">{scrub(part.title)}</h3>
-        {part.body != null && part.body !== "" && (
-          <p className="mt-1 max-w-prose-measure text-body text-ink">{scrub(part.body)}</p>
-        )}
+  const openBody = (
+    <>
+      <h3 className="max-w-prose-measure text-lead font-bold text-navy">{scrub(part.title)}</h3>
+      {part.body != null && part.body !== "" && (
+        <p className="mt-1 max-w-prose-measure text-body text-ink">{scrub(part.body)}</p>
+      )}
 
-        {chips.length > 0 && (
-          <div className="mt-3 space-y-2">
-            {chipGroups(chips).map((group) => (
-              <div key={group.heading ?? "chips"}>
-                {group.heading !== null && <p className={cn(LABEL_CLASS, "mb-1 text-grey")}>{group.heading}</p>}
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {group.chips.map((chip) => (
-                    <EditableChip
-                      key={chip.label}
-                      chip={chip}
-                      disabled={!interactive}
-                      onStage={(edit) => setStaged((edits) => [...edits, edit])}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-            <div className="flex flex-wrap items-center gap-1.5">
-            {interactive && !adding && (
-              <button
-                type="button"
-                className="cursor-pointer border border-dashed border-line-2 bg-paper px-2 py-1 text-meta font-semibold text-grey hover:text-navy"
-                onClick={() => setAdding(true)}
-              >
-                + add
-              </button>
-            )}
-            {adding && (
-              <span className="inline-flex items-center gap-1">
-                <input
-                  type="text"
-                  value={addText}
-                  onChange={(event) => setAddText(event.target.value)}
-                  placeholder="New constraint"
-                  aria-label="New constraint"
-                  className="border border-line-2 px-1.5 py-0.5 text-caption"
-                />
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    if (addText.trim() !== "") {
-                      setStaged((edits) => [...edits, { kind: "add", label: addText, detail: addText }]);
-                    }
-                    setAddText("");
-                    setAdding(false);
-                  }}
-                >
-                  Save
-                </Button>
-              </span>
-            )}
-            </div>
-          </div>
-        )}
-
-        {staged.length > 0 && (
-          <div className="mt-3 border border-yellow bg-yellow-tint/40 px-3 py-2">
-            <p className="text-caption font-bold text-navy">Staged changes</p>
-            <ul className="mt-1 space-y-0.5 text-lead text-ink">
-              {staged.map((edit, index) => (
-                <li key={`${edit.kind}-${edit.label}-${index}`}>
-                  {edit.kind === "remove"
-                    ? `Remove "${edit.label}"`
-                    : edit.kind === "add"
-                      ? `Add: ${edit.detail}`
-                      : `Change "${edit.label}" to ${edit.detail}`}
-                </li>
-              ))}
-            </ul>
-            <div className="mt-2 flex gap-2">
-              {/* On the scope card the staged edits go with "Looks right". */}
-              {!scopeButton && (
-                <Button
-                  size="sm"
-                  disabled={disabled}
-                  onClick={() => {
-                    onSend(chipEditMessage(staged));
-                    setStaged([]);
-                  }}
-                >
-                  Apply changes
-                </Button>
-              )}
-              <Button size="sm" variant="secondary" onClick={() => setStaged([])}>
-                Discard
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {scopeButton ? (
-          <Button
-            variant="secondary"
-            className="mt-4 border border-line-2"
-            disabled={!interactive}
-            data-part-option="primary"
-            onClick={looksRight}
-          >
-            Looks right
-          </Button>
-        ) : (
-          <div role="radiogroup" aria-label={part.title} className="mt-3 flex max-w-prose-measure flex-col gap-1">
-            {orderedOptions(part.options).map((option) => {
-              const selected = pickedId === option.id;
-              const words = optionNeedsWords(option);
-              return (
-                <div key={option.id}>
-                  <ChoiceRow
-                    label={option.label}
-                    sentences={[option.sub]}
-                    selected={selected}
+      {chips.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {chipGroups(chips).map((group) => (
+            <div key={group.heading ?? "chips"}>
+              {group.heading !== null && <p className={cn(LABEL_CLASS, "mb-1 text-grey")}>{group.heading}</p>}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {group.chips.map((chip) => (
+                  <EditableChip
+                    key={chip.label}
+                    chip={chip}
                     disabled={!interactive}
-                    data-option-id={option.id}
-                    data-part-option={option.primary ? "primary" : "secondary"}
-                    onChoose={() => {
-                      setPickedId(option.id);
-                      if (!words) onSend(confirmMessage(part, option));
-                    }}
+                    onStage={(edit) => setStaged((edits) => [...edits, edit])}
                   />
-                  {words && selected && interactive && (
-                    <div className="pl-7 max-sm:pl-0">
-                      <WordsInput
-                        label={option.label}
-                        disabled={disabled}
-                        onSend={(text) => {
-                          onSend(`${option.label}: ${text}`);
-                          setPickedId(null);
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="flex flex-wrap items-center gap-1.5">
+          {interactive && !adding && (
+            <button
+              type="button"
+              className="cursor-pointer border border-dashed border-line-2 bg-paper px-2 py-1 text-meta font-semibold text-grey hover:text-navy"
+              onClick={() => setAdding(true)}
+            >
+              + add
+            </button>
+          )}
+          {adding && (
+            <span className="inline-flex items-center gap-1">
+              <input
+                type="text"
+                value={addText}
+                onChange={(event) => setAddText(event.target.value)}
+                placeholder="New constraint"
+                aria-label="New constraint"
+                className="border border-line-2 px-1.5 py-0.5 text-caption"
+              />
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  if (addText.trim() !== "") {
+                    setStaged((edits) => [...edits, { kind: "add", label: addText, detail: addText }]);
+                  }
+                  setAddText("");
+                  setAdding(false);
+                }}
+              >
+                Save
+              </Button>
+            </span>
+          )}
           </div>
+        </div>
+      )}
+
+      {staged.length > 0 && (
+        <div className="mt-3 border border-yellow bg-yellow-tint/40 px-3 py-2">
+          <p className="text-caption font-bold text-navy">Staged changes</p>
+          <ul className="mt-1 space-y-0.5 text-lead text-ink">
+            {staged.map((edit, index) => (
+              <li key={`${edit.kind}-${edit.label}-${index}`}>
+                {edit.kind === "remove"
+                  ? `Remove "${edit.label}"`
+                  : edit.kind === "add"
+                    ? `Add: ${edit.detail}`
+                    : `Change "${edit.label}" to ${edit.detail}`}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-2 flex gap-2">
+            {/* On the scope card the staged edits go with "Looks right". */}
+            {!scopeButton && (
+              <Button
+                size="sm"
+                disabled={disabled}
+                onClick={() => {
+                  onSend(chipEditMessage(staged));
+                  setStaged([]);
+                }}
+              >
+                Apply changes
+              </Button>
+            )}
+            <Button size="sm" variant="secondary" onClick={() => setStaged([])}>
+              Discard
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {scopeButton ? (
+        <Button
+          variant="secondary"
+          className="mt-4 border border-line-2"
+          disabled={!interactive}
+          data-part-option="primary"
+          onClick={looksRight}
+        >
+          Looks right
+        </Button>
+      ) : (
+        <div role="radiogroup" aria-label={part.title} className="mt-3 flex max-w-prose-measure flex-col gap-1">
+          {orderedOptions(part.options).map((option) => {
+            const selected = pickedId === option.id;
+            const words = optionNeedsWords(option);
+            return (
+              <div key={option.id}>
+                <ChoiceRow
+                  label={option.label}
+                  sentences={[option.sub]}
+                  selected={selected}
+                  disabled={!interactive}
+                  data-option-id={option.id}
+                  data-part-option={option.primary ? "primary" : "secondary"}
+                  onChoose={() => {
+                    setPickedId(option.id);
+                    if (!words) onSend(confirmMessage(part, option));
+                  }}
+                />
+                {words && selected && interactive && (
+                  <div className="pl-7 max-sm:pl-0">
+                    <WordsInput
+                      label={option.label}
+                      disabled={disabled}
+                      onSend={(text) => {
+                        onSend(`${option.label}: ${text}`);
+                        setPickedId(null);
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {!state.live && (
+        <p className="mt-2 text-body text-grey">Updated below — this version is kept for the record.</p>
+      )}
+    </>
+  );
+
+  // One container across the two states (owner, round 8: a fluid settle).
+  // The card keeps its box: the surface and the rule ease to the settled
+  // look, the box eases to its settled height and across to the user's side,
+  // the options and controls fade out over it and the settled words rise in.
+  // Under reduced motion it is a cut.
+  return (
+    <div ref={shellRef} className={cn("anim-rise", settled ? "ml-8" : "mr-8")}>
+      {steps !== undefined && hadOpenForm && (
+        // The stepper line folds away with the settle rather than leaving a
+        // gap above the card.
+        <div
+          className={cn(
+            "grid transition-[grid-template-rows,opacity] duration-300 ease-[var(--ease-out-strong)]",
+            interactive ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+          )}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div className="pb-2">
+              <PlanStepper steps={steps} activeId={part.id} />
+            </div>
+          </div>
+        </div>
+      )}
+      <div
+        ref={boxRef}
+        data-testid={settled ? "part-settled" : "part-card"}
+        className={cn(
+          "relative overflow-hidden border transition-[background-color,border-color] duration-300 ease-[var(--ease-out-strong)]",
+          settled ? "border-r-2 border-blue-tint border-r-green bg-blue-tint-2" : "border-line-2 bg-paper",
         )}
-        {!state.live && (
-          <p className="mt-2 text-body text-grey">Updated below — this version is kept for the record.</p>
+      >
+        {settled && settledBody}
+        {(!settled || leaving) && (
+          <div
+            key="open"
+            aria-hidden={settled ? true : undefined}
+            inert={settled}
+            className={cn("px-5 py-4", settled && "pointer-events-none absolute inset-x-0 top-0 anim-fade-out")}
+          >
+            {openBody}
+          </div>
         )}
       </div>
     </div>

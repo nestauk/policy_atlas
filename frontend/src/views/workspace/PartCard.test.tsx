@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -233,11 +233,92 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
   it("takes the user bubble's surface, with the part's name as a small grey label", () => {
     renderPart(proposal("question"), { ...OPEN, confirmedOptionId: "confirm" }, vi.fn(), { partName: "Question" });
     const block = screen.getByTestId("part-settled");
-    expect(block).toHaveClass("border", "border-blue-tint", "bg-blue-tint-2", "px-3.5", "py-2.5");
+    expect(block).toHaveClass("border", "border-blue-tint", "bg-blue-tint-2");
+    expect(block.firstElementChild).toHaveClass("px-3.5", "py-2.5");
     const name = screen.getByText("Question");
     expect(name).toHaveClass("uppercase", "text-meta", "text-grey");
     expect(name).not.toHaveClass("text-navy");
     expect(screen.getByText("Looks right")).toHaveClass("text-[#0c6b5a]");
+  });
+
+  // Owner, round 8: "Change" takes its own line under the green words, as a
+  // quiet control at Caption size, never inline with the words.
+  it("puts Change on its own line under the green words, a quiet grey control at Caption size", () => {
+    renderPart(proposal("question"), { ...OPEN, confirmedOptionId: "confirm" }, vi.fn(), { partName: "Question" });
+    const change = screen.getByRole("button", { name: "Change" });
+    const words = screen.getByText("Looks right");
+    expect(words).not.toContainElement(change);
+    expect(change).toHaveClass("block", "text-caption", "text-grey", "underline", "hover:text-navy");
+    expect(change.className).not.toMatch(/\btext-body\b|\bml-2\b/);
+  });
+
+  // Owner, round 8: one container across the two states. The box keeps its
+  // element as the card settles; its surface and rule ease to the settled
+  // look; the open form fades out over the settled words, inert, and goes.
+  describe("the settle (owner, round 8)", () => {
+    function rerenderable(state: typeof OPEN) {
+      const part = proposal("question");
+      const ui = (next: typeof OPEN) => (
+        <PartCard part={part} partName="Question" state={next} disabled={false} onSend={vi.fn()} steps={[{ id: "question", name: "Question", settled: false }]} />
+      );
+      const view = render(ui(state));
+      return { ...view, settle: () => view.rerender(ui({ ...OPEN, confirmedOptionId: "confirm" })) };
+    }
+
+    it("keeps one box: the open card's element becomes the settled block, its colours easing", () => {
+      vi.useFakeTimers();
+      const view = rerenderable(OPEN);
+      const box = screen.getByTestId("part-card");
+      expect(box).toHaveClass("transition-[background-color,border-color]", "duration-300", "overflow-hidden");
+      view.settle();
+      expect(screen.getByTestId("part-settled")).toBe(box);
+      expect(box.parentElement).toHaveClass("ml-8");
+      vi.useRealTimers();
+    });
+
+    it("fades the open form out over the settled words, inert and hidden, then removes it", () => {
+      vi.useFakeTimers();
+      const view = rerenderable(OPEN);
+      view.settle();
+      const leaving = screen.getByTestId("part-settled").querySelector(".anim-fade-out") as HTMLElement;
+      expect(leaving).toHaveAttribute("aria-hidden", "true");
+      expect(leaving).toHaveAttribute("inert");
+      expect(leaving).toHaveClass("absolute", "pointer-events-none");
+      expect(screen.queryByRole("radio")).toBeNull();
+      // The settled words rise in.
+      expect(screen.getByTestId("part-settled").firstElementChild).toHaveClass("anim-rise");
+      act(() => vi.advanceTimersByTime(200));
+      expect(screen.getByTestId("part-settled").querySelector(".anim-fade-out")).toBeNull();
+      vi.useRealTimers();
+    });
+
+    it("folds the stepper line away rather than dropping it", () => {
+      const view = rerenderable(OPEN);
+      const stepper = screen.getByText(/Plan · step 1 of 1/).closest(".grid") as HTMLElement;
+      expect(stepper).toHaveClass("grid-rows-[1fr]");
+      view.settle();
+      expect(stepper).toHaveClass("grid-rows-[0fr]", "opacity-0");
+    });
+
+    it("is a cut under reduced motion: no fading form, no rise", () => {
+      vi.stubGlobal("matchMedia", (query: string) => ({
+        matches: query.includes("reduce"),
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }));
+      const view = rerenderable(OPEN);
+      view.settle();
+      expect(screen.getByTestId("part-settled").querySelector(".anim-fade-out")).toBeNull();
+      expect(screen.getByTestId("part-settled").firstElementChild).not.toHaveClass("anim-rise");
+      vi.unstubAllGlobals();
+    });
+
+    it("holds still when it mounts settled (the history)", () => {
+      rerenderable({ ...OPEN, confirmedOptionId: "confirm" });
+      expect(screen.getByTestId("part-settled").firstElementChild).not.toHaveClass("anim-rise");
+      expect(screen.queryByText(/Plan · step/)).toBeNull();
+    });
   });
 
   it("the scope card's one choice is a secondary Looks right button, with no words option", async () => {

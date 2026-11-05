@@ -6,53 +6,48 @@ import { useRunStream, type RunStreamState } from "../store";
 import { tabOfPath, type LifecycleTab } from "./lifecycle";
 import { READY_WORDS, isFinished, walkKind } from "./workspace/runProgress";
 
-/** The stage frames whose landing gives the Sources tab something new:
- *  sources, the landscape, findings (task 058, N14). */
-const SOURCES_STAGES = new Set(["acquire", "screen", "characterise", "extract", "group"]);
-
 /** A connection's replay arrives in a burst after it opens; nothing that lands
  *  in this window marks a tab, so an old run never reads as new. */
 export const REPLAY_SETTLE_MS = 2_500;
 
-/** What has landed on the stream so far, per tab that can be marked. */
+/** What has landed on the stream so far, for the tab that can be marked. */
 export interface Landing {
   runId: string | null;
   /** Report sections written. */
   sections: number;
-  /** Completed stages that feed the Sources tab. */
-  sources: number;
   /** True once the run finished with something to read. */
   finished: boolean;
 }
 
-/** Marks the shell shows: a dot per tab, and the unseen finish. */
+/** Marks the shell shows: the Result tab's dot (a section or the report is
+ *  ready), and the unseen finish. The Sources tab has no mark (owner, round
+ *  8: it was not useful). */
 export interface Marks {
   result: boolean;
-  sources: boolean;
   /** The run finished and the user has not looked at the Result tab since. */
   ready: boolean;
 }
 
-export const NO_MARKS: Marks = { result: false, sources: false, ready: false };
+export const NO_MARKS: Marks = { result: false, ready: false };
 
 /** Read what has landed from the stream. */
 export function landingOf(stream: Pick<RunStreamState, "run" | "stages" | "liveSections">): Landing {
   return {
     runId: stream.run?.id ?? null,
     sections: Object.values(stream.liveSections).filter((section) => section.state === "filled").length,
-    sources: stream.stages.filter((entry) => entry.status === "completed" && SOURCES_STAGES.has(entry.stage)).length,
     finished: isFinished(stream.run?.status),
   };
 }
 
 export function sameLanding(a: Landing, b: Landing): boolean {
-  return a.runId === b.runId && a.sections === b.sections && a.sources === b.sources && a.finished === b.finished;
+  return a.runId === b.runId && a.sections === b.sections && a.finished === b.finished;
 }
 
 /**
- * The marks after something new lands (task 058, N14): a tab gets a dot when
- * its content lands while the user is on another tab; the finish is unseen
- * unless the user is looking at the Result tab. A new run clears the finish.
+ * The marks after something new lands (task 058, N14): the Result tab gets a
+ * dot when a section or the report lands while the user is on another tab;
+ * the finish is unseen unless the user is looking at the Result tab. A new
+ * run clears the finish.
  *
  * Args:
  *   marks: The marks before.
@@ -68,15 +63,13 @@ export function nextMarks(marks: Marks, before: Landing, after: Landing, tab: Li
   const next = after.runId !== before.runId ? { ...marks, ready: false } : { ...marks };
   const justFinished = after.finished && !before.finished;
   if (tab !== "result" && (after.sections > before.sections || justFinished)) next.result = true;
-  if (tab !== "sources" && after.sources > before.sources) next.sources = true;
   if (justFinished && !(tab === "result" && looking)) next.ready = true;
   return next;
 }
 
-/** The marks once the user is on `tab`: visiting a tab clears its dot, and
- *  seeing the Result tab clears the unseen finish. */
+/** The marks once the user is on `tab`: visiting the Result tab clears its
+ *  dot, and seeing it clears the unseen finish. */
 export function visitMarks(marks: Marks, tab: LifecycleTab | null, looking: boolean): Marks {
-  if (tab === "sources" && marks.sources) return { ...marks, sources: false };
   if (tab === "result" && (marks.result || (marks.ready && looking))) {
     return { ...marks, result: false, ready: looking ? false : marks.ready };
   }
@@ -211,11 +204,11 @@ export function NewContentDot() {
   );
 }
 
-/** The tab dots for the live layer's marks, merged into the tab items. */
+/** The Result tab's dot for the live layer's marks, merged into the tab items. */
 export function withTabMarks<T extends { tab: string; marker?: ReactNode }>(items: T[], marks: Marks | null): T[] {
   if (marks === null) return items;
   return items.map((item) =>
-    item.marker === undefined && ((item.tab === "result" && marks.result) || (item.tab === "sources" && marks.sources))
+    item.marker === undefined && item.tab === "result" && marks.result
       ? { ...item, marker: <NewContentDot /> }
       : item,
   );

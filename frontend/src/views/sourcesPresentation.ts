@@ -1,4 +1,7 @@
+import { useEffect, useRef } from "react";
+
 import type { components } from "../api/gen/types";
+import { useRunStream } from "../store";
 
 type EvidenceItem = components["schemas"]["EvidenceItemOut"];
 
@@ -187,4 +190,108 @@ export function screeningDetails(
 /** Mark an LLM-produced abstract so it is never presented as document prose. */
 export function abstractSourceLabel(source: "provider" | "llm_description" | null | undefined): string | undefined {
   return source === "llm_description" ? "AI description" : undefined;
+}
+
+/**
+ * The stages whose output lands on the Sources tab: while one runs, the
+ * tab's views refetch every few seconds so a value replaces its placeholder
+ * as it lands (task 058, owner round 8; before, they refreshed only when the
+ * stage finished).
+ */
+const FEEDS_SOURCES = new Set([
+  "acquire",
+  "screen",
+  "classify",
+  "appraise",
+  "ingest",
+  "characterise",
+  "extract",
+  "group",
+]);
+
+/** How often a Sources view refetches while a stage that feeds it runs. */
+export const LIVE_REFETCH_MS = 5_000;
+
+/**
+ * The stages running now: those whose latest frame is `started`, while the
+ * run itself is running (a paused run is waiting on a person, so nothing is
+ * arriving and nothing pulses).
+ *
+ * Args:
+ *   stream: The task's run stream (its run and stage frames).
+ *
+ * Returns:
+ *   The keys of the stages in progress; empty when no run is running.
+ */
+export function liveStages(stream: {
+  run: { status: string } | null;
+  stages: ReadonlyArray<{ stage: string; status: string }>;
+}): ReadonlySet<string> {
+  if (stream.run?.status !== "running") return new Set();
+  const latest = new Map<string, string>();
+  for (const entry of stream.stages) latest.set(entry.stage, entry.status);
+  return new Set([...latest].filter(([, status]) => status === "started").map(([stage]) => stage));
+}
+
+/** Whether a stage that feeds the Sources tab is running. */
+export function feedsSources(live: ReadonlySet<string>): boolean {
+  return [...live].some((stage) => FEEDS_SOURCES.has(stage));
+}
+
+/** Which of a source's cells are waiting on a stage that runs now. */
+export type CellPulses = { relevant: boolean; type: boolean; strength: boolean; status: boolean };
+
+/**
+ * The cells of one source that show a pulsing placeholder (owner, round 8):
+ * only where the value is absent, and only while the stage that fills it
+ * runs. Screening fills Relevant for every source; classifying fills the
+ * evidence type and strength of the relevant ones; reading the full texts
+ * decides the Status of the relevant ones not yet read. Once the stage ends
+ * nothing pulses, whatever the cell holds.
+ *
+ * Args:
+ *   item: The source's row.
+ *   live: The stages running now (`liveStages`).
+ *
+ * Returns:
+ *   One flag per cell that may pulse.
+ */
+export function cellPulses(
+  item: Pick<EvidenceItem, "screen_status" | "evidence_type" | "appraisal_tier" | "read_in_full" | "status">,
+  live: ReadonlySet<string>,
+): CellPulses {
+  const relevant = item.screen_status === "relevant";
+  const classifying = live.has("classify") || live.has("appraise");
+  return {
+    relevant: live.has("screen") && item.screen_status == null,
+    type: classifying && relevant && !item.evidence_type,
+    strength: classifying && relevant && !item.appraisal_tier,
+    status: live.has("ingest") && relevant && !item.read_in_full && item.status !== "unavailable",
+  };
+}
+
+/** The stages running now on the task's one run stream (`liveStages`). */
+export function useLiveStages(taskId: string): ReadonlySet<string> {
+  return liveStages(useRunStream(taskId));
+}
+
+/**
+ * Refetch a view's reads every `LIVE_REFETCH_MS` while `active` (a stage
+ * that feeds the view runs), so the placeholders give way to values as they
+ * land; the interval stops when the stage ends.
+ *
+ * Args:
+ *   active: Whether a stage that feeds the view is running.
+ *   refetch: Refetches the view's reads.
+ */
+export function useLiveRefetch(active: boolean, refetch: () => void): void {
+  const latest = useRef(refetch);
+  useEffect(() => {
+    latest.current = refetch;
+  });
+  useEffect(() => {
+    if (!active) return undefined;
+    const id = window.setInterval(() => latest.current(), LIVE_REFETCH_MS);
+    return () => window.clearInterval(id);
+  }, [active]);
 }

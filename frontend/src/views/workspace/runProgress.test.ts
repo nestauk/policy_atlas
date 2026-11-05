@@ -190,10 +190,12 @@ describe("rowLink — where a done row points", () => {
     entry({ stage: "screen", status: "completed" }),
   ];
 
-  it("links Sources after searching and screening; Landscape on categorising only once mapping is done", () => {
+  // Lead, round 8 (superseding round 4's "after Mapping"): a done
+  // Classifying row links to the landscape at once.
+  it("links Sources after searching and screening; Landscape on categorising at once", () => {
     const early = done([...searchScreen, entry({ stage: "classify", label: "Classifying", status: "completed" }), entry({ stage: "appraise", label: "Classifying", status: "completed" })]);
     expect(rowLink(early[0], early, "t1", "evidence_search", false)).toEqual({ href: "/tasks/t1/sources/all", label: "Sources" });
-    expect(rowLink(early[1], early, "t1", "evidence_search", false)).toBeNull();
+    expect(rowLink(early[1], early, "t1", "evidence_search", false)).toEqual({ href: "/tasks/t1/sources/landscape", label: "Landscape" });
     const mapped = done([
       ...searchScreen,
       entry({ stage: "classify", label: "Classifying", status: "completed" }),
@@ -221,6 +223,41 @@ describe("rowLink — where a done row points", () => {
   it("links nothing on a scoping walk's rows", () => {
     const rows = done(searchScreen);
     expect(rowLink(rows[0], rows, "t1", "longlist", false)).toBeNull();
+  });
+});
+
+// Owner, round 8: the step in progress links to the page its output lands
+// on, before it finishes.
+describe("rowLink — where the step in progress points", () => {
+  const live = (stage: StageEntry["stage"], label: string) => {
+    const rows = cardRows([entry({ stage, label, status: "started" })], standardPlan(), "running");
+    return { rows, row: rows.find((row) => row.state === "progress")! };
+  };
+
+  it.each([
+    ["acquire", "Searching and screening", "/tasks/t1/sources/all", "Sources"],
+    ["screen", "Searching and screening", "/tasks/t1/sources/all", "Sources"],
+    ["classify", "Classifying", "/tasks/t1/sources/landscape", "Landscape"],
+    ["characterise", "Mapping", "/tasks/t1/sources", "Themes"],
+    ["synthesise", "Writing", "/tasks/t1/result", "Report"],
+  ] as const)("links %s to its page while it runs", (stage, label, href, name) => {
+    const { rows, row } = live(stage, label);
+    expect(rowLink(row, rows, "t1", "evidence_search", false)).toEqual({ href, label: name });
+  });
+
+  it("gives reading and shortlisting no link while they run, and a scoping walk none", () => {
+    const reading = live("ingest", "Reading the full texts");
+    expect(rowLink(reading.row, reading.rows, "t1", "evidence_search", false)).toBeNull();
+    const shortlisting = live("select", "Shortlisting");
+    expect(rowLink(shortlisting.row, shortlisting.rows, "t1", "evidence_search", false)).toBeNull();
+    const searching = live("acquire", "Searching and screening");
+    expect(rowLink(searching.row, searching.rows, "t1", "longlist", false)).toBeNull();
+  });
+
+  it("links a step still to come nowhere", () => {
+    const { rows } = live("acquire", "Searching and screening");
+    const upcoming = rows.find((row) => row.state === "upcoming")!;
+    expect(rowLink(upcoming, rows, "t1", "evidence_search", false)).toBeNull();
   });
 });
 

@@ -1,20 +1,17 @@
 import type { ReactNode } from "react";
 
-import { Figures } from "../../../lib/figures";
-import { useNow } from "../../../lib/freshness";
 import { COPY } from "../../../lib/vocabulary";
 import { scrub } from "../../../lib/scrub";
 import { cn } from "../../../ui/brand/cn";
-import { LiveMark } from "../../../ui/brand/Card";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { Tooltip, TooltipProvider } from "../../../ui/radix/Tooltip";
-import { elapsedSeconds, formatMinutes } from "../runProgress";
 import { ChatIcon, PanelIcon, PlusIcon } from "./icons";
 
 const RAIL_BUTTON =
   "pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
-/** The Task Agent's mark in the rail, still or turning. */
+/** The Task Agent's mark in the rail: the still fold mark, always (owner,
+ *  round 8). */
 const RAIL_MARK_SIZE = 11;
 
 /** How many recent chats the rail marks. */
@@ -27,23 +24,6 @@ export const RAIL_TOOLTIP_DELAY_MS = 150;
 /** Rail and overlay tooltips originate from the left edge, so they carry the
  *  system's 2px blue leading rule; tooltips in running text do not. */
 export const RAIL_TOOLTIP_CLASS = "border-l-2 border-l-blue";
-
-/** The run's elapsed time under the turning mark, to the minute, in grey
- *  tabular figures (task 058, owner round 6). Caption size: Meta's "12 min"
- *  nearly fills the 48 px rail and "1 h 4 min" does not fit, so the figure is
- *  set a step smaller and an hour-long run wraps after its hours ("1 h" over
- *  "4 min"); each number keeps its unit. Ticks every 15 s, enough for a
- *  minute figure. */
-function RailElapsed({ startedAt }: { startedAt: string }) {
-  const nowMs = useNow(true, 15_000);
-  const text = formatMinutes(elapsedSeconds(startedAt, undefined, nowMs)).replace(/(\d) /g, "$1\u00A0");
-  return (
-    // Tabular digits only: the tabular feature widens the space too.
-    <span data-testid="rail-elapsed" className="-mt-0.5 block w-full px-0.5 text-center text-caption leading-tight text-grey">
-      <Figures text={text} />
-    </span>
-  );
-}
 
 /** One recent chat on the rail. */
 export type RailChat = { id: string; title: string };
@@ -106,11 +86,10 @@ function RailButton({
  *     `aria-expanded`; `toggleDisabled` holds it until the data it needs has
  *     resolved; `onTaskAgent` marks the Task Agent as current; `recent` and
  *     `currentId` are the chat marks and the one on show; `className` sets
- *     the rail's geometry (a column, or a bar that becomes a column at `lg`);
- *     `runLive` turns the Task Agent's mark while a run is live (task 058,
- *     owner 2026-11-05: the fold mark, at the rail's own size so nothing
- *     jumps); `runWords` and `runStartedAt` give the mark its hover words
- *     and the elapsed figure under it.
+ *     the rail's geometry (a column, or a bar that becomes a column at `lg`).
+ *     The Task Agent's mark is the still fold mark named "Task Agent", with
+ *     no run status or timer (owner, round 8: the run strip and the trace
+ *     carry the run).
  */
 export function ConversationRail({
   toggleLabel,
@@ -125,9 +104,6 @@ export function ConversationRail({
   currentId = null,
   onSelectChat,
   className,
-  runLive = false,
-  runWords,
-  runStartedAt,
 }: {
   toggleLabel: string;
   expanded: boolean;
@@ -141,18 +117,7 @@ export function ConversationRail({
   currentId?: string | null;
   onSelectChat?: (conversationId: string) => void;
   className?: string;
-  runLive?: boolean;
-  /** While a run is live: the trace header's words, which the mark's
-   *  tooltip and accessible name carry ("Searching and screening · 184 found
-   *  so far"). */
-  runWords?: string;
-  /** While a run is live: when it started, for the elapsed figure under the mark. */
-  runStartedAt?: string;
 }) {
-  const live = runLive && runWords !== undefined && runWords !== "";
-  const taskAgentName = live ? `${COPY.taskAgent} · ${runWords}` : COPY.taskAgent;
-  const elapsedFrom = runLive && runStartedAt !== undefined && runStartedAt !== "" ? runStartedAt : null;
-  const showElapsed = elapsedFrom !== null;
   return (
     <TooltipProvider delayDuration={RAIL_TOOLTIP_DELAY_MS}>
       <aside
@@ -170,17 +135,9 @@ export function ConversationRail({
         >
           <PlusIcon size={16} />
         </RailButton>
-        {/* The Task Agent mark, and while a run is live the run's elapsed
-            time under it (owner, round 6): a glance at the rail from any tab
-            says the run is moving and for how long. */}
-        {/* With the figure the column spans the rail, so the figure wraps
-            inside the rail's 48 px instead of widening it. */}
-        <div className={cn("relative flex flex-col items-center", showElapsed && "w-full")}>
-          <RailButton label={taskAgentName} current={onTaskAgent} onClick={onSelectTaskAgent}>
-            {runLive ? <LiveMark size={RAIL_MARK_SIZE} /> : <FoldMarkIcon size={RAIL_MARK_SIZE} />}
-          </RailButton>
-          {elapsedFrom !== null && <RailElapsed startedAt={elapsedFrom} />}
-        </div>
+        <RailButton label={COPY.taskAgent} current={onTaskAgent} onClick={onSelectTaskAgent}>
+          <FoldMarkIcon size={RAIL_MARK_SIZE} />
+        </RailButton>
         {recent.map((chat) => (
           <RailButton
             key={chat.id}

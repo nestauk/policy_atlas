@@ -1,34 +1,62 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { useNavigate } from "react-router";
 
+import { useConversations } from "../api/queries";
 import { Figures } from "../lib/figures";
 import { useNow } from "../lib/freshness";
 import { createInitialRunStreamState } from "../store";
 import { LiveMark, StatusMark } from "../ui/brand/Card";
 import { cn } from "../ui/brand/cn";
 import { useMountedTraces, useTaskLive } from "./taskLive";
+import {
+  isTaskAgentConversation,
+  taskAgentConversationId,
+  useActiveConversation,
+} from "./workspace/chat/conversationState";
 import { elapsedSeconds, formatElapsed } from "./workspace/runProgress";
 import { useRunWords } from "./workspace/runWords";
 
 /** A stream with no run, for the shell before the live layer is enabled. */
 const NO_STREAM = createInitialRunStreamState();
 
-/** A no-break space binds each "·" to the word before it, so a separator
- *  never starts a line (lead, 2026-11-05). */
-function bound(text: string): string {
-  return text.replaceAll(" · ", " · ");
+/** The separator between items. A no-break space binds each "·" to the word
+ *  before it, so a separator never starts a line (lead, 2026-11-05). */
+const SEP = " · ";
+
+/** The sidebar shows from `md` up (`ChatSidePanel` is `max-md:hidden`);
+ *  below it the Agent tab is the way to the agent. */
+const SIDEBAR_QUERY = "(min-width: 48rem)";
+
+function sidebarAvailable(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.(SIDEBAR_QUERY).matches === true;
 }
 
-type Shown = { words: string; paused: boolean; elapsed: string; key: string };
+function subscribeSidebar(onChange: () => void): () => void {
+  const query = typeof window === "undefined" ? undefined : window.matchMedia?.(SIDEBAR_QUERY);
+  query?.addEventListener?.("change", onChange);
+  return () => query?.removeEventListener?.("change", onChange);
+}
+
+/** Whether the screen is wide enough for the sidebar, kept current. */
+function useSidebarAvailable(): boolean {
+  return useSyncExternalStore(subscribeSidebar, sidebarAvailable, () => false);
+}
+
+type Shown = { head: string; rest: string; words: string; paused: boolean; elapsed: string; key: string };
 
 /**
- * The run strip (task 058, owner round 7: it returns, the step note having
- * gone): under the lifecycle tabs on every tab but Agent, while a run is live
- * or paused, and nowhere else. One line on paper over a hairline: the turning
- * fold mark (the orange square while a check-in waits), the trace header's
- * words in Meta grey, and the elapsed time at the end in tabular figures.
- * Status only: no link and no button (contract D8: the Agent tab and the
- * rail's mark are the routes to the agent). Long words truncate; the time
- * stays in view.
+ * The run strip (task 058, owner rounds 7 and 8): under the lifecycle tabs
+ * on every tab but Agent, while a run is live or paused, and nowhere else.
+ * It starts after the rail, so it belongs to the page beside the sidebar
+ * (the shell places it at the top of the page's column). One line on paper
+ * over a hairline: the turning fold mark (the orange square while a
+ * check-in waits) on the first line, the step's label in navy semibold and
+ * what it is doing in grey, and the run's elapsed time at the right in grey
+ * tabular figures.
+ *
+ * The whole strip is the way to the agent (owner, round 8, reversing
+ * contract D8's "status only"): it opens the Task Agent in the sidebar, or
+ * the Agent tab below `md`, where the sidebar does not show.
  *
  * It opens and closes over 200 ms on the strong ease-out, so the page eases
  * rather than jumps, and its words rise in when the step changes; both hold
@@ -40,14 +68,26 @@ export function RunStrip() {
   const stream = live?.stream ?? NO_STREAM;
   const run = stream.run;
   const ticking = run?.status === "running" || run?.status === "paused";
-  const open = live !== null && live.tab !== null && live.tab !== "agent" && ticking;
+  const taskId = live?.taskId ?? "";
+  const conversations = useConversations(taskId, { status: "active" });
+  const { activeConversationId, setActiveConversation } = useActiveConversation();
+  const wide = useSidebarAvailable();
+  // While the Task Agent is open in the sidebar its trace says the same
+  // words, so the strip steps aside; it returns when the sidebar shuts or
+  // shows another conversation (lead, round 8).
+  const agentInSidebar = wide && isTaskAgentConversation(activeConversationId, conversations.data?.data ?? []);
+  const open = live !== null && live.tab !== null && live.tab !== "agent" && ticking && !agentInSidebar;
   const nowMs = useNow(open);
   const { words, row, paused } = useRunWords(stream, live?.isOwner ?? false);
   const traces = useMountedTraces();
+  const navigate = useNavigate();
 
+  const [head = "", ...restParts] = words.split(" · ");
   const now: Shown | null =
     open && run !== null
       ? {
+          head,
+          rest: restParts.join(" · "),
           words,
           paused,
           elapsed: formatElapsed(elapsedSeconds(run.startedAt, undefined, nowMs)),
@@ -60,6 +100,14 @@ export function RunStrip() {
     setLast(now);
   }
   const shown = now ?? last;
+
+  const openTaskAgent = () => {
+    if (sidebarAvailable()) {
+      setActiveConversation(taskAgentConversationId(conversations.data?.data ?? []));
+    } else {
+      void navigate(`/tasks/${taskId}`);
+    }
+  };
 
   return (
     <>
@@ -74,17 +122,32 @@ export function RunStrip() {
       >
         <div className="min-h-0 overflow-hidden">
           {shown !== null && (
-            <div className="flex min-h-9 items-center gap-2 border-b border-line bg-paper px-6 py-2 text-meta text-grey max-md:px-4">
-              <span className="flex size-3.5 shrink-0 items-center justify-center">
+            <button
+              type="button"
+              tabIndex={open ? undefined : -1}
+              aria-label={`Open the Task Agent: ${shown.words}`}
+              onClick={openTaskAgent}
+              className="flex w-full cursor-pointer items-start gap-2 border-b border-line bg-paper px-6 py-2.5 text-left text-meta leading-[1.55rem] transition-colors duration-150 hover:bg-paper-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue max-md:px-4"
+            >
+              {/* The mark sits on the first line of the words. */}
+              <span aria-hidden="true" className="flex h-[1lh] w-3.5 shrink-0 items-center justify-center">
                 {shown.paused ? <StatusMark tone="paused" /> : <LiveMark />}
               </span>
               <span key={shown.key} className="anim-rise min-w-0 flex-1 truncate">
-                <Figures text={bound(shown.words)} />
+                <span className="font-semibold text-navy">
+                  <Figures text={shown.head} />
+                </span>
+                {shown.rest !== "" && (
+                  <span className="text-grey">
+                    {SEP}
+                    <Figures text={shown.rest.replaceAll(" · ", SEP)} />
+                  </span>
+                )}
               </span>
-              <span className="shrink-0 whitespace-nowrap">
+              <span className="shrink-0 whitespace-nowrap text-right text-grey">
                 <Figures text={shown.elapsed} />
               </span>
-            </div>
+            </button>
           )}
         </div>
       </div>

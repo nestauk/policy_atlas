@@ -49,7 +49,7 @@ Section titles (report order): Key findings (written last, shown first); 1 Why t
 ## The running card (revised)
 - Top line: dot, "RUNNING", elapsed "6 min 12 s" right-aligned in tabular figures, "Minimise" link. No second title.
 - Rows, one per plan step in order. **Owner 2026-11-04: "Sorting by evidence type" is renamed "Classifying" and absorbs Appraising (a one-second deterministic step); Shortlisting has no view in the app and gets no link (the selection shows through citations and the read-in-full status).** Evidence search rows: Searching and screening; Classifying; Reading the full texts; Mapping; Shortlisting; Writing (six). Three looks:
-  - Done: label in navy, then on the same line in grey the key count, then the link. Examples: "Searching and screening · 312 found · 118 relevant · Sources →"; "Classifying · 118 classified · Landscape →" (link appears once Mapping is done; before that no link); "Reading the full texts · 38 read" (no link; owner round 4: nowhere relevant to point); "Mapping · 7 themes · Landscape →"; "Shortlisting · 24 selected" (no link); "Writing · 7 sections · Report →". In-progress line for Classifying: "40 of 118 classified".
+  - Done: label in navy, then on the same line in grey the key count, then the link. Examples: "Searching and screening · 312 found · 118 relevant · Sources →"; "Classifying · 118 classified · Landscape →" (link appears once Mapping is done; before that no link; superseded by the lead, round 8: the link shows at once); "Reading the full texts · 38 read" (no link; owner round 4: nowhere relevant to point); "Mapping · 7 themes · Landscape →"; "Shortlisting · 24 selected" (no link); "Writing · 7 sections · Report →". In-progress line for Classifying: "40 of 118 classified".
   - In progress: label in navy with the breathing dot at the right; under it the action line in grey (and, for Writing, the section line above the action line). No "In progress" word; the dot is the state.
   - Upcoming: name only, grey, smaller, no status word.
 - Rules between rows stay. Row order is the plan order; Searching and screening is one row even when the search runs several rounds.
@@ -585,6 +585,74 @@ page's kind row reads "Baseline" when the skeleton has no key-findings slot; the
 case-studies slot at index 1 is read as the key findings (the server's order), which the
 mock's skeleton relies on.
 
+## Owner round 8 (2026-11-05, evening, live-run notes): workspace and shell
+
+Brief: `research/briefs/round-8-workspace.md` (lead decisions). Built as below.
+
+1. **The ended state is the same card.** Ended, the trace keeps the card frame and the top
+   line: the green square, the finish words in the label style ("REPORT READY"), the wall time
+   and "Read it →"; stopped and failed in red the same way, with no link. The rows fold behind
+   "Show steps" / "Hide steps". A past run not in the stream is the same folded card. The green
+   one-liner is gone.
+2. **Right-aligned counts, times and links.** The card reads as a table: the top line and every
+   row share one template (words left; counts and time right-aligned in one grey column in
+   tabular figures; the link right-aligned in blue in the last), one line box for every line so
+   rows stand equal and the marks sit on the middle of the first line. Narrower than 32rem the
+   right group follows the label on the line under it.
+3. **The link while the step runs.** Searching and Screening → Sources, Classifying →
+   Landscape, Mapping → Themes, Writing → Report, right-aligned like a done row's.
+4. **The current row breathes.** The step in progress's activity line breathes with its square
+   (1.6 s, opacity 1 to 0.6); the label holds still; still under reduced motion.
+5. **Two rows for search and screen** ("Searching", "Screening"), each with its own counts and
+   activity line, both linking to Sources (the backend's row split).
+6. **"Change" on its own line** under the green words, left-aligned, a quiet control at Caption
+   size.
+7. **A fluid settle.** One container across the two states: the options and controls fade out
+   over 150 ms while the card eases to its settled height and across to the user's indent over
+   300 ms on the strong ease-out; the surface and the green rule ease in with it; the settled
+   words rise in; the stepper line folds away. Reduced motion: a cut.
+8. **The strip** starts after the rail from `md` up (full width below), and the whole strip is a
+   button that opens the Task Agent in the sidebar (the Agent tab below `md`); step label
+   semibold navy, activity grey, time grey and right-aligned, 10 px vertical padding, the mark
+   on the first line. The owner reversed contract D8's "status only" for the strip (2026-11-05,
+   round 8).
+9. **The rail** shows the static fold mark, named "Task Agent", with no hover status and no
+   timer.
+10. **Task list:** a running task's mark is the breathing 6 px blue square, one size with the
+    other rows.
+11. **Sources tab mark removed;** the Result tab's stays.
+12. **Pulsing placeholders** keyed to the live stage, only where the value is absent: Relevant
+    while screening; Evidence type and strength (relevant sources) while classifying; Status
+    (relevant sources not yet read) while reading the full texts; three placeholder rows on
+    Themes while mapping; placeholder bars in place of the evidence-types chart on Landscape
+    while classifying. The Sources views refetch every 5 s while a stage that feeds them runs.
+
+Rulings on the build (agent, for the lead to confirm):
+- "Show steps" sits under the top line's words, at the folded card's foot, and stays there when
+  the rows open below it (so the control that opened them closes them without moving); "See
+  plan" stays at the foot of the open rows.
+- The top line's time is Meta size, in the table's time column; the label style is unchanged.
+- A past run's card is not a landmark region (the thread's one "Analysis run" region is the run
+  the stream follows), so it no longer collides with the live card's name.
+- A finish that is a sentence (the degraded shortlist walk's) keeps its case in navy; only a
+  state word takes the label style.
+- The placeholder bar is Line 2 (a step darker than the Result tab's Line placeholder lines): a
+  short bar in a table cell needs the weight to read at the breathe's trough.
+- A pulse needs the run to be running: a paused run (a check-in waiting) pulses nothing.
+
+Lead rulings on the round-8 build (2026-11-05):
+- lead, round 8: a done Classifying row links to the Landscape at once, superseding round 4's
+  "link appears once Mapping is done" (the running row already links there).
+- lead, round 8: the Writing row's link keeps "Report →" (to the Result tab), running and done.
+- lead, round 8: "Show steps" under the top line's words, staying put as the rows open; "See
+  plan" at the foot of the open rows.
+- lead, round 8: the run strip steps aside while the Task Agent is open in the sidebar (its
+  trace shows the same words) and returns when the sidebar shuts or shows another chat; below
+  `md`, where the sidebar does not show, it stays.
+- lead, round 8: the agent's rulings above are accepted (the past run's card is not a landmark,
+  a finish that is a sentence keeps its case, the top line's time at Meta size, the Line 2
+  placeholder bar, no pulse while paused).
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |
@@ -596,8 +664,9 @@ mock's skeleton relies on.
 | 5 | build, owner questions on a live run | 2026-11-05 | no Result footer; automatic swap to the report; no event-log echoes in the thread; settled scope lines per group; the streaming fix; the run trace with the blue square mark in place of the card, dock and strip | owner |
 | 6 | build, owner round 6 (live-run notes) | 2026-11-05 | settled part cards take the user bubble's surface, the part's name a grey label; the live trace is the running card's body (rows in plan order on a spine, hairline rules, the fold mark on the step in progress, no step count or last-finished line); the shut rail shows the run's elapsed minutes under its mark and a step note slides out of it as each step finishes; the rail's mark turns on the Result tab too | owner |
 | 7 | build, owner round 7 (live-run notes) | 2026-11-05 | citation marks while streaming are the final marker's muted chip, and checked markers stay; the live page is the final page and the swap updates it in place; streamed prose paced with word snapping, frozen paragraphs and a 150 ms fade per batch; the trace is the running card again; the step note withdrawn and the run strip returns | owner |
-| 8 | review, agent pass | | | lead |
-| 9 | review, owner pass | | | owner |
+| 8 | build, owner round 8 (live-run notes) | 2026-11-05 | the ended trace is the same card (finish on the top line, rows behind "Show steps"); the card reads as a table with right-aligned counts, times and links; the running step links to its page and its activity line breathes; Searching and Screening as two rows; "Change" on its own line; one container for the decision card's settle; the strip starts after the rail and opens the Task Agent; the rail's mark static with no status or timer; one mark size in the task list; no Sources tab mark; pulsing placeholders on the Sources tab keyed to the live stage, with a 5 s refetch | owner |
+| 9 | review, agent pass | | | lead |
+| 10 | review, owner pass | | | owner |
 
 ## Deferred polish
 

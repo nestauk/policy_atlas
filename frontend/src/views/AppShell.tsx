@@ -502,9 +502,6 @@ export function AppShell() {
           </div>
         </NavBar>
       )}
-      {/* The run strip returns under the tabs on every tab but Agent (task
-          058, owner round 7): status only. */}
-      {liveShell && <RunStrip />}
       {liveShell && <LiveReconnectingBanner />}
       <SensitiveInfoBanner />
       {/* The Agent overlay beside every task view outside the Agent tab
@@ -526,23 +523,32 @@ export function AppShell() {
             <ChatSidePanel taskId={taskId ?? ""} isOwner={isOwner} />
           </ErrorBoundary>
         )}
-        <div
-          data-testid={footerInScrollPane ? "task-scroll-pane" : undefined}
-          className={cn(
-            "min-h-0 min-w-0 flex-1",
-            inWorkspace ? "overflow-hidden" : "overflow-y-auto [scrollbar-gutter:stable]",
-            // The pane is a flex column only to pin the footer with
-            // `mt-auto`; children must never flex-shrink, or a view
-            // root with an explicit min-height (Sources' `min-h-full`)
-            // gets squashed to one viewport and the footer lands
-            // mid-content.
-            footerInScrollPane && "flex flex-col [&>*]:shrink-0",
-          )}
-        >
-          <ErrorBoundary key={location.pathname}>
-            <Outlet />
-          </ErrorBoundary>
-          {footerInScrollPane && <AppFooter />}
+        {/* The page's column: the run strip on top, then the routed view.
+            The strip starts after the rail (owner, round 8: it no longer
+            runs under the sidebar to the window's left edge); below md the
+            rail hides and the column is the full width. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {/* The run strip under the tabs on every tab but Agent (task 058,
+              owner rounds 7 and 8): it opens the Task Agent. */}
+          {liveShell && <RunStrip />}
+          <div
+            data-testid={footerInScrollPane ? "task-scroll-pane" : undefined}
+            className={cn(
+              "min-h-0 min-w-0 flex-1",
+              inWorkspace ? "overflow-hidden" : "overflow-y-auto [scrollbar-gutter:stable]",
+              // The pane is a flex column only to pin the footer with
+              // `mt-auto`; children must never flex-shrink, or a view
+              // root with an explicit min-height (Sources' `min-h-full`)
+              // gets squashed to one viewport and the footer lands
+              // mid-content.
+              footerInScrollPane && "flex flex-col [&>*]:shrink-0",
+            )}
+          >
+            <ErrorBoundary key={location.pathname}>
+              <Outlet />
+            </ErrorBoundary>
+            {footerInScrollPane && <AppFooter />}
+          </div>
         </div>
         {liveShell && !inWorkspace && <ShellPlanPanel taskId={taskId ?? ""} />}
       </div>

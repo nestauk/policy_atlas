@@ -75,10 +75,11 @@ function trace(props: Props = {}) {
   );
 }
 
-/** The header line: a button only once the run has ended (its chevron opens
- *  the rows); live or paused it is a line, with the rows open under it. */
+/** The card's top line, and once the run has ended the "Show steps" control
+ *  under it; live or paused the rows are open under it. */
 const header = () => screen.getByTestId("trace-header");
 const headerButton = () => within(header()).getByRole("button");
+const time = () => screen.getByTestId("trace-time");
 const mark = () => header().querySelector("[data-tone]") as HTMLElement;
 /** Text with its no-break spaces read as spaces (the separators bind to the
  *  word before them). */
@@ -122,9 +123,9 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
     expect(mark()).toBeNull();
     // The card we first designed (owner, round 7): frame, label, no Minimise.
     expect(within(header()).getByText("Running")).toHaveClass("uppercase", "font-extrabold", "tracking-label", "text-grey");
-    expect(header().lastElementChild).toHaveClass("shrink-0", "text-grey");
-    expect(header().lastElementChild).toHaveTextContent(/^6 min 12 s$/);
-    expect(header()).toHaveClass("justify-between", "border-b", "border-line");
+    expect(time()).toHaveClass("whitespace-nowrap", "text-grey");
+    expect(time()).toHaveTextContent(/^6 min 12 s$/);
+    expect(header()).toHaveClass("border-b", "border-line");
     expect(screen.queryByRole("button", { name: "Minimise" })).toBeNull();
     expect(screen.getByRole("region", { name: "Analysis run" })).toHaveClass("border", "border-line-2", "bg-paper");
   });
@@ -142,8 +143,8 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
     render(trace());
     const list = screen.getByRole("list", { name: "Run steps" });
     expect(within(list).getAllByRole("listitem").map((li) => flat(li.textContent))).toEqual([
-      "Searching and screening · 312 found · 118 relevant · 1 min 4 s · Sources →, done",
-      "Classifying, in progress · 1 min 15 s40 of 118 classified",
+      "Searching and screening, done312 found · 118 relevant · 1 min 4 s ·Sources →",
+      "Classifying, in progress1 min 15 s ·Landscape →40 of 118 classified",
       "Reading the full texts, to come",
       "Mapping, to come",
       "Shortlisting, to come",
@@ -179,12 +180,100 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
     render(trace());
     const done = rowOf("Searching and screening");
     expect(within(done).getByRole("link", { name: "Sources →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
-    expect(within(done).getByText("Searching and screening")).toHaveClass("text-navy");
+    expect(within(done).getByText("Searching and screening")).toHaveClass("text-navy", "text-body");
     expect(done).toHaveClass("text-body");
     const upcoming = rowOf("Shortlisting");
     expect(upcoming.textContent).toBe("Shortlisting, to come");
-    expect(upcoming).toHaveClass("text-grey", "text-meta");
+    expect(within(upcoming).getByText("Shortlisting")).toHaveClass("text-grey", "text-meta");
     expect(within(upcoming).queryByRole("link")).toBeNull();
+  });
+
+  // Owner, round 8: the card reads as a table. Each line's counts and time
+  // sit right-aligned in one column and its link in the last, on the same
+  // template as the top line; narrow, the right group follows the label.
+  it("lays the top line and every row on one table template, the counts and links right-aligned", () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    render(trace());
+    const template = "@lg:grid-cols-[minmax(0,1fr)_auto_5.75rem]";
+    const done = rowOf("Searching and screening");
+    const rowGrid = within(done).getByText("Searching and screening").parentElement as HTMLElement;
+    const topGrid = within(header()).getByText("Running").closest("p")?.parentElement as HTMLElement;
+    expect(rowGrid.className).toContain(template);
+    expect(topGrid.className).toContain(template);
+    const counts = [...done.querySelectorAll("span.text-grey")].find((el) => el.textContent?.startsWith("312 found"));
+    expect(counts).toHaveClass("@lg:text-right");
+    expect(within(done).getByRole("link", { name: "Sources →" }).parentElement).toHaveClass("@lg:text-right");
+    // Narrow, a finished row's counts take the line under its label.
+    expect(within(done).getByText("Searching and screening")).toHaveClass("basis-full", "@lg:basis-auto");
+    // Every line shares one line box, so the rows stand equal.
+    for (const item of within(screen.getByRole("list", { name: "Run steps" })).getAllByRole("listitem")) {
+      expect(item).toHaveClass("leading-[1.55rem]");
+    }
+  });
+
+  // Owner, round 8: the link to the step's page shows while the step runs.
+  it.each([
+    ["acquire", "Searching and screening", "Sources →", "/sources/all"],
+    ["screen", "Searching and screening", "Sources →", "/sources/all"],
+    ["classify", "Classifying", "Landscape →", "/sources/landscape"],
+    ["characterise", "Mapping", "Themes →", "/sources"],
+    ["synthesise", "Writing", "Report →", "/result"],
+  ] as const)("links the step in progress (%s) to its page", (stage, label, name, path) => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    render(trace({ stages: [entry({ stage, label, status: "started", startedAt: ago(30) })], liveness: {} }));
+    expect(within(rowOf(label)).getByRole("link", { name })).toHaveAttribute("href", `/tasks/${TASK_ID}${path}`);
+  });
+
+  it("gives Reading the full texts and Shortlisting no link while they run", () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    render(trace({ stages: [...SEARCHED, entry({ stage: "ingest", label: "Reading the full texts", status: "started" })], liveness: {} }));
+    expect(within(rowOf("Reading the full texts")).queryByRole("link")).toBeNull();
+  });
+
+  // Owner, round 8: the step in progress's activity line breathes with its
+  // square, the label still; nothing breathes once updates stop.
+  it("breathes the activity line with the square while updates arrive, and holds the label still", () => {
+    vi.useFakeTimers({ now: NOW });
+    render(trace());
+    const activity = within(rowOf("Classifying")).getByTestId("row-activity");
+    expect(activity).toHaveClass("anim-breathe-soft");
+    expect(within(rowOf("Classifying")).getByText("Classifying")).not.toHaveClass("anim-breathe-soft");
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+    expect(within(rowOf("Classifying")).getByTestId("row-activity")).not.toHaveClass("anim-breathe-soft");
+    expect(rowOf("Classifying").querySelector("[data-tone]")).not.toHaveClass("anim-breathe");
+  });
+
+  it("holds the activity line still while paused", () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    render(trace({ status: "paused" }));
+    expect(within(rowOf("Classifying")).getByTestId("row-activity")).not.toHaveClass("anim-breathe-soft");
+  });
+
+  // Owner, round 8: searching and screening are two rows once the server
+  // splits them, each with its own counts, activity and link to Sources.
+  it("shows Searching and Screening as two rows, each linking to Sources", () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    const step = (stage: string, label: string, row: string) => ({ stage, label, row, blurb: "" }) as never;
+    const split = {
+      steps: [step("acquire", "Searching", "search"), step("screen", "Screening", "screen"), step("classify", "Classifying", "categorise")],
+    } as unknown as PlanDraft;
+    render(
+      trace({
+        plan: split,
+        stages: [
+          entry({ stage: "acquire", label: "Searching", status: "completed", startedAt: ago(600), seconds: 40, summary: { acquired: 312 } }),
+          entry({ stage: "screen", label: "Screening", status: "started", startedAt: ago(60) }),
+        ],
+        liveness: { screen: { activity: "screening 87 new abstracts · 104 relevant so far", heartbeat: false, dropped: 0, occurredAt: ago(0) } },
+      }),
+    );
+    expect(flat(rowOf("Searching").textContent)).toBe("Searching, done312 found · 40 s ·Sources →");
+    expect(within(rowOf("Screening")).getByRole("link", { name: "Sources →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
+    expect(flat(within(rowOf("Screening")).getByTestId("row-activity").textContent)).toBe(
+      "screening 87 new abstracts · 104 relevant so far",
+    );
   });
 
   it("reads Writing's section above the action line in its row, and in the screen reader's words", () => {
@@ -209,10 +298,11 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
     expect(header()).not.toHaveTextContent("Writing");
     const lines = [...rowOf("Writing").querySelectorAll("p")].map((line) => flat(line.textContent));
     expect(lines).toEqual([
-      "Writing, in progress · 30 s",
+      "Writing, in progress",
       "Section 3 of 7 · Costs and funding",
       "Looking for: childcare cost as a barrier to take-up",
     ]);
+    expect(flat(rowOf("Writing").textContent)).toContain("30 s ·Report →");
   });
 
   it("re-mounts the header's words as the run pauses, so they rise in", () => {
@@ -241,10 +331,10 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     render(trace({ status: "paused" }));
     const words = header().querySelector(".anim-rise") as HTMLElement;
-    const clock = words.closest("p")?.nextElementSibling as HTMLElement;
-    expect(clock).toHaveTextContent(/^6 min 12 s$/);
-    expect(clock).toHaveClass("shrink-0", "whitespace-nowrap");
-    expect(words).toHaveClass("min-w-0");
+    expect(time()).toHaveTextContent(/^6 min 12 s$/);
+    expect(time()).toHaveClass("whitespace-nowrap");
+    expect(time().parentElement).toHaveClass("shrink-0");
+    expect(words).toHaveClass("min-w-0", "flex-1");
   });
 
   it("sets the state word as a label and what waits in grey; the rows read at Body", () => {
@@ -328,24 +418,38 @@ describe("RunTrace — ended", () => {
     entry({ stage: "synthesise", label: "Writing", status: "completed", seconds: 300, summary: { section_count: 7 } }),
   ];
 
-  it("folds to one green line, the run's one destination, with a chevron that opens the steps", async () => {
+  // Owner, round 8: the ended state is the same card. Its top line is the
+  // finish (the green square, the finish words in the label style, the wall
+  // time, "Read it →"); the rows fold behind "Show steps".
+  it("stays the card, its top line the finish and its one destination, the steps folded behind Show steps", async () => {
     render(trace({ status: "succeeded", stages: WRITTEN, liveness: {}, endedAt: ago(0) }));
     const region = screen.getByRole("region", { name: "Analysis run" });
-    // The screen reader's status line, then the folded line itself.
-    expect(region).toHaveTextContent(/^Report ready›Report ready ·6 min· Read it →$/);
+    expect(region).toHaveClass("border", "border-line-2", "bg-paper");
+    // The screen reader's status line, then the top line, then the control.
+    expect(flat(region.textContent)).toBe("Report readyReport ready6 min ·Read it →Show steps");
+    expect(headerButton().querySelector("svg")).not.toBeNull();
+    expect(within(header()).getByText("Report ready")).toHaveClass("uppercase", "font-extrabold", "tracking-label", "text-grey");
     expect(mark()).toHaveClass("bg-green", "size-1.5");
     expect(liveMark()).toBeNull();
+    expect(time()).toHaveTextContent(/^6 min/);
     expect(within(region).getByRole("link", { name: "Read it →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
-    expect(headerButton()).toHaveTextContent("›");
+    expect(within(region).getByRole("link", { name: "Read it →" })).toHaveClass("text-blue", "font-semibold");
+    expect(headerButton()).toHaveAccessibleName("Show steps");
     expect(headerButton()).toHaveAttribute("aria-expanded", "false");
+    expect(headerButton()).toHaveClass("text-meta", "text-grey", "underline");
     expect(screen.queryByRole("list", { name: "Run steps" })).toBeNull();
-    // No last-finished line and no step count on the folded line.
+    expect(header()).not.toHaveClass("border-b");
+    // No green one-liner: the words are not green, and nothing repeats a row.
+    expect(region.querySelector(".text-\\[\\#0c6b5a\\]")).toBeNull();
     expect(region).not.toHaveTextContent("312 found");
-    expect(region).not.toHaveTextContent("steps");
     await userEvent.click(headerButton());
+    expect(headerButton()).toHaveAccessibleName("Hide steps");
     expect(headerButton()).toHaveAttribute("aria-expanded", "true");
+    expect(header()).toHaveClass("border-b", "border-line");
     expect(within(rowOf("Writing")).getByRole("link", { name: "Report →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
-    expect(rowOf("Writing")).toHaveTextContent("Writing · 7 sections · 5 min");
+    expect(flat(rowOf("Writing").textContent)).toBe("Writing, done7 sections · 5 min ·Report →");
+    await userEvent.click(headerButton());
+    expect(screen.queryByRole("list", { name: "Run steps" })).toBeNull();
   });
 
   it("opens a scoping walk's result on its own view", () => {
@@ -361,18 +465,20 @@ describe("RunTrace — ended", () => {
       }),
     );
     expect(screen.getByRole("link", { name: "Read it →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result?view=longlist`);
-    expect(headerButton()).toHaveTextContent("The longlist is ready");
+    expect(header()).toHaveTextContent("The longlist is ready");
   });
 
   it.each([
     ["failed", "Failed"],
     ["aborted", "Stopped"],
     ["interrupted", "Stopped"],
-  ] as const)("reads a %s run as '%s' with the red mark and no link", (status, words) => {
+  ] as const)("reads a %s run as '%s' with the red mark and no link, the same card", (status, words) => {
     render(trace({ status, stages: SEARCHED, liveness: {}, endedAt: ago(0) }));
-    expect(headerButton()).toHaveTextContent(new RegExp(`^›${words} ·6 min$`));
+    expect(flat(header().textContent)).toBe(`${words}6 minShow steps`);
+    expect(within(header()).getByText(words)).toHaveClass("uppercase", "font-extrabold");
     expect(mark()).toHaveClass("bg-red");
     expect(screen.queryByRole("link", { name: "Read it →" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Analysis run" })).toHaveClass("border", "bg-paper");
   });
 });
 
@@ -389,9 +495,11 @@ describe("RunTrace — a degraded shortlist walk (lead ruling, 2026-11-05)", () 
         endedAt: ago(0),
       }),
     );
-    expect(headerButton()).toHaveTextContent(
-      /^›Policy Atlas could not propose a shortlist\. Your places are unchanged\. ·6 min$/,
-    );
+    // A sentence keeps its case: only a state word takes the label style.
+    const sentence = within(header()).getByText("Policy Atlas could not propose a shortlist. Your places are unchanged.");
+    expect(sentence).not.toHaveClass("uppercase");
+    expect(sentence).toHaveClass("text-navy");
+    expect(time()).toHaveTextContent(/^6 min$/);
     expect(mark()).toHaveClass("bg-red");
     expect(screen.queryByRole("link", { name: "Read it →" })).toBeNull();
   });
@@ -409,9 +517,13 @@ describe("PastRunLine — a run the stream is not following", () => {
       ...overrides,
     }) as TaskAgentThreadRun;
 
-  it("folds to its status word and its wall time, with no chevron, no steps and no link", () => {
+  // Owner, round 8: a past run is the same folded card, with no steps to show.
+  it("is the same card folded to its status word and its wall time, with no Show steps, no steps and no link", () => {
     const { container } = render(<PastRunLine run={run({})} />);
-    expect(container).toHaveTextContent(/^Report ready · 14 min$/);
+    expect(container).toHaveTextContent(/^Report ready14 min$/);
+    expect(screen.getByTestId("past-run")).toHaveClass("border", "border-line-2", "bg-paper");
+    expect(screen.queryByRole("region", { name: "Analysis run" })).toBeNull();
+    expect(screen.getByText("Report ready")).toHaveClass("uppercase", "font-extrabold", "text-grey");
     expect(container.querySelector("button")).toBeNull();
     expect(container.querySelector("a")).toBeNull();
     expect(container.querySelector("[data-tone]")).toHaveClass("bg-green");
@@ -419,12 +531,12 @@ describe("PastRunLine — a run the stream is not following", () => {
 
   it("words its finish from its own walk", () => {
     const { container } = render(<PastRunLine run={run({ purpose: "longlist" })} capability="options_scoping" />);
-    expect(container).toHaveTextContent(/^The longlist is ready · 14 min$/);
+    expect(container).toHaveTextContent(/^The longlist is ready14 min$/);
   });
 
   it("reads a bad ending with the red mark", () => {
     const { container } = render(<PastRunLine run={run({ status: "failed" })} />);
-    expect(container).toHaveTextContent(/^Failed · 14 min$/);
+    expect(container).toHaveTextContent(/^Failed14 min$/);
     expect(container.querySelector("[data-tone]")).toHaveClass("bg-red");
   });
 });
@@ -457,6 +569,12 @@ describe("RunTrace — reduced motion", () => {
 
   it("swaps the words and a landed row in at once", () => {
     expect(utility("anim-rise")).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*animation-duration: 1ms;/);
+  });
+
+  it("holds the breathing activity line still under reduced motion (owner, round 8)", () => {
+    expect(utility("anim-breathe-soft")).toMatch(/animation: breathe-soft 1\.6s/);
+    expect(utility("anim-breathe-soft")).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*animation: none;/);
+    expect(css).toMatch(/@keyframes breathe-soft \{[^}]*\}\s*50% \{\s*opacity: 0\.6;/);
   });
 });
 
