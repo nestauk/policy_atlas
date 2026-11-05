@@ -22,7 +22,9 @@ secrets, no raw source text, no unredacted traces.
 
 | Phase 9, journeys (2026-11-05) | `make verify && cd frontend && pnpm e2e` | pass | **First fully green `make verify` on the branch:** backend 4257 passed, 1 skipped (7 min 59 s); mypy clean; ruff clean; prompt-guard 41 unchanged; infra 113; `drift-check: OK`; frontend 1064 tests in 93 files, build OK; Playwright 33 passed (1.1 min). |
 
-(The step-6 exit gate is the same command after the owner-gated phases; see § Status.)
+| Phase 10, round 1 (2026-11-05, `09fd7cfd`) | `make frontend-verify && make drift-check` | pass | typecheck clean, eslint 0 errors, 1064 tests, build OK, `drift-check: OK`; the backend tree is unchanged since the Phase 9 full gate. |
+
+(The step-6 exit gate is the same full command after the owner-gated phases; see § Status.)
 
 ## Checks beyond the build
 
