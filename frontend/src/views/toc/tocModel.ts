@@ -48,7 +48,7 @@ export function linkTip(link: TocLink): string {
 }
 
 /** The evidence balance's four columns, left to right (C36). */
-export const BALANCE: readonly Exclude<Support, "not_about">[] = ["refutes", "mixed", "weak", "strong"];
+const BALANCE: readonly Exclude<Support, "not_about">[] = ["refutes", "mixed", "weak", "strong"];
 
 /** Each column's documents, heaviest first; documents not about the step are left out. */
 export function evidenceBalance<T extends Pick<TocDocument, "support" | "weight">>(documents: T[]): { support: Exclude<Support, "not_about">; docs: T[] }[] {
@@ -59,7 +59,7 @@ export function evidenceBalance<T extends Pick<TocDocument, "support" | "weight"
 }
 
 /** Figures that say the same thing, shown as one line (C37). */
-export interface FigureGroup {
+interface FigureGroup {
   key: string;
   figures: TocFigure[];
 }
@@ -132,10 +132,10 @@ export function keptPathways(graph: Pick<TocGraph, "pathways">): TocPathway[] {
 }
 
 /** The pathway id of the links on no pathway (the user's, until the review places them, C41). */
-export const UNASSIGNED = "__unassigned";
+const UNASSIGNED = "__unassigned";
 
 /** Links on no pathway at all, kept or set aside: the ones the user added. */
-export function unassignedLinkIds(graph: Pick<TocGraph, "pathways" | "links">): string[] {
+function unassignedLinkIds(graph: Pick<TocGraph, "pathways" | "links">): string[] {
   const onAny = new Set(graph.pathways.flatMap((p) => p.link_ids));
   return graph.links.filter((link) => !onAny.has(link.link_id)).map((link) => link.link_id);
 }
@@ -185,7 +185,7 @@ const ROW_STEP = BOX_H + ROW_GAP;
 /** Space kept for the column headings above the first row. */
 export const HEADER_H = 48;
 
-export interface PlacedBox {
+interface PlacedBox {
   id: string;
   column: number;
   /** Row inside its half of the canvas (above or below the line). */
@@ -198,12 +198,12 @@ export interface PlacedBox {
   moved?: boolean;
 }
 
-export interface ColumnHeading {
+interface ColumnHeading {
   label: string;
   x: number;
 }
 
-export interface TocLayout {
+interface TocLayout {
   boxes: PlacedBox[];
   /** One heading per layer, over its first column. */
   headings: ColumnHeading[];
@@ -259,6 +259,16 @@ export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">)
   const shortColumns = columnsOf("outcome_short");
   const longColumn = 2 + shortColumns;
   const impactColumn = longColumn + columnsOf("outcome_long");
+  // A box's column by its layer; an outcome moves right by its depth.
+  const columnFor = (box: TocBox) =>
+    ({
+      input: 0,
+      output: 1,
+      outcome_short: 2 + (depth.get(box.box_id) ?? 0),
+      outcome_long: longColumn + (depth.get(box.box_id) ?? 0),
+      impact: impactColumn,
+      failure_outcome: 2,
+    })[box.layer];
 
   const column = new Map<string, number>();
   const onSuccess = new Set<string>();
@@ -277,19 +287,11 @@ export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">)
         if (!column.has(id)) {
           order.push(id);
           const sourceColumn = column.get(link.source_box_id);
-          const byLayer = {
-            input: 0,
-            output: 1,
-            outcome_short: 2 + (depth.get(id) ?? 0),
-            outcome_long: longColumn + (depth.get(id) ?? 0),
-            impact: impactColumn,
-            failure_outcome: 2,
-          }[box.layer];
           column.set(
             id,
             box.layer === "failure_outcome" && id === link.target_box_id && sourceColumn !== undefined
               ? Math.min(sourceColumn + 1, impactColumn)
-              : byLayer,
+              : columnFor(box),
           );
         }
         if (pathway.kind === "success") onSuccess.add(id);
@@ -325,10 +327,9 @@ export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">)
   }
   // Boxes with no connection at all (just added, C41): the next free row in their layer's column.
   const linked = new Set(graph.links.flatMap((link) => [link.source_box_id, link.target_box_id]));
-  const failureColumn = 2;
   for (const box of graph.boxes) {
     if (linked.has(box.box_id) || column.has(box.box_id)) continue;
-    const col = { input: 0, output: 1, outcome_short: 2, outcome_long: longColumn, impact: impactColumn, failure_outcome: failureColumn }[box.layer];
+    const col = columnFor(box);
     column.set(box.box_id, col);
     order.push(box.box_id);
     if (box.layer === "failure_outcome") {
@@ -391,7 +392,7 @@ export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">)
   };
 }
 
-export interface EdgeRoute {
+interface EdgeRoute {
   path: string;
   labelX: number;
   labelY: number;
@@ -450,7 +451,7 @@ export function routeEdge(sourceX: number, sourceY: number, targetX: number, tar
 }
 
 /** "Intervention → intended change", from the first input and the last impact. */
-export function tocTitle(graph: Pick<TocGraph, "boxes" | "links" | "pathways">, fallback?: string): string {
+export function tocTitle(graph: Pick<TocGraph, "boxes" | "links" | "pathways">): string {
   const layout = layoutToc(graph);
   const textOf = (id: string) => graph.boxes.find((box) => box.box_id === id)?.text;
   const first = layout.boxes.find((box) => !box.failure && box.column === 0);
@@ -458,7 +459,7 @@ export function tocTitle(graph: Pick<TocGraph, "boxes" | "links" | "pathways">, 
   const input = first === undefined ? undefined : textOf(first.id);
   const impact = impacts.length === 0 ? undefined : textOf(impacts[0]?.id ?? "");
   if (input !== undefined && impact !== undefined) return `${input} → ${impact}`;
-  return fallback ?? "Theory of change";
+  return "Theory of change";
 }
 
 /** "Pathway 1 · label" for success pathways, "If it goes wrong · label" for failure ones. */

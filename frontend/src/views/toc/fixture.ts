@@ -24,7 +24,7 @@ const id = (kind: string, n: number) => `${kind}0000000-0000-4000-8000-${String(
 export const boxId = (n: number) => id("b", n);
 export const linkId = (n: number) => id("c", n);
 export const pathwayId = (n: number) => id("d", n);
-export const docId = (n: number) => id("e", n);
+const docId = (n: number) => id("e", n);
 
 const PREFIX: Record<TocBox["layer"], string> = {
   input: "A",
@@ -99,7 +99,7 @@ export function link(n: number, source: number, target: number, type: string, ve
   };
 }
 
-export const LINKS: TocLink[] = [
+const LINKS: TocLink[] = [
   link(1, 1, 3, "delivery", "confident"),
   link(2, 2, 4, "delivery", "not_sure_insufficient", { evidence_sentence: "No evidence was found in the documents read." }),
   link(3, 3, 5, "take-up", "not_sure_mixed", {
@@ -135,7 +135,7 @@ const pathway = (
   ...extra,
 });
 
-export const PATHWAYS: TocPathway[] = [
+const PATHWAYS: TocPathway[] = [
   pathway(1, "success", "Fewer ads, healthier choices", [1, 3, 4, 5, 7]),
   pathway(2, "success", "Reformulation", [2, 6, 5, 7]),
   pathway(3, "failure", "Spend moves elsewhere", [1, 8, 9]),

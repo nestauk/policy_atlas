@@ -3,7 +3,7 @@ import { useState } from "react";
 import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 
-export interface DownloadItem {
+interface DownloadItem {
   label: string;
   /** A grey line under the label: what the file is for. */
   hint?: string;

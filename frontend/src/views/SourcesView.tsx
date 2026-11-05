@@ -31,7 +31,7 @@ import {
   type EvidenceSortField,
   type SortOrder,
 } from "./sourcesPresentation";
-import { csvCell, numberedAuthorships } from "./artefactPresentation";
+import { csvCell, numberedAuthorships, triggerUrlDownload } from "./artefactPresentation";
 import { isScoping } from "./scopingActivity";
 
 const STATUS_FILTERS = [
@@ -510,10 +510,7 @@ function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?
       ].join("\r\n");
       // UTF-8 BOM so spreadsheet apps decode non-ASCII source text correctly.
       const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${(taskName ?? "Task").replaceAll(/[\\/]/g, "-")} - sources.csv`;
-      anchor.click();
+      triggerUrlDownload(url, `${(taskName ?? "Task").replaceAll(/[\\/]/g, "-")} - sources.csv`);
       URL.revokeObjectURL(url);
     } catch {
       setFailed(true);

@@ -15,6 +15,7 @@ import { Button } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
 import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
+import { AttachFileButton } from "./toc/uploads";
 import type { TocUploadHandOff } from "./workspace/TaskAgentPane";
 
 /** Step one: pick a kind of work. Two of the four can run. */
@@ -258,21 +259,13 @@ function AttachTheory({ file, onFile }: { file: File | null; onFile: (file: File
     );
   }
   return (
-    <label className="flex shrink-0 cursor-pointer items-center gap-2 border border-navy bg-paper px-3 py-3 text-body font-semibold text-navy hover:bg-blue-tint-2 focus-within:outline-2 focus-within:outline-blue">
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-        <path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7" />
-      </svg>
+    <AttachFileButton
+      onFile={onFile}
+      className="flex shrink-0 cursor-pointer items-center gap-2 border border-navy bg-paper px-3 py-3 text-body font-semibold text-navy hover:bg-blue-tint-2 focus-within:outline-2 focus-within:outline-blue"
+      iconClassName="h-4 w-4"
+    >
       Upload your theory
-      <input
-        type="file"
-        accept="image/png,image/jpeg,application/pdf"
-        className="sr-only"
-        onChange={(event) => {
-          onFile(event.target.files?.[0] ?? null);
-          event.target.value = "";
-        }}
-      />
-    </label>
+    </AttachFileButton>
   );
 }
 
@@ -298,28 +291,22 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
   const canSend = (question.trim().length > 0 || file !== null) && !create.isPending;
   const copy = FORM_COPY[capability];
 
-  // Straight to the empty canvas: the user draws the theory without the Task Agent (owner, 2026-11-05).
-  const drawYourself = () => {
-    if (create.isPending) return;
-    create.mutate(
-      { question: question.trim() === "" ? "My own theory of change" : question, projectId: projectId === "" ? null : projectId, capability, openingTurn: false },
-      { onSuccess: (task) => void navigate(`/tasks/${task.task_id}/result`) },
-    );
-  };
-
-  const submit = () => {
-    if (!canSend) return;
+  // Create the task and open it. `draw` goes straight to the empty canvas: the user
+  // draws the theory without the Task Agent (owner, 2026-11-05). An upload opens with its file.
+  const start = (draw: boolean) => {
+    if (draw ? create.isPending : !canSend) return;
+    const upload = draw ? null : file;
     create.mutate(
       {
-        question: question.trim() === "" && file !== null ? `My own theory of change (${file.name})` : question,
+        question: question.trim() !== "" ? question : upload !== null ? `My own theory of change (${upload.name})` : "My own theory of change",
         projectId: projectId === "" ? null : projectId,
         capability,
         fromTaskIds,
-        ...(file !== null ? { openingTurn: false } : {}),
+        ...(draw || upload !== null ? { openingTurn: false } : {}),
       },
       {
         onSuccess: (task) =>
-          void navigate(`/tasks/${task.task_id}`, file === null ? undefined : { state: { tocFile: file, note: question.trim() } satisfies TocUploadHandOff }),
+          void navigate(draw ? `/tasks/${task.task_id}/result` : `/tasks/${task.task_id}`, upload === null ? undefined : { state: { tocFile: upload, note: question.trim() } satisfies TocUploadHandOff }),
       },
     );
   };
@@ -328,7 +315,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        submit();
+        start(false);
       }}
     >
       <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey max-md:text-meta">
@@ -360,7 +347,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
-              submit();
+              start(false);
             }
           }}
           className="max-h-[50vh] min-h-[5.5rem] min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent p-0 text-lead leading-[25px] text-ink focus-visible:outline-none"
@@ -383,7 +370,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
         {capability === "theory_of_change" && (
           <button
             type="button"
-            onClick={drawYourself}
+            onClick={() => start(true)}
             disabled={create.isPending}
             className="shrink-0 cursor-pointer text-meta font-semibold leading-5 text-blue underline-offset-2 hover:underline disabled:cursor-default disabled:text-grey"
           >

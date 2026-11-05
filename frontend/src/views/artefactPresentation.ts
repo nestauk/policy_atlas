@@ -548,16 +548,20 @@ export function downloadFilename(title: string, extension: string): string {
   return `${slug || "report"}.${extension}`;
 }
 
-/** Trigger a client-side file download of UTF-8 text. */
-export function triggerTextDownload(filename: string, body: string, mime: string): void {
-  const blob = new Blob([body], { type: `${mime};charset=utf-8` });
-  const url = URL.createObjectURL(blob);
+/** Trigger a client-side download of a URL (an object or data URL) as `filename`. */
+export function triggerUrlDownload(url: string, filename: string): void {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
+}
+
+/** Trigger a client-side file download of UTF-8 text. */
+export function triggerTextDownload(filename: string, body: string, mime: string): void {
+  const url = URL.createObjectURL(new Blob([body], { type: `${mime};charset=utf-8` }));
+  triggerUrlDownload(url, filename);
   URL.revokeObjectURL(url);
 }
 

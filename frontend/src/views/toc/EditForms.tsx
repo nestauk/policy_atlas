@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 
 import { Button } from "../../ui/brand/Button";
-import { checkWords, type Editor, isQueued } from "./Editing";
-import { LAYER_LABEL } from "./tocModel";
+import { CheckButton, type Editor, LayerSelect } from "./Editing";
 import type { BoxLayer, TocBox, TocGraph, TocLink } from "./types";
 
-const LAYERS: BoxLayer[] = ["input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"];
 const INPUT = "border border-line-2 bg-paper px-2 py-1.5 text-body font-normal text-ink";
+
+/** A submitted form's field, trimmed (a textarea submits CRLF line breaks; back to "\n"). */
+function fieldOf(event: FormEvent<HTMLFormElement>): (name: string) => string {
+  const data = new FormData(event.currentTarget);
+  return (name) => String(data.get(name) ?? "").replace(/\r\n/g, "\n").trim();
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -39,18 +43,15 @@ function DeleteButton({ label, confirm, onDelete, busy }: { label: string; confi
 
 /** Edit a box in place: every field, Save or Cancel, and Delete (C41). */
 export function BoxEditForm({ box, graph, editor, onDone }: { box: TocBox; graph: TocGraph; editor: Editor; onDone: () => void }) {
+  // The text stays controlled: the warning about its connections follows it as it is typed.
   const [text, setText] = useState(box.text);
-  const [layer, setLayer] = useState<BoxLayer>(box.layer);
-  const [description, setDescription] = useState(box.description ?? "");
-  const [definition, setDefinition] = useState(box.result_criteria.definition ?? "");
-  const [indicator, setIndicator] = useState(box.result_criteria.indicator ?? "");
-  const [timing, setTiming] = useState(box.result_criteria.timing ?? "");
   const links = graph.links.filter((link) => link.source_box_id === box.box_id || link.target_box_id === box.box_id).length;
   return (
     <form
       aria-label={`Edit ${box.code ?? "box"}`}
       onSubmit={(event) => {
         event.preventDefault();
+        const field = fieldOf(event);
         editor.run(
           {
             kind: "patchBox",
@@ -58,9 +59,9 @@ export function BoxEditForm({ box, graph, editor, onDone }: { box: TocBox; graph
             body: {
               expected_revision: box.revision,
               text: text.trim(),
-              layer,
-              description: description.trim() || null,
-              criteria: { definition: definition.trim() || null, indicator: indicator.trim() || null, timing: timing.trim() || null },
+              layer: field("layer") as BoxLayer,
+              description: field("description") || null,
+              criteria: { definition: field("definition") || null, indicator: field("indicator") || null, timing: field("timing") || null },
             },
           },
           `Edited ${box.code ?? "a box"}`,
@@ -73,25 +74,19 @@ export function BoxEditForm({ box, graph, editor, onDone }: { box: TocBox; graph
         <textarea required value={text} onChange={(event) => setText(event.target.value)} rows={3} maxLength={500} className={INPUT} />
       </Field>
       <Field label="Layer">
-        <select value={layer} onChange={(event) => setLayer(event.target.value as BoxLayer)} className={INPUT}>
-          {LAYERS.map((item) => (
-            <option key={item} value={item}>
-              {LAYER_LABEL[item]}
-            </option>
-          ))}
-        </select>
+        <LayerSelect name="layer" defaultValue={box.layer} className={INPUT} />
       </Field>
       <Field label="Description">
-        <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} maxLength={2000} className={INPUT} />
+        <textarea name="description" defaultValue={box.description ?? ""} rows={3} maxLength={2000} className={INPUT} />
       </Field>
       <Field label="Definition">
-        <input value={definition} onChange={(event) => setDefinition(event.target.value)} className={INPUT} />
+        <input name="definition" defaultValue={box.result_criteria.definition ?? ""} className={INPUT} />
       </Field>
       <Field label="Indicator">
-        <input value={indicator} onChange={(event) => setIndicator(event.target.value)} className={INPUT} />
+        <input name="indicator" defaultValue={box.result_criteria.indicator ?? ""} className={INPUT} />
       </Field>
       <Field label="Timing">
-        <input value={timing} onChange={(event) => setTiming(event.target.value)} className={INPUT} />
+        <input name="timing" defaultValue={box.result_criteria.timing ?? ""} className={INPUT} />
       </Field>
       {text.trim() !== box.text && links > 0 && (
         <p className="mt-2 text-meta text-grey">Changing the text marks its {links === 1 ? "connection" : `${links} connections`} "evidence from the earlier wording".</p>
@@ -117,29 +112,24 @@ export function BoxEditForm({ box, graph, editor, onDone }: { box: TocBox; graph
 
 /** Edit a connection in place: title, if, for, then, because, conditions; Delete (C41). */
 export function LinkEditForm({ link, editor, onDone }: { link: TocLink; editor: Editor; onDone: () => void }) {
-  const [title, setTitle] = useState(link.title ?? "");
-  const [ifText, setIf] = useState(link.if_text);
-  const [forText, setFor] = useState(link.for_text);
-  const [thenText, setThen] = useState(link.then_text);
-  const [because, setBecause] = useState(link.because_text);
-  const [conditions, setConditions] = useState(link.conditions.join("\n"));
   return (
     <form
       aria-label={`Edit ${link.code ?? "connection"}`}
       onSubmit={(event) => {
         event.preventDefault();
+        const field = fieldOf(event);
         editor.run(
           {
             kind: "patchLink",
             linkId: link.link_id,
             body: {
               expected_revision: link.revision,
-              title: title.trim() || null,
-              if_text: ifText.trim(),
-              for_text: forText.trim(),
-              then_text: thenText.trim(),
-              because_text: because.trim(),
-              conditions: conditions
+              title: field("title") || null,
+              if_text: field("if_text"),
+              for_text: field("for_text"),
+              then_text: field("then_text"),
+              because_text: field("because_text"),
+              conditions: field("conditions")
                 .split("\n")
                 .map((line) => line.trim())
                 .filter(Boolean),
@@ -152,22 +142,22 @@ export function LinkEditForm({ link, editor, onDone }: { link: TocLink; editor: 
     >
       <p className="text-meta text-grey">Editing connection {link.code}</p>
       <Field label="Title">
-        <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} className={INPUT} />
+        <input name="title" defaultValue={link.title ?? ""} maxLength={200} className={INPUT} />
       </Field>
       <Field label="If">
-        <textarea value={ifText} onChange={(event) => setIf(event.target.value)} rows={2} className={INPUT} />
+        <textarea name="if_text" defaultValue={link.if_text} rows={2} className={INPUT} />
       </Field>
       <Field label="For">
-        <input value={forText} onChange={(event) => setFor(event.target.value)} className={INPUT} />
+        <input name="for_text" defaultValue={link.for_text} className={INPUT} />
       </Field>
       <Field label="Then">
-        <textarea value={thenText} onChange={(event) => setThen(event.target.value)} rows={2} className={INPUT} />
+        <textarea name="then_text" defaultValue={link.then_text} rows={2} className={INPUT} />
       </Field>
       <Field label="Because">
-        <textarea value={because} onChange={(event) => setBecause(event.target.value)} rows={2} className={INPUT} />
+        <textarea name="because_text" defaultValue={link.because_text} rows={2} className={INPUT} />
       </Field>
       <Field label="Conditions (one per line)">
-        <textarea value={conditions} onChange={(event) => setConditions(event.target.value)} rows={3} className={INPUT} />
+        <textarea name="conditions" defaultValue={link.conditions.join("\n")} rows={3} className={INPUT} />
       </Field>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button type="submit" size="sm" disabled={editor.busy}>
@@ -199,13 +189,7 @@ export function NeedsEvidence({ links, graph, editor }: { links: TocLink[]; grap
       <p className="text-body">No check has looked for evidence on {unchecked.length === 1 ? "this connection" : `${unchecked.length} of its connections`} yet.</p>
       {editor !== null && (
         <div className="mt-2">
-          <Button
-            size="sm"
-            disabled={editor.busy || isQueued(graph, ids)}
-            onClick={() => editor.run({ kind: "check", body: { link_ids: ids, mode: "new_items" } })}
-          >
-            {checkWords(graph, ids, "Find evidence")}
-          </Button>
+          <CheckButton graph={graph} editor={editor} ids={ids} mode="new_items" label="Find evidence" />
         </div>
       )}
     </div>

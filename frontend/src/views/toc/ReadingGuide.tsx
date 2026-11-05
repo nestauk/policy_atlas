@@ -22,19 +22,21 @@ export function CriticalIcon() {
   );
 }
 
+/** Each verdict's dash on the canvas; a solid line has none. */
+const DASH: Record<Verdict, string | undefined> = {
+  confident: undefined,
+  not_sure_mixed: undefined,
+  not_sure_insufficient: "6 5",
+  not_confident: "2 5",
+  leaning_supports: "12 5",
+  leaning_against: "12 5",
+};
+
 /** A short line sample for each verdict, drawn as on the canvas (C36). */
-export function LineSample({ verdict }: { verdict: Verdict }) {
-  const line = (stroke: string, width: number, dash?: string) => (
-    <line x1="0" y1="4" x2="34" y2="4" stroke={stroke} strokeWidth={width} strokeDasharray={dash} />
-  );
+function LineSample({ verdict }: { verdict: Verdict }) {
   return (
     <svg width="34" height="8" aria-hidden="true">
-      {verdict === "confident" && line(VERDICT_VAR.confident, 3)}
-      {verdict === "not_sure_mixed" && line(VERDICT_VAR.not_sure_mixed, 3)}
-      {verdict === "not_sure_insufficient" && line(VERDICT_VAR.not_sure_insufficient, 3, "6 5")}
-      {verdict === "not_confident" && line(VERDICT_VAR.not_confident, 3, "2 5")}
-      {verdict === "leaning_supports" && line(VERDICT_VAR.leaning_supports, 3, "12 5")}
-      {verdict === "leaning_against" && line(VERDICT_VAR.leaning_against, 3, "12 5")}
+      <line x1="0" y1="4" x2="34" y2="4" stroke={VERDICT_VAR[verdict]} strokeWidth={3} strokeDasharray={DASH[verdict]} />
     </svg>
   );
 }

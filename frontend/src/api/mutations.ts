@@ -233,7 +233,7 @@ export function usePatchPlan(taskId: string) {
 export function useStartRun(taskId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();
-  const mutation = useMutation({
+  return useMutation({
     mutationFn: async () => {
       const { data, error, response } = await client.POST("/api/v1/tasks/{task_id}/runs", {
         params: { path: { task_id: taskId } },
@@ -242,16 +242,10 @@ export function useStartRun(taskId: string) {
       if (data === undefined) raise(error, response.status);
       return data;
     },
+    // Every start is a click: the moment the browser lets the page ask to alert when it finishes.
+    onMutate: askForFinishAlerts,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.taskRoot(taskId) }),
   });
-  // Every start is a click: the moment the browser lets the page ask to alert when it finishes.
-  return {
-    ...mutation,
-    mutate: (...args: Parameters<typeof mutation.mutate>) => {
-      askForFinishAlerts();
-      mutation.mutate(...args);
-    },
-  };
 }
 
 /** `POST .../plan/confirm-baseline` — record that a plan version was
@@ -425,14 +419,6 @@ export type TocEdit =
   | { kind: "dismiss"; proposalId: string }
   | { kind: "updateReport"; proposalId?: string };
 
-/**
- * Every theory-of-change write, as one mutation. Each refreshes the graph,
- * its evidence and History (all under the task's `toc` key). A 409
- * `toc_stale_revision` reaches the caller as `error.code`.
- */
-/** `POST .../toc/uploads` — the user's own theory diagram (task 054, increment 5):
- *  stored, then read by the model (about half a minute); the next Task Agent
- *  turn makes it the plan. */
 /** The opening words of the message an upload sends (task 054, increment 5): its bubble shows the file. */
 export const UPLOAD_MESSAGE = "I've uploaded my own theory of change";
 
@@ -445,6 +431,8 @@ export function uploadMessage(name: string, note: string): string {
 export const tocUploadKey = (taskId: string) => ["toc-upload", taskId] as const;
 
 /**
+ * `POST .../toc/uploads` — the user's own theory diagram (task 054, increment 5):
+ * stored, then read by the model (about half a minute).
  * Upload the user's diagram, then send the message that starts the planner.
  * Both happen in one job, so they finish even if the chat closes meanwhile
  * (the user switches tab while the diagram is read).
@@ -460,12 +448,15 @@ export function useTocUpload(taskId: string) {
         throw new Error("Upload a PNG, JPEG or PDF file.");
       }
       if (file.size > 10 * 1024 * 1024) throw new Error("The file must be under 10 MB.");
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      let binary = "";
-      for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
       const { data, error, response } = await client.POST("/api/v1/tasks/{task_id}/toc/uploads", {
         params: { path: { task_id: taskId } },
-        body: { file_name: file.name, content_type: type, data_base64: btoa(binary), message: uploadMessage(file.name, note) },
+        body: { file_name: file.name, content_type: type, data_base64: dataUrl.slice(dataUrl.indexOf(",") + 1), message: uploadMessage(file.name, note) },
       });
       if (data === undefined) raise(error, response.status);
       // After the draft, the upload itself answers in the chat (its suggestions); before, the planner reads it.
@@ -490,6 +481,11 @@ export function useTocUploading(taskId: string): { file: File; note: string } | 
   return running.at(-1) ?? null;
 }
 
+/**
+ * Every theory-of-change write, as one mutation. Each refreshes the graph,
+ * its evidence and History (all under the task's `toc` key). A 409
+ * `toc_stale_revision` reaches the caller as `error.code`.
+ */
 export function useTocEdit(taskId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();

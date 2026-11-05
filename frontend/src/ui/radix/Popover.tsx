@@ -2,6 +2,7 @@ import * as PopoverPrimitive from "@radix-ui/react-popover";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../brand/cn";
+import { portalContainer } from "./portal";
 
 /*
  * Popover (Radix copy-in) — the click rung of the citation ladder.
@@ -16,7 +17,7 @@ export function PopoverContent({
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>) {
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={portalContainer()}>
       <PopoverPrimitive.Content
         sideOffset={6}
         className={cn(

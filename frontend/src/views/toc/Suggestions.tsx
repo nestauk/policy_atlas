@@ -49,7 +49,7 @@ function routesOf(proposal: Proposal): Route[] {
 }
 
 /** The edits a route's preview draws: its own, and the pending ones it builds on from other routes. */
-export function previewOf(proposal: Proposal, route: Route): Preview {
+function previewOf(proposal: Proposal, route: Route): Preview {
   const pending = proposal.edits.filter((edit) => edit.status === "pending");
   const byKey = new Map(pending.filter((edit) => edit.key != null).map((edit) => [edit.key as string, edit]));
   const shown = new Set<Edit>(route.edits.filter((edit) => edit.status === "pending"));
@@ -71,6 +71,20 @@ export function previewOf(proposal: Proposal, route: Route): Preview {
     links: list.filter((edit) => edit.op === "add_link").map((edit) => ({ key: edit.key ?? "", source: edit.source ?? "", dest: edit.dest ?? "" })),
     pathway: pathway !== undefined ? { kind: pathway.kind ?? "success", links: pathway.links ?? [] } : null,
   };
+}
+
+/** A suggestion's Accept and Reject. */
+function AcceptReject({ busy, onDecide, acceptClassName }: { busy: boolean; onDecide: (accept: boolean) => void; acceptClassName?: string }) {
+  return (
+    <span className="mt-1.5 flex gap-2">
+      <Button size="sm" variant="secondary" className={acceptClassName} disabled={busy} onClick={() => onDecide(true)}>
+        Accept
+      </Button>
+      <Button size="sm" variant="secondary" disabled={busy} onClick={() => onDecide(false)}>
+        Reject
+      </Button>
+    </span>
+  );
 }
 
 /** How many suggestions wait: one per route, or one per edit not offered as a route. */
@@ -111,14 +125,13 @@ export function Suggestions({
       if (checkNew && added.length > 0) editor.run({ kind: "check", body: { link_ids: added, mode: "new_items" } });
     });
   };
-  // A single suggested edit shows on the canvas too, faded, while hovered.
+  // A route, or a single suggested edit, shows on the canvas faded while hovered.
+  const previewHandlers = (proposal: Proposal, route: Route) => ({
+    onMouseEnter: () => onPreview(previewOf(proposal, route)),
+    onMouseLeave: () => onPreview(null),
+  });
   const hover = (proposal: Proposal, edit: Edit) =>
-    edit.status === "pending" && ["add_box", "add_link", "add_pathway"].includes(edit.op)
-      ? {
-          onMouseEnter: () => onPreview(previewOf(proposal, { group: "", edits: [edit], label: "", kind: "" })),
-          onMouseLeave: () => onPreview(null),
-        }
-      : {};
+    edit.status === "pending" && ["add_box", "add_link", "add_pathway"].includes(edit.op) ? previewHandlers(proposal, { group: "", edits: [edit], label: "", kind: "" }) : {};
   return (
     <section id="toc-suggestions" aria-label="Suggestions" className="grid gap-4">
       <h3 className="text-body font-bold text-navy">Suggestions</h3>
@@ -146,8 +159,7 @@ export function Suggestions({
                     <li
                       key={route.group}
                       className="border-t border-line py-2 hover:bg-blue-tint-2"
-                      onMouseEnter={() => onPreview(previewOf(proposal, route))}
-                      onMouseLeave={() => onPreview(null)}
+                      {...previewHandlers(proposal, route)}
                       onFocus={() => onPreview(previewOf(proposal, route))}
                       onBlur={() => onPreview(null)}
                     >
@@ -156,14 +168,7 @@ export function Suggestions({
                         {route.kind === "failure" ? "A way it could go wrong" : "A route to the goal"}
                         {added.length > 0 && <> · adds {added.map((text) => `“${scrub(text)}”`).join(", ")}</>}
                       </p>
-                      <span className="mt-1.5 flex gap-2">
-                        <Button size="sm" variant="secondary" className="border border-navy" disabled={editor.busy} onClick={() => decide(proposal.proposal_id, { index: null, accept: true, group: route.group })}>
-                          Accept
-                        </Button>
-                        <Button size="sm" variant="secondary" disabled={editor.busy} onClick={() => decide(proposal.proposal_id, { index: null, accept: false, group: route.group })}>
-                          Reject
-                        </Button>
-                      </span>
+                      <AcceptReject busy={editor.busy} acceptClassName="border border-navy" onDecide={(accept) => decide(proposal.proposal_id, { index: null, accept, group: route.group })} />
                     </li>
                   );
                 })}
@@ -176,14 +181,7 @@ export function Suggestions({
                     <p className="text-body font-semibold text-ink">{scrub(edit.line)}</p>
                     <p className="text-meta text-grey">{scrub(edit.reason)}</p>
                     {edit.status === "pending" ? (
-                      <span className="mt-1.5 flex gap-2">
-                        <Button size="sm" variant="secondary" disabled={editor.busy} onClick={() => decide(proposal.proposal_id, { index: edit.index, accept: true })}>
-                          Accept
-                        </Button>
-                        <Button size="sm" variant="secondary" disabled={editor.busy} onClick={() => decide(proposal.proposal_id, { index: edit.index, accept: false })}>
-                          Reject
-                        </Button>
-                      </span>
+                      <AcceptReject busy={editor.busy} onDecide={(accept) => decide(proposal.proposal_id, { index: edit.index, accept })} />
                     ) : (
                       <span className="text-meta font-semibold text-grey">{edit.status === "accepted" ? "Accepted" : "Rejected"}</span>
                     )}

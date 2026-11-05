@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { blobUrl } from "../../lib/blobUrl";
 import { Link, useLocation, useNavigate } from "react-router";
 
 import { UPLOAD_MESSAGE, uploadMessage, useTocUpload, useTocUploading } from "../../api/mutations";
@@ -49,6 +48,7 @@ import { COMPONENT_LABEL, RUN_BLOCK_STATUS } from "./planVocabulary";
 import { RunningCard, RunningCardDock } from "./RunningCard";
 import { TocTrace } from "./TocTrace";
 import { TocCodeText } from "../toc/codeLinks";
+import { AttachFileButton, UploadPreview } from "../toc/uploads";
 import {
   completedSignposts,
   elapsedSeconds,
@@ -290,29 +290,18 @@ export function Composer({
           className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-lead [field-sizing:content] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
         />
         {onAttach !== undefined && (
-          <label
+          <AttachFileButton
+            onFile={onAttach}
+            disabled={disabled}
             title="Upload your own theory of change (PNG, JPEG or PDF)"
             className={cn(
               "inline-flex h-10 w-10 shrink-0 items-center justify-center border border-line-2 text-navy",
               disabled ? "cursor-default text-line-2" : "cursor-pointer hover:border-navy focus-within:outline-2 focus-within:outline-blue",
             )}
+            iconClassName="h-5 w-5"
           >
             <span className="sr-only">Upload your own theory of change</span>
-            <input
-              type="file"
-              accept="image/png,image/jpeg,application/pdf"
-              disabled={disabled}
-              className="sr-only"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (file !== undefined) onAttach(file);
-              }}
-            />
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-            </svg>
-          </label>
+          </AttachFileButton>
         )}
         <Button
           type="submit"
@@ -340,8 +329,6 @@ export function Composer({
   );
 }
 
-export { UPLOAD_MESSAGE };
-
 /** A theory of change the user brought from the new-task page, uploaded once the task opens. */
 export interface TocUploadHandOff {
   tocFile: File;
@@ -360,16 +347,18 @@ function UploadThumb({ text }: { text: string }) {
   const stored = useTocUploadFile(files?.taskId ?? "", uploadId);
   const blob = picked ?? stored.data ?? null;
   if (blob === null || name === null) return null;
-  const url = blobUrl(blob);
-  return blob.type === "application/pdf" ? (
-    <a href={url} target="_blank" rel="noreferrer" className="mb-2 inline-flex items-center gap-2 border border-line bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy">
-      <span aria-hidden="true">📄</span>
-      {name}
-    </a>
-  ) : (
-    <a href={url} target="_blank" rel="noreferrer" title="Open full size" className="mb-2 block w-fit">
-      <img src={url} alt="Your theory of change, as uploaded" className="max-h-40 max-w-[16rem] border border-line bg-paper object-contain" />
-    </a>
+  return (
+    <UploadPreview
+      blob={blob}
+      className="mb-2 block w-fit"
+      imageClassName="max-h-40 max-w-[16rem] border border-line bg-paper object-contain"
+      pdf={(url) => (
+        <a href={url} target="_blank" rel="noreferrer" className="mb-2 inline-flex items-center gap-2 border border-line bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy">
+          <span aria-hidden="true">📄</span>
+          {name}
+        </a>
+      )}
+    />
   );
 }
 
@@ -866,7 +855,6 @@ export function TaskAgentPane({
   // A theory of change pins its plan card where the plan was agreed: just before its first walk (round 7).
   const firstRunAt = isToc ? thread.findIndex((item) => item.type === "run_block") : -1;
   const planCardAt = firstRunAt > 0 ? firstRunAt : lastTurnAt === -1 ? thread.length : lastTurnAt + 1;
-  // A theory of change posts its own messages after its walks, so any walk at all means it started.
   // A theory of change has started once its theory exists or a walk runs: after a failed
   // draft the plan card offers "Draft the theory" again (owner, 2026-11-04).
   const planStarted = isToc

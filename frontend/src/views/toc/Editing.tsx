@@ -1,12 +1,13 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ComponentProps, type ReactNode, useState } from "react";
 
 import { type TocEdit, useTocEdit } from "../../api/mutations";
 import { useTocHistory } from "../../api/queries";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
+import { Popover, PopoverContent, PopoverTrigger } from "../../ui/radix/Popover";
 import { DownloadMenu } from "../DownloadMenu";
 import { canvasImage, downloadDrawio, downloadJson, downloadReferences, printReport } from "./exports";
-import { LAYER_LABEL } from "./tocModel";
+import { keptPathways, LAYER_LABEL, pathwayTitles } from "./tocModel";
 import type { BoxLayer, TocGraph } from "./types";
 
 /** What an edit control needs: run an edit, with the line the Undo toast shows after it. */
@@ -58,17 +59,43 @@ export function useTocEditor(taskId: string, canEdit: boolean) {
 }
 
 /** Whether a queued check already names every one of these links (it starts when the running walk ends). */
-export function isQueued(graph: TocGraph, linkIds: string[]): boolean {
+function isQueued(graph: TocGraph, linkIds: string[]): boolean {
   const queued = new Set(graph.queued_link_ids ?? []);
   return linkIds.length > 0 && linkIds.every((id) => queued.has(id));
 }
 
-/** A check button's words: its own, then "Added to the queue" once it waits for the running check. */
-export function checkWords(graph: TocGraph, linkIds: string[], label: string): string {
-  return isQueued(graph, linkIds) ? "Added to the queue" : label;
+type CheckMode = Extract<TocEdit, { kind: "check" }>["body"]["mode"];
+
+/** A button that checks these links: its own words, then "Added to the queue" once it waits for the running check. */
+export function CheckButton({
+  graph,
+  editor,
+  ids,
+  mode,
+  label,
+  disabled = false,
+  ...props
+}: { graph: TocGraph; editor: Editor; ids: string[]; mode: CheckMode; label: string } & Omit<ComponentProps<typeof Button>, "onClick" | "children">) {
+  const queued = isQueued(graph, ids);
+  return (
+    <Button size="sm" {...props} disabled={editor.busy || disabled || queued} onClick={() => editor.run({ kind: "check", body: { link_ids: ids, mode } })}>
+      {queued ? "Added to the queue" : label}
+    </Button>
+  );
 }
 
-const LAYERS: BoxLayer[] = ["input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"];
+/** The layer choice, in the canvas's column order. */
+export function LayerSelect(props: ComponentProps<"select">) {
+  return (
+    <select {...props}>
+      {Object.entries(LAYER_LABEL).map(([layer, label]) => (
+        <option key={layer} value={layer}>
+          {label}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 /** A bordered tool button with its icon: the canvas bar's edit actions. */
 function ToolButton({ icon, label, pressed, disabled, onClick }: { icon: ReactNode; label: string; pressed?: boolean; disabled?: boolean; onClick: () => void }) {
@@ -90,23 +117,16 @@ function ToolButton({ icon, label, pressed, disabled, onClick }: { icon: ReactNo
   );
 }
 
-/** The "…" menu: the actions used less often. Closes on a choice or a click elsewhere. */
+/** The "…" menu: the actions used less often. Closes on a choice, a click elsewhere or Esc. */
 function MoreMenu({ items }: { items: { label: string; disabled?: boolean; onClick: () => void }[] }) {
-  const ref = useRef<HTMLDetailsElement>(null);
-  useEffect(() => {
-    const close = (event: MouseEvent) => {
-      if (ref.current !== null && !ref.current.contains(event.target as Node)) ref.current.open = false;
-    };
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
-  }, []);
+  const [open, setOpen] = useState(false);
   if (items.length === 0) return null;
   return (
-    <details ref={ref} className="relative">
-      <summary aria-label="More actions" className="flex cursor-pointer list-none items-center border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-bold leading-none text-navy hover:border-navy [&::-webkit-details-marker]:hidden">
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger aria-label="More actions" className="flex cursor-pointer items-center border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-bold leading-none text-navy hover:border-navy">
         …
-      </summary>
-      <div role="menu" className="absolute right-0 z-20 mt-1 grid min-w-[16rem] border border-line bg-paper py-1 shadow-lg">
+      </PopoverTrigger>
+      <PopoverContent role="menu" align="end" sideOffset={4} className="grid w-auto min-w-[16rem] border-line p-0 py-1 shadow-lg">
         {items.map((item) => (
           <button
             key={item.label}
@@ -114,7 +134,7 @@ function MoreMenu({ items }: { items: { label: string; disabled?: boolean; onCli
             role="menuitem"
             disabled={item.disabled}
             onClick={() => {
-              if (ref.current !== null) ref.current.open = false;
+              setOpen(false);
               item.onClick();
             }}
             className="cursor-pointer px-3 py-2 text-left text-meta font-semibold text-navy hover:bg-paper-2 disabled:cursor-default disabled:text-line-2 disabled:hover:bg-transparent"
@@ -122,8 +142,8 @@ function MoreMenu({ items }: { items: { label: string; disabled?: boolean; onCli
             {item.label}
           </button>
         ))}
-      </div>
-    </details>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -135,24 +155,20 @@ function MoreMenu({ items }: { items: { label: string; disabled?: boolean; onCli
 export function CanvasBar({
   graph,
   pathway,
-  pathways,
   onPathway,
   editor,
   mode,
   onMode,
   onAddBox,
   onReview,
-  reviewLabel,
-  reviewDisabled,
   onGuide,
   guideOpen,
-  suggestions = 0,
-  suggestionsOpen = false,
+  suggestions,
+  suggestionsOpen,
   onSuggestions,
 }: {
   graph: TocGraph;
   pathway: string;
-  pathways: { id: string; title: string }[];
   onPathway: (id: string) => void;
   /** Null for a reader: the bar shows the pathway choice and How to read this only. */
   editor: Editor | null;
@@ -160,15 +176,15 @@ export function CanvasBar({
   onMode: (mode: "view" | "connect") => void;
   onAddBox: () => void;
   onReview: () => void;
-  reviewLabel: string;
-  reviewDisabled: boolean;
   onGuide: () => void;
   guideOpen: boolean;
   /** Suggestions waiting, and whether their panel is open (owner, 2026-11-04). */
-  suggestions?: number;
-  suggestionsOpen?: boolean;
-  onSuggestions?: () => void;
+  suggestions: number;
+  suggestionsOpen: boolean;
+  onSuggestions: () => void;
 }) {
+  const titles = pathwayTitles(graph);
+  const reviewLabel = `Review the theory${graph.edits_since_review >= 5 ? ` (${graph.edits_since_review} changes)` : ""}`;
   const running = graph.check_status === "drafting" || graph.check_status === "checking";
   // Before the draft there is no plan to check or review against.
   const drafted = graph.check_status !== "none";
@@ -184,7 +200,7 @@ export function CanvasBar({
           },
         ]
       : []),
-    ...(editor !== null && drafted ? [{ label: reviewLabel, disabled: reviewDisabled, onClick: onReview }] : []),
+    ...(editor !== null && drafted ? [{ label: reviewLabel, disabled: editor.busy || graph.reviewing === true, onClick: onReview }] : []),
     { label: guideOpen ? "Hide how to read this" : "How to read this", onClick: onGuide },
   ];
   return (
@@ -196,9 +212,9 @@ export function CanvasBar({
         className="w-[16rem] min-w-0 border border-line-2 bg-paper px-2.5 py-[5px] text-meta font-semibold text-navy"
       >
         <option value="all">All pathways</option>
-        {pathways.map((item) => (
-          <option key={item.id} value={item.id}>
-            {item.title}
+        {keptPathways(graph).map((item) => (
+          <option key={item.pathway_id} value={item.pathway_id}>
+            {titles.get(item.pathway_id) ?? ""}
           </option>
         ))}
       </select>
@@ -223,7 +239,7 @@ export function CanvasBar({
           />
         </>
       )}
-      {suggestions > 0 && onSuggestions !== undefined && (
+      {suggestions > 0 && (
         <button
           type="button"
           aria-pressed={suggestionsOpen}
@@ -269,13 +285,7 @@ export function AddBoxForm({ editor, onDone }: { editor: Editor; onDone: (boxId:
     >
       <label className="grid gap-1 text-meta font-semibold text-ink">
         Layer
-        <select value={layer} onChange={(event) => setLayer(event.target.value as BoxLayer)} className="border border-line-2 bg-paper px-2 py-1.5 text-body font-normal">
-          {LAYERS.map((item) => (
-            <option key={item} value={item}>
-              {LAYER_LABEL[item]}
-            </option>
-          ))}
-        </select>
+        <LayerSelect value={layer} onChange={(event) => setLayer(event.target.value as BoxLayer)} className="border border-line-2 bg-paper px-2 py-1.5 text-body font-normal" />
       </label>
       <label className="grid min-w-[16rem] flex-1 gap-1 text-meta font-semibold text-ink">
         What changes
@@ -316,32 +326,5 @@ export function EditedLine({ by, at }: { by?: string | null; at?: string | null 
       Edited by {scrub(by)}
       {at != null && ` · ${WHEN.format(new Date(at))}`}
     </p>
-  );
-}
-
-/** History: who changed what, newest first, with Undo on the user's own edits (C41). */
-export function HistorySection({ entries, editor }: { entries: { event_id: string; at: string; who: string; what: string; undoable: boolean }[]; editor: Editor }) {
-  return (
-    <details id="toc-history" className="mt-10 border-t border-line pt-4">
-      <summary className="cursor-pointer text-meta font-bold uppercase tracking-[0.06em] text-blue">History ({entries.length})</summary>
-      <table className="mt-3 w-full border-collapse text-body">
-        <tbody>
-          {entries.map((entry) => (
-            <tr key={entry.event_id} className="border-b border-line align-top">
-              <td className="whitespace-nowrap py-2 pr-4 text-grey">{WHEN.format(new Date(entry.at))}</td>
-              <td className="py-2 pr-4">{scrub(entry.who)}</td>
-              <td className="w-full py-2 pr-4">{scrub(entry.what)}</td>
-              <td className="py-2 text-right">
-                {entry.undoable && (
-                  <button type="button" disabled={editor.busy} onClick={() => editor.run({ kind: "undo", eventId: entry.event_id }, "Undid a change")} className="cursor-pointer font-bold text-blue hover:underline">
-                    Undo
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </details>
   );
 }

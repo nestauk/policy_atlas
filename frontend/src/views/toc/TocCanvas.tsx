@@ -143,8 +143,27 @@ const MIN_START_ZOOM = 1;
 const MIN_ZOOM = 0.1;
 const VIEW_PADDING = 0.08;
 const HANDLE_CLASS = "!h-1 !w-1 !border-0 !bg-transparent";
-/** Display-only nodes: never selected, never catching a click meant for a box or a connection. */
-const DECOR = { draggable: false, selectable: false, focusable: false, style: { pointerEvents: "none" as const } };
+
+/**
+ * A text node on the canvas: never dragged, selected or focused. `passThrough`
+ * also lets a click through to a box or a connection under it.
+ */
+function labelNode(id: string, x: number, y: number, data: LabelData, passThrough = false): LabelNode {
+  return {
+    id,
+    type: "label",
+    position: { x, y },
+    data,
+    // Explicit sizes: a node without them loses its measurement each time the
+    // nodes array is rebuilt, and React Flow's "fit view" then waits forever.
+    width: LABEL_W,
+    height: LABEL_H,
+    draggable: false,
+    selectable: false,
+    focusable: false,
+    ...(passThrough ? { style: { pointerEvents: "none" as const } } : {}),
+  };
+}
 
 function BoxView({ data }: NodeProps<BoxNode>) {
   const { box } = data;
@@ -162,15 +181,12 @@ function BoxView({ data }: NodeProps<BoxNode>) {
       ].join(" ")}
       style={{ width: BOX_W, height: BOX_H }}
     >
-      <Handle id="l" type="target" position={Position.Left} className={HANDLE_CLASS} />
-      <Handle id="t" type="target" position={Position.Top} className={HANDLE_CLASS} />
+      {HANDLES.map((handle) => (
+        <Handle key={handle.id} id={handle.id} type={handle.type} position={handle.position} className={HANDLE_CLASS} />
+      ))}
       {box.code !== null && <span className="absolute left-3.5 top-0.5 text-caption leading-none text-grey">{box.code}</span>}
       <span className="line-clamp-3">{scrub(box.text)}</span>
       {data.needsEvidence && <span className="absolute bottom-0.5 right-3 text-caption font-normal italic leading-none text-grey">Needs evidence</span>}
-      <Handle id="r" type="source" position={Position.Right} className={HANDLE_CLASS} />
-      <Handle id="b" type="source" position={Position.Bottom} className={HANDLE_CLASS} />
-      <Handle id="ts" type="source" position={Position.Top} className={HANDLE_CLASS} />
-      <Handle id="bt" type="target" position={Position.Bottom} className={HANDLE_CLASS} />
     </div>
   );
 }
@@ -236,11 +252,8 @@ function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
 const nodeTypes = { box: BoxView, label: LabelView };
 const edgeTypes = { toc: TocEdgeView };
 
-/** A link is "pending" while a check is working on it. */
-const isPending = (link: TocLink) => link.state === "checking";
-
 /** What the canvas needs to edit (C41, C47). */
-export interface CanvasEditing {
+interface CanvasEditing {
   /** "connect": the next two box clicks make a connection. */
   mode: "view" | "connect";
   onMove: (boxId: string, revision: number, x: number, y: number) => void;
@@ -262,7 +275,7 @@ const HANDLES = [
  * Sets the viewport: the whole graph (or the chosen pathway) fitted to the
  * view but never below MIN_START_ZOOM. When the graph is wider than fits at
  * that zoom it starts at the left edge, vertically centred, so the user pans
- * right. Also serves full-screen changes; the fit button uses WholeFitter.
+ * right. Also serves full-screen changes; the fit button uses FitTo.
  */
 function ViewFitter({ boxes, bounds, refit }: { boxes: number; bounds: Bounds; refit: number }) {
   const { setViewport } = useReactFlow();
@@ -291,27 +304,15 @@ function ViewFitter({ boxes, bounds, refit }: { boxes: number; bounds: Bounds; r
   return null;
 }
 
-/** The fit button: the whole graph (or the chosen pathway) in view, however far out that takes the zoom. */
-function WholeFitter({ count, bounds }: { count: number; bounds: Bounds }) {
-  const { setViewport } = useReactFlow();
-  const store = useStoreApi();
-  const { x, y, width, height } = bounds;
-  useEffect(() => {
-    if (count === 0) return;
-    const view = store.getState();
-    void setViewport(getViewportForBounds({ x, y, width, height }, view.width, view.height, MIN_ZOOM, 2, VIEW_PADDING), { duration: 300 });
-  }, [count, x, y, width, height, setViewport, store]);
-  return null;
-}
-
 /** Most zoom a focus may use: a box or connection close enough to read, with its neighbours in view. */
 const FOCUS_MAX_ZOOM = 1.25;
 
 /**
- * Centres the view on a box, or on both ends of a connection, when the report
- * asks (a code clicked there). Zooms in to at most FOCUS_MAX_ZOOM.
+ * Fits the view to `rect` each time `count` moves on (nothing while it is 0
+ * or there is no rect): the fit button's whole graph, or the box or
+ * connection the report asks to centre on.
  */
-function Focuser({ count, rect }: { count: number; rect: Bounds | null }) {
+function FitTo({ count, rect, minZoom, maxZoom, padding, duration }: { count: number; rect: Bounds | null; minZoom: number; maxZoom: number; padding: number; duration: number }) {
   const { setViewport } = useReactFlow();
   const store = useStoreApi();
   const { x = 0, y = 0, width = 0, height = 0 } = rect ?? {};
@@ -319,8 +320,8 @@ function Focuser({ count, rect }: { count: number; rect: Bounds | null }) {
   useEffect(() => {
     if (count === 0 || !has) return;
     const view = store.getState();
-    void setViewport(getViewportForBounds({ x, y, width, height }, view.width, view.height, 0.5, FOCUS_MAX_ZOOM, 0.25), { duration: 400 });
-  }, [count, has, x, y, width, height, setViewport, store]);
+    void setViewport(getViewportForBounds({ x, y, width, height }, view.width, view.height, minZoom, maxZoom, padding), { duration });
+  }, [count, has, x, y, width, height, minZoom, maxZoom, padding, duration, setViewport, store]);
   return null;
 }
 
@@ -341,22 +342,22 @@ export function TocCanvas({
   graph: theory,
   pathway,
   selection,
-  focus = null,
+  focus,
   onSelect,
-  editing = null,
-  preview = null,
+  editing,
+  preview,
 }: {
   graph: TocGraph;
   /** "all" or one kept pathway's id. */
   pathway: string;
   selection: Selection | null;
   /** A box or connection to centre on, from the report. */
-  focus?: { target: Selection; count: number } | null;
+  focus: { target: Selection; count: number } | null;
   onSelect: (selection: Selection | null) => void;
   /** Editing controls for an editor (C41, C47); null keeps the canvas read-only. */
-  editing?: CanvasEditing | null;
+  editing: CanvasEditing | null;
   /** A hovered suggestion's route, drawn faded (owner, 2026-11-04). */
-  preview?: Preview | null;
+  preview: Preview | null;
 }) {
   const graph = withPreview(theory, preview);
   // Where a box is while dragged and until the saved position comes back (its revision moves on).
@@ -445,55 +446,11 @@ export function TocCanvas({
   }, []);
 
   const nodes: Array<BoxNode | LabelNode> = [
-    ...layout.headings.map(
-      (heading, index): LabelNode => ({
-        id: `col-${index}`,
-        type: "label",
-        position: { x: heading.x, y: HEADER_H - 36 },
-        data: { text: heading.label },
-        // Explicit sizes: a node without them loses its measurement each time the
-        // nodes array is rebuilt, and React Flow's "fit view" then waits forever.
-        width: LABEL_W,
-        height: LABEL_H,
-        draggable: false,
-        selectable: false,
-        focusable: false,
-      }),
-    ),
-    ...(layout.lineY === null
-      ? []
-      : [
-          {
-            id: "line-label",
-            type: "label",
-            position: { x: 0, y: layout.lineY + 10 },
-            data: { text: "If it goes wrong" },
-            width: LABEL_W,
-            height: LABEL_H,
-            draggable: false,
-            selectable: false,
-            focusable: false,
-          } as LabelNode,
-        ]),
+    ...layout.headings.map((heading, index) => labelNode(`col-${index}`, heading.x, HEADER_H - 36, { text: heading.label })),
+    ...(layout.lineY === null ? [] : [labelNode("line-label", 0, layout.lineY + 10, { text: "If it goes wrong" })]),
     // The accountability ceiling (C35): what the programme directly influences, and what it contributes to.
-    {
-      id: "ceiling-left",
-      type: "label",
-      position: { x: layout.ceilingX - 8 - LABEL_W, y: ceilingLabelY },
-      data: { text: "Directly influenced", alignRight: true },
-      width: LABEL_W,
-      height: LABEL_H,
-      ...DECOR,
-    } as LabelNode,
-    {
-      id: "ceiling-right",
-      type: "label",
-      position: { x: layout.ceilingX + 8, y: ceilingLabelY },
-      data: { text: "Contributes to" },
-      width: LABEL_W,
-      height: LABEL_H,
-      ...DECOR,
-    } as LabelNode,
+    labelNode("ceiling-left", layout.ceilingX - 8 - LABEL_W, ceilingLabelY, { text: "Directly influenced", alignRight: true }, true),
+    labelNode("ceiling-right", layout.ceilingX + 8, ceilingLabelY, { text: "Contributes to" }, true),
     ...layout.boxes.flatMap((placed): BoxNode[] => {
       const box = boxById.get(placed.id);
       if (box === undefined) return [];
@@ -527,7 +484,8 @@ export function TocCanvas({
       const sameColumn = !curved && columnOf.get(link.source_box_id) === columnOf.get(link.target_box_id);
       // Inside one column a connection runs bottom to top, or top to bottom when it goes up.
       const upward = sameColumn && (yOf.get(link.target_box_id) ?? 0) < (yOf.get(link.source_box_id) ?? 0);
-      const pending = isPending(link);
+      // A link is "pending" while a check is working on it.
+      const pending = link.state === "checking";
       const reviewing = graph.check_status === "drafted";
       return {
         id: link.link_id,
@@ -610,9 +568,10 @@ export function TocCanvas({
             {connectFrom === null ? "Click the box the connection starts from" : "Click the box it leads to"} · Esc to cancel
           </p>
         )}
-        <Focuser count={focus?.count ?? 0} rect={focus === null ? null : rectOf(focus.target)} />
+        <FitTo count={focus?.count ?? 0} rect={focus === null ? null : rectOf(focus.target)} minZoom={0.5} maxZoom={FOCUS_MAX_ZOOM} padding={0.25} duration={400} />
         <ViewFitter boxes={layout.boxes.length} bounds={bounds} refit={refit} />
-        <WholeFitter count={fitWhole} bounds={bounds} />
+        {/* The fit button: the whole graph (or the chosen pathway) in view, however far out that takes the zoom. */}
+        <FitTo count={fitWhole} rect={bounds} minZoom={MIN_ZOOM} maxZoom={2} padding={VIEW_PADDING} duration={300} />
         <Controls showInteractive={false} showFitView={false}>
           {/* Our own fit button: the whole diagram, below the start zoom when it must be. */}
           <ControlButton onClick={() => setFitWhole((count) => count + 1)} title="Fit the whole diagram" aria-label="Fit the whole diagram">

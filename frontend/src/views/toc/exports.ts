@@ -5,12 +5,12 @@
 import { toPng, toSvg } from "html-to-image";
 
 import { scrub } from "../../lib/scrub";
-import { csvCell, downloadFilename, triggerTextDownload } from "../artefactPresentation";
+import { csvCell, downloadFilename, triggerTextDownload, triggerUrlDownload } from "../artefactPresentation";
 import { BOX_H, BOX_W, HEADER_H, layoutToc, VERDICT_LABEL, visibleLinkIds } from "./tocModel";
 import type { TocGraph, Verdict } from "./types";
 
 /** The file name, from the report's title. */
-export function exportName(graph: TocGraph, extension: string): string {
+function exportName(graph: TocGraph, extension: string): string {
   return downloadFilename(graph.report?.title ?? "Theory of change", extension);
 }
 
@@ -40,11 +40,6 @@ export function referencesCsv(graph: TocGraph): string {
         .join(","),
     ),
   ].join("\r\n");
-}
-
-/** The graph as the API returns it, for other tools. */
-export function theoryJson(graph: TocGraph): string {
-  return JSON.stringify(graph, null, 2);
 }
 
 // draw.io has no CSS variables: the verdict colours and dashes from index.css, written out.
@@ -154,13 +149,7 @@ async function canvasDataUrl(graph: TocGraph, kind: "png" | "svg"): Promise<stri
 
 export async function canvasImage(graph: TocGraph, kind: "png" | "svg"): Promise<void> {
   const url = await canvasDataUrl(graph, kind);
-  if (url === null) return;
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = exportName(graph, kind);
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
+  if (url !== null) triggerUrlDownload(url, exportName(graph, kind));
 }
 
 /**
@@ -191,8 +180,9 @@ export function downloadReferences(graph: TocGraph): void {
   triggerTextDownload(exportName(graph, "csv"), `\uFEFF${referencesCsv(graph)}`, "text/csv");
 }
 
+/** The graph as the API returns it, for other tools. */
 export function downloadJson(graph: TocGraph): void {
-  triggerTextDownload(exportName(graph, "json"), theoryJson(graph), "application/json");
+  triggerTextDownload(exportName(graph, "json"), JSON.stringify(graph, null, 2), "application/json");
 }
 
 export function downloadDrawio(graph: TocGraph): void {

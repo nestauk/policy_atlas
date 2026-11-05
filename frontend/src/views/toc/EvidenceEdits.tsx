@@ -3,8 +3,8 @@ import { useState } from "react";
 import type { components } from "../../api/gen/types";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
-import { DocumentItem, documentChips, VerdictWords } from "./Documents";
-import { checkWords, type Editor, isQueued } from "./Editing";
+import { DocumentItem, VerdictWords } from "./Documents";
+import { CheckButton, type Editor } from "./Editing";
 import { SUPPORT_LABEL } from "./tocModel";
 import type { Support, TocDocument, TocGraph, TocLink } from "./types";
 
@@ -98,15 +98,10 @@ export function RemovedDocuments({ documents, editor }: { documents: TocDocument
         {removed.map((doc) => (
           <DocumentItem
             key={doc.evidence_id}
+            doc={doc}
             muted
-            title={doc.title}
-            url={doc.url}
             quote={null}
             chips={`Removed by ${doc.removed_by}`}
-            authors={doc.authors}
-            source_type={doc.source_type}
-            year={doc.year}
-            evidence_type={doc.evidence_type}
             actions={
               editor !== null && (
                 <button
@@ -171,13 +166,7 @@ export function EditedEvidenceBlock({ link, graph, editor }: { link: TocLink; gr
           <Button size="sm" variant="secondary" disabled={editor.busy} onClick={() => editor.run({ kind: "keep", body: { link_ids: [link.link_id] } }, "Kept the evidence")}>
             Keep the evidence
           </Button>
-          <Button
-            size="sm"
-            disabled={editor.busy || isQueued(graph, [link.link_id])}
-            onClick={() => editor.run({ kind: "check", body: { link_ids: [link.link_id], mode: "check_again" } })}
-          >
-            {checkWords(graph, [link.link_id], "Check again")}
-          </Button>
+          <CheckButton graph={graph} editor={editor} ids={[link.link_id]} mode="check_again" label="Check again" />
         </div>
       )}
     </div>
@@ -202,14 +191,7 @@ export function NewEvidenceBlock({ link, documents, editor }: { link: TocLink; d
         {pending.map((doc) => (
           <DocumentItem
             key={doc.evidence_id}
-            title={doc.title}
-            url={doc.url}
-            quote={doc.quote}
-            chips={documentChips(doc)}
-            authors={doc.authors}
-            source_type={doc.source_type}
-            year={doc.year}
-            evidence_type={doc.evidence_type}
+            doc={doc}
             actions={
               editor !== null && (
                 <span className="mt-1.5 flex gap-2">
@@ -246,15 +228,7 @@ export function FindMore({ links, graph, editor }: { links: TocLink[]; graph: To
   if (links.length === 0) return null;
   return (
     <div className="mt-5 border-t border-line pt-3">
-      <Button
-        size="sm"
-        variant="secondary"
-        className="border border-navy"
-        disabled={editor.busy || ready.length === 0 || isQueued(graph, ids)}
-        onClick={() => editor.run({ kind: "check", body: { link_ids: ids, mode: "find_more" } })}
-      >
-        {checkWords(graph, ids, "Find more evidence")}
-      </Button>
+      <CheckButton graph={graph} editor={editor} ids={ids} mode="find_more" label="Find more evidence" variant="secondary" className="border border-navy" disabled={ready.length === 0} />
       <p className="mt-1 text-meta text-grey">
         {ready.length === 0
           ? "Check this connection first: its evidence is from an earlier wording or not found yet."

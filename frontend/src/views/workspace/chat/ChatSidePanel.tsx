@@ -15,6 +15,7 @@ import { ChatsIcon } from "./ChatsIcon";
 import { Tooltip, TooltipProvider } from "../../../ui/radix/Tooltip";
 import { ConversationList, type ConversationRow } from "./ConversationList";
 import { ConversationRail, RAIL_TOOLTIP_CLASS, RAIL_TOOLTIP_DELAY_MS } from "./ConversationRail";
+import { readStored, writeStored } from "./ConversationSidebar";
 import {
   DRAFT_CHAT_ID,
   isTaskAgentConversation,
@@ -24,6 +25,9 @@ import {
 } from "./conversationState";
 import { DraftChatPane } from "./DraftChatPane";
 import { ExpandIcon, PanelCloseIcon, PlusIcon } from "./icons";
+
+/** Whether the user closed the sidebar: a theory of change opens it on the Task Agent until they do. */
+const CLOSED_KEY = "pa.chatSidebarClosed";
 
 const HEADER_BUTTON =
   "pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
@@ -49,25 +53,6 @@ const HEADER_BUTTON =
  * Returns:
  *   The open panel beside the view, or a compact edge toggle when closed.
  */
-const CLOSED_KEY = "pa.chatSidebarClosed";
-
-function readClosed(): boolean {
-  try {
-    return window.localStorage.getItem(CLOSED_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function writeClosed(closed: boolean): void {
-  try {
-    if (closed) window.localStorage.setItem(CLOSED_KEY, "1");
-    else window.localStorage.removeItem(CLOSED_KEY);
-  } catch {
-    // Storage blocked: the sidebar just opens by default.
-  }
-}
-
 export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: boolean }) {
   const { activeConversationId, draftEntryArtefactId, setActiveConversation, openDraftChat } = useActiveConversation();
   const [listOpen, setListOpen] = useState(false);
@@ -89,10 +74,10 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   // ponytail: one flag for every task in this browser; per task if users ask.
   useEffect(() => {
     if (activeConversationId !== null) {
-      writeClosed(false);
+      writeStored(CLOSED_KEY, "0");
       return;
     }
-    if (tocTask && conversations.isSuccess && !readClosed()) {
+    if (tocTask && conversations.isSuccess && readStored(CLOSED_KEY) !== "1") {
       setActiveConversation(taskAgentId, { replace: true });
     }
   }, [activeConversationId, conversations.isSuccess, taskAgentId, setActiveConversation, tocTask]);
@@ -201,7 +186,7 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
             type="button"
             aria-label="Close sidebar"
             onClick={() => {
-              writeClosed(true);
+              writeStored(CLOSED_KEY, "1");
               setActiveConversation(null);
             }}
             className={HEADER_BUTTON}

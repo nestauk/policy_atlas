@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { drawioXml, referencesCsv, theoryJson } from "./exports";
+import { drawioXml, referencesCsv } from "./exports";
 import { box, BOXES, tocGraphFixture } from "./fixture";
 import { layoutToc, visibleLinkIds } from "./tocModel";
 
@@ -12,11 +12,6 @@ describe("theory exports", () => {
     expect(rows[1]).toContain('"#3"');
     expect(rows[3]).toContain('"#3, #5"');
     expect(rows[1]).toContain('"Ann Smith; Bo Lee"');
-  });
-
-  it("writes the graph as JSON that reads back the same", () => {
-    const graph = tocGraphFixture();
-    expect(JSON.parse(theoryJson(graph))).toEqual(graph);
   });
 
   it("draws one shape per box and one joined arrow per connection, escaped", () => {

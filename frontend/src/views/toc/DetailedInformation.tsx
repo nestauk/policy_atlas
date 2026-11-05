@@ -18,6 +18,11 @@ const TOKEN = /(#\d+|\b[APSLIF]\d+\b|\[\d+\])/;
 
 const CITES = /\s*(?:\[\d+\])+/g;
 
+/** A numbered source as a citation: its quote, shown in its passage when the judgement is stored. */
+function sourceCitation(source: Report["sources"][number]) {
+  return { n: source.n, evidenceId: source.evidence_id ?? null, title: source.title ?? source.citation, url: source.url, quote: null, fallbackQuote: source.quote ?? "" };
+}
+
 /**
  * Report text with its codes and source numbers made live: a box or
  * connection code ("#2", "S3") selects it on the canvas and opens its panel;
@@ -49,21 +54,7 @@ function RichSentence({ taskId, sentence, codes, sources, onSelect }: { taskId: 
           // The Evidence search's marker: opens the source and its quote beside this sentence
           // (in its passage when the judgement is stored; the whole programme's, the quote alone).
           return (
-            <CitationMarker
-              key={index}
-              taskId={taskId}
-              claim={claim}
-              citations={[
-                {
-                  n: source.n,
-                  evidenceId: source.evidence_id ?? null,
-                  title: source.title ?? source.citation,
-                  url: source.url,
-                  quote: null,
-                  fallbackQuote: source.quote ?? "",
-                },
-              ]}
-            />
+            <CitationMarker key={index} taskId={taskId} claim={claim} citations={[sourceCitation(source)]} />
           );
         }
         if (cite !== null) {
@@ -87,7 +78,7 @@ function RichSentence({ taskId, sentence, codes, sources, onSelect }: { taskId: 
 }
 
 /** The canvas selection each box and link code stands for. */
-function codeTargets(graph: TocGraph): Map<string, Selection> {
+export function codeTargets(graph: TocGraph): Map<string, Selection> {
   const codes = new Map<string, Selection>();
   for (const box of graph.boxes) if (box.code !== null) codes.set(box.code, { kind: "box", id: box.box_id });
   for (const link of graph.links) if (link.code !== null) codes.set(link.code, { kind: "link", id: link.link_id });
@@ -253,7 +244,7 @@ function SourceList({ taskId, sources }: { taskId: string; sources: Report["sour
           taskId={taskId}
           claim={null}
           numbered={false}
-          citations={[{ n: opened.n, evidenceId: opened.evidence_id ?? null, title: opened.title ?? opened.citation, url: opened.url, quote: null, fallbackQuote: opened.quote ?? "" }]}
+          citations={[sourceCitation(opened)]}
           onClose={() => setOpened(null)}
         />
       )}

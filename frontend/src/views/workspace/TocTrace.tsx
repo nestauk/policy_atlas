@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import type { TaskAgentThreadDecision } from "../../store";
 import { scrub } from "../../lib/scrub";
+import { elapsedSeconds } from "./runProgress";
 
 type Detail = Record<string, unknown>;
 
@@ -13,84 +14,102 @@ function plural(count: number, noun: string): string {
   return `${count} ${noun}${noun.endsWith("h") || noun.endsWith("x") ? "es" : "s"}`;
 }
 
-/** One finished step as a plain line, from the counts its completion event carries; null to leave it out. */
+/**
+ * Each step's lines: `done` once it finished, from the counts its completion
+ * event carries (null to leave it out); `now` while it runs, with the counts
+ * the steps before it already know.
+ */
+interface Step {
+  done?: (detail: Detail) => string | null;
+  now: (done: Map<string, Detail>, searches: number) => string;
+}
+
+const searching: Step = {
+  now: (_done, searches) => (searches > 0 ? `Searching for evidence: ${plural(searches, "search")} done` : "Searching for evidence on each connection"),
+};
+
+const STEPS = new Map<string, Step>([
+  [
+    "toc_draft",
+    {
+      done: (detail) =>
+        num(detail, "boxes") > 0
+          ? `Drafted ${plural(num(detail, "boxes"), "box")}, ${plural(num(detail, "links"), "connection")} and ${plural(num(detail, "pathways"), "pathway")}.`
+          : "Drafted the boxes, connections and pathways.",
+      now: () => "Drafting the theory",
+    },
+  ],
+  ["toc_item_searches", searching],
+  ["toc_search_new", searching],
+  [
+    "toc_select",
+    {
+      done: (detail) => {
+        const screened = num(detail, "screened");
+        if (screened === 0) return "Found no new documents to read.";
+        const relevant = num(detail, "relevant");
+        return `Read ${plural(screened, "title")} and abstracts: ${relevant} look on topic, ${screened - relevant} set aside.`;
+      },
+      now: () => "Reading titles and abstracts",
+    },
+  ],
+  ["toc_discover", { done: () => "Looked for other routes in the evidence.", now: () => "Looking for other routes in the evidence" }],
+  ["toc_merge", { done: () => "Merged steps that say the same thing.", now: () => "Merging steps that say the same thing" }],
+  [
+    "toc_judge",
+    {
+      done: (detail) => {
+        const judged = num(detail, "judgements");
+        if (judged === 0) return null;
+        const off = num(detail, "screened_out_not_about");
+        return `Judged ${plural(judged, "document")} against the steps: ${judged - off} test them, ${off} do not.`;
+      },
+      now: (done) => {
+        const relevant = num(done.get("toc_select"), "relevant");
+        return relevant > 0 ? `Judging ${plural(relevant, "document")} against the steps` : "Judging the documents against the steps";
+      },
+    },
+  ],
+  [
+    "toc_figures",
+    {
+      done: (detail) => (num(detail, "figures") > 0 ? `Took ${plural(num(detail, "figures"), "figure")} from the abstracts.` : null),
+      now: () => "Taking figures from the abstracts",
+    },
+  ],
+  [
+    "classify",
+    {
+      done: (detail) => (num(detail, "classified") > 0 ? `Named the design of ${plural(num(detail, "classified"), "study")}.` : null),
+      now: () => "Naming each study's design",
+    },
+  ],
+  [
+    "appraise",
+    {
+      done: (detail) => (num(detail, "appraised") > 0 ? `Rated the quality of ${plural(num(detail, "appraised"), "study")}.` : null),
+      now: (done) => {
+        const classified = num(done.get("classify"), "classified");
+        return classified > 0 ? `Rating the quality of ${plural(classified, "study")}` : "Rating the quality of the studies";
+      },
+    },
+  ],
+  ["toc_choose", { done: () => "Chose the pathways to keep.", now: () => "Choosing the pathways to keep" }],
+  ["toc_summarise", { done: () => "Wrote the titles and the summary.", now: () => "Writing the titles and the summary" }],
+  ["toc_report", { done: () => "Wrote the report.", now: () => "Writing the report" }],
+]);
+
+/** One finished step as a plain line; null to leave it out. */
 function doneLine(detail: Detail): string | null {
-  switch (detail.component) {
-    case "toc_draft":
-      return num(detail, "boxes") > 0
-        ? `Drafted ${plural(num(detail, "boxes"), "box")}, ${plural(num(detail, "links"), "connection")} and ${plural(num(detail, "pathways"), "pathway")}.`
-        : "Drafted the boxes, connections and pathways.";
-    case "toc_select": {
-      const screened = num(detail, "screened");
-      if (screened === 0) return "Found no new documents to read.";
-      const relevant = num(detail, "relevant");
-      return `Read ${plural(screened, "title")} and abstracts: ${relevant} look on topic, ${screened - relevant} set aside.`;
-    }
-    case "toc_judge": {
-      const judged = num(detail, "judgements");
-      if (judged === 0) return null;
-      const off = num(detail, "screened_out_not_about");
-      return `Judged ${plural(judged, "document")} against the steps: ${judged - off} test them, ${off} do not.`;
-    }
-    case "toc_figures":
-      return num(detail, "figures") > 0 ? `Took ${plural(num(detail, "figures"), "figure")} from the abstracts.` : null;
-    case "classify":
-      return num(detail, "classified") > 0 ? `Named the design of ${plural(num(detail, "classified"), "study")}.` : null;
-    case "appraise":
-      return num(detail, "appraised") > 0 ? `Rated the quality of ${plural(num(detail, "appraised"), "study")}.` : null;
-    case "toc_discover":
-      return "Looked for other routes in the evidence.";
-    case "toc_merge":
-      return "Merged steps that say the same thing.";
-    case "toc_choose":
-      return "Chose the pathways to keep.";
-    case "toc_summarise":
-      return "Wrote the titles and the summary.";
-    case "toc_report":
-      return "Wrote the report.";
-    default:
-      return null;
-  }
+  return STEPS.get(detail.component as string)?.done?.(detail) ?? null;
 }
 
-/** What a step is doing while it runs, with the counts the steps before it already know. */
+/** What a step is doing while it runs. */
 function nowLine(component: string, done: Map<string, Detail>, searches: number): string {
-  switch (component) {
-    case "toc_draft":
-      return "Drafting the theory";
-    case "toc_item_searches":
-    case "toc_search_new":
-      return searches > 0 ? `Searching for evidence: ${plural(searches, "search")} done` : "Searching for evidence on each connection";
-    case "toc_select":
-      return "Reading titles and abstracts";
-    case "toc_discover":
-      return "Looking for other routes in the evidence";
-    case "toc_merge":
-      return "Merging steps that say the same thing";
-    case "toc_judge": {
-      const relevant = num(done.get("toc_select"), "relevant");
-      return relevant > 0 ? `Judging ${plural(relevant, "document")} against the steps` : "Judging the documents against the steps";
-    }
-    case "toc_figures":
-      return "Taking figures from the abstracts";
-    case "classify":
-      return "Naming each study's design";
-    case "appraise": {
-      const classified = num(done.get("classify"), "classified");
-      return classified > 0 ? `Rating the quality of ${plural(classified, "study")}` : "Rating the quality of the studies";
-    }
-    case "toc_choose":
-      return "Choosing the pathways to keep";
-    case "toc_summarise":
-      return "Writing the titles and the summary";
-    case "toc_report":
-      return "Writing the report";
-    default:
-      return "Working";
-  }
+  return STEPS.get(component)?.now(done, searches) ?? "Working";
 }
 
-export interface TocTraceView {
+interface TocTraceView {
   /** Whether this walk drafts the theory (one model call: no steps to show while it runs). */
   drafting: boolean;
   /** When the step running now started, for the timer. */
@@ -256,6 +275,6 @@ function useElapsed(since: string | null): string | null {
     return () => window.clearInterval(id);
   }, [since]);
   if (since === null) return null;
-  const seconds = Math.max(0, Math.round((now - Date.parse(since)) / 1000));
+  const seconds = Math.round(elapsedSeconds(since, undefined, now));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }

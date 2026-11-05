@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 
 import { useApiClient, useTasks } from "../api/queries";
 import { activeRun } from "./scopingActivity";
+import type { CheckStatus } from "./toc/types";
 
 /**
  * Browser alerts when a task's work finishes (owner, 2026-11-04): a theory
@@ -12,22 +13,16 @@ import { activeRun } from "./scopingActivity";
  * nothing is sent from the server.
  */
 
-type CheckStatus = "none" | "drafting" | "drafted" | "checking" | "checked" | "stopped" | "failed";
+const TOC_ALERT: Partial<Record<CheckStatus, string>> = {
+  drafted: "Your theory of change is drafted. Review it, then check the evidence.",
+  checked: "The evidence check is finished.",
+  stopped: "The evidence check was stopped.",
+  failed: "The evidence check failed.",
+};
 
 /** What a theory-of-change alert says, by the theory's state; null while the walks go on. */
 export function tocAlertText(status: CheckStatus | undefined): string | null {
-  switch (status) {
-    case "drafted":
-      return "Your theory of change is drafted. Review it, then check the evidence.";
-    case "checked":
-      return "The evidence check is finished.";
-    case "stopped":
-      return "The evidence check was stopped.";
-    case "failed":
-      return "The evidence check failed.";
-    default:
-      return null;
-  }
+  return status === undefined ? null : (TOC_ALERT[status] ?? null);
 }
 
 /** Watch every task's walks and alert when one finishes or waits for the user. Mount once, in the app shell. */

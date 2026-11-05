@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { scrub } from "../../lib/scrub";
 import { Tooltip } from "../../ui/radix/Tooltip";
-import { CitationMarker, CitationSheet, citedDocuments, documentCitation, DocumentItem, documentChips, EvidenceBalance, FigureList, ITEM_QUOTE, ITEM_TITLE, LinkDocuments, sourceLine, VerdictDot, VerdictWords } from "./Documents";
+import { CitationMarker, CitationSheet, citedDocuments, documentCitation, DocumentItem, EvidenceBalance, FigureList, ITEM_QUOTE, ITEM_TITLE, LinkDocuments, sourceLine, VerdictDot, VerdictWords } from "./Documents";
 import { type Editor, EditedLine } from "./Editing";
 import { BoxEditForm, LinkEditForm, NeedsEvidence } from "./EditForms";
 import { AddStudy, DocumentActions, EditedEvidenceBlock, FindMore, NewEvidenceBlock, RemovedDocuments } from "./EvidenceEdits";
@@ -39,6 +39,11 @@ function Origin({ origin, rules }: { origin: TocBox["origin"]; rules?: TocGraph[
       </details>
     </>
   );
+}
+
+/** A case study's or figure's citation, numbered in the panel: its own quote is the passage. */
+function ownCitation(n: number, item: { evidence_id: string; url: string | null; quote: string }, title: string) {
+  return { n, evidenceId: item.evidence_id, title, url: item.url, quote: item.quote, fallbackQuote: item.quote };
 }
 
 /** "Definition", "Indicator", "Timing": how we'd know a box's change happened. */
@@ -87,14 +92,7 @@ function BoxDetail({
   const seenIn = studies
     .filter((study) => box.seen_in_cites.includes(study.task_source_snapshot_id))
     .filter((study, index, all) => all.findIndex((other) => other.task_source_snapshot_id === study.task_source_snapshot_id) === index)
-    .map((study) => ({
-      n: numberOf(study.task_source_snapshot_id),
-      evidenceId: study.evidence_id,
-      title: study.title,
-      url: study.url,
-      quote: study.quote,
-      fallbackQuote: study.quote,
-    }));
+    .map((study) => ownCitation(numberOf(study.task_source_snapshot_id), study, study.title));
   if (editing && editor !== null) return <BoxEditForm box={box} graph={graph} editor={editor} onDone={() => setEditing(false)} />;
   const ownLinks = graph.links.filter((link) => link.source_box_id === box.box_id || link.target_box_id === box.box_id);
   return (
@@ -132,14 +130,7 @@ function BoxDetail({
           <FigureList
             taskId={taskId}
             figures={figures}
-            citationOf={(figure) => ({
-              n: numberOf(figure.task_source_snapshot_id),
-              evidenceId: figure.evidence_id,
-              title: figure.source_title,
-              url: figure.url,
-              quote: figure.quote,
-              fallbackQuote: figure.quote,
-            })}
+            citationOf={(figure) => ownCitation(numberOf(figure.task_source_snapshot_id), figure, figure.source_title)}
           />
         </>
       )}
@@ -304,17 +295,7 @@ function LinkDetail({
             onOpen={(doc) => setOpened(doc)}
             detail={(doc) => (
               <ul className="[&>li]:border-0 [&>li]:py-0">
-                <DocumentItem
-                  n={numberOf(doc.task_source_snapshot_id)}
-                  title={doc.title}
-                  url={null}
-                  quote={doc.quote}
-                  chips={documentChips(doc)}
-                  authors={doc.authors}
-                  source_type={doc.source_type}
-                  year={doc.year}
-                  evidence_type={doc.evidence_type}
-                />
+                <DocumentItem doc={doc} n={numberOf(doc.task_source_snapshot_id)} url={null} />
               </ul>
             )}
           />
@@ -349,7 +330,7 @@ function LinkDetail({
         />
       )}
       <p className={SUB}>Documents ({cited.length})</p>
-      <LinkDocuments taskId={taskId} documents={documents} actions={editor !== null ? (doc) => <DocumentActions doc={doc} editor={editor} /> : undefined} />
+      <LinkDocuments cited={cited} onOpen={setOpened} actions={editor !== null ? (doc) => <DocumentActions doc={doc} editor={editor} /> : undefined} />
       <RemovedDocuments documents={documents} editor={editor} />
       {editor !== null && <AddStudy link={link} editor={editor} />}
       {editor !== null && <FindMore links={[link]} graph={graph} editor={editor} />}
@@ -365,7 +346,7 @@ export function DetailPanel({
   evidence,
   selection,
   onClose,
-  editor = null,
+  editor,
   panel,
 }: {
   taskId: string;
@@ -374,7 +355,7 @@ export function DetailPanel({
   selection: Selection;
   onClose: () => void;
   /** Editing controls for an editor (C41); null keeps the panel read-only. */
-  editor?: Editor | null;
+  editor: Editor | null;
   /** The width the user dragged it to, kept by the page while it is open. */
   panel: PanelWidth;
 }) {

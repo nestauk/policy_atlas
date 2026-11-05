@@ -5,7 +5,6 @@ import { useAuth } from "../auth";
 import { createAuthedApiClient } from "./client";
 import type { components } from "./gen/types";
 import { isRunActive } from "../views/scopingActivity";
-import type { TocEvidence, TocGraph } from "../views/toc/types";
 
 /**
  * Query-key roots, shared with `src/store/useRunStream.tsx` so SSE-driven
@@ -664,29 +663,19 @@ export function useLonglist(taskId: string) {
   });
 }
 
-/**
- * Theory of change reads (task 054, increment 1). The two routes are not in
- * the generated client yet, so the client is narrowed by hand; drop the cast
- * after `make openapi-sync`.
- */
-type TocGet = <T>(
-  path: string,
-  init: { params: { path: { task_id: string } } },
-) => Promise<{ data?: T; error?: unknown; response: Response }>;
+type TocGraph = components["schemas"]["TocGraphOut"];
 
-function useTocGet() {
-  const client = useApiClient();
-  return (client as unknown as { GET: TocGet }).GET;
-}
+/** Whether the draft or the evidence check is still running: the theory's polling rule. */
+const tocBusy = (status: TocGraph["check_status"] | undefined) => status === "drafting" || status === "checking";
 
 /** `GET /api/v1/tasks/{task_id}/toc` — the graph, polled every 5 s while the
  *  draft or the evidence check is still running. */
 export function useToc(taskId: string) {
-  const get = useTocGet();
+  const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.toc(taskId),
     queryFn: async () => {
-      const { data, error, response } = await get<TocGraph>("/api/v1/tasks/{task_id}/toc", {
+      const { data, error, response } = await client.GET("/api/v1/tasks/{task_id}/toc", {
         params: { path: { task_id: taskId } },
       });
       if (response.status === 404) return null;
@@ -696,7 +685,7 @@ export function useToc(taskId: string) {
     enabled: Boolean(taskId),
     refetchInterval: (activeQuery) => {
       const data = activeQuery.state.data;
-      return data?.check_status === "drafting" || data?.check_status === "checking" || data?.reviewing === true ? 5_000 : false;
+      return tocBusy(data?.check_status) || data?.reviewing === true ? 5_000 : false;
     },
   });
 }
@@ -721,12 +710,12 @@ export function useTocDocumentContext(taskId: string, evidenceId: string | null,
 /** `GET /api/v1/tasks/{task_id}/toc/evidence` — every judged document and
  *  case study; polled on the same rule as the graph. */
 export function useTocEvidence(taskId: string) {
-  const get = useTocGet();
+  const client = useApiClient();
   const queryClient = useQueryClient();
   return useQuery({
     queryKey: queryKeys.tocEvidence(taskId),
     queryFn: async () => {
-      const { data, error, response } = await get<TocEvidence>("/api/v1/tasks/{task_id}/toc/evidence", {
+      const { data, error, response } = await client.GET("/api/v1/tasks/{task_id}/toc/evidence", {
         params: { path: { task_id: taskId } },
       });
       if (response.status === 404) return null;
@@ -734,15 +723,10 @@ export function useTocEvidence(taskId: string) {
       return data ?? null;
     },
     enabled: Boolean(taskId),
-    refetchInterval: () => {
-      const status = queryClient.getQueryData<TocGraph | null>(queryKeys.toc(taskId))?.check_status;
-      return status === "drafting" || status === "checking" ? 5_000 : false;
-    },
+    refetchInterval: () => (tocBusy(queryClient.getQueryData<TocGraph | null>(queryKeys.toc(taskId))?.check_status) ? 5_000 : false),
   });
 }
 
-/** `GET .../toc/uploads/{upload_id}` — the user's original diagram as a file
- *  (task 054, increment 5): fetched with the user's login, never public. */
 /** `GET /api/v1/tasks/{task_id}/toc/uploads` — the task's diagrams that were read, oldest first. */
 export function useTocUploads(taskId: string, enabled: boolean) {
   const client = useApiClient();
@@ -757,6 +741,8 @@ export function useTocUploads(taskId: string, enabled: boolean) {
   });
 }
 
+/** `GET .../toc/uploads/{upload_id}` — the user's original diagram as a file
+ *  (task 054, increment 5): fetched with the user's login, never public. */
 export function useTocUploadFile(taskId: string, uploadId: string | null | undefined) {
   const client = useApiClient();
   return useQuery({

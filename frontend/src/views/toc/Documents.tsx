@@ -43,53 +43,31 @@ const PX_PER_WEIGHT = 40;
  * focusing a block shows its document as the document list shows it; clicking
  * it opens the document's citation, as the list does.
  */
-export function EvidenceBalance<T extends Pick<TocDocument, "support" | "weight">>({
-  documents,
-  detail,
-  onOpen,
-}: {
-  documents: T[];
-  detail?: (doc: T) => ReactNode;
-  /** Clicking a block opens its document's citation. */
-  onOpen?: (doc: T) => void;
-}) {
+export function EvidenceBalance({ documents, detail, onOpen }: { documents: TocDocument[]; detail: (doc: TocDocument) => ReactNode; onOpen: (doc: TocDocument) => void }) {
   const columns = evidenceBalance(documents);
-  const caption = { refutes: "Refutes", mixed: "Mixed", weak: "Weakly supports", strong: "Strongly supports" };
   return (
-    <div className="mt-2" role="group" aria-label={columns.map((col) => `${caption[col.support]}: ${col.docs.length}`).join(", ")}>
+    <div className="mt-2" role="group" aria-label={columns.map((col) => `${SUPPORT_LABEL[col.support]}: ${col.docs.length}`).join(", ")}>
       <div className="grid grid-cols-4 items-end gap-2">
         {columns.map((col) => (
           <div key={col.support} data-testid={`balance-${col.support}`} className="flex min-h-16 flex-col-reverse gap-[3px] border-b-2 border-line-2 pb-[3px]">
-            {col.docs.map((doc, index) => {
-              const style = { height: Math.max(4, Math.round(doc.weight * PX_PER_WEIGHT)), ...BLOCK[col.support] };
-              const block =
-                onOpen === undefined ? (
-                  <div key={index} data-testid="balance-block" tabIndex={detail === undefined ? undefined : 0} className="rounded-[3px] outline-offset-2" style={style} />
-                ) : (
-                  <button
-                    key={index}
-                    type="button"
-                    data-testid="balance-block"
-                    aria-label={`Open document ${index + 1} in ${caption[col.support]}`}
-                    onClick={() => onOpen(doc)}
-                    className="block w-full cursor-pointer rounded-[3px] outline-offset-2 hover:brightness-90"
-                    style={style}
-                  />
-                );
-              return detail === undefined ? (
-                block
-              ) : (
-                <Tooltip key={index} content={detail(doc)} className="max-w-sm text-body text-ink">
-                  {block}
-                </Tooltip>
-              );
-            })}
+            {col.docs.map((doc, index) => (
+              <Tooltip key={index} content={detail(doc)} className="max-w-sm text-body text-ink">
+                <button
+                  type="button"
+                  data-testid="balance-block"
+                  aria-label={`Open document ${index + 1} in ${SUPPORT_LABEL[col.support]}`}
+                  onClick={() => onOpen(doc)}
+                  className="block w-full cursor-pointer rounded-[3px] outline-offset-2 hover:brightness-90"
+                  style={{ height: Math.max(4, Math.round(doc.weight * PX_PER_WEIGHT)), ...BLOCK[col.support] }}
+                />
+              </Tooltip>
+            ))}
           </div>
         ))}
       </div>
       <div className="mt-1 grid grid-cols-4 gap-2 text-center text-meta text-grey" aria-hidden="true">
         {columns.map((col) => (
-          <span key={col.support}>{caption[col.support]}</span>
+          <span key={col.support}>{SUPPORT_LABEL[col.support]}</span>
         ))}
       </div>
     </div>
@@ -106,7 +84,7 @@ export function documentChips(doc: Pick<TocDocument, "support" | "quality" | "re
 }
 
 /** "Smith et al.", one author's name, or the publishing organisation (Overton's single author); null when unknown. */
-export function shortAuthors(authors: readonly string[] | undefined): string | null {
+function shortAuthors(authors: readonly string[] | undefined): string | null {
   const names = (authors ?? []).filter((name) => name !== "");
   if (names.length === 0) return null;
   return names.length === 1 ? (names[0] ?? null) : `${names[0]} et al.`;
@@ -119,7 +97,7 @@ export function sourceLine(sourceType: SourceType, authors: readonly string[] | 
 }
 
 /** One cited document: its number in the panel, the judgement behind it and the passage to show. */
-export interface TocCitation {
+interface TocCitation {
   n: number;
   /** The judgement row; null on rows written before evidence ids. */
   evidenceId: string | null;
@@ -181,49 +159,50 @@ export function CitationMarker({ taskId, claim, citations }: { taskId: string; c
   );
 }
 
-/** One document in full: title (a link when it has a URL), source line and quote; its number when it has one. */
+/**
+ * One document in full: title (a link when it has a URL), source line, its
+ * scores and quote; its number when it has one. `url`, `quote` and `chips`
+ * override the document's own.
+ */
 export function DocumentItem({
+  doc,
   n,
-  title,
-  url,
-  quote,
-  chips,
+  url = doc.url,
+  quote = doc.quote,
+  chips = documentChips(doc),
   onOpen,
-  authors,
   actions,
   muted = false,
-  ...rest
 }: {
+  doc: TocDocument;
   n?: number;
-  title: string;
-  url: string | null;
-  quote: string | null;
+  url?: string | null;
+  quote?: string | null;
   chips?: string;
-  authors?: string[];
   onOpen?: () => void;
   /** Editing controls under the document (C42). */
   actions?: ReactNode;
   /** Greyed: removed from the link by the user. */
   muted?: boolean;
-} & Pick<TocDocument, "source_type" | "year" | "evidence_type">) {
+}) {
   return (
     <li className={`border-t border-line py-2.5 text-body${muted ? " opacity-60" : ""}`}>
       <p className={ITEM_TITLE}>
         {n !== undefined && <span className="mr-1 text-grey">[{n}]</span>}
         {onOpen !== undefined ? (
           <button type="button" onClick={onOpen} className="cursor-pointer text-left text-blue hover:underline">
-            {scrub(title)}
+            {scrub(doc.title)}
           </button>
         ) : url !== null ? (
           <a href={url} target="_blank" rel="noreferrer" className="text-blue hover:underline">
-            {scrub(title)}
+            {scrub(doc.title)}
           </a>
         ) : (
-          scrub(title)
+          scrub(doc.title)
         )}
       </p>
-      <p className="mt-0.5">{sourceLine(rest.source_type, authors, rest.year, rest.evidence_type)}</p>
-      {chips !== undefined && <p className="mt-0.5">{scrub(chips)}</p>}
+      <p className="mt-0.5">{sourceLine(doc.source_type, doc.authors, doc.year, doc.evidence_type)}</p>
+      <p className="mt-0.5">{scrub(chips)}</p>
       {quote !== null && quote !== "" && <q className={ITEM_QUOTE}>{scrub(quote)}</q>}
       {actions}
     </li>
@@ -289,35 +268,14 @@ export function documentCitation(doc: TocDocument, n: number, quote: string | nu
   return { n, evidenceId: doc.evidence_id || null, title: doc.title, url: doc.url, quote, fallbackQuote: doc.quote ?? "" };
 }
 
-/** The citation list: a link's documents, numbered as the markers number them, each with its support, quality and relevance. */
-export function LinkDocuments({ taskId, documents, actions }: { taskId: string; documents: TocDocument[]; actions?: (doc: TocDocument) => ReactNode }) {
-  const [opened, setOpened] = useState<number | null>(null);
-  const shown = citedDocuments(documents);
-  if (shown.length === 0) return <p className="text-body text-grey">None found.</p>;
-  const doc = opened === null ? undefined : shown[opened - 1];
+/** The citation list: a link's cited documents, numbered as the markers number them, each with its support, quality and relevance. */
+export function LinkDocuments({ cited, onOpen, actions }: { cited: TocDocument[]; onOpen: (doc: TocDocument) => void; actions?: (doc: TocDocument) => ReactNode }) {
+  if (cited.length === 0) return <p className="text-body text-grey">None found.</p>;
   return (
-    <>
-      <ul>
-        {shown.map((item, index) => (
-          <DocumentItem
-            key={item.task_source_snapshot_id}
-            n={index + 1}
-            title={item.title}
-            url={item.url}
-            quote={item.quote}
-            chips={documentChips(item)}
-            authors={item.authors}
-            onOpen={() => setOpened(index + 1)}
-            actions={actions?.(item)}
-            source_type={item.source_type}
-            year={item.year}
-            evidence_type={item.evidence_type}
-          />
-        ))}
-      </ul>
-      {doc !== undefined && opened !== null && (
-        <CitationSheet taskId={taskId} claim={null} citations={[documentCitation(doc, opened)]} numbered={false} onClose={() => setOpened(null)} />
-      )}
-    </>
+    <ul>
+      {cited.map((doc, index) => (
+        <DocumentItem key={doc.task_source_snapshot_id} doc={doc} n={index + 1} onOpen={() => onOpen(doc)} actions={actions?.(doc)} />
+      ))}
+    </ul>
   );
 }

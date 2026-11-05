@@ -6,14 +6,14 @@ import { useTask, useToc, useTocEvidence, useTocProposals } from "../../api/quer
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { REPORT_BODY_CLASS } from "../artefactPresentation";
-import { DetailedInformation } from "./DetailedInformation";
+import { codeTargets, DetailedInformation } from "./DetailedInformation";
 import { DetailPanel, SidePanel, type Selection } from "./DetailPanel";
 import { AddBoxForm, CanvasBar, UndoToast, useTocEditor } from "./Editing";
 import { pendingCount, type Preview, Suggestions } from "./Suggestions";
 import { ReadingGuide, VerdictLegend } from "./ReadingGuide";
 import { TocCanvas } from "./TocCanvas";
 import { usePanelWidth } from "../workspace/usePanelWidth";
-import { keptPathways, pathwayTitles, tocTitle } from "./tocModel";
+import { tocTitle } from "./tocModel";
 
 /** The overall verdict's text colour: the canvas's verdict colours, darkened for text. */
 const EVIDENCE_TEXT: Record<"supports" | "mixed" | "too_little" | "against", string> = {
@@ -65,19 +65,19 @@ export function TocResult({ taskId }: { taskId: string }) {
   const askReview = () => editor.run({ kind: "review" });
 
   const graph = toc.data;
+  // Select a box or link and centre the canvas on it.
+  const focusOn = (target: Selection) => {
+    setSelection(target);
+    setFocus((current) => ({ target, count: (current?.count ?? 0) + 1 }));
+  };
   // A code clicked in the chat (?focus=#5) selects that box or connection here (round 6).
   const [params, setParams] = useSearchParams();
   const wanted = params.get("focus");
   const [handled, setHandled] = useState<string | null>(null);
   if (wanted !== handled && (wanted === null || graph != null)) {
     setHandled(wanted);
-    const box = graph?.boxes.find((item) => item.code === wanted);
-    const link = graph?.links.find((item) => item.code === wanted);
-    const target: Selection | null = box !== undefined ? { kind: "box", id: box.box_id } : link !== undefined ? { kind: "link", id: link.link_id } : null;
-    if (target !== null) {
-      setSelection(target);
-      setFocus((current) => ({ target, count: (current?.count ?? 0) + 1 }));
-    }
+    const target = wanted !== null && graph != null ? codeTargets(graph).get(wanted) : undefined;
+    if (target !== undefined) focusOn(target);
   }
   useEffect(() => {
     if (wanted === null || graph == null) return;
@@ -108,8 +108,7 @@ export function TocResult({ taskId }: { taskId: string }) {
     if (canvas instanceof HTMLElement && typeof canvas.scrollIntoView === "function") canvas.scrollIntoView({ behavior: "smooth", block: "center" });
   };
   const select = (target: Selection) => {
-    setSelection(target);
-    setFocus((current) => ({ target, count: (current?.count ?? 0) + 1 }));
+    focusOn(target);
     showCanvas();
   };
   // A pathway named in the report: the canvas shows that pathway alone, as the bar's dropdown does.
@@ -117,7 +116,18 @@ export function TocResult({ taskId }: { taskId: string }) {
     setPathway(pathwayId);
     showCanvas();
   };
-  const titles = pathwayTitles(graph);
+  // The drafted and failed banners' retry: the evidence check of the whole theory.
+  const checkEvidence = canEdit && (
+    <Button
+      disabled={editor.busy}
+      onClick={() => {
+        askForFinishAlerts();
+        editor.run({ kind: "checkFull" });
+      }}
+    >
+      Check the evidence
+    </Button>
+  );
   return (
     <main className="mx-auto my-8 w-full max-w-[1280px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0">
       {/* The report's short title and summary; the task's name until a report is written. */}
@@ -153,17 +163,7 @@ export function TocResult({ taskId }: { taskId: string }) {
           <p className={`min-w-0 flex-1 ${REPORT_BODY_CLASS}`}>
             This is how Policy Atlas read your diagram. Solid dark connections are drawn in your diagram. Dashed blue ones are connections Policy Atlas suggested where your diagram grouped boxes or left them unconnected. What Policy Atlas would add to complete the theory waits under Suggestions, beside the canvas. Compare it with your original in the plan, fix anything that is wrong, then check the evidence.
           </p>
-          {canEdit && (
-            <Button
-              disabled={editor.busy}
-              onClick={() => {
-                askForFinishAlerts();
-                editor.run({ kind: "checkFull" });
-              }}
-            >
-              Check the evidence
-            </Button>
-          )}
+          {checkEvidence}
         </div>
       )}
       {graph.check_status === "stopped" && (
@@ -173,17 +173,7 @@ export function TocResult({ taskId }: { taskId: string }) {
         // A check that ended with an error: say so and offer the retry the chat names (owner, 2026-11-04).
         <div role="alert" className="mt-4 flex max-w-[1100px] flex-wrap items-center gap-4 border-l-4 border-[var(--color-verdict-against)] bg-paper-2 px-4 py-3">
           <p className={`min-w-0 flex-1 ${REPORT_BODY_CLASS}`}>The evidence check stopped with an error. What it finished stays on the canvas.</p>
-          {canEdit && (
-            <Button
-              disabled={editor.busy}
-              onClick={() => {
-                askForFinishAlerts();
-                editor.run({ kind: "checkFull" });
-              }}
-            >
-              Check the evidence
-            </Button>
-          )}
+          {checkEvidence}
         </div>
       )}
       {/* The full-screen area: the bar, what it opens, and the canvas with its detail panel. */}
@@ -191,15 +181,12 @@ export function TocResult({ taskId }: { taskId: string }) {
         <CanvasBar
           graph={graph}
           pathway={pathway}
-          pathways={keptPathways(graph).map((item) => ({ id: item.pathway_id, title: titles.get(item.pathway_id) ?? "" }))}
           onPathway={setPathway}
           editor={canEdit ? editor : null}
           mode={mode}
           onMode={setMode}
           onAddBox={() => setAdding(true)}
           onReview={askReview}
-          reviewLabel={`Review the theory${graph.edits_since_review >= 5 ? ` (${graph.edits_since_review} changes)` : ""}`}
-          reviewDisabled={editor.busy || reviewing}
           onGuide={() => setGuideOpen((open) => !open)}
           guideOpen={guideOpen}
           suggestions={waiting}
