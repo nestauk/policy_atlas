@@ -349,6 +349,11 @@ planner prompt; hash re-pinned): "Abstracts only: themes, coverage and gaps. Up 
 100 policy documents."; "Reads about 25 sources in full and extracts their findings. Up to 400
 papers and 200 policy documents." Each then its measured band. The mock says the same, shorter.
 
+Owner, 2026-11-05: the three preset bands are Rapid overview ~5-10 min, Standard report ~10-20
+min, Detailed report ~20-30 min (`task_plan.TIME_BANDS`, the one table the plan document and the
+planner read). The off-diagonal cells (custom search × analysis pairs) keep their older values and
+are flagged for the owner: some now read longer than the deep preset.
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |

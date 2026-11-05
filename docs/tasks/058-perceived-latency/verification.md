@@ -106,6 +106,10 @@ tool and the gap measure are built and tested (Phase 0). The "before" captures m
 - **Owner note after round 3 (2026-11-05):** the thoroughness copy cut to the plain voice (the
   planner prompt, re-pinned; the mock follows). Gate: `tests/runtime/test_task_agent.py` 43
   passed, mock tests 45 passed, the planning journey passed, `make prompt-guard` green.
+- **Owner note, the preset bands (2026-11-05):** `task_plan.TIME_BANDS` presets set to ~5-10 min
+  (Rapid overview), ~10-20 min (Standard report), ~20-30 min (Detailed report); the planner
+  prompt reads the table, so its file and hash are unchanged (`make prompt-guard` green). The
+  off-diagonal cells keep their older values and are flagged for the owner in the annex.
 
 ## Diff summary
 
