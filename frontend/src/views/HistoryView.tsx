@@ -10,6 +10,7 @@ import { Card } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { mergeHistory } from "./historyPresentation";
+import { isToc } from "./scopingActivity";
 import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
 import { UndoToast, useTocEditor } from "./toc/Editing";
 
@@ -28,7 +29,7 @@ export function HistoryView() {
   const task = useTask(taskId);
   const decisions = useDecisions(taskId, { page_size: PAGE_SIZE });
   const turns = useTaskAgentTurns(taskId, { page_size: PAGE_SIZE });
-  const toc = useToc(taskId);
+  const toc = useToc(isToc(task.data) ? taskId : "");
   // Only an editor reads a theory's edits: the list names people.
   const { editor, toast, dismissToast, undoLast, error: editError, history: edits } = useTocEditor(taskId, toc.data?.can_edit === true);
   const [open, setOpen] = useState<string | null>(null);
