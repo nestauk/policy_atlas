@@ -24,7 +24,9 @@ secrets, no raw source text, no unredacted traces.
 
 | Phase 10, round 1 (2026-11-05, `09fd7cfd`) | `make frontend-verify && make drift-check` | pass | typecheck clean, eslint 0 errors, 1064 tests, build OK, `drift-check: OK`; the backend tree is unchanged since the Phase 9 full gate. |
 
-(The step-6 exit gate is the same full command after the owner-gated phases; see § Status.)
+| Step-6 exit gate, deterministic build (2026-11-05, `ce383f24`) | `make verify` | pass | backend 4257 passed, 1 skipped (8.1 min); mypy, ruff, prompt-guard, OKF, audit, font-guard, infra all green; `drift-check: OK`; frontend 1064 tests in 93 files, build OK. The owner-gated items (the N25 measures, the owner polish rounds) re-run this gate when they land. |
+
+(The gate map's step-6 exit is this command; it is re-run after the owner-gated phases.)
 
 ## Checks beyond the build
 
