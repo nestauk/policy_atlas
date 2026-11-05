@@ -158,3 +158,32 @@ def test_a_stored_draft_has_its_conditions_trimmed() -> None:
     trimmed = with_trimmed_conditions(draft.model_copy(update={"links": links}))
     assert [list(link.conditions) for link in trimmed.links[:2]] == [["Shared", "One"], []]
     assert draft_problems(trimmed) == []
+
+
+def test_an_as_drawn_diagram_may_skip_layers_and_stop_short() -> None:
+    from policy_atlas.theory_of_change.graph import Box, Graph, Link, Pathway, check_graph
+
+    # The user's simple diagram: an input straight to a short-term outcome, no impact,
+    # no failure pathway, and one box drawn on its own.
+    graph = Graph(
+        boxes={
+            "b1": Box(key="b1", layer="input", text="More PE lessons"),
+            "b2": Box(key="b2", layer="outcome_short", text="More energy used"),
+            "b3": Box(key="b3", layer="outcome_long", text="Healthier weight"),
+            "b4": Box(key="b4", layer="impact", text="Less obesity"),
+        },
+        links={
+            "l1": Link(key="l1", source="b1", target="b2", sentence="s"),
+            "l2": Link(key="l2", source="b2", target="b3", sentence="s"),
+        },
+        pathways=[Pathway(key="p1", kind="success", links=["l1", "l2"])],
+    )
+    assert check_graph(graph)  # the full rules refuse it
+    assert check_graph(graph, as_drawn=True) == []
+    # A broken route still fails, as drawn or not.
+    broken = Graph(
+        boxes=graph.boxes,
+        links=graph.links,
+        pathways=[Pathway(key="p1", kind="success", links=["l2", "l1"])],
+    )
+    assert check_graph(broken, as_drawn=True) == ["pathway p1 is broken between l2 and l1"]

@@ -1212,6 +1212,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/toc/check/full": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Full Toc Check
+         * @description Check the whole theory: after the user reviewed an uploaded theory's draft (increment 5).
+         */
+        post: operations["start_full_toc_check_api_v1_tasks__task_id__toc_check_full_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}/toc/check/stop": {
         parameters: {
             query?: never;
@@ -1574,6 +1594,50 @@ export interface paths {
          * @description Review the theory after edits, off the request path; the Task Agent reports (C45).
          */
         post: operations["start_toc_review_api_v1_tasks__task_id__toc_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Toc Theory
+         * @description Store a user's own theory diagram and read it for the plan (increment 5, C8).
+         *
+         *     The file is checked and stored first; the slow vision call runs outside any
+         *     transaction; the transcription is stored for the Task Agent's next plan.
+         *     Only before the draft: once the theory is on the canvas the plan is fixed.
+         */
+        post: operations["upload_toc_theory_api_v1_tasks__task_id__toc_uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/uploads/{upload_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc Upload
+         * @description The uploaded original, to people who can read the task; never on the public leg (C8).
+         */
+        get: operations["get_toc_upload_api_v1_tasks__task_id__toc_uploads__upload_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6174,7 +6238,7 @@ export interface components {
              * Check Status
              * @enum {string}
              */
-            check_status: "none" | "drafting" | "checking" | "checked" | "stopped" | "failed";
+            check_status: "none" | "drafting" | "drafted" | "checking" | "checked" | "stopped" | "failed";
             /** Confidence */
             confidence: ("confident" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "not_confident") | null;
             /** Context */
@@ -6427,6 +6491,9 @@ export interface components {
          *         where: The place the theory is for.
          *         time_horizon: When the impact is expected.
          *         context: What the user said about the setting.
+         *         published_after: The evidence searched starts at this date (`YYYY-MM-DD`);
+         *             `None` means any year.
+         *         published_before: The evidence searched ends at this date, or `None`.
          *         assumptions: Every guess the plan is making.
          *         ready: Whether the draft has validated into an executable plan.
          */
@@ -6464,6 +6531,16 @@ export interface components {
              */
             intervention: string | null;
             /**
+             * Published After
+             * @default null
+             */
+            published_after: string | null;
+            /**
+             * Published Before
+             * @default null
+             */
+            published_before: string | null;
+            /**
              * Question
              * @default null
              */
@@ -6489,6 +6566,11 @@ export interface components {
              */
             title: string | null;
             /**
+             * Upload Id
+             * @default null
+             */
+            upload_id: string | null;
+            /**
              * Where
              * @default null
              */
@@ -6499,7 +6581,9 @@ export interface components {
          * @description Typed replace-field edits for a theory-of-change plan (task 054).
          *
          *     Omitted fields stay as they are; an empty string clears an optional field.
-         *     Allowed only until the draft is on the canvas (S7).
+         *     Allowed only until the draft is on the canvas (S7). `published_after` and
+         *     `published_before` (`YYYY-MM-DD`) set the years of evidence searched; an
+         *     empty `published_after` means any year.
          */
         TocPlanPatch: {
             /** Context */
@@ -6510,6 +6594,10 @@ export interface components {
             intended_change?: string | null;
             /** Intervention */
             intervention?: string | null;
+            /** Published After */
+            published_after?: string | null;
+            /** Published Before */
+            published_before?: string | null;
             /** Target Population */
             target_population?: string | null;
             /** Time Horizon */
@@ -6542,6 +6630,8 @@ export interface components {
         TocProposalDecideIn: {
             /** Accept */
             accept: boolean;
+            /** Group */
+            group?: string | null;
             /** Index */
             index?: number | null;
         };
@@ -6550,19 +6640,37 @@ export interface components {
          * @description One suggested edit and what the user decided (C45, C46).
          */
         TocProposalEditOut: {
+            /** Dest */
+            dest?: string | null;
+            /** Group */
+            group?: string | null;
             /** Index */
             index: number;
+            /** Key */
+            key?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Layer */
+            layer?: string | null;
             /** Line */
             line: string;
+            /** Links */
+            links?: string[] | null;
             /** Op */
             op: string;
             /** Reason */
             reason: string;
+            /** Source */
+            source?: string | null;
             /**
              * Status
              * @enum {string}
              */
             status: "pending" | "accepted" | "rejected";
+            /** Text */
+            text?: string | null;
         };
         /**
          * TocProposalOut
@@ -6587,7 +6695,7 @@ export interface components {
              * Source
              * @enum {string}
              */
-            source: "review" | "chat";
+            source: "review" | "chat" | "discover" | "draft";
             /** Summary */
             summary: string;
         };
@@ -6629,6 +6737,21 @@ export interface components {
             why: string;
         };
         /**
+         * TocReportExpansionOut
+         * @description A route found in the evidence that the user's diagram does not show.
+         */
+        TocReportExpansionOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "success" | "failure";
+            /** Label */
+            label: string;
+            /** Sentence */
+            sentence: string;
+        };
+        /**
          * TocReportFindingOut
          * @description A report section that no longer matches the theory (C45).
          */
@@ -6645,6 +6768,11 @@ export interface components {
         TocReportOut: {
             /** Assumptions */
             assumptions: components["schemas"]["TocReportAssumptionOut"][];
+            /**
+             * Expansions
+             * @default []
+             */
+            expansions: components["schemas"]["TocReportExpansionOut"][];
             /** How It Could Fail */
             how_it_could_fail?: string | null;
             /** Method */
@@ -6656,11 +6784,20 @@ export interface components {
             summary: components["schemas"]["TocReportSummaryOut"];
             /** Summary Text */
             summary_text?: string | null;
+            /**
+             * Supporting Activities
+             * @default []
+             */
+            supporting_activities: string[];
             /** Tests */
             tests: components["schemas"]["TocReportTestOut"][];
             /** Title */
             title?: string | null;
             verdict?: components["schemas"]["TocTheoryVerdictOut"] | null;
+            /** Verdict Reason */
+            verdict_reason?: string | null;
+            /** Whole Programme */
+            whole_programme?: string | null;
         };
         /**
          * TocReportPathwayOut
@@ -6718,6 +6855,8 @@ export interface components {
             if_then_because: string;
             /** Population */
             population: string;
+            /** Question */
+            question?: string | null;
             /** Time Horizon */
             time_horizon: string | null;
             /**
@@ -6728,17 +6867,19 @@ export interface components {
         };
         /**
          * TocReportTestOut
-         * @description One row of What to test and measure.
+         * @description One thing to test first.
          */
         TocReportTestOut: {
             /** Indicator */
-            indicator: string;
+            indicator?: string | null;
             /** Link */
             link: string;
             /** Question */
-            question: string;
+            question?: string | null;
+            /** Sentence */
+            sentence?: string | null;
             /** Test And Learn */
-            test_and_learn: string;
+            test_and_learn?: string | null;
         };
         /**
          * TocResultCriteriaOut
@@ -6770,22 +6911,27 @@ export interface components {
         };
         /**
          * TocTheoryVerdictOut
-         * @description Can the theory work? One overall verdict after the check (``toc_verdict_v1``).
+         * @description Can the theory work, and what does the evidence say? (``toc_verdict_v2``).
          */
         TocTheoryVerdictOut: {
             /** Carrying Step */
             carrying_step: string;
+            /**
+             * Evidence
+             * @enum {string}
+             */
+            evidence: "supports" | "mixed" | "too_little" | "against";
             /** Headline */
             headline: string;
             /** Label */
             label: string;
-            /** Reason */
-            reason: string;
             /**
-             * Verdict
+             * Mechanism
              * @enum {string}
              */
-            verdict: "supported" | "plausible_untested" | "doubtful" | "implausible";
+            mechanism: "plausible" | "implausible";
+            /** Reason */
+            reason: string;
         };
         /**
          * TocUndoOut
@@ -6794,6 +6940,40 @@ export interface components {
         TocUndoOut: {
             /** Skipped */
             skipped: string[];
+        };
+        /**
+         * TocUploadIn
+         * @description A user's own theory of change as an image or PDF (increment 5, C8): base64 in JSON.
+         */
+        TocUploadIn: {
+            /**
+             * Content Type
+             * @enum {string}
+             */
+            content_type: "image/png" | "image/jpeg" | "application/pdf";
+            /** Data Base64 */
+            data_base64: string;
+            /** File Name */
+            file_name: string;
+        };
+        /**
+         * TocUploadOut
+         * @description What was read from an uploaded diagram, before the plan uses it.
+         */
+        TocUploadOut: {
+            /** Content Type */
+            content_type: string;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** File Name */
+            file_name: string;
+            /**
+             * Upload Id
+             * Format: uuid
+             */
+            upload_id: string;
         };
         /**
          * TocWeightsOut
@@ -8776,6 +8956,37 @@ export interface operations {
             };
         };
     };
+    start_full_toc_check_api_v1_tasks__task_id__toc_check_full_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     stop_toc_check_api_v1_tasks__task_id__toc_check_stop_post: {
         parameters: {
             query?: never;
@@ -9396,6 +9607,71 @@ export interface operations {
                         [key: string]: string;
                     };
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_toc_theory_api_v1_tasks__task_id__toc_uploads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocUploadIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocUploadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_upload_api_v1_tasks__task_id__toc_uploads__upload_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

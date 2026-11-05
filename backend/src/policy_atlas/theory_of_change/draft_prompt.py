@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
-TOC_DRAFT_PROMPT_VERSION = "toc_draft_v4"
+TOC_DRAFT_PROMPT_VERSION = "toc_draft_v5"
 
 #: Reasoning model: the cap covers reasoning and output tokens.
 TOC_DRAFT_MAX_OUTPUT_TOKENS = 32_000
@@ -102,7 +102,10 @@ class DraftLinkWire(BaseModel):
         )
     )
     if_text: str = Field(
-        description="What happens at the source box, as a clause with no leading 'if'."
+        description=(
+            "What happens at the source box, as a clause with no leading 'if', in "
+            "sentence case: a box's words inside it start in lower case unless a name."
+        )
     )
     for_text: str = Field(description="The people or organisations the step acts on.")
     then_text: str = Field(
@@ -257,7 +260,12 @@ set-up).
   for every element and step they name and set from_user_theory true on
   those. Add only what is missing (conditions, failure pathways, result
   criteria, missing steps) and set from_user_theory false on what you add.
-
+  A theory read from an uploaded diagram says how each connection was read:
+  a connection drawn as an arrow is the user's (keep it, from_user_theory
+  true); for connections the layout only suggests, groups the diagram joins
+  with a bracket, and boxes with no connection, add only the specific
+  connections that hold, as yours (from_user_theory false), never every box
+  to every box in a group.
 ## Style
 
 Plain UK English, short sentences, everyday words. Box text at most 12

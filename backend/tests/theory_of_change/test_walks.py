@@ -311,11 +311,15 @@ def test_start_drafts_then_checks_and_the_thread_stays_open(
     assert "London" not in walks[1].intent
     # No model screen (C27): every document the link searches found is screened in.
     with engine.connect() as conn:
-        statuses = conn.execute(
-            select(source_screening_result.c.status).where(
-                source_screening_result.c.evidence_scope_id == walks[1].evidence_scope_id
+        statuses = (
+            conn.execute(
+                select(source_screening_result.c.status).where(
+                    source_screening_result.c.evidence_scope_id == walks[1].evidence_scope_id
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert statuses and set(statuses) == {"relevant"}
     replies = _replies(engine, task_id)
     assert replies[0] == DRAFT_LANDED_MESSAGE
@@ -385,3 +389,39 @@ def test_a_check_already_following_the_draft_is_not_minted_twice(
     assert run_toc_sequence(engine, task_id=task_id, first_outcome=draft, backends=backends)
     assert run_toc_sequence(engine, task_id=task_id, first_outcome=draft, backends=backends) is None
     assert [w.context["toc_walk"] for w in _walks(engine, task_id)] == ["draft", "check"]
+
+
+def test_a_failed_draft_says_why_and_how_to_try_again(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    from policy_atlas.runtime.runner import RunnerBackends
+    from policy_atlas.theory_of_change.backend import StubTocBackend, stub_draft
+
+    # Every try (the draft's own retry and the runner's) leaves no failure route.
+    broken = stub_draft({})
+    broken = broken.model_copy(
+        update={"pathways": [p for p in broken.pathways if p.kind == "success"]}
+    )
+    task_id, plan_row = seed_toc(engine)
+    cleanup.append(task_id)
+    _start(
+        engine,
+        task_id,
+        plan_row,
+        RunnerBackends(toc=StubTocBackend({"draft": [broken] * 6})),
+    )
+    reply = _replies(engine, task_id)[-1]
+    assert reply.startswith(
+        "I couldn't draft the theory: the draft did not pass its structure check"
+    )
+    assert "there is no failure pathway" in reply
+    assert reply.endswith("Press “Draft the theory” to try again.")
+
+
+def test_a_failure_reason_is_plain_words() -> None:
+    from policy_atlas.api.toc_start import failure_reason
+
+    assert failure_reason("1 validation error for DraftResponse json_invalid") == (
+        "the model's answer could not be read"
+    )
+    assert failure_reason("boom") == "something went wrong on our side"

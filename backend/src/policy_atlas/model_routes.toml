@@ -55,8 +55,10 @@ longlist_judgment = "frontier"
 # Theory of change (task 054, contract § Prompts and model routes): the plan,
 # the draft and the two consolidation calls on the strongest tier; the many
 # judge calls, discovery and the summary on the middle tier.
-task_agent_toc = "frontier"
-toc_draft = "frontier"
+# The planner and the draft run on the middle tier (owner, 2026-11-04): about five
+# times faster than the strongest, with similar drafts in a side-by-side test.
+task_agent_toc = "standard"
+toc_draft = "standard"
 toc_merge = "frontier"
 toc_choose = "frontier"
 toc_discover = "standard"
@@ -71,7 +73,9 @@ toc_report = "frontier"
 # One call reviews the theory's shape after the user's edits (C45).
 toc_review = "frontier"
 # Can the theory work at all? The plan-stage sense check and the overall verdict (red team).
-toc_sense_check = "frontier"
+toc_sense_check = "standard"
+# One vision call reads a user's own diagram (increment 5).
+toc_import = "frontier"
 toc_verdict = "frontier"
 
 # ---------------------------------------------------------------------------
@@ -144,6 +148,27 @@ frontier = "global.openai.gpt-5.6-sol"
 
 [routes.bedrock-local.knobs.reasoning_effort]
 "global.openai.gpt-5.6-terra" = "none"
+"global.openai.gpt-6.1-terra" = "none"
+
+[routes.bedrock-local.steps]
+# Theory of change runs on OpenAI's 6.x models (owner, 2026-11-04): about half
+# the 5.6 price, each tier swapped like for like (Luna, Terra, Sol). All three
+# answered through Bedrock's global routing on 2026-11-04. Every other step
+# keeps this route's 5.6 tiers.
+task_agent_toc = "global.openai.gpt-6.1-terra"
+toc_draft = "global.openai.gpt-6.1-terra"
+toc_merge = "global.openai.gpt-6.1-sol"
+toc_choose = "global.openai.gpt-6.1-sol"
+toc_discover = "global.openai.gpt-6.1-terra"
+toc_judge = "global.openai.gpt-6.1-terra"
+toc_figures = "global.openai.gpt-6-luna"
+toc_pick = "global.openai.gpt-6-luna"
+toc_summarise = "global.openai.gpt-6.1-terra"
+toc_report = "global.openai.gpt-6.1-sol"
+toc_review = "global.openai.gpt-6.1-sol"
+toc_sense_check = "global.openai.gpt-6.1-terra"
+toc_import = "global.openai.gpt-6.1-sol"
+toc_verdict = "global.openai.gpt-6.1-sol"
 
 [routes.bedrock-local.embeddings]
 backend = "cohere"

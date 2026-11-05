@@ -14,8 +14,9 @@ What it deletes
     (boxes, links, pathways, band items, judgements, figures), its walks (runs), intent
     records (scopes), events, document membership rows, plans, Task Agent
     transcripts and conversations. The documents themselves (``source_snapshot``)
-    are shared between tasks and are kept. Uploaded files are not touched yet
-    (they arrive in increment 5).
+    are shared between tasks and are kept. Uploaded files (increment 5) are
+    deleted from the upload store (S3, or the local folder) after the database
+    change commits; a file that cannot be deleted is logged with its key.
 
 How to use it
     Without ``--apply`` it only lists what it would delete and changes nothing
@@ -51,6 +52,8 @@ log = structlog.get_logger()
 #: The theory-of-change tables, child first. They go before the shared order in
 #: ``ops_remove_scoping_tasks._apply``: judgements name documents and walks.
 TOC_TABLES: tuple[str, ...] = (
+    "task_upload",
+    "toc_proposal",
     "toc_figure",
     "toc_item_evidence",
     "toc_pathway_link",
@@ -124,6 +127,12 @@ def run(engine: Engine, apply: bool, task_ids: list[uuid.UUID] | None = None) ->
         if not apply:
             _list(conn, selected)
             return 0
+        keys = list(
+            conn.execute(
+                text("SELECT object_key FROM task_upload WHERE task_id = ANY(:ids)"),
+                {"ids": selected},
+            ).scalars()
+        )
         for table in TOC_TABLES:
             result = conn.execute(
                 text(f"DELETE FROM {table} WHERE task_id = ANY(:ids)"),  # noqa: S608
@@ -131,7 +140,23 @@ def run(engine: Engine, apply: bool, task_ids: list[uuid.UUID] | None = None) ->
             )
             log.info("ops_remove_toc_tasks.deleted", table=table, count=result.rowcount)
         scoping._apply(conn, selected, kind="theory_of_change")
+    _delete_files(keys)
     return 0
+
+
+def _delete_files(keys: list[str]) -> None:
+    """Remove the deleted tasks' uploaded files, once their rows are gone."""
+    if not keys:
+        return
+    from policy_atlas.core.uploads import store_from_env
+
+    store = store_from_env()
+    for key in keys:
+        try:
+            store.delete(key)
+        except Exception:  # noqa: BLE001 - one file must not stop the rest
+            log.exception("ops_remove_toc_tasks.file_not_deleted", key=key)
+    log.info("ops_remove_toc_tasks.files_deleted", count=len(keys))
 
 
 def main() -> int:

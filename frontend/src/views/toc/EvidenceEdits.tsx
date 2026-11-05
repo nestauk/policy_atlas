@@ -152,7 +152,6 @@ export function AddStudy({ link, editor }: { link: TocLink; editor: Editor }) {
           Add
         </Button>
       </div>
-      <p className="mt-1 text-meta text-grey">Policy Atlas fetches it, judges it for this connection and adds it, marked as added by you.</p>
     </form>
   );
 }
@@ -250,6 +249,7 @@ export function FindMore({ links, graph, editor }: { links: TocLink[]; graph: To
       <Button
         size="sm"
         variant="secondary"
+        className="border border-navy"
         disabled={editor.busy || ready.length === 0 || isQueued(graph, ids)}
         onClick={() => editor.run({ kind: "check", body: { link_ids: ids, mode: "find_more" } })}
       >
@@ -258,7 +258,7 @@ export function FindMore({ links, graph, editor }: { links: TocLink[]; graph: To
       <p className="mt-1 text-meta text-grey">
         {ready.length === 0
           ? "Check this connection first: its evidence is from an earlier wording or not found yet."
-          : "Searches again, leaving out what it has already judged. New documents wait for you to accept them."}
+          : "Performs a more extensive search of evidence for this connection."}
       </p>
     </div>
   );

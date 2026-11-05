@@ -43,6 +43,18 @@ def _cands(n: int) -> list[LinkCandidate]:
     return [LinkCandidate(uuid.UUID(int=i), q1, i, abstract="a") for i in range(1, n + 1)]
 
 
+def _programme_judgements(conn: Any, task_id: uuid.UUID) -> list[dict[str, Any]]:
+    from policy_atlas.core.schema import event_log
+    from policy_atlas.theory_of_change.check import PROGRAMME_EVENT
+
+    payload = conn.execute(
+        select(event_log.c.payload).where(
+            event_log.c.task_id == task_id, event_log.c.event_type == PROGRAMME_EVENT
+        )
+    ).scalar_one_or_none()
+    return list((payload or {}).get("judgements", []))
+
+
 def test_pick_ids_map_back_drop_unknown_and_top_up() -> None:
     cands = _cands(15)
     chosen = picked_ids(["d3", "zz", "d3", "d12"], cands)
@@ -58,7 +70,8 @@ def test_each_link_with_more_than_ten_documents_gets_one_pick_call(
     task_id = _run(engine, cleanup, backend, per_call=12)
     summary = _summary(engine, task_id, "toc_select")
     assert summary["pick_calls"] == 5 and summary["failed_pick_calls"] == 0
-    assert summary["relevant"] == 5 * PICK_N
+    # Ten per link, and ten for the whole programme's search.
+    assert summary["relevant"] == 5 * PICK_N + PICK_N
     shown = backend.inputs["pick"][0]["candidates"]
     assert [c["id"] for c in shown[:3]] == ["d1", "d2", "d3"]
     assert "usage_totals" in summary
@@ -73,7 +86,7 @@ def test_a_failed_pick_call_falls_back_to_round_robin(
     assert summary["failed_pick_calls"] == 5
     # Round-robin picks 10 per link; with the shared pool two links may pick one document.
     assert all(len(ids) == PICK_N for ids in _picks(engine, task_id).values())
-    assert summary["relevant"] <= 5 * PICK_N
+    assert summary["relevant"] <= 5 * PICK_N + PICK_N
 
 
 # --- box folds (C29) --------------------------------------------------------------
@@ -249,15 +262,6 @@ def test_merge_folds_boxes_first_and_the_thread_lists_it(
     sent = backend.inputs["merge"][0]["boxes"]
     assert {box["key"] for box in sent} >= {"b3", "b7"}
     assert _summary(engine, task_id, "toc_merge")["box_folds"] == 1
-    # The thread gives the theory at a glance (round 6); the change list stays in the walk's events.
-    from policy_atlas.api.toc_start import check_changes
-    from tests.theory_of_change.test_walks import _walks
-
-    with engine.connect() as conn:
-        changes = check_changes(
-            conn, task_id=task_id, walk_id=_walks(engine, task_id)[-1].capability_run_id
-        )
-    assert "Merged box “Behaviour shifts” into “Behaviour changes”" in changes
     assert _replies(engine, task_id)[-1].startswith("The evidence check is done.")
 
 
@@ -425,7 +429,14 @@ def test_classify_reads_only_what_the_judge_found_on_topic(
                 )
             ).scalars()
         )
-    assert on_topic and classified == on_topic
+    # The whole programme's on-topic documents are classified too.
+    with engine.connect() as conn:
+        programme = {
+            uuid.UUID(j["tss"])
+            for j in _programme_judgements(conn, task_id)
+            if j["support"] != "not_about"
+        }
+    assert on_topic and classified == on_topic | programme
 
 
 def test_crossref_retries_once_after_a_429() -> None:

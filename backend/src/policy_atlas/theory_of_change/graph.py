@@ -17,9 +17,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Literal
 
-Layer = Literal[
-    "input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"
-]
+Layer = Literal["input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"]
 LinkState = Literal["unchecked", "checking", "checked", "pending", "kept", "no_change"]
 
 #: The layers a step may lead to from each layer (C34). Any of these may also
@@ -104,8 +102,12 @@ def link_problem(source_layer: str, target_layer: str) -> str | None:
     )
 
 
-def pathway_problem(graph: Graph, pathway: Pathway) -> str | None:
-    """Return why a pathway is not a connected route, or ``None``."""
+def pathway_problem(graph: Graph, pathway: Pathway, *, as_drawn: bool = False) -> str | None:
+    """Return why a pathway is not a connected route, or ``None``.
+
+    ``as_drawn``: the user's own diagram, kept as given; its routes need only be
+    connected, not start at an input or end at an impact or failure outcome.
+    """
     if not pathway.links:
         return f"pathway {pathway.key} has no steps"
     missing = [key for key in pathway.links if key not in graph.links]
@@ -115,6 +117,8 @@ def pathway_problem(graph: Graph, pathway: Pathway) -> str | None:
     for before, after in zip(steps, steps[1:], strict=False):
         if before.target != after.source:
             return f"pathway {pathway.key} is broken between {before.key} and {after.key}"
+    if as_drawn:
+        return None
     first = graph.boxes.get(steps[0].source)
     last = graph.boxes.get(steps[-1].target)
     if first is None or first.layer != "input":
@@ -125,7 +129,7 @@ def pathway_problem(graph: Graph, pathway: Pathway) -> str | None:
     return None
 
 
-def check_graph(graph: Graph) -> list[str]:
+def check_graph(graph: Graph, *, as_drawn: bool = False) -> list[str]:
     """Run the E1 structure checks.
 
     Checks: every link joins known boxes with layers in order; no link has
@@ -134,8 +138,15 @@ def check_graph(graph: Graph) -> list[str]:
     connected route from an input to an impact (success) or a failure outcome
     (failure); at least one kept failure pathway.
 
+    A diagram the user uploaded and kept as drawn (owner, 2026-11-04) is the
+    user's theory as given: its steps may skip layers, a box may stand alone,
+    its routes may stop short of the impact, and it needs no failure pathway.
+    Every step must still join two known, different boxes, and every route
+    must be connected.
+
     Args:
         graph: The theory.
+        as_drawn: Check an as-drawn diagram (the lighter rules above).
 
     Returns:
         Plain-language problems; empty when the graph passes.
@@ -145,9 +156,7 @@ def check_graph(graph: Graph) -> list[str]:
     for link in graph.links.values():
         conditions = [c for c in link.conditions if c.strip()]
         if len(conditions) > MAX_CONDITIONS_PER_LINK:
-            problems.append(
-                f"step {link.key} has more than {MAX_CONDITIONS_PER_LINK} conditions"
-            )
+            problems.append(f"step {link.key} has more than {MAX_CONDITIONS_PER_LINK} conditions")
         for condition in conditions:
             owner = first_seen.setdefault(_norm(condition), link.key)
             if owner != link.key:
@@ -158,17 +167,18 @@ def check_graph(graph: Graph) -> list[str]:
             continue
         if link.source == link.target:
             problems.append(f"step {link.key} leads to the box it starts from")
-        reason = link_problem(source.layer, target.layer)
+        reason = None if as_drawn else link_problem(source.layer, target.layer)
         if reason:
             problems.append(f"step {link.key}: {reason}")
     linked = {key for link in graph.links.values() for key in (link.source, link.target)}
-    problems.extend(f"box {key} is on no step" for key in graph.boxes if key not in linked)
+    if not as_drawn:
+        problems.extend(f"box {key} is on no step" for key in graph.boxes if key not in linked)
     kept = [p for p in graph.pathways if p.status == "kept"]
     for pathway in kept:
-        reason = pathway_problem(graph, pathway)
+        reason = pathway_problem(graph, pathway, as_drawn=as_drawn)
         if reason:
             problems.append(reason)
-    if not any(p.kind == "failure" for p in kept):
+    if not as_drawn and not any(p.kind == "failure" for p in kept):
         problems.append("there is no failure pathway")
     if not any(p.kind == "success" for p in kept):
         problems.append("there is no success pathway")

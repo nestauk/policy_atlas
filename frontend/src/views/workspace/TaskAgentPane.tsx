@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { blobUrl } from "../../lib/blobUrl";
+import { Link, useLocation, useNavigate } from "react-router";
 
-import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns, useTask, useToc } from "../../api/queries";
+import { UPLOAD_MESSAGE, uploadMessage, useTocUpload, useTocUploading } from "../../api/mutations";
+import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns, useTask, useToc, useTocUploadFile } from "../../api/queries";
 import { useComposerSeed } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { COPY, TASK } from "../../lib/vocabulary";
@@ -194,6 +196,7 @@ export function taskAgentComposerPlaceholder(
   isOwner = true,
   atScopingGate = false,
   hasLonglist = false,
+  isToc = false,
 ): string {
   if (!isOwner) {
     return `Steering is limited to the ${TASK.lower} owner.`;
@@ -221,7 +224,8 @@ export function taskAgentComposerPlaceholder(
   if (planReady) {
     return "Suggest changes here, or edit directly in the plan.";
   }
-  return "Describe the policy question you need evidence for.";
+  // A theory of change asks about the change, not a question for evidence (task 054).
+  return isToc ? "Describe the change you want, or ask about your theory." : "Describe the policy question you need evidence for.";
 }
 
 /**
@@ -239,6 +243,7 @@ export function Composer({
   sendDisabled,
   id = "task_agent-message",
   label = COPY.messageTaskAgent,
+  onAttach,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -255,6 +260,8 @@ export function Composer({
    *  whichever came first in the document. */
   id?: string;
   label?: string;
+  /** A theory of change before its draft (task 054, increment 5): attach the user's own diagram. */
+  onAttach?: (file: File) => void;
 }) {
   return (
     <div>
@@ -282,6 +289,31 @@ export function Composer({
           disabled={disabled}
           className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-lead [field-sizing:content] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
         />
+        {onAttach !== undefined && (
+          <label
+            title="Upload your own theory of change (PNG, JPEG or PDF)"
+            className={cn(
+              "inline-flex h-10 w-10 shrink-0 items-center justify-center border border-line-2 text-navy",
+              disabled ? "cursor-default text-line-2" : "cursor-pointer hover:border-navy focus-within:outline-2 focus-within:outline-blue",
+            )}
+          >
+            <span className="sr-only">Upload your own theory of change</span>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,application/pdf"
+              disabled={disabled}
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file !== undefined) onAttach(file);
+              }}
+            />
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </svg>
+          </label>
+        )}
         <Button
           type="submit"
           aria-label="Send"
@@ -308,11 +340,38 @@ export function Composer({
   );
 }
 
+export { UPLOAD_MESSAGE };
+
+/** A theory of change the user brought from the new-task page, uploaded once the task opens. */
+export interface TocUploadHandOff {
+  tocFile: File;
+  note: string;
+}
+
+/** The uploaded diagram, for the bubble that sent it: an object URL and whether it is a PDF. */
+const UploadFile = createContext<{ url: string; pdf: boolean; name: string } | null>(null);
+
+function UploadThumb() {
+  const file = useContext(UploadFile);
+  if (file === null) return null;
+  return file.pdf ? (
+    <a href={file.url} target="_blank" rel="noreferrer" className="mb-2 inline-flex items-center gap-2 border border-line bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy">
+      <span aria-hidden="true">📄</span>
+      {file.name}
+    </a>
+  ) : (
+    <a href={file.url} target="_blank" rel="noreferrer" title="Open full size" className="mb-2 block w-fit">
+      <img src={file.url} alt="Your theory of change, as uploaded" className="max-h-40 max-w-[16rem] border border-line bg-paper object-contain" />
+    </a>
+  );
+}
+
 function UserBubble({ text }: { text: string }) {
   // A code-authored Task Agent line (task 054, J3) has no user message.
   if (text === "") return null;
   return (
     <div className="anim-rise ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5">
+      {text.startsWith(UPLOAD_MESSAGE) && <UploadThumb />}
       <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>
     </div>
   );
@@ -685,11 +744,24 @@ export function TaskAgentPane({
   const planReady =
     planQuery.data?.status === "approved" &&
     (planQuery.data.plan?.ready === true || planQuery.data.scoping?.ready === true);
-  const isToc = planQuery.data?.capability === "theory_of_change";
+  // A new task has no plan until its first turn: the task itself says what kind it is.
+  const isToc = (planQuery.data?.capability ?? taskQuery.data?.capability) === "theory_of_change";
   // A theory-of-change walk shows its steps as they happen (rounds 5, 6). Whether one runs
   // comes from the theory itself, not the live stream, so the chat sidebar on any tab
   // (which has no stream) shows the same as the Agent tab.
   const tocGraph = useToc(isToc ? taskId : "");
+  const upload = useTocUpload(taskId);
+  // An upload still running for this task, even one started before a tab switch.
+  const uploading = useTocUploading(taskId);
+  const picked = uploading?.file ?? null;
+  const pickedNote = uploading?.note ?? "";
+  const stored = useTocUploadFile(taskId, picked === null && isToc ? planQuery.data?.toc?.upload_id : null);
+  const shown = picked ?? stored.data ?? null;
+  const shownUrl = shown !== null ? blobUrl(shown) : null;
+  const uploadFile = useMemo(
+    () => (shownUrl === null || shown === null ? null : { url: shownUrl, pdf: shown.type === "application/pdf", name: picked?.name ?? "Your original" }),
+    [shownUrl, shown, picked],
+  );
   const tocLive = isToc && (tocGraph.data?.check_status === "drafting" || tocGraph.data?.check_status === "checking");
   const tocCodes = useMemo(
     () =>
@@ -788,7 +860,13 @@ export function TaskAgentPane({
   const firstRunAt = isToc ? thread.findIndex((item) => item.type === "run_block") : -1;
   const planCardAt = firstRunAt > 0 ? firstRunAt : lastTurnAt === -1 ? thread.length : lastTurnAt + 1;
   // A theory of change posts its own messages after its walks, so any walk at all means it started.
-  const planStarted = (isToc ? thread : thread.slice(planCardAt)).some((item) => item.type === "run_block");
+  // A theory of change has started once its theory exists or a walk runs: after a failed
+  // draft the plan card offers "Draft the theory" again (owner, 2026-11-04).
+  const planStarted = isToc
+    ? tocGraph.data === undefined
+      ? thread.some((item) => item.type === "run_block")
+      : (tocGraph.data?.boxes.length ?? 0) > 0 || tocLive
+    : thread.slice(planCardAt).some((item) => item.type === "run_block");
   // The first walk drafts the theory; every later one checks it.
   const firstTocRunId = isToc ? (thread.find((item) => item.type === "run_block")?.run.capability_run_id ?? null) : null;
   // The walk running now: the newest one still open.
@@ -875,12 +953,29 @@ export function TaskAgentPane({
       .catch(() => setSuggestions([]));
   };
 
+  // An uploaded diagram: its bubble and "Reading…" show in the chat while it is read, then
+  // the message it sends becomes the plan's starting point (task 054, increment 5).
+  // The upload sends its own message once read, so it completes even if this chat closes.
+  const attach = (file: File, note = "") => upload.mutate({ file, note });
+  // A file picked on the new-task page arrives in the route state; upload it once.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const handOff = (location.state as Partial<TocUploadHandOff> | null)?.tocFile instanceof File ? (location.state as TocUploadHandOff) : null;
+  const handedOff = useRef(false);
+  useEffect(() => {
+    if (handOff === null || handedOff.current || !isToc || transcript.data === undefined) return;
+    handedOff.current = true;
+    void navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+    attach(handOff.tocFile, handOff.note);
+  });
+
   // The landing (no conversation yet) is a bare centred prompt — no pane
   // heading, no helper copy (Claude design concept; owner, 2026-08-05).
   const landing =
-    transcript.data !== undefined && thread.length === 0 && transcript.optimisticTurns.length === 0;
+    transcript.data !== undefined && thread.length === 0 && transcript.optimisticTurns.length === 0 && picked === null && handOff === null;
 
   return (
+    <UploadFile.Provider value={uploadFile}>
     <section aria-label="Task Agent conversation" className="flex h-full min-h-0 flex-col">
       {/* The scroll region spans the whole pane so its scrollbar sits at the
           pane's edge like every other tab's; the reading column is inside. */}
@@ -925,7 +1020,7 @@ export function TaskAgentPane({
           ))}
         {landing && (
           <h2 className="text-center font-display text-title font-bold text-navy">
-            What do you need evidence on?
+            {isToc ? "What change do you want to explain?" : "What do you need evidence on?"}
           </h2>
         )}
 
@@ -964,7 +1059,9 @@ export function TaskAgentPane({
                 walkId={item.run.capability_run_id}
                 decisions={item.decisions}
                 live={tocLive && item.run.capability_run_id === tocLiveRunId}
-                kind={item.run.capability_run_id === firstTocRunId ? "draft" : "check"}
+                // Its own steps say what it was; the order is a guess before they load.
+                kind={item.decisions.length > 0 ? undefined : item.run.capability_run_id === firstTocRunId ? "draft" : "check"}
+                status={item.run.status}
               />
             ) : item.run.capability_run_id === liveRunId && liveCard !== null ? (
               <div key="live-run-block" className="space-y-6">
@@ -1034,6 +1131,21 @@ export function TaskAgentPane({
           </div>
         ))}
 
+        {picked !== null && (
+          <>
+            <UserBubble text={uploadMessage(picked.name, pickedNote)} />
+            <div role="status" className="anim-breathe mr-8 flex items-center gap-2 px-3.5 text-body text-grey">
+              <span aria-hidden="true" className="h-2 w-2 bg-blue" />
+              Reading your diagram… this takes about half a minute.
+            </div>
+          </>
+        )}
+        {upload.isError && (
+          <p role="alert" className="mr-8 text-lead text-[var(--color-verdict-against-text)]">
+            {(upload.error as Error | null)?.message ?? "The file couldn't be read. Try again."}
+          </p>
+        )}
+
         {transcript.isSubmitting && (
           <div role="status" className="anim-breathe mr-8 flex items-center gap-2 px-3.5 text-body text-grey">
             <span aria-hidden="true" className="h-2 w-2 bg-blue" />
@@ -1102,13 +1214,20 @@ export function TaskAgentPane({
           value={message}
           onChange={setMessage}
           onSubmit={() => send({ message, clientTurnId: crypto.randomUUID() })}
-          placeholder={taskAgentComposerPlaceholder(runStatus, planReady, isOwner, atScopingGate, hasLonglist(taskQuery.data))}
-          disabled={composerFenced || !isOwner}
-          sendDisabled={composerDisabled}
+          placeholder={taskAgentComposerPlaceholder(runStatus, planReady || planQuery.data?.toc?.ready === true, isOwner, atScopingGate, hasLonglist(taskQuery.data), isToc)}
+          disabled={composerFenced || !isOwner || upload.isPending}
+          sendDisabled={composerDisabled || upload.isPending}
+          onAttach={
+            // Before the theory is drafted: the user's own diagram becomes the plan.
+            isToc && isOwner && (tocGraph.data?.boxes.length ?? 0) === 0 && stream.run === null
+              ? (file) => attach(file)
+              : undefined
+          }
         />
         </div>
       </div>
       </div>
     </section>
+    </UploadFile.Provider>
   );
 }

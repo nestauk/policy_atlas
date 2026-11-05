@@ -8,6 +8,7 @@ import { BoxEditForm, LinkEditForm, NeedsEvidence } from "./EditForms";
 import { AddStudy, DocumentActions, EditedEvidenceBlock, FindMore, NewEvidenceBlock, RemovedDocuments } from "./EvidenceEdits";
 import { CriticalIcon } from "./ReadingGuide";
 import { CRITICAL_DEFINITION, LAYER_LABEL, ORIGIN_LABEL } from "./tocModel";
+import type { PanelWidth } from "../workspace/usePanelWidth";
 import type { TocBox, TocDocument, TocEvidence, TocGraph, TocLink } from "./types";
 
 export type Selection = { kind: "box" | "link"; id: string };
@@ -365,6 +366,7 @@ export function DetailPanel({
   selection,
   onClose,
   editor = null,
+  panel,
 }: {
   taskId: string;
   graph: TocGraph;
@@ -373,17 +375,31 @@ export function DetailPanel({
   onClose: () => void;
   /** Editing controls for an editor (C41); null keeps the panel read-only. */
   editor?: Editor | null;
+  /** The width the user dragged it to, kept by the page while it is open. */
+  panel: PanelWidth;
 }) {
   const box = selection.kind === "box" ? graph.boxes.find((b) => b.box_id === selection.id) : undefined;
   const link = selection.kind === "link" ? graph.links.find((l) => l.link_id === selection.id) : undefined;
   if (box === undefined && link === undefined) return null;
   return (
-    <aside aria-label="Details" className="w-[380px] shrink-0 overflow-y-auto lg:h-full border-l border-line bg-paper px-5 py-4 max-lg:w-full max-lg:border-l-0 max-lg:border-t">
-      <button type="button" onClick={onClose} aria-label="Close" className="float-right cursor-pointer text-lead leading-none text-grey hover:text-navy">
-        ×
-      </button>
+    <SidePanel label="Details" panel={panel} onClose={onClose}>
       {box !== undefined && <BoxDetail key={box.box_id} taskId={taskId} box={box} graph={graph} evidence={evidence} editor={editor} />}
       {link !== undefined && <LinkDetail key={link.link_id} taskId={taskId} link={link} graph={graph} evidence={evidence} editor={editor} />}
-    </aside>
+    </SidePanel>
+  );
+}
+
+/** The canvas's right-hand panel: resizable from its left edge, with a close button. */
+export function SidePanel({ label, panel, onClose, children }: { label: string; panel: PanelWidth; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div style={{ "--panel-w": panel.width } as React.CSSProperties} className="relative w-[var(--panel-w)] shrink-0 lg:h-full max-lg:w-full">
+      <div {...panel.separatorProps} className="absolute inset-y-0 -left-1 z-10 hidden w-2 cursor-col-resize hover:bg-blue-tint focus-visible:bg-blue-tint focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue lg:block" />
+      <aside aria-label={label} className="h-full overflow-y-auto border-l border-line bg-paper px-5 py-4 max-lg:border-l-0 max-lg:border-t">
+        <button type="button" onClick={onClose} aria-label="Close" className="float-right cursor-pointer text-lead leading-none text-grey hover:text-navy">
+          ×
+        </button>
+        {children}
+      </aside>
+    </div>
   );
 }

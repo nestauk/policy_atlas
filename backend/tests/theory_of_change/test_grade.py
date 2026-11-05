@@ -114,10 +114,10 @@ def test_the_lowest_verdict_is_the_theory_confidence() -> None:
 def test_the_rule_text_names_every_verdict() -> None:
     labels = [label for label, _ in rule_text()]
     assert labels[:6] == [
-        "Confident",
+        "Supported",
         "Leaning supports",
         "Mixed",
         "Leaning against",
-        "Not confident: evidence against",
+        "Evidence against",
         "Not enough evidence",
     ]

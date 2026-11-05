@@ -127,7 +127,7 @@ from policy_atlas.runtime.task_agent_scoping import (
     latest_approved_scoping_plan,
 )
 from policy_atlas.runtime.task_plan import TaskPlan, _enabled_components
-from policy_atlas.runtime.toc_plan import TOC_WALK_CHECK
+from policy_atlas.runtime.toc_plan import DEFAULT_PUBLISHED_AFTER, TOC_WALK_CHECK
 
 log = structlog.get_logger()
 
@@ -1640,8 +1640,17 @@ def _patch_toc_plan(conn: Connection, task_id: uuid.UUID, patch: TocPlanPatch) -
     if row is None:
         raise HTTPException(status_code=422, detail="plan is not ready to edit")
     edits = {key: (value or None) for key, value in patch.model_dump(exclude_unset=True).items()}
+    # The years live in the plan's evidence restriction, not in the Task Agent's
+    # draft: the model never sets them, so they stay out of its state below.
+    years = {key: edits.pop(key) for key in ("published_after", "published_before") if key in edits}
+    payload = {**row["payload"], **edits}
+    if years:
+        restriction = payload.get("evidence_restriction")
+        if restriction is None:
+            restriction = {"published_after": DEFAULT_PUBLISHED_AFTER}
+        payload["evidence_restriction"] = {**restriction, **years}
     try:
-        plan = validate_plan(THEORY_OF_CHANGE, {**row["payload"], **edits})
+        plan = validate_plan(THEORY_OF_CHANGE, payload)
     except (ValidationError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     latest = conn.execute(

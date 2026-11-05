@@ -30,12 +30,7 @@ export function LineSample({ verdict }: { verdict: Verdict }) {
   return (
     <svg width="34" height="8" aria-hidden="true">
       {verdict === "confident" && line(VERDICT_VAR.confident, 3)}
-      {verdict === "not_sure_mixed" && (
-        <>
-          {line(VERDICT_VAR.not_sure_mixed, 5)}
-          {line(VERDICT_VAR.confident, 2, "6 6")}
-        </>
-      )}
+      {verdict === "not_sure_mixed" && line(VERDICT_VAR.not_sure_mixed, 3)}
       {verdict === "not_sure_insufficient" && line(VERDICT_VAR.not_sure_insufficient, 3, "6 5")}
       {verdict === "not_confident" && line(VERDICT_VAR.not_confident, 3, "2 5")}
       {verdict === "leaning_supports" && line(VERDICT_VAR.leaning_supports, 3, "12 5")}
@@ -63,7 +58,7 @@ export function VerdictLegend() {
 }
 
 /** "How to read this": opens above the canvas. */
-export function ReadingGuide({ graph }: { graph: Pick<TocGraph, "grade_rules" | "context" | "supporting_activities"> }) {
+export function ReadingGuide({ graph }: { graph: Pick<TocGraph, "grade_rules"> }) {
   return (
     <section aria-label="How to read this" className="mb-3 border border-line bg-paper-2 px-5 py-4 text-meta">
       <h3 className="text-body font-bold text-navy">How to read this</h3>
@@ -85,18 +80,6 @@ export function ReadingGuide({ graph }: { graph: Pick<TocGraph, "grade_rules" | 
           </li>
         ))}
       </ul>
-      {graph.context.length > 0 && (
-        <p className="mt-2 max-w-[64em]">
-          <span className="font-semibold">Context. </span>
-          {graph.context.map(scrub).join(" ")}
-        </p>
-      )}
-      {graph.supporting_activities.length > 0 && (
-        <p className="mt-2 max-w-[64em]">
-          <span className="font-semibold">Supporting activities. </span>
-          {graph.supporting_activities.map(scrub).join(" · ")}
-        </p>
-      )}
     </section>
   );
 }

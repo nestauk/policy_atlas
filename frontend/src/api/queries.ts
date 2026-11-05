@@ -167,7 +167,7 @@ export function useMe() {
  *  keeps showing "Analysing"/"Paused" after the run has actually moved on.
  *  `refetchIntervalInBackground` defaults to `false`, so this only polls
  *  while the tab is visible. */
-export function useTasks(query?: TasksQuery, options?: { enabled?: boolean }) {
+export function useTasks(query?: TasksQuery, options?: { enabled?: boolean; background?: boolean }) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.tasks(query),
@@ -183,6 +183,8 @@ export function useTasks(query?: TasksQuery, options?: { enabled?: boolean }) {
       const hasActiveRun = activeQuery.state.data?.data.some(isRunActive);
       return hasActiveRun ? 15_000 : false;
     },
+    // The finish alerts keep polling while the tab is in the background.
+    refetchIntervalInBackground: options?.background === true,
   });
 }
 
@@ -736,6 +738,25 @@ export function useTocEvidence(taskId: string) {
       const status = queryClient.getQueryData<TocGraph | null>(queryKeys.toc(taskId))?.check_status;
       return status === "drafting" || status === "checking" ? 5_000 : false;
     },
+  });
+}
+
+/** `GET .../toc/uploads/{upload_id}` — the user's original diagram as a file
+ *  (task 054, increment 5): fetched with the user's login, never public. */
+export function useTocUploadFile(taskId: string, uploadId: string | null | undefined) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: [...queryKeys.toc(taskId), "upload", uploadId],
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/toc/uploads/{upload_id}", {
+        params: { path: { task_id: taskId, upload_id: uploadId as string } },
+        parseAs: "blob",
+      });
+      if (error) throw error;
+      return data as unknown as Blob;
+    },
+    enabled: Boolean(taskId) && Boolean(uploadId),
+    staleTime: Infinity,
   });
 }
 

@@ -11,13 +11,16 @@ unreadable one keeps the generic ``not_found``.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, Any, Literal, cast
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine, Row
 
@@ -60,7 +63,10 @@ from policy_atlas.api.contract.toc import (
     TocResultCriteriaOut,
     TocRevisionOut,
     TocStudyIn,
+    TocTheoryVerdictOut,
     TocUndoOut,
+    TocUploadIn,
+    TocUploadOut,
     TocWeightsOut,
 )
 from policy_atlas.api.deps import (
@@ -71,6 +77,7 @@ from policy_atlas.api.deps import (
     get_optional_user,
     get_runner_backends,
     get_settings,
+    get_upload_store,
 )
 from policy_atlas.api.readmodels.repository import (
     _authorships,
@@ -82,7 +89,7 @@ from policy_atlas.api.routers._access import accessible_task, readable_or_public
 from policy_atlas.api.routers.runs import start_toc_check
 from policy_atlas.api.settings import Settings
 from policy_atlas.api.toc_start import clear_queue, queued_link_ids
-from policy_atlas.core import events, tracing
+from policy_atlas.core import events, tracing, uploads
 from policy_atlas.core.schema import (
     capability_run,
     event_log,
@@ -97,6 +104,7 @@ from policy_atlas.core.schema import (
     toc_link,
     toc_pathway_link,
 )
+from policy_atlas.core.uploads import UploadStore
 from policy_atlas.runtime.capability_registry import THEORY_OF_CHANGE
 from policy_atlas.runtime.option_search import TOC_ITEM_SEARCHES_STAGE
 from policy_atlas.runtime.runner import RunnerBackends
@@ -104,11 +112,12 @@ from policy_atlas.runtime.toc_plan import (
     TOC_CHECK_MODE_KEY,
     TOC_LINKS_KEY,
     TOC_PURPOSE,
+    TOC_REVIEW_FIRST_KEY,
     TOC_STOP_EVENT,
     TOC_WALK_CHECK,
     TOC_WALK_KEY,
 )
-from policy_atlas.theory_of_change import edits, proposals, store
+from policy_atlas.theory_of_change import edits, importing, proposals, store
 from policy_atlas.theory_of_change.backend import StubTocBackend
 from policy_atlas.theory_of_change.check import (
     Document,
@@ -125,11 +134,12 @@ from policy_atlas.theory_of_change.edits import EditRefused
 from policy_atlas.theory_of_change.evidence.grade import lowest, quality, rule_text, weight
 from policy_atlas.theory_of_change.graph import assumption_type, item_hash, link_state
 from policy_atlas.theory_of_change.review import edits_since_review, run_review
+from policy_atlas.theory_of_change.store import has_graph
 
 router = APIRouter(prefix="/api/v1/tasks/{task_id}/toc", tags=["theory-of-change"])
 log = structlog.get_logger()
 
-CheckStatus = Literal["none", "drafting", "checking", "checked", "stopped", "failed"]
+CheckStatus = Literal["none", "drafting", "drafted", "checking", "checked", "stopped", "failed"]
 
 
 def _readable_toc(conn: Connection, task_id: uuid.UUID, user: AuthenticatedUser | None) -> None:
@@ -168,8 +178,11 @@ def check_status(walk: Row[Any] | None) -> CheckStatus:
     if walk.status in ("running", "paused"):
         return "checking" if kind == TOC_WALK_CHECK else "drafting"
     if walk.status in ("succeeded", "degraded"):
-        # A draft that landed is followed at once by its check (S4).
-        return "checked" if kind == TOC_WALK_CHECK else "checking"
+        if kind == TOC_WALK_CHECK:
+            return "checked"
+        # A draft that landed is followed at once by its check (S4), unless it
+        # is an uploaded theory waiting for the user's review (increment 5).
+        return "drafted" if (walk.context or {}).get(TOC_REVIEW_FIRST_KEY) else "checking"
     if walk.status == "aborted" and kind == TOC_WALK_CHECK:
         return "stopped"  # the user's Stop (C48)
     return "failed"
@@ -187,7 +200,16 @@ def _report(conn: Connection, task_id: uuid.UUID) -> TocReportOut | None:
     ).scalar_one_or_none()
     if not isinstance(payload, dict) or not isinstance(payload.get("report"), dict):
         return None
-    return TocReportOut.model_validate(payload["report"])
+    return report_out(payload["report"])
+
+
+def report_out(report: dict[str, Any]) -> TocReportOut:
+    """The stored report; a verdict from before ``toc_verdict_v2`` is left out, not a 500."""
+    try:
+        TocTheoryVerdictOut.model_validate(report.get("verdict"))
+    except ValidationError:
+        report = {**report, "verdict": None}
+    return TocReportOut.model_validate(report)
 
 
 def _links_left_out(conn: Connection, task_id: uuid.UUID) -> int:
@@ -1095,6 +1117,117 @@ def decide_toc_pending(
     )
 
 
+@router.post("/uploads", response_model=TocUploadOut, status_code=201)
+def upload_toc_theory(
+    task_id: uuid.UUID,
+    body: TocUploadIn,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    engine: Annotated[Engine, Depends(get_engine)],
+    backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+    upload_store: Annotated[UploadStore, Depends(get_upload_store)],
+) -> TocUploadOut:
+    """Store a user's own theory diagram and read it for the plan (increment 5, C8).
+
+    The file is checked and stored first; the slow vision call runs outside any
+    transaction; the transcription is stored for the Task Agent's next plan.
+    Only before the draft: once the theory is on the canvas the plan is fixed.
+    """
+    with engine.begin() as conn:
+        _editable_toc(conn, task_id, user)
+        if has_graph(conn, task_id):
+            raise ApiConflict("toc_plan_fixed", "the theory is already drafted")
+    try:
+        data = base64.b64decode(body.data_base64, validate=True)
+    except binascii.Error as exc:
+        raise ApiUnprocessable("upload_type", "The file could not be read.") from exc
+    with engine.begin() as conn:
+        try:
+            saved = uploads.save(
+                conn,
+                upload_store,
+                task_id=task_id,
+                purpose="toc_theory",
+                file_name=body.file_name,
+                content_type=body.content_type,
+                data=data,
+                user_id=user.user_id,
+            )
+        except uploads.UploadRefused as exc:
+            raise ApiUnprocessable(exc.code, str(exc)) from exc
+    backend = backends.toc if backends.toc is not None else StubTocBackend()
+    try:
+        with tracing.trace_scope(user_id=user.user_id):
+            response = importing.transcribe(data, body.content_type, backend)
+    except importing.NotATheory as exc:
+        raise ApiUnprocessable("upload_not_theory", str(exc)) from exc
+    with engine.begin() as conn:
+        stored = importing.store_import(
+            conn,
+            task_id=task_id,
+            upload_id=saved.upload_id,
+            file_name=saved.file_name,
+            response=response,
+        )
+    return TocUploadOut(
+        upload_id=saved.upload_id,
+        file_name=saved.file_name,
+        content_type=saved.content_type,
+        counts=stored["counts"],
+    )
+
+
+@router.get("/uploads/{upload_id}", response_class=Response)
+def get_toc_upload(
+    task_id: uuid.UUID,
+    upload_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+    upload_store: Annotated[UploadStore, Depends(get_upload_store)],
+) -> Response:
+    """The uploaded original, to people who can read the task; never on the public leg (C8)."""
+    accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
+    found = uploads.find(conn, task_id=task_id, upload_id=upload_id)
+    if found is None:
+        raise ApiNotFound("toc_not_found", "no such upload on this task")
+    safe = "".join(ch for ch in found.file_name if ch.isalnum() or ch in "._- ") or "upload"
+    return Response(
+        content=upload_store.get(found.object_key),
+        media_type=found.content_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{safe}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, max-age=300",
+        },
+    )
+
+
+@router.post("/check/full", response_model=TocCheckOut, status_code=202)
+def start_full_toc_check(
+    task_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    engine: Annotated[Engine, Depends(get_engine)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
+    backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+) -> TocCheckOut:
+    """Check the whole theory: after the user reviewed an uploaded theory's draft (increment 5)."""
+    with engine.begin() as conn:
+        _editable_toc(conn, task_id, user)
+        if not has_graph(conn, task_id):
+            raise ApiConflict("toc_not_running", "there is no theory to check yet")
+    walk_id = start_toc_check(
+        engine,
+        task_id=task_id,
+        link_ids=[],
+        user_id=user.user_id,
+        settings=settings,
+        executor=executor,
+        backends=backends,
+        mode="full",
+    )
+    return TocCheckOut(capability_run_id=walk_id, queued=walk_id is None)
+
+
 @router.post("/check/stop", status_code=202)
 def stop_toc_check(
     task_id: uuid.UUID,
@@ -1152,29 +1285,45 @@ def get_toc_proposals(
 ) -> list[TocProposalOut]:
     """The open suggestions, newest first (C45, C46)."""
     _editable_toc(conn, task_id, user)
-    return [
-        TocProposalOut(
-            proposal_id=row.proposal_id,
-            source=row.source,
-            summary=row.summary,
-            created_at=row.created_at,
-            edits=[
-                TocProposalEditOut(
-                    index=i,
-                    op=str(op.get("op")),
-                    line=str(op.get("line") or proposals.describe(op)),
-                    reason=str(op.get("reason") or ""),
-                    status=op.get("status", "pending"),
-                )
-                for i, op in enumerate(row.edits)
-            ],
-            report_findings=[
-                TocReportFindingOut(section=str(f.get("section")), why=str(f.get("why")))
-                for f in row.report_findings
-            ],
-        )
-        for row in proposals.open_proposals(conn, task_id)
-    ]
+    return [proposal_out(row) for row in proposals.open_proposals(conn, task_id)]
+
+
+def proposal_out(row: Any) -> TocProposalOut:
+    """One stored suggestion as the page reads it."""
+    return TocProposalOut(
+        proposal_id=row.proposal_id,
+        source=row.source,
+        summary=row.summary,
+        created_at=row.created_at,
+        edits=[
+            TocProposalEditOut(
+                index=i,
+                op=str(op.get("op")),
+                line=str(op.get("line") or proposals.describe(op)),
+                reason=str(op.get("reason") or ""),
+                status=op.get("status", "pending"),
+                **{
+                    name: op.get(name)
+                    for name in (
+                        "group",
+                        "key",
+                        "layer",
+                        "text",
+                        "source",
+                        "dest",
+                        "links",
+                        "kind",
+                        "label",
+                    )
+                },
+            )
+            for i, op in enumerate(row.edits)
+        ],
+        report_findings=[
+            TocReportFindingOut(section=str(f.get("section")), why=str(f.get("why")))
+            for f in row.report_findings
+        ],
+    )
 
 
 @router.post("/proposals/{proposal_id}/decide", response_model=TocProblemsOut)
@@ -1195,6 +1344,7 @@ def decide_toc_proposal(
         proposal_id=proposal_id,
         index=body.index,
         accept=body.accept,
+        group=body.group,
     )
     return TocProblemsOut(problems=problems)
 

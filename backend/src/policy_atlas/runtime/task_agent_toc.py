@@ -39,11 +39,13 @@ from policy_atlas.runtime.task_agent_toc_prompt import (
     build_toc_messages,
 )
 from policy_atlas.runtime.toc_plan import (
+    DEFAULT_PUBLISHED_AFTER,
     TOC_PURPOSE,
     TOC_WALK_CHECK,
     TOC_WALK_DRAFT,
     TOC_WALK_KEY,
     TocPlan,
+    toc_scope_constraints,
 )
 from policy_atlas.theory_of_change.store import has_graph
 
@@ -87,6 +89,8 @@ class TocInputs:
     approved: TocPlan | None
     #: Once a draft exists: its boxes, links, verdicts and pathways by code (C46).
     theory_outline: str = ""
+    #: Before a draft: the user's uploaded diagram, as read (increment 5).
+    imported: dict[str, Any] | None = None
 
 
 def read_theory_state(conn: Connection, task_id: uuid.UUID) -> tuple[str, bool]:
@@ -135,11 +139,21 @@ def load_toc_inputs(conn: Connection, task_id: uuid.UUID) -> TocInputs:
         if row is not None
         else None
     )
+    from policy_atlas.theory_of_change.importing import latest_import
+
+    imported = None if drafted else latest_import(conn, task_id)
+    if imported is not None:
+        # The uploaded diagram stands in for the outline until the draft exists.
+        state = f"{state}; the user uploaded their own theory of change diagram"
+        outline = imported["text"]
+    else:
+        outline = theory_outline(conn, task_id) if drafted else ""
     return TocInputs(
         theory_state=state,
         has_draft=drafted,
         approved=approved,
-        theory_outline=theory_outline(conn, task_id) if drafted else "",
+        theory_outline=outline,
+        imported=imported,
     )
 
 
@@ -207,6 +221,7 @@ def toc_after_approve(
 
     from policy_atlas.core import tracing
     from policy_atlas.evidence_search.sourcing.search_live import OpenAlexLiveBackend
+    from policy_atlas.evidence_search.sourcing.search_loop import _semantic_filter_parts
     from policy_atlas.runtime.agent_backend import StubAgentBackend
     from policy_atlas.theory_of_change.backend import OpenAITocBackend
     from policy_atlas.theory_of_change.sense_check import run_sense_check
@@ -215,12 +230,15 @@ def toc_after_approve(
     if isinstance(agent, StubAgentBackend) or not key:
         return plan, None
     openalex = OpenAlexLiveBackend(key, email=os.environ.get("OPENALEX_EMAIL"))
+    shared = toc_scope_constraints(plan).to_filters().get("shared", {})
+    years, _local = _semantic_filter_parts(shared)
     warning = run_sense_check(
         engine,
         task_id=task_id,
         plan=plan,
         backend=OpenAITocBackend(langfuse_client=tracing.get_langfuse(), session_id=task_id),
-        search=lambda text: openalex.search_semantic(text, max_results=6),
+        # The plan's publication years, as a year fence the semantic search takes.
+        search=lambda text: openalex.search_semantic(text, wire_params=years, max_results=6),
     )
     return plan, warning
 
@@ -235,11 +253,25 @@ def toc_merge_note(reply: str, note: str) -> str:
     return "\n\n".join(part for part in (" ".join(kept), note) if part)
 
 
+def _evidence_years(plan: TocPlan | None) -> dict[str, str | None]:
+    """The publication dates the searches use: the plan's, or the default before one exists."""
+    if plan is None:
+        return {"published_after": DEFAULT_PUBLISHED_AFTER, "published_before": None}
+    scope = toc_scope_constraints(plan)
+    return {"published_after": scope.published_after, "published_before": scope.published_before}
+
+
 def toc_draft_from_plan(plan: Any) -> TocPlanDraft:
     """Project an approved plan into the API draft."""
-    values = expect_toc_plan(plan).model_dump(mode="json")
+    toc = expect_toc_plan(plan)
+    values = toc.model_dump(mode="json")
     return TocPlanDraft.model_validate(
-        {**{key: values.get(key) for key in _PLAN_FIELDS}, "ready": True}
+        {
+            **{key: values.get(key) for key in _PLAN_FIELDS},
+            "upload_id": values.get("upload_id"),
+            **_evidence_years(toc),
+            "ready": True,
+        }
     )
 
 
@@ -247,7 +279,13 @@ def toc_draft_from_wire(draft: TocPlanDraftWire, ready: bool, inputs: TocInputs)
     """Project the model's draft into the API draft; the approved plan once a draft exists."""
     if inputs.has_draft and inputs.approved is not None:
         return toc_draft_from_plan(inputs.approved)
-    return TocPlanDraft.model_validate({**draft.model_dump(), "ready": ready})
+    return TocPlanDraft.model_validate(
+        {
+            **draft.model_dump(),
+            **_evidence_years(inputs.approved),
+            "ready": ready,
+        }
+    )
 
 
 def build_toc_plan(draft: TocPlanDraftWire, inputs: TocInputs, turn_index: int) -> TocPlan:
@@ -260,7 +298,22 @@ def build_toc_plan(draft: TocPlanDraftWire, inputs: TocInputs, turn_index: int) 
     """
     if inputs.has_draft:
         raise ValueError("the plan is fixed once the draft exists")
-    values = {key: getattr(draft, key) for key in _PLAN_FIELDS}
+    values: dict[str, Any] = {key: getattr(draft, key) for key in _PLAN_FIELDS}
+    # The model never sets the years: keep the user's from the approved plan
+    # (edited in the plan panel), or start from the default.
+    previous = inputs.approved.evidence_restriction if inputs.approved is not None else None
+    values["evidence_restriction"] = (
+        previous.model_dump(mode="json", exclude_none=True)
+        if previous is not None
+        else {"published_after": DEFAULT_PUBLISHED_AFTER}
+    )
+    if inputs.imported is not None:
+        # The uploaded diagram is the user's theory, word for word (increment 5).
+        values |= {
+            "entry_point": "existing_theory",
+            "existing_theory_text": inputs.imported["text"],
+            "upload_id": inputs.imported["upload_id"],
+        }
     plan = expect_toc_plan(
         validate_plan(
             THEORY_OF_CHANGE,

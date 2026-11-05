@@ -2019,7 +2019,9 @@ toc_proposal = Table(
     Column("report_findings", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("status", Text, nullable=False, server_default=text("'open'")),
     *_toc_common(),
-    CheckConstraint("source IN ('review', 'chat')", name="ck_toc_proposal_source"),
+    CheckConstraint(
+        "source IN ('review', 'chat', 'discover', 'draft')", name="ck_toc_proposal_source"
+    ),
     CheckConstraint("status IN ('open', 'closed')", name="ck_toc_proposal_status"),
     Index("ix_toc_proposal_task", "task_id"),
 )
@@ -2072,4 +2074,30 @@ toc_figure = Table(
         name="ck_toc_figure_effect_type",
     ),
     Index("ix_toc_figure_task_link", "task_id", "link_id"),
+)
+
+#: Files a user gives a task, for any capability (task 054 increment 5, C8; one
+#: table and one bucket for all, owner 2026-11-03). The file lives in the upload
+#: store (S3, or a local folder in development) under ``object_key``; this row
+#: says what it is, why it was uploaded (``purpose``) and who uploaded it.
+task_upload = Table(
+    "task_upload",
+    metadata,
+    Column("upload_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("purpose", Text, nullable=False),
+    Column("object_key", Text, nullable=False),
+    Column("file_name", Text, nullable=False),
+    Column("content_type", Text, nullable=False),
+    Column("size_bytes", Integer, nullable=False),
+    Column("sha256", Text, nullable=False),
+    Column("uploaded_by", Text, nullable=False),
+    Column("uploaded_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("purpose IN ('toc_theory')", name="ck_task_upload_purpose"),
+    CheckConstraint(
+        "content_type IN ('image/png', 'image/jpeg', 'application/pdf')",
+        name="ck_task_upload_type",
+    ),
+    CheckConstraint("size_bytes > 0 AND size_bytes <= 10485760", name="ck_task_upload_size"),
+    Index("ix_task_upload_task", "task_id"),
 )

@@ -15,6 +15,7 @@ from policy_atlas.evidence_search.sourcing.search_loop import parse_search_direc
 from policy_atlas.runtime import option_search, runner
 from policy_atlas.runtime.agent import persist_approved_plan
 from policy_atlas.runtime.toc_plan import (
+    DEFAULT_PUBLISHED_AFTER,
     TOC_ITEM_RECORD_CAP,
     TocPlan,
     compose_toc,
@@ -97,6 +98,14 @@ def test_an_item_search_only_acquires_under_the_plan_s_restriction() -> None:
     assert guidance == list(ITEM_SEARCH_GUIDANCE)
 
 
+def test_an_item_search_defaults_to_evidence_from_2000() -> None:
+    """A plan with no restriction (a plan stored before the years existed) searches from 2000."""
+    directive = compose_toc(_plan(), "targeted", {"acquire_only": True}).steps[0].directive_delta
+    _depth, filters, _guidance = parse_search_directive(directive)
+    assert filters == {"shared": {"published_after": DEFAULT_PUBLISHED_AFTER}}
+    assert DEFAULT_PUBLISHED_AFTER == "2000-01-01"
+
+
 @pytest.mark.parametrize(
     ("purpose", "context"),
     [
@@ -166,3 +175,10 @@ def test_an_approved_plan_opens_the_draft_walk_s_intent_record(conn: Connection)
     ).mappings().one()
     assert (row["purpose"], row["plan_id"]) == ("toc", plan_id)
     assert row["context"] == {"capability": "theory_of_change", "toc_walk": "draft"}
+
+
+def test_a_plan_saved_with_the_retired_use_diagram_field_still_loads() -> None:
+    from tests.theory_of_change.test_walks import toc_plan
+
+    saved = {**toc_plan().model_dump(mode="json"), "use_diagram": None}
+    assert TocPlan.model_validate(saved).title == "Healthy weight"

@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -33,6 +33,7 @@ vi.mock("../../api/queries", async (importOriginal) => {
     useFunnel: vi.fn(),
     useTask: vi.fn(),
     useToc: vi.fn(() => ({ data: undefined })),
+    useTocUploadFile: vi.fn(() => ({ data: undefined })),
   };
 });
 vi.mock("../../api/mutations", async (importOriginal) => {
@@ -40,6 +41,8 @@ vi.mock("../../api/mutations", async (importOriginal) => {
   return {
     ...actual,
     useTaskAgentTurn: vi.fn(),
+    useTocUpload: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, error: null })),
+    useTocUploading: vi.fn(() => null),
     useStartRun: vi.fn(),
     usePatchPlan: vi.fn(),
     useAnswerCheckIn: vi.fn(),
@@ -179,6 +182,18 @@ describe("Composer", () => {
     return { onChange, onSubmit };
   }
 
+  it("offers an upload only when given onAttach, and hands it the chosen file", async () => {
+    const user = userEvent.setup();
+    renderComposer();
+    expect(screen.queryByText("Upload your own theory of change")).toBeNull();
+    cleanup();
+    const onAttach = vi.fn();
+    renderComposer({ onAttach });
+    const file = new File([new Uint8Array([137, 80, 78, 71])], "theory.png", { type: "image/png" });
+    await user.upload(screen.getByLabelText("Upload your own theory of change"), file);
+    expect(onAttach).toHaveBeenCalledWith(file);
+  });
+
   it("Enter sends: submits without inserting a newline", async () => {
     const user = userEvent.setup();
     const { onSubmit, onChange } = renderComposer({ value: "Map school-meal evidence." });
@@ -243,6 +258,7 @@ describe("taskAgentComposerPlaceholder", () => {
     expect(taskAgentComposerPlaceholder("succeeded", true)).toBe(
       "Describe a change to the plan to run again.",
     );
+    expect(taskAgentComposerPlaceholder(undefined, false, true, false, false, true)).toBe("Describe the change you want, or ask about your theory.");
     expect(taskAgentComposerPlaceholder("failed")).toBe(
       "Describe what to change, then start again.",
     );
@@ -367,6 +383,76 @@ describe("TaskAgentPane — non-owner read-only (task 033 phase 10c, contract §
       </MemoryRouter>,
     );
   }
+
+  it("shows an uploaded diagram in the message that sent it, and uploads a file handed over from the new-task page", () => {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:theory");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    vi.mocked(queries.usePlan).mockReturnValue({
+      data: { capability: "theory_of_change", toc: { upload_id: "u1", ready: false }, status: "draft", version: 1 },
+    } as unknown as ReturnType<typeof queries.usePlan>);
+    vi.mocked(queries.useTaskAgentTurns).mockReturnValue({
+      data: { data: [{ ...turn(0, "2026-11-04T10:00:00Z"), user_message: "I've uploaded my own theory of change (theory.png)." }] },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof queries.useTaskAgentTurns>);
+    vi.mocked(queries.useTocUploadFile).mockReturnValue({ data: new Blob(["png"], { type: "image/png" }) } as unknown as ReturnType<typeof queries.useTocUploadFile>);
+    const mutate = vi.fn();
+    vi.mocked(mutations.useTocUpload).mockReturnValue({ mutate, isPending: false, isError: false, error: null } as unknown as ReturnType<typeof mutations.useTocUpload>);
+    const file = new File(["png"], "mine.png", { type: "image/png" });
+    render(
+      <MemoryRouter initialEntries={[{ pathname: `/tasks/${TASK_ID}`, state: { tocFile: file, note: "For councils" } }]}>
+        <ToastProvider>
+          <TaskAgentPane taskId={TASK_ID} runStatus={undefined} stream={createInitialRunStreamState()} isOwner />
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("img", { name: "Your theory of change, as uploaded" })).toHaveAttribute("src", "blob:theory");
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutate.mock.calls[0]?.[0]).toEqual({ file, note: "For councils" });
+  });
+
+  it("uploads a handed-over file on a brand-new task, before it has a plan", () => {
+    vi.mocked(queries.usePlan).mockReturnValue({ data: null } as unknown as ReturnType<typeof queries.usePlan>);
+    vi.mocked(queries.useTask).mockReturnValue({ data: { capability: "theory_of_change" } } as unknown as ReturnType<typeof queries.useTask>);
+    vi.mocked(queries.useTaskAgentTurns).mockReturnValue({
+      data: { data: [] },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof queries.useTaskAgentTurns>);
+    const mutate = vi.fn();
+    vi.mocked(mutations.useTocUpload).mockReturnValue({ mutate, isPending: false, isError: false, error: null } as unknown as ReturnType<typeof mutations.useTocUpload>);
+    const file = new File(["png"], "mine.png", { type: "image/png" });
+    render(
+      <MemoryRouter initialEntries={[{ pathname: `/tasks/${TASK_ID}`, state: { tocFile: file, note: "" } }]}>
+        <ToastProvider>
+          <TaskAgentPane taskId={TASK_ID} runStatus={undefined} stream={createInitialRunStreamState()} isOwner />
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+    expect(mutate.mock.calls[0]?.[0]).toEqual({ file, note: "" });
+    expect(screen.queryByText("What do you need evidence on?")).toBeNull();
+  });
+
+  it("shows an upload still running after the chat was closed and opened again", () => {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:mine");
+    vi.mocked(queries.usePlan).mockReturnValue({ data: { capability: "theory_of_change", toc: null, status: "draft", version: 1 } } as unknown as ReturnType<typeof queries.usePlan>);
+    vi.mocked(queries.useTaskAgentTurns).mockReturnValue({ data: { data: [] }, isPending: false, isError: false, error: null, refetch: vi.fn() } as unknown as ReturnType<typeof queries.useTaskAgentTurns>);
+    vi.mocked(mutations.useTocUploading).mockReturnValue({ file: new File(["png"], "mine.png", { type: "image/png" }), note: "For councils" });
+    render(
+      <MemoryRouter>
+        <ToastProvider>
+          <TaskAgentPane taskId={TASK_ID} runStatus={undefined} stream={createInitialRunStreamState()} isOwner />
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/Reading your diagram/)).toBeInTheDocument();
+    expect(screen.getByText(/I've uploaded my own theory of change \(mine.png\)/)).toBeInTheDocument();
+    vi.mocked(mutations.useTocUploading).mockReturnValue(null);
+  });
 
   it("disables the composer with the owner-only placeholder", () => {
     renderPane();

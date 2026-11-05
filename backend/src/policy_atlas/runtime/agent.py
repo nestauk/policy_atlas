@@ -91,7 +91,13 @@ from policy_atlas.runtime.task_agent import (
 )
 from policy_atlas.runtime.task_agent_prompt import PLANNER_HISTORY_TURNS_MAX, PlanDraftWire
 from policy_atlas.runtime.task_plan import CountryGroupAuthorship, TaskPlan
-from policy_atlas.runtime.toc_plan import TOC_PURPOSE, TOC_WALK_DRAFT, TOC_WALK_KEY, TocPlan
+from policy_atlas.runtime.toc_plan import (
+    TOC_PURPOSE,
+    TOC_REVIEW_FIRST_KEY,
+    TOC_WALK_DRAFT,
+    TOC_WALK_KEY,
+    TocPlan,
+)
 from policy_atlas.theory_of_change.backend import OpenAITocBackend
 
 log = structlog.get_logger()
@@ -971,7 +977,12 @@ def persist_approved_plan(
         # A theory of change starts with its draft walk (task 054, S3).
         scope_fields = {
             "intent": plan.question,
-            "context": {"capability": THEORY_OF_CHANGE, TOC_WALK_KEY: TOC_WALK_DRAFT},
+            "context": {
+                "capability": THEORY_OF_CHANGE,
+                TOC_WALK_KEY: TOC_WALK_DRAFT,
+                # An uploaded theory pauses after the draft for the user's review.
+                **({TOC_REVIEW_FIRST_KEY: True} if plan.upload_id is not None else {}),
+            },
             "purpose": TOC_PURPOSE,
         }
     else:

@@ -329,8 +329,8 @@
 }
 
 /* Theory of change canvas (task 054, C36): the line style shows the link's
-   evidence verdict. Confident solid green; Leaning supports long green
-   dashes; Mixed a green dash over an amber underlay (two-tone); Not enough
+   evidence verdict. Supported solid green; Leaning supports long green
+   dashes; Mixed solid amber (owner, 2026-11-04); Not enough
    evidence grey dashed; Leaning against long red dashes; Not
    confident dotted red. The critical link carries a warning triangle
    (CriticalMark), not a thicker line. An unchecked or checking
@@ -342,14 +342,20 @@
   stroke-linecap: round;
 }
 .react-flow .toc-edge--confident { stroke: var(--color-verdict-confident); }
-.react-flow .toc-edge--not_sure_mixed { stroke: var(--color-verdict-confident); stroke-dasharray: 6 6; stroke-linecap: butt; }
-.react-flow .toc-edge-under { fill: none; stroke: var(--color-verdict-mixed); stroke-width: 5; pointer-events: none; }
+.react-flow .toc-edge--not_sure_mixed { stroke: var(--color-verdict-mixed); }
 .react-flow .toc-edge--not_sure_insufficient { stroke: var(--color-verdict-little); stroke-dasharray: 6 5; }
 .react-flow .toc-edge--not_confident { stroke: var(--color-verdict-against); stroke-dasharray: 2 5; }
 .react-flow .toc-edge--leaning_supports { stroke: var(--color-verdict-confident); stroke-dasharray: 12 5; }
 .react-flow .toc-edge--leaning_against { stroke: var(--color-verdict-against); stroke-dasharray: 12 5; }
 .react-flow .toc-edge--pending { stroke: var(--color-line-2); animation: toc-pulse 1.6s ease-in-out infinite; }
+/* An uploaded theory waiting for review: a connection Policy Atlas suggested (task 054, increment 5). */
+.react-flow .toc-edge--suggested { stroke: var(--color-blue); stroke-dasharray: 4 4; }
+.react-flow .toc-edge--drawn { stroke: var(--color-navy); }
+.react-flow .toc-edge--preview { stroke: var(--color-blue); stroke-dasharray: 5 4; opacity: 0.6; }
 .react-flow .toc-edge--selected { stroke-width: 3; }
+/* Dividers drawn only into the downloaded image (views/toc/exports.ts). */
+.toc-export-only { display: none; }
+.toc-exporting .toc-export-only { display: block; }
 .react-flow .toc-edge-halo { fill: none; stroke: var(--color-blue); stroke-opacity: 0.18; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 @keyframes toc-pulse {
   0%, 100% { opacity: 1; }
@@ -365,6 +371,10 @@
 .toc-verdict-leaning_supports { color: var(--color-verdict-confident-text); }
 .toc-verdict-leaning_against { color: var(--color-verdict-against-text); }
 /* PDF: the panel is hidden (aside), the canvas and toolbar stay. */
+.toc-print-image { display: none; }
 @media print {
   .toc-canvas { height: 520px !important; break-inside: avoid; }
+  /* Report (PDF) from the Download menu: the whole canvas as a picture, in place of the bar and the live canvas. */
+  #toc-canvas:has(.toc-print-image) > :not(.toc-print-image) { display: none !important; }
+  .toc-print-image { display: block; width: 100%; height: auto; break-inside: avoid; }
 }

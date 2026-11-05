@@ -113,6 +113,8 @@ export function tocTrace(
   live: boolean,
   /** The walk's kind when the caller knows it: the first walk drafts, every later one checks. */
   kind?: "draft" | "check",
+  /** The walk's end status, when it has ended: a failed walk says so in its name. */
+  status?: string,
 ): TocTraceView {
   const ordered = [...decisions].sort((a, b) => a.sequence - b.sequence);
   const searches = new Map<string, { at: number; queries: string[]; found?: Detail }>();
@@ -156,7 +158,18 @@ export function tocTrace(
   return {
     drafting,
     since: live && running !== null ? since : null,
-    title: drafting ? (live ? "Drafting the theory" : "Drafted the theory") : live ? "Searching for evidence" : "Searched for evidence",
+    title:
+      !live && (status === "failed" || status === "interrupted")
+        ? drafting
+          ? "The draft failed"
+          : "The evidence check failed"
+        : drafting
+          ? live
+            ? "Drafting the theory"
+            : "Drafted the theory"
+          : live
+            ? "Searching for evidence"
+            : "Searched for evidence",
     now: live ? (running === null && !drafting && searches.size === 0 ? "Starting the evidence check" : nowLine(running ?? (drafting ? "toc_draft" : "toc_item_searches"), done, finishedSearches)) : null,
     lines,
   };
@@ -173,14 +186,17 @@ export function TocTrace({
   decisions,
   live,
   kind,
+  status,
 }: {
   walkId: string;
   decisions: TaskAgentThreadDecision[];
   live: boolean;
   kind?: "draft" | "check";
+  /** The walk's end status (failed, interrupted, ...). */
+  status?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const view = tocTrace(walkId, decisions, live, kind);
+  const view = tocTrace(walkId, decisions, live, kind, status);
   const elapsed = useElapsed(view.since);
   const last = view.lines.at(-1);
   return (

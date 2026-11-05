@@ -559,3 +559,12 @@ export function triggerTextDownload(filename: string, body: string, mime: string
   anchor.remove();
   URL.revokeObjectURL(url);
 }
+
+/** A CSV cell: quoted/escaped, and defused against spreadsheet formula
+ *  injection — titles and venues arrive from external sources. */
+export function csvCell(value: string | number | boolean | null | undefined): string {
+  let text = value === null || value === undefined ? "" : String(value);
+  // Also defuse markers behind leading whitespace ("\t=SUM…").
+  if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replaceAll('"', '""')}"`;
+}

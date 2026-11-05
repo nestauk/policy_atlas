@@ -33,3 +33,11 @@ describe("tocTrace", () => {
     expect(tocTrace("walk", draft.slice(0, 1), true).now).toBe("Drafting the theory");
   });
 });
+
+describe("a failed walk", () => {
+  it("says it failed, not that it drafted or searched", () => {
+    expect(tocTrace("w1", [], false, "draft", "failed").title).toBe("The draft failed");
+    expect(tocTrace("w1", [], false, "check", "interrupted").title).toBe("The evidence check failed");
+    expect(tocTrace("w1", [], false, "draft", "succeeded").title).toBe("Drafted the theory");
+  });
+});

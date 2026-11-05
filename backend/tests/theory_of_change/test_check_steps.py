@@ -200,8 +200,10 @@ def test_the_critical_connection_is_the_weakest_important_success_step() -> None
     # Equal again: the earlier one in pathway order; a link with no verdict counts as
     # too little evidence, below mixed.
     graph.pathways = [Pathway(key="p1", kind="success", links=["l1", "l3"])]
-    assert critical_link(graph, _verdicts({"l1": "confident", "l3": "confident"})) == "l1"
+    assert critical_link(graph, _verdicts({"l1": "not_sure_mixed", "l3": "not_sure_mixed"})) == "l1"
     assert critical_link(graph, _verdicts({"l1": "not_sure_mixed"})) == "l3"
+    # Every step supported (or leaning that way): no connection is critical.
+    assert critical_link(graph, _verdicts({"l1": "confident", "l3": "leaning_supports"})) is None
     # Only failure pathways are never critical.
     graph.pathways = [Pathway(key="p3", kind="failure", links=["l3"])]
     assert critical_link(graph, _verdicts({})) is None
@@ -244,8 +246,13 @@ def test_the_judge_stores_support_quote_and_relevance(
         assert row.quote and row.relevance_reason == "A similar population elsewhere."
         assert row.stance_elsewhere is None and row.stance_here is None
     # Unscored documents (Q 1) at relevance 2 weigh 2/9 each: the verdicts follow the rule.
+    # The critical connection is the weakest step, unless every step is supported.
     critical = [link for link in out.links if link.critical]
-    assert len(critical) == 1 and out.confidence == critical[0].verdict
+    supported = {"confident", "leaning_supports"}
+    if all(link.verdict in supported for link in out.links):
+        assert critical == [] and out.confidence is None
+    else:
+        assert len(critical) == 1 and out.confidence == critical[0].verdict
 
 
 def test_an_unverified_quote_is_dropped_and_counted(
@@ -285,11 +292,13 @@ def test_each_link_reads_at_most_k_documents_of_its_own_search(
     # Each link read only documents its own search found.
     assert len({tss for _, tss in per_link}) == len(per_link)
     stage = _summary(engine, task_id, "toc_item_searches")
-    assert stage["total"] == 5 and stage["failed"] == 0
-    # toc_select (C27): 10 picked per link screened in, the rest screened out, no model.
+    # One search per link, and one for the whole programme.
+    assert stage["total"] == 6 and stage["failed"] == 0
+    # toc_select (C27): 10 picked per link (and for the programme) screened in, the
+    # rest screened out, no model.
     picked = _summary(engine, task_id, "toc_select")
-    assert picked["relevant"] == 5 * PICK_N
-    assert picked["not_relevant"] == picked["screened"] - 5 * PICK_N > 0
+    assert picked["relevant"] == 6 * PICK_N
+    assert picked["not_relevant"] == picked["screened"] - 6 * PICK_N > 0
     with engine.connect() as conn:
         flags = {
             (payload["status"], payload["aggregation_flags"][0])
@@ -661,7 +670,7 @@ def test_merge_keeps_one_of_each_kind_and_the_thread_lists_its_changes(
             MergeDecisionWire(pathway="p1", action="set_aside", into=None, reason="Misses it."),
             MergeDecisionWire(pathway="p2", action="set_aside", into=None, reason="Misses it."),
             MergeDecisionWire(pathway="p3", action="merge", into="p1", reason="Same mechanism."),
-        ]
+        ],
     )
     backend = StubTocBackend({"draft": [_two_success_draft()], "merge": [merge]})
     task_id = _run(engine, cleanup, backend)
@@ -686,7 +695,8 @@ def test_merge_keeps_one_of_each_kind_and_the_thread_lists_its_changes(
     # The model set aside every pathway; code keeps the first of each kind back.
     assert rows["Main route"][0] == "kept" and rows["Low take-up"][0] == "kept"
     assert rows["Second route"] == ("set_aside", "Merged into “Main route”: Same mechanism.")
-    assert "to the impact" in replies[-1]
+    # The thread only points to the results (owner, 2026-11-04).
+    assert replies[-1].startswith("The evidence check is done. Read the full report")
     assert replies[-1].endswith(STRESS_TEST_MESSAGE)
 
 
@@ -721,12 +731,12 @@ class _DiscoversThenMerges(_Discovers):
         return MergeResponse(box_merges=[], decisions=decisions), None
 
 
-def test_the_check_message_names_found_pathways_it_kept_once(
+def test_the_check_message_leaves_found_pathways_to_the_result_tab(
     engine: Engine, cleanup: list[uuid.UUID]
 ) -> None:
+    # The added pathway is on the Result tab; the chat no longer lists it.
     reply = _replies(engine, _run(engine, cleanup, _Discovers()))[-1]
-    assert "Added 1 pathway found in the evidence: “Found route”." in reply
-    assert "from the evidence: Found route" not in reply
+    assert "Found route" not in reply
 
 
 def test_the_check_message_leaves_out_a_found_pathway_merged_in_the_same_check(
@@ -806,7 +816,11 @@ def _doc(i: int) -> Any:
     from policy_atlas.theory_of_change.check import Document
 
     return Document(
-        tss_id=uuid.UUID(int=i), title=f"t{i}", year=None, abstract="a", evidence_type=None,
+        tss_id=uuid.UUID(int=i),
+        title=f"t{i}",
+        year=None,
+        abstract="a",
+        evidence_type=None,
         score=None,
     )
 
@@ -818,7 +832,9 @@ def test_select_for_link_takes_the_lists_in_turn_with_abstracts_first() -> None:
     q1, q2, ov = LINK_LISTS[:3]
     candidates = [
         # Out of order on purpose: the rule sorts by list, then rank.
-        cand(23, ov, 3), cand(21, ov, 1), cand(22, ov, 2, abstract=False),
+        cand(23, ov, 3),
+        cand(21, ov, 1),
+        cand(22, ov, 2, abstract=False),
         *[cand(10 + i, q2, 30 + i) for i in range(3)],
         *[cand(i, q1, i + 1) for i in range(8)],
     ]
@@ -909,3 +925,62 @@ def test_summarise_writes_titles_cited_sentences_and_box_texts(
     # No box has case studies, so its "seen in" is dropped and counted.
     assert all(box.description == "Why it matters." and box.seen_in is None for box in out.boxes)
     assert summary["replaced"] >= len(out.boxes)
+
+
+def test_an_as_drawn_diagram_gets_found_routes_as_one_suggestion(
+    engine: Engine, cleanup: list[uuid.UUID], monkeypatch: Any
+) -> None:
+    from policy_atlas.theory_of_change import check, proposals
+    from policy_atlas.theory_of_change.edits import Actor
+
+    # The theory is the user's diagram, kept as drawn (owner, 2026-11-04).
+    monkeypatch.setattr(check, "as_drawn", lambda plan: True)
+    task_id = _run(engine, cleanup, _Discovers())
+    with engine.connect() as conn:
+        found = conn.execute(
+            select(toc_pathway.c.pathway_id).where(
+                toc_pathway.c.task_id == task_id, toc_pathway.c.origin == "found_in_evidence"
+            )
+        ).all()
+        [suggestion] = [
+            p for p in proposals.open_proposals(conn, task_id) if p.source == "discover"
+        ]
+        report = toc_graph_out(conn, task_id).report
+    # Nothing joined the theory; the route waits as its box, its links and the pathway.
+    assert found == []
+    assert [op["op"] for op in suggestion.edits] == [
+        "add_box",
+        "add_link",
+        "add_link",
+        "add_pathway",
+    ]
+    assert report is not None and [e.label for e in report.expansions] == ["Found route"]
+    # Its sentence cites the document it was found in, listed among the report's sources.
+    [route] = report.expansions
+    cited = [s.n for s in report.sources if f"[{s.n}]" in route.sentence]
+    assert route.kind == "success" and cited
+    # Accepting it all adds the route, its pathway naming the connections it added.
+    with engine.begin() as conn:
+        problems = proposals.decide(
+            conn,
+            task_id=task_id,
+            actor=Actor(user_id="test-user"),
+            proposal_id=suggestion.proposal_id,
+            index=None,
+            accept=True,
+        )
+        added = conn.execute(
+            select(toc_pathway.c.label).where(
+                toc_pathway.c.task_id == task_id, toc_pathway.c.label == "Found route"
+            )
+        ).all()
+    assert problems == [] and len(added) == 1
+
+
+def test_an_uploaded_diagram_is_put_on_the_canvas_as_drawn() -> None:
+    from policy_atlas.runtime.toc_plan import as_drawn
+
+    plan = toc_plan(entry_point="existing_theory", existing_theory_text="A to B")
+    assert as_drawn(plan.model_copy(update={"upload_id": uuid.uuid4()}))
+    # A pasted or drafted theory is never "as drawn".
+    assert not as_drawn(plan) and not as_drawn(toc_plan())

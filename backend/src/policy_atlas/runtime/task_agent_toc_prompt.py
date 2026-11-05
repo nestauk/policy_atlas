@@ -29,7 +29,7 @@ from policy_atlas.runtime.task_agent_prompt import (
 )
 from policy_atlas.theory_of_change.proposals import EditOpWire
 
-TASK_AGENT_TOC_PROMPT_VERSION = "task_agent_toc_v2"
+TASK_AGENT_TOC_PROMPT_VERSION = "task_agent_toc_v3"
 
 #: Reasoning model: the cap covers reasoning and output tokens.
 TOC_TASK_AGENT_MAX_OUTPUT_TOKENS = 16_384
@@ -140,7 +140,14 @@ and you never say what the evidence will show.
 - intervention: what would be done, with its dosage when the user gives it.
   Required for intervention_first.
 - existing_theory_text: for existing_theory, the user's theory exactly as
-  they pasted it. Never shorten or reword it.
+  they pasted it. Never shorten or reword it. When the theory state says the
+  user uploaded a diagram, the entry point is existing_theory and Policy
+  Atlas fills this from the upload: leave it null, and take the intended
+  change, population and place from the diagram (shown as data below) and
+  the conversation. In your reply, say in one short sentence that Policy
+  Atlas will show the diagram as drawn and suggest changes the user can
+  accept, e.g. "I'll show your diagram as drawn and suggest changes you
+  can accept."
 - where: the place the theory is for. Default "England" and say it is
   assumed. It steers the search and never excludes evidence.
 - time_horizon: when the impact is expected. Suggest one.

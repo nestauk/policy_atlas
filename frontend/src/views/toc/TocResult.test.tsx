@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,7 +17,7 @@ vi.mock("../../api/queries", () => ({
   useTocEvidence: vi.fn(),
   useTocDocumentContext: vi.fn(),
   useTocHistory: vi.fn(() => ({ data: [{ event_id: "e1", at: "2026-10-30T11:20:00Z", who: "Ada", what: "Edited S1: text", undoable: true }] })),
-  useTocProposals: vi.fn(() => ({ data: [] })),
+  useTocProposals: vi.fn(() => ({ data: [], refetch: vi.fn() })),
 }));
 const mutate = vi.fn();
 vi.mock("../../api/mutations", () => ({ useTocEdit: vi.fn(() => ({ mutate, isPending: false })) }));
@@ -54,13 +54,12 @@ describe("canvas", () => {
     expect(box.className).not.toMatch(/grade/);
   });
 
-  it("styles each edge by its verdict: solid, two-tone, dashed, dotted", () => {
+  it("styles each edge by its verdict: solid, dashed, dotted", () => {
     renderResult();
     expect(edge(1)?.querySelector(".toc-edge--confident")).not.toBeNull();
-    // Mixed is two-tone: the amber underlay and the green dash on top.
+    // Mixed is one solid amber line (owner, 2026-11-04).
     expect(edge(5)?.querySelector(".toc-edge--not_sure_mixed")).not.toBeNull();
-    expect(edge(5)?.querySelector(".toc-edge-under")).not.toBeNull();
-    expect(edge(1)?.querySelector(".toc-edge-under")).toBeNull();
+    expect(edge(5)?.querySelectorAll("path")).toHaveLength(edge(1)?.querySelectorAll("path").length ?? 0);
     expect(edge(2)?.querySelector(".toc-edge--not_sure_insufficient")).not.toBeNull();
     expect(edge(7)?.querySelector(".toc-edge--not_confident")).not.toBeNull();
     expect(edge(9)?.querySelector(".toc-edge--pending")).not.toBeNull(); // still checking
@@ -77,7 +76,7 @@ describe("canvas", () => {
   it("keys the six line styles and the critical connection's mark", () => {
     renderResult();
     const key = screen.getByRole("list", { name: "Line key" });
-    for (const label of ["Confident", "Leaning supports", "Mixed", "Leaning against", "Not confident: evidence against", "Not enough evidence"]) {
+    for (const label of ["Supported", "Leaning supports", "Mixed", "Leaning against", "Evidence against", "Not enough evidence"]) {
       expect(within(key).getByText(label)).toBeInTheDocument();
     }
     expect(within(key).getByText(/Critical connection/)).toBeInTheDocument();
@@ -103,7 +102,7 @@ describe("canvas", () => {
 
   it("hover text gives the verdict", () => {
     renderResult();
-    expect(edge(4)?.querySelector("title")?.textContent).toBe("Confident");
+    expect(edge(4)?.querySelector("title")?.textContent).toBe("Supported");
     expect(edge(3)?.querySelector("title")?.textContent).toBe("Critical connection. Mixed");
   });
 });
@@ -118,7 +117,8 @@ describe("reading guide", () => {
     await user.click(screen.getByRole("menuitem", { name: "How to read this" }));
     const guide = screen.getByLabelText("How to read this");
     expect(within(guide).getByText(/neither clearly supports nor refutes/)).toBeInTheDocument();
-    expect(within(guide).getByText(/Rules in force since January 2026/)).toBeInTheDocument();
+    // Context and supporting activities are in the report, not here (owner, 2026-11-04).
+    expect(within(guide).queryByText(/Rules in force since January 2026/)).toBeNull();
     await user.click(screen.getByLabelText("More actions"));
     await user.click(screen.getByRole("menuitem", { name: "Hide how to read this" }));
     expect(screen.queryByLabelText("How to read this")).toBeNull();
@@ -181,7 +181,7 @@ describe("detail panel", () => {
     renderResult();
     const panel = openLink(3);
     await user.hover(within(panel).getByText("Critical connection"));
-    expect((await screen.findByRole("tooltip")).textContent).toContain("lowest evidence verdict");
+    expect((await screen.findByRole("tooltip")).textContent).toContain("weakest evidence");
   });
 
   it("shows each figure's statement, quote and source, and groups same-measure figures as a range", () => {
@@ -251,9 +251,9 @@ describe("detail panel", () => {
 });
 
 describe("detailed information", () => {
-  const SECTIONS = ["Overview", "Assumptions and evidence", "References"];
+  const SECTIONS = ["Summary", "Pathways", "How it could fail", "What to test first", "How it could be expanded", "Supporting activities", "Assumptions", "References"];
 
-  it("is the three-section report (Overview, table, References), in the report's four text styles only", () => {
+  it("is the report (Summary, routes, failure, tests, appendix, References), in the report's four text styles only", () => {
     renderResult();
     const info = screen.getByLabelText("Detailed information");
     // No heading of its own, and no contents sidebar for now (round 5).
@@ -271,12 +271,14 @@ describe("detailed information", () => {
       const inherited = (el.closest("table") as HTMLElement | null)?.className ?? "";
       expect(styles.some((style) => own.includes(style) || inherited.includes(style))).toBe(true);
     }
-    expect(within(info).getByText("Goal:")).toBeInTheDocument();
-    // The if-then-because keywords are bold; the scope is a list.
-    expect([...info.querySelectorAll("p > b")].map((el) => el.textContent)).toEqual(expect.arrayContaining(["If", "then", "because"]));
-    expect(within(info).getByText("Population:").closest("li")).toHaveTextContent("Population: children under 18 in England");
-    expect(within(info).getByText("How it could fail.")).toBeInTheDocument();
-    expect(within(info).getByText("What to test")).toBeInTheDocument();
+    // The Summary: context, question, claim (If / then / because in bold), then the verdict and why.
+    expect(within(info).queryByText("Goal:")).toBeNull();
+    expect(within(info).getByText(/This report asks whether the ban/)).toBeInTheDocument();
+    expect([...info.querySelectorAll("p > b")].map((el) => el.textContent)).toEqual(expect.arrayContaining(["If", "then", "because", "Verdict: Too little evidence."]));
+    // Above the canvas: the verdict, the goal (the report's question), then the evidence in brief.
+    expect(screen.queryByText("children under 18 in England · five years")).toBeNull();
+    expect(screen.getAllByText(/This report asks whether the ban/)).toHaveLength(2);
+    expect(within(info).getByText(/Find out whether children see fewer/)).toBeInTheDocument();
     // The table scrolls sideways on a narrow screen; What to test is a list, not a table.
     expect(info.querySelectorAll(".overflow-x-auto table")).toHaveLength(1);
     // No method paragraph under the sources.
@@ -318,10 +320,25 @@ describe("detailed information", () => {
     const user = userEvent.setup();
     renderResult();
     const info = screen.getByLabelText("Detailed information");
-    const item = within(info).getByRole("button", { name: "Show the pathway Fewer adverts, less snacking on the canvas" }).closest("li") as HTMLElement;
+    const item = within(info).getByRole("button", { name: "Show the pathway Fewer adverts, less snacking on the canvas" }).closest("h4") as HTMLElement;
     expect(item).toHaveTextContent("Mixed");
     await user.click(within(item).getByRole("button", { name: /Show the pathway/ }));
     expect(screen.getByRole("combobox", { name: /pathway/i })).toHaveValue(pathwayId(1));
+  });
+
+  it("shows the first five rows, the rest on a click, and collapses again", async () => {
+    const user = userEvent.setup();
+    const fixture = tocGraphFixture();
+    const report = fixture.report as NonNullable<TocGraph["report"]>;
+    const base = report.assumptions[0] as (typeof report.assumptions)[number];
+    const more = [4, 6, 7, 8].map((n) => ({ ...base, code: `#${n}`, flag: false }));
+    renderResult({ ...fixture, report: { ...report, assumptions: [...report.assumptions, ...more] } });
+    const row = screen.getAllByRole("row", { hidden: true }).find((item) => item.textContent?.startsWith("#8")) as HTMLElement;
+    expect(row).toHaveClass("hidden");
+    await user.click(screen.getByRole("button", { name: "Show all 6 connections" }));
+    expect(row).not.toHaveClass("hidden");
+    await user.click(screen.getByRole("button", { name: "Collapse table" }));
+    expect(row).toHaveClass("hidden");
   });
 
   it("sorts the assumptions table and flags central, weak rows", async () => {
@@ -337,23 +354,36 @@ describe("detailed information", () => {
     expect(codes()).toEqual(["#5", "#3"]);
   });
 
-  it("prints whole: nothing is collapsed, and the button prints", async () => {
+  it("prints whole: nothing is collapsed, and the canvas's Download menu prints", async () => {
     const user = userEvent.setup();
     const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
     renderResult();
     const info = screen.getByLabelText("Detailed information");
     expect(info.querySelectorAll('details, [aria-expanded="false"]')).toHaveLength(0);
-    await user.click(within(info).getByRole("button", { name: "Download as PDF" }));
-    expect(print).toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Download" }));
+    expect(within(screen.getAllByRole("menu").at(-1) as HTMLElement).getAllByRole("menuitem").map((item) => item.firstChild?.textContent)).toEqual(["Report (PDF)", "Image (PNG)", "Image (SVG)", "Diagram file (draw.io)", "References (CSV)", "Theory (JSON)"]);
+    await user.click(screen.getByRole("menuitem", { name: /Report \(PDF\)/ }));
+    await waitFor(() => expect(print).toHaveBeenCalled());
   });
 
   it("leads with the overall verdict and its headline, without repeating the label", () => {
     const fixture = tocGraphFixture();
     const report = fixture.report as NonNullable<TocGraph["report"]>;
-    renderResult({ ...fixture, report: { ...report, verdict: { ...(report.verdict as NonNullable<typeof report.verdict>), verdict: "implausible", label: "Implausible", headline: "Implausible: blue doors would not credibly reduce diabetes." } } });
+    renderResult({ ...fixture, report: { ...report, verdict: { ...(report.verdict as NonNullable<typeof report.verdict>), mechanism: "implausible", label: "Implausible", headline: "Implausible: blue doors would not credibly reduce diabetes." } } });
     const line = screen.getByText("Implausible.").closest("p") as HTMLElement;
     expect(line).toHaveTextContent("Implausible. Blue doors would not credibly reduce diabetes.");
     expect(screen.getByText("Implausible.")).toHaveStyle({ color: "var(--color-verdict-against-text)" });
+  });
+
+  it("asks the user to review an uploaded theory, with its suggested connections dashed", async () => {
+    const user = userEvent.setup();
+    const base = tocGraphFixture({ can_edit: true, check_status: "drafted" });
+    renderResult({ ...base, links: base.links.map((item, i) => ({ ...item, origin: i === 0 ? "drafted" : "imported" })) });
+    expect(screen.getByText(/This is how Policy Atlas read your diagram/)).toBeInTheDocument();
+    expect((edge(1) as Element).querySelector(".toc-edge--suggested")).not.toBeNull();
+    expect((edge(2) as Element).querySelector(".toc-edge--suggested")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Check the evidence" }));
+    expect(mutate.mock.calls.at(-1)?.[0]).toEqual({ kind: "checkFull" });
   });
 
   it("says when the report is not written yet", () => {
@@ -611,6 +641,14 @@ describe("review and suggestions (C45, C46)", () => {
     report_findings: [{ section: "how_change_happens", why: "A step changed." }],
   };
 
+  it("offers to check the evidence again after a failed check", async () => {
+    const user = userEvent.setup();
+    renderResult(editable({ check_status: "failed" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("The evidence check stopped with an error.");
+    await user.click(screen.getByRole("button", { name: "Check the evidence" }));
+    expect(lastEdit()).toEqual({ kind: "checkFull" });
+  });
+
   it("asks for a review, counting the changes since the last one", async () => {
     const user = userEvent.setup();
     renderResult(editable({ edits_since_review: 6 }));
@@ -619,9 +657,36 @@ describe("review and suggestions (C45, C46)", () => {
     expect(lastEdit()).toEqual({ kind: "review" });
   });
 
+  it("offers a found route as one suggestion, previewed faded on the canvas", async () => {
+    const user = userEvent.setup();
+    const route = {
+      proposal_id: "p2",
+      source: "draft" as const,
+      summary: "To complete your theory: 1 more route to the goal",
+      created_at: "2026-11-04T12:00:00Z",
+      edits: [
+        { index: 0, op: "add_box", line: "Add box", reason: "r", status: "pending" as const, group: "r1", key: "n1", layer: "outcome_short", text: "Families cook at home" },
+        { index: 1, op: "add_link", line: "Connect", reason: "r", status: "pending" as const, group: "r1", key: "l9", source: "P1", dest: "n1" },
+        { index: 2, op: "add_pathway", line: "Add pathway", reason: "r", status: "pending" as const, group: "r1", links: ["l9"], kind: "success", label: "Cooking at home" },
+      ],
+      report_findings: [],
+    };
+    vi.mocked(queries.useTocProposals).mockReturnValue({ data: [route], refetch: vi.fn() } as unknown as ReturnType<typeof queries.useTocProposals>);
+    renderResult(editable());
+    const panel = screen.getByRole("region", { name: "Suggestions" });
+    // One suggestion for the route, not one per box and link.
+    expect(within(panel).getByText("Cooking at home")).toBeInTheDocument();
+    expect(within(panel).getAllByRole("button", { name: "Accept" })).toHaveLength(1);
+    await user.hover(within(panel).getByText("Cooking at home"));
+    expect(screen.getByText("Families cook at home").closest(".border-dashed")).not.toBeNull();
+    await user.click(within(panel).getByRole("button", { name: "Accept" }));
+    expect(lastEdit()).toEqual({ kind: "proposal", proposalId: "p2", body: { index: null, accept: true, group: "r1" } });
+    vi.mocked(queries.useTocProposals).mockReturnValue({ data: [], refetch: vi.fn() } as unknown as ReturnType<typeof queries.useTocProposals>);
+  });
+
   it("lists suggestions with Accept, Reject, Accept all, Update the report and Dismiss", async () => {
     const user = userEvent.setup();
-    vi.mocked(queries.useTocProposals).mockReturnValue({ data: [proposal] } as unknown as ReturnType<typeof queries.useTocProposals>);
+    vi.mocked(queries.useTocProposals).mockReturnValue({ data: [proposal], refetch: vi.fn() } as unknown as ReturnType<typeof queries.useTocProposals>);
     renderResult(editable());
     const card = screen.getByRole("region", { name: "Suggestions" });
     expect(within(card).getByText("Connect S5 → L1")).toBeInTheDocument();
@@ -636,6 +701,11 @@ describe("review and suggestions (C45, C46)", () => {
     expect(lastEdit()).toEqual({ kind: "updateReport", proposalId: "p1" });
     await user.click(within(card).getByRole("button", { name: "Dismiss" }));
     expect(lastEdit()).toEqual({ kind: "dismiss", proposalId: "p1" });
-    vi.mocked(queries.useTocProposals).mockReturnValue({ data: [] } as unknown as ReturnType<typeof queries.useTocProposals>);
+    // The panel closes, and the canvas bar's Suggestions button opens it again.
+    await user.click(within(screen.getByRole("complementary", { name: "Suggestions" })).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("region", { name: "Suggestions" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: /^Suggestions \(/ }));
+    expect(screen.getByRole("region", { name: "Suggestions" })).toBeInTheDocument();
+    vi.mocked(queries.useTocProposals).mockReturnValue({ data: [], refetch: vi.fn() } as unknown as ReturnType<typeof queries.useTocProposals>);
   });
 });

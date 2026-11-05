@@ -7,12 +7,12 @@ import type { BoxLayer, Origin, Support, TocBox, TocDocument, TocFigure, TocGrap
  */
 
 export const VERDICT_LABEL: Record<Verdict, string> = {
-  confident: "Confident",
+  confident: "Supported",
   leaning_supports: "Leaning supports",
   not_sure_mixed: "Mixed",
   not_sure_insufficient: "Not enough evidence",
   leaning_against: "Leaning against",
-  not_confident: "Not confident: evidence against",
+  not_confident: "Evidence against",
 };
 
 /** The legend's order: supports to against, then not enough evidence. */
@@ -30,7 +30,7 @@ export const VERDICT_VAR: Record<Verdict, string> = {
 
 /** What makes a connection critical: the rule in the backend's `critical_link` (C6, C36). */
 export const CRITICAL_DEFINITION =
-  "The weakest step on the routes to the impact: of the connections on the kept pathways, the one with the lowest evidence verdict. When several tie, it is the one the most pathways pass through. Test it first.";
+  "The step on the routes to the impact with the weakest evidence. None is marked when every step is supported.";
 
 export const SUPPORT_LABEL: Record<Support, string> = {
   strong: "Strongly supports",

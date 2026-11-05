@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { blobUrl } from "../lib/blobUrl";
 import { useNavigate, useSearchParams } from "react-router";
 
 import { useProjects, useTasks } from "../api/queries";
@@ -14,6 +15,7 @@ import { Button } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
 import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
+import type { TocUploadHandOff } from "./workspace/TaskAgentPane";
 
 /** Step one: pick a kind of work. Two of the four can run. */
 function CapabilityList({ onPick }: { onPick: (key: SelectableCapabilityKey) => void }) {
@@ -234,12 +236,45 @@ const FORM_COPY: Record<
     eyebrow: "Theory of change",
     heading: "What change do you want to explain?",
     blurb:
-      "Describe the change you want, or the intervention you have in mind. Policy Atlas will draft a theory of change for your review, then check each step against the evidence.",
+      "Describe the change you want or the intervention you have in mind. Policy Atlas will draft a theory of change and check each step against evidence.\nIf you have an already existing theory of change, upload it as an image or PDF and Policy Atlas will check it against evidence.",
     placeholder:
       "Describe the change you want, the intervention you have in mind, or paste a theory of change you already have.",
-    submitLabel: "Prepare plan",
+    submitLabel: "Start",
   },
 };
+
+/** Upload your own theory of change: a paperclip, then the picked file with a way to remove it. */
+function AttachTheory({ file, onFile }: { file: File | null; onFile: (file: File | null) => void }) {
+  const url = file !== null && file.type !== "application/pdf" ? blobUrl(file) : null;
+  if (file !== null) {
+    return (
+      <div className="flex shrink-0 items-center gap-2 border border-line bg-paper-2 px-2 py-1.5">
+        {url !== null ? <img src={url} alt="" className="h-10 w-14 object-contain" /> : <span aria-hidden="true">📄</span>}
+        <span className="max-w-[10rem] truncate text-meta font-semibold text-navy">{file.name}</span>
+        <button type="button" aria-label={`Remove ${file.name}`} onClick={() => onFile(null)} className="cursor-pointer px-1 text-lead leading-none text-grey hover:text-navy">
+          ×
+        </button>
+      </div>
+    );
+  }
+  return (
+    <label className="flex shrink-0 cursor-pointer items-center gap-2 border border-navy bg-paper px-3 py-3 text-body font-semibold text-navy hover:bg-blue-tint-2 focus-within:outline-2 focus-within:outline-blue">
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7" />
+      </svg>
+      Upload your theory
+      <input
+        type="file"
+        accept="image/png,image/jpeg,application/pdf"
+        className="sr-only"
+        onChange={(event) => {
+          onFile(event.target.files?.[0] ?? null);
+          event.target.value = "";
+        }}
+      />
+    </label>
+  );
+}
 
 /** Step two: the question, and as little else as possible beside it. */
 function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
@@ -258,19 +293,25 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
   const assignableProjects = projects.data?.data ?? [];
   const create = useCreateTask();
   const navigate = useNavigate();
-  const canSend = question.trim().length > 0 && !create.isPending;
+  // A theory of change can start from the user's own diagram (task 054, increment 5).
+  const [file, setFile] = useState<File | null>(null);
+  const canSend = (question.trim().length > 0 || file !== null) && !create.isPending;
   const copy = FORM_COPY[capability];
 
   const submit = () => {
     if (!canSend) return;
     create.mutate(
       {
-        question,
+        question: question.trim() === "" && file !== null ? `My own theory of change (${file.name})` : question,
         projectId: projectId === "" ? null : projectId,
         capability,
         fromTaskIds,
+        ...(file !== null ? { openingTurn: false } : {}),
       },
-      { onSuccess: (task) => void navigate(`/tasks/${task.task_id}`) },
+      {
+        onSuccess: (task) =>
+          void navigate(`/tasks/${task.task_id}`, file === null ? undefined : { state: { tocFile: file, note: question.trim() } satisfies TocUploadHandOff }),
+      },
     );
   };
 
@@ -287,7 +328,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
       <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title">
         {copy.heading}
       </h1>
-      <p className="mt-3 max-w-prose text-lead font-normal leading-[25px] text-grey text-pretty max-md:text-body max-md:leading-snug">
+      <p className="whitespace-pre-line mt-3 max-w-prose text-lead font-normal leading-[25px] text-grey text-pretty max-md:text-body max-md:leading-snug">
         {copy.blurb}
       </p>
 
@@ -301,23 +342,32 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
           rows={3}
           placeholder={copy.placeholder}
           value={question}
-          onChange={(event) => setQuestion(event.target.value)}
+          onChange={(event) => {
+            setQuestion(event.target.value);
+            // Grow with the text, up to half the screen; then it scrolls.
+            event.target.style.height = "auto";
+            event.target.style.height = `${event.target.scrollHeight}px`;
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
               submit();
             }
           }}
-          className="min-h-[5.5rem] min-w-0 flex-1 resize-none border-0 bg-transparent p-0 text-lead leading-[25px] text-ink focus-visible:outline-none"
+          className="max-h-[50vh] min-h-[5.5rem] min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent p-0 text-lead leading-[25px] text-ink focus-visible:outline-none"
         />
-        <Button
-          type="submit"
-          size="md"
-          disabled={!canSend}
-          className="shrink-0 px-6 py-3.5 text-body"
-        >
-          {create.isPending ? "Starting…" : copy.submitLabel}
-        </Button>
+        {/* The upload sits above the submit button (theory of change only). */}
+        <div className="flex shrink-0 flex-col items-stretch gap-2">
+          {capability === "theory_of_change" && <AttachTheory file={file} onFile={setFile} />}
+          <Button
+            type="submit"
+            size="md"
+            disabled={!canSend}
+            className="shrink-0 px-6 py-3.5 text-body"
+          >
+            {create.isPending ? "Starting…" : copy.submitLabel}
+          </Button>
+        </div>
       </div>
       <p className="mt-2 text-meta font-normal leading-5 text-grey">
         Enter to send · Shift+Enter for a new line

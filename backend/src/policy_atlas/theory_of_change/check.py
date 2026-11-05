@@ -82,6 +82,7 @@ from policy_atlas.runtime.toc_plan import (
     TOC_LINKS_KEY,
     TOC_STARTED_BY_KEY,
     TOC_STUDIES_KEY,
+    as_drawn,
 )
 from policy_atlas.theory_of_change import store
 from policy_atlas.theory_of_change.backend import TocBackend
@@ -116,6 +117,7 @@ from policy_atlas.theory_of_change.graph import (
     link_problem,
     trim_conditions,
 )
+from policy_atlas.theory_of_change.seminal import SEMINAL_ORIGIN, fetch_seminal_works
 
 log = structlog.get_logger()
 
@@ -227,14 +229,15 @@ def walk_of_run(conn: Connection, *, task_id: uuid.UUID, run_id: uuid.UUID) -> u
 
 
 def appraisals_for(
-    conn: Connection, *, task_id: uuid.UUID, evidence_rows: Iterable[Row[Any]]
+    conn: Connection, *, task_id: uuid.UUID, evidence_rows: Iterable[Any]
 ) -> dict[str, DocAppraisal]:
     """Each judged document's appraisal, read under the walk that judged it.
 
     Args:
         conn: Open connection.
         task_id: The task.
-        evidence_rows: ``toc_item_evidence`` rows.
+        evidence_rows: ``toc_item_evidence`` rows, or anything with their
+            ``capability_run_id`` and ``task_source_snapshot_id``.
 
     Returns:
         Document id → appraisal; an unscored document has ``score=None``. A
@@ -414,6 +417,31 @@ def links_to_check(graph: Graph, named: list[str] | None = None) -> tuple[list[s
     return ordered[:TOC_LINK_CAP], max(0, len(ordered) - TOC_LINK_CAP)
 
 
+#: The search and judgements on the whole programme (red team, 2026-11-03): one
+#: more item search in a full check, its documents judged in the same pool as the
+#: connections' and stored as one event, never as a connection's evidence.
+PROGRAMME_KEY = "programme"
+PROGRAMME_EVENT = "toc.programme_judged"
+
+
+def programme_item_text(plan: Any) -> str:
+    """The text the whole programme is searched and judged on: intervention → goal."""
+    intervention = (plan.intervention or "the intervention").strip()
+    goal = plan.intended_change.strip()
+    where = plan.where.strip() if plan.where else "the stated place"
+    return "\n".join(
+        [
+            f"If {intervention}, then {goal}.",
+            f"From: {intervention}",
+            f"To: {goal}",
+            "The whole programme: evaluations of this intervention, or a close one, "
+            "and what happened to the goal.",
+            f"Did this work where it was tried, and does it hold for "
+            f"{plan.target_population.strip()} in {where} now?",
+        ]
+    )
+
+
 def item_search_intents(
     conn: Connection,
     *,
@@ -430,7 +458,8 @@ def item_search_intents(
         links: The links a named-link check covers, or ``None`` for all.
 
     Returns:
-        ``([(link_id, item_text)], left_out)`` under the 80-link cap (C5).
+        ``([(link_id, item_text)], left_out)`` under the 80-link cap (C5); a
+        full check adds the whole programme's search (:data:`PROGRAMME_KEY`).
     """
     plan = expect_toc_plan(validate_plan(THEORY_OF_CHANGE, payload))
     graph, _ = store.load_graph(conn, task_id)
@@ -450,6 +479,8 @@ def item_search_intents(
                 ),
             )
         )
+    if links is None and plan.intervention:
+        intents.append((PROGRAMME_KEY, programme_item_text(plan)))
     return intents, left_out
 
 
@@ -627,6 +658,81 @@ def _candidate(proposal_id: str, proposal: ProposalWire) -> dict[str, object]:
     }
 
 
+#: A found route keeps at most this many of the documents it was found in.
+ROUTE_DOCUMENTS = 3
+
+
+def _route_suggestion(
+    path: Any,
+    new_boxes: dict[str, Any],
+    code_of: dict[str, str],
+    link_code: dict[tuple[str, str], str],
+    *,
+    proposed: set[str],
+    evidence: list[dict[str, str]],
+    group: str,
+) -> list[Any]:
+    """One found route as suggested edits: its new boxes, its new connections, then the pathway.
+
+    Existing boxes and connections are named by their codes; new ones by keys
+    (``n1`` for a box, ``l1`` for a connection) that the later edits use.
+    """
+    from policy_atlas.theory_of_change.proposals import EditOpWire
+
+    def op(**values: Any) -> EditOpWire:
+        fields = dict.fromkeys(EditOpWire.model_fields, None)
+        return EditOpWire.model_validate({**fields, "group": group, **values})
+
+    reason = f"Found in the evidence: {path.label}."
+    ops = [
+        op(
+            op="add_box",
+            reason=reason,
+            key=key,
+            layer=new_boxes[key].layer,
+            text=new_boxes[key].text,
+        )
+        for key in dict.fromkeys(path.route)
+        if key in new_boxes and key not in proposed
+    ]
+
+    def ref(key: str) -> str:
+        return key if key in new_boxes else code_of.get(key, key)
+
+    new_links = {(link.source, link.target): link for link in path.new_links}
+    refs: list[str] = []
+    for source, target in zip(path.route, path.route[1:], strict=False):
+        if (source, target) in link_code:
+            refs.append(link_code[(source, target)])
+            continue
+        wire = new_links[(source, target)]
+        key = f"l{len(proposed) + len(refs) + len(ops) + 1}"
+        ops.append(
+            op(
+                op="add_link",
+                reason=reason,
+                key=key,
+                source=ref(source),
+                dest=ref(target),
+                if_text=wire.if_text,
+                then_text=wire.then_text,
+                because_text=wire.because_text,
+            )
+        )
+        refs.append(key)
+    ops.append(
+        op(
+            op="add_pathway",
+            reason=reason,
+            links=refs,
+            kind=path.kind,
+            label=path.label,
+            evidence=evidence,
+        )
+    )
+    return ops
+
+
 def toc_discover_scope(
     conn: Connection,
     *,
@@ -648,10 +754,16 @@ def toc_discover_scope(
         Batch and proposal counts and the usage totals.
     """
     plan = walk_toc_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
-    graph, _ = store.load_graph(conn, task_id)
+    graph, graph_rows = store.load_graph(conn, task_id)
     documents = screened_documents(conn, task_id=task_id, scope_id=context.scope_id)
     short, back = _short_keys(graph)
     theory = _theory_for_discover(graph, short)
+    # An uploaded diagram kept as drawn: found routes wait as one suggestion (owner, 2026-11-04).
+    suggest_only = as_drawn(plan)
+    code_of = {short[key]: graph_rows.boxes[key].code or short[key] for key in graph.boxes}
+    suggested: list[Any] = []
+    # Each checked proposal's documents and quotes, for the suggestion and the report.
+    evidence_of: dict[str, list[dict[str, str]]] = {}
     data = plan_data(plan)
     batches = [
         documents[i : i + DISCOVER_BATCH_SIZE]
@@ -697,7 +809,12 @@ def toc_discover_scope(
                 rejected += 1
                 log.info("toc_discover.proposal_dropped", problem=problem)
                 continue
-            candidates.append(_candidate(f"q{len(candidates) + 1}", proposal))
+            candidate_id = f"q{len(candidates) + 1}"
+            candidates.append(_candidate(candidate_id, proposal))
+            evidence_of[candidate_id] = [
+                {"tss": evidence.document_id, "quote": evidence.quote}
+                for evidence in proposal.evidence
+            ]
     kept_kinds = [pathway.kind for pathway in graph.pathways if pathway.status == "kept"]
     limit = {
         "success": max(
@@ -752,6 +869,26 @@ def toc_discover_scope(
             continue
         counts[path.kind] += 1
         accepted += 1
+        if suggest_only:
+            suggested.extend(
+                _route_suggestion(
+                    path,
+                    new_boxes,
+                    code_of,
+                    {pair: graph_rows.links[key].code or key for pair, key in link_of_pair.items()},
+                    proposed={op.key for op in suggested if op.key},
+                    # Each found route is offered on its own (owner, 2026-11-04).
+                    group=f"r{sum(1 for op in suggested if op.op == 'add_pathway') + 1}",
+                    evidence=list(
+                        {
+                            item["tss"]: item
+                            for proposal_id in path.from_proposals
+                            for item in evidence_of.get(proposal_id, [])
+                        }.values()
+                    )[:ROUTE_DOCUMENTS],
+                )
+            )
+            continue
         # A new box is written once, the first time a kept route uses it.
         for key in path.route:
             if key not in new_boxes or key in written:
@@ -824,6 +961,20 @@ def toc_discover_scope(
                 "text": f"Added a {path.kind} pathway from the evidence: {path.label}.",
                 "pathway_id": str(pathway_id),
             }
+        )
+    if suggested:
+        from policy_atlas.theory_of_change import proposals
+
+        routes = sum(1 for op in suggested if op.op == "add_pathway")
+        proposals.create_proposal(
+            conn,
+            task_id=task_id,
+            source="discover",
+            summary=(
+                f"{routes} route{'s' if routes != 1 else ''} found in the evidence that "
+                "your diagram does not show"
+            ),
+            ops=suggested,
         )
     store.record(
         conn, task_id=task_id, run_id=run_id, step="toc_discover", log=log_, changes=changes
@@ -1086,9 +1237,7 @@ def toc_merge_scope(
         if fold_box(conn, log_, task_id=task_id, box=box, into=into):
             folded[box] = into
             box_folds += 1
-            changes.append(
-                f"Merged box “{graph.boxes[box].text}” into “{graph.boxes[into].text}”"
-            )
+            changes.append(f"Merged box “{graph.boxes[box].text}” into “{graph.boxes[into].text}”")
         else:
             refused += 1
     decisions = {
@@ -1224,15 +1373,27 @@ def picked_ids(ids: list[str], candidates: list[LinkCandidate]) -> list[uuid.UUI
 
 
 def _link_candidates(
-    conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    walk_id: uuid.UUID,
+    programme: bool = False,
+    seminal: bool = False,
 ) -> dict[str, list[LinkCandidate]]:
     """Link id → the documents its own search found, from acquire's events.
 
     A document the task already held counts too (``source.seen_again``): a
     named check searches again and mostly finds documents an earlier check
-    acquired for another link.
+    acquired for another link. With ``seminal``, the seminal works this walk
+    itself looked up, under :data:`SEMINAL_ORIGIN`.
     """
-    child_link = _child_links(conn, task_id=task_id, walk_id=walk_id)
+    child_link = (
+        {walk_id: SEMINAL_ORIGIN}
+        if seminal
+        else _child_links(conn, task_id=task_id, walk_id=walk_id, programme=programme)
+    )
+    if programme:
+        child_link = {run: key for run, key in child_link.items() if key == PROGRAMME_KEY}
     if not child_link:
         return {}
     # Keyed by document and link: two links' searches may find the same held document.
@@ -1251,6 +1412,8 @@ def _link_candidates(
         .order_by(event_log.c.sequence)
     ):
         payload = row.payload
+        if seminal and payload.get("query_origin") != SEMINAL_ORIGIN:
+            continue
         found.setdefault(
             (uuid.UUID(payload["task_source_snapshot_id"]), child_link[row.capability_run_id]),
             ((str(payload["backend"]), str(payload["query_origin"])), int(payload["pool_rank"])),
@@ -1344,6 +1507,7 @@ def toc_select_scope(
     context: ScopeContext,
     backend: TocBackend,
     embedder: EmbeddingBackend | None = None,
+    searchers: list[Any] | None = None,
 ) -> dict[str, Any]:
     """Pick each link's documents and write the screen's rows (C27, C28, C31).
 
@@ -1361,6 +1525,10 @@ def toc_select_scope(
     screen's own, so classify, appraise and the later steps read them
     unchanged. A live backend first fills missing abstracts from Crossref.
 
+    Before picking, the seminal works step (:mod:`.seminal`) looks up the works
+    the walk's documents cite most and are not among them; every link's pick
+    is offered them too, after its own and its nearest documents.
+
     Args:
         conn: Open connection inside the component transaction.
         task_id: The task.
@@ -1368,9 +1536,11 @@ def toc_select_scope(
         context: The check walk's intent record.
         backend: The ToC model seam.
         embedder: The embedding backend for the shared pool, or ``None``.
+        searchers: The walk's search backends, for the seminal works lookup.
 
     Returns:
-        Screen counts, pick call counts and the pick usage.
+        Screen counts, pick call counts, the pick usage and the seminal works
+        counts (``seminal_*``).
     """
     return _select_links(
         conn,
@@ -1380,6 +1550,7 @@ def toc_select_scope(
         backend=backend,
         embedder=embedder,
         only=None,
+        searchers=searchers or [],
     )
 
 
@@ -1392,15 +1563,34 @@ def _select_links(
     backend: TocBackend,
     embedder: EmbeddingBackend | None,
     only: set[str] | None,
+    searchers: list[Any] | None = None,
 ) -> dict[str, Any]:
     """Pick documents for the walk's links, or for the ``only`` links (C28, C31, C32).
 
     With ``only``, the other links' picks are kept and merged into the new
     picks event, and a picked document already screened out is screened in
-    again at the next screen generation.
+    again at the next screen generation; the seminal works the first select
+    looked up are offered again, not looked up again.
     """
     walk_id = walk_of_run(conn, task_id=task_id, run_id=run_id)
     candidates = _link_candidates(conn, task_id=task_id, walk_id=walk_id)
+    plan = walk_toc_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
+    seminal_counts: dict[str, Any] = {}
+    if only is None:
+        whole = _link_candidates(conn, task_id=task_id, walk_id=walk_id, programme=True)
+        seminal_counts = fetch_seminal_works(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            context=context,
+            plan=plan,
+            pool_ids={c.tss_id for docs in [*candidates.values(), *whole.values()] for c in docs},
+            searchers=searchers or [],
+            embedder=embedder,
+        )
+    seminal = _link_candidates(conn, task_id=task_id, walk_id=walk_id, seminal=True).get(
+        SEMINAL_ORIGIN, []
+    )
     targets = set(candidates) if only is None else only & set(candidates)
     # A named check (C40): studies the user added are picked as given (C42); Check
     # again also re-judges the documents already judged for the link (C43).
@@ -1425,7 +1615,7 @@ def _select_links(
             candidates[key] = [c for c in candidates[key] if c.tss_id not in seen]
     if backend.mode == "live":
         candidates.update(_fill_abstracts(conn, {k: candidates[k] for k in targets}))
-    plan = walk_toc_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
+        seminal = _fill_abstracts(conn, {SEMINAL_ORIGIN: seminal})[SEMINAL_ORIGIN]
     graph, _ = store.load_graph(conn, task_id)
     texts: dict[str, str] = {}
     for key in targets:
@@ -1447,6 +1637,7 @@ def _select_links(
     walk_pool = list({c.tss_id: c for docs in candidates.values() for c in docs}.values())
     vectors = _document_vectors(conn, [c.tss_id for c in walk_pool]) if texts else {}
     shared = 0
+    seminal_offered = 0
     for key in list(texts):
         own = candidates[key]
         mine = {c.tss_id for c in own}
@@ -1457,7 +1648,11 @@ def _select_links(
             if c.tss_id not in already.get(key, set())
         ]
         shared += len(extra)
-        candidates[key] = [*own, *extra]
+        # The seminal works, offered to every link after its own and nearest ones.
+        offered = {c.tss_id for c in [*own, *extra]} | already.get(key, set())
+        cited = [c for c in seminal if c.tss_id not in offered]
+        seminal_offered += len(cited)
+        candidates[key] = [*own, *extra, *cited]
     called = [k for k in texts if len(candidates[k]) > PICK_N]
 
     def run_pick(key: str) -> CallOutcome[Any]:
@@ -1503,6 +1698,10 @@ def _select_links(
             },
         )
     everything = {c.tss_id for key in targets for c in candidates[key]}
+    if only is None:
+        # The whole programme's documents: the round-robin rule's 10, no pick call.
+        whole = _link_candidates(conn, task_id=task_id, walk_id=walk_id, programme=True)
+        picked = picked | set(select_for_link(whole.get(PROGRAMME_KEY, [])))
     screen = ScreenContext(
         scope_id=context.scope_id, intent=context.intent, context=context.context
     )
@@ -1534,6 +1733,9 @@ def _select_links(
         "failed_pick_calls": failed,
         "links": len(targets),
         "shared_candidates": shared,
+        **{f"seminal_{name}": value for name, value in seminal_counts.items()},
+        "seminal_works": len(seminal),
+        "seminal_offered": seminal_offered,
         "backend_mode": backend.mode,
         "usage_totals": usage.payload(),
     }
@@ -1627,9 +1829,7 @@ def _judged_documents(
     return out
 
 
-def links_without_search(
-    conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID
-) -> list[str]:
+def links_without_search(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> list[str]:
     """The kept links that have no item search of their own in this walk (C32).
 
     After merge, these are the links discovery added. Kept-pathway links
@@ -1696,9 +1896,13 @@ def toc_search_new_scope(
 
 
 def _child_links(
-    conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID, programme: bool = False
 ) -> dict[uuid.UUID, str]:
-    """Item-search child walk id → the link it searched, for this walk."""
+    """Item-search child walk id → the link it searched, for this walk.
+
+    The whole programme's search is left out unless ``programme`` is true: it
+    is no connection, and only the judge's programme jobs read it.
+    """
     children = conn.execute(
         select(capability_run.c.capability_run_id, evidence_scope.c.context)
         .select_from(
@@ -1715,6 +1919,7 @@ def _child_links(
         child.capability_run_id: str(link_id)
         for child in children
         if (link_id := (child.context or {}).get("link_id"))
+        and (programme or link_id != PROGRAMME_KEY)
     }
 
 
@@ -2019,6 +2224,17 @@ def toc_judge_scope(
                 )
             )
 
+    # The whole programme, on a full check: its own search's documents, judged
+    # in the same pool as the connections' (no extra wait).
+    if not named:
+        found = _link_candidates(conn, task_id=task_id, walk_id=walk_id, programme=True)
+        candidates = [
+            pool_by_id[c.tss_id] for c in found.get(PROGRAMME_KEY, []) if c.tss_id in pool_by_id
+        ]
+        whole = programme_item_text(plan)
+        for document in rerank(ranker, candidates, intent=whole, usage=usage)[:JUDGE_TOP_K]:
+            jobs.append(_JudgeJob(PROGRAMME_KEY, document, whole, "", "", "", ""))
+
     def run_job(job: _JudgeJob) -> CallOutcome[Any]:
         return _call(
             "toc_judge",
@@ -2041,7 +2257,10 @@ def toc_judge_scope(
     started_by = context.context.get(TOC_STARTED_BY_KEY)
     find_more = context.context.get(TOC_CHECK_MODE_KEY) == "find_more"
     study_links = set(context.context.get(TOC_STUDIES_KEY) or {})
-    carried = _user_decisions(conn, task_id, {job.link_key for job in jobs})
+    carried = _user_decisions(
+        conn, task_id, {job.link_key for job in jobs if job.link_key != PROGRAMME_KEY}
+    )
+    programme: list[dict[str, Any]] = []
     for job, outcome in zip(jobs, outcomes, strict=True):
         response = _outcome_value(outcome, usage)
         if response is None:
@@ -2054,6 +2273,18 @@ def toc_judge_scope(
             unverified += 1
             support = "not_about"
         about = support != "not_about"
+        if job.link_key == PROGRAMME_KEY:
+            programme.append(
+                {
+                    "tss": str(job.document.tss_id),
+                    "support": support,
+                    "quote": quote if about else None,
+                    "relevance": response.relevance if about else 0,
+                    "relevance_reason": response.relevance_reason if about else None,
+                    "robust_model": response.robust_model,
+                }
+            )
+            continue
         # A case study only from a document about the step, with a quote in its text.
         case = response.case_study if about else None
         if case is not None and not quote_found(text, case.quote):
@@ -2135,6 +2366,16 @@ def toc_judge_scope(
             .where(toc_item_evidence.c.support != "not_about")
         ).scalars()
     )
+    if programme:
+        events.append(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            event_type=PROGRAMME_EVENT,
+            payload={"walk_id": str(walk_id), "judgements": programme},
+        )
+        # Kept for classify and appraise, which weigh them like any document.
+        on_topic |= {uuid.UUID(j["tss"]) for j in programme if j["support"] != "not_about"}
     off_topic = set(pool_by_id) - on_topic
     if off_topic:
         screen_in(
@@ -2156,6 +2397,7 @@ def toc_judge_scope(
         "calls": len(jobs),
         "failed_calls": failed,
         "judgements": stored,
+        "programme_judgements": len(programme),
         "unverified_dropped": unverified,
         "backend_mode": backend.mode,
         "usage_totals": usage.payload(),
@@ -2176,7 +2418,9 @@ def critical_link(graph: Graph, verdicts: Mapping[str, LinkVerdict]) -> str | No
 
     The weakest important step on a success pathway: among links on kept
     success pathways, the one with the lowest verdict; ties go to the link on
-    the most kept pathways, then the earlier one in pathway order.
+    the most kept pathways, then the earlier one in pathway order. A step the
+    evidence supports (Supported or Leaning supports) is never critical
+    (owner, 2026-11-04): when every step is supported, there is none.
 
     Args:
         graph: The theory, with current pathway statuses.
@@ -2184,7 +2428,8 @@ def critical_link(graph: Graph, verdicts: Mapping[str, LinkVerdict]) -> str | No
             little evidence.
 
     Returns:
-        The link key, or ``None`` when no kept success pathway has a link.
+        The link key, or ``None`` when no kept success pathway has a link or
+        every such link is supported.
     """
     kept = [p for p in graph.pathways if p.status == "kept"]
     order = list(
@@ -2200,7 +2445,12 @@ def critical_link(graph: Graph, verdicts: Mapping[str, LinkVerdict]) -> str | No
         found = verdicts.get(key)
         return VERDICT_ORDER.index(found.verdict if found else "not_sure_insufficient")
 
-    return min(order, key=lambda key: (rank(key), -on[key], order.index(key)))
+    weakest = min(order, key=lambda key: (rank(key), -on[key], order.index(key)))
+    return None if rank(weakest) >= VERDICT_ORDER.index(CRITICAL_ABOVE) else weakest
+
+
+#: A step at this verdict or better is never the critical connection.
+CRITICAL_ABOVE = "leaning_supports"
 
 
 def toc_choose_scope(
@@ -2419,7 +2669,21 @@ def _pick_critical(
     if any(row.user_edited for row in marked):
         return False
     choice = critical_link(graph, verdicts)
-    if choice is None or (marked and str(marked[0].link_id) == choice):
+    if choice is None:
+        # Every step on the routes to the goal is supported: no connection is critical.
+        for row in marked:
+            store.update(
+                conn,
+                log_,
+                toc_link,
+                row.link_id,
+                observed_revision=row.revision,
+                values={"critical": False},
+            )
+        if marked:
+            changes.append("No connection is critical: every step to the goal is supported.")
+        return bool(marked)
+    if marked and str(marked[0].link_id) == choice:
         return False
     # Unmark first: at most one critical link per task (W10).
     for row in marked:

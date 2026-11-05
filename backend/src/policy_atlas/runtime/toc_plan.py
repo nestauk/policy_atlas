@@ -67,6 +67,9 @@ TOC_STUDIES_KEY = "studies"
 TOC_CHECK_MODE_KEY = "mode"
 #: The user who started a named check, for ``added_by`` on the studies they added.
 TOC_STARTED_BY_KEY = "started_by"
+#: On a draft walk of an uploaded theory (increment 5): stop after the draft, so
+#: the user compares the canvas with their diagram before the evidence check.
+TOC_REVIEW_FIRST_KEY = "review_first"
 
 #: The event a Stop writes; the runner ends the walk before its next step (C48).
 TOC_STOP_EVENT = "toc.stop_requested"
@@ -125,6 +128,11 @@ _NAMED_LINK_SKIPS = frozenset(
 )
 
 EntryPoint = Literal["outcome_first", "intervention_first", "existing_theory"]
+
+#: The evidence a theory is checked against starts here unless the user changes
+#: the plan: older studies (1980s, 1990s) crowded the checks (owner, 2026-11-04).
+#: A new plan carries it, and a stored plan with no restriction is read the same.
+DEFAULT_PUBLISHED_AFTER = "2000-01-01"
 
 
 class TocEvidenceRestriction(BaseModel):
@@ -209,6 +217,14 @@ class TocPlan(BaseModel):
     from_option: TocFromOption | None = None
     steering_mode: Literal["unattended"] = "unattended"
     steer_point_defaults: list[ScopingSteerPointDefault] = Field(default_factory=list, max_length=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def drop_retired_fields(cls, data: Any) -> Any:
+        """Ignore ``use_diagram``, which plans saved on 2026-11-04 may carry (since retired)."""
+        if isinstance(data, dict) and "use_diagram" in data:
+            return {key: value for key, value in data.items() if key != "use_diagram"}
+        return data
     source_turn_index: int | None = None
 
     @property
@@ -229,6 +245,16 @@ class TocPlan(BaseModel):
         return True
 
 
+def as_drawn(plan: TocPlan) -> bool:
+    """Whether the theory is the user's uploaded diagram, put on the canvas as drawn.
+
+    The canvas starts with only the user's boxes and arrows; what the draft
+    adds to complete the theory, and the routes the evidence check finds, wait
+    as suggestions (owner, 2026-11-04).
+    """
+    return plan.upload_id is not None
+
+
 def toc_scope_constraints(plan: TocPlan) -> ScopeConstraints:
     """Compile the plan's evidence restriction into the Evidence search grammar.
 
@@ -236,11 +262,12 @@ def toc_scope_constraints(plan: TocPlan) -> ScopeConstraints:
         plan: The validated plan.
 
     Returns:
-        The compiled constraints; empty when the plan restricts nothing.
+        The compiled constraints. A plan with no restriction (one stored before
+        the date range existed) gets :data:`DEFAULT_PUBLISHED_AFTER`.
     """
     restriction = plan.evidence_restriction
     if restriction is None:
-        return ScopeConstraints()
+        return ScopeConstraints(published_after=DEFAULT_PUBLISHED_AFTER)
     return ScopeConstraints.model_validate(restriction.model_dump(exclude_none=True))
 
 

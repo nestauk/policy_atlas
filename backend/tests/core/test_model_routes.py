@@ -49,8 +49,8 @@ DEFAULT_ROUTE_MODELS = {
     "longlist_assignment": "gpt-5.6-luna",
     "extract_interventions": "gpt-5.6-luna",
     # Theory of change (task 054).
-    "task_agent_toc": "gpt-5.6-sol",
-    "toc_draft": "gpt-5.6-sol",
+    "task_agent_toc": "gpt-5.6-terra",
+    "toc_draft": "gpt-5.6-terra",
     "toc_merge": "gpt-5.6-sol",
     "toc_choose": "gpt-5.6-sol",
     "toc_discover": "gpt-5.6-terra",
@@ -60,8 +60,9 @@ DEFAULT_ROUTE_MODELS = {
     "toc_figures": "gpt-5.6-luna",
     "toc_report": "gpt-5.6-sol",
     "toc_review": "gpt-5.6-sol",
-    "toc_sense_check": "gpt-5.6-sol",
+    "toc_sense_check": "gpt-5.6-terra",
     "toc_verdict": "gpt-5.6-sol",
+    "toc_import": "gpt-5.6-sol",
 }
 
 
@@ -107,13 +108,31 @@ def test_bedrock_local_names_bedrock_models_and_cohere() -> None:
     assert route.reasoning_effort_for("global.openai.gpt-5.6-terra") == "none"
 
 
+def test_bedrock_local_runs_theory_of_change_on_the_6x_models() -> None:
+    route = load_route(ROUTE_FILE, "bedrock-local", {})
+    # Each theory-of-change step keeps its tier, on the 6.x model of that tier.
+    six = {
+        "fast": "global.openai.gpt-6-luna",
+        "standard": "global.openai.gpt-6.1-terra",
+        "frontier": "global.openai.gpt-6.1-sol",
+    }
+    toc = [s for s in route.steps if s.startswith("toc_") or s == "task_agent_toc"]
+    assert len(toc) == 14
+    for step in toc:
+        assert route.model_for(step) == six[route.steps[step]], step
+    assert route.model_for("screen") == "global.openai.gpt-5.6-luna"
+    assert route.reasoning_effort_for("global.openai.gpt-6.1-terra") == "none"
+
+
 def test_bedrock_local_claude_switches_only_query_generation() -> None:
     plain = load_route(ROUTE_FILE, "bedrock-local", {})
     claude = load_route(ROUTE_FILE, "bedrock-local-claude", {})
     assert claude.search_queries.backend == "claude"
     assert claude.search_queries.model == "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+    # Theory of change runs on the 6.x models on bedrock-local only (2026-11-04).
     for step in DEFAULT_ROUTE_MODELS:
-        assert claude.model_for(step) == plain.model_for(step), step
+        if not step.startswith(("toc_", "task_agent_toc")):
+            assert claude.model_for(step) == plain.model_for(step), step
     assert claude.embeddings == plain.embeddings
 
 
@@ -208,7 +227,7 @@ def test_overlay_replaces_and_adds_routes_but_not_steps(tmp_path: Path) -> None:
         tmp_path,
         "replace.toml",
         '[routes.r]\nopenai_base_url = "https://other.test/v1"\napi_key_env = "OPENAI_API_KEY"\n'
-        '[routes.r.text]\n'
+        "[routes.r.text]\n"
         'mini = "m-mini-x"\nstandard = "m-std"\n[routes.r.embeddings]\nbackend = "openai"\n'
         'model = "e"\nprofile = "p"\n[routes.r.search_queries]\nbackend = "openai"\n',
     )

@@ -2,12 +2,14 @@
 
 When the Task Agent makes a theory-of-change plan ready, one quick OpenAlex
 search on the whole intervention (two queries, six results each) and one
-frontier call (``toc_sense_check_v1``) rate the route from the intervention to
-the goal: established, plausible, doubtful or implausible.
+frontier call (``toc_sense_check_v2``) answer two questions: is the route from
+the intervention to the goal plausible (logic), and what do evaluations of the
+whole programme say (evidence)?
 
-- **Doubtful or implausible:** the Task Agent's reply gets a warning with the
-  sources it rests on, and offers to draft anyway or change the plan. Nothing
-  is blocked: the user decides.
+- **Implausible mechanism:** the Task Agent's reply gets a warning with the
+  sources it rests on, and offers to draft anyway or change the plan.
+- **Plausible, evidence against:** a plain note on what evaluations found.
+  Nothing is blocked: the user decides.
 - **Stored** as a ``toc.sense_check`` event, keyed by the plan's intervention,
   goal, population and place, so the same plan is checked once; the theory
   verdict after the evidence check reads the latest one, because the
@@ -31,7 +33,6 @@ from policy_atlas.core import events
 from policy_atlas.core.schema import event_log
 from policy_atlas.evidence_search.sourcing.acquire import _reconstruct_abstract
 from policy_atlas.theory_of_change.backend import TocBackend
-from policy_atlas.theory_of_change.plausibility_prompt import FLAGGED
 
 log = structlog.get_logger()
 
@@ -97,13 +98,18 @@ def _documents(fields: dict[str, str], search: Search) -> list[dict[str, str]]:
 
 
 def note(payload: dict[str, Any]) -> str | None:
-    """The chat warning for a flagged check: the message, then the sources it rests on."""
-    if payload.get("rating") not in FLAGGED or not payload.get("message"):
+    """What the Task Agent adds: a warning (implausible), a note (evidence against), or nothing.
+
+    Each lists the documents its reasons cite.
+    """
+    if payload.get("mechanism") == "implausible" and payload.get("warning"):
+        lines = [f"Before I draft it: {payload['warning']}"]
+    elif payload.get("evidence") == "against" and payload.get("note"):
+        lines = [f"Before you start: {payload['note']}"]
+    else:
         return None
-    cited = [
-        doc for doc in payload.get("documents", []) if f"[{doc['id']}]" in payload.get("reason", "")
-    ]
-    lines = [f"Before I draft it: {payload['message']}"]
+    reasons = f"{payload.get('mechanism_reason', '')} {payload.get('evidence_reason', '')}"
+    cited = [doc for doc in payload.get("documents", []) if f"[{doc['id']}]" in reasons]
     if cited:
         lines.append(
             "What this rests on: "
@@ -158,19 +164,28 @@ def run_sense_check(
         events.append(
             conn, task_id=task_id, run_id=None, event_type=SENSE_CHECK_EVENT, payload=payload
         )
-    log.info("toc_sense_check.done", task_id=str(task_id), rating=response.rating)
+    log.info(
+        "toc_sense_check.done",
+        task_id=str(task_id),
+        mechanism=response.mechanism,
+        evidence=response.evidence,
+    )
     return note(payload)
 
 
 def for_verdict(payload: dict[str, Any] | None) -> dict[str, Any] | None:
-    """What the theory verdict reads from a stored check: rating, reason, cited titles."""
-    if payload is None:
+    """What the theory verdict reads from a stored check: both answers, reasons, cited titles."""
+    if payload is None or "mechanism" not in payload:
         return None
-    titles = {doc["id"]: doc["title"] for doc in payload.get("documents", [])}
+    reasons = f"{payload.get('mechanism_reason', '')} {payload.get('evidence_reason', '')}"
     return {
-        "rating": payload.get("rating"),
-        "reason": payload.get("reason"),
+        "mechanism": payload["mechanism"],
+        "mechanism_reason": payload.get("mechanism_reason"),
+        "evidence": payload.get("evidence"),
+        "evidence_reason": payload.get("evidence_reason"),
         "documents": {
-            doc_id: title for doc_id, title in titles.items() if doc_id in payload.get("reason", "")
+            doc["id"]: doc["title"]
+            for doc in payload.get("documents", [])
+            if f"[{doc['id']}]" in reasons
         },
     }

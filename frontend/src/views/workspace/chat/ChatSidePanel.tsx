@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { useArtefact, useConversations } from "../../../api/queries";
@@ -8,6 +8,7 @@ import { cn } from "../../../ui/brand/cn";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { useChatsEnabled } from "../../taskResult";
 import { TaskAgentPane } from "../TaskAgentPane";
+import { usePanelWidth } from "../usePanelWidth";
 import { ChatPane } from "./ChatPane";
 import { ChatsIcon } from "./ChatsIcon";
 import { Tooltip, TooltipProvider } from "../../../ui/radix/Tooltip";
@@ -22,61 +23,6 @@ import {
 } from "./conversationState";
 import { DraftChatPane } from "./DraftChatPane";
 import { ExpandIcon, PanelCloseIcon, PlusIcon } from "./icons";
-
-/** Resize bounds (px) — the workspace rail's own clamp. */
-const PANEL_MIN = 280;
-const PANEL_MAX = 640;
-const PANEL_DEFAULT = 416;
-const KEY_STEP = 24;
-
-/** Drag/keyboard width for the left-hand panel (handle on its RIGHT edge —
- *  the workspace rail's own geometry, so the delta math matches it). */
-function usePanelWidth() {
-  const [px, setPx] = useState(PANEL_DEFAULT);
-  const dragFrom = useRef<{ x: number; width: number } | null>(null);
-  const clamp = (value: number) => Math.min(Math.max(value, PANEL_MIN), PANEL_MAX);
-
-  const onPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    const panel = (event.currentTarget as HTMLElement).parentElement;
-    if (panel === null) return;
-    dragFrom.current = { x: event.clientX, width: panel.getBoundingClientRect().width };
-    const handle = event.currentTarget as HTMLElement;
-    handle.setPointerCapture(event.pointerId);
-    const onMove = (move: PointerEvent) => {
-      const from = dragFrom.current;
-      if (from === null) return;
-      setPx(clamp(from.width + (move.clientX - from.x)));
-    };
-    const onUp = () => {
-      dragFrom.current = null;
-      handle.removeEventListener("pointermove", onMove);
-      handle.removeEventListener("pointerup", onUp);
-    };
-    handle.addEventListener("pointermove", onMove);
-    handle.addEventListener("pointerup", onUp);
-  }, []);
-
-  const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    event.preventDefault();
-    setPx((current) => clamp(current + (event.key === "ArrowRight" ? KEY_STEP : -KEY_STEP)));
-  }, []);
-
-  return {
-    width: `${px}px`,
-    separatorProps: {
-      role: "separator" as const,
-      "aria-orientation": "vertical" as const,
-      "aria-label": "Resize the chat panel",
-      "aria-valuemin": PANEL_MIN,
-      "aria-valuemax": PANEL_MAX,
-      "aria-valuenow": px,
-      tabIndex: 0 as const,
-      onPointerDown,
-      onKeyDown,
-    },
-  };
-}
 
 const HEADER_BUTTON =
   "pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
@@ -124,7 +70,7 @@ function writeClosed(closed: boolean): void {
 export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: boolean }) {
   const { activeConversationId, draftEntryArtefactId, setActiveConversation, openDraftChat } = useActiveConversation();
   const [listOpen, setListOpen] = useState(false);
-  const panel = usePanelWidth();
+  const panel = usePanelWidth({ label: "Resize the chat panel", initial: 416 });
   const navigate = useNavigate();
   const conversations = useConversations(taskId, { status: "active" });
   const rows = conversations.data?.data ?? [];

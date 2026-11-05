@@ -68,7 +68,7 @@ export function PlanCard({
   if (toc !== null && approved && toc.ready) {
     return (
       <div className="anim-rise mr-8 flex flex-wrap items-center gap-3" data-testid="plan-ready-actions">
-        <Button className={started ? "" : "px-6 py-3.5 text-body"} variant={started ? "secondary" : "primary"} size={started ? "sm" : "md"} onClick={() => onReviewPlan?.()}>
+        <Button className={started ? "border border-navy" : "px-6 py-3.5 text-body"} variant={started ? "secondary" : "primary"} size={started ? "sm" : "md"} onClick={() => onReviewPlan?.()}>
           {started ? "See the plan" : "Review the plan"}
         </Button>
         {isOwner && !started && (

@@ -69,6 +69,14 @@ from policy_atlas.theory_of_change.evidence.pick_prompt import (
     PickResponse,
     build_pick_messages,
 )
+from policy_atlas.theory_of_change.import_prompt import (
+    TOC_IMPORT_MAX_OUTPUT_TOKENS,
+    TOC_IMPORT_PROMPT_VERSION,
+    ImportArrowWire,
+    ImportBoxWire,
+    ImportResponse,
+    build_import_messages,
+)
 from policy_atlas.theory_of_change.merge_prompt import (
     TOC_MERGE_MAX_OUTPUT_TOKENS,
     TOC_MERGE_PROMPT_VERSION,
@@ -89,9 +97,10 @@ from policy_atlas.theory_of_change.report_prompt import (
     TOC_REPORT_MAX_OUTPUT_TOKENS,
     TOC_REPORT_PROMPT_VERSION,
     ConnectionReasonWire,
+    FoundRouteWire,
     PathwayLineWire,
     ReportResponse,
-    TestWire,
+    WhatToTestWire,
     build_report_messages,
 )
 from policy_atlas.theory_of_change.review_prompt import (
@@ -192,7 +201,7 @@ class TocBackend(Protocol):
         max_success: int,
         max_failure: int,
     ) -> UsageResult[ChooseResponse]:
-        """Choose pathways and name new conditions (``toc_choose_v3``)."""
+        """Choose pathways and name new conditions (``toc_choose_v4``)."""
         ...
 
     def summarise(
@@ -233,6 +242,10 @@ class TocBackend(Protocol):
         self, *, theory: dict[str, object], sense_check: dict[str, object] | None
     ) -> UsageResult[TheoryVerdictResponse]:
         """Give the checked theory one overall verdict and a headline (``toc_verdict_v1``)."""
+        ...
+
+    def import_theory(self, *, pages: list[str]) -> UsageResult[ImportResponse]:
+        """Transcribe an uploaded diagram (``toc_import_v1``, increment 5)."""
         ...
 
 
@@ -470,6 +483,16 @@ class OpenAITocBackend:
             prompt_version=TOC_VERDICT_PROMPT_VERSION,
         )
 
+    def import_theory(self, *, pages: list[str]) -> UsageResult[ImportResponse]:
+        """See :class:`TocBackend`."""
+        return self._call(
+            build_import_messages(pages),
+            response_format=ImportResponse,
+            step="toc_import",
+            max_output_tokens=TOC_IMPORT_MAX_OUTPUT_TOKENS,
+            prompt_version=TOC_IMPORT_PROMPT_VERSION,
+        )
+
     def report(
         self,
         *,
@@ -579,8 +602,9 @@ class StubTocBackend:
       judged document; plain box descriptions with no "seen in".
     - ``report``: a plain report: each pathway's paragraph names its first
       link and cites that link's first source; a reason for every row.
-    - ``sense_check``: plausible, no message.
-    - ``theory_verdict``: plausible but untested.
+    - ``sense_check``: plausible, too little evidence, no warning or note.
+    - ``theory_verdict``: plausible, too little evidence.
+    - ``import_theory``: a three-box chain with two drawn arrows.
 
     Calls are counted in :attr:`calls` and their keyword inputs kept in
     :attr:`inputs`, both under a lock (judge runs in a thread pool).
@@ -798,31 +822,64 @@ class StubTocBackend:
     def sense_check(
         self, *, plan: dict[str, object], documents: list[dict[str, str]]
     ) -> UsageResult[SenseCheckResponse]:
-        """See :class:`StubTocBackend`: plausible, with no message."""
+        """See :class:`StubTocBackend`: plausible, too little evidence, no warning or note."""
         queued = self._next("sense_check", {"plan": plan, "documents": documents})
         return (
             queued
             or SenseCheckResponse(
                 active_ingredient="What the plan changes.",
                 best_route="Through the plan's own route.",
-                rating="plausible",
-                reason="A credible route exists.",
-                message=None,
+                mechanism="plausible",
+                mechanism_reason="A credible route exists.",
+                evidence="too_little",
+                evidence_reason="No document evaluates it.",
+                warning=None,
+                note=None,
             )
         ), None
 
     def theory_verdict(
         self, *, theory: dict[str, object], sense_check: dict[str, object] | None
     ) -> UsageResult[TheoryVerdictResponse]:
-        """See :class:`StubTocBackend`: plausible but untested."""
+        """See :class:`StubTocBackend`: plausible, too little evidence."""
         queued = self._next("theory_verdict", {"theory": theory, "sense_check": sense_check})
         return (
             queued
             or TheoryVerdictResponse(
-                verdict="plausible_untested",
                 carrying_step="#1",
+                mechanism="plausible",
+                evidence="too_little",
                 reason="The carrying step is credible but thinly evidenced.",
-                headline="The theory could work, but its key steps are not yet tested.",
+                headline="Too little evidence was found that the key steps happen.",
+            )
+        ), None
+
+    def import_theory(self, *, pages: list[str]) -> UsageResult[ImportResponse]:
+        """See :class:`StubTocBackend`: a three-box chain with two drawn arrows."""
+        queued = self._next("import_theory", {"pages": pages})
+        return (
+            queued
+            or ImportResponse(
+                is_theory_of_change=True,
+                title="An uploaded theory",
+                boxes=[
+                    ImportBoxWire(
+                        ref="b1", text="Fund the programme", layer="input", shown_as="Inputs"
+                    ),
+                    ImportBoxWire(
+                        ref="b2", text="People take part", layer="output", shown_as="Outputs"
+                    ),
+                    ImportBoxWire(
+                        ref="b3", text="Lives improve", layer="impact", shown_as="Impact"
+                    ),
+                ],
+                arrows=[
+                    ImportArrowWire(source="b1", target="b2", how="drawn", label=None),
+                    ImportArrowWire(source="b2", target="b3", how="drawn", label=None),
+                ],
+                groups=[],
+                notes=[],
+                unreadable=[],
             )
         ), None
 
@@ -862,6 +919,16 @@ class StubTocBackend:
                 if_then_because=f"If {plan.get('intervention') or 'it'} happens, then "
                 f"{plan.get('goal')}, because of the mechanism.",
                 context="The setting matters.",
+                question="This report asks whether the intervention reaches its goal.",
+                verdict_reason=(
+                    "The evidence is thin."
+                    + (
+                        " Evaluations of the whole programme were found."
+                        + cited.get("programme", "")
+                        if theory.get("whole_programme")
+                        else ""
+                    )
+                ),
                 pathways=[line(path) for path in pathways if path.get("kind") == "success"],
                 how_it_could_fail=(
                     f"The weakest connection is {weakest[0]}." if weakest else "None stands out."
@@ -870,12 +937,21 @@ class StubTocBackend:
                     ConnectionReasonWire(connection=str(row["code"]), why="The evidence is thin.")
                     for row in rows
                 ],
+                found_routes=[
+                    FoundRouteWire(
+                        route=str(found["key"]),
+                        sentence=f"The evidence describes this route.{cited.get('expand', '')}",
+                    )
+                    for found in cast(list[dict[str, Any]], theory.get("found_routes") or [])
+                ],
+                supporting_activities=[
+                    f"{text}.{cited.get('programme', '')}"
+                    for text in cast(list[str], theory.get("supporting_activities") or [])
+                ],
                 tests=[
-                    TestWire(
+                    WhatToTestWire(
                         connection=code,
-                        question="Does this step happen?",
-                        indicator="A count from routine data",
-                        test_and_learn="Compare before and after",
+                        sentence="Find out whether this step happens, from routine data.",
                     )
                     for code in weakest
                 ],

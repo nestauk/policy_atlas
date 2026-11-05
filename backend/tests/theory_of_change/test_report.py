@@ -26,7 +26,7 @@ from policy_atlas.theory_of_change.report_prompt import (
     ConnectionReasonWire,
     PathwayLineWire,
     ReportResponse,
-    TestWire,
+    WhatToTestWire,
 )
 from tests.theory_of_change.test_check_steps import _run, _summary
 
@@ -68,20 +68,32 @@ LINKS = [
 ]
 
 
-def test_one_row_per_connection_central_and_weak_first_then_most_central() -> None:
-    rows = assumption_rows(LINKS, {"#2": [3, 4]}, pathways=4)
+def test_one_row_per_connection_supported_risks_first_then_most_central_then_weak_risks() -> None:
+    supported_risk = _link(
+        "#6",
+        "leaning_supports",
+        target_code="F2",
+        target_layer="failure_outcome",
+        on_failure=True,
+        on_success=False,
+        on_pathways=0,
+    )
+    rows = assumption_rows([*LINKS, supported_risk], {"#2": [3, 4]}, pathways=4)
     assert [(r["key"], r["code"], r["importance"], r["flag"]) for r in rows] == [
-        # On 3 of 4 pathways and Mixed: central and weak.
-        ("r1", "#2", "75% of pathways", True),
+        # A risk the evidence supports: the likeliest way to fail.
+        ("r1", "#6", "Risk", False),
+        # Then the success connections, most central first.
         ("r2", "#1", "100% of pathways", False),
-        ("r3", "#3", "25% of pathways", False),
-        # Only on a failure pathway: a risk, after every success connection.
-        ("r4", "#4", "Risk", False),
+        # On 3 of 4 pathways and Mixed: central and weak.
+        ("r3", "#2", "75% of pathways", True),
+        ("r4", "#3", "25% of pathways", False),
+        # A risk with too little support: last.
+        ("r5", "#4", "Risk", False),
     ]
-    first = rows[0]
-    assert first["statement"] == "Step #2." and first["conditions"] == ["c2a", "c2b"]
-    assert first["verdict"] == "Mixed" and first["sources"] == [3, 4]
-    assert rows[3]["kind"] == "risk" and rows[3]["share"] is None
+    second = rows[2]
+    assert second["statement"] == "Step #2." and second["conditions"] == ["c2a", "c2b"]
+    assert second["verdict"] == "Mixed" and second["sources"] == [3, 4]
+    assert rows[4]["kind"] == "risk" and rows[4]["share"] is None
 
 
 def test_the_publisher_is_the_journal_or_the_organisation_unless_it_is_the_author() -> None:
@@ -180,15 +192,22 @@ def test_the_step_stores_the_report_and_the_read_serves_it(
     assert report.summary.directly_influenced == "outputs"
     assert report.title == "A drafted theory of change"
     assert report.summary_text == "What the theory says, and where its evidence is weakest."
-    # Each source carries its judgement and quote, so a marker opens it in context.
-    assert all(s.evidence_id is not None and s.quote for s in report.sources)
+    # Each source carries its quote; a connection's also its judgement, so a marker
+    # opens it in context (the whole programme's are judged but not stored per row).
+    assert all(s.quote for s in report.sources)
+    assert any(s.evidence_id is not None for s in report.sources)
     success = [p for p in sent["theory"]["pathways"] if p["kind"] == "success"]
     assert len(report.pathways) == len(success)
     assert all(p.pathway_id is not None and p.strength for p in report.pathways)
     assert report.how_it_could_fail
     # The stub cites each pathway's first link's first source: renumbered from 1, all listed.
     assert [s.n for s in report.sources] == list(range(1, len(report.sources) + 1))
-    assert report.sources and "[1]" in report.pathways[0].paragraph
+    # The verdict's reason, with the whole programme's evaluations, comes first, so it holds [1].
+    assert report.verdict_reason and "[1]" in report.verdict_reason
+    assert report.summary.question
+    # One bullet per supporting activity the draft named, with its citations renumbered.
+    assert report.supporting_activities and report.supporting_activities[0].startswith("Set-up")
+    assert "[2]" in report.pathways[0].paragraph
     assert route().model_for("toc_judge") in report.method
     assert all(row.why for row in report.assumptions)
     # A row lists at most three sources when its reason cites none.
@@ -201,11 +220,15 @@ def test_the_step_counts_what_its_checks_removed(engine: Engine, cleanup: list[u
         summary="A summary.",
         if_then_because="If it happens (L9), then it works [99].",
         context="Context.",
+        question="Does it work?",
+        verdict_reason="Because.",
+        supporting_activities=[],
+        found_routes=[],
         pathways=[PathwayLineWire(pathway="p99", title="Nowhere", sentence="No.")],
         how_it_could_fail="None.",
         connection_reasons=[ConnectionReasonWire(connection="#99", why="Unknown row.")],
         tests=[
-            TestWire(connection="#99", question="Q?", indicator="I", test_and_learn="T"),
+            WhatToTestWire(connection="#99", sentence="Find out."),
         ],
     )
     task_id = _run(engine, cleanup, StubTocBackend({"report": [bad]}))
@@ -216,3 +239,37 @@ def test_the_step_counts_what_its_checks_removed(engine: Engine, cleanup: list[u
     assert report["summary"]["if_then_because"] == "If it happens, then it works."
     assert report["pathways"] == [] and report["tests"] == []
     assert {row["why"] for row in report["assumptions"]} == {ROW_FALLBACK}
+
+
+def test_a_report_with_a_first_format_verdict_still_reads() -> None:
+    from policy_atlas.api.routers.toc import report_out
+
+    summary = dict.fromkeys(
+        ("goal", "if_then_because", "population", "time_horizon", "directly_influenced", "context"),
+        "",
+    )
+    report = {"summary": summary, "pathways": [], "assumptions": [], "tests": [], "sources": []}
+    old = {"label": "Supported", "verdict": "supported", "headline": "h", "reason": "r"}
+    assert report_out({**report, "method": "m", "verdict": old}).verdict is None
+
+
+def test_one_paper_found_twice_gets_one_number_and_split_capitals_are_mended() -> None:
+    from policy_atlas.theory_of_change.report import mend_title, same_work
+
+    doi = {"doi": "https://doi.org/10.1/X", "title": "A"}
+    assert same_work(doi) == same_work({"doi": "10.1/x", "title": "B"})
+    assert same_work({"title": "Alcohol in Scotland.", "publication_year": 1983}) == same_work(
+        {"title": "alcohol in scotland", "publication_year": 1983}
+    )
+    assert mend_title("Drinking in G reat B ritain") == "Drinking in Great Britain"
+    # One split letter alone is left: it may be real ("Vitamin D levels").
+    assert mend_title("T cells and alcohol") == "T cells and alcohol"
+
+
+def test_the_report_notices_when_steps_hold_but_the_programme_does_not() -> None:
+    from policy_atlas.theory_of_change.report import steps_hold_but_programme_does_not
+
+    assert steps_hold_but_programme_does_not(["confident", "leaning_supports"], "not_sure_mixed")
+    assert not steps_hold_but_programme_does_not(["confident"], "confident")
+    assert not steps_hold_but_programme_does_not(["confident", "not_sure_mixed"], "not_sure_mixed")
+    assert not steps_hold_but_programme_does_not([], "not_sure_mixed")

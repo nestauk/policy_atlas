@@ -192,7 +192,9 @@ def edit_link(
     }
     values = dict(fields)
     if "sentence" not in fields and set(parts) & set(fields):
-        values["sentence"] = sentence_of(**parts)
+        values["sentence"] = sentence_of(
+            **parts, boxes=_box_texts(conn, row.source_box_id, row.target_box_id)
+        )
     log = store.ChangeLog()
     _update(conn, log, toc_link, row, actor=actor, values=values)
     _record(
@@ -204,12 +206,49 @@ def edit_link(
     )
 
 
-def sentence_of(*, if_text: str, for_text: str, then_text: str, because_text: str) -> str:
-    """'If …, then …, because ….' from a link's parts (the for clause stays on its own)."""
-    sentence = f"If {if_text.strip().rstrip('.,')}, then {then_text.strip().rstrip('.,')}"
+def mid_sentence(text: str) -> str:
+    """A clause as it reads inside a sentence: its first letter in lower case.
+
+    Box texts start with a capital ("More exercise in schools"); inside "If …,
+    then …" that reads oddly. An acronym or a word with more capitals ("UK",
+    "NHS", "McDonald's") is left as it is. A place or a name at the start
+    ("England …") would be lowered too: rare in box text, and harmless.
+    """
+    text = text.strip()
+    first = text.split(" ", 1)[0]
+    if len(first) > 1 and first[0].isupper() and first[1:].islower():
+        return text[0].lower() + text[1:]
+    return text
+
+
+def sentence_of(
+    *, if_text: str, for_text: str, then_text: str, because_text: str, boxes: tuple[str, ...] = ()
+) -> str:
+    """'If …, then …, because ….' from a link's parts (the for clause stays on its own).
+
+    ``boxes``: the texts of the link's two boxes; where one appears inside a
+    clause it reads in lower case too ("then they sustain more exercise in schools").
+    """
+
+    def clause(text: str) -> str:
+        text = mid_sentence(text)
+        for box in boxes:
+            lowered = mid_sentence(box)
+            if lowered != box.strip():
+                text = text.replace(box.strip(), lowered)
+        return text
+
+    sentence = f"If {clause(if_text).rstrip('.,')}, then {clause(then_text).rstrip('.,')}"
     if because_text.strip():
-        sentence += f", because {because_text.strip().rstrip('.')}"
+        sentence += f", because {clause(because_text).rstrip('.')}"
     return sentence + "."
+
+
+def _box_texts(conn: Connection, *box_ids: uuid.UUID) -> tuple[str, ...]:
+    """The texts of a link's boxes, for its sentence."""
+    return tuple(
+        conn.execute(select(toc_box.c.text).where(toc_box.c.box_id.in_(box_ids))).scalars()
+    )
 
 
 def create_box(
@@ -300,7 +339,7 @@ def create_link(
             "source_box_id": source_box_id,
             "target_box_id": target_box_id,
             **parts,
-            "sentence": sentence_of(**parts),
+            "sentence": sentence_of(**parts, boxes=(source.text, target.text)),
             "conditions": [],
             "origin": "user",
             "user_edited": True,
@@ -699,7 +738,8 @@ def undo(conn: Connection, *, task_id: uuid.UUID, actor: Actor, event_id: uuid.U
             conn.execute(table.insert().values(**values))
             if name in store._PRIMARY_KEY:
                 log.created.append({"table": name, "id": str(values[store._PRIMARY_KEY[name]])})
-    for entry in payload.get("before", []):
+    # Rows that lose the critical mark go back first: at most one link is critical (W10).
+    for entry in sorted(payload.get("before", []), key=lambda e: bool(e["row"].get("critical"))):
         if entry.get("deleted") or entry["table"] not in (
             "toc_box",
             "toc_link",

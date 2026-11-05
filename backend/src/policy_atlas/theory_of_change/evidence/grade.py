@@ -22,8 +22,8 @@ counts strong +2, weak +1, mixed 0, refutes −2; *not about* is ignored. Per li
   relevant study).
 - Some evidence (4/9 ≤ W < 1): **Leaning supports** when S̄ ≥ 0.5, **Leaning
   against** when S̄ ≤ −0.5, else Not enough evidence.
-- Enough evidence (W ≥ 1): **Confident** when S̄ ≥ 1 and R% < 25%; else
-  **Leaning supports** when S̄ ≥ 0.5; **Not confident: evidence against** when
+- Enough evidence (W ≥ 1): **Supported** when S̄ ≥ 1 and R% < 25%; else
+  **Leaning supports** when S̄ ≥ 0.5; **Evidence against** when
   S̄ ≤ −1; **Leaning against** when S̄ ≤ −0.5; else **Mixed**.
 
 Calibrated on 2026-10-30 over six runs (123 links): the leaning verdicts say
@@ -91,12 +91,12 @@ VERDICT_ORDER: tuple[Verdict, ...] = (
 )
 
 VERDICT_LABELS: dict[Verdict, str] = {
-    "confident": "Confident",
+    "confident": "Supported",
     "leaning_supports": "Leaning supports",
     "not_sure_mixed": "Mixed",
     "leaning_against": "Leaning against",
     "not_sure_insufficient": "Not enough evidence",
-    "not_confident": "Not confident: evidence against",
+    "not_confident": "Evidence against",
 }
 
 

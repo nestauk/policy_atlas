@@ -157,18 +157,20 @@ export function tocGraphFixture(overrides: Partial<TocGraph> = {}): TocGraph {
     context: ["Rules in force since January 2026.", "Children's viewing is moving to YouTube and TikTok."],
     supporting_activities: ["Ofcom monitoring", "Industry guidance on nutrient profiling"],
     grade_rules: [
-      { label: "Confident", rule: "enough evidence, and on average it supports the step." },
+      { label: "Supported", rule: "enough evidence, and on average it supports the step." },
       { label: "Mixed", rule: "enough evidence, but it neither clearly supports nor refutes the step." },
       { label: "Not enough evidence", rule: "the documents add up to less than one strong, relevant study." },
-      { label: "Not confident: evidence against", rule: "enough evidence, and on average it is against the step." },
+      { label: "Evidence against", rule: "enough evidence, and on average it is against the step." },
     ],
     confidence: "not_sure_mixed",
     report: {
       title: "Food advert limits and childhood obesity",
       summary_text: "Removing adverts should cut snacking, but whether children see fewer adverts overall is the weakest step.",
+      verdict_reason: "Whether children see fewer adverts overall (#3) is mixed. Chile's restrictions cut children's exposure to food adverts [1].",
       verdict: {
-        verdict: "plausible_untested",
-        label: "Plausible, not yet tested",
+        mechanism: "plausible",
+        evidence: "too_little",
+        label: "Too little evidence",
         headline: "Advert limits could reduce childhood obesity, but whether children see fewer adverts overall is untested.",
         reason: "#3 is credible but its evidence is mixed.",
         carrying_step: "#3",
@@ -181,6 +183,7 @@ export function tocGraphFixture(overrides: Partial<TocGraph> = {}): TocGraph {
         time_horizon: "five years",
         directly_influenced: "outputs",
         context: "Children watch most television outside children's programmes [2].",
+        question: "This report asks whether the ban reduces obesity among children in England within five years.",
         weakest_links: "",
       },
       pathways: [
@@ -220,12 +223,12 @@ export function tocGraphFixture(overrides: Partial<TocGraph> = {}): TocGraph {
           sources: [3],
         },
       ],
+      supporting_activities: ["Ofcom monitors compliance with the advertising rules [1]."],
+      expansions: [{ label: "Brands move spend to influencers", kind: "failure", sentence: "Brands in Chile moved spend to influencers [3]." }],
       tests: [
         {
           link: "#3",
-          question: "Do children see fewer less healthy food adverts overall?",
-          indicator: "Children's impacts per week (BARB)",
-          test_and_learn: "Compare exposure before and after January 2026",
+          sentence: "Find out whether children see fewer less healthy food adverts overall, from BARB impacts per week before and after January 2026.",
         },
       ],
       sources: [

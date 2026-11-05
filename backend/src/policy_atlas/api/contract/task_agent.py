@@ -401,6 +401,9 @@ class TocPlanDraft(BaseModel):
         where: The place the theory is for.
         time_horizon: When the impact is expected.
         context: What the user said about the setting.
+        published_after: The evidence searched starts at this date (`YYYY-MM-DD`);
+            `None` means any year.
+        published_before: The evidence searched ends at this date, or `None`.
         assumptions: Every guess the plan is making.
         ready: Whether the draft has validated into an executable plan.
     """
@@ -413,9 +416,13 @@ class TocPlanDraft(BaseModel):
     intervention: str | None = None
     dosage: str | None = None
     existing_theory_text: str | None = None
+    #: The user's uploaded diagram behind the existing theory (increment 5).
+    upload_id: uuid.UUID | None = None
     where: str | None = None
     time_horizon: str | None = None
     context: str | None = None
+    published_after: str | None = None
+    published_before: str | None = None
     assumptions: list[str] = Field(default_factory=list)
     ready: bool = False
 
@@ -475,7 +482,9 @@ class TocPlanPatch(BaseModel):
     """Typed replace-field edits for a theory-of-change plan (task 054).
 
     Omitted fields stay as they are; an empty string clears an optional field.
-    Allowed only until the draft is on the canvas (S7).
+    Allowed only until the draft is on the canvas (S7). `published_after` and
+    `published_before` (`YYYY-MM-DD`) set the years of evidence searched; an
+    empty `published_after` means any year.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -487,6 +496,8 @@ class TocPlanPatch(BaseModel):
     where: str | None = Field(default=None, max_length=120)
     time_horizon: str | None = Field(default=None, max_length=120)
     context: str | None = Field(default=None, max_length=2000)
+    published_after: str | None = None
+    published_before: str | None = None
 
 
 class ScopingPlanPatch(BaseModel):

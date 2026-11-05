@@ -96,7 +96,7 @@ def test_new_boxes_and_links_get_codes_and_need_evidence(engine: Engine, ids: An
         graph = toc_graph_out(conn, task_id)
     added = next(item for item in graph.links if item.link_id == link)
     assert added.state == "unchecked" and added.origin == "user" and added.code
-    assert added.sentence.startswith("If output box, then Children eat less")
+    assert added.sentence.startswith("If output box, then children eat less")
     with pytest.raises(EditRefused) as refused, engine.begin() as conn:
         edits.create_link(
             conn, task_id=task_id, actor=ME, source_box_id=ids["target"], target_box_id=box
@@ -196,6 +196,11 @@ def test_marking_a_link_critical_unmarks_the_other(engine: Engine, ids: Any) -> 
         edits.set_critical(conn, task_id=task_id, actor=ME, link_id=other, expected_revision=1)
     assert _one(engine, toc_link, "link_id", other).critical
     assert not _one(engine, toc_link, "link_id", ids["link"]).critical
+    # Undo moves the mark back without two critical links at once.
+    with engine.begin() as conn:
+        edits.undo(conn, task_id=task_id, actor=ME, event_id=_last_event(engine, task_id))
+    assert not _one(engine, toc_link, "link_id", other).critical
+    assert _one(engine, toc_link, "link_id", ids["link"]).critical
 
 
 # --- Evidence edits (C42, C43) ---------------------------------------------------------------
@@ -388,3 +393,21 @@ def test_a_stop_request_is_seen_by_the_runner_check(engine: Engine, ids: Any) ->
             payload={"capability_run_id": str(walk)},
         )
     assert toc_stop_requested(engine, task_id=task_id, capability_run_id=walk)
+
+
+def test_a_connection_sentence_reads_in_sentence_case() -> None:
+    sentence = edits.sentence_of(
+        if_text="More pupils join exercise",
+        for_text="",
+        then_text="they sustain More exercise in schools",
+        because_text="Repeated participation builds activity.",
+        boxes=("More pupils join exercise", "More exercise in schools"),
+    )
+    assert sentence == (
+        "If more pupils join exercise, then they sustain more exercise in schools, "
+        "because repeated participation builds activity."
+    )
+    # Acronyms keep their capitals.
+    assert edits.sentence_of(
+        if_text="NHS funds clinics", for_text="", then_text="UK rates fall", because_text=""
+    ) == ("If NHS funds clinics, then UK rates fall.")

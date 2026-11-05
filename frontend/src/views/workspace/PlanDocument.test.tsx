@@ -16,6 +16,7 @@ vi.mock("../../api/queries", () => ({
   useTask: vi.fn(),
   useRuns: vi.fn(),
   useLonglist: vi.fn(),
+  useTocUploadFile: vi.fn(() => ({ data: undefined, isError: false })),
 }));
 
 const { patchMutate, confirmMutate } = vi.hoisted(() => ({
@@ -997,6 +998,7 @@ describe("PlanDocument — theory of change (task 054)", () => {
         title: "Healthy weight",
         question: "How would an advertising ban reduce childhood obesity?",
         entry_point: "intervention_first",
+        upload_id: null,
         intended_change: "Fewer children living with obesity",
         target_population: "children aged 4 to 11",
         intervention: "a junk-food advertising ban",
@@ -1005,6 +1007,8 @@ describe("PlanDocument — theory of change (task 054)", () => {
         where: "London",
         time_horizon: "within 5 years",
         context: null,
+        published_after: "2000-01-01",
+        published_before: null,
         assumptions: [],
         ready: true,
         ...overrides,
@@ -1028,6 +1032,22 @@ describe("PlanDocument — theory of change (task 054)", () => {
     expect(screen.getByRole("button", { name: "Draft the theory" })).toBeEnabled();
     // No Evidence search sections or start button.
     expect(screen.queryByText("Research question")).not.toBeInTheDocument();
+  });
+
+  it("shows the evidence years and saves a changed range through the plan edit", () => {
+    mockUsePlan({ data: tocPlanOut() });
+    renderPlan();
+    expect(screen.getByText("Evidence published")).toBeInTheDocument();
+    expect(screen.getByText("2000 onwards")).toBeInTheDocument();
+    const section = screen.getByText("Evidence published").closest("section") as HTMLElement;
+    fireEvent.click(within(section).getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Published from (year)"), { target: { value: "1995" } });
+    fireEvent.change(screen.getByLabelText("Published until (year)"), { target: { value: "2010" } });
+    fireEvent.click(within(section).getByRole("button", { name: "Save" }));
+    expect(patchMutate).toHaveBeenCalledWith(
+      { toc: { published_after: "1995-01-01", published_before: "2010-12-31" } },
+      expect.anything(),
+    );
   });
 
   it("shows a pasted theory under the starting point", () => {

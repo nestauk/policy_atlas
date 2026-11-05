@@ -18,10 +18,12 @@ import {
   useReactFlow,
   useStore,
   useStoreApi,
+  ViewportPortal,
 } from "@xyflow/react";
 
 import { scrub } from "../../lib/scrub";
 import type { Selection } from "./DetailPanel";
+import { imageBounds } from "./exports";
 import { CriticalMark } from "./ReadingGuide";
 import {
   BOX_H,
@@ -33,7 +35,66 @@ import {
   VERDICT_VAR,
   visibleLinkIds,
 } from "./tocModel";
-import type { TocBox, TocGraph, TocLink, Verdict } from "./types";
+import type { Preview } from "./Suggestions";
+import type { TocBox, TocGraph, TocLink, TocPathway, Verdict } from "./types";
+
+/** Ids of what a hovered suggestion would add: drawn faded, never clickable. */
+const PREVIEW = "preview:";
+
+/**
+ * The theory with a suggested route added, for the canvas only: its new boxes,
+ * links and pathway get preview ids. Existing boxes and links are named by code.
+ */
+function withPreview(graph: TocGraph, preview: Preview | null): TocGraph {
+  if (preview === null) return graph;
+  const boxId = (ref: string) => graph.boxes.find((box) => box.code === ref)?.box_id ?? PREVIEW + ref;
+  const linkId = (ref: string) => graph.links.find((link) => link.code === ref)?.link_id ?? PREVIEW + ref;
+  const boxes = preview.boxes.map(
+    (box) =>
+      ({
+        box_id: PREVIEW + box.key,
+        code: null,
+        layer: box.layer,
+        text: box.text,
+        origin: "drafted",
+        revision: 0,
+        position: null,
+        result_criteria: { definition: null, indicator: null },
+      }) as unknown as TocBox,
+  );
+  const links = preview.links.map(
+    (link) =>
+      ({
+        link_id: PREVIEW + link.key,
+        code: null,
+        source_box_id: boxId(link.source),
+        target_box_id: boxId(link.dest),
+        verdict: "not_sure_insufficient",
+        state: "checked",
+        pending_count: 0,
+        critical: false,
+        origin: "drafted",
+        sentence: "",
+        conditions: [],
+      }) as unknown as TocLink,
+  );
+  const pathways =
+    preview.pathway === null
+      ? []
+      : [
+          {
+            pathway_id: `${PREVIEW}route`,
+            kind: preview.pathway.kind,
+            status: "kept",
+            label: "",
+            link_ids: preview.pathway.links.map(linkId),
+            origin: "drafted",
+            broken: false,
+            reason: null,
+          } as unknown as TocPathway,
+        ];
+  return { ...graph, boxes: [...graph.boxes, ...boxes], links: [...graph.links, ...links], pathways: [...graph.pathways, ...pathways] };
+}
 
 interface BoxData extends Record<string, unknown> {
   box: TocBox;
@@ -43,6 +104,8 @@ interface BoxData extends Record<string, unknown> {
   needsEvidence: boolean;
   /** The source picked in Connect mode. */
   connecting: boolean;
+  /** Part of a hovered suggestion: drawn faded. */
+  ghost: boolean;
 }
 interface EdgeData extends Record<string, unknown> {
   /** Columns from source to target; 0 inside one column. */
@@ -53,6 +116,12 @@ interface EdgeData extends Record<string, unknown> {
   attention: boolean;
   verdict: Verdict;
   pending: boolean;
+  /** An uploaded theory waiting for review: a connection Policy Atlas suggested (increment 5). */
+  suggested: boolean;
+  /** An uploaded theory waiting for review: a connection from the user's own diagram, not yet checked. */
+  drawn: boolean;
+  /** Part of a hovered suggestion: drawn faded. */
+  ghost: boolean;
   critical: boolean;
   selected: boolean;
   tip: string;
@@ -70,6 +139,8 @@ const LABEL_W = 200;
 const LABEL_H = 20;
 /** Never zoom out below this on load: smaller and the box text is hard to read. */
 const MIN_START_ZOOM = 1;
+/** The furthest the view zooms out: far enough for the fit button to show a large theory whole. */
+const MIN_ZOOM = 0.1;
 const VIEW_PADDING = 0.08;
 const HANDLE_CLASS = "!h-1 !w-1 !border-0 !bg-transparent";
 /** Display-only nodes: never selected, never catching a click meant for a box or a connection. */
@@ -87,6 +158,7 @@ function BoxView({ data }: NodeProps<BoxNode>) {
         box.code !== null ? "pt-3.5" : "",
         data.selected || data.connecting ? "border-blue ring-4 ring-blue-tint" : "border-grey/40",
         data.dim ? "opacity-20" : "",
+        data.ghost ? "border-dashed !border-blue opacity-60" : "",
       ].join(" ")}
       style={{ width: BOX_W, height: BOX_H }}
     >
@@ -123,6 +195,17 @@ function Dividers({ lineY, ceilingX }: { lineY: number | null; ceilingX: number 
   );
 }
 
+/** The same two dividers, bounded and inside the viewport, for the downloaded image only. */
+function ExportDividers({ graph, lineY, ceilingX }: { graph: TocGraph; lineY: number | null; ceilingX: number }) {
+  const { x, y, width, height } = imageBounds(graph);
+  return (
+    <ViewportPortal>
+      {lineY !== null && <div className="toc-export-only absolute border-t border-line-2" style={{ left: x, top: lineY, width }} />}
+      <div className="toc-export-only absolute border-l border-dashed border-grey" style={{ left: ceilingX, top: y, height }} />
+    </ViewportPortal>
+  );
+}
+
 function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, markerEnd }: EdgeProps<TocEdge>) {
   if (data === undefined) return null;
   const [path, markX, markY] = data.curved
@@ -131,14 +214,12 @@ function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
     : data.span > 0
       ? (({ path: p, labelX, labelY }) => [p, labelX, labelY] as const)(routeEdge(sourceX, sourceY, targetX, targetY, data.span))
       : getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 10 });
-  const kind = data.pending ? "pending" : data.verdict;
+  const kind = data.ghost ? "preview" : data.pending ? "pending" : data.suggested ? "suggested" : data.drawn ? "drawn" : data.verdict;
   return (
     <g>
       <title>{data.tip}</title>
       {/* The selected connection gets the boxes' blue halo, under its own line. */}
       {data.selected && <path d={path} data-testid="toc-edge-halo" className="toc-edge-halo" />}
-      {/* Mixed is two-tone: an amber line under the green dash. */}
-      {kind === "not_sure_mixed" && <path d={path} className="toc-edge-under" />}
       <BaseEdge
         id={id}
         path={path}
@@ -181,16 +262,25 @@ const HANDLES = [
  * Sets the viewport: the whole graph (or the chosen pathway) fitted to the
  * view but never below MIN_START_ZOOM. When the graph is wider than fits at
  * that zoom it starts at the left edge, vertically centred, so the user pans
- * right. Also serves the "fit view" button and full-screen changes.
+ * right. Also serves full-screen changes; the fit button uses WholeFitter.
  */
 function ViewFitter({ boxes, bounds, refit }: { boxes: number; bounds: Bounds; refit: number }) {
   const { setViewport } = useReactFlow();
   const store = useStoreApi();
   const ready = useStore((state) => state.width > 0 && state.height > 0);
   const { x, y, width, height } = bounds;
+  // The load, a new box count or full screen fit the view; a pathway change only pans to it.
+  const fittedFor = useRef<string | null>(null);
   useEffect(() => {
     if (!ready) return;
-    const { width: viewW, height: viewH } = store.getState();
+    const { width: viewW, height: viewH, transform } = store.getState();
+    const key = `${boxes}:${refit}`;
+    if (fittedFor.current === key) {
+      const zoom = transform[2];
+      void setViewport({ x: viewW / 2 - (x + width / 2) * zoom, y: viewH / 2 - (y + height / 2) * zoom, zoom }, { duration: 300 });
+      return;
+    }
+    fittedFor.current = key;
     const fitted = getViewportForBounds({ x, y, width, height }, viewW, viewH, 0.1, 2, VIEW_PADDING);
     if (fitted.zoom >= MIN_START_ZOOM) {
       void setViewport(fitted);
@@ -198,6 +288,19 @@ function ViewFitter({ boxes, bounds, refit }: { boxes: number; bounds: Bounds; r
     }
     void setViewport({ x: 24 - x * MIN_START_ZOOM, y: (viewH - height * MIN_START_ZOOM) / 2 - y * MIN_START_ZOOM, zoom: MIN_START_ZOOM });
   }, [ready, boxes, x, y, width, height, refit, setViewport, store]);
+  return null;
+}
+
+/** The fit button: the whole graph (or the chosen pathway) in view, however far out that takes the zoom. */
+function WholeFitter({ count, bounds }: { count: number; bounds: Bounds }) {
+  const { setViewport } = useReactFlow();
+  const store = useStoreApi();
+  const { x, y, width, height } = bounds;
+  useEffect(() => {
+    if (count === 0) return;
+    const view = store.getState();
+    void setViewport(getViewportForBounds({ x, y, width, height }, view.width, view.height, MIN_ZOOM, 2, VIEW_PADDING), { duration: 300 });
+  }, [count, x, y, width, height, setViewport, store]);
   return null;
 }
 
@@ -235,12 +338,13 @@ interface Bounds {
  * or a connection selects it. Set-aside pathways never appear here.
  */
 export function TocCanvas({
-  graph,
+  graph: theory,
   pathway,
   selection,
   focus = null,
   onSelect,
   editing = null,
+  preview = null,
 }: {
   graph: TocGraph;
   /** "all" or one kept pathway's id. */
@@ -251,7 +355,10 @@ export function TocCanvas({
   onSelect: (selection: Selection | null) => void;
   /** Editing controls for an editor (C41, C47); null keeps the canvas read-only. */
   editing?: CanvasEditing | null;
+  /** A hovered suggestion's route, drawn faded (owner, 2026-11-04). */
+  preview?: Preview | null;
 }) {
+  const graph = withPreview(theory, preview);
   // Where a box is while dragged and until the saved position comes back (its revision moves on).
   const [dragged, setDragged] = useState<Map<string, { x: number; y: number; revision: number }>>(new Map());
   const [connectFrom, setConnectFrom] = useState<string | null>(null);
@@ -321,6 +428,7 @@ export function TocCanvas({
   const fsEl = () => boxRef.current?.closest<HTMLElement>("#toc-canvas") ?? boxRef.current?.parentElement ?? null;
   const [fullscreen, setFullscreen] = useState(false);
   const [refit, setRefit] = useState(0);
+  const [fitWhole, setFitWhole] = useState(0);
   const canFullscreen = typeof document !== "undefined" && document.fullscreenEnabled === true;
   useEffect(() => {
     const onChange = () => {
@@ -403,6 +511,7 @@ export function TocCanvas({
             selected: selection?.kind === "box" && selection.id === placed.id,
             needsEvidence: needsEvidence(box),
             connecting: connectFrom === placed.id,
+            ghost: placed.id.startsWith(PREVIEW),
           },
           draggable: editing !== null && !connecting,
           connectable: false,
@@ -419,6 +528,7 @@ export function TocCanvas({
       // Inside one column a connection runs bottom to top, or top to bottom when it goes up.
       const upward = sameColumn && (yOf.get(link.target_box_id) ?? 0) < (yOf.get(link.source_box_id) ?? 0);
       const pending = isPending(link);
+      const reviewing = graph.check_status === "drafted";
       return {
         id: link.link_id,
         type: "toc",
@@ -426,13 +536,21 @@ export function TocCanvas({
         target: link.target_box_id,
         sourceHandle: sameColumn ? (upward ? "ts" : "b") : "r",
         targetHandle: sameColumn ? (upward ? "bt" : "t") : "l",
-        markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: pending ? "var(--color-line-2)" : VERDICT_VAR[link.verdict] },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 14,
+          height: 14,
+          color: pending ? "var(--color-line-2)" : reviewing ? (link.origin === "imported" ? "var(--color-navy)" : "var(--color-blue)") : VERDICT_VAR[link.verdict],
+        },
         data: {
           span: sameColumn ? 0 : (columnOf.get(link.target_box_id) ?? 0) - (columnOf.get(link.source_box_id) ?? 0),
           curved,
           attention: link.pending_count > 0 || link.state === "pending",
           verdict: link.verdict,
           pending,
+          suggested: reviewing && link.origin !== "imported",
+          drawn: reviewing && link.origin === "imported",
+          ghost: link.link_id.startsWith(PREVIEW),
           critical: link.critical,
           selected: selection?.kind === "link" && selection.id === link.link_id,
           tip: linkTip(link),
@@ -452,7 +570,7 @@ export function TocCanvas({
         nodesDraggable={editing !== null && !connecting}
         nodesConnectable={false}
         elementsSelectable={false}
-        minZoom={0.3}
+        minZoom={MIN_ZOOM}
         onNodesChange={(changes) => {
           // Only drags change anything: follow the box while it moves.
           const moves = changes.filter((change) => change.type === "position" && change.position !== undefined);
@@ -486,6 +604,7 @@ export function TocCanvas({
         onPaneClick={() => onSelect(null)}
       >
         <Dividers lineY={layout.lineY} ceilingX={layout.ceilingX} />
+        <ExportDividers graph={graph} lineY={layout.lineY} ceilingX={layout.ceilingX} />
         {connecting && (
           <p className="pointer-events-none absolute left-3 top-3 z-10 rounded bg-paper px-2.5 py-1 text-meta font-semibold text-blue shadow-sm">
             {connectFrom === null ? "Click the box the connection starts from" : "Click the box it leads to"} · Esc to cancel
@@ -493,9 +612,10 @@ export function TocCanvas({
         )}
         <Focuser count={focus?.count ?? 0} rect={focus === null ? null : rectOf(focus.target)} />
         <ViewFitter boxes={layout.boxes.length} bounds={bounds} refit={refit} />
+        <WholeFitter count={fitWhole} bounds={bounds} />
         <Controls showInteractive={false} showFitView={false}>
-          {/* Our own fit button: the library's would fit below the minimum zoom. */}
-          <ControlButton onClick={() => setRefit((count) => count + 1)} title="Fit view" aria-label="Fit view">
+          {/* Our own fit button: the whole diagram, below the start zoom when it must be. */}
+          <ControlButton onClick={() => setFitWhole((count) => count + 1)} title="Fit the whole diagram" aria-label="Fit the whole diagram">
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
               <rect x="5" y="5" width="14" height="14" />
             </svg>

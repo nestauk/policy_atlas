@@ -126,6 +126,28 @@ def test_the_plan_panel_edits_a_toc_plan_until_the_draft_exists(
     assert _versions(engine, task_id) == 2
 
 
+def test_the_plan_s_evidence_years_default_to_2000_and_survive_the_next_turn(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = _toc_task(client, owner)
+        turn = task_agent_turn_ok(client, owner, task_id, QUESTION)
+        assert turn["toc_plan"]["published_after"] == "2000-01-01"
+        assert turn["toc_plan"]["published_before"] is None
+        url = f"/api/v1/tasks/{task_id}/plan"
+        years = {"published_after": "1990-01-01", "published_before": "2010-12-31"}
+        patched = client.patch(url, headers=owner, json={"toc": years})
+        assert patched.status_code == 200, patched.text
+        assert {k: patched.json()["toc"][k] for k in years} == years
+        bad = client.patch(url, headers=owner, json={"toc": {"published_after": "1990"}})
+        assert bad.status_code == 422
+        # The Task Agent never sets the years, so its next turn keeps the user's.
+        later = task_agent_turn_ok(client, owner, task_id, "Make it about adults instead")
+        assert {k: later["toc_plan"][k] for k in years} == years
+        cleared = client.patch(url, headers=owner, json={"toc": {"published_after": ""}})
+        assert cleared.json()["toc"]["published_after"] is None
+
+
 def test_a_turn_during_the_check_is_admitted_and_leaves_the_plan_as_approved(
     engine: Engine, tmp_path: Path
 ) -> None:

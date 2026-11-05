@@ -40,7 +40,6 @@ from policy_atlas.core.schema import (
     evidence_scope,
     runs,
     task_agent_transcript,
-    toc_pathway,
 )
 from policy_atlas.runtime.capability_registry import (
     THEORY_OF_CHANGE,
@@ -53,12 +52,14 @@ from policy_atlas.runtime.runner import RunnerBackends, RunPlanOutcome, run_plan
 from policy_atlas.runtime.toc_plan import (
     TOC_LINKS_KEY,
     TOC_PURPOSE,
+    TOC_REVIEW_FIRST_KEY,
     TOC_WALK_CHECK,
     TOC_WALK_DRAFT,
     TOC_WALK_KEY,
     TocPlan,
 )
-from policy_atlas.theory_of_change.store import TOC_CHANGED_EVENT, has_graph
+from policy_atlas.theory_of_change import store
+from policy_atlas.theory_of_change.store import has_graph
 
 log = structlog.get_logger()
 
@@ -241,6 +242,14 @@ def start_scope(engine: Engine, *, task_id: uuid.UUID, plan_row: dict[str, Any])
 
 def walk_kind(conn: Connection, *, task_id: uuid.UUID, capability_run_id: uuid.UUID) -> str | None:
     """Return a walk's ``toc_walk`` kind, or ``None`` for any other walk."""
+    context = walk_context(conn, task_id=task_id, capability_run_id=capability_run_id)
+    return None if context is None else context.get(TOC_WALK_KEY)
+
+
+def walk_context(
+    conn: Connection, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
+) -> dict[str, Any] | None:
+    """A theory-of-change walk's intent-record context, or ``None`` for any other walk."""
     row = conn.execute(
         select(evidence_scope.c.purpose, evidence_scope.c.context)
         .select_from(
@@ -255,7 +264,7 @@ def walk_kind(conn: Connection, *, task_id: uuid.UUID, capability_run_id: uuid.U
     ).one_or_none()
     if row is None or row.purpose != TOC_PURPOSE:
         return None
-    return (row.context or {}).get(TOC_WALK_KEY)
+    return dict(row.context or {})
 
 
 def _check_follows(conn: Connection, *, task_id: uuid.UUID, draft_run_id: uuid.UUID) -> bool:
@@ -298,6 +307,9 @@ def run_toc_sequence(
         # The user's Stop (C48): say what stays and how to go on.
         post_agent_message(engine, task_id=task_id, text=STOPPED_MESSAGE)
         return None
+    if walk_id is not None and first_outcome.status in _ENDED_BADLY:
+        post_failure_message(engine, task_id=task_id, walk_id=walk_id)
+        return None
     if walk_id is None or first_outcome.status not in _ENDED_WELL:
         return None
     with engine.connect() as conn:
@@ -306,6 +318,12 @@ def run_toc_sequence(
         post_check_message(engine, task_id=task_id, walk_id=walk_id)
         return None
     if kind != TOC_WALK_DRAFT:
+        return None
+    with engine.connect() as conn:
+        context = walk_context(conn, task_id=task_id, capability_run_id=walk_id) or {}
+    if context.get(TOC_REVIEW_FIRST_KEY):
+        # An uploaded theory (increment 5): the user checks the reading first.
+        post_agent_message(engine, task_id=task_id, text=_review_text(engine, task_id))
         return None
     post_agent_message(engine, task_id=task_id, text=DRAFT_LANDED_MESSAGE)
     with engine.connect() as conn:
@@ -335,7 +353,34 @@ def run_toc_sequence(
     )
     if outcome.status in _ENDED_WELL:
         post_check_message(engine, task_id=task_id, walk_id=admitted.capability_run_id)
+    elif outcome.status in _ENDED_BADLY:
+        post_failure_message(engine, task_id=task_id, walk_id=admitted.capability_run_id)
     return outcome
+
+
+def _review_text(engine: Engine, task_id: uuid.UUID) -> str:
+    """The review message for an uploaded theory's draft: what came from the diagram."""
+    from policy_atlas.theory_of_change.importing import latest_import, review_message
+    from policy_atlas.theory_of_change.proposals import open_proposals
+
+    with engine.connect() as conn:
+        imported = latest_import(conn, task_id)
+        graph, rows = store.load_graph(conn, task_id)
+        completes = next(
+            (p.summary for p in open_proposals(conn, task_id) if p.source == "draft"), None
+        )
+    if imported is None:
+        return DRAFT_LANDED_MESSAGE
+    codes = [row.code or key for key, row in rows.links.items() if row.origin != "imported"]
+    suggested = sorted(codes, key=lambda c: int(c.lstrip("#")) if c.lstrip("#").isdigit() else 0)
+    return review_message(
+        imported,
+        kept=len(rows.links) - len(suggested),
+        suggested=suggested,
+        boxes=len(graph.boxes),
+        links=len(graph.links),
+        completes=completes,
+    )
 
 
 def post_agent_message(engine: Engine, *, task_id: uuid.UUID, text: str) -> None:
@@ -375,56 +420,6 @@ def post_agent_message(engine: Engine, *, task_id: uuid.UUID, text: str) -> None
                 completed_at=now,
             )
         )
-
-
-def check_changes(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> list[str]:
-    """The plain-language changes a check walk made, net (J5).
-
-    Pathways the check found in the evidence are listed once, as one line naming
-    those it kept; a found pathway that a later step merged or set aside in the
-    same check is left out. Changes to pathways that existed before the check,
-    and to conditions and the critical connection, are listed as recorded.
-    """
-    payloads = conn.execute(
-        select(event_log.c.payload)
-        .select_from(
-            event_log.join(
-                runs,
-                (runs.c.run_id == event_log.c.run_id) & (runs.c.task_id == event_log.c.task_id),
-            )
-        )
-        .where(event_log.c.task_id == task_id)
-        .where(runs.c.capability_run_id == walk_id)
-        .where(event_log.c.event_type == TOC_CHANGED_EVENT)
-        .order_by(event_log.c.sequence)
-    ).scalars()
-    found: list[str] = []
-    lines: list[str] = []
-    for payload in payloads:
-        step = (payload or {}).get("step")
-        for item in (payload or {}).get("changes", []):
-            if not isinstance(item, dict):
-                lines.append(str(item))
-            elif step == "toc_discover":
-                found.append(str(item["pathway_id"]))
-            elif str(item.get("pathway_id")) not in found:
-                lines.append(str(item["text"]))
-    if found:
-        labels = {
-            str(row.pathway_id): row.label
-            for row in conn.execute(
-                select(toc_pathway.c.pathway_id, toc_pathway.c.label)
-                .where(toc_pathway.c.task_id == task_id)
-                .where(toc_pathway.c.pathway_id.in_([uuid.UUID(pid) for pid in found]))
-                .where(toc_pathway.c.status == "kept")
-            )
-        }
-        kept = [labels[pid] for pid in found if pid in labels]
-        if kept:
-            names = ", ".join(f"“{label}”" for label in kept)
-            noun = "pathway" if len(kept) == 1 else "pathways"
-            lines.insert(0, f"Added {len(kept)} {noun} found in the evidence: {names}.")
-    return lines
 
 
 #: A check asked for while another walk runs waits as this event (task 054, round 5).
@@ -645,114 +640,63 @@ def _pending_found(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) 
     return "\n".join(lines)
 
 
-def theory_overview(conn: Connection, *, task_id: uuid.UUID) -> list[str]:
-    """The theory at a glance after a full check (round 6): its pathways, the
-    best-supported one, the critical connection and how the verdicts fall."""
-    from policy_atlas.core.schema import toc_link
-    from policy_atlas.theory_of_change.evidence.grade import VERDICT_LABELS, VERDICT_ORDER
-    from policy_atlas.theory_of_change.review import _theory
+#: A walk that ended with an error: the chat says so and how to try again.
+_ENDED_BADLY = frozenset({"failed", "interrupted"})
 
-    theory = _theory(conn, task_id)
-    rank = {VERDICT_LABELS[verdict]: VERDICT_ORDER.index(verdict) for verdict in VERDICT_ORDER}
-    verdict_of = {link["code"]: link["verdict"] for link in theory["links"]}
-    lines: list[str] = []
-    success = [p for p in theory["pathways"] if p["kind"] != "failure"]
-    failure = [p for p in theory["pathways"] if p["kind"] == "failure"]
-    shape = f"The theory has {_plural(len(success), 'pathway')} to the impact"
-    lines.append(
-        shape + (f" and {_plural(len(failure), 'way')} it could go wrong." if failure else ".")
+
+def failure_reason(error: str | None) -> str:
+    """A walk's error in plain words for the chat; the full error stays in the logs."""
+    text = error or ""
+    if text.startswith("the draft failed its structure checks:"):
+        return "the draft did not pass its structure check (" + text.split(":", 1)[1].strip() + ")"
+    if "json_invalid" in text or "validation error" in text:
+        return "the model's answer could not be read"
+    return "something went wrong on our side"
+
+
+def post_failure_message(engine: Engine, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> None:
+    """Say a walk failed, why in plain words, and how to try again (owner, 2026-11-04)."""
+    with engine.connect() as conn:
+        kind = walk_kind(conn, task_id=task_id, capability_run_id=walk_id)
+        error = conn.execute(
+            select(event_log.c.payload["error"].astext)
+            .where(
+                event_log.c.task_id == task_id,
+                # The error is on the failing step's own run, which belongs to the walk.
+                event_log.c.run_id.in_(
+                    select(runs.c.run_id).where(runs.c.capability_run_id == walk_id)
+                ),
+                event_log.c.event_type == "run.failed",
+            )
+            .order_by(event_log.c.sequence.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+    reason = failure_reason(error)
+    text = (
+        f"I couldn't draft the theory: {reason}. Press “Draft the theory” to try again."
+        if kind == TOC_WALK_DRAFT
+        else f"The evidence check stopped: {reason}. What it finished stays on the canvas. "
+        "Press “Check the evidence” on the Result tab to try again."
     )
-
-    def weakest(pathway: dict[str, Any]) -> str:
-        found = [verdict_of[code] for code in pathway["links"] if code in verdict_of]
-        return min(found, key=lambda label: rank[label]) if found else "Not enough evidence"
-
-    if success:
-        best = max(success, key=lambda p: rank[weakest(p)])
-        floor = weakest(best)
-        tail = (
-            "every step is Confident." if floor == "Confident" else f"its weakest step is {floor}."
-        )
-        lines.append(f"The best-supported pathway is “{best['label']}”: {tail}")
-    critical = conn.execute(
-        select(toc_link.c.code, toc_link.c.title)
-        .where(toc_link.c.task_id == task_id, toc_link.c.critical.is_(True))
-        .order_by(toc_link.c.code)
-    ).all()
-    for row in critical:
-        name = f" ({row.title})" if row.title else ""
-        lines.append(
-            f"The critical connection is {row.code}{name}: "
-            f"{verdict_of.get(row.code, 'Not enough evidence')}. Test it first."
-        )
-    labels = [link["verdict"] for link in theory["links"]]
-    good = sum(1 for v in labels if v in ("Confident", "Leaning supports"))
-    weak = sum(
-        1 for v in labels if v in ("Mixed", "Leaning against", VERDICT_LABELS["not_confident"])
-    )
-    none = len(labels) - good - weak
-    lines.append(
-        f"Of {len(labels)} connections, {good} {'is' if good == 1 else 'are'} supported, "
-        f"{weak} {'is' if weak == 1 else 'are'} mixed or against, and {none} "
-        f"{'has' if none == 1 else 'have'} too little evidence."
-    )
-    return lines
-
-
-def _headline(verdict: dict[str, Any]) -> str:
-    """The headline without a leading "Implausible:" that repeats the label."""
-    text = str(verdict["headline"])
-    prefix = f"{verdict['label']}:"
-    if not text.startswith(prefix):
-        return text
-    rest = text[len(prefix) :].strip()
-    return rest[:1].upper() + rest[1:]
-
-
-def _latest_verdict(conn: Connection, task_id: uuid.UUID) -> dict[str, Any] | None:
-    """The overall verdict in the latest report, if it has one."""
-    from policy_atlas.core.schema import event_log
-
-    payload = conn.execute(
-        select(event_log.c.payload)
-        .where(
-            event_log.c.task_id == task_id,
-            event_log.c.event_type == "component.completed",
-            event_log.c.payload["component"].astext == "toc_report",
-        )
-        .order_by(event_log.c.sequence.desc())
-        .limit(1)
-    ).scalar_one_or_none()
-    verdict = ((payload or {}).get("report") or {}).get("verdict")
-    return verdict if isinstance(verdict, dict) else None
+    post_agent_message(engine, task_id=task_id, text=text)
 
 
 def post_check_message(engine: Engine, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> None:
-    """Post the check's end message: what changed, then the stress-test suggestion (J5, J7).
+    """Post the check's end message: where the results are, then the stress-test suggestion.
 
-    A Find more evidence walk (C44) says instead how many new documents wait for
-    the user, and where.
+    The verdict and the findings are on the Result tab; the chat only points
+    there (owner, 2026-11-04: the longer summary read as bitty). A Find more
+    evidence walk (C44) says instead how many new documents wait for the user,
+    and where.
     """
     with engine.connect() as conn:
         found = _pending_found(conn, task_id=task_id, walk_id=walk_id)
-        if found is not None:
-            post_agent_message(engine, task_id=task_id, text=found)
-            return
-        overview = theory_overview(conn, task_id=task_id)
-        verdict = _latest_verdict(conn, task_id)
-        added = [
-            line
-            for line in check_changes(conn, task_id=task_id, walk_id=walk_id)
-            if line.startswith("Added")
-        ]
-    lead = (
-        [f"The evidence check is done. Overall: {verdict['label']}. {_headline(verdict)}"]
-        if verdict is not None
-        else ["The evidence check is done."]
-    )
-    body = "\n".join([*lead, *added[:1], *overview])
+    if found is not None:
+        post_agent_message(engine, task_id=task_id, text=found)
+        return
     post_agent_message(
         engine,
         task_id=task_id,
-        text=f"{body}\n\nRead the full report in the Result tab. {STRESS_TEST_MESSAGE}",
+        text="The evidence check is done. Read the full report in the Result tab. "
+        + STRESS_TEST_MESSAGE,
     )

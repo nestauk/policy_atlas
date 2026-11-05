@@ -128,7 +128,7 @@ describe("wording and grouping", () => {
 
   it("gives the verdict on a link's hover text", () => {
     const link = tocGraphFixture().links.find((l) => l.link_id === linkId(4));
-    expect(link && linkTip(link)).toBe("Confident");
+    expect(link && linkTip(link)).toBe("Supported");
   });
 
   it("titles the page from the first input and the impact", () => {

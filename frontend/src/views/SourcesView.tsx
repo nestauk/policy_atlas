@@ -31,7 +31,7 @@ import {
   type EvidenceSortField,
   type SortOrder,
 } from "./sourcesPresentation";
-import { numberedAuthorships } from "./artefactPresentation";
+import { csvCell, numberedAuthorships } from "./artefactPresentation";
 import { isScoping } from "./scopingActivity";
 
 const STATUS_FILTERS = [
@@ -463,14 +463,6 @@ function TitleWithDescription({ item, onOpen }: { item: Parameters<typeof screen
   );
 }
 
-/** A CSV cell: quoted/escaped, and defused against spreadsheet formula
- *  injection — titles and venues arrive from external sources. */
-function csvCell(value: string | number | boolean | null | undefined): string {
-  let text = value === null || value === undefined ? "" : String(value);
-  // Also defuse markers behind leading whitespace ("\t=SUM…").
-  if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
-  return `"${text.replaceAll('"', '""')}"`;
-}
 
 /** Downloads the whole source list (every page, no filters) as a CSV file. */
 function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?: string }) {

@@ -8,7 +8,6 @@ from typing import Any
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.routers.toc import toc_graph_out
-from policy_atlas.api.toc_start import _headline, _latest_verdict
 from policy_atlas.theory_of_change.backend import StubTocBackend
 from policy_atlas.theory_of_change.plausibility_prompt import SenseCheckResponse
 from policy_atlas.theory_of_change.sense_check import for_verdict, latest, run_sense_check
@@ -23,9 +22,22 @@ PLAN = {
 DOUBTFUL = SenseCheckResponse(
     active_ingredient="The colour of a door.",
     best_route="A visual cue might prompt a visit.",
-    rating="implausible",
-    reason="Door colour changes no driver of diabetes [W1].",
-    message="There is no credible route from door colour to diabetes.",
+    mechanism="implausible",
+    mechanism_reason="Door colour changes no driver of diabetes [W1].",
+    evidence="too_little",
+    evidence_reason="Nothing evaluates it.",
+    warning="There is no credible route from door colour to diabetes.",
+    note=None,
+)
+AGAINST = SenseCheckResponse(
+    active_ingredient="Prison visits.",
+    best_route="Deterrence.",
+    mechanism="plausible",
+    mechanism_reason="Deterrence is a known route.",
+    evidence="against",
+    evidence_reason="Trials found more offending [W2].",
+    warning=None,
+    note="Trials of this programme found it increased offending.",
 )
 
 
@@ -57,15 +69,28 @@ def test_a_flagged_plan_warns_once_with_its_sources(
     assert [d["id"] for d in backend.inputs["sense_check"][0]["documents"]] == ["W1", "W2"]
     with engine.connect() as conn:
         stored = latest(conn, task_id)
-    assert stored is not None and stored["rating"] == "implausible"
+    assert stored is not None and stored["mechanism"] == "implausible"
     assert for_verdict(stored) == {
-        "rating": "implausible",
-        "reason": "Door colour changes no driver of diabetes [W1].",
+        "mechanism": "implausible",
+        "mechanism_reason": "Door colour changes no driver of diabetes [W1].",
+        "evidence": "too_little",
+        "evidence_reason": "Nothing evaluates it.",
         "documents": {"W1": "Diabetes prevention"},
     }
     # The same plan is not checked again.
     again = run_sense_check(engine, task_id=task_id, plan=PLAN, backend=backend, search=_search)
     assert again is None and backend.calls["sense_check"] == 1
+
+
+def test_a_plausible_plan_with_evidence_against_gets_a_note_not_a_warning(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    task_id = _task(engine, cleanup)
+    backend = StubTocBackend({"sense_check": [AGAINST]})
+    note = run_sense_check(engine, task_id=task_id, plan=PLAN, backend=backend, search=_search)
+    assert note is not None
+    assert note.startswith("Before you start: Trials of this programme found")
+    assert "Hospital wayfinding" in note
 
 
 def test_a_plausible_plan_or_a_failed_check_says_nothing(
@@ -97,13 +122,16 @@ def test_the_report_leads_with_the_overall_verdict(
     task_id = _run(engine, cleanup, backend)
     with engine.connect() as conn:
         report = toc_graph_out(conn, task_id).report
-        # The end-of-check chat message leads with it.
-        lead = _latest_verdict(conn, task_id)
     assert report is not None and report.verdict is not None
-    assert report.verdict.label == "Plausible, not yet tested"
-    assert lead is not None and lead["headline"] == report.verdict.headline
+    assert report.verdict.label == "Too little evidence"
+    assert report.verdict.mechanism == "plausible"
     sent = backend.inputs["theory_verdict"][0]
     assert sent["theory"]["connections"] and sent["sense_check"] is None
+    # The whole programme was searched and judged in the check, and the verdict read it.
+    assert isinstance(sent["theory"]["whole_programme"], dict)
+    assert report.verdict_reason
+    programme_sources = {s.n for s in report.sources if f"[{s.n}]" in report.verdict_reason}
+    assert programme_sources
     # The report's writer sees the verdict its prose must agree with.
     assert backend.inputs["report"][0]["theory"]["overall_verdict"]["label"] == report.verdict.label
 
@@ -116,15 +144,6 @@ def test_a_failed_verdict_leaves_the_report_without_one(
     with engine.connect() as conn:
         report = toc_graph_out(conn, task_id).report
     assert report is not None and report.verdict is None
-
-
-def test_the_chat_does_not_repeat_the_label() -> None:
-    verdict = {
-        "label": "Implausible",
-        "headline": "Implausible: blue GP doors do not cut diabetes.",
-    }
-    assert _headline(verdict) == "Blue GP doors do not cut diabetes."
-    assert _headline({"label": "Supported", "headline": "It works."}) == "It works."
 
 
 def test_a_warning_replaces_the_invitation_to_start() -> None:

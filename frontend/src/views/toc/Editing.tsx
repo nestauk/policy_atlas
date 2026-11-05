@@ -4,6 +4,8 @@ import { type TocEdit, useTocEdit } from "../../api/mutations";
 import { useTocHistory } from "../../api/queries";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
+import { DownloadMenu } from "../DownloadMenu";
+import { canvasImage, downloadDrawio, downloadJson, downloadReferences, printReport } from "./exports";
 import { LAYER_LABEL } from "./tocModel";
 import type { BoxLayer, TocGraph } from "./types";
 
@@ -144,6 +146,9 @@ export function CanvasBar({
   reviewDisabled,
   onGuide,
   guideOpen,
+  suggestions = 0,
+  suggestionsOpen = false,
+  onSuggestions,
 }: {
   graph: TocGraph;
   pathway: string;
@@ -159,6 +164,10 @@ export function CanvasBar({
   reviewDisabled: boolean;
   onGuide: () => void;
   guideOpen: boolean;
+  /** Suggestions waiting, and whether their panel is open (owner, 2026-11-04). */
+  suggestions?: number;
+  suggestionsOpen?: boolean;
+  onSuggestions?: () => void;
 }) {
   const running = graph.check_status === "drafting" || graph.check_status === "checking";
   const unchecked = graph.links.filter((link) => link.state === "unchecked").map((link) => link.link_id);
@@ -182,7 +191,7 @@ export function CanvasBar({
         aria-label="Pathway"
         value={pathway}
         onChange={(event) => onPathway(event.target.value)}
-        className="border border-line-2 bg-paper px-2.5 py-[5px] text-meta font-semibold text-navy"
+        className="w-[16rem] min-w-0 border border-line-2 bg-paper px-2.5 py-[5px] text-meta font-semibold text-navy"
       >
         <option value="all">All pathways</option>
         {pathways.map((item) => (
@@ -212,9 +221,34 @@ export function CanvasBar({
           />
         </>
       )}
+      {suggestions > 0 && onSuggestions !== undefined && (
+        <button
+          type="button"
+          aria-pressed={suggestionsOpen}
+          onClick={onSuggestions}
+          className="inline-flex cursor-pointer items-center gap-1.5 border border-blue bg-paper px-2.5 py-[5px] text-meta font-semibold text-blue hover:bg-blue-tint-2 aria-pressed:bg-blue-tint-2"
+        >
+          Suggestions ({suggestions})
+        </button>
+      )}
       <MoreMenu items={menu} />
+      <DownloadMenu small items={downloads(graph)} />
     </div>
   );
+}
+
+/** The Download menu (contract item 6), grouped by what people do next. */
+function downloads(graph: TocGraph) {
+  const failed = () => window.alert("The download could not be made. Try again.");
+  const image = (kind: "png" | "svg") => () => void canvasImage(graph, kind).catch(failed);
+  return [
+    { group: "Read and share", label: "Report (PDF)", hint: "The whole canvas, then the report", onSelect: () => void printReport(graph) },
+    { label: "Image (PNG)", hint: "The whole canvas", onSelect: image("png") },
+    { label: "Image (SVG)", hint: "The whole canvas, for web pages", onSelect: image("svg") },
+    { group: "Keep working", label: "Diagram file (draw.io)", hint: "Opens in Miro, Lucidchart and diagrams.net", onSelect: () => downloadDrawio(graph) },
+    { group: "Data", label: "References (CSV)", hint: "Each cited document and the connections it supports", onSelect: () => downloadReferences(graph) },
+    { label: "Theory (JSON)", hint: "For other tools", onSelect: () => downloadJson(graph) },
+  ];
 }
 
 /** Add a box: its layer and text (C41). */

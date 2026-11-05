@@ -26,7 +26,8 @@ Verdict = Literal[
 Support = Literal["strong", "weak", "mixed", "refutes", "not_about"]
 LinkState = Literal["unchecked", "checking", "checked", "pending", "kept", "no_change"]
 Origin = Literal["drafted", "found_in_evidence", "imported", "user", "options_scoping"]
-CheckStatus = Literal["none", "drafting", "checking", "checked", "stopped", "failed"]
+#: ``drafted``: an uploaded theory's draft, waiting for the user's review before the check.
+CheckStatus = Literal["none", "drafting", "drafted", "checking", "checked", "stopped", "failed"]
 
 
 class TocResultCriteriaOut(BaseModel):
@@ -155,6 +156,8 @@ class TocReportSummaryOut(BaseModel):
     #: The accountability ceiling: the last layer the programme directly influences.
     directly_influenced: str
     context: str
+    #: What the report tests (``toc_report_v7``); null on earlier reports.
+    question: str | None = None
     #: Reports before ``toc_report_v4`` only; v4 puts this in ``how_it_could_fail``.
     weakest_links: str = ""
 
@@ -199,14 +202,16 @@ class TocReportAssumptionOut(BaseModel):
 
 
 class TocReportTestOut(BaseModel):
-    """One row of What to test and measure."""
+    """One thing to test first."""
 
     model_config = ConfigDict(extra="forbid")
 
     link: str
-    question: str
-    indicator: str
-    test_and_learn: str
+    #: One plain sentence (``toc_report_v7``); earlier reports have the three parts below.
+    sentence: str | None = None
+    question: str | None = None
+    indicator: str | None = None
+    test_and_learn: str | None = None
 
 
 class TocReportSourceOut(BaseModel):
@@ -231,18 +236,32 @@ class TocReportSourceOut(BaseModel):
 
 
 class TocTheoryVerdictOut(BaseModel):
-    """Can the theory work? One overall verdict after the check (``toc_verdict_v1``)."""
+    """Can the theory work, and what does the evidence say? (``toc_verdict_v2``)."""
 
     model_config = ConfigDict(extra="forbid")
 
-    verdict: Literal["supported", "plausible_untested", "doubtful", "implausible"]
-    #: The verdict's words on the page, e.g. "Plausible, not yet tested".
+    #: Logic: is there a credible route from the intervention to the goal?
+    mechanism: Literal["plausible", "implausible"]
+    #: What the documents found, for the carrying steps and the whole programme.
+    evidence: Literal["supports", "mixed", "too_little", "against"]
+    #: The words on the page: "Implausible", or the evidence's ("Evidence against").
     label: str
     #: The report's first sentence: what Policy Atlas concludes.
     headline: str
     reason: str
     #: The connection the whole theory depends on most.
     carrying_step: str
+
+
+class TocReportExpansionOut(BaseModel):
+    """A route found in the evidence that the user's diagram does not show."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    kind: Literal["success", "failure"]
+    #: What its documents found, citing them, and where it would fit.
+    sentence: str
 
 
 class TocReportOut(BaseModel):
@@ -258,10 +277,20 @@ class TocReportOut(BaseModel):
     verdict: TocTheoryVerdictOut | None = None
     summary: TocReportSummaryOut
     pathways: list[TocReportPathwayOut]
+    #: Why the overall verdict, with what the whole programme's evaluations found
+    #: (``toc_report_v7``); null on earlier reports.
+    verdict_reason: str | None = None
+    #: What evaluations of the whole programme found (``toc_report_v6`` only).
+    whole_programme: str | None = None
     #: The failure pathways and the weakest critical connections (``toc_report_v4``).
     how_it_could_fail: str | None = None
     assumptions: list[TocReportAssumptionOut]
     tests: list[TocReportTestOut]
+    #: One bullet per supporting activity, citing sources (``toc_report_v7``).
+    supporting_activities: list[str] = []
+    #: Routes found in the evidence that an as-drawn diagram does not show; each
+    #: waits under Suggestions (owner, 2026-11-04).
+    expansions: list[TocReportExpansionOut] = []
     sources: list[TocReportSourceOut]
     #: How it was made: written by code, with the date and the judge's model.
     method: str
@@ -566,6 +595,29 @@ class TocCheckIn(BaseModel):
     mode: Literal["new_items", "check_again", "find_more", "rest"] = "new_items"
 
 
+class TocUploadIn(BaseModel):
+    """A user's own theory of change as an image or PDF (increment 5, C8): base64 in JSON."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    file_name: str = Field(min_length=1, max_length=200)
+    content_type: Literal["image/png", "image/jpeg", "application/pdf"]
+    #: The file, base64-encoded; at most 10 MB once decoded.
+    data_base64: str = Field(min_length=1, max_length=14_000_000)
+
+
+class TocUploadOut(BaseModel):
+    """What was read from an uploaded diagram, before the plan uses it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    upload_id: uuid.UUID
+    file_name: str
+    content_type: str
+    #: ``boxes``, ``drawn`` and ``inferred`` connections, ``groups``, ``unconnected`` boxes.
+    counts: dict[str, int]
+
+
 class TocCheckOut(BaseModel):
     """The check walk that started, or null when it waits for the running walk."""
 
@@ -629,6 +681,18 @@ class TocProposalEditOut(BaseModel):
     line: str
     reason: str
     status: Literal["pending", "accepted", "rejected"]
+    #: The route it belongs to, when the suggestion is offered a route at a time.
+    group: str | None = None
+    #: What the page needs to preview it on the canvas: a new box's key, layer and
+    #: text; a new link's two ends (codes or new keys); a pathway's links, kind and label.
+    key: str | None = None
+    layer: str | None = None
+    text: str | None = None
+    source: str | None = None
+    dest: str | None = None
+    links: list[str] | None = None
+    kind: str | None = None
+    label: str | None = None
 
 
 class TocReportFindingOut(BaseModel):
@@ -646,7 +710,9 @@ class TocProposalOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     proposal_id: uuid.UUID
-    source: Literal["review", "chat"]
+    #: Where it came from: the review, the chat, the evidence check (``discover``),
+    #: or the draft of an uploaded diagram (``draft``).
+    source: Literal["review", "chat", "discover", "draft"]
     summary: str
     created_at: datetime
     edits: list[TocProposalEditOut]
@@ -660,6 +726,8 @@ class TocProposalDecideIn(BaseModel):
 
     index: int | None = None
     accept: bool
+    #: A route of the suggestion (``r1``): accept or reject its edits together.
+    group: str | None = None
 
 
 class TocProblemsOut(BaseModel):

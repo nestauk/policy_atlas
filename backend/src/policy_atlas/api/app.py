@@ -60,6 +60,8 @@ _CONFLICT_CODES = {
     "toc_duplicate",
     "toc_already_undone",
     "toc_not_running",
+    # Task 054: the plan is fixed once the theory is drafted (plan edits, uploads).
+    "toc_plan_fixed",
 }
 
 _CAPACITY_CODES = {"chat_capacity"}
@@ -68,7 +70,14 @@ _CAPACITY_CODES = {"chat_capacity"}
 _NOT_FOUND_CODES = {"toc_not_found"}
 
 #: Task 054 (C15): a capability this deployment has switched off.
-_UNPROCESSABLE_CODES = {"capability_not_enabled", "toc_invalid"}
+_UNPROCESSABLE_CODES = {
+    "capability_not_enabled",
+    "toc_invalid",
+    # Task 054 increment 5 (C8): a refused upload, or an image that is no theory.
+    "upload_type",
+    "upload_size",
+    "upload_not_theory",
+}
 
 
 class ApiConflict(Exception):

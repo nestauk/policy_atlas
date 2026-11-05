@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic.json_schema import SkipJsonSchema
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
@@ -81,6 +82,12 @@ class EditOpWire(BaseModel):
         description="add_pathway: success, or failure for a route where it goes wrong."
     )
     label: str | None = Field(description="add_pathway: a short label, at most 8 words.")
+    #: A route found in the evidence: the documents it was found in, as
+    #: ``{"tss": ..., "quote": ...}``. Set by code only, so no model sees it.
+    evidence: SkipJsonSchema[list[dict[str, str]] | None] = None
+    #: The route this edit belongs to (``r1``), when edits are offered a route at a
+    #: time: its new boxes, its new connections and the pathway. Set by code only.
+    group: SkipJsonSchema[str | None] = None
 
 
 def describe(op: dict[str, Any]) -> str:
@@ -236,6 +243,9 @@ def apply_op(
             source_box_id=_box_id(conn, task_id, op.get("source"), created),
             target_box_id=_box_id(conn, task_id, op.get("dest"), created),
         )
+        if op.get("key"):
+            # A pathway the same proposal adds names this connection by its key.
+            created[op["key"]] = str(link_id)
         fields = {
             name: op[name] for name in ("if_text", "then_text", "because_text") if op.get(name)
         }
@@ -274,7 +284,7 @@ def apply_op(
     elif kind == "merge_boxes":
         _merge(conn, task_id=task_id, actor=actor, op=op, created=created)
     elif kind == "add_pathway":
-        _add_pathway(conn, task_id=task_id, actor=actor, op=op)
+        _add_pathway(conn, task_id=task_id, actor=actor, op=op, created=created)
     else:
         raise EditRefused("toc_invalid", f"no edit {kind!r}", status=422)
 
@@ -314,9 +324,20 @@ def _merge(
     )
 
 
-def _add_pathway(conn: Connection, *, task_id: uuid.UUID, actor: Actor, op: dict[str, Any]) -> None:
-    rows = [_link_row(conn, task_id, code) for code in op.get("links") or []]
-    if not rows:
+def _add_pathway(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    actor: Actor,
+    op: dict[str, Any],
+    created: dict[str, str],
+) -> None:
+    # A connection is named by its code, or by the key of one this proposal added.
+    link_ids = [
+        uuid.UUID(created[ref]) if ref in created else _link_row(conn, task_id, ref).link_id
+        for ref in op.get("links") or []
+    ]
+    if not link_ids:
         raise EditRefused("toc_invalid", "a pathway needs its connections", status=422)
     log = store.ChangeLog()
     store.insert_pathway(
@@ -326,7 +347,7 @@ def _add_pathway(conn: Connection, *, task_id: uuid.UUID, actor: Actor, op: dict
         pathway_id=uuid.uuid4(),
         kind=op.get("kind") or "success",
         label=op.get("label") or "Suggested pathway",
-        link_ids=[row.link_id for row in rows],
+        link_ids=link_ids,
         origin="user",
     )
     store.record(
@@ -348,8 +369,14 @@ def decide(
     proposal_id: uuid.UUID,
     index: int | None,
     accept: bool,
+    group: str | None = None,
 ) -> list[str]:
-    """Accept or reject one edit of a proposal, or every pending one (``index`` None).
+    """Accept or reject one edit of a proposal, a route's edits, or every pending one.
+
+    ``group`` names a route (``r1``): accepting it applies the route's edits and
+    any still-pending edits they build on (a box another route introduced);
+    rejecting it leaves those shared ones for the other routes. ``index`` None
+    and no ``group``: every pending edit.
 
     Accepted edits apply in order; one that cannot apply is left pending and
     its reason returned, so the user sees why. The proposal closes when no edit
@@ -371,7 +398,13 @@ def decide(
     for op in ops:
         if op.get("status") == "accepted" and op.get("created_id") and op.get("key"):
             created[op["key"]] = op["created_id"]
-    chosen = range(len(ops)) if index is None else [index]
+    chosen: list[int] | range = (
+        _route_edits(ops, group, accept)
+        if group is not None
+        else range(len(ops))
+        if index is None
+        else [index]
+    )
     problems: list[str] = []
     for i in chosen:
         if not 0 <= i < len(ops) or ops[i].get("status") != "pending":
@@ -401,6 +434,43 @@ def decide(
         )
     )
     return problems
+
+
+def _refs(op: dict[str, Any]) -> list[str]:
+    """The keys an edit builds on: its link's two boxes, or its pathway's links."""
+    return [
+        ref
+        for ref in [op.get("source"), op.get("dest"), *(op.get("links") or [])]
+        if isinstance(ref, str)
+    ]
+
+
+def _route_edits(ops: list[dict[str, Any]], group: str, accept: bool) -> list[int]:
+    """The pending edits a route's Accept or Reject applies to, in order.
+
+    Accept: the route's own edits and, first, any pending edit they build on.
+    Reject: the route's own edits, except those another pending route needs.
+    """
+    pending = [i for i, op in enumerate(ops) if op.get("status") == "pending"]
+    by_key = {ops[i]["key"]: i for i in pending if ops[i].get("key")}
+    own = [i for i in pending if ops[i].get("group") == group]
+    if not accept:
+        others = {
+            ref
+            for i in pending
+            if ops[i].get("group") not in (group, None)
+            for ref in _refs(ops[i])
+        }
+        return [i for i in own if ops[i].get("key") not in others]
+    needed: set[int] = set()
+    todo = list(own)
+    while todo:
+        i = todo.pop()
+        if i in needed:
+            continue
+        needed.add(i)
+        todo += [by_key[ref] for ref in _refs(ops[i]) if ref in by_key]
+    return sorted(needed)
 
 
 def close(conn: Connection, *, task_id: uuid.UUID, proposal_id: uuid.UUID) -> None:

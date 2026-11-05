@@ -64,6 +64,7 @@ QueryOrigin = Literal[
     "landmark",
     "suggestion_doi",
     "suggestion_title",
+    "seminal",  # a work the theory-of-change check's documents cite most (task 054)
 ]
 CallVerb = Literal[
     "search",

@@ -144,6 +144,19 @@ class PolicyAtlasStack(Stack):
             platform=ecr_assets.Platform.LINUX_AMD64,
         )
 
+        # Files users give a task (task 054 increment 5; one bucket for every
+        # capability, owner 2026-11-03). Private, encrypted, HTTPS only, and kept
+        # if the stack is ever deleted: they are users' work. Only the backend
+        # reads it; the browser never does.
+        uploads_bucket = s3.Bucket(self, "UploadsBucket",
+            bucket_name=be_config["upload_bucket_name"],
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            enforce_ssl=True,
+            versioned=False,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+
         be_task_def = ecs.FargateTaskDefinition(self, "PolicyAtlasBackendTaskDef",
             cpu=be_config["cpu"],
             memory_limit_mib=be_config["memory_limit_mib"],
@@ -171,6 +184,7 @@ class PolicyAtlasStack(Stack):
                 # runs inside the shared dev Langfuse project.
                 "LANGFUSE_TRACING_ENVIRONMENT": env_name,
                 "POLICY_ATLAS_MODEL_ROUTE": model_route,
+                "POLICY_ATLAS_UPLOAD_BUCKET": uploads_bucket.bucket_name,
             },
             secrets=app_secrets,
             port_mappings=[ecs.PortMapping(
@@ -179,6 +193,11 @@ class PolicyAtlasStack(Stack):
             )],
             stop_timeout=Duration.seconds(10),
         )
+
+        # The backend reads, writes and deletes uploads under tasks/ only, through
+        # its task role: AWS hands the container short-lived credentials, so no
+        # keys are stored anywhere.
+        uploads_bucket.grant_read_write(be_task_def.task_role, "tasks/*")
 
         # No task-role secret grants: ECS injects container secrets through the
         # EXECUTION role (CDK grants it via ecs.Secret.from_secrets_manager);

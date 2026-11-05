@@ -42,3 +42,6 @@ cdk.context.json
 
 # Tests are not needed to install or run the production project.
 tests/
+
+# Uploaded files in development (task 054 increment 5): never in the image
+.uploads/

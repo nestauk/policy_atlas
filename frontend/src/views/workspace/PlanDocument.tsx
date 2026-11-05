@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { blobUrl } from "../../lib/blobUrl";
 
 import type { components } from "../../api/gen/types";
 import { usePatchPlan, useStartRun } from "../../api/mutations";
-import { usePlan, useTask } from "../../api/queries";
+import { usePlan, useTask, useTocUploadFile } from "../../api/queries";
 import { seedComposer } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { COPY } from "../../lib/vocabulary";
@@ -925,7 +926,114 @@ function TocEditSection({
   );
 }
 
+/** "2000 onwards", "2000–2010", "Until 2010" or "Any year", from the plan's ISO dates. */
+export function tocYearsLabel(after: string, before: string): string {
+  if (after !== "" && before !== "") return `${after}–${before}`;
+  if (after !== "") return `${after} onwards`;
+  if (before !== "") return `Until ${before}`;
+  return "Any year";
+}
+
+/**
+ * The years of evidence the theory's checks search (task 054): the same
+ * from/until year boxes as Evidence search's filters, saved straight away
+ * like the other theory-of-change sections.
+ */
+function TocYearsSection({ taskId, toc, readOnly }: { taskId: string; toc: TocPlanDraft; readOnly: boolean }) {
+  const patchPlan = usePatchPlan(taskId);
+  const after = (toc.published_after ?? "").slice(0, 4);
+  const before = (toc.published_before ?? "").slice(0, 4);
+  const [editing, setEditing] = useState(false);
+  const [drafts, setDrafts] = useState({ after, before });
+  const [error, setError] = useState<string | null>(null);
+  const save = () => {
+    const from = drafts.after.trim();
+    const until = drafts.before.trim();
+    const changed: { published_after?: string; published_before?: string } = {};
+    if (from !== after) changed.published_after = from === "" ? "" : `${from}-01-01`;
+    if (until !== before) changed.published_before = until === "" ? "" : `${until}-12-31`;
+    if (Object.keys(changed).length === 0) {
+      setEditing(false);
+      return;
+    }
+    patchPlan.mutate(
+      { toc: changed },
+      {
+        onSuccess: () => setEditing(false),
+        onError: (err) => setError((err as Error | undefined)?.message ?? "The edit couldn't be saved. Try again."),
+      },
+    );
+  };
+  const yearInput = (key: "after" | "before", label: string) => (
+    <label className="block">
+      <span className={`mb-1 block ${panelHintClass}`}>{label}</span>
+      <input
+        type="number"
+        min={1900}
+        max={2100}
+        placeholder="Any"
+        value={drafts[key]}
+        onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))}
+        className={panelFieldClass}
+      />
+    </label>
+  );
+  return (
+    <PanelSection
+      readOnly={readOnly}
+      label="Evidence"
+      editing={editing}
+      onEdit={() => {
+        setDrafts({ after, before });
+        setError(null);
+        setEditing(true);
+      }}
+      onCancel={() => setEditing(false)}
+      onSave={save}
+      view={
+        <dl className="space-y-3">
+          <PlainField label="Evidence published" value={tocYearsLabel(after, before)} />
+        </dl>
+      }
+    >
+      <div className="space-y-3">
+        {yearInput("after", "Published from (year)")}
+        {yearInput("before", "Published until (year)")}
+        {error !== null && (
+          <p role="alert" className="text-body text-red-tint">
+            {error}
+          </p>
+        )}
+      </div>
+    </PanelSection>
+  );
+}
+
 /** The theory-of-change plan's sections, each edited in place until the draft exists; Start drafts the theory. */
+/** The user's uploaded diagram, shown as they gave it (task 054, increment 5). */
+function YourOriginal({ taskId, uploadId }: { taskId: string; uploadId: string }) {
+  const file = useTocUploadFile(taskId, uploadId);
+  const url = file.data !== undefined ? blobUrl(file.data) : null;
+  return (
+    <div>
+      <dt className="text-meta font-bold uppercase tracking-[0.06em] text-grey">Your original</dt>
+      <dd className="mt-1">
+        {file.isError && <span className="text-body text-grey">Your original couldn't be loaded.</span>}
+        {url !== null &&
+          (file.data?.type === "application/pdf" ? (
+            <a href={url} target="_blank" rel="noreferrer" className="text-body font-bold text-blue hover:underline">
+              Open your original (PDF)
+            </a>
+          ) : (
+            <a href={url} target="_blank" rel="noreferrer" title="Open full size">
+              <img src={url} alt="Your theory of change, as uploaded" className="max-h-80 w-full border border-line object-contain" />
+            </a>
+          ))}
+      </dd>
+    </div>
+  );
+}
+
 function TocPlanSections({
   taskId,
   toc,
@@ -952,9 +1060,17 @@ function TocPlanSections({
                 label="Entry point"
                 value={toc.entry_point != null ? TOC_ENTRY_POINT_LABEL[toc.entry_point] : null}
               />
-              {toc.existing_theory_text != null && (
-                <PlainField label="Your theory of change" value={toc.existing_theory_text} />
-              )}
+              {toc.upload_id != null && <YourOriginal taskId={taskId} uploadId={toc.upload_id} />}
+              {toc.existing_theory_text != null &&
+                (toc.upload_id != null ? (
+                  // The transcription is long: the picture is the user's view of it.
+                  <details>
+                    <summary className="cursor-pointer text-meta font-bold text-white hover:underline">How Policy Atlas read it</summary>
+                    <p className="mt-2 whitespace-pre-wrap text-body">{scrub(toc.existing_theory_text)}</p>
+                  </details>
+                ) : (
+                  <PlainField label="Your theory of change" value={toc.existing_theory_text} />
+                ))}
             </dl>
           }
         />
@@ -987,6 +1103,7 @@ function TocPlanSections({
           label="Context"
           fields={[{ key: "context", label: "What you told us about the setting", rows: 4 }]}
         />
+        <TocYearsSection taskId={taskId} toc={toc} readOnly={readOnly} />
       </div>
       {!readOnly && (
         <div className="pt-8">
