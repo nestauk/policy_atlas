@@ -1167,7 +1167,11 @@ class OpenAISynthesisBackend:
             seed, transcript, force_emit=False, streamed=True
         )
         tools = section_request_tools(seed)
-        index = int(seed["section_index"])
+        # Deltas are addressed to the page's section index (key findings first
+        # at 0), which the seed carries as ``display_index``; the loop's own
+        # ``section_index`` is one lower for a body section when the report
+        # has key findings (task 058; owner round 5).
+        index = int(seed.get("display_index", seed["section_index"]))
         metadata = {
             "step": step,
             "attempt": 1,

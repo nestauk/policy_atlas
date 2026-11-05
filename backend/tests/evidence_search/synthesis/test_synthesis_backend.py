@@ -944,6 +944,24 @@ def section_deltas(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, str, str]
     return recorded
 
 
+def test_section_emit_stream_addresses_deltas_to_the_display_index(
+    section_deltas: list[tuple[int, str, str]],
+) -> None:
+    # The loop counts sections from 0; the page puts the key findings first,
+    # so the seed carries the page's index and the deltas use it (owner round
+    # 5, 2026-11-05: the first section's text landed on the key-findings slot).
+    backend = _streaming_backend(_StreamCompletions(_stream_chunks(_STREAM_JSON, 50)))
+    backend.section_emit_stream({**_seed(), "section_index": 0, "display_index": 1}, [])
+    assert section_deltas and all(index == 1 for index, _text, _mode in section_deltas)
+
+    # Without a display index (a seed built without the emitter) the loop's
+    # index is used, as before.
+    section_deltas.clear()
+    backend = _streaming_backend(_StreamCompletions(_stream_chunks(_STREAM_JSON, 50)))
+    backend.section_emit_stream({**_seed(), "section_index": 0}, [])
+    assert section_deltas and all(index == 0 for index, _text, _mode in section_deltas)
+
+
 def test_section_emit_stream_request_shape(section_deltas: list[tuple[int, str, str]]) -> None:
     completions = _StreamCompletions(_stream_chunks(_STREAM_JSON, 50))
     backend = _streaming_backend(completions)

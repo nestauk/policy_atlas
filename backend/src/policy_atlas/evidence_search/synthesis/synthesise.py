@@ -4335,7 +4335,11 @@ def _section_claims(
     else:
         accounting.repair_taken = True
         call_counts["repair"] += 1
-        _publish_revising(section_index, failing, section_line=section_line)
+        # The page addresses sections by their display index (the seed carries
+        # it); ``section_index`` stays the loop's count, used for claim ids.
+        _publish_revising(
+            int(seed.get("display_index", section_index)), failing, section_line=section_line
+        )
         repair_wire: SectionRepairWire | None
         try:
             repair_wire, repair_usage = synthesis_backend.repair_section(
@@ -5038,6 +5042,8 @@ def _key_findings_pass(
         "available_tools": [],
         "available_claim_types": sorted(kf_available),
         "ledger": ledger,
+        # The key findings are always the page's first section (task 058).
+        "display_index": 0,
         # Chunk-content map filtered to chunks cited by surviving claims only
         # (022 rider 16) — the pass's evidence surface, since it runs
         # transcript-free. ``citable_chunk_ids`` (below) already IS that set:
@@ -6181,6 +6187,14 @@ def synthesise_scope(
             "intent": context.intent,
             "section": section.as_seed(),
             "section_index": section_index,
+            # The page's index for this section (key findings first at 0):
+            # streamed text and revising spans are addressed with it, never
+            # with the loop's own count (task 058; owner round 5).
+            "display_index": (
+                progress_emitter.display_index(section_index)
+                if progress_emitter is not None
+                else section_index
+            ),
             "substrate": section_substrate,
             "corpus": corpus_summary if isinstance(corpus_summary, dict) else {},
             "available_tools": [

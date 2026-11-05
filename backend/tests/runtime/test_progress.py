@@ -58,6 +58,11 @@ def test_progress_emitter_uses_display_order_and_closes_empty_key_findings(
                 {"title": "Conclusions", "focus": "What it amounts to"},
             ]
         )
+        # The page numbers sections with the key findings first, so the
+        # writer's first section is the page's section 1 (task 058; the
+        # streamed text is addressed with this index).
+        assert emitter.display_index(0) == 1
+        assert emitter.display_index(1) == 2
         emitter.section_started(0)
         emitter.section_completed(0, prose="Completed evidence prose.")
         emitter.section_started(1)

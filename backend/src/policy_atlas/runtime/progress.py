@@ -141,6 +141,23 @@ class ProgressEmitter:
             )
             return None
 
+    def display_index(self, synthesis_index: int) -> int:
+        """The index the page shows for a section the writer is on (task 058).
+
+        The writer counts sections in the order it writes them, from 0. The
+        page numbers them in reading order, with the key findings first at 0
+        when the report has them, so a body section's display index is one
+        higher. Streamed text and revising spans must carry this index, or they
+        land on the wrong section.
+
+        Args:
+            synthesis_index: Zero-based position in the generation loop.
+
+        Returns:
+            The section's index in the skeleton the page received.
+        """
+        return int(self._section(synthesis_index)["index"])
+
     def _section(self, synthesis_index: int) -> dict[str, Any]:
         try:
             return self._sections_by_synthesis_index[synthesis_index]

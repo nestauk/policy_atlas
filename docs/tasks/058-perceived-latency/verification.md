@@ -151,6 +151,15 @@ tool and the gap measure are built and tested (Phase 0). The "before" captures m
   turn returns); rare and small. Agent proposals 2 to 4 declined: `parallel_tool_calls` stays
   off the streamed request (the probe's shape B hit the cache without it); the no-stream
   route's "final turn" wording only reaches the offline test backends.
+- **Owner round 5 (2026-11-05, evening), item 10, the lead:** the owner's 13:24 run streamed on
+  the server (Langfuse: per section a read turn, a 14-token ready turn, a 10 s
+  `synthesise:section_emit`), but the page showed nothing: the deltas and the revising spans
+  carried the loop's `section_index` while the skeleton numbers sections for display (key
+  findings first at 0). The seed now carries `display_index` from the progress emitter
+  (`ProgressEmitter.display_index`), the key-findings seed carries 0, and
+  `section_emit_stream` and `_publish_revising` address the page with it. Tests: the emitter's
+  display index; deltas use `display_index` when present. Items 1 to 9 of the round are a
+  frontend-designer pass (see the gates table).
 
 ## Diff summary
 
