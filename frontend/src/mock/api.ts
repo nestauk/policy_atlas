@@ -13,6 +13,8 @@ import {
   mockArtefactSkeleton,
   mockArtefactSectionRepairedProse,
   mockSectionOneRevisingSpan,
+  mockSectionOneClaims,
+  mockSectionOneSources,
   mockCheckIn,
   mockPlannerTurn,
   STAGE_COUNTS,
@@ -1387,19 +1389,36 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         text,
         occurred_at: frameTime(),
       });
+      // Each read names the sources it returned; the set only grows
+      // (task 058, evidence shown live).
+      const sources = (set: { source_id: string; title: string }[]): SseFrame => ({
+        type: "artefact.section_sources",
+        ephemeral: true,
+        index: 1,
+        sources: set,
+        occurred_at: frameTime(),
+      });
       let rest = draft;
       if (replay) {
         const firstHalf = draft.slice(0, draft.lastIndexOf(" ", Math.floor(draft.length / 2)) + 1);
         emit(delta(firstHalf, "replace"));
+        emit(sources(mockSectionOneSources[1]));
         rest = draft.slice(firstHalf.length);
       } else {
+        emit(sources(mockSectionOneSources[0]));
         emitTick(tick("synthesise", "Reading findings", { section: sectionOne }));
         await pace(MOCK_TICK_MS);
+        emit(sources(mockSectionOneSources[1]));
         emitTick(tick("synthesise", "Writing", { section: sectionOne }));
       }
       for (const chunk of chunkWords(rest)) {
         await pace(100);
         emit(delta(chunk, "append"));
+      }
+      // The writer's own citations close after the whole prose, in a wave.
+      for (const claim of mockSectionOneClaims) {
+        await pace(100);
+        emit({ type: "artefact.section_claim", ephemeral: true, index: 1, ...claim, occurred_at: frameTime() });
       }
       emitTick(tick("synthesise", "Checking claims", { section: sectionOne }));
       await pace(MOCK_TICK_MS);

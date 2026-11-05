@@ -19,16 +19,19 @@ this module.
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import math
 import re
 import unicodedata
 import uuid
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import AbstractContextManager, nullcontext
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager, nullcontext
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, NotRequired, Protocol, TypedDict, cast
 
+import structlog
 from sqlalchemy import ColumnElement, case, func, true
 from sqlalchemy import select as sa_select
 from sqlalchemy import text as sa_text
@@ -78,6 +81,8 @@ from policy_atlas.evidence_search.extract.quote_verify import QuoteMatcher, buil
 
 if TYPE_CHECKING:
     from policy_atlas.evidence_search.synthesis.section_prompt import SectionProseWire
+
+log = structlog.get_logger()
 
 # --- Plan-pinned constants (plan.md rev 2 — binding; the caps-bind test
 # asserts these module constants are the values enforced on the live path,
@@ -3447,6 +3452,7 @@ def run_tool_loop(
     emit_label: str = "emit_section",
     on_tool_start: Callable[[str, dict[str, Any]], None] | None = None,
     langfuse_client: Any | None = None,
+    on_tool_result: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> ToolLoopResult:
     """Run the shared bounded read-tool loop with an adapter-owned terminal emission.
 
@@ -3459,6 +3465,8 @@ def run_tool_loop(
         on_tool_start: Optional progress hook invoked before a valid tool call.
         langfuse_client: Optional Langfuse client; each executed read tool then
             traces as a ``tool:{name}`` observation beside the turn's generation.
+        on_tool_result: Optional hook invoked with the tool's name and result
+            after a tool call has run and been added to the transcript.
 
     Returns:
         Terminal emission, transcript, and bounded-loop accounting.
@@ -3570,6 +3578,8 @@ def run_tool_loop(
             })
             tool_call_counts[tool_name] = tool_call_counts.get(tool_name, 0) + 1
             executed_this_turn += 1
+            if on_tool_result is not None:
+                on_tool_result(tool_name, tool_result)
 
     raise RuntimeError("section loop exhausted without emission")
 
@@ -3633,6 +3643,10 @@ def run_section_loop(
     "Looking up sources"; before the write turn, "Writing". Each line
     carries ``section_line`` so the user sees which section it belongs to.
 
+    After each read tool returns, the loop also publishes the sources its
+    results came from, so the page can say which sources the writer is
+    drawing on (task 058, owner 2026-11-05; see :func:`read_sources`).
+
     The write turn (task 058, owner 2026-11-05) runs when the writer says it
     has gathered enough (a ``ready`` turn: it called ``write_section``) or
     when the turn budget runs out. It is the same loop turn as the ready
@@ -3664,6 +3678,19 @@ def run_section_loop(
         line = _tool_activity(tool_name, arguments)
         if line is not None:
             liveness.publish_progress(activity=line, section=section_line)
+
+    # The page's index for this section, as the streamed text uses it.
+    display_index = int(seed.get("display_index", seed.get("section_index", 0)))
+
+    def on_tool_result(_tool_name: str, result: dict[str, Any]) -> None:
+        # Display-only: naming the sources must never stop the section.
+        try:
+            sources = read_sources(result)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("synthesis.read_sources.failed", error=type(exc).__name__)
+            return
+        if sources:
+            liveness.publish_section_sources(display_index, sources)
 
     stream_emit = getattr(backend, "section_emit_stream", None)
 
@@ -3707,6 +3734,7 @@ def run_section_loop(
         retriever=retriever,
         langfuse_client=langfuse_client,
         on_tool_start=on_tool_start,
+        on_tool_result=on_tool_result,
     )
     return {
         "claims": cast("SectionProseWire | None", result["emission"]),
@@ -3756,3 +3784,273 @@ def gathered_ids(transcript: Sequence[ToolExchange]) -> dict[str, set[str]]:
                         ):
                             finding_ids.add(cast("str", finding["finding_id"]))
     return {"chunk_ids": chunk_ids, "finding_ids": finding_ids}
+
+
+# Sources named on the page while a section is written (task 058, owner 2026-11-05)
+
+#: Gives each source id (a task source snapshot id) the short name the page shows.
+type SourceLabeller = Callable[[Sequence[str]], Mapping[str, str]]
+
+#: The name shown for a source with no title and no locator (never a raw id).
+UNTITLED_SOURCE = "Untitled source"
+
+#: How deep :func:`read_sources` looks into one tool result.
+_READ_SOURCES_MAX_DEPTH = 6
+
+_source_labeller: ContextVar[SourceLabeller | None] = ContextVar(
+    "synthesis_source_labeller", default=None
+)
+
+
+@contextmanager
+def source_labelling(labeller: SourceLabeller | None) -> Iterator[None]:
+    """Name sources with ``labeller`` for the sources and citations shown live.
+
+    In plain terms: while a section is written, the page shows which sources
+    the writer read and which ones each sentence cites. The tool results only
+    carry each source's title; ``labeller`` (built once per run from the
+    database by :func:`make_source_labeller`) gives the shorter "Smith 2023"
+    form. Without one, the record's own title is used.
+
+    Args:
+        labeller: Maps source ids to names, or ``None``.
+
+    Yields:
+        Nothing; the binding lasts until the block exits.
+    """
+    token = _source_labeller.set(labeller)
+    try:
+        yield
+    finally:
+        _source_labeller.reset(token)
+
+
+def _record_title(record: Mapping[str, Any], source_id: str) -> str | None:
+    """Return a record's own title, unless it is the ``source <id>`` placeholder."""
+    for key in ("document_title", "title"):
+        title = record.get(key)
+        if isinstance(title, str) and title.strip() and title != f"source {source_id}":
+            return title.strip()
+    return None
+
+
+def name_sources(found: Sequence[tuple[str, str | None]]) -> list[liveness.SourceRef]:
+    """Give each ``(source_id, own_title)`` pair the name the page shows.
+
+    The bound labeller's name wins; otherwise the record's own title; otherwise
+    :data:`UNTITLED_SOURCE`. Repeated ids are kept once, in first-seen order.
+
+    Args:
+        found: Source ids with the title their record carried (or ``None``).
+
+    Returns:
+        ``(source_id, name)`` pairs.
+    """
+    unique: dict[str, str | None] = {}
+    for source_id, title in found:
+        if unique.get(source_id) is None:
+            unique[source_id] = title
+    if not unique:
+        return []
+    labeller = _source_labeller.get()
+    labels: Mapping[str, str] = {}
+    if labeller is not None:
+        labels = labeller(list(unique))
+    return [
+        (source_id, labels.get(source_id) or title or UNTITLED_SOURCE)
+        for source_id, title in unique.items()
+    ]
+
+
+def read_sources(result: Mapping[str, Any]) -> list[liveness.SourceRef]:
+    """Name the sources one read tool's result came from, in first-seen order.
+
+    Every record in the result that carries a ``tss_id`` counts: a chunk from
+    ``search_chunks``, a finding from ``query_findings``, a document from
+    ``lookup``. Stubs for records already returned, and chunks skipped over
+    the text budget, carry no ``tss_id`` and so add nothing.
+
+    Args:
+        result: The tool's result.
+
+    Returns:
+        ``(source_id, name)`` pairs, each source once.
+    """
+    found: list[tuple[str, str | None]] = []
+
+    def walk(value: Any, depth: int) -> None:
+        if depth > _READ_SOURCES_MAX_DEPTH:
+            return
+        if isinstance(value, Mapping):
+            tss_id = value.get("tss_id")
+            if isinstance(tss_id, str) and tss_id:
+                found.append((tss_id, _record_title(value, tss_id)))
+            for child in value.values():
+                if isinstance(child, Mapping | list):
+                    walk(child, depth + 1)
+        elif isinstance(value, list):
+            for child in value:
+                walk(child, depth + 1)
+
+    walk(result, 0)
+    return name_sources(found)
+
+
+def citable_sources(
+    seed: Mapping[str, Any], transcript: Sequence[ToolExchange]
+) -> tuple[dict[str, tuple[str, str | None]], dict[str, tuple[str, str | None]]]:
+    """Map the chunk and finding ids a section may cite to their sources.
+
+    Args:
+        seed: The section seed (its ``member_findings`` are citable).
+        transcript: The section's tool exchanges so far.
+
+    Returns:
+        ``(by_chunk_id, by_finding_id)``, each mapping an id to
+        ``(source_id, own_title)``.
+    """
+    by_chunk: dict[str, tuple[str, str | None]] = {}
+    by_finding: dict[str, tuple[str, str | None]] = {}
+
+    def keep(record: Any) -> None:
+        if not isinstance(record, Mapping):
+            return
+        tss_id = record.get("tss_id")
+        if not isinstance(tss_id, str) or not tss_id:
+            return
+        source = (tss_id, _record_title(record, tss_id))
+        chunk_id = record.get("chunk_record_id")
+        if isinstance(chunk_id, str):
+            by_chunk.setdefault(chunk_id, source)
+        finding_id = record.get("finding_id")
+        if isinstance(finding_id, str):
+            by_finding.setdefault(finding_id, source)
+
+    for finding in seed.get("member_findings", []) or []:
+        keep(finding)
+    for exchange in transcript:
+        result = exchange.get("result")
+        if not isinstance(result, Mapping):
+            continue
+        for key in ("chunks", "findings", "iof_findings", "icf_findings"):
+            records = result.get(key)
+            if isinstance(records, list):
+                for record in records:
+                    keep(record)
+    return by_chunk, by_finding
+
+
+def _first_author(metadata: Mapping[str, Any]) -> str | None:
+    """Return the first author's family name, or ``None`` when the record has none."""
+    provider = metadata.get("provider_fields")
+    provider = provider if isinstance(provider, Mapping) else {}
+    name: str | None = None
+    authorships = provider.get("authorships")
+    if isinstance(authorships, list):
+        for entry in authorships:
+            if isinstance(entry, Mapping):
+                value = entry.get("author_name")
+                if isinstance(value, str) and value.strip():
+                    name = value.strip()
+                    break
+    if name is None:
+        authors = provider.get("authors")
+        if isinstance(authors, str) and authors.strip():
+            name = authors.strip()
+        elif isinstance(authors, list):
+            name = next((a.strip() for a in authors if isinstance(a, str) and a.strip()), None)
+    if name is None:
+        return None
+    if "," in name:
+        # "Smith, Jane": the family name comes first.
+        return name.split(",", 1)[0].strip() or None
+    return name.split()[-1]
+
+
+def source_short_name(metadata: Mapping[str, Any], locator: str | None) -> str:
+    """Return the short name the page shows for a source (task 058).
+
+    The first author's family name (or, without authors, the publisher) and
+    the year, as "Smith 2023", when both are known; otherwise the title, as
+    the Result tab's references show it; otherwise where the source came from
+    (its locator); otherwise :data:`UNTITLED_SOURCE`.
+
+    Args:
+        metadata: The source snapshot's metadata.
+        locator: The source snapshot's locator, or ``None``.
+
+    Returns:
+        The name.
+    """
+    year = metadata.get("publication_year", metadata.get("year"))
+    if not isinstance(year, int) or isinstance(year, bool):
+        year = None
+    who = _first_author(metadata)
+    if who is None:
+        publisher = metadata.get("publisher_org")
+        who = publisher.strip() if isinstance(publisher, str) and publisher.strip() else None
+    if who is not None and year is not None:
+        return f"{who} {year}"
+    title = metadata.get("title")
+    if isinstance(title, str) and title.strip():
+        return html.unescape(title.strip())
+    if locator:
+        return locator
+    return UNTITLED_SOURCE
+
+
+def make_source_labeller(conn: Connection, *, task_id: uuid.UUID) -> SourceLabeller:
+    """Build a labeller that names a task's sources from the database, once each.
+
+    Names are read on first use and remembered, so each source is read once
+    per run.
+
+    Args:
+        conn: Open database connection.
+        task_id: The task whose sources are named.
+
+    Returns:
+        A function from source ids to their short names (ids that are not
+        this task's sources are left out).
+    """
+    known: dict[str, str] = {}
+
+    def labels(source_ids: Sequence[str]) -> Mapping[str, str]:
+        wanted: list[uuid.UUID] = []
+        for source_id in source_ids:
+            if source_id in known:
+                continue
+            try:
+                wanted.append(uuid.UUID(source_id))
+            except ValueError:
+                continue
+        if wanted:
+            # An id that is not this task's source is remembered as unnamed,
+            # so it is not read again.
+            known.update({str(source_id): "" for source_id in wanted})
+            rows = conn.execute(
+                sa_select(
+                    task_source_snapshot.c.task_source_snapshot_id,
+                    source_snapshot.c.metadata,
+                    source_snapshot.c.source_locator,
+                )
+                .join(
+                    source_snapshot,
+                    source_snapshot.c.source_snapshot_id
+                    == task_source_snapshot.c.source_snapshot_id,
+                )
+                .where(task_source_snapshot.c.task_id == task_id)
+                .where(task_source_snapshot.c.task_source_snapshot_id.in_(wanted))
+            )
+            for row in rows:
+                metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
+                known[str(row.task_source_snapshot_id)] = source_short_name(
+                    metadata, row.source_locator
+                )
+        return {
+            source_id: known[source_id]
+            for source_id in source_ids
+            if known.get(source_id)
+        }
+
+    return labels

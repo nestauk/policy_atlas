@@ -2,6 +2,7 @@ import type { SseFrame } from "../api/sseFrame";
 import {
   GLOBAL_LIVENESS_KEY,
   type LiveSection,
+  type LiveSource,
   type ResolvedDecision,
   type RunStreamState,
   type StageEntry,
@@ -21,12 +22,14 @@ import {
  * That set resets whenever the sequence actually advances. Together this
  * makes folding the same frame stream twice, or resuming the fold from
  * any mid-stream cursor (however the redelivery is sliced), produce the
- * same final state. The three ephemeral frame types are the deliberate
+ * same final state. The five ephemeral frame types are the deliberate
  * exception: they carry no `sequence` at all and never advance
  * `lastSequence`. `tick` updates only the transient `liveness` slice;
  * `artefact.section_delta` and `artefact.section_revising` update only a
- * section's `draft` and `revising` (task 058, N7). A replay carries none of
- * them, so folding a replay rebuilds `prose` alone.
+ * section's `draft` and `revising` (task 058, N7);
+ * `artefact.section_sources` and `artefact.section_claim` update only its
+ * `sources` and `claims` (task 058, evidence shown live). A replay carries
+ * none of them, so folding a replay rebuilds `prose` alone.
  */
 /** Task 045 (A3): a stage frame names its walk; one from a different walk
  *  than the tracked run (a longlist walk's option search) is not this
@@ -69,9 +72,37 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
     // reopens it.
     if (section.state === "filled") return state;
     const draft = frame.mode === "append" ? (section.draft ?? "") + frame.text : frame.text;
+    const next: LiveSection = { ...section, draft };
+    // A replaced draft is new text: citations bound to the old one go.
+    if (frame.mode === "replace") delete next.claims;
     return {
       ...state,
-      liveSections: { ...state.liveSections, [frame.index]: { ...section, draft } },
+      liveSections: { ...state.liveSections, [frame.index]: next },
+    };
+  }
+
+  if (frame.type === "artefact.section_sources") {
+    const section = state.liveSections[frame.index];
+    if (section === undefined || section.state === "filled") return state;
+    return {
+      ...state,
+      liveSections: {
+        ...state.liveSections,
+        [frame.index]: { ...section, sources: liveSources(frame.sources) },
+      },
+    };
+  }
+
+  if (frame.type === "artefact.section_claim") {
+    const section = state.liveSections[frame.index];
+    if (section === undefined || section.state === "filled") return state;
+    const claim = { start: frame.start, end: frame.end, sources: liveSources(frame.sources) };
+    return {
+      ...state,
+      liveSections: {
+        ...state.liveSections,
+        [frame.index]: { ...section, claims: [...(section.claims ?? []), claim] },
+      },
     };
   }
 
@@ -260,6 +291,8 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       const settled: LiveSection = { ...section };
       delete settled.draft;
       delete settled.revising;
+      delete settled.sources;
+      delete settled.claims;
       return {
         ...base,
         liveSections: {
@@ -311,6 +344,11 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
     default:
       return assertNever(frame);
   }
+}
+
+/** The wire's `{source_id, title}` pairs as the store keeps them. */
+function liveSources(sources: readonly { source_id: string; title: string }[]): LiveSource[] {
+  return sources.map(({ source_id, title }) => ({ sourceId: source_id, title }));
 }
 
 /**

@@ -698,6 +698,28 @@ describe("mock API", () => {
       expect(order.indexOf("artefact.section_revising")).toBeLessThan(order.lastIndexOf("artefact.section_completed"));
     });
 
+    it("names the sources read before the prose and the writer's citations after it (evidence shown live)", async () => {
+      const frames = await playEvidenceWalk();
+      const draft = mockArtefactSectionProse[1];
+      const sources = ofType(frames, "artefact.section_sources");
+      expect(sources.map((entry) => entry.sources.length)).toEqual([2, 5]);
+      expect(sources.every((entry) => entry.index === 1)).toBe(true);
+      const claims = ofType(frames, "artefact.section_claim");
+      expect(claims).toHaveLength(2);
+      for (const claim of claims) {
+        expect(claim.index).toBe(1);
+        expect(claim.end).toBeLessThanOrEqual(Array.from(draft).length);
+        expect(claim.sources.length).toBeGreaterThan(0);
+      }
+      expect(draft.slice(claims[1].start, claims[1].end)).toBe(
+        "Schools that added a walking bus saw 8 more children arrive on foot in every 100.",
+      );
+      const order = frames.map((frame) => frame.type);
+      expect(order.indexOf("artefact.section_sources")).toBeLessThan(order.indexOf("artefact.section_delta"));
+      expect(order.lastIndexOf("artefact.section_delta")).toBeLessThan(order.indexOf("artefact.section_claim"));
+      expect(order.lastIndexOf("artefact.section_claim")).toBeLessThan(order.indexOf("artefact.section_revising"));
+    });
+
     it("serves the planner turn as a stream: progress, deltas, one completed last", async () => {
       await freshTask("evidence_search");
       const post = async (message: string) => {

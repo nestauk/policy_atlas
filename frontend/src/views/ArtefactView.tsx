@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   cardEvidenceMeta,
   CASE_STUDIES_INTRO,
+  drawingOnLine,
   EXECUTIVE_SUMMARY_ANCHOR,
   fullReportIntro,
   FULL_REPORT_ANCHOR,
@@ -37,7 +38,7 @@ import { usePlanPanel } from "./planPanel";
 import { ShortlistView } from "./longlist/ShortlistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
-import type { LiveSection, RunStreamState } from "../store";
+import type { LiveClaim, LiveSection, RunStreamState } from "../store";
 import { Card, LiveMark } from "../ui/brand/Card";
 import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
@@ -1199,58 +1200,105 @@ function PlaceholderLines({ index, still }: { index: number; still: boolean }) {
   );
 }
 
-/** Split drafted text into paragraphs (blank lines) and mark the spans
- *  under repair. Spans are code-point offsets into the draft, as the server
- *  counts them. */
+/** One stretch of drafted text: whether it is under repair, and the
+ *  writer's citations that end where it ends (`marks`, only when there are
+ *  any). */
+export type DraftRun = { text: string; revising: boolean; marks?: LiveClaim[] };
+
+/** Split drafted text into paragraphs (blank lines), mark the spans under
+ *  repair, and end a run wherever one of the writer's citations ends, so its
+ *  provisional marker can follow the cited words. Spans are code-point
+ *  offsets into the draft, as the server counts them. */
 export function draftParagraphs(
   draft: string,
   revising: readonly { start: number; end: number }[] = [],
-): { text: string; revising: boolean }[][] {
+  claims: readonly LiveClaim[] = [],
+): DraftRun[][] {
   const chars = Array.from(draft);
   const marked = new Array<boolean>(chars.length).fill(false);
   for (const { start, end } of revising) {
     for (let at = Math.max(0, start); at < Math.min(end, chars.length); at += 1) marked[at] = true;
   }
-  const runs: { text: string; revising: boolean }[] = [];
+  // Citations by the code point they end after; one past the draft is dropped.
+  const endingAt = new Map<number, LiveClaim[]>();
+  for (const claim of claims) {
+    if (claim.end <= 0 || claim.end > chars.length || claim.start >= claim.end) continue;
+    endingAt.set(claim.end - 1, [...(endingAt.get(claim.end - 1) ?? []), claim]);
+  }
+  const runs: DraftRun[] = [];
+  let open = false;
   chars.forEach((char, at) => {
     const last = runs.at(-1);
-    if (last !== undefined && last.revising === marked[at]) last.text += char;
+    if (open && last !== undefined && last.revising === marked[at]) last.text += char;
     else runs.push({ text: char, revising: marked[at] });
+    open = true;
+    const ending = endingAt.get(at);
+    if (ending !== undefined) {
+      (runs.at(-1) as DraftRun).marks = ending;
+      open = false;
+    }
   });
-  const paragraphs: { text: string; revising: boolean }[][] = [[]];
+  const paragraphs: DraftRun[][] = [[]];
   for (const run of runs) {
-    run.text.split(/\n[ \t]*\n\s*/).forEach((piece, pieceAt) => {
+    const pieces = run.text.split(/\n[ \t]*\n\s*/);
+    pieces.forEach((piece, pieceAt) => {
       if (pieceAt > 0) paragraphs.push([]);
-      if (piece !== "") paragraphs[paragraphs.length - 1].push({ text: piece, revising: run.revising });
+      if (piece === "") return;
+      const out: DraftRun = { text: piece, revising: run.revising };
+      if (run.marks !== undefined && pieceAt === pieces.length - 1) out.marks = run.marks;
+      paragraphs[paragraphs.length - 1].push(out);
     });
   }
   return paragraphs.filter((paragraph) => paragraph.length > 0);
 }
 
-/** Drafted prose: plain text, no Markdown, no claim marker, no citation. A
- *  span the checker failed blurs in place while the writer revises it. */
+/** The writer's own citation, placed after the cited words while the section
+ *  is written (task 058, owner 2026-11-05): the status mark's 6 px square,
+ *  hollow in Line 2, not a control and not blue (blue belongs to the checked
+ *  markers the committed section brings). Its titles are the hover text. */
+function ProvisionalMark({ claim }: { claim: LiveClaim }) {
+  const titles = claim.sources.map((source) => scrub(source.title)).join("; ");
+  return (
+    <span
+      role="img"
+      aria-label={`Cited, being checked: ${titles}`}
+      title={titles}
+      data-testid="provisional-mark"
+      className="ml-1 inline-block size-1.5 border border-line-2 align-middle"
+    />
+  );
+}
+
+/** Drafted prose: plain text, no Markdown, no checked citation. A span the
+ *  checker failed blurs in place while the writer revises it; the writer's
+ *  own citations show as provisional marks after the words they cite. */
 function DraftProse({
   draft,
   revising,
+  claims,
   className = "",
 }: {
   draft: string;
   revising?: readonly { start: number; end: number }[];
+  claims?: readonly LiveClaim[];
   className?: string;
 }) {
   return (
     <div className={`max-w-prose-measure space-y-4 ${REPORT_BODY_CLASS} ${className}`}>
-      {draftParagraphs(draft, revising).map((paragraph, at) => (
+      {draftParagraphs(draft, revising, claims).map((paragraph, at) => (
         <p key={at} className="whitespace-pre-line">
-          {paragraph.map((run, runAt) =>
-            run.revising ? (
-              <span key={runAt} data-revising="true" className="draft-revising">
-                {scrub(run.text)}
-              </span>
-            ) : (
-              <span key={runAt}>{scrub(run.text)}</span>
-            ),
-          )}
+          {paragraph.map((run, runAt) => (
+            <span key={runAt}>
+              {run.revising ? (
+                <span data-revising="true" className="draft-revising">
+                  {scrub(run.text)}
+                </span>
+              ) : (
+                scrub(run.text)
+              )}
+              {run.marks?.map((claim, markAt) => <ProvisionalMark key={markAt} claim={claim} />)}
+            </span>
+          ))}
         </p>
       ))}
     </div>
@@ -1319,12 +1367,20 @@ function LiveSectionBlock({
   const writing = active && !terminal;
   const showWords = writing && activity !== null;
   const actionText = useLatched(showWords ? activity : null);
+  // The sources the writer has read, from the first read until the checked
+  // section replaces the draft (task 058, owner 2026-11-05). Not links.
+  const drawingOn = filled || terminal ? null : drawingOnLine(section.sources);
 
   return (
     <section className="mt-9" aria-busy={writing ? true : undefined}>
       <h2 className={REPORT_SECTION_HEADING_CLASS}>{scrub(section.title)}</h2>
       {keyFindings && !filled && !active && !terminal && (
         <p className="mt-1.5 text-body text-grey">Written last, after the sections are checked.</p>
+      )}
+      {drawingOn !== null && (
+        <p data-testid="drawing-on" className="mt-1.5 text-meta text-grey">
+          {scrub(drawingOn)}
+        </p>
       )}
       <div
         className={`grid transition-[grid-template-rows] duration-300 ease-[var(--ease-out-strong)] ${writing ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
@@ -1355,7 +1411,7 @@ function LiveSectionBlock({
           )}
         </div>
       ) : draft !== "" ? (
-        <DraftProse draft={draft} revising={section.revising} className="mt-2" />
+        <DraftProse draft={draft} revising={section.revising} claims={section.claims} className="mt-2" />
       ) : terminal ? (
         <p className="mt-2 text-body italic text-grey">
           {section.focus !== "" ? scrub(section.focus) : "Waiting to be written."}

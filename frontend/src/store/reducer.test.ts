@@ -560,6 +560,61 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
     });
   });
 
+  it("sources replace the set, claims append, and completion clears both (evidence shown live)", () => {
+    const sources = (set: { source_id: string; title: string }[]): SseFrame => ({
+      type: "artefact.section_sources",
+      index: 3,
+      sources: set,
+      occurred_at: "2026-07-28T10:01:05Z",
+      ephemeral: true,
+    });
+    const claim = (start: number, end: number, title: string): SseFrame => ({
+      type: "artefact.section_claim",
+      index: 3,
+      start,
+      end,
+      sources: [{ source_id: `id-${title}`, title }],
+      occurred_at: "2026-07-28T10:01:12Z",
+      ephemeral: true,
+    });
+    const base = fold(createInitialRunStreamState(), writingFrames());
+    let state = fold(base, [
+      sources([{ source_id: "a", title: "Smith 2023" }]),
+      sources([
+        { source_id: "a", title: "Smith 2023" },
+        { source_id: "b", title: "DfE 2022" },
+      ]),
+    ]);
+    expect(state.liveSections[3].sources).toEqual([
+      { sourceId: "a", title: "Smith 2023" },
+      { sourceId: "b", title: "DfE 2022" },
+    ]);
+
+    state = fold(state, [delta(3, "The evidence supports it. It costs little."), claim(0, 25, "Smith 2023")]);
+    state = reduceRunStreamFrame(state, claim(26, 42, "DfE 2022"));
+    expect(state.liveSections[3].claims).toEqual([
+      { start: 0, end: 25, sources: [{ sourceId: "id-Smith 2023", title: "Smith 2023" }] },
+      { start: 26, end: 42, sources: [{ sourceId: "id-DfE 2022", title: "DfE 2022" }] },
+    ]);
+    // Neither frame moves the cursor.
+    expect(state.lastSequence).toBe(base.lastSequence);
+    expect(state.appliedTypesAtLastSequence).toEqual(base.appliedTypesAtLastSequence);
+
+    // A replaced draft drops the citations bound to the old text; the sources stay.
+    const replaced = reduceRunStreamFrame(state, delta(3, "", "replace"));
+    expect(replaced.liveSections[3].claims).toBeUndefined();
+    expect(replaced.liveSections[3].sources).toHaveLength(2);
+
+    state = reduceRunStreamFrame(state, completed);
+    expect(state.liveSections[3].sources).toBeUndefined();
+    expect(state.liveSections[3].claims).toBeUndefined();
+    // A late frame never reopens the completed section, and an unknown index is ignored.
+    const late = fold(state, [sources([{ source_id: "c", title: "Late" }]), claim(0, 3, "Late")]);
+    expect(late.liveSections).toEqual(state.liveSections);
+    const unknown = reduceRunStreamFrame(base, { ...claim(0, 3, "X"), index: 9 } as SseFrame);
+    expect(unknown).toBe(base);
+  });
+
   it("a late delta never reopens a completed section", () => {
     const state = fold(createInitialRunStreamState(), [...writingFrames(), completed, delta(3, "late")]);
     expect(state.liveSections[3].draft).toBeUndefined();

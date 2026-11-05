@@ -3,8 +3,9 @@
 Frame `type` names and the nineteen pinned `stage` keys are contract (spec §
 SSE) — Hyrum hygiene means nothing else internal (module names, model ids,
 raw payload keys) is ever observable through a frame. Every frame except the
-three ephemeral ones (`tick`, `artefact.section_delta`,
-`artefact.section_revising`) carries a `sequence` (the `event_log` sequence,
+five ephemeral ones (`tick`, `artefact.section_delta`,
+`artefact.section_revising`, `artefact.section_sources`,
+`artefact.section_claim`) carries a `sequence` (the `event_log` sequence,
 doubling as the client's reconnect cursor); the ephemeral frames carry
 neither `sequence` nor an `id:` line and are never replayed.
 """
@@ -249,6 +250,52 @@ class ArtefactSectionRevisingFrame(BaseModel):
     occurred_at: datetime
 
 
+class SectionSourceRef(BaseModel):
+    """One source as the page names it while a section is written.
+
+    Args:
+        source_id: The source's id in this task (display identity only).
+        title: The source's short name: first author or publisher and year
+            when both are known, else its title, else where it came from.
+    """
+
+    source_id: str
+    title: str
+
+
+class ArtefactSectionSourcesFrame(BaseModel):
+    """Ephemeral: the sources the writer has read so far for a section (task 058).
+
+    Each frame carries the whole set, in the order the sources were first
+    read; it replaces the one before. Display-only: never persisted, no
+    `id:` line, no `sequence`. A reconnect mid-section gets the current set.
+    """
+
+    type: Literal["artefact.section_sources"]
+    ephemeral: Literal[True] = True
+    index: int
+    sources: list[SectionSourceRef]
+    occurred_at: datetime
+
+
+class ArtefactSectionClaimFrame(BaseModel):
+    """Ephemeral: one of the writer's citations, bound to the draft (task 058).
+
+    The span `[start, end)` counts code points of the section draft, as
+    `artefact.section_revising` does. The citation is still to be checked;
+    `artefact.section_completed` brings the checked section. Display-only:
+    never persisted, no `id:` line, no `sequence`.
+    """
+
+    type: Literal["artefact.section_claim"]
+    ephemeral: Literal[True] = True
+    index: int
+    start: int
+    end: int
+    sources: list[SectionSourceRef]
+    occurred_at: datetime
+
+
 #: Discriminated union of every SSE frame type, keyed on `type`.
 SseFrame = Annotated[
     RunStatusFrame
@@ -264,6 +311,8 @@ SseFrame = Annotated[
     | TaskUpdatedFrame
     | TickFrame
     | ArtefactSectionDeltaFrame
-    | ArtefactSectionRevisingFrame,
+    | ArtefactSectionRevisingFrame
+    | ArtefactSectionSourcesFrame
+    | ArtefactSectionClaimFrame,
     Field(discriminator="type"),
 ]

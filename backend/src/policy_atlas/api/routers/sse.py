@@ -20,9 +20,11 @@ from sqlalchemy.sql.elements import ColumnElement
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.check_ins_read import _check_in
 from policy_atlas.api.contract import (
+    ArtefactSectionClaimFrame,
     ArtefactSectionCompletedFrame,
     ArtefactSectionDeltaFrame,
     ArtefactSectionRevisingFrame,
+    ArtefactSectionSourcesFrame,
     ArtefactSectionStartedFrame,
     ArtefactSkeletonFrame,
     CheckinPendingFrame,
@@ -30,6 +32,7 @@ from policy_atlas.api.contract import (
     PlanUpdatedFrame,
     RunStatus,
     RunStatusFrame,
+    SectionSourceRef,
     SectionSpan,
     StageCompletedFrame,
     StageCount,
@@ -68,6 +71,9 @@ from policy_atlas.core import events
 from policy_atlas.core.liveness import (
     HubMessage,
     SectionDelta,
+    SectionRevising,
+    SectionSources,
+    SourceRef,
     Tick,
     tick_hub,
 )
@@ -636,7 +642,13 @@ def _encode_ephemeral(message: HubMessage) -> str:
             if message.stage in _STAGE_PRESENTATION
             else None
         )
-        frame: TickFrame | ArtefactSectionDeltaFrame | ArtefactSectionRevisingFrame = (
+        frame: (
+            TickFrame
+            | ArtefactSectionDeltaFrame
+            | ArtefactSectionRevisingFrame
+            | ArtefactSectionSourcesFrame
+            | ArtefactSectionClaimFrame
+        ) = (
             TickFrame(
                 type="tick",
                 stage=stage,
@@ -658,14 +670,35 @@ def _encode_ephemeral(message: HubMessage) -> str:
             mode=message.mode,
             occurred_at=message.occurred_at,
         )
-    else:
+    elif isinstance(message, SectionRevising):
         frame = ArtefactSectionRevisingFrame(
             type="artefact.section_revising",
             index=message.index,
             spans=[SectionSpan(start=start, end=end) for start, end in message.spans],
             occurred_at=message.occurred_at,
         )
+    elif isinstance(message, SectionSources):
+        frame = ArtefactSectionSourcesFrame(
+            type="artefact.section_sources",
+            index=message.index,
+            sources=_source_refs(message.sources),
+            occurred_at=message.occurred_at,
+        )
+    else:
+        frame = ArtefactSectionClaimFrame(
+            type="artefact.section_claim",
+            index=message.index,
+            start=message.start,
+            end=message.end,
+            sources=_source_refs(message.sources),
+            occurred_at=message.occurred_at,
+        )
     return f"event: {frame.type}\ndata: {frame.model_dump_json()}\n\n"
+
+
+def _source_refs(sources: tuple[SourceRef, ...]) -> list[SectionSourceRef]:
+    """Name each ``(source_id, title)`` pair as the frame carries it."""
+    return [SectionSourceRef(source_id=source_id, title=title) for source_id, title in sources]
 
 
 @router.get("/{task_id}/events")

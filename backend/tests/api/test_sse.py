@@ -27,8 +27,10 @@ from policy_atlas.api import continuation
 from policy_atlas.api.app import create_app
 from policy_atlas.api.contract import SseFrame
 from policy_atlas.api.contract.sse import (
+    ArtefactSectionClaimFrame,
     ArtefactSectionDeltaFrame,
     ArtefactSectionRevisingFrame,
+    ArtefactSectionSourcesFrame,
 )
 from policy_atlas.api.dev_issuer import init, mint_token
 from policy_atlas.api.routers import access, sse
@@ -891,6 +893,116 @@ def test_sse_delta_and_revising_frames_have_no_id_line(
             _cleanup(engine, task_id)
 
     asyncio.run(exercise())
+
+
+def test_sse_sources_and_claim_frames_have_no_id_line(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The sources read and the citations bound arrive as validated cursor-free frames."""
+
+    async def exercise() -> None:
+        task_id: uuid.UUID | None = None
+        try:
+            async with _api_session(tmp_path) as api:
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                stream = await api.open_stream(task_id)
+                await _subscribed(task_id)
+                tick_hub.publish_sources(
+                    task_id, index=1, sources=[("tss-1", "Smith 2023"), ("tss-2", "DfE 2022")]
+                )
+                tick_hub.publish_delta(
+                    task_id, index=1, text="A draft sentence.", mode="replace"
+                )
+                tick_hub.publish_claim(
+                    task_id, index=1, start=2, end=17, sources=[("tss-2", "DfE 2022")]
+                )
+                items = await stream.collect_until(
+                    lambda item: item.event == "artefact.section_claim"
+                )
+                await stream.aclose()
+
+                frames = _frames(items)
+                assert [item.event for item in frames] == [
+                    "artefact.section_sources",
+                    "artefact.section_delta",
+                    "artefact.section_claim",
+                ]
+                assert all(item.sequence is None for item in frames)
+                adapter: TypeAdapter[SseFrame] = TypeAdapter(SseFrame)
+                validated = [adapter.validate_python(item.data) for item in frames]
+                assert isinstance(validated[0], ArtefactSectionSourcesFrame)
+                assert [(s.source_id, s.title) for s in validated[0].sources] == [
+                    ("tss-1", "Smith 2023"),
+                    ("tss-2", "DfE 2022"),
+                ]
+                assert isinstance(validated[2], ArtefactSectionClaimFrame)
+                assert (validated[2].index, validated[2].start, validated[2].end) == (1, 2, 17)
+                assert [s.title for s in validated[2].sources] == ["DfE 2022"]
+        finally:
+            _cleanup(engine, task_id)
+
+    asyncio.run(exercise())
+
+
+def test_sse_snapshot_sends_the_sources_and_claims_after_the_draft(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A reconnect mid-section gets the draft, then the sources read, then each citation."""
+
+    async def exercise() -> None:
+        task_id: uuid.UUID | None = None
+        try:
+            async with _api_session(tmp_path) as api:
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                tick_hub.publish_sources(task_id, index=2, sources=[("tss-1", "Smith 2023")])
+                tick_hub.publish_delta(task_id, index=2, text="Draft text.", mode="replace")
+                tick_hub.publish_claim(
+                    task_id, index=2, start=0, end=5, sources=[("tss-1", "Smith 2023")]
+                )
+
+                stream = await api.open_stream(task_id)
+                items = await stream.collect_until(
+                    lambda item: item.event == "artefact.section_claim"
+                )
+                await stream.aclose()
+
+                frames = _frames(items)
+                assert [item.event for item in frames] == [
+                    "artefact.section_delta",
+                    "artefact.section_sources",
+                    "artefact.section_claim",
+                ]
+                assert frames[0].data is not None and frames[0].data["text"] == "Draft text."
+                assert frames[1].data is not None
+                assert frames[1].data["sources"] == [
+                    {"source_id": "tss-1", "title": "Smith 2023"}
+                ]
+                assert frames[2].data is not None
+                assert (frames[2].data["start"], frames[2].data["end"]) == (0, 5)
+        finally:
+            _cleanup(engine, task_id)
+
+    asyncio.run(exercise())
+
+
+def test_encode_ephemeral_names_the_sources_and_claim_frames() -> None:
+    """The hub's two new messages become the two new frames, with no id line."""
+    from datetime import UTC, datetime
+
+    from policy_atlas.core.liveness import SectionClaim, SectionSources
+
+    now = datetime.now(UTC)
+    sources = _encode_ephemeral(
+        SectionSources(index=3, sources=(("tss-1", "Smith 2023"),), occurred_at=now)
+    )
+    claim = _encode_ephemeral(
+        SectionClaim(index=3, start=1, end=9, sources=(("tss-1", "Smith 2023"),), occurred_at=now)
+    )
+    assert sources.startswith("event: artefact.section_sources\ndata: ")
+    assert claim.startswith("event: artefact.section_claim\ndata: ")
+    assert "id:" not in sources and "id:" not in claim
+    assert '"sources":[{"source_id":"tss-1","title":"Smith 2023"}]' in sources
+    assert '"start":1,"end":9' in claim
 
 
 def test_sse_drains_every_queued_message_in_one_poll(

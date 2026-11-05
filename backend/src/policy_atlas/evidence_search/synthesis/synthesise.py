@@ -150,8 +150,10 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     is_qualified_group_id,
     make_findings_reader,
     make_lookup_reader,
+    make_source_labeller,
     parse_synthesis_directive,
     run_section_loop,
+    source_labelling,
 )
 from policy_atlas.runtime.progress import ProgressEmitter
 
@@ -6158,6 +6160,7 @@ def synthesise_scope(
     repair_count_mismatch_any = False
     repair_unparseable_any = False
 
+    source_labeller = make_source_labeller(conn, task_id=task_id)
     for section_index, section in enumerate(written_sections):
         if progress_emitter is not None:
             progress_emitter.section_started(section_index)
@@ -6230,15 +6233,18 @@ def synthesise_scope(
             group_doc_ids_by_group_id=group_doc_ids_by_group_id,
         )
         try:
-            loop_result = run_section_loop(
-                synthesis_backend,
-                seed=seed,
-                tools=tools,
-                turn_cap=section.turn_cap or SECTION_TURN_CAP,
-                retriever=retriever,
-                langfuse_client=getattr(synthesis_backend, "langfuse_client", None),
-                section_line=section_line,
-            )
+            # The sources read and cited are named on the page as the
+            # section is written (task 058, owner 2026-11-05).
+            with source_labelling(source_labeller):
+                loop_result = run_section_loop(
+                    synthesis_backend,
+                    seed=seed,
+                    tools=tools,
+                    turn_cap=section.turn_cap or SECTION_TURN_CAP,
+                    retriever=retriever,
+                    langfuse_client=getattr(synthesis_backend, "langfuse_client", None),
+                    section_line=section_line,
+                )
             usage_totals.add_payload(loop_result["usage_totals"])
         except RuntimeError as exc:
             raise SynthesiseFailure(type(exc).__name__, blocks_written=blocks_written) from exc

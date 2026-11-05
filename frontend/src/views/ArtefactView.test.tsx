@@ -19,6 +19,7 @@ import {
   ReportToBe,
   showLiveArtefact,
 } from "./ArtefactView";
+import { drawingOnLine, liveSourceName } from "./artefactPresentation";
 
 describe("highlightParts", () => {
   it("finds an exact quote", () => {
@@ -382,6 +383,110 @@ describe("draftParagraphs", () => {
       { text: " b.", revising: false },
     ]);
     expect(paragraphs[1]).toEqual([{ text: "C d.", revising: false }]);
+  });
+});
+
+describe("evidence shown live (task 058, owner 2026-11-05)", () => {
+  const SOURCES = [
+    { sourceId: "a", title: "Smith 2023" },
+    { sourceId: "b", title: "DfE 2022" },
+    { sourceId: "c", title: "Walking school buses and active travel to school: a mixed-methods evaluation" },
+    { sourceId: "d", title: "Sustrans 2020" },
+  ];
+
+  it("names up to three sources under the heading, then 'and N more'", () => {
+    expect(drawingOnLine(undefined)).toBeNull();
+    expect(drawingOnLine([])).toBeNull();
+    expect(drawingOnLine(SOURCES.slice(0, 1))).toBe("Drawing on 1 source · Smith 2023");
+    expect(drawingOnLine(SOURCES)).toBe(
+      "Drawing on 4 sources · Smith 2023 · DfE 2022 · Walking school buses and active travel… · and 1 more",
+    );
+    expect(liveSourceName("Short title")).toBe("Short title");
+    expect(liveSourceName("x".repeat(60))).toBe(`${"x".repeat(40)}…`);
+  });
+
+  it("shows the line from the first read, above the action line and the prose, until the section settles", () => {
+    const { rerender } = render(<LiveArtefactBody stream={writingStream({ sources: SOURCES.slice(0, 2) })} />);
+    const costs = screen.getByRole("heading", { name: "Costs" }).closest("section") as HTMLElement;
+    const line = within(costs).getByTestId("drawing-on");
+    expect(line).toHaveTextContent("Drawing on 2 sources · Smith 2023 · DfE 2022");
+    expect(line.className).toContain("text-meta");
+    expect(line.className).toContain("text-grey");
+    // Under the heading, before the action line; nothing in it is a link.
+    expect(costs.querySelector("h2")?.nextElementSibling).toBe(line);
+    expect(line.compareDocumentPosition(within(costs).getByTestId("action-line"))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(within(line).queryByRole("link")).toBeNull();
+    expect(within(line).queryByRole("button")).toBeNull();
+
+    rerender(
+      <LiveArtefactBody stream={writingStream({ sources: SOURCES, draft: "Cost is the" }, "Checking claims")} />,
+    );
+    expect(screen.getByTestId("drawing-on")).toHaveTextContent("and 1 more");
+
+    rerender(
+      <LiveArtefactBody
+        stream={writingStream({ state: "filled", prose: "Cost is the barrier.", draft: undefined, sources: undefined })}
+      />,
+    );
+    expect(screen.queryByTestId("drawing-on")).toBeNull();
+  });
+
+  it("puts a hollow provisional mark after each cited span, named for its sources, under the revising blur too", () => {
+    const draft = `${LEAD} ${FAILED}`;
+    const failedAt = draft.indexOf(FAILED);
+    const claims = [
+      { start: 0, end: LEAD.length, sources: [SOURCES[0], SOURCES[1]] },
+      { start: failedAt, end: failedAt + FAILED.length, sources: [SOURCES[3]] },
+    ];
+    render(
+      <LiveArtefactBody
+        stream={writingStream(
+          { draft, claims, revising: [{ start: failedAt, end: failedAt + FAILED.length }] },
+          "Checking claims",
+        )}
+      />,
+    );
+    const marks = screen.getAllByRole("img", { name: /^Cited, being checked: / });
+    expect(marks).toHaveLength(2);
+    expect(marks[0]).toHaveAccessibleName("Cited, being checked: Smith 2023; DfE 2022");
+    expect(marks[0]).toHaveAttribute("title", "Smith 2023; DfE 2022");
+    expect(marks[1]).toHaveAccessibleName("Cited, being checked: Sustrans 2020");
+    for (const mark of marks) {
+      // The status mark's 6 px square, hollow in Line 2; not blue, not a control.
+      expect(mark.className).toContain("size-1.5");
+      expect(mark.className).toContain("border-line-2");
+      expect(mark.className).not.toMatch(/blue/);
+      expect(mark.tagName).toBe("SPAN");
+    }
+    // The first mark follows the lead sentence; the second the blurred one.
+    expect(marks[0].previousSibling?.textContent).toBe(LEAD);
+    expect(marks[1].previousElementSibling).toHaveAttribute("data-revising", "true");
+    expect(screen.queryAllByRole("button", { name: /Cited/ })).toHaveLength(0);
+  });
+
+  it("the settled section carries no provisional marks", () => {
+    render(
+      <LiveArtefactBody
+        stream={writingStream({ state: "filled", prose: LEAD, draft: undefined, claims: undefined })}
+      />,
+    );
+    expect(screen.queryAllByTestId("provisional-mark")).toHaveLength(0);
+  });
+
+  it("draftParagraphs ends a run where a citation ends, across paragraphs and code points", () => {
+    const draft = "A \u{1F600} b.\n\nC d.";
+    const claim = { start: 0, end: 3, sources: [SOURCES[0]] };
+    const tail = { start: 10, end: 12, sources: [SOURCES[1]] };
+    const paragraphs = draftParagraphs(draft, [], [claim, tail, { start: 0, end: 99, sources: [] }]);
+    expect(paragraphs).toEqual([
+      [
+        { text: "A \u{1F600}", revising: false, marks: [claim] },
+        { text: " b.", revising: false },
+      ],
+      [{ text: "C d.", revising: false, marks: [tail] }],
+    ]);
   });
 });
 

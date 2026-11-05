@@ -22,6 +22,8 @@ const EPHEMERAL_FRAME_TYPES: ReadonlySet<SseFrame["type"]> = new Set([
   "tick",
   "artefact.section_delta",
   "artefact.section_revising",
+  "artefact.section_sources",
+  "artefact.section_claim",
 ] satisfies SseFrame["type"][]);
 
 interface ConnectEventStreamOptions {

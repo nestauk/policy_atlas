@@ -558,3 +558,36 @@ export function triggerTextDownload(filename: string, body: string, mime: string
   anchor.remove();
   URL.revokeObjectURL(url);
 }
+
+/** The longest source name the "Drawing on" line shows in full. */
+const LIVE_SOURCE_NAME_MAX = 40;
+
+/**
+ * A source's name as the live "Drawing on" line shows it (task 058, owner
+ * 2026-11-05). The server sends the short form ("Smith 2023") when it has
+ * one, else the title; a long title is cut at a word near 40 characters and
+ * ends with an ellipsis.
+ */
+export function liveSourceName(title: string): string {
+  const name = title.trim().replace(/\s+/g, " ");
+  if (name.length <= LIVE_SOURCE_NAME_MAX) return name;
+  const cut = name.slice(0, LIVE_SOURCE_NAME_MAX);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > LIVE_SOURCE_NAME_MAX / 2 ? cut.slice(0, space) : cut).replace(/[\s,.;:–—-]+$/, "")}…`;
+}
+
+/** How many sources the "Drawing on" line names before "and N more". */
+const LIVE_SOURCES_NAMED = 3;
+
+/**
+ * The line under a section being written that says which sources the writer
+ * has read: "Drawing on 4 sources · Smith 2023 · DfE 2022 · Nesta 2021 · and
+ * 1 more". Null when it has read none.
+ */
+export function drawingOnLine(sources: readonly { title: string }[] | undefined): string | null {
+  if (sources === undefined || sources.length === 0) return null;
+  const count = sources.length === 1 ? "1 source" : `${sources.length} sources`;
+  const named = sources.slice(0, LIVE_SOURCES_NAMED).map((source) => liveSourceName(source.title));
+  const rest = sources.length - named.length;
+  return [`Drawing on ${count}`, ...named, ...(rest > 0 ? [`and ${rest} more`] : [])].join(" · ");
+}

@@ -42,9 +42,10 @@ from langfuse import Langfuse
 from pydantic import ValidationError
 
 from policy_atlas.core import tracing
-from policy_atlas.core.liveness import publish_section_delta
+from policy_atlas.core.liveness import publish_section_claim, publish_section_delta
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import (
+    JsonArrayObjectDecoder,
     JsonStringFieldDecoder,
     openai_kwargs,
     require_parsed,
@@ -113,7 +114,9 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     MalformedEmissionError,
     ToolCallRequest,
     ToolExchange,
+    citable_sources,
     is_qualified_group_id,
+    name_sources,
 )
 
 log = structlog.get_logger()
@@ -488,6 +491,129 @@ def _salvage_section(arguments: str) -> tuple[SectionProseWire, int]:
                 error=str(exc)[:300],
             )
     return SectionProseWire(prose=prose, claims=valid), malformed
+
+
+class StreamedClaimMarker:
+    """Mark the writer's citations on the page as each claim closes (task 058).
+
+    In plain terms: the streamed write turn sends the prose first and then the
+    claims, each naming the exact words of the prose it supports and the
+    sources it cites. As each claim object closes, this class reads it alone,
+    finds its words in the prose streamed so far (the same ordered search as
+    the final binding: from where the last claim ended, else the first place
+    that does not overlap a claim already placed), and publishes the span and
+    the cited sources' names through :func:`publish_section_claim`.
+
+    Display-only: a claim that does not parse, does not validate, does not
+    bind, or cites no known source is skipped; nothing here can raise or
+    change what the final parse returns.
+
+    Args:
+        index: The page's index for the section.
+        seed: The section seed (its member findings are citable).
+        transcript: The section's tool exchanges.
+    """
+
+    def __init__(
+        self, index: int, seed: dict[str, Any], transcript: list[ToolExchange]
+    ) -> None:
+        self._index = index
+        self._seed = seed
+        self._transcript = transcript
+        self._claims = JsonArrayObjectDecoder("claims")
+        self._prose = ""
+        self._cursor = 0
+        self._bound: list[tuple[int, int]] = []
+        self._seen = 0
+        self._sources: (
+            tuple[dict[str, tuple[str, str | None]], dict[str, tuple[str, str | None]]] | None
+        ) = None
+        self._broken = False
+
+    def feed(self, fragment: str, decoded_prose: str) -> None:
+        """Take one streamed piece and the prose decoded from it.
+
+        Args:
+            fragment: The raw streamed JSON text.
+            decoded_prose: The prose characters decoded from ``fragment``.
+        """
+        if self._broken:
+            return
+        try:
+            self._prose += decoded_prose
+            for raw in self._claims.feed(fragment):
+                self._claim(raw)
+        except Exception as exc:  # noqa: BLE001 - display-only, never fails the turn
+            self._broken = True
+            log.warning("synthesis.streamed_claim_marker.failed", error=type(exc).__name__)
+
+    def _claim(self, raw: str) -> None:
+        self._seen += 1
+        if self._seen > EMISSION_CLAIMS_MAX:
+            return
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(payload, dict):
+            return
+        text = payload.get("text")
+        if not isinstance(text, str) or not text or len(text) > CLAIM_TEXT_MAX:
+            return
+        try:
+            claim = ClaimWire.model_validate(payload)
+        except ValidationError:
+            return
+        span = self._bind(claim.text)
+        if span is None:
+            return
+        sources = self._cited_sources(claim)
+        if sources:
+            publish_section_claim(self._index, span[0], span[1], sources)
+
+    def _bind(self, text: str) -> tuple[int, int] | None:
+        prose = self._prose
+        at = prose.find(text, self._cursor)
+        if at == -1:
+            search = 0
+            while True:
+                candidate = prose.find(text, search)
+                if candidate == -1:
+                    break
+                if not self._overlaps((candidate, candidate + len(text))):
+                    at = candidate
+                    break
+                search = candidate + 1
+        if at == -1:
+            return None
+        span = (at, at + len(text))
+        if self._overlaps(span):
+            return None
+        self._bound.append(span)
+        self._cursor = max(self._cursor, span[1])
+        return span
+
+    def _overlaps(self, span: tuple[int, int]) -> bool:
+        return any(span[0] < end and start < span[1] for start, end in self._bound)
+
+    def _cited_sources(self, claim: ClaimWire) -> list[tuple[str, str]]:
+        if self._sources is None:
+            self._sources = citable_sources(self._seed, self._transcript)
+        by_chunk, by_finding = self._sources
+        found: list[tuple[str, str | None]] = []
+        if claim.claim_type == "chunk":
+            found = [
+                by_chunk[citation.chunk_record_id]
+                for citation in claim.citations
+                if citation.chunk_record_id in by_chunk
+            ]
+        elif claim.claim_type == "finding":
+            found = [
+                by_finding[finding_id]
+                for finding_id in claim.cited_finding_ids
+                if finding_id in by_finding
+            ]
+        return name_sources(found)
 
 
 def _salvage_repairs(arguments: str) -> SectionRepairWire:
@@ -1140,7 +1266,10 @@ class OpenAISynthesisBackend:
         it has already stored from the earlier turns (its "prompt cache"); a
         structured-output schema would change that stored part and lose the
         reuse (probe, 2026-11-05). Each piece of prose is sent to the user as
-        it arrives through :func:`publish_section_delta`; the whole text, less
+        it arrives through :func:`publish_section_delta`. Each claim object is
+        read as soon as it closes, and a claim whose text is found in the
+        prose and that cites a source is sent to the page with its sources
+        (:class:`StreamedClaimMarker`, display-only). The whole text, less
         any Markdown code fence around it, is then parsed exactly as the
         forced ``emit_section`` call is, so the result continues into the
         claim checks unchanged.
@@ -1192,6 +1321,7 @@ class OpenAISynthesisBackend:
                 stream_options={"include_usage": True},
             )
             decoder = JsonStringFieldDecoder("prose")
+            markers = StreamedClaimMarker(index, seed, transcript)
             text = ""
             provider_usage: Any | None = None
             for chunk in stream:
@@ -1204,6 +1334,7 @@ class OpenAISynthesisBackend:
                         decoded = decoder.feed(fragment)
                         if decoded:
                             publish_section_delta(index, decoded)
+                        markers.feed(fragment, decoded)
                 chunk_usage = getattr(chunk, "usage", None)
                 if chunk_usage is not None:
                     provider_usage = chunk_usage

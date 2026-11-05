@@ -502,6 +502,119 @@ class JsonStringFieldDecoder:
             self._high_surrogate = None
 
 
+class JsonArrayObjectDecoder:
+    """Hand back each object of one top-level array field as soon as it closes.
+
+    In plain terms: the section writer's streamed answer is one JSON object,
+    ``{"prose": "...", "claims": [{...}, {...}]}``, arriving in small pieces.
+    Feed each piece to :meth:`feed`; whenever one object inside the named
+    array (``claims``) is complete, its JSON text is returned, so it can be
+    read on its own while the rest is still arriving. The scanning follows
+    :class:`JsonStringFieldDecoder`: only a key of the outermost object
+    counts, and braces, brackets and quotes inside strings (escaped quotes
+    included) are text, not structure. The returned text is not checked; the
+    caller parses it and skips what does not parse. Task 058, owner
+    2026-11-05.
+
+    Args:
+        field_name: The top-level key whose array of objects to follow.
+    """
+
+    def __init__(self, field_name: str) -> None:
+        self._field_name = field_name
+        self._depth = 0
+        self._in_string = False
+        self._escape = False
+        self._string_is_key = False
+        self._raw_key: list[str] = []
+        self._expect_key = False
+        self._last_key: str | None = None
+        self._value_pending = False
+        self._in_array = False
+        self._object: list[str] | None = None
+        self.done = False
+
+    def feed(self, fragment: str) -> list[str]:
+        """Consume one piece of the JSON text.
+
+        Args:
+            fragment: The next piece of the streamed JSON text.
+
+        Returns:
+            The JSON text of each array object that closed in this piece, in
+            order (often none).
+        """
+        closed: list[str] = []
+        for char in fragment:
+            if self.done:
+                break
+            if self._object is not None:
+                self._object.append(char)
+            if self._in_string:
+                self._string_char(char)
+            else:
+                self._structural_char(char, closed)
+        return closed
+
+    def _string_char(self, char: str) -> None:
+        if self._escape:
+            self._escape = False
+            if self._string_is_key:
+                self._raw_key.append(char)
+            return
+        if char == "\\":
+            self._escape = True
+            return
+        if char == '"':
+            self._in_string = False
+            if self._string_is_key:
+                self._last_key = "".join(self._raw_key)
+                self._expect_key = False
+            return
+        if self._string_is_key:
+            self._raw_key.append(char)
+
+    def _structural_char(self, char: str, closed: list[str]) -> None:
+        if char == '"':
+            self._in_string = True
+            self._string_is_key = self._depth == 1 and self._expect_key
+            self._raw_key = []
+            if self._depth == 1:
+                self._value_pending = False
+            return
+        if char in "{[":
+            opens_array = (
+                char == "["
+                and self._depth == 1
+                and self._value_pending
+                and self._last_key == self._field_name
+            )
+            self._depth += 1
+            if self._depth == 1:
+                self._expect_key = char == "{"
+            if self._depth == 2:
+                self._value_pending = False
+                self._in_array = opens_array
+            elif self._depth == 3 and self._in_array and char == "{":
+                self._object = ["{"]
+            return
+        if char in "}]":
+            if self._depth == 3 and self._object is not None and char == "}":
+                closed.append("".join(self._object))
+                self._object = None
+            elif self._depth == 2 and self._in_array:
+                self._in_array = False
+                self.done = True
+            self._depth -= 1
+            return
+        if char == "," and self._depth == 1:
+            self._expect_key = True
+        elif char == ":" and self._depth == 1:
+            self._value_pending = True
+        elif self._depth == 1 and not char.isspace():
+            self._value_pending = False
+
+
 def require_single_tool_call(response: Any, *, label: str) -> Any:
     """Return the response's single tool call or fail loud.
 

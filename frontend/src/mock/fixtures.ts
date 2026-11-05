@@ -420,6 +420,45 @@ export const mockSectionOneRevisingSpan: { start: number; end: number } = (() =>
   return { start, end: start + MOCK_SECTION_ONE_FAILED.length };
 })();
 
+/** The sources the writer reads for section 1, as `artefact.section_sources`
+ *  carries them (task 058, evidence shown live): the first read returns two,
+ *  the second adds three more. Short names where the source has an author or
+ *  publisher and a year; one long title the page cuts. */
+export const mockSectionOneSources: { source_id: string; title: string }[][] = [
+  [
+    { source_id: "00000000-0000-4000-8000-0000000051a1", title: "Smith 2023" },
+    { source_id: "00000000-0000-4000-8000-0000000051a2", title: "DfE 2022" },
+  ],
+  [
+    { source_id: "00000000-0000-4000-8000-0000000051a1", title: "Smith 2023" },
+    { source_id: "00000000-0000-4000-8000-0000000051a2", title: "DfE 2022" },
+    { source_id: "00000000-0000-4000-8000-0000000051a3", title: "Nesta 2021" },
+    {
+      source_id: "00000000-0000-4000-8000-0000000051a4",
+      title: "Walking school buses and active travel to school: a mixed-methods evaluation",
+    },
+    { source_id: "00000000-0000-4000-8000-0000000051a5", title: "Sustrans 2020" },
+  ],
+];
+
+/** The writer's own citations in the drafted section 1, as
+ *  `artefact.section_claim` carries them: the lead sentence and the sentence
+ *  the judge later fails, each with the sources it cites. */
+export const mockSectionOneClaims: { start: number; end: number; sources: { source_id: string; title: string }[] }[] = [
+  {
+    start: 0,
+    end: MOCK_SECTION_ONE_LEAD.length,
+    sources: [
+      { source_id: "00000000-0000-4000-8000-0000000051a1", title: "Smith 2023" },
+      { source_id: "00000000-0000-4000-8000-0000000051a2", title: "DfE 2022" },
+    ],
+  },
+  {
+    ...mockSectionOneRevisingSpan,
+    sources: [{ source_id: "00000000-0000-4000-8000-0000000051a5", title: "Sustrans 2020" }],
+  },
+];
+
 export const mockArtefact: components["schemas"]["ArtefactOut"] = {
   artefact_id: "00000000-0000-4000-8000-00000000a001",
   title: "Policy options for healthier childhoods",

@@ -38,6 +38,7 @@ secrets, no raw source text, no unredacted traces.
 | Owner round 5 (2026-11-05, evening), items 1 to 9: settle on choice, no tick, rule on the right, smaller sidebar text, one way to change the scope, the fold mark as the live mark (nav still), the mark in the writing action line, the Sources default per completed step, the trace at the chat's size | `make frontend-verify && make drift-check && pnpm e2e` | pass | 1123 tests in 92 files, build OK, `drift-check: OK`; Playwright 33 passed; frontend-designer agent, lead rulings on its proposals in the annex; screenshots under `research/screenshots/round5/`. |
 | Owner round 5, item 10 (the display index) | `make verify-fast` | pass | backend 4234 passed, 1 skipped; mypy and ruff clean. |
 | The streaming fix (owner go, 2026-11-05) | `make verify-fast` + `make prompt-guard` | pass | backend 4233 passed, 1 skipped (7 min 12 s); mypy "no issues found in 464 source files"; ruff clean; prompt guard green on the v12 pin. Focused first: 227 tests across the prompt-pin, prompts, shape, backend, loop and call-site files. |
+| Owner round 6 + evidence shown live (2026-11-05, `b69bf869` and the next commit) | `make frontend-verify && make drift-check && pnpm e2e` on the combined tree (frontend-designer, second pass); `make -C backend verify` on the evidence-live tree (deep-reasoner, own test database); lead: `make prompt-guard && make drift-check && make audit-paths` | pass | frontend 93 files / 1,142 passed, build; Playwright 33 passed; backend 4,302 passed, 1 skipped, mypy 465 files, ruff clean; prompt-guard 41 unchanged; drift-check OK; audit-paths 215. The first frontend run of round 6 had one 5 s timeout in an untouched error-boundary test (passed alone and on the rerun); the evidence-live agent's `pnpm e2e` failed only journey scene 1, the trace header the concurrent polish pass was rewriting, green once both landed. `fe-api-smoke.spec.ts` updated, not run (needs the real API). |
 
 (The gate map's step-6 exit is this command; it is re-run after the owner-gated phases.)
 
@@ -163,6 +164,48 @@ tool and the gap measure are built and tested (Phase 0). The "before" captures m
   display index; deltas use `display_index` when present. Items 1 to 9 of the round are a
   frontend-designer pass (see the gates table).
 
+## Evidence shown live (owner, 2026-11-05)
+
+Built by a deep-reasoner agent from `research/briefs/evidence-live.md`. Display-only: nothing
+new is persisted or judged, no prompt text changed.
+
+- **Sources read (item 1).** After each read tool returns, `run_section_loop` publishes the
+  sources its records came from (`synthesis_tools.read_sources`, via a new `on_tool_result`
+  hook on `run_tool_loop`). Hub message `SectionSources(index, sources, occurred_at)`; the hub
+  keeps the running set per task and section (first-seen order, each source once) and sends the
+  whole set. SSE frame `artefact.section_sources` (index, sources `[{source_id, title}]`,
+  occurred_at; ephemeral). Names: `source_short_name` ("Smith 2023": first author's family
+  name, else the publisher, with the year; else the title, HTML-unescaped as the references do;
+  else the locator; else "Untitled source"), read once per source per run by
+  `make_source_labeller(conn, task_id)` and bound around the section loop with
+  `source_labelling`. The `source <id>` placeholder title is never shown.
+- **Citations as they close (item 2).** `core/openai_client.JsonArrayObjectDecoder("claims")`
+  hands back each claim object as it closes; `synthesis_backend.StreamedClaimMarker` validates
+  it as `_salvage_section` does, binds its text with `bind_spans`'s ordered-cursor rule, and
+  publishes `SectionClaim(index, start, end, sources, occurred_at)` for a bound chunk or finding
+  claim with known sources. SSE frame `artefact.section_claim` (ephemeral). The marker cannot
+  raise into the turn (any error stops the markers, not the write); the final parse is unchanged.
+- **Hub memory.** `_Draft` holds the text, `sources` and `claims` together; a snapshot sends
+  the draft (only when it has text), then the sources, then each claim; a `replace` delta keeps
+  the sources and drops the claims; `clear_draft`, `end_stage("synthesise")`, `end_run` and the
+  sweep forget all three; both messages count in `dropped`.
+- **Frontend.** `LiveSection.sources` / `claims` (store reducer; cleared on completion, claims
+  also on a `replace` delta); the Result tab's Meta grey "Drawing on N sources · … · and N more"
+  line under the heading (`drawingOnLine`, `liveSourceName` in `artefactPresentation.ts`) and a
+  hollow 6 px Line 2 square after each cited span (`ProvisionalMark`, `role="img"`, name
+  "Cited, being checked: <titles>", titles as hover text) in `ArtefactView.tsx`. The mock walk
+  sends both frames; journey scene 6 asserts the line, the marks and their removal.
+- **Tests.** `backend/tests/evidence_search/synthesis/test_evidence_live.py` (decoder: objects
+  split at every size, escaped quotes and braces, nested `claims` key and code fence, stop after
+  the array; markers: bound and cited claims published with spans, unbound / uncited /
+  overlapping / malformed skipped, final parse equal to `_salvage_section`, broken JSON falls
+  back as before, a failing labeller never fails the turn, no raw id; `read_sources`,
+  `source_short_name`, the labeller reads once; the loop publishes sources right after a read);
+  `tests/core/test_liveness.py` (7 hub tests); `tests/api/test_sse.py` (both frames live, the
+  snapshot order, the encoder); `tests/api/test_contract_models.py` (both frames ephemeral);
+  frontend `store/reducer.test.ts`, `views/ArtefactView.test.tsx` (5 tests),
+  `mock/api.test.ts`, `e2e/journey.spec.ts` scene 6.
+
 ## Diff summary
 
 Filled per phase as it lands; the flagged deviations are in § Review handoff.
@@ -225,6 +268,7 @@ writer's publisher never logs it).
 | R | the longlist during the build (N24) | frontend-designer | frontend-designer | done: 174 tests; `LonglistBuilding`, `useOptions`; no screenshots (two mock gaps, fixed by the follow-up to N). Lead after: the clustering note comes from the server tick. |
 | S | the mock journeys (N26 second half) | fast-worker | fast-worker | done: 31 Playwright tests pass (`pnpm exec playwright test e2e/journey.spec.ts e2e/scoping.spec.ts`, 1.1 min); scenarios selected by an init script that appends `mockScenario=` to the `/events` request; transient states asserted from a record of every distinct line the page showed. Mock gaps (private fixture, not product): the mock always serves a committed report so the early Result tab is tested with a shimmed 404; a literal reload resets the mock world, so the reload case asserts what a reconnect sees under `reload-mid-section`; the mock skeleton has two sections and no key-findings slot, so the footer and key-findings states are unit-tested only; no part cards on the mock's scoping task; the mock's check-in facts line still says "2 rounds". |
 | L | task-list stage, options read | codex | deep-reasoner (cap) | done; the `LatestRun.model_rebuild` workaround for the `StageKey` import cycle was replaced by the lead: `StageKey`/`STAGE_KEYS` now live in `contract/common.py` and are re-exported |
+| evidence-live | sources read and citations as they close (two ephemeral frames, hub, Result tab) | deep-reasoner | deep-reasoner (Opus) | done 2026-11-05: `make -C backend verify` "4302 passed, 1 skipped", mypy "Success: no issues found in 465 source files", ruff "All checks passed!"; `make frontend-verify` "Test Files 93 passed (93)", "Tests 1141 passed (1141)", build ok; `make drift-check` "drift-check: OK" (after `make openapi-sync`); `make prompt-guard` "41 prompt file(s) unchanged"; `pnpm e2e` "32 passed", 1 failed: journey scene 1 (the run trace header, `RunTrace.tsx`, being rewritten by the concurrent polish pass); scene 6 passed. A first `pnpm e2e` run beside the backend suite had 5 `page.goto` timeouts (load). |
 
 **Executor substitution (memory rule, owner 2026-07-09):** the Codex workspace spend cap was
 hit at about 09:30 on 2026-11-05 during Phase 1. Every Codex-marked seam from that point

@@ -6,6 +6,10 @@ stage, and the report section's text as it streams. The hub hands each message
 to every browser connection (a "subscriber") watching that task, and remembers
 just enough to greet a newly connected browser with where things stand: the
 last tick per stage and the section text written so far (task 058, N4).
+While a section is written the hub also passes on the sources the writer has
+just read and, as each of the writer's citations closes, the stretch of text it
+marks; it remembers both beside the section text, so a newly connected browser
+sees them too (task 058, "evidence shown live", owner 2026-11-05).
 
 Nothing here is saved to the database. The durable record stays in
 ``event_log``; these messages may be lost (a full queue drops its oldest
@@ -52,6 +56,8 @@ MEMORY_TTL_SECONDS = 600.0
 DRAFT_MAX_CHARS = 20_000
 
 type TickSource = Literal["loop", "hook"]
+#: One source as the page names it: ``(source_id, title)``.
+type SourceRef = tuple[str, str]
 type DeltaMode = Literal["append", "replace"]
 type Schedule = Callable[[float, Callable[[], None]], None]
 
@@ -117,7 +123,48 @@ class SectionRevising:
     occurred_at: datetime
 
 
-type HubMessage = Tick | SectionDelta | SectionRevising
+@dataclass(frozen=True, slots=True)
+class SectionSources:
+    """The sources the writer has read so far for the section being written.
+
+    Each message carries the whole set (it replaces the one before), in the
+    order the sources were first read, each source once.
+
+    Attributes:
+        index: The section's position in the report.
+        sources: ``(source_id, title)`` pairs.
+        occurred_at: When the message was sent.
+    """
+
+    index: int
+    sources: tuple[SourceRef, ...]
+    occurred_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class SectionClaim:
+    """One of the writer's citations, bound to its stretch of the section draft.
+
+    Display-only: the claim is still to be checked; the completed section
+    brings the checked citations.
+
+    Attributes:
+        index: The section's position in the report.
+        start: First character of the cited text in the draft.
+        end: One past its last character (the same counting as
+            :class:`SectionRevising`).
+        sources: ``(source_id, title)`` pairs for the sources it cites.
+        occurred_at: When the message was sent.
+    """
+
+    index: int
+    start: int
+    end: int
+    sources: tuple[SourceRef, ...]
+    occurred_at: datetime
+
+
+type HubMessage = Tick | SectionDelta | SectionRevising | SectionSources | SectionClaim
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,11 +192,13 @@ class _StageMemory:
 
 @dataclass(slots=True)
 class _Draft:
-    """The section text written so far."""
+    """The section being written: its text so far, sources read and citations bound."""
 
     index: int
     text: str
     updated_at: float
+    sources: tuple[SourceRef, ...] = ()
+    claims: list[SectionClaim] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -243,7 +292,9 @@ class TickHub:
         Returns:
             The queue, and the remembered state: the last tick of each stage
             (in the order the stages first appeared), then, if a section is
-            being written, one ``replace`` delta carrying its text so far.
+            being written, one ``replace`` delta carrying its text so far
+            (when there is any), the sources read so far (when there are
+            any) and each citation bound so far.
         """
         queue: asyncio.Queue[HubMessage] = asyncio.Queue(maxsize=self._queue_size)
         subscriber = _Subscriber(asyncio.get_running_loop(), queue)
@@ -264,14 +315,24 @@ class TickHub:
                     snapshot.append(dataclasses.replace(last, heartbeat=False))
                 draft = memory.draft
                 if draft is not None and now - draft.updated_at < MEMORY_TTL_SECONDS:
-                    snapshot.append(
-                        SectionDelta(
-                            index=draft.index,
-                            text=draft.text,
-                            mode="replace",
-                            occurred_at=_now_utc(),
+                    if draft.text:
+                        snapshot.append(
+                            SectionDelta(
+                                index=draft.index,
+                                text=draft.text,
+                                mode="replace",
+                                occurred_at=_now_utc(),
+                            )
                         )
-                    )
+                    if draft.sources:
+                        snapshot.append(
+                            SectionSources(
+                                index=draft.index,
+                                sources=draft.sources,
+                                occurred_at=_now_utc(),
+                            )
+                        )
+                    snapshot.extend(draft.claims)
         return queue, snapshot
 
     async def unsubscribe(self, task_id: uuid.UUID, queue: asyncio.Queue[HubMessage]) -> None:
@@ -423,7 +484,14 @@ class TickHub:
             memory = self._tasks.setdefault(task_id, _TaskMemory())
             if mode == "replace":
                 self._emit_pending_delta(task_id, memory)
-                memory.draft = _Draft(index, text[:DRAFT_MAX_CHARS], now)
+                kept = memory.draft
+                # The sources read stay; citations bound to the old text go.
+                memory.draft = _Draft(
+                    index,
+                    text[:DRAFT_MAX_CHARS],
+                    now,
+                    sources=kept.sources if kept is not None and kept.index == index else (),
+                )
                 self._fan_out(
                     task_id,
                     SectionDelta(index=index, text=text, mode="replace", occurred_at=_now_utc()),
@@ -476,8 +544,85 @@ class TickHub:
                 ),
             )
 
+    def publish_sources(
+        self, task_id: uuid.UUID, *, index: int, sources: Sequence[SourceRef]
+    ) -> None:
+        """Add the sources one read returned to the section's set and send the whole set.
+
+        A source already in the set keeps its place; new ones join at the
+        end. Nothing is sent when the read added nothing new.
+
+        Args:
+            task_id: The task.
+            index: The section's position in the report.
+            sources: ``(source_id, title)`` pairs from one read, in order.
+        """
+        with self._lock:
+            now = self._clock()
+            memory = self._tasks.setdefault(task_id, _TaskMemory())
+            draft = memory.draft
+            if draft is None or draft.index != index:
+                self._emit_pending_delta(task_id, memory)
+                draft = memory.draft = _Draft(index, "", now)
+            seen = {source_id for source_id, _title in draft.sources}
+            added: list[SourceRef] = []
+            for source_id, title in sources:
+                if source_id in seen:
+                    continue
+                seen.add(source_id)
+                added.append((source_id, title))
+            draft.updated_at = now
+            if not added:
+                return
+            draft.sources = (*draft.sources, *added)
+            self._fan_out(
+                task_id,
+                SectionSources(index=index, sources=draft.sources, occurred_at=_now_utc()),
+            )
+
+    def publish_claim(
+        self,
+        task_id: uuid.UUID,
+        *,
+        index: int,
+        start: int,
+        end: int,
+        sources: Sequence[SourceRef],
+    ) -> None:
+        """Send one citation bound to the draft, and remember it for a reconnect.
+
+        Any held append is sent first, so the range refers to text the
+        client already has.
+
+        Args:
+            task_id: The task.
+            index: The section's position in the report.
+            start: First character of the cited text in the draft.
+            end: One past its last character.
+            sources: ``(source_id, title)`` pairs it cites.
+        """
+        claim = SectionClaim(
+            index=index,
+            start=start,
+            end=end,
+            sources=tuple(sources),
+            occurred_at=_now_utc(),
+        )
+        with self._lock:
+            now = self._clock()
+            memory = self._tasks.setdefault(task_id, _TaskMemory())
+            self._emit_pending_delta(task_id, memory)
+            draft = memory.draft
+            if draft is None or draft.index != index:
+                draft = memory.draft = _Draft(index, "", now)
+            draft.claims.append(claim)
+            draft.updated_at = now
+            self._fan_out(task_id, claim)
+
     def clear_draft(self, task_id: uuid.UUID) -> None:
-        """Forget the section draft and any held append (a section has finished).
+        """Forget the section draft, its sources and citations, and any held append.
+
+        Called when a section has finished.
 
         Args:
             task_id: The task.
@@ -540,7 +685,8 @@ class TickHub:
     def end_stage(self, task_id: uuid.UUID, stage: str) -> None:
         """Forget one stage's tick, held tick and open calls.
 
-        Ending ``synthesise`` also forgets the section draft and held text.
+        Ending ``synthesise`` also forgets the section draft (with its sources
+        and citations) and held text.
 
         Args:
             task_id: The task.
@@ -859,6 +1005,34 @@ def publish_section_revising(index: int, spans: Sequence[tuple[int, int]]) -> No
     task_id = _task_id.get()
     if task_id is not None:
         tick_hub.publish_revising(task_id, index=index, spans=spans)
+
+
+def publish_section_sources(index: int, sources: Sequence[SourceRef]) -> None:
+    """Publish the sources one read returned for the bound task (no-op when unbound).
+
+    Args:
+        index: The section's position in the report.
+        sources: ``(source_id, title)`` pairs, in the order the read returned them.
+    """
+    task_id = _task_id.get()
+    if task_id is not None:
+        tick_hub.publish_sources(task_id, index=index, sources=sources)
+
+
+def publish_section_claim(
+    index: int, start: int, end: int, sources: Sequence[SourceRef]
+) -> None:
+    """Publish one citation bound to the draft for the bound task (no-op when unbound).
+
+    Args:
+        index: The section's position in the report.
+        start: First character of the cited text in the draft.
+        end: One past its last character.
+        sources: ``(source_id, title)`` pairs it cites.
+    """
+    task_id = _task_id.get()
+    if task_id is not None:
+        tick_hub.publish_claim(task_id, index=index, start=start, end=end, sources=sources)
 
 
 def clear_section_draft() -> None:

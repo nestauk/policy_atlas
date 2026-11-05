@@ -184,6 +184,56 @@
         "title": "ArtefactOut",
         "type": "object"
       },
+      "ArtefactSectionClaimFrame": {
+        "description": "Ephemeral: one of the writer's citations, bound to the draft (task 058).\n\nThe span `[start, end)` counts code points of the section draft, as\n`artefact.section_revising` does. The citation is still to be checked;\n`artefact.section_completed` brings the checked section. Display-only:\nnever persisted, no `id:` line, no `sequence`.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SectionSourceRef"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "type": {
+            "const": "artefact.section_claim",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "index",
+          "start",
+          "end",
+          "sources",
+          "occurred_at"
+        ],
+        "title": "ArtefactSectionClaimFrame",
+        "type": "object"
+      },
       "ArtefactSectionCompletedFrame": {
         "description": "A live-artefact section's whole prose is available.",
         "properties": {
@@ -333,6 +383,46 @@
           "focus"
         ],
         "title": "ArtefactSectionSkeleton",
+        "type": "object"
+      },
+      "ArtefactSectionSourcesFrame": {
+        "description": "Ephemeral: the sources the writer has read so far for a section (task 058).\n\nEach frame carries the whole set, in the order the sources were first\nread; it replaces the one before. Display-only: never persisted, no\n`id:` line, no `sequence`. A reconnect mid-section gets the current set.",
+        "properties": {
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SectionSourceRef"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "type": {
+            "const": "artefact.section_sources",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "index",
+          "sources",
+          "occurred_at"
+        ],
+        "title": "ArtefactSectionSourcesFrame",
         "type": "object"
       },
       "ArtefactSectionStartedFrame": {
@@ -7086,6 +7176,25 @@
         "title": "SectionOut",
         "type": "object"
       },
+      "SectionSourceRef": {
+        "description": "One source as the page names it while a section is written.\n\nArgs:\n    source_id: The source's id in this task (display identity only).\n    title: The source's short name: first author or publisher and year\n        when both are known, else its title, else where it came from.",
+        "properties": {
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "title"
+        ],
+        "title": "SectionSourceRef",
+        "type": "object"
+      },
       "SectionSpan": {
         "description": "A code-point span `[start, end)` of the section draft.",
         "properties": {
@@ -7525,9 +7634,11 @@
       "SseFrame": {
         "discriminator": {
           "mapping": {
+            "artefact.section_claim": "#/components/schemas/ArtefactSectionClaimFrame",
             "artefact.section_completed": "#/components/schemas/ArtefactSectionCompletedFrame",
             "artefact.section_delta": "#/components/schemas/ArtefactSectionDeltaFrame",
             "artefact.section_revising": "#/components/schemas/ArtefactSectionRevisingFrame",
+            "artefact.section_sources": "#/components/schemas/ArtefactSectionSourcesFrame",
             "artefact.section_started": "#/components/schemas/ArtefactSectionStartedFrame",
             "artefact.skeleton": "#/components/schemas/ArtefactSkeletonFrame",
             "checkin.pending": "#/components/schemas/CheckinPendingFrame",
@@ -7584,6 +7695,12 @@
           },
           {
             "$ref": "#/components/schemas/ArtefactSectionRevisingFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSectionSourcesFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSectionClaimFrame"
           }
         ]
       },

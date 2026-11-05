@@ -102,6 +102,27 @@ export interface LiveSection {
   /** Character spans of `draft` the checker failed and the writer is now
    *  revising (`artefact.section_revising`); cleared on completion. */
   revising?: { start: number; end: number }[];
+  /** The sources the writer has read so far for this section, in the order
+   *  first read (`artefact.section_sources`; each frame replaces the set);
+   *  cleared on completion. */
+  sources?: LiveSource[];
+  /** The writer's own citations as they close, each a code-point span of
+   *  `draft` and the sources it cites (`artefact.section_claim`). Not yet
+   *  checked; cleared on completion and when the draft is replaced. */
+  claims?: LiveClaim[];
+}
+
+/** A source named on the page while a section is written. */
+export interface LiveSource {
+  sourceId: string;
+  title: string;
+}
+
+/** One provisional citation in a section draft (task 058, owner 2026-11-05). */
+export interface LiveClaim {
+  start: number;
+  end: number;
+  sources: LiveSource[];
 }
 
 /** Liveness key used for `tick` frames with no `stage`. */

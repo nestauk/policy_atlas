@@ -1383,6 +1383,41 @@ export interface components {
             title: string;
         };
         /**
+         * ArtefactSectionClaimFrame
+         * @description Ephemeral: one of the writer's citations, bound to the draft (task 058).
+         *
+         *     The span `[start, end)` counts code points of the section draft, as
+         *     `artefact.section_revising` does. The citation is still to be checked;
+         *     `artefact.section_completed` brings the checked section. Display-only:
+         *     never persisted, no `id:` line, no `sequence`.
+         */
+        ArtefactSectionClaimFrame: {
+            /** End */
+            end: number;
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sources */
+            sources: components["schemas"]["SectionSourceRef"][];
+            /** Start */
+            start: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_claim";
+        };
+        /**
          * ArtefactSectionCompletedFrame
          * @description A live-artefact section's whole prose is available.
          */
@@ -1488,6 +1523,36 @@ export interface components {
             index: number;
             /** Title */
             title: string;
+        };
+        /**
+         * ArtefactSectionSourcesFrame
+         * @description Ephemeral: the sources the writer has read so far for a section (task 058).
+         *
+         *     Each frame carries the whole set, in the order the sources were first
+         *     read; it replaces the one before. Display-only: never persisted, no
+         *     `id:` line, no `sequence`. A reconnect mid-section gets the current set.
+         */
+        ArtefactSectionSourcesFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sources */
+            sources: components["schemas"]["SectionSourceRef"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_sources";
         };
         /**
          * ArtefactSectionStartedFrame
@@ -4856,6 +4921,21 @@ export interface components {
             title: string;
         };
         /**
+         * SectionSourceRef
+         * @description One source as the page names it while a section is written.
+         *
+         *     Args:
+         *         source_id: The source's id in this task (display identity only).
+         *         title: The source's short name: first author or publisher and year
+         *             when both are known, else its title, else where it came from.
+         */
+        SectionSourceRef: {
+            /** Source Id */
+            source_id: string;
+            /** Title */
+            title: string;
+        };
+        /**
          * SectionSpan
          * @description A code-point span `[start, end)` of the section draft.
          */
@@ -5021,7 +5101,7 @@ export interface components {
             /** Tag Type */
             tag_type: string;
         };
-        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"] | components["schemas"]["ArtefactSectionDeltaFrame"] | components["schemas"]["ArtefactSectionRevisingFrame"];
+        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"] | components["schemas"]["ArtefactSectionDeltaFrame"] | components["schemas"]["ArtefactSectionRevisingFrame"] | components["schemas"]["ArtefactSectionSourcesFrame"] | components["schemas"]["ArtefactSectionClaimFrame"];
         /**
          * StageCompletedFrame
          * @description A component reached its terminal (successful) outcome.

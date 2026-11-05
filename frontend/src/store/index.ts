@@ -5,7 +5,9 @@ export { useChatConversation, useComposerDraft } from "./conversations";
 export { RunStreamProvider, useRunStream } from "./useRunStream";
 export { createInitialRunStreamState } from "./types";
 export type {
+  LiveClaim,
   LiveSection,
+  LiveSource,
   PlanDraft,
   ResolvedDecision,
   RunStatus,

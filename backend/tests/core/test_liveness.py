@@ -24,8 +24,10 @@ from policy_atlas.core.liveness import (
     HEARTBEAT_SECONDS,
     MEMORY_TTL_SECONDS,
     HubMessage,
+    SectionClaim,
     SectionDelta,
     SectionRevising,
+    SectionSources,
     Tick,
     TickHub,
 )
@@ -536,3 +538,162 @@ def test_a_held_tick_schedules_one_flush_per_key_and_an_open_call_one_sweep() ->
     hub.call_closed(TASK, "screen")
     scheduled[3][1]()
     assert len(scheduled) == 4
+
+
+# --- Evidence shown live (task 058, owner 2026-11-05) -----------------------
+
+
+def test_sources_grow_as_a_set_in_first_seen_order_and_each_message_carries_all() -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        queue = await hub.subscribe(TASK)
+        hub.publish_sources(TASK, index=1, sources=[("a", "Smith 2023"), ("b", "DfE 2022")])
+        hub.publish_sources(TASK, index=1, sources=[("b", "DfE 2022"), ("c", "Nesta 2021")])
+        # A read that adds nothing new sends nothing.
+        hub.publish_sources(TASK, index=1, sources=[("a", "Smith 2023")])
+        sent = await _drain(queue)
+        assert all(isinstance(m, SectionSources) for m in sent)
+        assert [[sid for sid, _t in m.sources] for m in sent if isinstance(m, SectionSources)] == [
+            ["a", "b"],
+            ["a", "b", "c"],
+        ]
+        assert all(m.index == 1 for m in sent if isinstance(m, SectionSources))
+
+        # The next section starts its own set.
+        hub.publish_sources(TASK, index=2, sources=[("c", "Nesta 2021")])
+        [fresh] = await _drain(queue)
+        assert isinstance(fresh, SectionSources) and fresh.sources == (("c", "Nesta 2021"),)
+
+    _run(body)
+
+
+def test_a_claim_flushes_the_held_append_first_and_is_remembered() -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        queue = await hub.subscribe(TASK)
+        hub.publish_delta(TASK, index=0, text="Cost is the barrier.")
+        hub.publish_claim(TASK, index=0, start=0, end=20, sources=[("a", "Smith 2023")])
+        sent = await _drain(queue)
+        assert isinstance(sent[0], SectionDelta) and sent[0].text == "Cost is the barrier."
+        assert isinstance(sent[1], SectionClaim)
+        assert (sent[1].index, sent[1].start, sent[1].end) == (0, 0, 20)
+        assert sent[1].sources == (("a", "Smith 2023"),)
+        draft = hub._tasks[TASK].draft
+        assert draft is not None and [c.start for c in draft.claims] == [0]
+
+    _run(body)
+
+
+def test_snapshot_sends_the_draft_then_the_sources_then_each_claim() -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        hub.publish_sources(TASK, index=2, sources=[("a", "Smith 2023")])
+
+        # Sources before any text: no empty draft is sent, only the set.
+        queue, early = await hub.subscribe_with_snapshot(TASK)
+        await hub.unsubscribe(TASK, queue)
+        assert len(early) == 1 and isinstance(early[0], SectionSources)
+
+        hub.publish_delta(TASK, index=2, text="First. Second.")
+        hub.publish_sources(TASK, index=2, sources=[("b", "DfE 2022")])
+        hub.publish_claim(TASK, index=2, start=0, end=6, sources=[("a", "Smith 2023")])
+        hub.publish_claim(TASK, index=2, start=7, end=14, sources=[("b", "DfE 2022")])
+
+        queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+        await hub.unsubscribe(TASK, queue)
+        draft, sources, first, second = snapshot
+        assert isinstance(draft, SectionDelta) and draft.mode == "replace"
+        assert draft.text == "First. Second."
+        assert isinstance(sources, SectionSources)
+        assert [sid for sid, _t in sources.sources] == ["a", "b"]
+        assert isinstance(first, SectionClaim) and (first.start, first.end) == (0, 6)
+        assert isinstance(second, SectionClaim) and (second.start, second.end) == (7, 14)
+
+    _run(body)
+
+
+def test_a_replace_keeps_the_sources_and_drops_the_claims() -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        hub.publish_sources(TASK, index=0, sources=[("a", "Smith 2023")])
+        hub.publish_delta(TASK, index=0, text="Old text.")
+        hub.publish_claim(TASK, index=0, start=0, end=3, sources=[("a", "Smith 2023")])
+        # The streamed turn fell back: its draft is reset.
+        hub.publish_delta(TASK, index=0, text="", mode="replace")
+        draft = hub._tasks[TASK].draft
+        assert draft is not None
+        assert draft.sources == (("a", "Smith 2023"),)
+        assert draft.claims == []
+
+    _run(body)
+
+
+def test_clear_draft_end_stage_end_run_and_the_sweep_forget_sources_and_claims() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+
+        async def snapshot() -> list[HubMessage]:
+            queue, messages = await hub.subscribe_with_snapshot(TASK)
+            await hub.unsubscribe(TASK, queue)
+            return messages
+
+        def fill() -> None:
+            hub.publish_sources(TASK, index=0, sources=[("a", "Smith 2023")])
+            hub.publish_delta(TASK, index=0, text="Text.")
+            hub.publish_claim(TASK, index=0, start=0, end=4, sources=[("a", "Smith 2023")])
+
+        fill()
+        assert len(await snapshot()) == 3
+        hub.clear_draft(TASK)
+        assert await snapshot() == []
+
+        fill()
+        hub.end_stage(TASK, "synthesise")
+        assert await snapshot() == []
+
+        run = uuid.uuid4()
+        hub.begin_run(TASK, run)
+        fill()
+        hub.end_run(TASK, run)
+        assert await snapshot() == []
+
+        fill()
+        clock.now = MEMORY_TTL_SECONDS + 1
+        assert await snapshot() == []
+        hub.sweep()
+        assert TASK not in hub._tasks
+
+    _run(body)
+
+
+def test_sources_and_claims_count_as_dropped_on_a_full_queue() -> None:
+    async def body() -> None:
+        hub, _clock = _hub(queue_size=1)
+        await hub.subscribe(TASK)
+        hub.publish_sources(TASK, index=0, sources=[("a", "A 2020")])
+        hub.publish_sources(TASK, index=0, sources=[("b", "B 2021")])
+        hub.publish_claim(TASK, index=0, start=0, end=1, sources=[("a", "A 2020")])
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert hub.dropped(TASK) == 2
+
+    _run(body)
+
+
+def test_context_helpers_publish_sources_and_claims_for_the_bound_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        monkeypatch.setattr(liveness, "tick_hub", hub)
+        queue = await hub.subscribe(TASK)
+        liveness.publish_section_sources(0, [("a", "A 2020")])
+        liveness.publish_section_claim(0, 0, 1, [("a", "A 2020")])
+        assert await _drain(queue) == []
+        with liveness.task_liveness(TASK, stage="synthesise"):
+            liveness.publish_section_sources(0, [("a", "A 2020")])
+            liveness.publish_section_claim(0, 0, 1, [("a", "A 2020")])
+        sent = await _drain(queue)
+        assert [type(m) for m in sent] == [SectionSources, SectionClaim]
+
+    _run(body)

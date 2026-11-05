@@ -33,9 +33,11 @@ from policy_atlas.api.contract import (
     TurnDecisionOut,
 )
 from policy_atlas.api.contract.sse import (
+    ArtefactSectionClaimFrame,
     ArtefactSectionCompletedFrame,
     ArtefactSectionDeltaFrame,
     ArtefactSectionRevisingFrame,
+    ArtefactSectionSourcesFrame,
     ArtefactSectionStartedFrame,
     ArtefactSkeletonFrame,
     CheckinPendingFrame,
@@ -521,6 +523,52 @@ def test_section_delta_and_revising_frames_are_ephemeral() -> None:
                 "index": 3,
                 "text": "",
                 "mode": "rewrite",
+            }
+        )
+
+
+def test_section_sources_and_claim_frames_are_ephemeral() -> None:
+    """Task 058 (evidence shown live): the sources and claim frames carry no `sequence`."""
+    sources = _adapter().validate_python(
+        {
+            "type": "artefact.section_sources",
+            "occurred_at": _now().isoformat(),
+            "index": 2,
+            "sources": [
+                {"source_id": "tss-1", "title": "Smith 2023"},
+                {"source_id": "tss-2", "title": "DfE 2022"},
+            ],
+        }
+    )
+    assert isinstance(sources, ArtefactSectionSourcesFrame)
+    assert not hasattr(sources, "sequence")
+    assert sources.ephemeral is True
+    assert [(s.source_id, s.title) for s in sources.sources] == [
+        ("tss-1", "Smith 2023"),
+        ("tss-2", "DfE 2022"),
+    ]
+    claim = _adapter().validate_python(
+        {
+            "type": "artefact.section_claim",
+            "occurred_at": _now().isoformat(),
+            "index": 2,
+            "start": 4,
+            "end": 31,
+            "sources": [{"source_id": "tss-1", "title": "Smith 2023"}],
+        }
+    )
+    assert isinstance(claim, ArtefactSectionClaimFrame)
+    assert not hasattr(claim, "sequence")
+    assert claim.ephemeral is True
+    assert (claim.start, claim.end, claim.sources[0].title) == (4, 31, "Smith 2023")
+    with pytest.raises(ValidationError):
+        _adapter().validate_python(
+            {
+                "type": "artefact.section_claim",
+                "occurred_at": _now().isoformat(),
+                "index": 2,
+                "start": 4,
+                "sources": [],
             }
         )
 
