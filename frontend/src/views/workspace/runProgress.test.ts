@@ -202,7 +202,8 @@ describe("rowLink — where a done row points", () => {
       entry({ stage: "characterise", label: "Mapping", status: "completed" }),
     ]);
     expect(rowLink(mapped[1], mapped, "t1", "evidence_search", false)?.label).toBe("Landscape");
-    expect(rowLink(mapped[3], mapped, "t1", "evidence_search", false)?.href).toBe("/tasks/t1/sources/landscape");
+    // Mapping's own link is the themes, the Sources tab's first view (owner, polish round 2).
+    expect(rowLink(mapped[3], mapped, "t1", "evidence_search", false)).toEqual({ href: "/tasks/t1/sources", label: "Themes" });
   });
 
   it("gives Shortlisting and Reading no link, Writing the report", () => {

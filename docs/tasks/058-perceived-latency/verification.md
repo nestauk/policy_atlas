@@ -28,6 +28,8 @@ secrets, no raw source text, no unredacted traces.
 
 | Phase 10, owner round 1 of 3 (2026-11-05) | `make verify-fast && make frontend-verify && make drift-check && pnpm e2e` | pass | backend 4220 passed, 1 skipped (test-fast, typecheck, lint); frontend 1065 tests in 93 files, build OK, `drift-check: OK`; Playwright 31 passed after three journeys moved from the nav Plan control to the card's "See plan" and one stopped matching the strip's time on the same text line. Live check on the owner's real completed task through a spare API and frontend pair (ports 8010/5190): the Agent and History tabs load, no Start button under the completed search, "See plan" on the card, "See the plan" on the Result tab, no "Esc closes", "Classifying"; screenshots under `research/screenshots/phase10-owner-r2/`. |
 
+| Phase 10, owner round 2 of 3 (2026-11-05) | `make frontend-verify && make drift-check && pnpm e2e` | pass | typecheck clean, eslint 0 errors, 1070 tests in 93 files, build OK, `drift-check: OK`; Playwright 31 passed after the planning journey learned that a card with a later turn settles; the backend tree is unchanged since the round-1 gate. |
+
 (The gate map's step-6 exit is this command; it is re-run after the owner-gated phases.)
 
 ## Checks beyond the build
@@ -85,6 +87,14 @@ tool and the gap measure are built and tested (Phase 0). The "before" captures m
   "Classifying". The owner's dev API (uvicorn `--reload`) stopped answering during the edits;
   the fixes are verified in-process and by the tests, and the owner restarts `make dev` to see
   them.
+- **Round 3, owner pass, round 2 of 3 (2026-11-05):** "uncompleted 'N of 3' cards in the Task
+  Agent chat on completed searches": a part card with a later turn after it now collapses to
+  one line naming the plan's outcome ("Thoroughness · Standard report · ~10-20 min"; the
+  scope's chips; the question's text; the user's reply only where the plan names nothing) at
+  the conversation's text size, and the stepper counts it as settled; only the newest unanswered
+  card is open (`PartState.answered`/`answer`, `settledSummary`, tests in `PartCard.test.tsx`).
+  Same round: the two stage signposts under the running card are removed (the card's row links
+  point at the outputs); the Mapping row links to the Themes view. One owner round remains.
 
 ## Diff summary
 

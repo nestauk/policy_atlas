@@ -141,14 +141,13 @@ test.describe("mock task-lifecycle journey", () => {
     // the surface. The durable seed transcript renders as structured part
     // cards rather than plain reply bubbles: turn 1's question part shows
     // the ✓ confirm recorded via turn 2's canned marker message — the raw
-    // marker text never leaks as a visible bubble — and turn 2's scope part
-    // is still live, with its editable constraint chips and confirm options.
+    // marker text never leaks as a visible bubble — and turn 2's scope part,
+    // answered by turn 3, has settled to its chips (owner, polish round 2:
+    // no open card once a later turn exists).
     await expect(page.getByText("Question · That's my question · Change")).toBeVisible();
     await expect(page.getByText("[confirm part=question option=confirm]")).toHaveCount(0);
-    await expect(page.getByText("UK primary")).toBeVisible();
-    await expect(page.getByText("Since 2016")).toBeVisible();
-    await expect(page.getByRole("radio", { name: /^Looks right/ })).toBeVisible();
-    await expect(page.getByRole("radio", { name: /^Add or change a constraint/ })).toBeVisible();
+    await expect(page.getByText(/^Scope · .*UK primary.*Since 2016|^Scope · .*Since 2016.*UK primary/)).toBeVisible();
+    await expect(page.getByRole("radio", { name: /^Looks right/ })).toHaveCount(0);
 
     // (f) The ready plan is two actions at the foot of the thread — review
     // in the side panel, or start. Locked-vocabulary labels live in the panel,
@@ -167,8 +166,10 @@ test.describe("mock task-lifecycle journey", () => {
     const timeline = page.getByRole("list", { name: "Stage timeline" });
     await expect(timeline.getByText("Searching and screening").first()).toBeVisible({ timeout: 15_000 });
     await expect(timeline.getByRole("listitem").filter({ hasText: /^Writing/ })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole("link", { name: /Sources are ready/ })).toBeVisible();
-    await expect(runCard.getByRole("link", { name: /Sources are ready/ })).toHaveCount(0);
+    // No stage signposts under the card (owner, polish round 2): the card's
+    // own row links point at the outputs.
+    await expect(page.getByRole("link", { name: /Sources are ready/ })).toHaveCount(0);
+    await expect(runCard.getByRole("link", { name: "Sources →" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Analysis progress" })).toHaveCount(0);
 
     // (h) The check-in card appears; the run genuinely parks here. Paused

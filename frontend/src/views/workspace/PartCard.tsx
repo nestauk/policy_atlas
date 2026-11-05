@@ -5,7 +5,13 @@ import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { LABEL_CLASS } from "../../ui/brand/label";
-import { PLAN_PARTS } from "./planVocabulary";
+import {
+  PLAN_PARTS,
+  RISK_APPETITE_LABELS,
+  SCOPING_DEPTH_LABEL,
+  researchApproachId,
+  researchApproachLabel,
+} from "./planVocabulary";
 
 type PartProposal = components["schemas"]["PartProposalOut"];
 type PartChip = components["schemas"]["PartChipOut"];
@@ -32,6 +38,13 @@ export function confirmMessage(part: PartProposal, option: PartOption): string {
 export interface PartState {
   /** Latest proposal per part id wins (F34): older proposals render inert. */
   live: boolean;
+  /** A later turn exists, so the user answered this card (in words or by a
+   *  choice); it renders settled even without a recorded option (owner,
+   *  polish round 2: no open card on a finished conversation). */
+  answered: boolean;
+  /** What the user wrote in reply to this card (the next turn's message),
+   *  shown on the settled line when no recorded choice names the answer. */
+  answer: string | null;
   /** The option id a later (pre-supersession) confirm turn recorded, if any. */
   confirmedOptionId: string | null;
 }
@@ -62,14 +75,78 @@ export function derivePartStates(turns: TaskAgentTurn[]): Map<number, PartState>
     }
   }
   const states = new Map<number, PartState>();
-  for (const turn of ordered) {
+  const lastIndex = ordered.length === 0 ? -1 : ordered[ordered.length - 1].turn_index;
+  for (const [position, turn] of ordered.entries()) {
     if (turn.part == null) continue;
+    const next = ordered[position + 1];
     states.set(turn.turn_index, {
       live: newestProposal.get(turn.part.id) === turn.turn_index,
+      answered: turn.turn_index < lastIndex,
+      answer: next === undefined ? null : confirmTarget(next.user_message) !== null ? null : next.user_message.trim(),
       confirmedOptionId: confirmed.get(turn.turn_index) ?? null,
     });
   }
   return states;
+}
+
+type PlanDraft = components["schemas"]["PlanDraft"];
+type ScopingPlanDraft = components["schemas"]["ScopingPlanDraft"];
+
+/** The thoroughness part's option ids, by the plan's preset id. */
+const THOROUGHNESS_OPTION_BY_PRESET: Record<string, string> = {
+  rapid_overview: "quick_look",
+  standard_review: "standard_review",
+  detailed_review: "deep_analysis",
+};
+
+/**
+ * What a settled part's line says (owner, polish round 2): the outcome the
+ * plan settled on, not the user's words. A recorded choice names itself;
+ * otherwise the question's text, the scope's chips, the thoroughness preset
+ * and its band, the scoping depth and risk appetite labels; the user's reply
+ * only where the plan has nothing to name.
+ *
+ * Args:
+ *   part: The card's proposal.
+ *   state: Its derived state.
+ *   plan: The task's current Evidence search plan, if any.
+ *   scoping: The task's current scoping plan, if any.
+ *
+ * Returns:
+ *   The line after the part's name, or null when nothing can be named.
+ */
+export function settledSummary(
+  part: PartProposal,
+  state: PartState,
+  plan: PlanDraft | null | undefined,
+  scoping: ScopingPlanDraft | null | undefined,
+): string | null {
+  const confirmed =
+    state.confirmedOptionId === null ? null : (part.options.find((option) => option.id === state.confirmedOptionId)?.label ?? null);
+  if (confirmed !== null) return confirmed;
+  const fallback = state.answer !== null && state.answer !== "" ? state.answer : null;
+  switch (part.id) {
+    case "question":
+      return plan?.question ?? scoping?.question ?? fallback;
+    case "scope": {
+      const chips = (part.chips ?? []).map((chip) => chip.label);
+      return chips.length > 0 ? chips.join(" · ") : fallback;
+    }
+    case "thoroughness": {
+      if (plan?.search_effort == null || plan.analysis_depth == null) return fallback;
+      const preset = researchApproachId(plan.search_effort, plan.analysis_depth);
+      const option = preset === null ? undefined : part.options.find((candidate) => candidate.id === THOROUGHNESS_OPTION_BY_PRESET[preset]);
+      const label = option?.label ?? researchApproachLabel(plan.search_effort, plan.analysis_depth);
+      if (label === null) return fallback;
+      return plan.time_band ? `${label} · ${plan.time_band}` : label;
+    }
+    case "depth":
+      return scoping?.depth != null ? (SCOPING_DEPTH_LABEL[scoping.depth] ?? fallback) : fallback;
+    case "appetite":
+      return scoping?.risk_appetite != null ? (RISK_APPETITE_LABELS[scoping.risk_appetite] ?? fallback) : fallback;
+    default:
+      return fallback;
+  }
 }
 
 /** Chip edit staged on the scope card, batched into one task_agent turn. */
@@ -281,7 +358,9 @@ export function planSteps(
     .filter((part) => part.optional !== true || newest.has(part.id))
     .map((part) => {
       const index = newest.get(part.id);
-      const settled = index !== undefined && (states.get(index)?.confirmedOptionId ?? null) !== null;
+      const partState = index === undefined ? undefined : states.get(index);
+      const settled =
+        partState !== undefined && ((partState.confirmedOptionId ?? null) !== null || partState.answered);
       return { id: part.id, name: part.name, settled };
     });
 }
@@ -434,6 +513,7 @@ export function PartCard({
   state,
   disabled,
   steps,
+  summary,
   onSend,
 }: {
   part: PartProposal;
@@ -444,6 +524,8 @@ export function PartCard({
   disabled: boolean;
   /** The plan's steps; the stepper line renders above a live, open card. */
   steps?: PlanStep[];
+  /** The settled line's words (`settledSummary`); falls back to the user's reply. */
+  summary?: string | null;
   /** Send a message as an ordinary task_agent turn. */
   onSend: (message: string) => void;
 }) {
@@ -459,10 +541,26 @@ export function PartCard({
       : part.options.find((option) => option.id === state.confirmedOptionId) ?? null;
   const name = partName ?? part.title;
 
+  if (confirmedOption === null && (state.answered || !state.live)) {
+    // Answered in the user's own words: one settled line carrying what they
+    // wrote, nothing to change here (owner, polish round 2).
+    return (
+      <div data-testid="part-settled" className="mr-8">
+        <p className="max-w-prose-measure text-lead text-grey">
+          <span className="font-semibold text-navy">{scrub(name)}</span>
+          {(() => {
+            const words = summary ?? state.answer;
+            return words !== null && words !== undefined && words !== "" ? ` · ${scrub(words)}` : " · answered";
+          })()}
+        </p>
+      </div>
+    );
+  }
+
   if (confirmedOption !== null) {
     return (
       <div data-testid="part-settled" className="mr-8">
-        <p className="text-body text-grey">
+        <p className="max-w-prose-measure text-lead text-grey">
           <span className="font-semibold text-navy">{scrub(name)}</span> · {scrub(confirmedOption.label)}
           {state.live && (
             <>

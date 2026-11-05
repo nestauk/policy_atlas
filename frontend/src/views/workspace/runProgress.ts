@@ -320,7 +320,9 @@ export function rowLink(
   const has = (stage: string) => row.stages.includes(stage);
   const mapped = rows.some((other) => other.stages.includes("characterise") && other.state === "done");
   if (has("acquire") || has("screen")) return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
-  if (has("characterise") || ((has("classify") || has("appraise")) && mapped)) {
+  // Mapping's output is the themes (the Sources tab's first view; owner, polish round 2).
+  if (has("characterise")) return { href: `/tasks/${taskId}/sources`, label: "Themes" };
+  if ((has("classify") || has("appraise")) && mapped) {
     return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
   }
   if (has("extract") && hasFindings) return { href: `/tasks/${taskId}/sources/findings`, label: "Findings" };
@@ -339,36 +341,6 @@ export function rowDetail(tick: StageLiveness | undefined, options: { short?: bo
   return activity === "" ? null : activity;
 }
 
-/** Link to a lifecycle tab that now has something to read. */
-function signpostForStage(
-  stage: string,
-  taskId: string,
-  hasFindings: boolean,
-): StageSignpost | null {
-  if (stage === "acquire") {
-    return {
-      href: `/tasks/${taskId}/sources/all`,
-      label: "Sources are ready",
-      message: "Searching has finished.",
-    };
-  }
-  if (stage === "characterise") {
-    return {
-      href: `/tasks/${taskId}/sources/landscape`,
-      label: "The landscape is ready",
-      message: "Mapping has finished.",
-    };
-  }
-  if (stage === "extract" && hasFindings) {
-    return {
-      href: `/tasks/${taskId}/sources/findings`,
-      label: "Findings are ready",
-      message: "Findings are ready.",
-    };
-  }
-  return null;
-}
-
 /** Chat-thread destination once the write-up exists — last word, not a stage echo. */
 export function runFinishedSignpost(
   taskId: string,
@@ -384,23 +356,6 @@ export function runFinishedSignpost(
   };
 }
 
-/** Completed-stage signposts in timeline order, one per destination. */
-export function completedSignposts(
-  stages: StageEntry[],
-  taskId: string,
-  hasFindings: boolean,
-): StageSignpost[] {
-  const out: StageSignpost[] = [];
-  const seen = new Set<string>();
-  for (const entry of stages) {
-    if (entry.status !== "completed") continue;
-    const signpost = signpostForStage(entry.stage, taskId, hasFindings);
-    if (signpost === null || seen.has(signpost.href)) continue;
-    seen.add(signpost.href);
-    out.push(signpost);
-  }
-  return out;
-}
 
 /** Results link once the write-up exists. */
 export function resultsSignpost(

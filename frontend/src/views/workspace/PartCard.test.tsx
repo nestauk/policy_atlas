@@ -12,8 +12,7 @@ import {
   chipEditMessage,
   confirmMessage,
   confirmTarget,
-  derivePartStates,
-} from "./PartCard";
+  derivePartStates, settledSummary } from "./PartCard";
 
 function turn(
   index: number,
@@ -70,16 +69,16 @@ describe("derivePartStates (F34 rehydration rules)", () => {
       turn(4, "Looks right\n\n[confirm part=scope option=confirm]"),
     ];
     const states = derivePartStates(turns);
-    expect(states.get(1)).toEqual({ live: true, confirmedOptionId: "confirm" });
+    expect(states.get(1)).toEqual(expect.objectContaining({ live: true, confirmedOptionId: "confirm" }));
     // The superseded scope proposal is inert and holds no confirm.
-    expect(states.get(2)).toEqual({ live: false, confirmedOptionId: null });
+    expect(states.get(2)).toEqual(expect.objectContaining({ live: false, confirmedOptionId: null }));
     // The re-proposal is live and took turn 4's confirm.
-    expect(states.get(3)).toEqual({ live: true, confirmedOptionId: "confirm" });
+    expect(states.get(3)).toEqual(expect.objectContaining({ live: true, confirmedOptionId: "confirm" }));
   });
 
   it("a confirm referencing a part never proposed binds nothing", () => {
     const turns = [turn(1, "opening", proposal("question")), turn(2, "[confirm part=scope option=confirm]")];
-    expect(derivePartStates(turns).get(1)).toEqual({ live: true, confirmedOptionId: null });
+    expect(derivePartStates(turns).get(1)).toEqual(expect.objectContaining({ live: true, confirmedOptionId: null }));
   });
 });
 
@@ -103,7 +102,7 @@ describe("chipEditMessage", () => {
 describe("PartCard (task 058, N18; annex scene 11)", () => {
   function renderPart(
     part: NonNullable<TaskAgentTurn["part"]>,
-    state = { live: true, confirmedOptionId: null as string | null },
+    state = { live: true, answered: false, answer: null, confirmedOptionId: null as string | null },
     onSend = vi.fn(),
     extra: { partName?: string; steps?: PlanStep[] } = {},
   ) {
@@ -186,7 +185,7 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
 
   it("a confirmed part collapses to <Part> · <choice> · Change, and Change opens a line in place", async () => {
     const user = userEvent.setup();
-    const onSend = renderPart(proposal("scope"), { live: true, confirmedOptionId: "confirm" }, vi.fn(), {
+    const onSend = renderPart(proposal("scope"), { live: true, answered: false, answer: null, confirmedOptionId: "confirm" }, vi.fn(), {
       partName: "Scope",
     });
     expect(screen.getByTestId("part-settled")).toHaveTextContent(/^Scope · Looks right · Change$/);
@@ -198,10 +197,10 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
     expect(onSend).toHaveBeenCalledWith("Change this part: UK only");
   });
 
-  it("a superseded proposal renders inert with its history note", () => {
-    renderPart(proposal("scope"), { live: false, confirmedOptionId: null });
-    expect(screen.getByRole("radio", { name: /Looks right/ })).toBeDisabled();
-    expect(screen.getByText(/kept for the record/)).toBeInTheDocument();
+  it("a superseded proposal collapses to <Part> · answered (owner, polish round 2)", () => {
+    renderPart(proposal("scope"), { live: false, answered: true, answer: null, confirmedOptionId: null }, vi.fn(), { partName: "Scope" });
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.getByTestId("part-settled")).toHaveTextContent(/^Scope · answered$/);
   });
 
   it("stages chip edits and applies them as one batched turn", async () => {
@@ -243,12 +242,12 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
       { id: "thoroughness", name: "Thoroughness", settled: false },
     ];
     const { unmount } = render(
-      <PartCard part={proposal("scope")} state={{ live: true, confirmedOptionId: null }} disabled={false} onSend={vi.fn()} steps={steps} />,
+      <PartCard part={proposal("scope")} state={{ live: true, answered: false, answer: null, confirmedOptionId: null }} disabled={false} onSend={vi.fn()} steps={steps} />,
     );
     expect(screen.getByTestId("plan-stepper")).toHaveTextContent(/^Question ✓, done\s*Plan · step 2 of 3 · Scope$/);
     unmount();
     render(
-      <PartCard part={proposal("scope")} state={{ live: false, confirmedOptionId: null }} disabled={false} onSend={vi.fn()} steps={steps} />,
+      <PartCard part={proposal("scope")} state={{ live: false, answered: true, answer: null, confirmedOptionId: null }} disabled={false} onSend={vi.fn()} steps={steps} />,
     );
     expect(screen.queryByTestId("plan-stepper")).toBeNull();
   });
@@ -295,7 +294,7 @@ describe("planSteps (task 058, N18)", () => {
             { id: "i_have_some", label: "I have some", sub: null, primary: false, reason: null },
           ],
         })}
-        state={{ live: true, confirmedOptionId: null }}
+        state={{ live: true, answered: false, answer: null, confirmedOptionId: null }}
         disabled={false}
         onSend={vi.fn()}
         steps={steps}
@@ -313,3 +312,54 @@ describe("planSteps (task 058, N18)", () => {
     expect(optionNeedsWords({ id: "confirm", label: "Looks right", primary: true })).toBe(false);
   });
 });
+
+describe("PartCard — an answered card settles (owner, polish round 2)", () => {
+  it("renders one settled line with the user's own answer and no radios once a later turn exists", () => {
+    render(
+      <PartCard
+        part={proposal("scope")}
+        partName="Scope"
+        state={{ live: true, answered: true, answer: "Please go ahead with your recommended choices.", confirmedOptionId: null }}
+        disabled={false}
+        onSend={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("part-settled")).toHaveTextContent("Scope · Please go ahead with your recommended choices.");
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
+  });
+
+  it("derivePartStates marks every card but the last turn's as answered", () => {
+    const turns = [turn(1, "What works?", proposal("question")), turn(2, "Narrow it to England.", proposal("scope"))];
+    const states = derivePartStates(turns);
+    expect(states.get(1)?.answered).toBe(true);
+    expect(states.get(1)?.answer).toBe("Narrow it to England.");
+    expect(states.get(2)?.answered).toBe(false);
+    expect(states.get(2)?.answer).toBeNull();
+  });
+});
+
+describe("settledSummary — a settled part names the plan's outcome (owner, polish round 2)", () => {
+  const answered = { live: true, answered: true, answer: "Please go ahead with your recommended choices.", confirmedOptionId: null };
+  it("names the thoroughness preset and its band from the plan", () => {
+    const part = proposal("thoroughness", {
+      options: [
+        { id: "quick_look", label: "Rapid overview", sub: null, primary: false },
+        { id: "standard_review", label: "Standard report", sub: null, primary: true },
+        { id: "deep_analysis", label: "Detailed report", sub: null, primary: false },
+      ],
+    });
+    const plan = { search_effort: "standard", analysis_depth: "standard", time_band: "~10-20 min" } as never;
+    expect(settledSummary(part, answered, plan, null)).toBe("Standard report · ~10-20 min");
+  });
+  it("names the scope's chips and the question's text; a recorded choice names itself", () => {
+    const scope = proposal("scope", { chips: [{ label: "Since 2010", kind: "text" }, { label: "UK", kind: "text" }] as never });
+    expect(settledSummary(scope, answered, null, null)).toBe("Since 2010 · UK");
+    expect(settledSummary(proposal("question"), answered, { question: "What works?" } as never, null)).toBe("What works?");
+    expect(settledSummary(proposal("question"), { ...answered, confirmedOptionId: "confirm" }, null, null)).toBe("Looks right");
+  });
+  it("falls back to the user's words when the plan names nothing", () => {
+    expect(settledSummary(proposal("settings"), answered, null, null)).toBe("Please go ahead with your recommended choices.");
+  });
+});
+

@@ -40,13 +40,13 @@ import { usePinToBottom } from "./chat/usePinToBottom";
 import { AnsweredCheckIn } from "./AnsweredCheckIn";
 import { CheckInCard } from "./CheckInCard";
 import { BASELINE_GATE_KIND } from "./checkInPresentation";
-import { PartCard, type PartState, type PlanStep, confirmTarget, derivePartStates, planSteps } from "./PartCard";
+import type { components } from "../../api/gen/types";
+import { PartCard, type PartState, type PlanStep, confirmTarget, derivePartStates, planSteps, settledSummary } from "./PartCard";
 import { PlanCard } from "./PlanCard";
 import type { PlanOverlay } from "./planOverlay";
 import { RUN_BLOCK_STATUS } from "./planVocabulary";
 import { RunningCard, RunningCardDock } from "./RunningCard";
 import {
-  completedSignposts,
   elapsedSeconds,
   formatElapsed,
   runFinishedSignpost,
@@ -383,6 +383,8 @@ function DurableTurn({
   retryDisabled,
   partState,
   steps,
+  plan,
+  scopingPlan,
   onSend,
 }: {
   taskId: string;
@@ -393,6 +395,9 @@ function DurableTurn({
   partState: PartState | undefined;
   /** The plan's steps, for the stepper above the active part card. */
   steps: PlanStep[];
+  /** The task's current plans, so a settled part names its outcome. */
+  plan?: components["schemas"]["PlanDraft"] | null;
+  scopingPlan?: components["schemas"]["ScopingPlanDraft"] | null;
   onSend: (message: string) => void;
 }) {
   // A button-confirm turn's record is the ✓ on its part card — the canned
@@ -448,6 +453,7 @@ function DurableTurn({
           state={partState}
           disabled={retryDisabled}
           steps={steps}
+          summary={settledSummary(turn.part, partState, plan, scopingPlan)}
           onSend={onSend}
         />
       )}
@@ -832,18 +838,6 @@ export function TaskAgentPane({
         />
       </div>
     );
-  const signpostBubbles = completedSignposts(stream.stages, taskId, hasFindings).map(
-    (signpost) => (
-      <div key={signpost.href} className="anim-rise mr-8">
-        <p className="max-w-prose-measure text-lead text-ink">
-          {signpost.message}{" "}
-          <Link to={signpost.href} className="font-semibold text-blue hover:underline">
-            {signpost.label} →
-          </Link>
-        </p>
-      </div>
-    ),
-  );
 
   const send = (input: { message: string; clientTurnId: string }) => {
     const trimmed = input.message.trim();
@@ -966,13 +960,14 @@ export function TaskAgentPane({
                 retryDisabled={composerDisabled}
                 partState={partStates.get(item.turn.turn_index)}
                 steps={steps}
+                plan={planQuery.data?.plan}
+                scopingPlan={planQuery.data?.scoping}
                 onSend={(text) => send({ message: text, clientTurnId: crypto.randomUUID() })}
               />
             ) : item.run.capability_run_id === liveRunId && liveCard !== null ? (
               <div key="live-run-block" className="space-y-6">
                 {liveCard}
                 <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} stages={stream.stages} />
-                {signpostBubbles}
                 <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={liveKind} />
               </div>
             ) : (
@@ -1077,7 +1072,6 @@ export function TaskAgentPane({
           <div key="live-run-fallback" className="space-y-6">
             {liveCard}
             <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} stages={stream.stages} />
-            {signpostBubbles}
             <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={liveKind} />
           </div>
         )}

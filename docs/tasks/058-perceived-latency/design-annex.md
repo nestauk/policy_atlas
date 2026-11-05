@@ -310,14 +310,33 @@ a constraint") still shows its unsettled radio list in the conversation history;
 one-line form, or a read-only look, would read better once the plan has run. The sidebar's run
 block lists every run event ("Executed a search query × 50"); it predates this slice.
 
+## Owner pass, round 3 (2026-11-05): "uncompleted 'N of 3' cards on completed searches"
+
+A part card whose turn has a later turn after it is answered: it collapses to one line
+carrying what the user wrote, "<Part> · <the user's reply>" (no radio list, no Change), and
+the stepper counts it as settled. A card answered by a recorded choice keeps
+"<Part> · <choice> · Change" while it is the newest proposal. Only the newest, unanswered card
+is open. Both settled lines use the conversation's text size (Lead), the part name in navy
+bold, the rest in grey (owner: consistent text sizes). The settled line names the outcome the
+plan settled on, not the user's words (owner: "I would have expected 'standard'"): a recorded
+choice names itself; otherwise the question's text, the scope's chips, the thoroughness preset
+with its band ("Standard report · ~10-20 min"), the scoping depth and risk appetite labels; the
+user's reply only where the plan names nothing.
+
+Also in this round (owner): the two stage signposts under the running card ("Searching has
+finished. Sources are ready →", "Mapping has finished. The landscape is ready →") go; the card's
+own row links point at the outputs. The run-finished line stays. The Mapping row links to the
+Themes view (the Sources tab's first view), not the Landscape.
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |
 |---|---|---|---|---|
 | 1 | build, agent pass | 2026-11-05 | Plan side panel lies over the page instead of squeezing the report; task nav keeps a gutter before Plan; the card's step in progress keeps its clock on the label line on phones; the strip's elapsed time never truncates; in-card inputs span the card on phones | lead |
 | 2 | build, owner pass | 2026-11-05 | six notes applied (above); the transcript-read bug fixed; Classifying | owner (round 1 of 3) |
-| 3 | review, agent pass | | | lead |
-| 4 | review, owner pass | | | owner |
+| 3 | build, owner pass (round 2 of 3) | 2026-11-05 | settled part cards name the plan's outcome at the conversation's text size; stage signposts under the card removed; Mapping links to Themes | owner |
+| 4 | review, agent pass | | | lead |
+| 5 | review, owner pass | | | owner |
 
 ## Deferred polish
 
