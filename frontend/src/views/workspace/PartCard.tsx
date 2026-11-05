@@ -123,8 +123,10 @@ export function settledSummary(
 ): string | null {
   const confirmed =
     state.confirmedOptionId === null ? null : (part.options.find((option) => option.id === state.confirmedOptionId)?.label ?? null);
-  if (confirmed !== null) return confirmed;
-  const fallback = state.answer !== null && state.answer !== "" ? state.answer : null;
+  // The outcome first (owner, polish round 3: "what looks right?"); the
+  // recorded choice's label, then the user's words, only where the plan
+  // names nothing.
+  const fallback = confirmed ?? (state.answer !== null && state.answer !== "" ? state.answer : null);
   switch (part.id) {
     case "question":
       return plan?.question ?? scoping?.question ?? fallback;
@@ -317,10 +319,11 @@ export function optionNeedsWords(option: PartOption): boolean {
   return !option.primary && WORDS_OPTION_IDS.has(option.id);
 }
 
-/** The planner's primary option first, the rest in the order it gave them
- *  (annex block H: one shape for a choice). */
+/** The options in the order the planner gave them (owner, polish round 3:
+ *  the thoroughness presets read fastest to slowest; the primary is not
+ *  moved to the front). */
 export function orderedOptions(options: PartOption[]): PartOption[] {
-  return [...options.filter((option) => option.primary), ...options.filter((option) => !option.primary)];
+  return [...options];
 }
 
 /** One step of the plan, as the stepper names it. */
@@ -539,13 +542,17 @@ export function PartCard({
     state.confirmedOptionId === null
       ? null
       : part.options.find((option) => option.id === state.confirmedOptionId) ?? null;
+  // A confirmed question or scope names its outcome, not the option's words
+  // (owner, polish round 3): the summary the pane computed from the plan.
+  const confirmedWords =
+    confirmedOption === null ? null : summary !== undefined && summary !== null && summary !== "" ? summary : confirmedOption.label;
   const name = partName ?? part.title;
 
   if (confirmedOption === null && (state.answered || !state.live)) {
     // Answered in the user's own words: one settled line carrying what they
     // wrote, nothing to change here (owner, polish round 2).
     return (
-      <div data-testid="part-settled" className="mr-8">
+      <div data-testid="part-settled" className="anim-rise mr-8">
         <p className="max-w-prose-measure text-lead text-grey">
           <span className="font-semibold text-navy">{scrub(name)}</span>
           {(() => {
@@ -559,9 +566,9 @@ export function PartCard({
 
   if (confirmedOption !== null) {
     return (
-      <div data-testid="part-settled" className="mr-8">
+      <div data-testid="part-settled" className="anim-rise mr-8">
         <p className="max-w-prose-measure text-lead text-grey">
-          <span className="font-semibold text-navy">{scrub(name)}</span> · {scrub(confirmedOption.label)}
+          <span className="font-semibold text-navy">{scrub(name)}</span> · {scrub(confirmedWords ?? confirmedOption.label)}
           {state.live && (
             <>
               {" · "}
@@ -688,7 +695,7 @@ export function PartCard({
               <div key={option.id}>
                 <ChoiceRow
                   label={option.label}
-                  sentences={[option.sub, option.primary ? option.reason : null]}
+                  sentences={[option.sub]}
                   selected={selected}
                   disabled={!interactive}
                   data-option-id={option.id}

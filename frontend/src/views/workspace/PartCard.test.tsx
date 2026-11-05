@@ -110,7 +110,7 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
     return onSend;
   }
 
-  it("is a radio list: the primary first with its reason under it, nothing chosen, no Recommended", () => {
+  it("is a radio list in the planner's order, each option with its one sentence, nothing chosen, no Recommended", () => {
     renderPart(
       proposal("question", {
         options: [
@@ -120,10 +120,13 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
       }),
     );
     const radios = screen.getAllByRole("radio");
-    expect(radios.map((radio) => radio.getAttribute("data-option-id"))).toEqual(["confirm", "refine"]);
-    expect(radios[0]).toHaveTextContent("That's my question");
-    expect(radios[0]).toHaveTextContent("It names the outcome, the group and the setting.");
-    expect(radios[1]).toHaveTextContent("Tell me what to add or leave out.");
+    // The planner's order stands (owner, polish round 3: fastest to slowest
+    // for thoroughness); the primary is not moved first and its reason is
+    // not shown.
+    expect(radios.map((radio) => radio.getAttribute("data-option-id"))).toEqual(["refine", "confirm"]);
+    expect(radios[1]).toHaveTextContent("That's my question");
+    expect(radios[1]).not.toHaveTextContent("It names the outcome, the group and the setting.");
+    expect(radios[0]).toHaveTextContent("Tell me what to add or leave out.");
     expect(radios.every((radio) => radio.getAttribute("aria-checked") === "false")).toBe(true);
     expect(screen.queryByText(/Recommended/)).toBeNull();
   });

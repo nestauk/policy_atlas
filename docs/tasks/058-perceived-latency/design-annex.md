@@ -328,6 +328,19 @@ finished. Sources are ready →", "Mapping has finished. The landscape is ready 
 own row links point at the outputs. The run-finished line stays. The Mapping row links to the
 Themes view (the Sources tab's first view), not the Landscape.
 
+## Owner pass, round 4 (2026-11-05, the last of the build's three owner rounds)
+
+1. The thoroughness options read fastest to slowest, in the order the planner gives them; the
+   primary option is no longer moved to the front (D10's "primary first" is withdrawn by the
+   owner for this card; no option is pre-selected and no "Recommended" word appears).
+2. Each option shows its label and its one sentence, as before this slice; the planner's reason
+   line under the primary option goes (owner: too verbose).
+3. A settled question line shows the question's text; a settled scope line shows the screening
+   and search chips; "That's my question" and "Looks right" are fallbacks only when the plan
+   names nothing.
+4. The cards take a moment to arrive, so settled lines rise in like the open card and the plan
+   card (the existing 300 ms rise; off under reduced motion).
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |
@@ -335,8 +348,9 @@ Themes view (the Sources tab's first view), not the Landscape.
 | 1 | build, agent pass | 2026-11-05 | Plan side panel lies over the page instead of squeezing the report; task nav keeps a gutter before Plan; the card's step in progress keeps its clock on the label line on phones; the strip's elapsed time never truncates; in-card inputs span the card on phones | lead |
 | 2 | build, owner pass | 2026-11-05 | six notes applied (above); the transcript-read bug fixed; Classifying | owner (round 1 of 3) |
 | 3 | build, owner pass (round 2 of 3) | 2026-11-05 | settled part cards name the plan's outcome at the conversation's text size; stage signposts under the card removed; Mapping links to Themes | owner |
-| 4 | review, agent pass | | | lead |
-| 5 | review, owner pass | | | owner |
+| 4 | build, owner pass (round 3 of 3) | 2026-11-05 | option order as the planner gives it; no reason line; settled lines show the question and the chips; settled lines rise in | owner |
+| 5 | review, agent pass | | | lead |
+| 6 | review, owner pass | | | owner |
 
 ## Deferred polish
 

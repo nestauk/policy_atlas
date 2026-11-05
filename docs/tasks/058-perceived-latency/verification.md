@@ -30,6 +30,8 @@ secrets, no raw source text, no unredacted traces.
 
 | Phase 10, owner round 2 of 3 (2026-11-05) | `make frontend-verify && make drift-check && pnpm e2e` | pass | typecheck clean, eslint 0 errors, 1070 tests in 93 files, build OK, `drift-check: OK`; Playwright 31 passed after the planning journey learned that a card with a later turn settles; the backend tree is unchanged since the round-1 gate. |
 
+| Phase 10, owner round 3 of 3 (2026-11-05) | `make frontend-verify && make drift-check && pnpm e2e` | pass | typecheck clean, eslint 0 errors, 1070 tests in 93 files, build OK, `drift-check: OK`; Playwright 33 passed; the backend tree is unchanged since the round-1 gate. |
+
 (The gate map's step-6 exit is this command; it is re-run after the owner-gated phases.)
 
 ## Checks beyond the build
@@ -95,6 +97,12 @@ tool and the gap measure are built and tested (Phase 0). The "before" captures m
   card is open (`PartState.answered`/`answer`, `settledSummary`, tests in `PartCard.test.tsx`).
   Same round: the two stage signposts under the running card are removed (the card's row links
   point at the outputs); the Mapping row links to the Themes view. One owner round remains.
+- **Round 4, owner pass, round 3 of 3 (2026-11-05):** the thoroughness options read in the
+  planner's order (fastest to slowest; the primary is no longer moved first); each option shows
+  its label and one sentence, the planner's reason line goes (too verbose); a settled question
+  line shows the question's text and a settled scope line its chips ("That's my question" and
+  "Looks right" only as fallbacks); settled lines rise in like the open card. The owner's three
+  rounds at build end are used; the next two rounds belong to the review phase (D11).
 
 ## Diff summary
 
