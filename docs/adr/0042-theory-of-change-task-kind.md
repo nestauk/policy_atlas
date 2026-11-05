@@ -161,6 +161,9 @@ Recorded by the review stack (task-cycle step 7) against `task/054-1-core`, befo
   (a `purpose` column), not only imported theories. Reads are for the owner and colleagues,
   never the public leg. The public reads of the theory carry no person's name (task 037 D5;
   fixed at the review).
+- **Staging on** (owner, 2026-11-05): the server setting and the SPA's build flag are on in
+  staging and off in production (`theory_of_change` in `infra/pa_config.json`;
+  `scripts/deploy.sh`). Decision 9's "off in both environments" holds for production only.
 - **Rollback as built:** `python scripts/ops_remove_toc_tasks.py --apply` deletes the named
   tasks' rows and their uploaded files (the store's `delete` was restored at the review), then
   `alembic downgrade 0914321f8de4` steps down the ten revisions. ADR § Rollback above reads

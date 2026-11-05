@@ -335,7 +335,7 @@ cleanup re-raises the 422 after removing the row and the file; no error is swall
 | 11 Prompt hashes | Holds | 14 ToC entries added; nothing else changed; 55 files unchanged. |
 | 12 Dependencies | Holds | `@xyflow/react`, `html-to-image@1.11.11`; no `python-pptx`. |
 | 13 Access | Holds in part | Full matrix on the three public reads; write and upload routes tested for owner, outsider and anonymous (deferred: same-org on every writer). |
-| 14 Infra | Holds | Private, encrypted, TLS-only, retained; the backend task role only; the setting off in both environments. |
+| 14 Infra | Holds as amended | Private, encrypted, TLS-only, retained; the backend task role only. The setting is on in staging and off in production (owner, 2026-11-05, below). |
 | 15 Tests | Holds | No test deleted, skipped or weakened. |
 | 16 Evidence | Holds | This file; the licence note; the evals that ran; exports by tool deferred. |
 | 17 Seams | Holds | `docs/deferred.md` § Theory of change. |
@@ -585,3 +585,17 @@ trials found that prison visits increased offending compared with doing nothing.
 the 2013 Campbell systematic review with a quote found in its abstract. That run came before the
 marker move; the unit test covers the moved form. A free school meals plan
 the same evening was judged "supports" and, correctly, got no note.
+
+## Switched on in staging (2026-11-05, owner)
+
+The owner asked for the deploy configuration in this PR, so the merge to `dev` makes the
+capability usable on staging. Rubric 14 and C15 said the setting stays off in both environments;
+this is the owner's ruling over them, for staging only.
+
+- `infra/pa_config.json`: `theory_of_change` is `true` for staging and `false` for production.
+  The stack sets `POLICY_ATLAS_THEORY_OF_CHANGE` to `"1"` or `"0"` from it.
+- `scripts/deploy.sh`: the staging build exports `VITE_THEORY_OF_CHANGE=1`, beside
+  `VITE_OPTIONS_SCOPING=1`. Production builds leave it unset.
+- Tests: the API's environment map includes the setting (`"1"` on the staging template), and
+  `test_theory_of_change_is_on_in_staging_only` pins the two config values. Infra tests 116
+  passed; the deploy build-guard test passed.

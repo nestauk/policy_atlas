@@ -97,6 +97,10 @@ class PolicyAtlasStack(Stack):
         # field to the app secret first, then switch the route in pa_config.json.
         model_route = be_config.get("model_route", "openai-direct")
         ingest_mode = be_config.get("ingest_mode")
+        # Task 054 (C15): the API creates theory-of-change tasks only where this
+        # is "1". On in staging for colleagues to try; off in production until
+        # the capability is complete.
+        theory_of_change = "1" if be_config.get("theory_of_change") else "0"
         if ingest_mode not in INGEST_MODES:
             raise ValueError(
                 f"backend.ingest_mode must be one of {INGEST_MODES} in pa_config.json, "
@@ -211,6 +215,7 @@ class PolicyAtlasStack(Stack):
                 "LANGFUSE_TRACING_ENVIRONMENT": env_name,
                 "POLICY_ATLAS_MODEL_ROUTE": model_route,
                 "POLICY_ATLAS_UPLOAD_BUCKET": uploads_bucket.bucket_name,
+                "POLICY_ATLAS_THEORY_OF_CHANGE": theory_of_change,
                 "POLICY_ATLAS_INGEST_MODE": ingest_mode,
                 "POLICY_ATLAS_INGEST_QUEUE_URL": ingest.queue.queue_url,
             },

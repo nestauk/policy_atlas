@@ -22,6 +22,7 @@ API_ENVIRONMENT_NAMES = {
     "LANGFUSE_TRACING_ENVIRONMENT",
     "POLICY_ATLAS_MODEL_ROUTE",
     "POLICY_ATLAS_UPLOAD_BUCKET",
+    "POLICY_ATLAS_THEORY_OF_CHANGE",
     "POLICY_ATLAS_INGEST_MODE",
     "POLICY_ATLAS_INGEST_QUEUE_URL",
 }
@@ -75,6 +76,17 @@ def test_api_container_has_the_complete_deployed_plain_environment_map():
     assert environment["POLICY_ATLAS_INGEST_MODE"] == "queued"
     assert "IngestQueue" in json.dumps(environment["POLICY_ATLAS_INGEST_QUEUE_URL"])
     assert environment["POLICY_ATLAS_UPLOAD_BUCKET"] == {"Ref": _uploads_bucket_id()}
+    assert environment["POLICY_ATLAS_THEORY_OF_CHANGE"] == "1"
+
+
+def test_theory_of_change_is_on_in_staging_only():
+    """Task 054 (C15): colleagues try it on staging; production stays off."""
+    config = json.loads((REPO_ROOT / "infra/pa_config.json").read_text())
+    backends = {env: config[env]["policy_atlas_config"]["backend"] for env in config}
+    assert {env: backend.get("theory_of_change") for env, backend in backends.items()} == {
+        "staging": True,
+        "prod": False,
+    }
 
 
 def _uploads_bucket_id(template: dict | None = None) -> str:
