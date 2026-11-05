@@ -60,6 +60,8 @@ export const STRENGTH_FILTER_OPTIONS = [
   "Moderate",
   "Limited",
   "Weak",
+  // Task 056: no score (Unknown or Non-evidence documents); always last.
+  "Unrated",
 ] as const;
 
 /**
@@ -128,9 +130,12 @@ export function readDepthHint(
 export function strengthHint(
   item: Pick<EvidenceItem, "appraisal_tier" | "evidence_type">,
 ): string {
+  if (item.appraisal_tier === "Unrated" && item.evidence_type) {
+    return `Unrated — the document type (${item.evidence_type}) is not scored; the source can be cited but counts below the evidence bar.`;
+  }
   return item.appraisal_tier && item.evidence_type
     ? `${item.appraisal_tier} evidence strength — appraised from the document type: ${item.evidence_type}.`
-    : "The source's appraised evidence strength — five bands from Weak to Very strong, scored from its classified document type.";
+    : "The source's appraised evidence strength — five bands from Weak to Very strong, scored from its classified document type; Unrated when the type is not scored.";
 }
 
 const STATUS_LABELS: Record<EvidenceItem["status"], string> = {

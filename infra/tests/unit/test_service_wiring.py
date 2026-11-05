@@ -3,7 +3,7 @@ import json
 import tomllib
 from pathlib import Path
 
-from tests.unit.test_synth import BEDROCK_APP_TEMPLATE, TEMPLATES, _resources
+from tests.unit.test_synth import BEDROCK_APP_TEMPLATE, OPENAI_APP_TEMPLATE, TEMPLATES, _resources
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -22,6 +22,8 @@ API_ENVIRONMENT_NAMES = {
     "LANGFUSE_TRACING_ENVIRONMENT",
     "POLICY_ATLAS_MODEL_ROUTE",
     "POLICY_ATLAS_UPLOAD_BUCKET",
+    "POLICY_ATLAS_INGEST_MODE",
+    "POLICY_ATLAS_INGEST_QUEUE_URL",
 }
 APP_SECRET_NAMES = {
     "OPENAI_API_KEY",
@@ -56,7 +58,7 @@ def _secret_map(container: dict) -> dict[str, object]:
 
 
 def test_api_container_has_the_complete_deployed_plain_environment_map():
-    api_container = _container(_task_definition("policy-atlas-v3-api"))
+    api_container = _container(_task_definition("policy-atlas-v3-api", OPENAI_APP_TEMPLATE))
     environment = {
         item["Name"]: item["Value"] for item in api_container["Environment"]
     }
@@ -70,6 +72,8 @@ def test_api_container_has_the_complete_deployed_plain_environment_map():
     assert environment["LOG_FORMAT"] == "json"
     assert environment["LANGFUSE_TRACING_ENVIRONMENT"] == "staging"
     assert environment["POLICY_ATLAS_MODEL_ROUTE"] == "openai-direct"
+    assert environment["POLICY_ATLAS_INGEST_MODE"] == "queued"
+    assert "IngestQueue" in json.dumps(environment["POLICY_ATLAS_INGEST_QUEUE_URL"])
     assert environment["POLICY_ATLAS_UPLOAD_BUCKET"] == {"Ref": _uploads_bucket_id()}
 
 
@@ -129,7 +133,7 @@ def test_only_the_api_task_role_may_use_the_uploads_bucket_under_tasks():
 
 
 def test_api_container_references_database_and_app_secrets_without_values():
-    secrets = _secret_map(_container(_task_definition("policy-atlas-v3-api")))
+    secrets = _secret_map(_container(_task_definition("policy-atlas-v3-api", OPENAI_APP_TEMPLATE)))
     assert set(secrets) == {"DATABASE_URL", *APP_SECRET_NAMES}
 
     database_reference = json.dumps(secrets["DATABASE_URL"])
@@ -151,7 +155,7 @@ def test_bedrock_route_adds_only_the_bedrock_key_from_the_app_secret():
     """Task 053: a Bedrock route passes AWS_BEARER_TOKEN_BEDROCK; OpenAI direct does not."""
     container = _container(_task_definition("policy-atlas-v3-api", BEDROCK_APP_TEMPLATE))
     environment = {item["Name"]: item["Value"] for item in container["Environment"]}
-    assert environment["POLICY_ATLAS_MODEL_ROUTE"] == "bedrock-local"
+    assert environment["POLICY_ATLAS_MODEL_ROUTE"] == "bedrock"
     secrets = _secret_map(container)
     assert set(secrets) == {"DATABASE_URL", *APP_SECRET_NAMES, "AWS_BEARER_TOKEN_BEDROCK"}
     reference = json.dumps(secrets["AWS_BEARER_TOKEN_BEDROCK"])

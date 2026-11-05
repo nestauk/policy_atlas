@@ -27,6 +27,7 @@ StageKey = Literal[
     "screen",
     "classify",
     "appraise",
+    "ingest",
     "characterise",
     "select",
     "extract",
@@ -40,6 +41,7 @@ StageKey = Literal[
     "option_profile",
     "constrain",
     "theme",
+    "shortlist",
 ]
 
 #: `StageKey`'s members as a plain tuple, for runtime membership checks.
@@ -48,6 +50,7 @@ STAGE_KEYS: tuple[StageKey, ...] = (
     "screen",
     "classify",
     "appraise",
+    "ingest",
     "characterise",
     "select",
     "extract",
@@ -61,6 +64,7 @@ STAGE_KEYS: tuple[StageKey, ...] = (
     "option_profile",
     "constrain",
     "theme",
+    "shortlist",
 )
 
 #: Who decided a resolved check-in. Mirrors `steering_events.DecidedBy`.
@@ -205,6 +209,12 @@ class TickFrame(BaseModel):
     ephemeral: Literal[True] = True
     stage: StageKey | None = None
     note: str
+    #: Typed progress counts for the full-text reading stage (task 056, S5):
+    #: documents fetched, parsed, and the eligible total. Omitted from the
+    #: wire when the tick carries no counts.
+    fetched: int | None = None
+    parsed: int | None = None
+    total: int | None = None
     occurred_at: datetime
 
 

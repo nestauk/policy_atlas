@@ -80,11 +80,13 @@ from policy_atlas.evidence_search.sourcing.acquire import (
     SearchBackend,
 )
 from policy_atlas.evidence_search.sourcing.ingest_full_text import (
+    ConnectFactory,
     DocumentFetcher,
     FixtureFetcher,
     IngestFullTextContext,
     ingest_full_text_sources,
 )
+from policy_atlas.evidence_search.sourcing.ingest_queue import QueueClient
 from policy_atlas.evidence_search.sourcing.search_generation import (
     SearchGenerationBackend,
     StubSearchGenerationBackend,
@@ -106,12 +108,13 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
 from policy_atlas.options_scoping.constrain.constrain import constrain_scope
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.longlist.longlist import longlist_scope
-from policy_atlas.options_scoping.longlist.longlist_backend import (
+from policy_atlas.options_scoping.longlist_intent import plan_tagging_context
+from policy_atlas.options_scoping.option_profile.option_profile import option_profile_scope
+from policy_atlas.options_scoping.scoping_backend import (
     LonglistBackend,
     StubLonglistBackend,
 )
-from policy_atlas.options_scoping.longlist_intent import plan_tagging_context
-from policy_atlas.options_scoping.option_profile.option_profile import option_profile_scope
+from policy_atlas.options_scoping.shortlist.shortlist import shortlist_scope
 from policy_atlas.options_scoping.suggest.suggest import SuggestBackend, suggest_options
 from policy_atlas.options_scoping.theme.theme import theme_scope
 from policy_atlas.runtime.agent_backend import StubAgentBackend
@@ -140,6 +143,8 @@ class HarnessState(TypedDict):
     search_backends: list[SearchBackend]
     search_generation_backend: SearchGenerationBackend
     document_fetcher: DocumentFetcher
+    ingest_queue: QueueClient | None
+    ingest_connect: ConnectFactory | None
     screening_backend: ScreeningBackend
     classification_backend: ClassificationBackend
     embedding_backend: EmbeddingBackend
@@ -251,6 +256,8 @@ def _run_ingest_full_text(state: HarnessState) -> HarnessState:
         ingest_full_text_sources,
         fetcher=state["document_fetcher"],
         embedder=state["embedding_backend"],
+        queue=state["ingest_queue"],
+        connect=state["ingest_connect"],
     )
     return _run_scope_component(state, IngestFullTextContext, sources_fn)
 
@@ -446,8 +453,8 @@ def _inherit_sources(
 #: ``inherit`` (task 045, S6) completes even when a link cannot be read, its
 #: ``degrades_walk`` flag making a degraded walk; ``option_profile`` is a
 #: spine step (a failure fails the walk); ``theme`` is not (a failure
-#: degrades the walk). ``constrain``, ``option_profile`` and ``theme`` ride
-#: the longlist backend.
+#: degrades the walk), nor is ``shortlist`` (task 055). ``constrain``,
+#: ``option_profile``, ``theme`` and ``shortlist`` ride the longlist backend.
 _BackendKey = Literal["suggest_backend", "longlist_backend"]
 _SCOPING_STEPS: dict[str, tuple[Callable[..., dict[str, Any]], _BackendKey | None]] = {
     "inherit": (_inherit_sources, None),
@@ -456,6 +463,7 @@ _SCOPING_STEPS: dict[str, tuple[Callable[..., dict[str, Any]], _BackendKey | Non
     "option_profile": (option_profile_scope, "longlist_backend"),
     "constrain": (constrain_scope, "longlist_backend"),
     "theme": (theme_scope, "longlist_backend"),
+    "shortlist": (shortlist_scope, "longlist_backend"),
 }
 
 
@@ -743,6 +751,7 @@ def build_graph() -> Any:
             "option_profile": "option_profile",
             "constrain": "constrain",
             "theme": "theme",
+            "shortlist": "shortlist",
             "group": "group",
             "synthesise": "synthesise",
             **{name: name for name in _TOC_STEPS},
@@ -763,6 +772,7 @@ def build_graph() -> Any:
     g.add_edge("option_profile", "finish")
     g.add_edge("constrain", "finish")
     g.add_edge("theme", "finish")
+    g.add_edge("shortlist", "finish")
     g.add_edge("group", "finish")
     g.add_edge("synthesise", "finish")
     for name in _TOC_STEPS:
@@ -827,6 +837,8 @@ def run_harness(
     search_backends: list[SearchBackend] | None = None,
     search_generation_backend: SearchGenerationBackend | None = None,
     document_fetcher: DocumentFetcher | None = None,
+    ingest_queue: QueueClient | None = None,
+    ingest_connect: ConnectFactory | None = None,
     screening_backend: ScreeningBackend | None = None,
     classification_backend: ClassificationBackend | None = None,
     embedding_backend: EmbeddingBackend | None = None,
@@ -864,6 +876,10 @@ def run_harness(
         document_fetcher: Fetcher for the ingest_full_text component; defaults
             to ``FixtureFetcher()`` — the same injection pattern as
             ``search_backends`` (approved gated change 3, task 008).
+        ingest_queue: Queue client for the ingest_full_text stage (task 057);
+            ``None`` runs every document inline on ``conn`` (each in a savepoint).
+        ingest_connect: Opens one short committed transaction for that stage's
+            own writes (``engine.begin``); ``None`` uses savepoints on ``conn``.
         screening_backend: Screening backend for the screen component;
             defaults to ``StubScreeningBackend()`` — no default egress, the
             extraction backend pattern (approved gated change 2, task 014).
@@ -958,6 +974,8 @@ def run_harness(
         "document_fetcher": (
             document_fetcher if document_fetcher is not None else FixtureFetcher()
         ),
+        "ingest_queue": ingest_queue,
+        "ingest_connect": ingest_connect,
         "screening_backend": (
             screening_backend if screening_backend is not None else StubScreeningBackend()
         ),

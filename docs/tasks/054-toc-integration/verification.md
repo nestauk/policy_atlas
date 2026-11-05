@@ -349,3 +349,54 @@ these out of the diff: `frontend/openapi.json`, `frontend/src/api/gen/types.ts`,
 SVG files, and `docs/tasks/054-toc-integration/toc_examples/` (not committed). Run
 `/security-review` on the upload route, the bucket, and colleague access to originals. Use the
 Codex family for the adversarial pass: the lead (Claude) wrote all of this code.
+
+## Merge of `dev` (2026-11-05, lead)
+
+`dev` brought tasks 055 (shortlist), 056 (GPT-6, per-step effort, prompt caching) and 057
+(queued full-text ingest, per-step timeouts, module renames). Where the two sides clashed, dev's
+design was kept and the ToC code was moved onto it:
+
+- **Model routes:** the `openai-6x` route and the `bedrock-local` ToC overrides were dropped:
+  `openai-direct` and `bedrock` now run the same GPT-6 models. The 14 ToC steps are in `[steps]`
+  with the tier, effort and timeout they had on this branch. The effort is "none" on Terra and
+  "medium" (the provider default) elsewhere. The timeout is 300 s (180 s for the planner).
+  `CACHE_MODES` has them too: the planner uses "auto" and the other steps use "breakpoint".
+  `OpenAITocBackend` sends the step's effort, timeout and cache mode, and its client no longer
+  sets its own timeout or retries.
+- **Migrations (rebased, owner's choice):** the ToC chain hung off `f1b6d3a8c2e5`, beside
+  dev's 055 to 057 chain. Both re-created `ck_scope_purpose` with only their own new value.
+  Dev's migrations stay exactly as written. The first ToC revision `9127f849697f` now follows
+  dev's head `0914321f8de4`, and it widens dev's list (with `shortlist`) by `toc`. There is one
+  head (`f5a1c8e93b27`) and no merge revision.
+  - Checked on Postgres 17: a staging-like database (dev's own migrations, plus a shortlist
+    row) upgrades through the ToC chain, and the row survives. A fresh build has the same
+    schema as the owner's local database.
+  - **One-time step for a local database that ran the old order** (it has the ToC tables but
+    not dev's 055 to 057): before the rebase, upgrade it with the merge-revision version of
+    this branch. Then run `uv run alembic stamp --purge f5a1c8e93b27`. The owner's database
+    and `policy_atlas_test` were done this way on 2026-11-05.
+- **ToC evidence read:** task 057 dropped the JSON column `chunk_embedding.vector`. The ToC
+  check's document vectors (`check.py`, `_document_vectors`) now read the pgvector column
+  `embedding`. mypy did not catch this, because SQLAlchemy looks up table columns by name only
+  when the code runs.
+- **Renames from dev:** `api.readmodels` became `read_models`. `routers._access` and
+  `routers._common` became `access` and `common`. `test_rename_044_sweep.py` was deleted.
+- **Tests:** the route tests now count 70 steps. The timeout-site scan counts 22 clients. The
+  ingest-queue permission test finds the SQS statement among the API role's statements, because
+  the uploads bucket is on the same role. Two migration tests were changed:
+  `test_migration_054_core` now starts from `0914321f8de4`, and the 057 round trip upgrades to
+  `0914321f8de4` instead of "head".
+
+**Gates after the merge:**
+- The backend lint and mypy are clean. The route and timeout tests pass (65). The prompt-hash
+  guard reports 55 files unchanged. The drift check is OK.
+- The infra unit tests pass (115). The frontend tests pass (1,032).
+- **Local database:** moved to `pgvector/pgvector:pg17` (dev's compose file). Steps:
+  `pg_dumpall` from Postgres 16, a new container with a new volume, then a restore. All 141
+  tables match row for row (726,323 rows). The old Postgres 16 volume
+  (`87c995eafd8e…`) and the dump (session scratchpad) are kept as backups.
+- **Database tests:** on a clean test database, 288 passed: the migration tests for 046 and
+  054 to 057, the route and timeout tests, all ToC tests and the ToC API tests. On the shared
+  `policy_atlas_test`, the dev migration round trips refuse: 2 ToC tasks from 2026-11-04 remain
+  there, and the ToC downgrade refuses while ToC tasks exist. `make test` resets that database
+  first. The full suite has not run.

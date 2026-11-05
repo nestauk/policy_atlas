@@ -12,7 +12,7 @@ from fastapi import Request
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.auth import get_current_user, get_optional_user
-from policy_atlas.api.settings import Settings
+from policy_atlas.api.settings import IngestMode, Settings
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import (
     EmbeddingBackend,
@@ -34,7 +34,7 @@ from policy_atlas.runtime.agent_backend import (
 )
 from policy_atlas.runtime.chat_backend import ChatBackend, StubChatBackend
 from policy_atlas.runtime.chat_backend_openai import OpenAIChatBackend
-from policy_atlas.runtime.runner import RunnerBackends
+from policy_atlas.runtime.runner import RunnerBackends, with_ingest_queue
 from policy_atlas.runtime.task_agent import (
     OpenAITaskAgentBackend,
     StubTaskAgentBackend,
@@ -163,19 +163,51 @@ def get_upload_store() -> UploadStore:
     return store_from_env()
 
 
-def get_runner_backends() -> RunnerBackends:
+def runner_backends_for(
+    engine: Engine, *, ingest_mode: IngestMode, ingest_queue_url: str | None = None
+) -> RunnerBackends:
     """Build the runner backend bundle, key-driven exactly like `agent`.
+
+    Shared by the request path (:func:`get_runner_backends`) and the startup
+    re-execution of interrupted walks (``app._claim_and_execute``).
+
+    Args:
+        engine: The process engine; the full-text ingest queue's workers take
+            their connections from it.
+        ingest_mode: Where full-text ingestion runs (``Settings.ingest_mode``).
+        ingest_queue_url: The SQS queue for ``queued`` (``Settings.ingest_queue_url``).
 
     Returns:
         The full live backend set (search transports, OpenAI components,
         document fetcher, tracing) when the route's key is configured, else
-        the egress-free harness defaults. Tests override this seam with
-        deterministic component doubles.
+        the egress-free harness defaults; either way with the ingest queue for
+        ``ingest_mode`` attached.
     """
     if _live():
         _, backends = live_task_agent_and_backends(tracing.get_langfuse())
-        return backends
-    return RunnerBackends()
+    else:
+        backends = RunnerBackends()
+    return with_ingest_queue(
+        backends, engine, ingest_mode=ingest_mode, queue_url=ingest_queue_url
+    )
+
+
+def get_runner_backends(request: Request) -> RunnerBackends:
+    """Build the runner backend bundle for a request (see :func:`runner_backends_for`).
+
+    Args:
+        request: Incoming request whose application owns the engine and settings.
+
+    Returns:
+        The runner backend bundle. Tests override this seam with deterministic
+        component doubles.
+    """
+    settings = get_settings(request)
+    return runner_backends_for(
+        get_engine(request),
+        ingest_mode=settings.ingest_mode,
+        ingest_queue_url=settings.ingest_queue_url,
+    )
 
 
 def get_agent_backend() -> AgentBackend:
@@ -199,7 +231,7 @@ def get_chat_backend() -> ChatBackend:
         session and trace recording, so this provider stays stateless.
     """
     if _live():
-        return OpenAIChatBackend()
+        return OpenAIChatBackend(langfuse_client=tracing.get_langfuse())
     return StubChatBackend()
 
 
@@ -229,5 +261,6 @@ __all__ = [
     "get_agent_backend",
     "get_task_agent_backend",
     "get_runner_backends",
+    "runner_backends_for",
     "get_settings",
 ]

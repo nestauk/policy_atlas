@@ -5,13 +5,17 @@ import type { components } from "../../api/gen/types";
 import { cn } from "../../ui/brand/cn";
 import { Chip } from "../../ui/brand/Chip";
 import { scrub } from "../../lib/scrub";
+import { useTask } from "../../api/queries";
 import { SECTION_EXPAND_LINK_CLASS } from "../ArtefactOutline";
+import { isRunActive } from "../scopingActivity";
+import { ShortlistActionButton, useOptionActions } from "./optionActions";
 import {
   GRID_COLUMN_LINES,
   LEVEL_WORDS,
   LINE_NAMES,
   MIDDLE_WORD,
   capitalise,
+  placeWord,
 } from "./longlistPresentation";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
@@ -34,8 +38,7 @@ const CELL_LIMIT = 4;
  * taxonomy order plus "None fits", columns the chosen line's `less` word,
  * "Middle", `more` word and "Untagged" (R41) — tiles that open the option and carry its excluded/
  * no-in-scope-evidence states. An empty row stays empty (owner, 2026-09-23:
- * the absence is the message). No shortlist state, actions, gap messages or
- * footer (task 3 extends it).
+ * the absence is the message). The shortlist word and its action ride each tile (task 055).
  */
 export function LonglistGrid({
   taskId,
@@ -47,6 +50,8 @@ export function LonglistGrid({
   /** Excluded options stay out of the grid unless the reader asks. */
   showExcluded: boolean;
 }) {
+  const task = useTask(taskId);
+  const actions = useOptionActions(taskId, isRunActive(task.data));
   const options = (longlist.options ?? []).filter(
     (option) => showExcluded || option.state !== "excluded",
   );
@@ -185,6 +190,24 @@ export function LonglistGrid({
                                   no in-scope evidence
                                 </Chip>
                               )}
+                              {placeWord(option.shortlist?.state) !== null && (
+                                <span className="mt-0.5 block text-meta text-grey">
+                                  {placeWord(option.shortlist?.state)}
+                                </span>
+                              )}
+                              <ShortlistActionButton
+                                actions={actions}
+                                optionId={option.option_id}
+                                shortlistState={option.shortlist?.state}
+                                excluded={option.state === "excluded"}
+                                className="mt-1 block"
+                              />
+                              {actions.notice !== null &&
+                                actions.notice.optionId === option.option_id && (
+                                  <p role="alert" className="mt-1 text-meta text-red">
+                                    {actions.notice.text}
+                                  </p>
+                                )}
                             </li>
                           ))}
                         </ul>

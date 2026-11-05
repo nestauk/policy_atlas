@@ -438,7 +438,14 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
             # (absent, not zero) — both are honest here.
             assert timing_payload["usage_totals"] in (
                 None,
-                {"prompt": 0, "completion": 0, "total": 0, "cached": 0},
+                {
+                    "prompt": 0,
+                    "completion": 0,
+                    "total": 0,
+                    "cached": 0,
+                    "cache_write": 0,
+                    "reasoning": 0,
+                },
             )
             assert isinstance(timing_payload["headline_counts"], dict)
 

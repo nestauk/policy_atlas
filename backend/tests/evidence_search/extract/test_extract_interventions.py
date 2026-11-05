@@ -513,23 +513,23 @@ def test_an_es_directive_cannot_name_the_intervention_profile() -> None:
     [
         (
             "stub", False,
-            "c8c4663b8c5b1cff618f08207c44e5de36ecbdd3a90fba46733c1248d371afa5",
-            "f2d043b2d9a3086adfe72413ea8ed523e6ebfc848ba19592c23cf6a13a5bfd33",
+            "76120948e3e55768b8080d35bab178d85352c530b5a60739d90a6296ab27be75",
+            "642900d5796898e54dc290f977b5cec0f0d9a41876bc40ae0db9bb32cc968413",
         ),
         (
             "stub", True,
-            "87d56a899e5c0f14f99366ac029e6f1616df67b9fa3d621aa7eb014488a7607c",
-            "540a1e292c384eb58af40068d363065e2b69a5d0cb8b4ab9c756456b0d119225",
+            "30c9e6eb91c3f435de10f6527ed2f5381da4f6fe6385abff256e35478908c654",
+            "eeb648d51d4937ea005f08df53fc38e30271d945c79dcf06dff982213e8c0e4c",
         ),
         (
             "live", False,
-            "3858a7de0a64490a0d683532708cc9696903e332640887b32c834d13e8dd9a61",
-            "f8decbfefbb13ec1ddb16563fb89907079f3f03b7f3877e752c0b38faf406db0",
+            "9aa6ebd93a0339bebd66965878df44c79a43dd400a822073da44ae7c3965a762",
+            "851ef70b7d150d871418365125636636dd5d5677135d5bee23a8a38ec6938f18",
         ),
         (
             "live", True,
-            "e2ded5c8ca44c79347dfb5c934b11c065ebb05af1c2f38305e809bd7c757400c",
-            "95b9b1c03e361f006bdb095a23717aab43e081868aa18b7bbad8c44f11abc8b3",
+            "3ce82f51170d2e3d21749cc3ada159ade4a9b68ce92b595b357482b01ebc38c4",
+            "858b242ba304a316279b4b2a5e64f6e438100c97be00c42770130b8b97af8dff",
         ),
     ],
 )
@@ -543,7 +543,13 @@ def test_the_iof_and_icf_fingerprints_are_pinned(
     steps (and their vetters) from gpt-5.4-mini to gpt-5.6-luna: re-digesting the
     components with the old model reproduces the earlier hashes exactly, so the model
     is the only moved component. A moved key means stored extractions are not reused
-    under the new model; the next run re-extracts.
+    under the new model; the next run re-extracts. Re-pinned again on 2026-11-02 when
+    task 056 moved the fast tier to gpt-6-luna (the digest shows the model as the only
+    moved component; the vetter effort stays "high"); and once more in Phase 5 when the
+    two finding vetters moved from "high" to "medium" (the digest embeds the vetter effort).
+    Re-pinned on 2026-11-03 (task 057, N14) when the quote verifier moved from ``qv_v1``
+    to ``qv_v2`` (markup ignored on both sides): re-digesting with ``qv_v1`` reproduces
+    the earlier hashes exactly, so the verifier is the only moved component.
     """
     assert extraction_fingerprint(mode, finding_vetter_active=vetted)[0] == iof
     assert icf_extraction_fingerprint(mode, finding_vetter_active=vetted)[0] == icf

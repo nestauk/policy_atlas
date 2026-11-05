@@ -29,3 +29,8 @@ timestamp: 2026-10-12
 Amendments 2–4 of task 046 built this way so that gating (15 minutes a run) and building
 overlapped; the faults above each cost a re-gate. See
 [delegated executor practices](delegated-executor-practices.md).
+
+055 addendum (2026-10-27): the method held through six gates with three delegates editing the
+main tree. Splitting one gated tree into several commits works with a temporary
+`GIT_INDEX_FILE` fed by `git ls-tree -r <gated tree> -- <paths>`; macOS `xargs` has no `-a`
+(read the path list from stdin instead).

@@ -58,7 +58,7 @@ def test_version_constants() -> None:
     assert ICF_PROMPT_VERSION == "extract_icf_v2"
     assert ICF_FINDING_VETTER_PROMPT_VERSION == "extract_icf_vetter_v2"
     # Gate decision 1: vetter knobs mirror the IOF vetter.
-    assert route().model_for("icf_finding_vetter") == ICF_FINDING_VETTER_MODEL
+    assert route().model_for("extract_vet_icf_findings") == ICF_FINDING_VETTER_MODEL
 
 
 def test_user_template_has_no_inline_envelope_interpolation() -> None:

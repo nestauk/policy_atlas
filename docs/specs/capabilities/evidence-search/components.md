@@ -190,9 +190,11 @@ Cheap **document-level** quality tier, **per-document fan-out**, applying a **st
 default-first rubric** (document type + typed dimensions → quality tier — **not** a fixed global
 hierarchy; the **rubric version travels with each appraisal**). **v3.0 = a single light pass**
 from metadata + title/abstract, document-type-based, over all screened-in — coverage
-clarification (task 006): the pass scores classified **evidence** types; Non-evidence and
-Unknown are skipped-and-counted (Unknown re-enters via the deferred full-text resolution
-seam). Deferred seams (see
+clarification (task 006, amended by task 056 D7): the pass scores classified **evidence**
+types; Non-evidence and Unknown are **appraised as Unrated (no score), citable, and counted**
+as their own bucket (an appraisal row with a null score and the `unrated` flag; Unknown
+re-enters via the deferred full-text resolution seam). § 3 is unchanged: `Non-evidence`
+still excludes from `select`/`extract`. Deferred seams (see
 [../../system/provenance-grounding.md](../../system/provenance-grounding.md)): ⏸ the full
 full-text pass (methods quality / risk-of-bias, gated to the selected subset; two-stage with the
 light tier) + modifier-tag-driven dimensions; ⏸ relative-to-feasible tier; the cross-document
@@ -215,7 +217,16 @@ URLs `blocked`; bot-blocks are never counted as paywalls). Full-text fetch is eg
 mechanical execution of the governed `search` (telemetry
 plane + run-record summary, *not* a per-document audit event). Vectorisation is **eager and
 uniform** (lazy/on-demand rejected — biases retrieval toward what was vectorised early). In v3.0
-Tier-0 ingestion lands as fetch → parse → segment → embed: the embed seam opened in task 009
+Tier-0 ingestion lands as fetch → parse → segment → embed. *As built (task 057, S2,
+2026-11-03):* in the cloud the reading of full texts runs as a **queued job outside the web
+server** (`ingest_mode = queued`): the stage puts one message per document on a queue (two
+ids and a schema number, no URL, no user identifier), a function fetches, parses and writes
+the document into the shared store, and the stage embeds the text as documents land and
+**waits with a deadline** (10 minutes); on laptops and in tests (`ingest_mode = in_process`)
+the same per-document code runs on threads. A document still unread at the deadline is
+`fetch_failed` with reason **`not_ready`**, which sits **outside the access-failure
+vocabulary** (it is not a paywall or a block; the document is retried on the next run) and
+reads as "not read yet". The embed seam opened in task 009
 **ahead of its first reader** (approved exception to "vectorise at the first vector reader" —
 chunk vectors are certain retrieval/synthesis substrate, and landing them with the egress
 gate beat relitigating egress in a third slice). Vectorisation is eager and uniform over all
@@ -473,7 +484,9 @@ on what the run produced:
   spans repeats), oversized-only windowed chunk returns, per-argument fail-closed
   `search_chunks` scope filters, the screen-confidence retrieval boost (clamped
   functional multiplier, suppression when selection priced it), repair as a
-  dependency-complete id-carrying micro-call (never a transcript resend), and the
+  dependency-complete id-carrying call that starts with the section's own first-turn
+  request so it reads the section's prompt cache, never a resend of the tool transcript
+  (task 056 S9), and the
   **pre-synthesise steer seam**: side-effect-free `propose_synthesis_plan` +
   deterministic fail-closed directive compile — an out-of-band caller shapes
   `context["synthesis"]` between runs; no runtime pausing. Every cited claim goes
@@ -485,9 +498,11 @@ on what the run produced:
   never hidden/dropped).
 - ⏸ **Corpus-scale retrieval** (ADR 0009 decision 4): in-corpus chunk grounding
   over the **screened-in corpus** is part of grounded synthesis above (a referenced selection
-  is only a soft ranking prior) — what remains gated on the index-backed `retrieve` slice is
-  retrieval **beyond the in-memory ceiling** (`RETRIEVAL_UNIT_CAP`, fail-closed) or over
-  **unscreened** content, with ADR 0009's recorded risk note.
+  is only a soft ranking prior) — *As built (task 057, S4,
+  2026-11-03):* chunk retrieval is **one SQL query over the store** (pgvector cosine leg and
+  a word-overlap leg, fused by reciprocal rank, at parity with the former in-memory ranking);
+  the Python scope load and its 20,000-unit ceiling are gone. What remains gated is
+  retrieval over **unscreened** content, with ADR 0009's recorded risk note.
 
 ⏸ **Consensus seam:** the *weighted* verdict (strength-weighted "the evidence supports X at
 strength Y") is deferred to the same roll-up seam; candidate mechanism = the deferred

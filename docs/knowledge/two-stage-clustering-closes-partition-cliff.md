@@ -9,7 +9,7 @@ timestamp: 2026-07-14
 # Rule
 
 When a model must organise N units, never ask one response to emit an
-exhaustive id partition. Split the job (`clustering_engine.py`, task 022):
+exhaustive id partition. Split the job (`core/clustering_engine.py`, task 022):
 
 1. **Open discovery** — the model sees id-keyed unit records but emits ONLY
    labels + descriptions (the output schema has no id fields to fabricate).
@@ -49,4 +49,4 @@ catch-all buckets. One framing defect, two symptom classes.
 - [ADR 0018](../adr/0018-multi-facet-clustering-engine.md) (decisions 1, 5)
 - [022 verification.md § replay evidence](../tasks/022-synthesis-refinement/verification.md)
 - [The failure this closes](facet-partition-value-list-scale-limit.md)
-- `cluster_units`, `validate_assignments` in `src/policy_atlas/clustering_engine.py`
+- `cluster_units`, `validate_assignments` in `src/policy_atlas/core/clustering_engine.py`

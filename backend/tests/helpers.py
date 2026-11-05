@@ -487,6 +487,7 @@ def seed_ingested_full_text(
     from policy_atlas.core.hashing import content_hash
     from policy_atlas.core.schema import chunk as chunk_table
     from policy_atlas.core.schema import chunk_embedding, source_snapshot, task_source_snapshot
+    from policy_atlas.core.tokens import word_tokens
 
     full_snapshot_id = uuid.uuid4()
     conn.execute(
@@ -528,7 +529,8 @@ def seed_ingested_full_text(
                 unit_policy=UNIT_POLICY,
                 unit_index=0,
                 unit_locator={"start": 0, "end": len(content)},
-                vector=vectors[index],
+                embedding=vectors[index],
+                tokens=sorted(word_tokens(content)),
                 created_at=now(),
             )
         )
@@ -790,11 +792,16 @@ def seed_select_doc(
     evidence_type: str | None = EVIDENCE_TYPE,
     abstract: str | None = None,
     quality: int | None = 3,
+    unrated: bool = False,
     year: int = 2026,
     origin: str = "uploaded",
     text_basis: str = "full_text",
 ) -> uuid.UUID:
-    """Insert a screened-relevant source ready for select, with optional classification."""
+    """Insert a screened-relevant source ready for select, with optional classification.
+
+    ``unrated=True`` writes an Unrated appraisal row (no score, task 056) and
+    ignores ``quality``.
+    """
     from policy_atlas.core.schema import (
         source_appraisal_result,
         source_classification_result,
@@ -828,14 +835,15 @@ def seed_select_doc(
             primary_evidence_type=evidence_type,
             classified_at=now(),
         ))
-    if quality is not None:
+    if quality is not None or unrated:
         conn.execute(source_appraisal_result.insert().values(
             source_appraisal_result_id=uuid.uuid4(),
             evidence_scope_id=scope_id,
             task_source_snapshot_id=tss_id,
             task_id=task_id,
             appraised_by_run_id=run_id,
-            quality_score=quality,
+            quality_score=None if unrated else quality,
+            unrated=unrated,
             rubric_version="test-rubric",
             appraised_at=now(),
         ))

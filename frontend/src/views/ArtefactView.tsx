@@ -32,6 +32,7 @@ import { hasLonglist, isBaselineArtefact, isToc, statusRun } from "./scopingActi
 import { useChatsEnabled } from "./taskResult";
 import { LonglistView } from "./longlist/LonglistView";
 import { TocResult } from "./toc/TocResult";
+import { ShortlistView } from "./longlist/ShortlistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
@@ -163,7 +164,7 @@ const GAP_GRADE_TEXT: Record<string, string> = {
  *  document type (the type is the rubric's scoring input — see the dynamic
  *  tooltip in CitationCard). */
 const APPRAISAL_FALLBACK_HINT =
-  "The cited source's appraised evidence strength — five bands from Weak to Very strong, scored from its classified document type.";
+  "The cited source's appraised evidence strength — five bands from Weak to Very strong, scored from its classified document type; Unrated when the type is not scored.";
 
 /** The grounding-tier vocabulary (demo ui.tsx TIER_LABEL/TIER_TEXT — locked;
  *  unknown tier → the raw value never renders, the chip omits). Exported so
@@ -409,7 +410,9 @@ export function AppraisalChip({ label, evidenceType }: { label: string; evidence
       content={
         <span className="text-meta">
           {typeof evidenceType === "string"
-            ? `${scrub(label)} evidence strength — appraised from the document type: ${scrub(evidenceType)}.`
+            ? label === "Unrated"
+              ? `Unrated — the document type (${scrub(evidenceType)}) is not scored; the source can be cited but counts below the evidence bar.`
+              : `${scrub(label)} evidence strength — appraised from the document type: ${scrub(evidenceType)}.`
             : APPRAISAL_FALLBACK_HINT}
         </span>
       }
@@ -1349,8 +1352,8 @@ function ScopingResult({ taskId }: { taskId: string }) {
   const select = (next: string) => {
     setSearchParams((current) => {
       const params = new URLSearchParams(current);
-      // The longlist is the default; only the baseline needs spelling out.
-      if (next === "baseline") params.set("view", next);
+      // The longlist is the default; the baseline and the shortlist need spelling out.
+      if (next === "baseline" || next === "shortlist") params.set("view", next);
       else params.delete("view");
       return params;
     });
@@ -1378,7 +1381,11 @@ function ScopingResult({ taskId }: { taskId: string }) {
       {view === "baseline" ? (
         <ArtefactReport />
       ) : longlist.data != null ? (
-        <LonglistView taskId={taskId} longlist={longlist.data} />
+        view === "shortlist" ? (
+          <ShortlistView taskId={taskId} longlist={longlist.data} />
+        ) : (
+          <LonglistView taskId={taskId} longlist={longlist.data} />
+        )
       ) : longlist.isPending ? (
         <main aria-busy="true" aria-label="Loading the longlist" className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
           {Array.from({ length: 4 }).map((_, i) => (

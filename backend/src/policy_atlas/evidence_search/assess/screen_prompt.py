@@ -41,7 +41,11 @@ SCREEN_FULLTEXT_PROMPT_VERSION = "screen_fulltext_v1"
 # Stage-1 model (task 051, contract D10): ``screen_v4`` was tuned on Luna and
 # measured there (0.917 recall on the labelled mini set); the adaptive vote in
 # ``screen.py`` adds the redundancy, full text carries the signal at stage 2.
-SCREEN_MODEL = route().model_for("screen")
+SCREEN_MODEL = route().model_for("screen_abstract")
+SCREEN_EFFORT = route().effort_for("screen_abstract")
+# Stage 2 (full text) is its own step: its own model and effort.
+SCREEN_FULL_MODEL = route().model_for("screen_full")
+SCREEN_FULL_EFFORT = route().effort_for("screen_full")
 
 STAGE2_REPS = 1
 
@@ -51,8 +55,12 @@ STAGE2_REPS = 1
 STAGE2_WINDOW_CHAR_BUDGET = 60_000
 
 # Reasoning model: the cap covers reasoning + output tokens (extract's 011
-# lesson). Screen output is tiny; 8K leaves ample reasoning headroom.
-SCREEN_MAX_OUTPUT_TOKENS = 8_192
+# lesson). Sized from Langfuse (task 057 review, 2026-11-03, 7,763 calls since
+# 2026-10-28 at medium effort, reasoning included): screen:abstract p99 454,
+# max 713; screen:full p99 656, max 1,608. Bedrock reserves input + this cap
+# against the tokens-per-minute quota before the call runs, so the cap is a
+# bound on the burst, not just on the answer (was 8_192).
+SCREEN_MAX_OUTPUT_TOKENS = 2_048
 
 # Input-side caps at prompt assembly (contract M10). Generous for legitimate
 # envelopes; a bound, not a filter.

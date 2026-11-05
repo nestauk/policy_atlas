@@ -28,8 +28,8 @@ from policy_atlas.api.contract import (
     SourceRecordsOut,
 )
 from policy_atlas.api.deps import get_conn, get_current_user, get_optional_user
-from policy_atlas.api.readmodels import repository
-from policy_atlas.api.routers._access import accessible_task, readable_or_public_task
+from policy_atlas.api.read_models import repository
+from policy_atlas.api.routers.access import accessible_task, readable_or_public_task
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["read-models"])
 
@@ -94,7 +94,7 @@ def evidence(
     origin: Annotated[Literal["OpenAlex", "Overton", "Uploaded"] | None, Query()] = None,
     evidence_type: Annotated[str | None, Query(max_length=200)] = None,
     strength: Annotated[
-        Literal["Very strong", "Strong", "Moderate", "Limited", "Weak"] | None, Query()
+        Literal["Very strong", "Strong", "Moderate", "Limited", "Weak", "Unrated"] | None, Query()
     ] = None,
     year_from: Annotated[int | None, Query(ge=1000, le=3000)] = None,
     year_to: Annotated[int | None, Query(ge=1000, le=3000)] = None,

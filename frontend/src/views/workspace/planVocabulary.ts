@@ -143,6 +143,11 @@ const ALWAYS_STEPS: readonly PlanStepPreview[] = [
   { stage: "screen", label: "Screening", blurb: "Checking title and abstract against your criteria." },
   { stage: "classify", label: "Sorting by evidence type", blurb: "Labelling each document by its evidence type." },
   { stage: "appraise", label: "Appraising", blurb: "Calculating evidence strength scores." },
+  {
+    stage: "ingest",
+    label: "Reading the full texts",
+    blurb: "Fetching each selected document's full text and reading it into sections.",
+  },
 ];
 
 const CHARACTERISE_STEP: PlanStepPreview = {
@@ -288,6 +293,17 @@ export const SCOPING_DEPTH_LABEL: Record<string, string> = {
   standard: "Standard scoping",
 };
 
+/** The shortlist's risk appetite (task 055, A25): how far it may reach beyond
+ *  options already tried elsewhere. The backend holds the same three answers
+ *  (`RISK_APPETITE_LABELS` in `scoping_plan.py`); a test pins the key set to
+ *  the generated enum. */
+export type RiskAppetite = NonNullable<components["schemas"]["ScopingPlanPatch"]["risk_appetite"]>;
+export const RISK_APPETITE_LABELS = {
+  tried_only: "Cautious: only options that have been evaluated somewhere",
+  mostly_tried: "Balanced: mostly evaluated, plus one or two not yet evaluated",
+  open_to_untested: "Ambitious: the biggest ideas, even those never implemented",
+} satisfies Record<RiskAppetite, string>;
+
 /** Check-ins (steering mode) screen words for a scoping plan — its own
  *  wording, distinct from the ES's `STEERING_MODE_LABEL` above. */
 export const SCOPING_STEERING_MODE_LABEL: Record<string, string> = {
@@ -329,7 +345,8 @@ const CONSIDERATION_ASPECT_EFFECT: Record<string, string> = {
   transferability: "Kept for the assessment. It excludes nothing.",
 };
 
-/** The nine profile lines' screen names (R36). Reused by later phases. */
+/** The profile lines' screen names (R36): the nine on the card, Potential
+ *  impact last (task 055), then transferability. Reused by later phases. */
 export const PROFILE_LINE_LABELS: Record<string, string> = {
   cost: "Cost",
   time_to_set_up: "Time to set up",
@@ -339,6 +356,7 @@ export const PROFILE_LINE_LABELS: Record<string, string> = {
   dependencies: "Dependencies",
   coordination: "Coordination requirements",
   delivery_complexity: "Delivery complexity",
+  potential_impact: "Potential impact",
   transferability: "Transferability",
 };
 

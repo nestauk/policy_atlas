@@ -10,6 +10,7 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -23,12 +24,12 @@ from structlog.testing import capture_logs
 from policy_atlas.api import continuation
 from policy_atlas.api.app import create_app
 from policy_atlas.api.dev_issuer import init, mint_token
-from policy_atlas.api.routers import _access, sse
-from policy_atlas.api.routers.sse import _summary, _tail
+from policy_atlas.api.routers import access, sse
+from policy_atlas.api.routers.sse import _encode_tick, _summary, _tail
 from policy_atlas.api.settings import Settings
 from policy_atlas.api.stage_vocabulary import stage_for_payload
 from policy_atlas.core import events
-from policy_atlas.core.liveness import tick_hub
+from policy_atlas.core.liveness import Tick, tick_hub
 from policy_atlas.core.schema import (
     app_user,
     event_log,
@@ -313,8 +314,10 @@ async def _api_session(
         sse_heartbeat_seconds=heartbeat_seconds,
     )
     other_id = f"other-{uuid.uuid4()}"
-    owner = mint_token(owner_id, settings.oidc_issuer, settings.oidc_client_id, 60, key_dir)
-    other = mint_token(other_id, settings.oidc_issuer, settings.oidc_client_id, 60, key_dir)
+    # Ten minutes, not one: the replay test outlived a 60 s token under a loaded
+    # eight-worker suite and read a 401 as its failure (task 056 review).
+    owner = mint_token(owner_id, settings.oidc_issuer, settings.oidc_client_id, 600, key_dir)
+    other = mint_token(other_id, settings.oidc_issuer, settings.oidc_client_id, 600, key_dir)
     app = create_app(settings=settings)
     async with app.router.lifespan_context(app), httpx.AsyncClient(
         transport=_StreamingAsgiTransport(app), base_url="http://testserver"
@@ -423,6 +426,43 @@ def test_stage_completed_summary_flattens_nested_round_index() -> None:
     assert "component" not in summary
 
 
+def _tick_data(encoded: str) -> dict[str, Any]:
+    lines = encoded.strip().split("\n")
+    assert lines[0] == "event: tick"
+    assert not any(line.startswith("id:") for line in lines)
+    data: dict[str, Any] = json.loads(lines[1].removeprefix("data: "))
+    return data
+
+
+def test_tick_with_counts_serialises_them() -> None:
+    """Task 056 (S5): an ``ingest`` tick carries its typed counts on the wire."""
+    tick = Tick(
+        stage="ingest",
+        note="3 of 10 read, 5 fetched.",
+        occurred_at=datetime.now(UTC),
+        fetched=5,
+        parsed=3,
+        total=10,
+    )
+    data = _tick_data(_encode_tick(tick))
+    assert data["stage"] == "ingest"
+    assert (data["fetched"], data["parsed"], data["total"]) == (5, 3, 10)
+    assert data["note"] == "3 of 10 read, 5 fetched."
+
+
+def test_tick_without_counts_sends_them_as_null() -> None:
+    """A tick with no counts carries the three keys as null, matching the generated
+    contract (`fetched: number | null`, always present; owner ruling 2026-11-02)."""
+    tick = Tick(stage="acquire", note="Searching a source database.", occurred_at=datetime.now(UTC))
+    data = _tick_data(_encode_tick(tick))
+    assert set(data) == {
+        "type", "ephemeral", "stage", "note", "occurred_at", "fetched", "parsed", "total"
+    }
+    assert (data["fetched"], data["parsed"], data["total"]) == (None, None, None)
+    stageless = _tick_data(_encode_tick(Tick(stage=None, note="n", occurred_at=datetime.now(UTC))))
+    assert stageless["stage"] is None
+
+
 def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path) -> None:
     """Replay rebuilds the same durable narrative and cursors select its exact suffix."""
 
@@ -459,8 +499,9 @@ def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path
                         and stage_for_payload(event["payload"]) is not None
                         for event in events.read(conn, task_id)
                     )
-                # ingest_full_text (and screen_full) still write run.started but
-                # are not public stages, so the counts match the mapped subset.
+                # screen_full still writes run.started but is not a public
+                # stage, so the counts match the mapped subset (ingest_full_text
+                # maps to ``ingest`` since task 056).
                 assert sum(item.event == "stage.started" for item in first) == started
 
                 cursor = first[len(first) // 2].sequence
@@ -1051,7 +1092,7 @@ def test_a_batch_read_after_the_grade_check_discloses_nothing_once_access_is_gon
     monkeypatch.setattr(
         sse,
         "may_read_task",
-        lambda *_args, **_kwargs: _access.ReadCheck(allowed=True, via_admin=False),
+        lambda *_args, **_kwargs: access.ReadCheck(allowed=True, via_admin=False),
     )
     with seeded(engine) as conn:
         conn.execute(
@@ -1121,7 +1162,7 @@ def test_sse_reauthorisation_resolves_through_the_same_legs_as_the_snapshot(
 ) -> None:
     """The tail asks the same question the snapshot did, whatever the legs are.
 
-    The admin read leg is a third disjunct inside `_access._read_legs` — the
+    The admin read leg is a third disjunct inside `access._read_legs` — the
     single function `_snapshot`'s `accessible_task` resolves through. This
     pins that the **tail** resolves through that same function and honours
     whatever it returns, which is why phase 8 widened the live stream at the
@@ -1138,14 +1179,14 @@ def test_sse_reauthorisation_resolves_through_the_same_legs_as_the_snapshot(
     that flipping only that function's verdict is enough to end the stream.
     """
     calls: list[tuple[str, str]] = []
-    real = _access._read_legs
+    real = access._read_legs
     state = {"revoked": False}
 
     def recording(table: Table, user_id: str) -> ColumnElement[bool]:
         calls.append((table.name, user_id))
         return false() if state["revoked"] else real(table, user_id)
 
-    monkeypatch.setattr(_access, "_read_legs", recording)
+    monkeypatch.setattr(access, "_read_legs", recording)
 
     async def exercise() -> None:
         async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
@@ -1271,11 +1312,11 @@ def test_sse_administrator_stream_traces_the_subscribe_and_every_reauthorisation
     """
 
     carried: list[str] = []
-    real = _access.may_read_task
+    real = access.may_read_task
 
     def recording(
         conn: Connection, *, task_id: uuid.UUID, user_id: str
-    ) -> _access.ReadCheck:
+    ) -> access.ReadCheck:
         check = real(conn, task_id=task_id, user_id=user_id)
         if check.allowed and check.via_admin:
             carried.append(user_id)

@@ -64,6 +64,12 @@ dependencies = [
     # `<2` ceiling is the same rule as openai/langfuse above. Its type stubs
     # stay in `ops` (type-check only, never shipped).
     "boto3>=1.43,<2",
+    # Task 057 (approved dependency gate G3): the AWS Lambda Runtime Interface
+    # Client, which runs the queued ingest handler inside the backend image
+    # (`python -m awslambdaric policy_atlas.ops.ingest_worker.handler`). In the MAIN
+    # group because the image leaves the `ops` group out (review finding 2); Linux
+    # only, the platform the image is built for (it has no macOS build to install).
+    "awslambdaric>=3,<4; sys_platform == 'linux'",
 ]
 
 [build-system]
@@ -104,6 +110,7 @@ dev = [
     "types-psycopg2",
     "pytest-socket>=0.8.0",
     "ipykernel>=7.3.0",
+    "pytest-xdist>=3.6",
 ]
 
 # Task 033 (approved dependency gate, contract rev 3.0 § 10): the operator CLI's

@@ -28,7 +28,7 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.deps import get_conn, get_current_user
 from policy_atlas.api.identity import owner_display_for
-from policy_atlas.api.routers._access import (
+from policy_atlas.api.routers.access import (
     OWNER_EMAIL_MAX,
     accessible_project,
     accessible_task,
@@ -38,7 +38,7 @@ from policy_atlas.api.routers._access import (
     owner_email_filter,
     trace_admin_listing,
 )
-from policy_atlas.api.routers._common import resolve_owner_display
+from policy_atlas.api.routers.common import resolve_owner_display
 from policy_atlas.core.schema import app_user, project, project_membership, task
 
 router = APIRouter(

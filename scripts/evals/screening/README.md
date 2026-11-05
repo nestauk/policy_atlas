@@ -139,7 +139,7 @@ The bucket is the same one the earlier prototype used. The results prefix is new
 
 All commands run from the repository root.
 
-**Models and routes (task 053).** The scripts run with `--env-file backend/.env`, so they use the same model route as the app: `POLICY_ATLAS_MODEL_ROUTE` unset means OpenAI directly, `bedrock-local` means Amazon Bedrock, and `POLICY_ATLAS_MODEL_ROUTE_FILE` can add an experimental route (see `backend/.env.example`). The key is the one the route names: `OPENAI_API_KEY` on the default route, `AWS_BEARER_TOKEN_BEDROCK` on Bedrock. A `--model` flag overrides the route's choice for that run only; on a Bedrock route it must be a Bedrock model id (for example `global.openai.gpt-5.6-luna`), because the route also sets the address the request goes to.
+**Models and routes (task 053).** The scripts run with `--env-file backend/.env`, so they use the same model route as the app: `POLICY_ATLAS_MODEL_ROUTE` unset means OpenAI directly, `bedrock` means Amazon Bedrock, and `POLICY_ATLAS_MODEL_ROUTE_FILE` can add an experimental route (see `backend/.env.example`). The key is the one the route names: `OPENAI_API_KEY` on the default route, `AWS_BEARER_TOKEN_BEDROCK` on Bedrock. A `--model` flag overrides the route's choice for that run only; on a Bedrock route it must be a Bedrock model id (for example `global.openai.gpt-5.6-luna`), because the route also sets the address the request goes to.
 
 The language-model key goes in `backend/.env`: `OPENAI_API_KEY` on the default route, `AWS_BEARER_TOKEN_BEDROCK` on a Bedrock route (see the note below). The AWS command-line tool uses your default profile. Log in the way you usually do first. This should print your account, not an error:
 

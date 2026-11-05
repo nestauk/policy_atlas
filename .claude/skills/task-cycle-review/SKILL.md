@@ -129,6 +129,18 @@ resolution the build made unilaterally within the contract's vocabulary — the 
 confirms or contests every one explicitly (adopt as-is / require change / escalate as
 a contract problem); a deviation nobody re-examined is drift with a paper trail.
 
+## Frontend-heavy slices — design lane and second polish round (owner, 2026-11-04)
+
+- **Design lane** in the step-7 stack: the pinned `frontend-designer` agent, briefed
+  read-only, reviews the built surfaces against the annex and returns ordered material
+  fixes. The
+  contract-verifier checks behaviours against the annex's cited version, never looks.
+  "Differs from the mock" is not a finding; "differs from the annex" is.
+- **Second polish round** after the stack's fixes land: the agent pass and the owner
+  pass from task-cycle-build § Step 5b run again, with the same rules (annex updated,
+  commits on green, owner sign-off recorded in `verification.md`). Then step 8.
+- `verification.md` carries live-dev screenshots of every changed surface.
+
 ## Step 8 — Durable records + PR
 
 With the code now **finalised by the review stack**, author the slice's durable records

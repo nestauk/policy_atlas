@@ -10,6 +10,11 @@ readonly ENV_NAME="${PA_DEPLOY_ENV_NAME:-staging}"
 readonly ECS_SERVICE_NAME="policy-atlas-v3-api-service"
 readonly SERVICE_STOP_TIMEOUT_SECONDS=600
 readonly SERVICE_STOP_POLL_SECONDS=5
+# The migration task is polled every 15 s for at most MIGRATION_WAIT_MAX_S seconds
+# (default 5,400 = 90 minutes). `aws ecs wait tasks-stopped` gave up after about 10
+# minutes, too short for a migration that backfills a large table (task 057).
+readonly MIGRATION_POLL_SECONDS=15
+readonly MIGRATION_WAIT_MAX_S="${MIGRATION_WAIT_MAX_S:-5400}"
 
 readonly REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -480,8 +485,46 @@ migration_stopped_reason() {
         --output text 2>/dev/null || true
 }
 
+# Poll the migration task until ECS reports it STOPPED, or fail loudly once
+# MIGRATION_WAIT_MAX_S has passed. A failed describe-tasks call (a network blip or
+# API throttling) counts as one more poll, not a failure. On timeout the task is
+# left running: a migration stopped half-way is safe to rerun, but the operator
+# decides (infra/DEPLOYMENT.md § 4).
+wait_for_migration_task() {
+    local deadline last_status stopped_reason
+
+    if [[ ! "$MIGRATION_WAIT_MAX_S" =~ ^[0-9]+$ ]]; then
+        fail "MIGRATION_WAIT_MAX_S must be a whole number of seconds"
+    fi
+    deadline=$((SECONDS + MIGRATION_WAIT_MAX_S))
+
+    while true; do
+        if ! last_status="$(aws ecs describe-tasks \
+            --region "$DEPLOY_REGION" \
+            --cluster "$CLUSTER_ARN" \
+            --tasks "$MIGRATION_TASK_ARN" \
+            --query 'tasks[0].lastStatus' \
+            --output text)"; then
+            last_status="UNKNOWN (describe-tasks failed)"
+        fi
+
+        if [[ "$last_status" == "STOPPED" ]]; then
+            return
+        fi
+
+        if (( SECONDS >= deadline )); then
+            stopped_reason="$(migration_stopped_reason)"
+            echo "ERROR: migration task did not stop within ${MIGRATION_WAIT_MAX_S} s (MIGRATION_WAIT_MAX_S); last status: ${last_status}; stoppedReason: ${stopped_reason:-unavailable}; task: ${MIGRATION_TASK_ARN}. The task was left running." >&2
+            exit 1
+        fi
+
+        echo "migration task status: ${last_status}; waiting"
+        sleep "$MIGRATION_POLL_SECONDS"
+    done
+}
+
 run_migrations() {
-    local network_configuration exit_code stopped_reason
+    local network_configuration
     network_configuration="awsvpcConfiguration={subnets=[${PRIVATE_SUBNET_IDS}],securityGroups=[${MIGRATION_SG_ID}],assignPublicIp=DISABLED}"
 
     MIGRATION_TASK_ARN="$(aws ecs run-task \
@@ -495,14 +538,14 @@ run_migrations() {
         --output text)"
     require_value "migration task ARN returned by ECS" "$MIGRATION_TASK_ARN"
 
-    if ! aws ecs wait tasks-stopped \
-        --region "$DEPLOY_REGION" \
-        --cluster "$CLUSTER_ARN" \
-        --tasks "$MIGRATION_TASK_ARN"; then
-        stopped_reason="$(migration_stopped_reason)"
-        echo "ERROR: migration task did not reach stopped state; stoppedReason: ${stopped_reason:-unavailable}" >&2
-        exit 1
-    fi
+    check_migration_task
+}
+
+# Wait for the migration task to stop, then fail loudly unless it exited 0.
+check_migration_task() {
+    local exit_code stopped_reason
+
+    wait_for_migration_task
 
     exit_code="$(aws ecs describe-tasks \
         --region "$DEPLOY_REGION" \
@@ -657,6 +700,17 @@ export AWS_DEFAULT_REGION="$DEPLOY_REGION"
 # or extracted copy of its logic in the test itself.
 if [[ "${PA_DEPLOY_GUARD_ONLY:-}" == "1" ]]; then
     require_production_build_environment
+    exit 0
+fi
+
+# The same kind of harness for the migration waiter (task 057): runs the real
+# wait-and-exit-code steps of run_migrations against a task ARN and cluster the
+# caller supplies, so scripts/test_deploy_migration_wait.sh can drive them with a
+# stubbed `aws`. Starts no task.
+if [[ "${PA_DEPLOY_MIGRATION_WAIT_ONLY:-}" == "1" ]]; then
+    CLUSTER_ARN="${CLUSTER_ARN:?set CLUSTER_ARN}"
+    MIGRATION_TASK_ARN="${MIGRATION_TASK_ARN:?set MIGRATION_TASK_ARN}"
+    check_migration_task
     exit 0
 fi
 

@@ -12,7 +12,7 @@ import hashlib
 
 import pytest
 
-from policy_atlas.evidence_search.synthesis import synthesis_backend as sb
+from policy_atlas.evidence_search.synthesis import section_prompt as sb
 from policy_atlas.evidence_search.synthesis.baseline_prompt import BASELINE_SECTION_PREAMBLE
 
 # sha256 of SECTION_SYSTEM_PROMPT at commit 91beec2a (before the split), with and

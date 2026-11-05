@@ -33,7 +33,7 @@ from alembic import command
 from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.readmodels.repository import decisions_page
+from policy_atlas.api.read_models.repository import decisions_page
 from policy_atlas.core.schema import (
     capability_run,
     event_log,

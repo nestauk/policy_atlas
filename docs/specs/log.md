@@ -1,5 +1,47 @@
 # Spec update log
 
+## 2026-11-04
+Task 057 review, owner rulings.
+* **Update** (S5 wording): [prompting § Timeouts](system/prompting.md) — as built: three attempts,
+  2 × p99 from at least 30 traced calls, floor 15 s, multiples of 5 s (review ruling 8).
+* **Move**: [data-flow-queued-ingest](system/data-flow-queued-ingest.md) — the DPIA addendum's
+  input, from `docs/agentic-ops/` (development conventions) to the system specs (the app's data
+  flow). Owner, 2026-11-04.
+
+## 2026-11-03
+Task 057 (queued ingest, document store, SQL retrieval, step timeouts), the owner-accepted spec
+items S1 to S5 (contract rev 4, 2026-11-03: "They're fine"), applied at the build (step 5) as
+built. Contract: `docs/tasks/057-queued-ingest/contract.md`; decisions in ADR 0043.
+* **Update** (S1): [data-model § Corpus & source snapshots](system/data-model.md) — the store
+  key as built (body hash × parse profile × segmentation policy; embeddings per profile on top),
+  reuse on for acquired snapshots, the retention rule.
+* **Update** (S2): [ES components § 4](capabilities/evidence-search/components.md) — ingestion
+  runs as a queued job outside the web server in the cloud (`ingest_mode`); the stage waits with
+  a deadline; `not_ready` sits outside the access-failure vocabulary.
+* **Update** (S3): [execution-orchestration § Durability & concurrency](system/execution-orchestration.md)
+  — the first component whose work runs outside the API process; the component boundary stays
+  the checkpoint because a late result cannot change this run's rows (revision 3 wording).
+* **Update** (S4): [ES components § 9](capabilities/evidence-search/components.md) — chunk
+  retrieval is a SQL query over the store at parity; the Python scope load and its ceiling are gone.
+* **Update** (S5): [prompting § Provider-specific](system/prompting.md) — each route step carries
+  a client timeout sized from its measured tail; stalls are retried once, never waited out.
+
+## 2026-11-02
+Task 056 (cost and latency), the owner-accepted spec items S1, S2 and S9 (contract rev 2, plan
+gate 2026-11-01), applied at the build (step 5) because the Unrated behaviour ships in this slice.
+Contract: `docs/tasks/056-cost-latency/contract.md`; decisions in ADR 0042.
+* **Update** (S1): [ES components § 4](capabilities/evidence-search/components.md) — Non-evidence
+  and Unknown are appraised as Unrated (no score), citable, and counted as their own bucket; § 3
+  unchanged (Non-evidence still excludes from select/extract).
+* **Update** (S2): [ES provenance](capabilities/evidence-search/provenance.md) and
+  [system provenance-grounding](system/provenance-grounding.md) — Unrated is below the citable
+  bar for pattern and coverage counting, its own coverage bucket, the reader-facing word is
+  "Unrated", and grounding stays the judge's verdict alone.
+* **Update** (S9): [ES components § 9](capabilities/evidence-search/components.md) — repair is a
+  dependency-complete id-carrying call that starts with the section's own first-turn request so
+  it reads the section's prompt cache, never a resend of the tool transcript.
+* S5 (the full-text reading stage and the typed progress counts) is applied with Phase 6.
+* **Update** (S5 wording, review of task 056, owner 2026-11-02): [web-api](system/web-api.md) — a `tick`'s three counts `fetched`, `parsed` and `total` are sent as null when absent (were "omitted"), so the wire matches the generated contract, which lists them as always present and nullable.
 ## 2026-10-30 (task 054, editing slices B to D)
 * **Update**: [Theory of change components](capabilities/theory-of-change/components.md): an editor
   can remove a study from a connection, set their own support and relevance over the judge's (the

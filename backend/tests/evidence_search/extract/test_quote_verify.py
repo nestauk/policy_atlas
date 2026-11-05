@@ -87,7 +87,7 @@ def _wire(
 
 
 def test_version_constants() -> None:
-    assert QUOTE_VERIFIER_VERSION == "qv_v1"
+    assert QUOTE_VERIFIER_VERSION == "qv_v2"
     assert FIELD_RULES_VERSION == "iof_rules_v3"
     assert "" in NULL_LIKE_STRINGS
 

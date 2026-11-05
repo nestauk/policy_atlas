@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import resolve_openai_client, traced_parse
 from policy_atlas.core.usage import UsageResult
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 from policy_atlas.theory_of_change.choose_prompt import (
     TOC_CHOOSE_MAX_OUTPUT_TOKENS,
     TOC_CHOOSE_PROMPT_VERSION,
@@ -269,9 +270,7 @@ class OpenAITocBackend:
         langfuse_client: Langfuse | None = None,
         session_id: uuid.UUID | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key, backend_name="OpenAITocBackend", timeout=300.0, max_retries=2
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAITocBackend")
         self._langfuse_client = langfuse_client
         self._session_id = session_id
 
@@ -291,9 +290,12 @@ class OpenAITocBackend:
             messages=messages,
             response_format=response_format,
             model=model,
-            # The route's setting for the model (Terra: "none"); the judge was
-            # measured at it, and without it Terra's default gave unstable stances.
-            reasoning_effort=route().reasoning_effort_for(model),
+            step=step,
+            # The step's effort (Terra: "none"); the judge was measured at it,
+            # and without it Terra's default gave unstable stances.
+            reasoning_effort=route().effort_for(step),
+            timeout_s=route().timeout_for(step),
+            prompt_cache=cache_mode_for(step),
             max_output_tokens=max_output_tokens,
             usage_event=f"{step}.usage",
             label=step,

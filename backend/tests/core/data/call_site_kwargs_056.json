@@ -1,0 +1,1316 @@
+{
+  "call_sites": {
+    "agent_decide": {
+      "extra_body": null,
+      "function": "OpenAIAgentBackend.decide",
+      "max_completion_tokens": 8192,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.runtime.agent_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "traced_parse",
+      "response_format": "WatchDecisionTransport",
+      "stream": null,
+      "system_shape": "text",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "agent:decide"
+    },
+    "agent_gate_sort": {
+      "extra_body": null,
+      "function": "OpenAIAgentBackend.sort_gate_turn",
+      "max_completion_tokens": 1024,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.runtime.agent_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "traced_parse",
+      "response_format": "GateSortWire",
+      "stream": null,
+      "system_shape": "text",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "agent:gate_sort"
+    },
+    "agent_longlist_sort": {
+      "extra_body": null,
+      "function": "OpenAIAgentBackend.sort_longlist_turn",
+      "max_completion_tokens": 1024,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.runtime.agent_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "traced_parse",
+      "response_format": "LonglistVerbWire",
+      "stream": null,
+      "system_shape": "text",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "agent:longlist_sort"
+    },
+    "agent_option_design": {
+      "extra_body": null,
+      "function": "OpenAIAgentBackend.propose_option_design",
+      "max_completion_tokens": 4096,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.runtime.agent_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "traced_parse",
+      "response_format": "OptionDesignWire",
+      "stream": null,
+      "system_shape": "text",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "agent:option_design"
+    },
+    "agent_route": {
+      "extra_body": null,
+      "function": "OpenAIAgentBackend.route",
+      "max_completion_tokens": 8192,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.runtime.agent_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "traced_parse",
+      "response_format": "RouterCompileTransport",
+      "stream": null,
+      "system_shape": "text",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "agent:route"
+    },
+    "agent_suggest": {
+      "extra_body": null,
+      "function": "OpenAIAgentBackend.suggest_options",
+      "max_completion_tokens": 16384,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.runtime.agent_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "traced_parse",
+      "response_format": "SuggestResponse",
+      "stream": null,
+      "system_shape": "text",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "agent:suggest"
+    },
+    "agent_triage": {
+      "extra_body": null,
+      "function": "OpenAIAgentBackend.triage",
+      "max_completion_tokens": 1024,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.runtime.agent_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "traced_parse",
+      "response_format": "WatchTriageWire",
+      "stream": null,
+      "system_shape": "text",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "agent:triage"
+    },
+    "characterise_assign": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIThemeGroupingBackend.assign",
+      "max_completion_tokens": null,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.corpus.theme_grouping",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "_AssignmentsModel",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "characterise:assign"
+    },
+    "characterise_discover": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIThemeGroupingBackend.discover",
+      "max_completion_tokens": null,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.corpus.theme_grouping",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "_ThemeSetModel",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "characterise:discover"
+    },
+    "chat/parse": {
+      "extra_body": null,
+      "function": "OpenAIChatBackend.chat_turn(force_emit=True) step 2",
+      "max_completion_tokens": 4096,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.runtime.chat_backend_openai",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "direct_parse",
+      "response_format": "ChatAnswerWire",
+      "stream": null,
+      "system_shape": null,
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": null
+    },
+    "chat/stream": {
+      "extra_body": null,
+      "function": "OpenAIChatBackend.chat_turn(force_emit=True) step 1",
+      "max_completion_tokens": 4096,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.runtime.chat_backend_openai",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "direct_create",
+      "response_format": null,
+      "stream": true,
+      "system_shape": null,
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": null
+    },
+    "chat/tool_turn": {
+      "extra_body": null,
+      "function": "OpenAIChatBackend.chat_turn(force_emit=False)",
+      "max_completion_tokens": 4096,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.runtime.chat_backend_openai",
+      "other_keys": [],
+      "parallel_tool_calls": true,
+      "reasoning_effort": "none",
+      "request_path": "direct_create",
+      "response_format": null,
+      "stream": null,
+      "system_shape": null,
+      "timeout": 120.0,
+      "tool_choice": "required",
+      "tools": [
+        "search_chunks",
+        "query_findings",
+        "lookup"
+      ],
+      "trace_name": null
+    },
+    "classify_document": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIClassificationBackend.classify",
+      "max_completion_tokens": 8192,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.assess.classification_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "ClassifyWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "classify:document"
+    },
+    "extract_annotate_relevance": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIRelevanceAnnotatorBackend.annotate",
+      "max_completion_tokens": 4096,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.extract.relevance_annotator",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "high",
+      "request_path": "parse_structured",
+      "response_format": "RelevanceAnnotationWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "extract:annotate_relevance"
+    },
+    "extract_icf_findings": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIICFExtractionBackend.extract",
+      "max_completion_tokens": 32768,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.extract.extraction_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "ICFExtractionResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "extract:icf_findings"
+    },
+    "extract_interventions": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIInterventionsBackend.extract",
+      "max_completion_tokens": 8192,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.extract.extraction_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "InterventionsResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "extract:interventions"
+    },
+    "extract_iof_findings": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIExtractionBackend.extract",
+      "max_completion_tokens": 32768,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.extract.extraction_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "ExtractionResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "extract:iof_findings"
+    },
+    "extract_vet_icf_findings": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIICFFindingVetterBackend.judge",
+      "max_completion_tokens": 32768,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.extract.finding_vetter",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "ICFFindingVetterResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "extract:vet_icf_findings"
+    },
+    "extract_vet_iof_findings": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIFindingVetterBackend.judge",
+      "max_completion_tokens": 32768,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.extract.finding_vetter",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "FindingVetterResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "extract:vet_iof_findings"
+    },
+    "group_assign": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIGroupClusteringBackendFactory.for_facet().assign",
+      "max_completion_tokens": null,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.group.group_clustering",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "_AssignmentsModel",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "group:assign"
+    },
+    "group_discover": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIGroupClusteringBackendFactory.for_facet().discover",
+      "max_completion_tokens": null,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.group.group_clustering",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "_DiscoveryModel",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "group:discover"
+    },
+    "judge_grounding": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIGroundingJudgeBackend.judge_block",
+      "max_completion_tokens": null,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.synthesis.grounding_judge",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "direct_parse",
+      "response_format": "JudgeResponseWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "judge:grounding"
+    },
+    "longlist_assign": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.assign",
+      "max_completion_tokens": 16384,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "traced_parse",
+      "response_format": "OptionAssignmentsResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "longlist:assign"
+    },
+    "longlist_assign_themes": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.assign_themes",
+      "max_completion_tokens": 8192,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "traced_parse",
+      "response_format": "ThemeAssignmentsResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "longlist:assign_themes"
+    },
+    "longlist_authority": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.authority",
+      "max_completion_tokens": 16384,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "traced_parse",
+      "response_format": "AuthorityResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "longlist:authority"
+    },
+    "longlist_constrain": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.constrain",
+      "max_completion_tokens": 16384,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "traced_parse",
+      "response_format": "ConstrainResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "longlist:constrain"
+    },
+    "longlist_discover": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.discover",
+      "max_completion_tokens": 16384,
+      "model": "gpt-6.1-sol",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "low",
+      "request_path": "traced_parse",
+      "response_format": "OptionDiscoveryResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "longlist:discover"
+    },
+    "longlist_distinct": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.distinct",
+      "max_completion_tokens": 16384,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "traced_parse",
+      "response_format": "DistinctResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "longlist:distinct"
+    },
+    "longlist_shortlist": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.propose_shortlist",
+      "max_completion_tokens": 4096,
+      "model": "gpt-6.1-sol",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "low",
+      "request_path": "traced_parse",
+      "response_format": "ShortlistWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "longlist:shortlist"
+    },
+    "longlist_themes": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.discover_themes",
+      "max_completion_tokens": 8192,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "traced_parse",
+      "response_format": "ThemeDiscoveryResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "longlist:themes"
+    },
+    "longlist_type": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.type_options",
+      "max_completion_tokens": 16384,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "traced_parse",
+      "response_format": "LeverTypingResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "longlist:type"
+    },
+    "option_profile_ambition": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.profile_ambition",
+      "max_completion_tokens": 16384,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "traced_parse",
+      "response_format": "AmbitionResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "option_profile:ambition"
+    },
+    "option_profile_fold": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.fold",
+      "max_completion_tokens": 16000,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "traced_parse",
+      "response_format": "FoldingResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "option_profile:fold"
+    },
+    "option_profile_line": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.profile_line",
+      "max_completion_tokens": 16384,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "traced_parse",
+      "response_format": "MarkedLineResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "option_profile:line"
+    },
+    "option_profile_place_sentences": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.place_sentences",
+      "max_completion_tokens": 8192,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "traced_parse",
+      "response_format": "PlaceSentencesResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "option_profile:place_sentences"
+    },
+    "option_profile_potential_impact": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.profile_potential_impact",
+      "max_completion_tokens": 16384,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "traced_parse",
+      "response_format": "PotentialImpactResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "option_profile:potential_impact"
+    },
+    "option_profile_setting": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAILonglistBackend.profile_setting",
+      "max_completion_tokens": 16384,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.options_scoping.scoping_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "high",
+      "request_path": "traced_parse",
+      "response_format": "SettingResponse",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "option_profile:setting"
+    },
+    "screen_abstract": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIScreeningBackend.screen_envelope",
+      "max_completion_tokens": 2048,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.assess.screening_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "ScreenRepWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "screen:abstract"
+    },
+    "screen_full": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIScreeningBackend.screen_fulltext",
+      "max_completion_tokens": 2048,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.assess.screening_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "ScreenRepWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "screen:full"
+    },
+    "search_generate_queries": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAISearchGenerationBackend.generate_queries",
+      "max_completion_tokens": 8192,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.sourcing.search_generation",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "SearchQueriesWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "search:generate_queries"
+    },
+    "search_queries_v2_openalex": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "V2SearchGenerationBackend.generate_queries",
+      "max_completion_tokens": 8192,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.sourcing.search_generation",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "V2SingleQueryWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "search_queries_v2_openalex:1"
+    },
+    "search_queries_v2_overton": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "V2SearchGenerationBackend.generate_queries",
+      "max_completion_tokens": 8192,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.sourcing.search_generation",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "V2SingleQueryWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "search_queries_v2_overton:1"
+    },
+    "search_reformulate": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAISearchGenerationBackend.reformulate",
+      "max_completion_tokens": 8192,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.sourcing.search_generation",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "SearchQueriesWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "search:reformulate"
+    },
+    "search_reformulate_v2_openalex": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "V2SearchGenerationBackend.reformulate",
+      "max_completion_tokens": 8192,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.sourcing.search_generation",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "V2SingleQueryWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "search_reformulate_v2_openalex:r1:1"
+    },
+    "search_reformulate_v2_overton": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "V2SearchGenerationBackend.reformulate",
+      "max_completion_tokens": 8192,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.sourcing.search_generation",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "V2SingleQueryWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "search_reformulate_v2_overton:r1:1"
+    },
+    "search_suggest": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAISearchGenerationBackend.suggest",
+      "max_completion_tokens": 8192,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.sourcing.search_generation",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "SearchSuggestWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "search:suggest"
+    },
+    "select_rerank": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAIRankingBackend.rank",
+      "max_completion_tokens": null,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.corpus.ranking",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "parse_structured",
+      "response_format": "_RankedDocsModel",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "select:rerank"
+    },
+    "synthesise_judge_summary": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAISynthesisBackend.judge_summary",
+      "max_completion_tokens": null,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.evidence_search.synthesis.synthesis_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "direct_parse",
+      "response_format": "SummaryJudgeWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "synthesise:judge_summary"
+    },
+    "synthesise_propose_sections": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAISynthesisBackend.propose_sections",
+      "max_completion_tokens": null,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.evidence_search.synthesis.synthesis_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "direct_parse",
+      "response_format": "SectionProposalWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "synthesise:propose_sections"
+    },
+    "synthesise_section_turn/repair": {
+      "extra_body": null,
+      "function": "OpenAISynthesisBackend.repair_section",
+      "max_completion_tokens": null,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.evidence_search.synthesis.synthesis_backend",
+      "other_keys": [],
+      "parallel_tool_calls": true,
+      "reasoning_effort": "none",
+      "request_path": "direct_create",
+      "response_format": null,
+      "stream": null,
+      "system_shape": "text",
+      "timeout": 120.0,
+      "tool_choice": {
+        "function": {
+          "name": "emit_repairs"
+        },
+        "type": "function"
+      },
+      "tools": [
+        "search_chunks",
+        "query_findings",
+        "lookup",
+        "emit_section",
+        "emit_repairs"
+      ],
+      "trace_name": "synthesise:repair_claims"
+    },
+    "synthesise_section_turn/section_turn": {
+      "extra_body": null,
+      "function": "OpenAISynthesisBackend.section_turn",
+      "max_completion_tokens": null,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.evidence_search.synthesis.synthesis_backend",
+      "other_keys": [],
+      "parallel_tool_calls": true,
+      "reasoning_effort": "none",
+      "request_path": "direct_create",
+      "response_format": null,
+      "stream": null,
+      "system_shape": "text",
+      "timeout": 120.0,
+      "tool_choice": {
+        "allowed_tools": {
+          "mode": "required",
+          "tools": [
+            {
+              "function": {
+                "name": "search_chunks"
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "name": "query_findings"
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "name": "lookup"
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "name": "emit_section"
+              },
+              "type": "function"
+            }
+          ]
+        },
+        "type": "allowed_tools"
+      },
+      "tools": [
+        "search_chunks",
+        "query_findings",
+        "lookup",
+        "emit_section",
+        "emit_repairs"
+      ],
+      "trace_name": "synthesise:section_turn"
+    },
+    "synthesise_write_artefact_summary": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAISynthesisBackend.write_block_summary",
+      "max_completion_tokens": null,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.evidence_search.synthesis.synthesis_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "direct_parse",
+      "response_format": "SummaryWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "synthesise:write_artefact_summary"
+    },
+    "synthesise_write_block_summary": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAISynthesisBackend.write_block_summary",
+      "max_completion_tokens": null,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.evidence_search.synthesis.synthesis_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "direct_parse",
+      "response_format": "SummaryWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "synthesise:write_block_summary"
+    },
+    "synthesise_write_case_studies": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAISynthesisBackend.write_case_studies",
+      "max_completion_tokens": null,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.evidence_search.synthesis.synthesis_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "direct_parse",
+      "response_format": "CaseStudyWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "synthesise:write_case_studies"
+    },
+    "synthesise_write_intro": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAISynthesisBackend.write_full_report_intro",
+      "max_completion_tokens": null,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.synthesis.synthesis_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "direct_parse",
+      "response_format": "IntroWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 30.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "synthesise:write_intro"
+    },
+    "synthesise_write_key_findings": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAISynthesisBackend.write_key_findings",
+      "max_completion_tokens": null,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.evidence_search.synthesis.synthesis_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "direct_create",
+      "response_format": null,
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 120.0,
+      "tool_choice": {
+        "function": {
+          "name": "emit_section"
+        },
+        "type": "function"
+      },
+      "tools": [
+        "emit_section"
+      ],
+      "trace_name": "synthesise:write_key_findings"
+    },
+    "synthesise_write_source_note": {
+      "extra_body": {
+        "prompt_cache_options": {
+          "mode": "explicit"
+        }
+      },
+      "function": "OpenAISynthesisBackend.write_source_note",
+      "max_completion_tokens": null,
+      "model": "gpt-6-luna",
+      "module": "policy_atlas.evidence_search.synthesis.synthesis_backend",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "direct_parse",
+      "response_format": "NoteWire",
+      "stream": null,
+      "system_shape": "parts+breakpoint",
+      "timeout": 30.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "synthesise:write_source_note"
+    },
+    "task_agent_scoping_turn": {
+      "extra_body": null,
+      "function": "OpenAITaskAgentBackend.turn(OPTIONS_SCOPING_TASK_AGENT)",
+      "max_completion_tokens": 16384,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.runtime.task_agent",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "none",
+      "request_path": "traced_parse",
+      "response_format": "ScopingTurnWire",
+      "stream": null,
+      "system_shape": "text",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "task_agent_scoping:turn"
+    },
+    "task_agent_turn": {
+      "extra_body": null,
+      "function": "OpenAITaskAgentBackend.turn(EVIDENCE_SEARCH_TASK_AGENT)",
+      "max_completion_tokens": 16384,
+      "model": "gpt-6.1-terra",
+      "module": "policy_atlas.runtime.task_agent",
+      "other_keys": [],
+      "parallel_tool_calls": null,
+      "reasoning_effort": "medium",
+      "request_path": "traced_parse",
+      "response_format": "PlannerTurnWire",
+      "stream": null,
+      "system_shape": "text",
+      "timeout": 60.0,
+      "tool_choice": null,
+      "tools": null,
+      "trace_name": "task_agent:turn"
+    }
+  },
+  "captured_at": "2026-11-02",
+  "extraction_fingerprint": "3ce82f51170d2e3d21749cc3ada159ade4a9b68ce92b595b357482b01ebc38c4",
+  "extraction_fingerprint_source": {
+    "extraction_fingerprint": "policy_atlas.evidence_search.extract.extract.extraction_fingerprint('live', finding_vetter_active=True)",
+    "icf_extraction_fingerprint": "policy_atlas.evidence_search.extract.extract.icf_extraction_fingerprint('live', finding_vetter_active=True)"
+  },
+  "icf_extraction_fingerprint": "858b242ba304a316279b4b2a5e64f6e438100c97be00c42770130b8b97af8dff",
+  "route": "openai-direct",
+  "uncaptured": {
+    "claude_search_generate_queries": "Inventory row 20, ClaudeSearchGenerationBackend.generate_queries: a boto3 Bedrock `converse` call, not the OpenAI client; it has no route step and no row in the plan's Steps table, and no route selects it (route search_queries.backend is never 'claude')."
+  }
+}

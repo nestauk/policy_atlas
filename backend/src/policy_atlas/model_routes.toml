@@ -1,206 +1,242 @@
-# Which AI model each part of the app uses.
+# Which AI model each part of the app uses, and how hard it thinks.
 #
 # This file is the only place model names live. The code asks for a model by
-# step name (for example "screen" or "synthesis"); this file says which model
-# that step gets on the selected route. Pick a route with the environment
-# variable POLICY_ATLAS_MODEL_ROUTE. When it is unset, "openai-direct" is used:
-# OpenAI called directly, with the owner's model choice of 2026-10-22.
+# step name; one step is one named model call site (for example
+# "classify_document" or "synthesise_section_turn"). This file says which model
+# that step gets on the selected route and which reasoning effort it sends.
+# Pick a route with the environment variable POLICY_ATLAS_MODEL_ROUTE. When it
+# is unset, "openai-direct" is used: OpenAI called directly.
 #
 # Three layers:
-#   [steps]            every step, once, with its default tier
-#   [routes.<name>]    the model for each tier, provider knobs, embeddings,
-#                      and the search-queries backend
+#   [steps]            every step, once: its default tier, its reasoning
+#                      effort ("none", "low", "medium", "high" or "xhigh";
+#                      "none" means the model does not think before answering)
+#                      and its timeout_s (see below)
+#   [routes.<name>]    the model for each tier, embeddings, and the
+#                      search-queries backend
 #   [routes.<name>.steps]  optional: a step that should not follow its default
-#                      tier on this route (a tier name, or a specific model id)
+#                      on this route. A bare string is a tier name or a model
+#                      id. A table may carry `model` (tier name or model id),
+#                      `reasoning_effort` and/or `timeout_s`.
+#
+# Reasoning effort is per step (task 056, D4). "medium" is the provider's own
+# default, written out so every step says what it sends. Terra-class models
+# refuse function tools unless the effort is "none", so the tool-bearing
+# writer and chat steps carry "none". Sol-class models refuse "none"; their
+# lowest accepted value is "low".
+#
+# timeout_s is how many seconds one request of the step may take before the app
+# gives up on it (task 057, D12). It is applied to each request, not to the
+# shared client. A request that is cut off, or that fails for a passing reason
+# (a dropped connection, "too many requests", a server error), is tried again,
+# up to MODEL_CALL_ATTEMPTS attempts (three today; task 057 review: code-review 9),
+# and each try is recorded as its own generation in Langfuse with the
+# step name and the try number. The values in [steps] are the timeouts each
+# call site had in code before task 057 (60, 120 or 30 seconds), so a route
+# that sets nothing keeps them. Streamed chat is the exception to the retry:
+# its timeout bounds the wait between chunks, and it is never tried twice.
 #
 # To try models without editing this file, point an env variable
 # POLICY_ATLAS_MODEL_ROUTE_FILE at a second file with its own [routes.*] tables;
 # they replace or add routes by name. [steps] always comes from this file.
 #
-# Design: docs/tasks/053-bedrock-local-route/contract.md (D3) and ADR 0041.
+# Design: docs/tasks/053-bedrock-local-route/contract.md (D3), ADR 0041, and
+# docs/tasks/056-cost-latency/contract.md (D2, D4, D9), ADR 0042, and
+# docs/tasks/057-queued-ingest/contract.md (D12), ADR 0043.
 
 [steps]
-# Cheap, high-volume steps: one small model for all of them
-screen = "fast"
-search_queries = "fast"
-search_reformulate = "fast"
-search_suggest = "fast"
-classify = "fast"
-extract = "fast"
-icf_extract = "fast"
-finding_vetter = "fast"
-icf_finding_vetter = "fast"
-relevance = "fast"
-rerank = "fast"
-theme_discovery = "fast"
-theme_assignment = "fast"
-group_clustering = "fast"
-grounding_judge = "fast"
-mrs_note = "fast"
-full_report_intro = "fast"
-agent_triage = "fast"
-# Options scoping (tasks 044 to 046): the small calls.
-extract_interventions = "fast"
-longlist_assignment = "fast"
-# Writing, conversation, planning and the agent's routing decisions (owner,
-# 2026-10-22: the Task Agent and the agent moved from gpt-5.5 to Terra).
-synthesis = "standard"
-case_studies = "standard"
-chat = "standard"
-task_agent = "standard"
-agent = "standard"
-# The options-scoping judgment calls run on the strongest tier (Sol).
-task_agent_scoping = "frontier"
-longlist_judgment = "frontier"
-# Theory of change (task 054, contract § Prompts and model routes): the plan,
-# the draft and the two consolidation calls on the strongest tier; the many
-# judge calls, discovery and the summary on the middle tier.
-# The planner and the draft run on the middle tier (owner, 2026-11-04): about five
-# times faster than the strongest, with similar drafts in a side-by-side test.
-task_agent_toc = "standard"
-toc_draft = "standard"
-toc_merge = "frontier"
-toc_choose = "frontier"
-toc_discover = "standard"
-toc_judge = "standard"
-# One small call per judged document finds the size of change behind a link (C37).
-toc_figures = "fast"
-# One small call per link picks the documents the judge reads (C28).
-toc_pick = "fast"
-toc_summarise = "standard"
-# One call writes Detailed information as a short narrative report (C38).
-toc_report = "frontier"
-# One call reviews the theory's shape after the user's edits (C45).
-toc_review = "frontier"
-# Can the theory work at all? The plan-stage sense check and the overall verdict (red team).
-toc_sense_check = "standard"
-# One vision call reads a user's own diagram (increment 5).
-toc_import = "frontier"
-toc_verdict = "frontier"
+# --- Evidence search: assess ---------------------------------------------
+classify_document = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }   # was high; medium measured within noise, 19% cheaper (task 056 P5)
+screen_abstract = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+screen_full = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+# --- Evidence search: corpus, group ---------------------------------------
+select_rerank = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+characterise_discover = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+characterise_assign = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+group_discover = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }
+group_assign = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }
+# --- Evidence search: extract ----------------------------------------------
+extract_iof_findings = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }   # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
+extract_icf_findings = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }   # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
+extract_interventions = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+extract_vet_iof_findings = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }   # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
+extract_vet_icf_findings = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }   # long-output step: stored tail 67 to 71 s (owner, 2026-11-02)
+extract_annotate_relevance = { tier = "fast", reasoning_effort = "high", timeout_s = 60 }   # no stored calls to measure (task 056 P5); stays high
+# --- Evidence search: search ------------------------------------------------
+search_generate_queries = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+search_reformulate = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+search_suggest = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+search_queries_v2_openalex = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+search_queries_v2_overton = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+search_reformulate_v2_openalex = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+search_reformulate_v2_overton = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+# --- Evidence search: synthesise (the writer; Terra needs "none" for tools) --
+synthesise_propose_sections = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
+synthesise_write_block_summary = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
+synthesise_write_artefact_summary = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
+synthesise_judge_summary = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
+synthesise_section_turn = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }   # section turns and the repair share this step (D10)
+synthesise_write_key_findings = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
+synthesise_write_case_studies = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
+synthesise_write_source_note = { tier = "fast", reasoning_effort = "medium", timeout_s = 30 }
+synthesise_write_intro = { tier = "fast", reasoning_effort = "medium", timeout_s = 30 }
+judge_grounding = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }
+# --- Conversation and agents -----------------------------------------------
+chat = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }   # the tool turn, the prose stream and the final parse share this step
+agent_route = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }
+agent_triage = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+agent_decide = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }
+agent_gate_sort = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+agent_longlist_sort = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+agent_option_design = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }
+agent_suggest = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }
+task_agent_turn = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }
+# --- Options scoping (the judgment calls run on the strongest tier) ----------
+task_agent_scoping_turn = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+# timeout_s 60, not 300 (task 056, owner 2026-11-02): the longlist and profile calls take 5 to 20 s, so a
+# stalled request is retried after a minute, not five.
+longlist_discover = { tier = "frontier", reasoning_effort = "low", timeout_s = 60 }
+longlist_assign = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+longlist_themes = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_assign_themes = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_type = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_constrain = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_distinct = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_authority = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_shortlist = { tier = "frontier", reasoning_effort = "low", timeout_s = 60 }
+option_profile_line = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_potential_impact = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_ambition = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_setting = { tier = "standard", reasoning_effort = "high", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_fold = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+option_profile_place_sentences = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+# --- Theory of change (task 054) ---------------------------------------------
+# Tiers as on the task branch (owner, 2026-11-04: the planner and the draft on the middle
+# tier). Effort as the branch sent it: "none" on Terra (the judge was measured at it;
+# Terra's default gave unstable stances), the provider default elsewhere. Timeout 300 s,
+# the branch's client timeout (the planner: 180 s, as before): the draft, the report and
+# the vision import take minutes.
+task_agent_toc = { tier = "standard", reasoning_effort = "none", timeout_s = 180 }
+toc_draft = { tier = "standard", reasoning_effort = "none", timeout_s = 300 }
+toc_merge = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }
+toc_choose = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }
+toc_discover = { tier = "standard", reasoning_effort = "none", timeout_s = 300 }
+toc_judge = { tier = "standard", reasoning_effort = "none", timeout_s = 300 }
+toc_figures = { tier = "fast", reasoning_effort = "medium", timeout_s = 300 }   # one small call per judged document (C37)
+toc_pick = { tier = "fast", reasoning_effort = "medium", timeout_s = 300 }   # one small call per link (C28)
+toc_summarise = { tier = "standard", reasoning_effort = "none", timeout_s = 300 }
+toc_report = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }   # the narrative report (C38)
+toc_review = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }   # the shape review after edits (C45)
+toc_sense_check = { tier = "standard", reasoning_effort = "none", timeout_s = 300 }   # can the theory work at all (red team)
+toc_import = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }   # one vision call reads the user's diagram
+toc_verdict = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }
 
 # ---------------------------------------------------------------------------
 [routes.openai-direct]
-# OpenAI called directly. The default when nothing is set. Until 2026-10-22 this
-# route reproduced the pre-053 models exactly (gpt-5.4-mini for the cheap steps,
-# gpt-5.5 for the agents); it now carries the owner's three-tier choice.
+# OpenAI called directly. The default when nothing is set. The three GPT-6
+# models since task 056 (owner, 2026-10-29 and 2026-10-30, D2).
 openai_base_url = "https://api.openai.com/v1"   # stated so no stray env var can move it
 api_key_env = "OPENAI_API_KEY"                  # which variable holds this route's key
 
 [routes.openai-direct.text]
-fast = "gpt-5.6-luna"
-standard = "gpt-5.6-terra"
-frontier = "gpt-5.6-sol"
-
-[routes.openai-direct.knobs.reasoning_effort]
-# Terra refuses function tools unless reasoning effort is "none" (task 029).
-"gpt-5.6-terra" = "none"
+fast = "gpt-6-luna"
+standard = "gpt-6.1-terra"
+frontier = "gpt-6.1-sol"
 
 [routes.openai-direct.embeddings]
 backend = "openai"
 model = "text-embedding-3-small"
 profile = "openai_text_embedding_3_small_v1"
+# Most embedding requests the full-text stage keeps in flight (task 057, D6):
+# the pool starts at 6, halves on throttling and adds one after 5 clean batches.
+pool_cap = 8
 
 [routes.openai-direct.search_queries]
 # Which code path writes the search queries (the one step with two
-# implementations). "openai": the OpenAI client, on the search_queries step's
-# tier like every other step. "claude": Claude through boto3 (Claude does not
-# accept the OpenAI request format), which needs a model line beside it.
+# implementations). "openai": the OpenAI client, on the step's tier like every
+# other step. "claude": Claude through boto3 (Claude does not accept the OpenAI
+# request format), which needs a model line beside it.
 backend = "openai"
 
 # ---------------------------------------------------------------------------
-[routes.openai-6x]
-# OpenAI's 6.x models (owner, 2026-10-27): about half the 5.6 price. Used for
-# local theory-of-change runs while the task 054 eval tests them; staging and
-# prod stay on openai-direct until the eval says otherwise.
-openai_base_url = "https://api.openai.com/v1"
-api_key_env = "OPENAI_API_KEY"
-
-[routes.openai-6x.text]
-fast = "gpt-6-luna"
-standard = "gpt-6.1-terra"
-frontier = "gpt-6.1-sol"
-
-[routes.openai-6x.knobs.reasoning_effort]
-# The same setting openai-direct gives Terra (function tools need "none").
-"gpt-6.1-terra" = "none"
-
-[routes.openai-6x.embeddings]
-backend = "openai"
-model = "text-embedding-3-small"
-profile = "openai_text_embedding_3_small_v1"
-
-[routes.openai-6x.search_queries]
-backend = "openai"
-
-# ---------------------------------------------------------------------------
-[routes.bedrock-local]
+[routes.bedrock]
 # Every call goes to Amazon Bedrock's London endpoint. OpenAI models are reached
 # through Bedrock's global routing (the only way from London); embeddings use
-# Cohere through EU-only routing. The same three models as openai-direct, under
-# Bedrock's global profile names.
+# Cohere through EU-only routing. The same three GPT-6 models as openai-direct,
+# under Bedrock's global profile names.
 openai_base_url = "https://bedrock-runtime.eu-west-2.amazonaws.com/openai/v1"
 api_key_env = "AWS_BEARER_TOKEN_BEDROCK"       # the Bedrock key; boto3 reads the same variable
 
-[routes.bedrock-local.text]
-fast = "global.openai.gpt-5.6-luna"
-standard = "global.openai.gpt-5.6-terra"
-frontier = "global.openai.gpt-5.6-sol"
+[routes.bedrock.text]
+fast = "global.openai.gpt-6-luna"
+standard = "global.openai.gpt-6.1-terra"
+frontier = "global.openai.gpt-6.1-sol"
 
-[routes.bedrock-local.knobs.reasoning_effort]
-"global.openai.gpt-5.6-terra" = "none"
-"global.openai.gpt-6.1-terra" = "none"
-
-[routes.bedrock-local.steps]
-# Theory of change runs on OpenAI's 6.x models (owner, 2026-11-04): about half
-# the 5.6 price, each tier swapped like for like (Luna, Terra, Sol). All three
-# answered through Bedrock's global routing on 2026-11-04. Every other step
-# keeps this route's 5.6 tiers.
-task_agent_toc = "global.openai.gpt-6.1-terra"
-toc_draft = "global.openai.gpt-6.1-terra"
-toc_merge = "global.openai.gpt-6.1-sol"
-toc_choose = "global.openai.gpt-6.1-sol"
-toc_discover = "global.openai.gpt-6.1-terra"
-toc_judge = "global.openai.gpt-6.1-terra"
-toc_figures = "global.openai.gpt-6-luna"
-toc_pick = "global.openai.gpt-6-luna"
-toc_summarise = "global.openai.gpt-6.1-terra"
-toc_report = "global.openai.gpt-6.1-sol"
-toc_review = "global.openai.gpt-6.1-sol"
-toc_sense_check = "global.openai.gpt-6.1-terra"
-toc_import = "global.openai.gpt-6.1-sol"
-toc_verdict = "global.openai.gpt-6.1-sol"
-
-[routes.bedrock-local.embeddings]
+[routes.bedrock.embeddings]
 backend = "cohere"
 model = "eu.cohere.embed-v4:0"
 profile = "cohere_embed_v4_1536_v1"
+# Most embedding requests the full-text stage keeps in flight (task 057, D6):
+# the pool starts at 6, halves on throttling and adds one after 5 clean batches.
+pool_cap = 12
 
-[routes.bedrock-local.search_queries]
+[routes.bedrock.search_queries]
 backend = "openai"   # Luna through Bedrock's OpenAI-format address, like every other step
 
+[routes.bedrock.steps]
+# Per-step timeouts on Bedrock (task 057, contract D12): 2 x the step's healthy 99th
+# percentile from at least 30 traced calls since 2026-11-02, floor 15 s (owner ruling
+# 2026-11-03, after the build's n >= 100 / 5 s first pass); a step with fewer calls keeps
+# its [steps] value, and every value is rounded up to a multiple of 5 s (owner). Derived by
+# scripts/step_timeouts.py --min-n 30 --floor 15 --round-to 5; the table
+# with sample counts is in docs/tasks/057-queued-ingest/verification.md. A stalled call
+# now costs this long, then two traced retries, instead of 60 or 120 s. The fan-out steps
+# (classify, the two screens) run 48 wide, so their 15 s floor also covers queueing.
+classify_document = { timeout_s = 15 }               # n 4739, p99 5.3 s (floor)
+screen_abstract = { timeout_s = 15 }                 # n 7876, p99 3.3 s (floor)
+screen_full = { timeout_s = 15 }                     # n 921, p99 3.9 s (floor)
+select_rerank = { timeout_s = 25 }                   # n 85, p99 11.7 s
+characterise_assign = { timeout_s = 30 }             # n 57, p99 12.7 s
+extract_interventions = { timeout_s = 35 }           # n 1415, p99 16.4 s
+search_generate_queries = { timeout_s = 15 }         # n 95, p99 3.5 s (floor)
+synthesise_propose_sections = { timeout_s = 15 }     # n 30, p99 4.3 s (floor)
+synthesise_write_block_summary = { timeout_s = 15 }  # n 254, p99 2.7 s (floor)
+synthesise_judge_summary = { timeout_s = 15 }        # n 277, p99 2.3 s (floor)
+synthesise_section_turn = { timeout_s = 25 }         # n 424, p99 11.0 s (repair shares the step)
+synthesise_write_source_note = { timeout_s = 15 }    # n 33, p99 1.8 s (floor)
+longlist_assign = { timeout_s = 50 }                 # n 71, p99 22.6 s
+option_profile_line = { timeout_s = 85 }             # n 65, p99 41.7 s (above today's 60)
+option_profile_place_sentences = { timeout_s = 35 }  # n 111, p99 17.1 s
+# The grounding judge runs at low effort on this route (task 057, D14): half the wall per
+# call at 0.8x the cost, agreement with the medium judge at the judge's own noise floor;
+# the synthesis refinement task revisits it with a labelled set of disputed claims. Its
+# timeout was 40 s (2 x p99 at medium) and was raised once to 80 s after a retry was also
+# cut on the fixed questions (round b, 2026-11-03); re-measured at low effort.
+judge_grounding = { reasoning_effort = "low", timeout_s = 80 }
+
 # ---------------------------------------------------------------------------
-[routes.bedrock-local-claude]
+[routes.bedrock-claude]
 # NOT IN USE. Kept for testing Claude models later (owner, 2026-10-22): as
-# bedrock-local, but search query generation runs on Claude via Bedrock. No
+# bedrock, but search query generation runs on Claude via Bedrock. No
 # environment selects it and nothing is planned to. Swap the Claude tier by
 # changing the model below:
 #   eu.anthropic.claude-sonnet-5  /  eu.anthropic.claude-opus-5
 openai_base_url = "https://bedrock-runtime.eu-west-2.amazonaws.com/openai/v1"
 api_key_env = "AWS_BEARER_TOKEN_BEDROCK"
 
-[routes.bedrock-local-claude.text]
-fast = "global.openai.gpt-5.6-luna"
-standard = "global.openai.gpt-5.6-terra"
-frontier = "global.openai.gpt-5.6-sol"
+[routes.bedrock-claude.text]
+fast = "global.openai.gpt-6-luna"
+standard = "global.openai.gpt-6.1-terra"
+frontier = "global.openai.gpt-6.1-sol"
 
-[routes.bedrock-local-claude.knobs.reasoning_effort]
-"global.openai.gpt-5.6-terra" = "none"
-
-[routes.bedrock-local-claude.embeddings]
+[routes.bedrock-claude.embeddings]
 backend = "cohere"
 model = "eu.cohere.embed-v4:0"
 profile = "cohere_embed_v4_1536_v1"
+# Most embedding requests the full-text stage keeps in flight (task 057, D6):
+# the pool starts at 6, halves on throttling and adds one after 5 clean batches.
+pool_cap = 12
 
-[routes.bedrock-local-claude.search_queries]
+[routes.bedrock-claude.search_queries]
 backend = "claude"
 model = "eu.anthropic.claude-haiku-4-5-20251001-v1:0"

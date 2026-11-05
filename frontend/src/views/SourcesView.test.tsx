@@ -284,11 +284,16 @@ describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", 
     await user.selectOptions(typeSelect, "Systematic review");
     expect(lastEvidenceQuery()).toMatchObject({ evidence_type: "Systematic review" });
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Filter by evidence strength" }),
-      "Moderate",
-    );
+    const strengthSelect = screen.getByRole("combobox", { name: "Filter by evidence strength" });
+    await user.selectOptions(strengthSelect, "Moderate");
     expect(lastEvidenceQuery()).toMatchObject({ strength: "Moderate" });
+    // Task 056: Unrated is its own band, offered last.
+    const strengthOptions = within(strengthSelect)
+      .getAllByRole("option")
+      .map((option) => option.textContent);
+    expect(strengthOptions.at(-1)).toBe("Unrated");
+    await user.selectOptions(strengthSelect, "Unrated");
+    expect(lastEvidenceQuery()).toMatchObject({ strength: "Unrated" });
   });
 
   it("hovers Abstract only with a human-readable reason", () => {

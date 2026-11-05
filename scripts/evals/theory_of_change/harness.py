@@ -688,9 +688,7 @@ class Harness:
         self.classifier = OpenAIClassificationBackend()
         self.ranker = OpenAIRankingBackend()
         self.toc = check_backend()
-        self.client = resolve_openai_client(
-            None, backend_name="toc_search_eval", timeout=300.0, max_retries=2
-        )
+        self.client = resolve_openai_client(None, backend_name="toc_search_eval")
         self.fetcher = LiveDocumentFetcher()
         self.r = route()
         self.standard = self.r.tiers["standard"]

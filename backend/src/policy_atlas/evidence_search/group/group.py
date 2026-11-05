@@ -21,16 +21,7 @@ import structlog
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core.schema import (
-    extraction_result,
-    finding_reference_union,
-    grouping_result,
-    implementation_context_finding,
-    intervention_outcome_finding,
-)
-from policy_atlas.core.tags import has_control_character
-from policy_atlas.core.usage import UsageAccumulator, UsageResult
-from policy_atlas.evidence_search.clustering_engine import (
+from policy_atlas.core.clustering_engine import (
     AssignmentOutput,
     ClusteringBackend,
     ClusteringFailure,
@@ -41,6 +32,15 @@ from policy_atlas.evidence_search.clustering_engine import (
     call_budget_for_unit_count,
     cluster_units,
 )
+from policy_atlas.core.schema import (
+    extraction_result,
+    finding_reference_union,
+    grouping_result,
+    implementation_context_finding,
+    intervention_outcome_finding,
+)
+from policy_atlas.core.tags import has_control_character
+from policy_atlas.core.usage import UsageAccumulator, UsageResult
 from policy_atlas.evidence_search.extract.extract import record_ids_by_profile
 from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID

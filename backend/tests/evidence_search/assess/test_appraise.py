@@ -22,10 +22,14 @@ from policy_atlas.evidence_search.assess.appraise import (
     DEFAULT_RUBRIC,
     DEFAULT_RUBRIC_VERSION,
     SCORE_LABELS,
+    UNRATED_LABEL,
+    UNRATED_TYPES,
     AppraiseContext,
     AppraiseDirectiveError,
     _derive_rubric_version,
     _parse_appraisal_directive,
+    appraisal_label,
+    appraisal_tier,
     appraise_sources,
 )
 from policy_atlas.evidence_search.assess.classify import ClassifyContext, classify_sources
@@ -98,10 +102,24 @@ def test_table_count(conn: Connection) -> None:
 
 # --- Rubric and labels (pure Python, no DB) ---
 
-def test_rubric_domain_is_evidence_types_minus_non_appraisable() -> None:
-    non_appraisable = {"Other (Non-evidence documents)", "Unknown / Insufficient information"}
-    assert set(DEFAULT_RUBRIC) == set(EVIDENCE_TYPES) - non_appraisable
+def test_rubric_domain_is_evidence_types_minus_the_unrated_types() -> None:
+    unrated = {"Other (Non-evidence documents)", "Unknown / Insufficient information"}
+    assert unrated == UNRATED_TYPES
+    assert set(DEFAULT_RUBRIC) == set(EVIDENCE_TYPES) - unrated
+    # Every evidence type is either scored or Unrated: none is left without a row.
+    assert set(DEFAULT_RUBRIC) | UNRATED_TYPES == set(EVIDENCE_TYPES)
     assert all(score in range(1, 6) for score in DEFAULT_RUBRIC.values())
+
+
+def test_label_and_tier_helpers() -> None:
+    assert UNRATED_LABEL == "Unrated"
+    assert UNRATED_LABEL not in SCORE_LABELS.values()
+    assert appraisal_label(None, unrated=True) == UNRATED_LABEL
+    assert appraisal_label(4) == SCORE_LABELS[4]
+    assert appraisal_label(None) is None
+    assert appraisal_tier(None, unrated=True) == UNRATED_LABEL
+    assert appraisal_tier(4) == "4"
+    assert appraisal_tier(None) is None
 
 
 def test_rubric_matches_v2_hierarchy_exactly() -> None:
@@ -180,8 +198,8 @@ def test_derived_rubric_version_format_and_determinism() -> None:
     override = {"Expert Opinion and Commentary": 5}
     version = _derive_rubric_version(override)
 
-    assert version.startswith("v2-hierarchy-v1+")
-    suffix = version.removeprefix("v2-hierarchy-v1+")
+    assert version.startswith("v2-hierarchy-v2+")
+    suffix = version.removeprefix("v2-hierarchy-v2+")
     assert len(suffix) == 8
     assert all(char in "0123456789abcdef" for char in suffix)
 
@@ -202,7 +220,7 @@ def test_derived_rubric_version_differs_for_different_overrides() -> None:
 
 def test_no_override_guard_byte_identical_to_default_version() -> None:
     """No override reproduces today's version string byte-for-byte."""
-    assert _derive_rubric_version({}) == DEFAULT_RUBRIC_VERSION == "v2-hierarchy-v1"
+    assert _derive_rubric_version({}) == DEFAULT_RUBRIC_VERSION == "v2-hierarchy-v2"
 
 
 # --- Round-trips ---
@@ -234,29 +252,76 @@ def test_appraise_sources_round_trip_via_classify(conn: Connection) -> None:
     assert {r.task_source_snapshot_id: r.quality_score for r in rows} == tss_by_score
 
 
-def test_non_evidence_skipped_and_counted(conn: Connection) -> None:
+@pytest.mark.parametrize(
+    "evidence_type",
+    ["Other (Non-evidence documents)", "Unknown / Insufficient information"],
+)
+def test_unrated_type_gets_an_unrated_row_and_is_counted(
+    conn: Connection, evidence_type: str
+) -> None:
+    """Task 056, D7: the two unscored types are appraised as Unrated, not skipped."""
+    pid, rid = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    snap_id, tss_id = _seed_classified(conn, pid, rid, scope_id, evidence_type)
+
+    counts = appraise_sources(conn, task_id=pid, run_id=rid, context=_ctx(scope_id))
+
+    assert counts["appraised"] == 0
+    assert counts["appraised_unrated"] == 1
+    assert counts["by_score"] == {}
+    assert counts["skipped_non_evidence"] == 0
+    assert counts["skipped_unknown"] == 0
+    rows = _appraisal_rows(conn, pid)
+    assert [(r.task_source_snapshot_id, r.quality_score, r.unrated) for r in rows] == [
+        (tss_id, None, True)
+    ]
+    assert rows[0].rubric_version == DEFAULT_RUBRIC_VERSION
+    appraised_events = [
+        e for e in events.read(conn, pid) if e["event_type"] == "source.appraised"
+    ]
+    assert [e["payload"] for e in appraised_events] == [
+        {
+            "source_snapshot_id": str(snap_id),
+            "task_source_snapshot_id": str(tss_id),
+            "evidence_scope_id": str(scope_id),
+            "quality_score": None,
+            "rubric_version": DEFAULT_RUBRIC_VERSION,
+            "unrated": True,
+        }
+    ]
+
+
+def test_override_that_scores_an_unrated_type_wins(conn: Connection) -> None:
     pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _seed_classified(conn, pid, rid, scope_id, "Other (Non-evidence documents)")
+    _seed_classified(conn, pid, rid, scope_id, "Unknown / Insufficient information")
+    ctx = AppraiseContext(
+        scope_id=scope_id,
+        intent="Test",
+        context={"appraisal": {"rubric": {"Other (Non-evidence documents)": 2}}},
+    )
 
-    counts = appraise_sources(conn, task_id=pid, run_id=rid, context=_ctx(scope_id))
+    counts = appraise_sources(conn, task_id=pid, run_id=rid, context=ctx)
 
-    assert counts["appraised"] == 0
-    assert counts["skipped_non_evidence"] == 1
-    assert counts["skipped_unknown"] == 0
-    assert _appraisal_rows(conn, pid) == []
+    assert counts["appraised"] == 1
+    assert counts["by_score"] == {2: 1}
+    assert counts["appraised_unrated"] == 1
+    assert sorted(
+        (r.quality_score or 0, r.unrated) for r in _appraisal_rows(conn, pid)
+    ) == [(0, True), (2, False)]
 
 
-def test_unknown_skipped_and_counted(conn: Connection) -> None:
+def test_demoted_unrated_type_is_not_appraised(conn: Connection) -> None:
     pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    _seed_classified(conn, pid, rid, scope_id, "Unknown / Insufficient information")
+    _, tss_id = _seed_classified(conn, pid, rid, scope_id, "Unknown / Insufficient information")
+    seed_screening_result(conn, pid, rid, scope_id, tss_id, status="not_relevant", screen_stage=2)
 
     counts = appraise_sources(conn, task_id=pid, run_id=rid, context=_ctx(scope_id))
 
-    assert counts["appraised"] == 0
-    assert counts["skipped_unknown"] == 1
-    assert counts["skipped_non_evidence"] == 0
+    assert counts["appraised_unrated"] == 0
+    assert counts["skipped_demoted"] == 1
     assert _appraisal_rows(conn, pid) == []
 
 
@@ -350,15 +415,16 @@ def test_mixed_rerun_skip_counts_stable_and_invariant_holds(conn: Connection) ->
     _, tss_unclassified = seed_source(conn, pid)
     seed_screening_result(conn, pid, rid, scope_id, tss_unclassified)
 
-    for expected_appraised, expected_already in [(1, 0), (0, 1)]:
+    for expected_appraised, expected_unrated, expected_already in [(1, 2, 0), (0, 0, 3)]:
         counts = appraise_sources(conn, task_id=pid, run_id=rid, context=_ctx(scope_id))
         assert counts["appraised"] == expected_appraised
+        assert counts["appraised_unrated"] == expected_unrated
         assert counts["already_appraised"] == expected_already
-        assert counts["skipped_non_evidence"] == 1
-        assert counts["skipped_unknown"] == 1
+        assert counts["skipped_non_evidence"] == 0
+        assert counts["skipped_unknown"] == 0
         assert counts["unclassified"] == 1
         assert (
-            counts["appraised"] + counts["already_appraised"]
+            counts["appraised"] + counts["appraised_unrated"] + counts["already_appraised"]
             + counts["skipped_non_evidence"] + counts["skipped_unknown"]
             + counts["skipped_demoted"]
             == classification_rows
@@ -385,8 +451,8 @@ def test_rubric_version_persisted_on_every_row(conn: Connection) -> None:
 
     rows = _appraisal_rows(conn, pid)
     assert len(rows) == 2
-    assert all(r.rubric_version == "v2-hierarchy-v1" for r in rows)
-    assert DEFAULT_RUBRIC_VERSION == "v2-hierarchy-v1"
+    assert all(r.rubric_version == "v2-hierarchy-v2" for r in rows)
+    assert DEFAULT_RUBRIC_VERSION == "v2-hierarchy-v2"
 
 
 def test_appraised_by_run_id(conn: Connection) -> None:
@@ -531,7 +597,7 @@ def test_cross_task_fk_rejected(conn: Connection) -> None:
             "INSERT INTO source_appraisal_result "
             "(source_appraisal_result_id, evidence_scope_id, task_source_snapshot_id, "
             " task_id, appraised_by_run_id, quality_score, rubric_version, appraised_at) "
-            "VALUES (:sarid, :scope_id, :tss_id, :pid_a, :rid_a, 3, 'v2-hierarchy-v1', :ts)"
+            "VALUES (:sarid, :scope_id, :tss_id, :pid_a, :rid_a, 3, 'v2-hierarchy-v2', :ts)"
         ), {
             "sarid": uuid.uuid4(),
             "scope_id": scope_id,
@@ -592,26 +658,29 @@ def test_harness_appraise_component(conn: Connection) -> None:
         provider=StubEchoProvider(),
     )
 
-    # One appraisal row (only the SR source; non-evidence skipped)
-    rows = _appraisal_rows(conn, pid)
-    assert len(rows) == 1
-    assert rows[0].task_source_snapshot_id == tss_sr
-    assert rows[0].quality_score == 5
+    # Two appraisal rows: the SR source scored, the non-evidence source Unrated (D7)
+    rows = {r.task_source_snapshot_id: r for r in _appraisal_rows(conn, pid)}
+    assert set(rows) == {tss_sr, tss_non_ev}
+    assert (rows[tss_sr].quality_score, rows[tss_sr].unrated) == (5, False)
+    assert (rows[tss_non_ev].quality_score, rows[tss_non_ev].unrated) == (None, True)
 
     log_entries = events.read(conn, pid)
     summary = outcome["summary"]
     assert summary is not None
     assert summary["appraised"] == 1
+    assert summary["appraised_unrated"] == 1
     assert summary["by_score"] == {5: 1}  # in-memory summary, pre-JSON (int keys)
-    assert summary["skipped_non_evidence"] == 1
+    assert summary["skipped_non_evidence"] == 0
     assert summary["skipped_unknown"] == 0
     assert summary["already_appraised"] == 0
     assert summary["unclassified"] == 0
 
-    # No source.appraised event for the skipped row
+    # One source.appraised event per row, the Unrated one flagged
     appraised_events = [e for e in log_entries if e["event_type"] == "source.appraised"]
-    assert len(appraised_events) == 1
-    assert appraised_events[0]["payload"]["task_source_snapshot_id"] == str(tss_sr)
+    assert {
+        e["payload"]["task_source_snapshot_id"]: e["payload"].get("unrated")
+        for e in appraised_events
+    } == {str(tss_sr): None, str(tss_non_ev): True}
 
     run_row = conn.execute(select(runs).where(runs.c.run_id == rid_appraise)).one()
     assert run_row.status == "succeeded"
@@ -634,7 +703,7 @@ def test_source_appraised_event_payload(conn: Connection) -> None:
         "task_source_snapshot_id": str(tss_id),
         "evidence_scope_id": str(scope_id),
         "quality_score": 5,
-        "rubric_version": "v2-hierarchy-v1",
+        "rubric_version": "v2-hierarchy-v2",
     }
 
 

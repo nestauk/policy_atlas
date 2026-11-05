@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import email.utils
 import http.cookiejar
 import ipaddress
+import random
 import select
 import socket
 import ssl
@@ -12,6 +14,7 @@ import time
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, cast
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
@@ -21,10 +24,17 @@ import structlog
 
 from policy_atlas.core.liveness import publish_current_tick
 from policy_atlas.evidence_search.sourcing.ingest_full_text import (
+    DEADLINE_MARGIN_S,
+    EUROPE_PMC_FULL_TEXT_URL,
+    EUROPE_PMC_HOST,
+    FETCH_DEADLINE,
     DocumentFetcher,
     FetchResult,
     FixtureFetcher,
     _redact_url,
+)
+from policy_atlas.evidence_search.sourcing.ingest_full_text import (
+    normalise_pmcid as normalise_pmcid,  # re-exported: callers import it from here
 )
 
 log = structlog.get_logger()
@@ -32,7 +42,21 @@ log = structlog.get_logger()
 FETCH_TIMEOUT_S = 30.0
 REDIRECT_HOP_CAP = 5
 MAX_DOCUMENT_BYTES = 25_000_000
+# JATS articles are small (well under 5 MB); a lower cap bounds how far expat's
+# entity expansion (a ratio, not an absolute) can grow inside a parse worker.
+EUROPE_PMC_MAX_BYTES = 10_000_000
 RETRY_BACKOFF_S = 2.0
+# Workers that fail together would retry together. The fixed wait is spread by this
+# fraction either way (2 s becomes 1 s to 3 s). A host's own ``Retry-After`` is not changed.
+RETRY_JITTER = 0.5
+# After a 429 or 503 the host gets a rest: later requests to it wait out the time it asked
+# for (never more than this), so a warm worker does not hit it again straight away.
+HOST_COOLDOWN_CAP_S = 10.0
+# Task 057 (N2): a 429 or 503 carrying ``Retry-After`` is retried after the delay the
+# host asked for (seconds, or an HTTP date), never longer than this. A missing or
+# malformed header keeps the fixed RETRY_BACKOFF_S wait.
+RETRY_AFTER_CAP_S = 30.0
+_RETRY_AFTER_STATUSES = frozenset({429, 503})
 FETCH_MAX_CONCURRENCY = 10
 PER_HOST_MAX_CONCURRENCY = 2
 PER_HOST_MIN_INTERVAL_S = 1.0
@@ -49,7 +73,8 @@ PAYWALL_MARKERS = (
     "log in via your institution",
 )
 
-USER_AGENT = "policy-atlas/0.1 (+research; contact via repo)"
+# The project page tells a host who is fetching and how to reach us.
+USER_AGENT = "policy-atlas/0.1 (+https://www.nesta.org.uk/project/policy-atlas/)"
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
@@ -81,6 +106,7 @@ class _HostState:
     semaphore: threading.Semaphore
     lock: threading.Lock
     last_start_at: float | None = None
+    cooldown_until: float | None = None
 
 
 @dataclass
@@ -91,6 +117,9 @@ class _Redirect:
 @dataclass(frozen=True)
 class _RetryableStatus:
     status_code: int
+    # Seconds the host asked us to wait (``Retry-After`` on a 429 or 503), already
+    # capped; None means no usable header, so the fixed backoff applies.
+    retry_after_s: float | None = None
 
 
 @dataclass
@@ -278,6 +307,7 @@ class LiveDocumentFetcher:
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         self._resolver = resolver or _default_resolver
+        self._transport = transport
         self._clock = clock
         self._sleep = sleep
         cookie_jar = http.cookiejar.CookieJar(
@@ -334,6 +364,40 @@ class LiveDocumentFetcher:
             )
             publish_current_tick(stage="acquire", note="A source could not be fetched — recorded.")
             return FetchResult(status="error", error="fetch_error")
+
+    def fetch_europe_pmc_xml(self, pmcid: str) -> bytes | None:
+        """Download one article's JATS XML from Europe PMC under this fetcher's limits.
+
+        The request takes a slot from the same overall limit as every other
+        document fetch and a per-host slot for ``www.ebi.ac.uk`` (at most
+        ``PER_HOST_MAX_CONCURRENCY`` at once, starts at least
+        ``PER_HOST_MIN_INTERVAL_S`` apart), with the usual ``FETCH_TIMEOUT_S``.
+        The ingest pipeline finds this method by duck typing: the fixture
+        fetcher has none, so fixture replay never contacts Europe PMC.
+
+        Args:
+            pmcid: PubMed Central id in ``PMC<digits>`` form.
+
+        Returns:
+            The XML bytes, or ``None`` when Europe PMC has no usable full text
+            (see ``fetch_europe_pmc_xml``).
+        """
+        # A fresh pinned-IP transport per call: the client below closes its
+        # transport on exit, so the pooled one behind ``self._client`` must not
+        # be handed over. A test transport is passed through (zero egress).
+        transport = (
+            self._transport
+            if self._transport is not None
+            else _PinnedIPTransport(self._resolver)
+        )
+        with self._global_semaphore, self._host_slot(EUROPE_PMC_HOST):
+            body = fetch_europe_pmc_xml(pmcid, timeout=FETCH_TIMEOUT_S, transport=transport)
+        if body is not None:
+            # On the shared in-flight byte budget like every other body; the ingest
+            # loop releases it through ``release_body`` once the parser has it.
+            self._account_bytes(len(body))
+            self._register_body_lease(len(body), 1)
+        return body
 
     def release_body(self, n_bytes: int) -> None:
         """Release byte-budget accounting for a returned successful body.
@@ -433,9 +497,8 @@ class LiveDocumentFetcher:
                     log.warning("fetch_live.blocked", url=_redact_url(url))
                     return FetchResult(status="error", error="blocked")
                 if _is_timeout_error(exc):
-                    if attempts < 1:
+                    if attempts < 1 and self._wait_before_retry(url, _jittered(RETRY_BACKOFF_S)):
                         log.warning("fetch_live.retry", url=_redact_url(url), reason="timeout")
-                        self._sleep(RETRY_BACKOFF_S)
                         attempts += 1
                         continue
                     log.warning("fetch_live.timeout", url=_redact_url(url))
@@ -448,13 +511,20 @@ class LiveDocumentFetcher:
                 return FetchResult(status="error", error="fetch_error")
 
             if isinstance(outcome, _RetryableStatus):
-                if attempts < 1:
+                wait_s = (
+                    outcome.retry_after_s
+                    if outcome.retry_after_s is not None
+                    else _jittered(RETRY_BACKOFF_S)
+                )
+                if outcome.status_code in _RETRY_AFTER_STATUSES:
+                    self._cool_host(url, wait_s)
+                if attempts < 1 and self._wait_before_retry(url, wait_s):
                     log.warning(
                         "fetch_live.retry",
                         url=_redact_url(url),
                         status_code=outcome.status_code,
+                        wait_s=wait_s,
                     )
-                    self._sleep(RETRY_BACKOFF_S)
                     attempts += 1
                     continue
                 log.warning(
@@ -465,6 +535,27 @@ class LiveDocumentFetcher:
                 return FetchResult(status="error", error="fetch_error")
             return outcome
 
+    def _wait_before_retry(self, url: str, wait_s: float) -> bool:
+        """Sleep before the one retry, unless the wait would run past the deadline.
+
+        The deadline is the per-document one the ingest function sets in
+        ``FETCH_DEADLINE`` (a value of this fetcher's clock; none in-process). A
+        wait that would end within ``DEADLINE_MARGIN_S`` of it is not started.
+
+        Args:
+            url: The URL being retried (redacted in the log line).
+            wait_s: Seconds to wait before the retry.
+
+        Returns:
+            True after sleeping; False when the retry is given up for the deadline.
+        """
+        deadline = FETCH_DEADLINE.get()
+        if deadline is not None and self._clock() + wait_s > deadline - DEADLINE_MARGIN_S:
+            log.warning("fetch_live.retry_past_deadline", url=_redact_url(url), wait_s=wait_s)
+            return False
+        self._sleep(wait_s)
+        return True
+
     def _attempt_request(self, url: str) -> FetchResult | _Redirect | _RetryableStatus:
         guarded = _guard_url(url, self._resolver)
         host = _host_from_guarded_url(guarded)
@@ -472,6 +563,16 @@ class LiveDocumentFetcher:
             log.info("fetch_live.request", url=_redact_url(guarded))
             with self._client.stream("GET", guarded) as response:
                 return self._response_outcome(guarded, response)
+
+    def _cool_host(self, url: str, wait_s: float) -> None:
+        """Make later requests to this URL's host wait out a 429 or 503, up to a cap."""
+        host = urlsplit(url).hostname
+        if host is None:
+            return
+        state = self._host_state(host.lower())
+        with state.lock:
+            until = self._clock() + min(wait_s, HOST_COOLDOWN_CAP_S)
+            state.cooldown_until = max(state.cooldown_until or 0.0, until)
 
     def _host_slot(self, host: str) -> _HostSlot:
         return _HostSlot(self._host_state(host), self._clock, self._sleep)
@@ -497,7 +598,12 @@ class LiveDocumentFetcher:
                 return FetchResult(status="error", error="fetch_error")
             return _Redirect(redirect_url)
         if status_code in _RETRYABLE_STATUSES:
-            return _RetryableStatus(status_code)
+            retry_after_s = (
+                retry_after_seconds(response.headers.get("retry-after"), now=datetime.now(UTC))
+                if status_code in _RETRY_AFTER_STATUSES
+                else None
+            )
+            return _RetryableStatus(status_code, retry_after_s)
         if status_code in {401, 402}:
             return FetchResult(status="error", error="paywall")
         if status_code == 403:
@@ -546,8 +652,15 @@ class LiveDocumentFetcher:
         # actual body size on completion (the part release_body later frees).
         self._account_bytes(MAX_DOCUMENT_BYTES)
         body = bytearray()
+        deadline = FETCH_DEADLINE.get()
         try:
             for chunk in response.iter_bytes():
+                # task 057 review (security 2): a slow-drip body stops at the
+                # per-document deadline, like a per-operation timeout.
+                if deadline is not None and self._clock() > deadline:
+                    self._release_accounted_bytes(MAX_DOCUMENT_BYTES)
+                    log.warning("fetch_live.timeout", reason="deadline_mid_body")
+                    return FetchResult(status="error", error="timeout")
                 if not chunk:
                     continue
                 if len(body) + len(chunk) > MAX_DOCUMENT_BYTES:
@@ -604,11 +717,18 @@ class _HostSlot:
         self._state.semaphore.acquire()
         with self._state.lock:
             now = self._clock()
+            wait_s = 0.0
             if self._state.last_start_at is not None:
                 wait_s = PER_HOST_MIN_INTERVAL_S - (now - self._state.last_start_at)
-                if wait_s > 0:
-                    self._sleep(wait_s)
-                    now = self._clock()
+            if self._state.cooldown_until is not None:
+                rest_s = self._state.cooldown_until - now
+                deadline = FETCH_DEADLINE.get()
+                if deadline is not None:  # never rest past the document's own deadline
+                    rest_s = min(rest_s, deadline - DEADLINE_MARGIN_S - now)
+                wait_s = max(wait_s, rest_s)
+            if wait_s > 0:
+                self._sleep(wait_s)
+                now = self._clock()
             self._state.last_start_at = now
 
     def __exit__(
@@ -618,6 +738,35 @@ class _HostSlot:
         traceback: object | None,
     ) -> None:
         self._state.semaphore.release()
+
+
+def retry_after_seconds(value: str | None, *, now: datetime) -> float | None:
+    """Read a ``Retry-After`` header as a wait in seconds, capped at 30 s.
+
+    The header is either a whole number of seconds (``Retry-After: 7``) or an HTTP
+    date (``Retry-After: Wed, 21 Oct 2026 07:28:00 GMT``); a date in the past means
+    no wait.
+
+    Args:
+        value: The header's value, or None when the response had none.
+        now: The current time, to turn a date into a number of seconds.
+
+    Returns:
+        Seconds to wait (at most ``RETRY_AFTER_CAP_S``), or None when the header is
+        missing or malformed, so the caller keeps its fixed backoff.
+    """
+    if value is None:
+        return None
+    text = value.strip()
+    if text.isascii() and text.isdigit():
+        return min(float(int(text)), RETRY_AFTER_CAP_S)
+    try:
+        when = email.utils.parsedate_to_datetime(text)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return min(max((when - now).total_seconds(), 0.0), RETRY_AFTER_CAP_S)
 
 
 def _default_resolver(host: str, port: int) -> Sequence[Any]:
@@ -691,6 +840,11 @@ def _is_refused_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
 
 def _default_port(scheme: str) -> int:
     return 443 if scheme.lower() == "https" else 80
+
+
+def _jittered(seconds: float) -> float:
+    """Spread a wait by ``RETRY_JITTER`` either way, so parallel workers do not retry in step."""
+    return seconds * random.uniform(1 - RETRY_JITTER, 1 + RETRY_JITTER)  # noqa: S311
 
 
 def _host_from_guarded_url(url: str) -> str:
@@ -776,3 +930,75 @@ def select_document_fetcher(live: bool) -> DocumentFetcher:
         assert fetcher.mode == "live"
         return fetcher
     return FixtureFetcher()
+
+
+
+
+def fetch_europe_pmc_xml(
+    pmcid: str,
+    *,
+    timeout: float,
+    transport: httpx.BaseTransport | None = None,
+) -> bytes | None:
+    """Download one article's full text as JATS XML from Europe PMC.
+
+    JATS is the XML format journals use to deposit articles; it keeps the
+    section headings and tables that a PDF loses. The request goes to
+    ``www.ebi.ac.uk`` only and carries nothing but the id in the address: no
+    query string, no cookies, no other headers than the product's user agent.
+    Redirects are not followed and the body is capped at ``EUROPE_PMC_MAX_BYTES``
+    (lower than the PDF cap: JATS files are small).
+
+    Args:
+        pmcid: PubMed Central id in ``PMC<digits>`` form (see ``normalise_pmcid``).
+            Anything else is refused before any request is made.
+        timeout: Seconds allowed for connecting and for each read.
+        transport: Optional httpx transport, for tests that must make no
+            network call. The default is the same guarded transport the live
+            document fetcher uses (it refuses private and local addresses).
+
+    Returns:
+        The XML bytes, or ``None`` when the id is invalid, Europe PMC has no
+        full text for it (404 and other non-200 answers), the answer is not XML,
+        it is too large, or the request fails. Never raises for these outcomes.
+    """
+    if not isinstance(pmcid, str) or normalise_pmcid(pmcid) != pmcid:
+        log.warning("europe_pmc.invalid_pmcid")
+        return None
+    url = EUROPE_PMC_FULL_TEXT_URL.format(pmcid=pmcid)
+    try:
+        with httpx.Client(
+            transport=transport if transport is not None else _PinnedIPTransport(),
+            timeout=httpx.Timeout(timeout),
+            follow_redirects=False,
+            trust_env=False,
+            headers={"User-Agent": USER_AGENT, "Accept": "application/xml"},
+        ) as client, client.stream("GET", url) as response:
+            if response.status_code != 200:
+                log.info("europe_pmc.no_full_text", pmcid=pmcid, status_code=response.status_code)
+                return None
+            body = _read_capped(response)
+    except Exception as exc:  # network failures are per-document outcomes, not crashes
+        log.warning("europe_pmc.fetch_error", pmcid=pmcid, exc_type=type(exc).__name__)
+        return None
+    if body is None:
+        log.warning("europe_pmc.too_large", pmcid=pmcid)
+        return None
+    if not _looks_like_xml(body):
+        log.info("europe_pmc.not_xml", pmcid=pmcid)
+        return None
+    return body
+
+
+def _read_capped(response: httpx.Response) -> bytes | None:
+    body = bytearray()
+    for chunk in response.iter_bytes():
+        if len(body) + len(chunk) > EUROPE_PMC_MAX_BYTES:
+            return None
+        body.extend(chunk)
+    return bytes(body)
+
+
+def _looks_like_xml(body: bytes) -> bool:
+    head = body[:512].lstrip(b"\xef\xbb\xbf \t\r\n")
+    return head.startswith(b"<") and not head.lower().startswith((b"<html", b"<!doctype html"))

@@ -80,13 +80,13 @@ from policy_atlas.api.deps import (
     get_settings,
     get_upload_store,
 )
-from policy_atlas.api.readmodels.repository import (
+from policy_atlas.api.read_models.repository import (
     _authorships,
     _clamped_quote_window,
     _url,
     _venue,
 )
-from policy_atlas.api.routers._access import accessible_task, readable_or_public_task
+from policy_atlas.api.routers.access import accessible_task, readable_or_public_task
 from policy_atlas.api.routers.runs import start_toc_check
 from policy_atlas.api.settings import Settings
 from policy_atlas.api.toc_start import clear_queue, post_agent_message, queued_link_ids

@@ -68,9 +68,11 @@ from tests.runtime.test_baseline_gate import scoping_plan
 #: prompt version ``extract_interventions_v4`` and schema ``interventions_v3``
 #: (task 046, amendment 4, Phase 27; before that for amendment 3's v3 and v2):
 #: both are fingerprint components, so the earlier values no longer apply.
+#: Re-pinned again for the quote verifier ``qv_v2`` (task 057, N14): re-digesting
+#: with ``qv_v1`` reproduces the earlier values, so the verifier is the only change.
 PINNED_NO_CONTEXT = {
-    "stub": "b928a0f384ead5cfabd86ff7ed6ec1525cc8df680fa544902db1bf4fe9b19b97",
-    "live": "279a37ef82477badcc541996cda6b494bf7888c6dd48554b4369b248d24b2ddb",
+    "stub": "f874c63e4a2e180edffb9671cbb51ac05af935effd73746123d3130f6c87a9ec",
+    "live": "c79dce67ca7b09f733df7e89316aef9a3397b82bf75e648a8ec6bea44b98c355",
 }
 
 CONTEXT = TaggingContext(

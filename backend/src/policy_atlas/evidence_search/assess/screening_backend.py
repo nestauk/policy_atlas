@@ -1,4 +1,7 @@
-"""Screening backend seam for the screen_v2 and screen_fulltext_v1 calls."""
+"""Screening backend seam for the abstract-screen and full-text-screen calls.
+
+Prompt versions live in screen_prompt.py.
+"""
 
 from __future__ import annotations
 
@@ -8,10 +11,14 @@ from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import confidence_is_valid, scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.assess.screen_prompt import (
+    SCREEN_EFFORT,
+    SCREEN_FULL_EFFORT,
+    SCREEN_FULL_MODEL,
     SCREEN_FULLTEXT_PROMPT_VERSION,
     SCREEN_MAX_OUTPUT_TOKENS,
     SCREEN_MODEL,
@@ -22,6 +29,7 @@ from policy_atlas.evidence_search.assess.screen_prompt import (
     build_screen_fulltext_messages,
     build_screen_messages,
 )
+from policy_atlas.evidence_search.synthesis.cache_modes import PromptCache, cache_mode_for
 
 
 class ScreeningBackend(Protocol):
@@ -98,12 +106,7 @@ class OpenAIScreeningBackend:
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAIScreeningBackend",
-            timeout=120.0,
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIScreeningBackend")
         self._langfuse_client = langfuse_client
 
     def _parse_once(
@@ -111,6 +114,10 @@ class OpenAIScreeningBackend:
         *,
         messages: list[ChatCompletionMessageParam],
         usage_event: str,
+        model: str,
+        reasoning_effort: str,
+        prompt_cache: PromptCache,
+        step: str,
     ) -> UsageResult[ScreenRepWire]:
         parsed, usage = parse_structured(
             self._client,
@@ -118,7 +125,10 @@ class OpenAIScreeningBackend:
             response_format=ScreenRepWire,
             usage_event=usage_event,
             label="screening",
-            model=SCREEN_MODEL,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            prompt_cache=prompt_cache,
+            timeout_s=route().timeout_for(step),
             max_completion_tokens=SCREEN_MAX_OUTPUT_TOKENS,
         )
         return _scrub_rep(parsed), usage
@@ -181,13 +191,17 @@ class OpenAIScreeningBackend:
                 data_type="NUMERIC",
             )
 
-        rep, usage = tracing.traced_call(
+        rep, usage = tracing.traced_attempts(
             langfuse_client,
             name="screen:abstract",
-            as_type="generation",
+            step="screen_abstract",
             call=lambda: self._parse_once(
                 messages=messages,
                 usage_event="screening.screen.usage",
+                model=SCREEN_MODEL,
+                reasoning_effort=SCREEN_EFFORT,
+                prompt_cache=cache_mode_for("screen_abstract"),
+                step="screen_abstract",
             ),
             update=_update,
             after=_score_trace,
@@ -225,7 +239,7 @@ class OpenAIScreeningBackend:
                 usage_details=usage_details(usage),
                 input={"messages": messages},
                 output=rep.model_dump(),
-                model=SCREEN_MODEL,
+                model=SCREEN_FULL_MODEL,
                 metadata={
                     "prompt_version": SCREEN_FULLTEXT_PROMPT_VERSION,
                     "tss_id": payload.tss_id,
@@ -253,13 +267,17 @@ class OpenAIScreeningBackend:
                 data_type="NUMERIC",
             )
 
-        rep, usage = tracing.traced_call(
+        rep, usage = tracing.traced_attempts(
             langfuse_client,
             name="screen:full",
-            as_type="generation",
+            step="screen_full",
             call=lambda: self._parse_once(
                 messages=messages,
                 usage_event="screening.screen.usage",
+                model=SCREEN_FULL_MODEL,
+                reasoning_effort=SCREEN_FULL_EFFORT,
+                prompt_cache=cache_mode_for("screen_full"),
+                step="screen_full",
             ),
             update=_update,
             after=_score_trace,

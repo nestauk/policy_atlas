@@ -187,7 +187,7 @@ def main() -> None:
     http = httpx.Client(
         headers={"Authorization": f"Bearer {Path(args.token_file).read_text().strip()}"}, timeout=60
     )
-    client = resolve_openai_client(None, backend_name="plausibility", timeout=300.0, max_retries=2)
+    client = resolve_openai_client(None, backend_name="plausibility")
     model = route().model_for(MODEL_STEP)
     openalex = OpenAlexLiveBackend(os.environ["OPENALEX_API_KEY"], email=os.environ.get("OPENALEX_EMAIL"))
 
@@ -198,7 +198,10 @@ def main() -> None:
             messages=messages,
             response_format=fmt,
             model=model,
-            reasoning_effort=route().reasoning_effort_for(model),
+            step=MODEL_STEP,
+            reasoning_effort=route().effort_for(MODEL_STEP),
+            timeout_s=300.0,
+            prompt_cache="off",
             max_output_tokens=4000,
             usage_event="plausibility.usage",
             label=label,

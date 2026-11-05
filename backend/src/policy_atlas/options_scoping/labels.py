@@ -57,6 +57,12 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.evidence_search.assess.appraise import DEFAULT_RUBRIC_VERSION
 
+#: Rubric versions whose scores an inherited appraisal may carry as current. Task 056
+#: bumped the version to add the Unrated state; the 1 to 5 scores did not change, so
+#: rows scored under the previous version are not stale (the lead's call, 2026-11-02;
+#: without it every linked Evidence search task would re-classify every document).
+COMPATIBLE_RUBRIC_VERSIONS: frozenset[str] = frozenset({"v2-hierarchy-v1", DEFAULT_RUBRIC_VERSION})
+
 #: Where a document's labels came from.
 LabelProvenance = Literal["own", "inherited", "absent"]
 
@@ -68,7 +74,8 @@ class DocumentLabels:
     Args:
         evidence_type: The classified primary evidence type, or ``None``.
         quality_score: The appraisal score (1..5), or ``None`` — including
-            when an inherited appraisal is under a stale rubric.
+            when an inherited appraisal is under a stale rubric, and for an
+            Unrated appraisal.
         rubric_version: The rubric the appraisal used, or ``None`` when there
             is no appraisal.
         provenance: ``own``, ``inherited`` or ``absent``.
@@ -78,6 +85,9 @@ class DocumentLabels:
             from the current one and its score was withheld.
         type_inherited: ``True`` when the evidence type came through the link.
         tier_inherited: ``True`` when the appraisal came through the link.
+        unrated: ``True`` when the appraisal is Unrated: a row with no score
+            for a document typed Unknown or Other (task 056, D7). Read it with
+            :func:`~policy_atlas.evidence_search.assess.appraise.appraisal_label`.
     """
 
     evidence_type: str | None
@@ -89,6 +99,7 @@ class DocumentLabels:
     stale_rubric: bool = False
     type_inherited: bool = False
     tier_inherited: bool = False
+    unrated: bool = False
 
 
 _ABSENT = DocumentLabels(
@@ -120,6 +131,7 @@ def _inherited_rows(
             task_link.c.source_capability_run_id,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
+            source_appraisal_result.c.unrated,
             source_appraisal_result.c.rubric_version,
         )
         .select_from(
@@ -167,7 +179,7 @@ def _inherited_rows(
     for row in rows:
         if row.task_source_snapshot_id in first:
             continue
-        if row.primary_evidence_type is None and row.quality_score is None:
+        if row.primary_evidence_type is None and row.quality_score is None and not row.unrated:
             continue
         first[row.task_source_snapshot_id] = row
     return first
@@ -189,7 +201,7 @@ def labels_for_snapshots(
         and its links hold no label for the document.
     """
     # Imported here: the read models import this module, so a module-level import cycles.
-    from policy_atlas.api.readmodels.repository import latest_row_by_id
+    from policy_atlas.api.read_models.repository import latest_row_by_id
 
     ids = set(tss_ids)
     if not ids:
@@ -212,6 +224,7 @@ def labels_for_snapshots(
             select(
                 source_appraisal_result.c.task_source_snapshot_id,
                 source_appraisal_result.c.quality_score,
+                source_appraisal_result.c.unrated,
                 source_appraisal_result.c.rubric_version,
                 source_appraisal_result.c.appraised_at,
             )
@@ -245,16 +258,19 @@ def labels_for_snapshots(
             evidence_type = link_row.primary_evidence_type
             type_inherited = True
         quality_score: int | None = None
+        unrated = False
         rubric_version: str | None = None
         stale = False
         if own_appraisal is not None:
             quality_score = own_appraisal.quality_score
+            unrated = own_appraisal.unrated
             rubric_version = own_appraisal.rubric_version
-        elif link_row is not None and link_row.quality_score is not None:
+        elif link_row is not None and (link_row.quality_score is not None or link_row.unrated):
             tier_inherited = True
             rubric_version = link_row.rubric_version
-            if rubric_version == DEFAULT_RUBRIC_VERSION:
+            if rubric_version in COMPATIBLE_RUBRIC_VERSIONS:
                 quality_score = link_row.quality_score
+                unrated = bool(link_row.unrated)
             else:
                 stale = True
         if type_inherited or tier_inherited:
@@ -269,6 +285,7 @@ def labels_for_snapshots(
                 stale_rubric=stale,
                 type_inherited=type_inherited,
                 tier_inherited=tier_inherited,
+                unrated=unrated,
             )
         elif own_class is not None or own_appraisal is not None:
             resolved[tss_id] = DocumentLabels(
@@ -276,6 +293,7 @@ def labels_for_snapshots(
                 quality_score=quality_score,
                 rubric_version=rubric_version,
                 provenance="own",
+                unrated=unrated,
             )
         else:
             resolved[tss_id] = _ABSENT

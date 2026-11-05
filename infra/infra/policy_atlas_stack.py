@@ -4,6 +4,8 @@
 # * Security groups: backend containers
 # * DB security group ingress rule so backend can reach RDS (port 5432)
 # * Listener rule on the shared ALB for host-header routing
+# * The queued document-ingest worker (task 057): queue, dead-letter queue,
+#   Lambda function and its dead-letter alarm (components/ingest_worker.py)
 #
 # Pre-requisites (deployed separately):
 # * NetworkStack (provides shared ALB, HTTPS listener, security group via SSM)
@@ -31,7 +33,13 @@ from aws_cdk import (
     aws_logs as logs,
 )
 from infra.cognito_auth import CognitoAuth
+from infra.components.ingest_worker import IngestWorker
 from infra.components.shared_alb import import_shared_alb
+
+# How the API reads documents' full text (task 057): "in_process" parses them
+# inside the API task as before; "queued" sends one message per document to
+# the ingest function. Set per environment in pa_config.json.
+INGEST_MODES = ("in_process", "queued")
 
 
 class PolicyAtlasStack(Stack):
@@ -88,6 +96,12 @@ class PolicyAtlasStack(Stack):
         # a task whose secret names a field the secret does not have: add the
         # field to the app secret first, then switch the route in pa_config.json.
         model_route = be_config.get("model_route", "openai-direct")
+        ingest_mode = be_config.get("ingest_mode")
+        if ingest_mode not in INGEST_MODES:
+            raise ValueError(
+                f"backend.ingest_mode must be one of {INGEST_MODES} in pa_config.json, "
+                f"got {ingest_mode!r}."
+            )
         app_secrets = {
             "DATABASE_URL": ecs.Secret.from_secrets_manager(db_secret, field="db_connection_string"),
             "OPENAI_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OPENAI_API_KEY"),
@@ -140,8 +154,20 @@ class PolicyAtlasStack(Stack):
             domain_name=domain_name,
             domain_prefix=pa_app_config["cognito_domain_prefix"],
         )
-        backend_image = ecs.ContainerImage.from_asset("../backend",
+        # One image build for three consumers: the API task, the migration
+        # task and the ingest function (which starts it with another command).
+        backend_image_asset = ecr_assets.DockerImageAsset(self, "BackendImageAsset",
+            directory="../backend",
             platform=ecr_assets.Platform.LINUX_AMD64,
+        )
+        backend_image = ecs.ContainerImage.from_docker_image_asset(backend_image_asset)
+
+        ingest = IngestWorker(self, "Ingest",
+            vpc=vpc,
+            image_asset=backend_image_asset,
+            db_secret=db_secret,
+            db_security_group=db_security_group,
+            model_route=model_route,
         )
 
         # Files users give a task (task 054 increment 5; one bucket for every
@@ -185,6 +211,8 @@ class PolicyAtlasStack(Stack):
                 "LANGFUSE_TRACING_ENVIRONMENT": env_name,
                 "POLICY_ATLAS_MODEL_ROUTE": model_route,
                 "POLICY_ATLAS_UPLOAD_BUCKET": uploads_bucket.bucket_name,
+                "POLICY_ATLAS_INGEST_MODE": ingest_mode,
+                "POLICY_ATLAS_INGEST_QUEUE_URL": ingest.queue.queue_url,
             },
             secrets=app_secrets,
             port_mappings=[ecs.PortMapping(
@@ -203,6 +231,10 @@ class PolicyAtlasStack(Stack):
         # EXECUTION role (CDK grants it via ecs.Secret.from_secrets_manager);
         # the app never calls Secrets Manager at runtime, so a task-role grant
         # would only widen what a compromised process could read.
+
+        # The API sends one message per document to the ingest queue
+        # (SendMessage, GetQueueAttributes, GetQueueUrl; nothing else).
+        ingest.queue.grant_send_messages(be_task_def.task_role)
 
         migration_task_def = ecs.FargateTaskDefinition(
             self, "PolicyAtlasMigrationTaskDef",

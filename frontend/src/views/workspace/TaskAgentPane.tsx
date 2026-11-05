@@ -54,7 +54,7 @@ import {
   elapsedSeconds,
   formatElapsed,
   runFinishedSignpost,
-  FINISHED_NOTICE,
+  finishedNotice,
   walkKind,
   type WalkKind,
 } from "./runProgress";
@@ -634,7 +634,7 @@ function RunFinishedNotice({
 }) {
   const notice = runFinishedSignpost(taskId, status, kind);
   if (notice === null) return null;
-  const words = FINISHED_NOTICE[kind];
+  const words = finishedNotice(kind, status);
   return (
     <div className="anim-rise mr-8 border-2 border-[#17A88D] bg-[#DDF2EE] px-4 py-3">
       <p className="max-w-prose-measure text-lead text-navy">
@@ -930,6 +930,7 @@ export function TaskAgentPane({
           taskId={taskId}
           status={stream.run.status}
           stages={stream.stages}
+          liveness={stream.liveness}
           plan={stream.plan?.plan}
           startedAt={stream.run.startedAt}
           endedAt={stream.run.endedAt}
@@ -1227,6 +1228,7 @@ export function TaskAgentPane({
           <RunningCardDock
             status={stream.run.status}
             stages={stream.stages}
+            liveness={stream.liveness}
             plan={stream.plan?.plan}
             elapsedLabel={liveElapsed}
             onOpen={() => {

@@ -34,6 +34,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import CallBudget
 from policy_atlas.core.prompt_fields import parse_guidance_channel
 from policy_atlas.core.schema import (
@@ -61,11 +62,9 @@ from policy_atlas.evidence_search.extract.finding_vetter import (
     FINDING_VETTER_MAX_OUTPUT_TOKENS,
     FINDING_VETTER_MODEL,
     FINDING_VETTER_PROMPT_VERSION,
-    FINDING_VETTER_REASONING_EFFORT,
     ICF_FINDING_VETTER_MAX_OUTPUT_TOKENS,
     ICF_FINDING_VETTER_MODEL,
     ICF_FINDING_VETTER_PROMPT_VERSION,
-    ICF_FINDING_VETTER_REASONING_EFFORT,
     FindingVetterBackend,
     ICFFindingVetterBackend,
     ICFVetterVerdictWire,
@@ -151,7 +150,9 @@ WINDOW_OVERLAP_CHUNKS = 1
 OVERSIZE_SUBSEGMENT_OVERLAP = 1_000
 OVERSIZE_POLICY = "char_split_v1"
 EXTRACT_RETRY_CAP = 1
-MAX_CONCURRENT_EXTRACT = 4
+#: Extraction and vetter calls in flight at once; 8, not 4 (task 056, owner 2026-11-02),
+#: so a request stalled at the provider holds an eighth of the pool, not a quarter.
+MAX_CONCURRENT_EXTRACT = 8
 EXTRACTION_PROFILE = PROFILE_ID
 #: The profiles an Evidence search extraction directive may name (the ES
 #: grammar; ``task_plan.EXTRACT_PROFILE_IDS`` pins it at import).
@@ -290,7 +291,7 @@ def extraction_fingerprint(
             {
                 "prompt": FINDING_VETTER_PROMPT_VERSION,
                 "model": FINDING_VETTER_MODEL,
-                "reasoning_effort": FINDING_VETTER_REASONING_EFFORT,
+                "reasoning_effort": route().effort_for("extract_vet_iof_findings"),
                 "max_output_tokens": FINDING_VETTER_MAX_OUTPUT_TOKENS,
             }
             if finding_vetter_active
@@ -332,7 +333,7 @@ def icf_extraction_fingerprint(
             {
                 "prompt": ICF_FINDING_VETTER_PROMPT_VERSION,
                 "model": ICF_FINDING_VETTER_MODEL,
-                "reasoning_effort": ICF_FINDING_VETTER_REASONING_EFFORT,
+                "reasoning_effort": route().effort_for("extract_vet_icf_findings"),
                 "max_output_tokens": ICF_FINDING_VETTER_MAX_OUTPUT_TOKENS,
             }
             if finding_vetter_active

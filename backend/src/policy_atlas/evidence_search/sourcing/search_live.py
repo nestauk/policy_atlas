@@ -63,8 +63,11 @@ OPENALEX_SEMANTIC_MIN_INTERVAL_S = 1.0
 # with a doubling wait: try, wait 1s, try, wait 2s, try, wait 4s, try, give up.
 # OpenAlex returns 500/504 in bursts under load, and a burst usually outlasts a
 # single short wait — one flat retry gave up while the API was still coming
-# back. Worst case a dead host costs 7s of waiting before the call fails.
+# back. Worst case a dead host costs 7s of waiting before the call fails (35s for repeated
+# 429s, which wait 5s, 10s and 20s: RATE_LIMIT_BACKOFF_S).
 RETRY_BACKOFF_S = 1.0
+# A 429 means "too many requests": wait longer than for other errors (5 s, 10 s, 20 s).
+RATE_LIMIT_BACKOFF_S = 5.0
 RETRY_MAX_ATTEMPTS = 4
 # A 429 means the provider is refusing the current rate, which with concurrent
 # callers is the backend's whole pacing, not one thread's. The refused thread
@@ -301,7 +304,8 @@ class _TransportMixin:
                 )
                 if redacted.status_code == 429:
                     self._pause_admission(RATE_LIMIT_PAUSE_S)
-                _sleep(RETRY_BACKOFF_S * 2**attempts)
+                backoff_s = RATE_LIMIT_BACKOFF_S if redacted.status_code == 429 else RETRY_BACKOFF_S
+                _sleep(backoff_s * 2**attempts)
                 if overton_retry_wait and redacted.status_code == 429:
                     _sleep(OVERTON_MIN_INTERVAL_S)
                 attempts += 1

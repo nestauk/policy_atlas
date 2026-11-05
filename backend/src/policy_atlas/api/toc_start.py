@@ -31,7 +31,7 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.locks import task_lock
-from policy_atlas.api.routers._common import active_parentless_walk
+from policy_atlas.api.routers.common import active_parentless_walk
 from policy_atlas.api.routers.runs import _dispatch_lock
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.core.schema import (

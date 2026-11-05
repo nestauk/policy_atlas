@@ -202,13 +202,17 @@ def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> 
     assert (
         stage_for_payload({"component": "screen_full", "registry_component": "screen_full"}) is None
     )
-    # Full-text ingest used to map onto public acquire and overwrite Searching.
+    # Full-text ingest used to map onto public acquire and overwrite Searching;
+    # since task 056 (S5) it has its own public stage, after appraise.
     assert (
         stage_for_payload(
             {"component": "ingest_full_text", "registry_component": "ingest_full_text"}
         )
-        is None
+        == "ingest"
     )
+    stages = [step.stage for step in projected.steps]
+    assert stages.count("acquire") == 1
+    assert stages.index("ingest") == stages.index("appraise") + 1
 
 
 def test_task_agent_turn_is_durable_idempotent_and_ready_turn_persists_plan(

@@ -10,20 +10,18 @@ pure-helper cases need no DB; the reader/loader cases ride the ``conn`` fixture.
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
 from sqlalchemy.engine import Connection
 
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     PRIORITY_FINDINGS_BLOCK,
     SECTION_PROMPT_VERSION,
     build_section_messages,
     build_section_repair_messages,
-)
-from policy_atlas.evidence_search.synthesis.synthesis_prompts_v6 import (
-    build_v6_section_messages,
 )
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     make_findings_reader,
@@ -61,8 +59,9 @@ def _seed() -> dict[str, Any]:
 # --- 1. Version + conditional block ------------------------------------------
 
 
-def test_section_prompt_version_is_v10() -> None:
-    assert SECTION_PROMPT_VERSION == "synthesise_section_v10"
+def test_section_prompt_version_is_v11() -> None:
+    # v11 (task 056 D8/D10/X3): request-shape bump; the prompt text is unchanged.
+    assert SECTION_PROMPT_VERSION == "synthesise_section_v11"
 
 
 def test_block_absent_when_not_active() -> None:
@@ -94,17 +93,9 @@ def test_priority_flag_never_enters_data_payload() -> None:
     seed = {**_seed(), "priority_block_active": True}
     messages = build_section_messages(seed, [], force_emit=False)
     for message in messages[1:]:
-        assert "priority_block_active" not in message["content"]
-
-
-def test_v6_baseline_byte_identical_regardless_of_flag() -> None:
-    """The frozen v6 cost baseline strips the v8-only control flag: adding it to
-    the seed leaves the rendered v6 messages byte-identical."""
-    base = _seed()
-    with_flag = {**_seed(), "priority_block_active": True}
-    a = build_v6_section_messages(base, [], force_emit=False, final_turn_message="END")
-    b = build_v6_section_messages(with_flag, [], force_emit=False, final_turn_message="END")
-    assert a == b
+        # The run message is a content-part list (task 056 D8): serialise so the
+        # check reads its text, not list membership.
+        assert "priority_block_active" not in json.dumps(message["content"])
 
 
 # --- 2. _relevance_annotations reader ----------------------------------------

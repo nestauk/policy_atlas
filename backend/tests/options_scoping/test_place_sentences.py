@@ -31,7 +31,7 @@ from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
     PLACE_DOCUMENTS_MAX,
     build_place_sentences_messages,
 )
-from tests.options_scoping.test_longlist_coverage_046 import _member
+from tests.options_scoping.test_coverage import _member
 
 
 def _doc(key: str, **values: Any) -> PlaceDocument:

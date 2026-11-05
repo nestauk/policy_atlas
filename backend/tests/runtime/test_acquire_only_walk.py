@@ -71,6 +71,7 @@ def test_the_three_chains_are_the_plan_s() -> None:
         ("option_profile", True),
         ("constrain", True),
         ("theme", False),
+        ("shortlist", False),
     )
     assert TARGETED_CHAIN == (
         "acquire",

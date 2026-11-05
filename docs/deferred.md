@@ -860,8 +860,8 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   constraint from 018 stays: nothing new couples to a provider-specific API surface.
   What remains deferred, and to which slice:
   - **Staging and production:** the wiring landed in 053 on 2026-10-21 (owner decision,
-    contract note 9): `backend.model_route` in `infra/pa_config.json` (both environments
-    `openai-direct`), the stack maps `AWS_BEARER_TOKEN_BEDROCK` only on a Bedrock route,
+    contract note 9): `backend.model_route` in `infra/pa_config.json` (staging switched to
+    `bedrock` on 2026-10-28, production on 2026-11-03 by a colleague, dev `f0018c4e`), the stack maps `AWS_BEARER_TOKEN_BEDROCK` only on a Bedrock route,
     and `infra/DEPLOYMENT.md` § 5 has the switch procedure. The history below is kept
     for the reasoning. The owner's plan changed on 2026-10-21:
     the container does **not** mint its own key from the task role. Both keys live in
@@ -1772,6 +1772,15 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   "tests"]`, so `scripts/ops_remove_scoping_tasks.py` (destructive, `--apply`-guarded) and the
   rename tooling are tested but never typechecked. Add `scripts/` to the mypy files or move
   long-lived scripts under `backend/src/policy_atlas/ops` (044 review stack, two lanes).
+- **`test_option_search.py::test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent`
+  hangs intermittently** (seen 2026-10-27 twice in CI: on `dev` eedf9ef9 at 10:29 and on the 055
+  branch at 13:30, each time right after `…interrupts_its_children[raise]` passed, each time until
+  the `verify` job's 40-minute limit; `dev` passed on re-run). Locally the three tests around it
+  took 81 s once and over 150 s another time, with no Postgres query active, so the wait is in
+  Python: the test's `_stuck_until` child waits on a `threading.Event` with a 30-second deadline and
+  the helpers' deadlines are 10–30 s, which together bound the slow case but not the hang. The
+  stack dump that would name the wait (`pytest -o faulthandler_timeout=110`) was not captured before
+  the 055 review closed. Root-cause it next time it shows: it costs a 40-minute CI run each time.
 
 ## Steering surface (task 024 seams)
 
@@ -3261,3 +3270,217 @@ sent; found in task 049), now `sort=relevance` on every search, protected.
   publisher-typed plan can admit a landmark outside its range, as D8 is written. Seam:
   apply the plan's Overton filters locally to landmarks, counted on the `fetch_by_id`
   event like the country check.
+
+## Options scoping shortlist (task 055 seams)
+
+Recorded by the task 055 contract, plan and build (`docs/tasks/055-scoping-shortlist/`;
+[ADR 0041](adr/0041-options-scoping-shortlist.md)). The owner's rulings are quoted in the contract
+(S1–S26); the items below stay open on purpose.
+
+- **Update-in-place of the longlist (S10; 045 open question 7).** Still deferred. 055 keeps Rebuild:
+  an appetite change bypasses it (a shortlist walk re-proposes at once) and the user's places survive
+  a Rebuild by option id. Owner, 2026-10-27: "What does that even mean to rebuild in place? Do we
+  really need to worry about this?" → no.
+- **Shortlist verbs by chat.** Add to shortlist, Remove and Suggest more are buttons only; the
+  `longlist_turns` verbs stay add · exclude · include again. A chat verb needs the same opener and
+  refusals as the routes.
+- **Shortlist recall as the eval measure.** Research report 3 § 4: the right measure of a shortlist
+  is whether the option an assessment later finds best was on it. Needs assessment to exist. No AI
+  eval in 055; proposal quality was read by hand (verification.md, M1–M6).
+- **A comparability rule for settings.** The `tried_only` mix says "a comparable setting preferred"
+  and the maturity rung's modifier says "none in your setting" by country only. What makes a
+  setting comparable (income level, health system, federal structure) is not defined.
+- **Inferring the appetite.** Never inferred from the plan's wording (S2). A later slice could
+  propose one from the question's words and show it as a guess for the user to confirm.
+- **Direction of effect from abstracts (046 R42).** Stays with assessment; a reason may say an
+  option "bears on" an outcome, never that it moves it.
+- **The shortlist stage key.** Built as its own key (the pattern of every other scoping component),
+  not as `select` with an override (contract PG3). If the owner wants the override, it is a lookup by
+  registry name at four call sites in `routers/sse.py` and `checkin_read`.
+- **A failed proposal can cost up to four model calls.** The component re-asks once; the runner then
+  retries a failed model-calling step once, so a walk that ends `degraded` may have made four calls.
+  `theme` behaves the same way today. A per-step "no runner retry" flag would halve it.
+- **The note's footer needs `document_lines_total`.** Served since Phase 4; the frontend shows "Policy
+  Atlas read N of M document lines" only when both counts exist.
+- **The baseline check-in card does not show the appetite.** Its settings summary comes from the
+  backend's check-in bundle (Who · Where · Outcomes · Depth); adding "Risk appetite" is one bundle
+  key and one label in `checkInPresentation.ts`. The plan document beside the card shows it.
+- **Potential impact length.** The ceiling is a code check (a `max_length` on the wire made the
+  constrained decoder cut sentences mid-word at the limit): the prompt states a target (about 300,
+  never more than 380), a line over 400 is kept with a warning, and only a line over the hard bound
+  (600) fails the attempt, because `option_profile` is a spine step. If the judgment model keeps
+  writing over 400 characters on verbose lists, the target in the prompt goes down before either
+  number goes up. The contract says "under 400"; the owner rules on the number at the 055 review.
+- **One card build per option before the shortlist call.** `option_cards()` calls
+  `repository.option_out` once per included option, and each call re-reads the task-wide data (the
+  newest longlist row, every option name, all relations, the plan version). A 40-option list makes
+  several hundred queries before one model call, on every appetite change and Suggest more; measured
+  at 9–27 s wall per proposal in the staged check, so not a user-visible problem yet. A batch reader
+  belongs to a system-level cost and latency task (owner ruling 2026-09-28: Evidence search
+  components are not edited for cost inside a capability slice).
+- **The "could not propose" notice stays until the next walk.** The shortlist view derives it from
+  the task's newest parentless run; it says "Your places are unchanged" even after the user has since
+  added or removed places by hand. Clearing it on the first user action after the failed walk needs
+  the walk id on the view's state.
+- **The model does not see a breach on a kept place.** When constrain excludes an option the user
+  added, the user sees the breach on the row (O1) but the card text sent to the shortlist call omits
+  the exclusion block (contract card-text matrix: exclusion block out). One breach line for kept,
+  excluded places would let the note say so.
+- **Add on a pick from the screen.** The route turns Policy Atlas's pick into "Added by you" (the user
+  has now chosen it, so a re-proposal keeps it) and is tested; the Shortlist view offers only Remove on
+  a pick. A small "Keep" control on pick rows would expose it. Left for the owner's design call (055
+  review, step 9: no ruling made).
+- **"In the documents we found".** The contract's disciplines say the rung should carry this qualifier
+  where it would otherwise read as a fact about the world; the owner's rung words ("Evaluated",
+  "Implemented, not yet evaluated", …) do not. The card's "No document names this option yet" line and
+  the design mix carry the qualification nearby. Reopen if a reader takes the rung as a world fact.
+- **Appetite changes are an unmetered model-cost lever.** Each `PATCH /plan` that flips the appetite
+  opens a full shortlist walk (about USD 0.15 at 25–43 options). Bounded by `run_active`
+  serialisation and executor capacity only, the same posture as Rebuild; a per-task cap belongs with
+  the price envelope (open question 2).
+
+## Cost and latency (task 056 seams)
+
+Seams left by task 056 (GPT-6 on both routes, one route step per call site, prompt caching,
+Unrated appraisal, the ingest scheduler and the Europe PMC XML route) and by its review stack
+(2026-11-02). Each entry says what is true today and what the lever is.
+
+- **Timeout retries are billed but untraced** — *closed by task 057 (D12, 2026-11-03):*
+  `max_retries=0` on every client and one traced retry of our own (`tracing.traced_attempts`),
+  so each attempt is its own generation with `step`, `attempt` and a shared `logical_call_id`.
+- **The summary retry can oscillate** (review, trace lane). `_write_and_judge_summary` carries
+  only the latest failed attempt; on scoping task 809fe75c attempt 3 repeated attempt 1 word for
+  word and the block ended `failed` with no summary. Lever: carry every failed attempt
+  (`previous_attempts`) and say so in both summariser prompts (a deliberate re-pin).
+- **A block summary's failure reason is not persisted.** `block.summary_status` says `failed`;
+  the judge's reason lives only in logs and the trace. Lever: a `summary_reason` column, so the
+  decision is diagnosable without the trace.
+- **The cache-mode table lives beside the route file, not in it** (review, code-review R5).
+  `synthesis/cache_modes.py` is a second per-step table that `assess`, `corpus`, `extract`,
+  `runtime` and `options_scoping` import from a synthesis module; a test keeps it in step with
+  `[steps]`. Lever: a `prompt_cache` key per step in `model_routes.toml` and
+  `Route.cache_mode_for(step)`, so one table enumerates steps and `core` owns it.
+- **Scoping derives its route step from the trace name** (review, code-review R6).
+  `scoping_backend._call` turns `longlist:discover` into `longlist_discover`; a trace rename
+  fails at call time (the kwargs fixture and the route test catch it in the suite). Lever: an
+  explicit `step=` per call as `agent_backend._parse` has.
+- **Extra tool calls on a forced turn are dropped, not merged** (review, Codex H2; contract D10
+  said "reject"). `_first_named_tool_call` keeps the first `emit_section` / `emit_repairs` and
+  counts the rest in `extra_tool_calls_ignored` (0 of 434 calls on 2026-11-02). Lever: if the
+  count ever goes non-zero, merge repair payloads or retry the turn.
+- **`set_forkserver_preload` only applies before the forkserver starts** (review, code-review
+  R8). Ingest is the only forkserver user in `backend/src`; a future earlier user would silently
+  cost 1 to 2 s of imports per parse worker. Lever: a log line when the preload is set on a
+  started server, or start the server in `_parse_process_context`.
+- **Worker test databases survive a hard kill** (review, Codex L1). `tests/conftest.py` drops
+  `policy_atlas_test_gw<N>_<pid>` at interpreter exit; a kill leaves it. Cleanup:
+  `psql "$DATABASE_URL" -Atc "select datname from pg_database where datname like 'policy_atlas_test_gw%'" | xargs -n1 dropdb -U policy_atlas --force`
+  (against the compose Postgres). Lever: a sweep of names whose pid is dead at suite start.
+- **`cost_per_run.py` pages every trace to resolve a session prefix** (review, code-review R10):
+  about 40 s per session on our instance. Lever: filter traces by `sessionId` for a full id, the
+  sessions endpoint for a prefix.
+- **A second breakpoint after run-stable user-message blocks** was not measured (judge_summary
+  `detail`, group:assign label list, screen:abstract scope block, the extract document envelope);
+  the `bedrock-claude` route's breakpoint content part is unmeasured and no route selects it.
+- **The Claude-direct search path reads only `cacheReadInputTokens`** (no cache-write capture; no
+  route selects it today).
+- **The section ledger overlap (contract X5, dropped 2026-11-01).** The ledger is sent in the
+  section task message from the first turn and there is no separate write turn, so removing the
+  overlap needs a prompt-shape change; it goes to the synthesis refinement task.
+- **Dependency-direction knots the tidy-ups exposed:** `core` importing a capability; the
+  options-scoping and API read models reaching into each other. `baseline_prompt.py:14` still
+  names `synthesis_backend.py` as the home of the shared core (a pinned file; fix at the next
+  deliberate re-pin).
+- **Owner items after deploy:** N8 parse wall time on staging (2 CPUs; measured on a laptop
+  only); chunk quality of the XML route on live documents (fixtures only); the 60 s timeout on
+  the long-output extraction and vetter steps (decision item 2 in the task's verification.md).
+
+## Queued ingest, document store, SQL retrieval, step timeouts (task 057 seams)
+
+Seams left by task 057 (contract D8, D10, D11, D14, D3; the build of 2026-11-03). Each entry
+says what is true today and what the lever is. Experiment figures are from the gitignored
+`experiments/experiments-057-2026-11-02/` folder, quoted here so they survive.
+
+- **Parse profile v2 is the markup rule only.** The header, page-number and footnote rules
+  (E6 rules b, c, d) were dropped by the owner (D8): together they recovered 5 quotes of 941 on
+  the control PDFs and only worked as a set; alone each added nothing. Lever: build the three
+  together behind a profile bump if a later quote-failure measurement attributes failures to
+  page furniture. The v2 rule's own collateral (paired underscores in a URL; `<b disabled>`-style
+  one-letter tags with a bare attribute, after the review closed `<b and c>`; `*p*`)
+  is recorded in task 057's verification.md.
+- **Fallback parser trigger signals.** Textract or Bedrock Data Automation stays deferred; the
+  signals that would trigger it are the parse-failure reason counts per run (`parse_failed`
+  by reason) and the thin-text guard hits, both already in the ingest counts. Lever: a
+  measured share of `parse_failed` on real runs that a second parser could recover.
+- **Per-host coordination across functions (D11).** With up to 20 functions in flight the
+  per-host limit (2 at once, 1 s apart) is not coordinated across them; `Retry-After` on 429
+  and 503 plus queue redelivery cover the one host that refused in E5. Lever: a per-host
+  FIFO message group if 429s rise on staging.
+- **Retention script scheduling (D3).** `scripts/prune_unlinked_snapshots.py` runs by hand
+  (dry run by default). Lever: a scheduled run (EventBridge rule on a small task) once the
+  store's growth is measured on staging.
+- **HNSW index (D7).** Retrieval is exact cosine over the scope's units; the dev-corpus
+  measurement (3,400 to 9,000-unit scopes) saw about 300 ms a search under load. Lever: an
+  HNSW index on `chunk_embedding.embedding` if per-search latency matters once scopes grow
+  (chat over several scopes).
+- **Per-claim judge filtering with E9's numbers.** Deterministic quote, number and negation
+  checks catch 8 of 26 unsupported claims with 82 false flags; skipping whole judge calls
+  saves 8% of tokens; per-claim filtering removes about 41% of chunk text at 2% false passes
+  against one judge, while two judges disagree on 13% of claims. Lever: for the synthesis
+  refinement task with a labelled set, if at all.
+- **The low-effort judge revisit (D14).** `judge_grounding` runs at `low` on the bedrock
+  route: E3 measured half the wall per call (11.5 → 5.4 s) at 0.8× the cost, agreement with
+  the medium judge at the judge's own noise floor (91.7%; 8% of claims flip run to run), but
+  26 claims marked unsupported against 33 and 28 for two medium runs and 3 real attribution
+  catches missed in 157 claims. Lever: the synthesis refinement task re-judges a labelled set
+  of disputed claims and raises the effort again if the leniency is real.
+- **The lexical leg is word overlap, not BM25** (contract D7; owner 2026-11-04: the synthesis
+  refinement task). The SQL retriever's word leg scores a chunk by the share of the query's
+  distinct words it holds: every word weighs the same, repetition and chunk length do not
+  count. BM25 adds rarity weighting (inverse document frequency), frequency saturation and
+  length normalisation; rank fusion softens the gap but the ranks would move. Parity with the
+  deleted Python leg was the task's proof, so the recipe stayed. Levers, cheapest first:
+  Postgres `ts_rank_cd` on a `tsvector` column (no rarity weighting, so not BM25); the
+  `pg_search` extension (new dependency) or our own per-scope term statistics. Measure on the
+  88 recorded queries and the citation funnel (about 12 of about 55 relevant documents cited)
+  before adopting; a leg that does not move the relevant documents reaching the writer is not
+  worth its dependency.
+- **Alarm actions.** The three task 057 alarms (dead-letter depth, NAT network out, writer CPU
+  credits) have no notification action because the stacks have no SNS topic. Lever: one topic
+  with an email subscription, wired to every alarm.
+- **Three NAT instances.** The VPC runs one fck-nat instance per availability zone (three),
+  not the single instance the network stack's comment and contract D5 describe; the NAT
+  alarm takes the busiest. Lever: the owner's call on cost against zone resilience.
+- **A failed attempt's generation carries no input** (review, trace lane). `traced_attempts`
+  stamps a failed attempt with its step, attempt number, call id and the error; the messages,
+  model and parameters are recorded by the caller's `update`, which runs only on success. A
+  call cut on every attempt (round (g): one `synthesise_section_turn` three times at 23 s)
+  cannot be diagnosed from Langfuse: long output, long reasoning or a stall look the same.
+  Lever: a `before` hook on `traced_attempts` that records the input before the request goes
+  out (24 call sites take it).
+- **The chat prose stream has no retry** (review, contract verifier). The streamed
+  `chat:call` is exempt from the step timeouts (D12) and the SDK's two silent retries are
+  gone with `max_retries=0`, so a connection error before the first token fails the turn
+  where it used to be retried. Lever: `traced_attempts` around the stream's opening request
+  only (nothing has been sent to the user yet).
+- **Three Retry-After parsers** (review, code review): `tracing._retry_wait_s`,
+  `embeddings._retry_after_s` and `fetch_live.retry_after_seconds`; only the last handles
+  the HTTP-date form. Model and embedding providers send seconds today. Lever: one parser in
+  `core`, used by all three.
+- **The pool convergence test measures the fake's timing** (review, Codex). `_QuotaFakeBackend`
+  models a concurrency ceiling with a 0.2 s hold; a virtual clock and token bucket would
+  test mixed batch sizes and a throttle-plus-success round deterministically. Lever: rewrite
+  the fake when the pool changes next.
+- **The staging inspection secret's password no longer matches the database** (ADR 0043
+  consequences; found at the build). Lever: rotate the inspection user's password and update
+  the secret at the next staging session.
+- **The Bedrock hangs are the provider's; their cause is unknown** (review; probes 2 and 4,
+  `docs/tasks/057-queued-ingest/bedrock-integration-brief.md`). The bare OpenAI SDK hangs
+  10 to 17% of serial judge-sized calls, some returning after 2 to 4 minutes; the client,
+  the pool and our wrapper are cleared. Production moved to `bedrock` on 2026-11-03 (dev
+  `f0018c4e`), so these are due now rather than before a flip, in the brief's order: file the AWS support case with probe 4's request ids; record the response's
+  request-id header on every traced attempt and graph the free `AWS/Bedrock` `Invocations`
+  metric against Langfuse's attempts; turn on invocation logging only if the DPIA allows
+  the stored bodies; replace the long-term API key (AWS: "exploration only") with
+  short-term keys or SigV4 as its own approval-gated task. Not: TCP keep-alive, the NAT
+  sysctl, streaming on the long steps, a token-aware limiter (reasoned out in the brief).

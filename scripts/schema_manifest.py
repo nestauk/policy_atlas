@@ -129,7 +129,7 @@ def main() -> None:
     out.append("2. `event_log.event_type`: `project.renamed|archived|shared_publicly|unshared` → `task.*` on new writes; readers accept both; downgrade rewrites `task.*` → `project.*`.")
     out.append("3. `event_log.payload` JSONB `decided_by` / `authored_by`: `orchestrator` → `agent` on new writes; downgrade rewrites back.")
     out.append("4. `orchestration_plan.payload` (→ `plan.payload`) JSONB steer-point ids: `evidence_base_coverage` → `evidence_search_coverage` on new writes; downgrade rewrites back.")
-    out.append("5. `event_log.payload` JSONB pause records (`checkin_read.py`) steer-point id: same as 4; downgrade rewrites back.")
+    out.append("5. `event_log.payload` JSONB pause records (`check_ins_read.py`) steer-point id: same as 4; downgrade rewrites back.")
     print("\n".join(out))
 
 

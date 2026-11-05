@@ -206,8 +206,7 @@ def test_an_uploaded_draft_suggests_what_completes_it_and_accepting_builds_it(
     from sqlalchemy import func, select
 
     from policy_atlas.core.schema import toc_box, toc_link, toc_pathway
-    from policy_atlas.theory_of_change import proposals
-    from policy_atlas.theory_of_change import edits
+    from policy_atlas.theory_of_change import edits, proposals
     from policy_atlas.theory_of_change.edits import Actor
 
     upload_id = uuid.uuid4()

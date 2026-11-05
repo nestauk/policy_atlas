@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, cast, runtime_checkable
 
@@ -31,7 +31,6 @@ from policy_atlas.core.schema import (
     task_plan,
 )
 from policy_atlas.core.usage import UsageAccumulator
-from policy_atlas.evidence_search.assess.appraise import DEFAULT_RUBRIC
 from policy_atlas.evidence_search.assess.classification_backend import ClassificationBackend
 from policy_atlas.evidence_search.assess.classify import SKIP_TSS_KEY
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
@@ -48,7 +47,12 @@ from policy_atlas.evidence_search.extract.finding_vetter import (
 )
 from policy_atlas.evidence_search.group.group import GroupClusteringBackendFactory
 from policy_atlas.evidence_search.sourcing.acquire import SearchBackend
-from policy_atlas.evidence_search.sourcing.ingest_full_text import DocumentFetcher
+from policy_atlas.evidence_search.sourcing.ingest_full_text import (
+    ConnectFactory,
+    DocumentFetcher,
+    FixtureFetcher,
+)
+from policy_atlas.evidence_search.sourcing.ingest_queue import QueueClient, build_queue_client
 from policy_atlas.evidence_search.sourcing.search_generation import SearchGenerationBackend
 from policy_atlas.evidence_search.synthesis.grounding_judge import GroundingJudgeBackend
 from policy_atlas.evidence_search.synthesis.synthesis_backend import (
@@ -64,7 +68,7 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
     write_summaries_after_commit,
 )
 from policy_atlas.options_scoping.labels import labels_for_snapshots
-from policy_atlas.options_scoping.longlist.longlist_backend import LonglistBackend
+from policy_atlas.options_scoping.scoping_backend import LonglistBackend
 from policy_atlas.options_scoping.suggest.suggest import SuggestBackend
 from policy_atlas.runtime import option_search, steering_events
 from policy_atlas.runtime.agent_backend import (
@@ -203,6 +207,8 @@ LLM_BEARING_COMPONENTS = frozenset(
         "toc_choose",
         "toc_summarise",
         "toc_report",
+        # Task 055: shortlist makes the one proposal call (and its re-ask).
+        "shortlist",
     }
 )
 SPINE_COMPONENTS = frozenset(SPINE)
@@ -323,6 +329,10 @@ class RunnerBackends:
             deterministic ``StubLonglistBackend``.
         toc: Optional model seam for every theory-of-change step (task
             054); ``None`` lets the harness resolve ``StubTocBackend``.
+        queue: The full-text ingest queue client (task 057). ``None`` lets the
+            runner build the in-process client over its own engine.
+        connect: Opens one short committed transaction for the full-text stage's
+            own writes (``engine.begin``); ``None`` uses the runner's engine.
     """
 
     embedding: EmbeddingBackend | None = None
@@ -345,6 +355,44 @@ class RunnerBackends:
     suggest: SuggestBackend | None = None
     longlist: LonglistBackend | None = None
     toc: TocBackend | None = None
+    queue: QueueClient | None = None
+    connect: ConnectFactory | None = None
+
+
+def with_ingest_queue(
+    backends: RunnerBackends,
+    engine: Engine,
+    *,
+    ingest_mode: str,
+    queue_url: str | None = None,
+) -> RunnerBackends:
+    """Return ``backends`` with the full-text ingest queue for ``ingest_mode`` attached.
+
+    The queue's handler fetches with the bundle's document fetcher (the fixture
+    fetcher when the bundle has none, as the harness would), so the bundle's
+    fetcher is set to that same one. Each handler thread takes its own
+    connections from ``engine`` (one short committed transaction per write).
+
+    Args:
+        backends: The bundle without a queue.
+        engine: The engine the queue's workers and the stage's writes use.
+        ingest_mode: ``in_process`` or ``queued`` (``POLICY_ATLAS_INGEST_MODE``).
+        queue_url: The SQS queue URL ``queued`` sends to
+            (``POLICY_ATLAS_INGEST_QUEUE_URL``).
+
+    Returns:
+        A copy of ``backends`` carrying ``queue``, ``connect`` and the fetcher.
+
+    Raises:
+        RuntimeError: ``queued`` without a queue URL.
+    """
+    fetcher = (
+        backends.document_fetcher if backends.document_fetcher is not None else FixtureFetcher()
+    )
+    queue = build_queue_client(
+        ingest_mode, connect=engine.begin, fetcher=fetcher, queue_url=queue_url
+    )
+    return replace(backends, document_fetcher=fetcher, queue=queue, connect=engine.begin)
 
 
 class CheckInIO(Protocol):
@@ -745,12 +793,13 @@ def resolved_skip_ids(
     keep the Evidence search's per-scope discipline.
 
     - ``classify``: the evidence type is inherited-resolved **and** nothing is
-      left for appraise to do — the tier is inherited-resolved too (not a
-      stale rubric), or the type is outside the rubric's domain. Appraise
-      works from this scope's classification rows, so a document whose
-      inherited appraisal is under a stale rubric (or missing, or whose tier
-      is this task's own) is classified here and appraised afresh rather than
-      left without a tier.
+      left for appraise to do — the tier is inherited-resolved too (a score
+      or Unrated, not a stale rubric). Appraise works from this scope's
+      classification rows, so a document whose inherited appraisal is under a
+      stale rubric (or missing, or whose tier is this task's own) is
+      classified here and appraised afresh rather than left without a tier.
+      Since task 056 (D7) every type gets a tier (Unknown and Non-evidence get
+      Unrated), so a type outside the rubric no longer means "nothing to do".
     - ``appraise``: the tier **and** the type are both inherited-resolved and
       the tier is not under a stale rubric (the resolver withholds a stale
       score), so a stale-rubric document is re-appraised, and an inherited
@@ -779,12 +828,10 @@ def resolved_skip_ids(
             continue
         if not label.type_inherited or label.evidence_type is None:
             continue
-        tier_resolved = label.tier_inherited and label.quality_score is not None
-        if component == "appraise":
-            if tier_resolved:
-                skip.add(tss_id)
-            continue
-        if tier_resolved or label.evidence_type not in DEFAULT_RUBRIC:
+        tier_resolved = label.tier_inherited and (
+            label.quality_score is not None or label.unrated
+        )
+        if tier_resolved:
             skip.add(tss_id)
     return skip
 
@@ -5972,6 +6019,11 @@ def _run_step_attempt(
             component=step.component,
             session_id=session_id,
         ) as run_span:
+            ingest_backends = backends
+            if registry_component == "ingest_full_text" and backends.queue is None:
+                # A bundle built without the construction paths (tests, stubs):
+                # the in-process queue over this runner's engine.
+                ingest_backends = with_ingest_queue(backends, engine, ingest_mode="in_process")
             with engine.begin() as conn:
                 _apply_directive(
                     conn,
@@ -6011,7 +6063,13 @@ def _run_step_attempt(
                     toc_backend=backends.toc,
                     search_backends=backends.search_backends,
                     search_generation_backend=backends.search_generation,
-                    document_fetcher=backends.document_fetcher,
+                    document_fetcher=ingest_backends.document_fetcher,
+                    ingest_queue=ingest_backends.queue,
+                    ingest_connect=(
+                        ingest_backends.connect
+                        if ingest_backends.connect is not None
+                        else engine.begin
+                    ),
                     progress_emitter=(
                         ProgressEmitter(engine, task_id=task_id, run_id=run_id)
                         if registry_component == "synthesise"
@@ -6396,6 +6454,8 @@ def _usage_totals(
         "completion": usage["completion"] if isinstance(usage.get("completion"), int) else 0,
         "total": usage["total"] if isinstance(usage.get("total"), int) else 0,
         "cached": usage["cached"] if isinstance(usage.get("cached"), int) else 0,
+        "cache_write": usage["cache_write"] if isinstance(usage.get("cache_write"), int) else 0,
+        "reasoning": usage["reasoning"] if isinstance(usage.get("reasoning"), int) else 0,
     }
 
 

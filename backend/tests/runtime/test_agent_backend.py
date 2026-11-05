@@ -103,7 +103,7 @@ def test_model_routing_by_moment() -> None:
     """route/decide are standard-tier; triage is the fast tier (a distinct default)."""
     assert AGENT_TRIAGE_MODEL != AGENT_MODEL
     assert route().model_for("agent_triage") == AGENT_TRIAGE_MODEL
-    assert route().model_for("agent") == AGENT_MODEL
+    assert route().model_for("agent_decide") == AGENT_MODEL
 
 
 def test_parse_needs_failclosed() -> None:

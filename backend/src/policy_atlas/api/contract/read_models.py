@@ -721,6 +721,11 @@ OptionOrigin = Literal["clustered", "suggested", "from_evidence_search", "added_
 #: An option's state. "No in-scope evidence" is a condition, not a state.
 OptionState = Literal["included", "excluded"]
 
+#: An option's place on the shortlist (task 055): a Policy Atlas pick, a
+#: place the user added, or a pick the user removed. Mirrors
+#: `schema.OPTION_SHORTLIST_STATES`.
+ShortlistState = Literal["proposed", "added_by_you", "set_aside"]
+
 #: Who excluded an option: the constrain step, or the user.
 ExclusionBy = Literal["constrain", "user"]
 
@@ -832,6 +837,7 @@ ProfileLineKey = Literal[
     "dependencies",
     "coordination",
     "delivery_complexity",
+    "potential_impact",
 ]
 ProfileMark = Literal["less", "more"]
 AuthorityLabel = Literal["within_your_power", "needs_action_by", "unclear"]
@@ -909,6 +915,41 @@ class OutcomeCountsOut(BaseModel):
     by_outcome: list[OutcomeCountOut] = Field(default_factory=list)
 
 
+class ShortlistStateOut(BaseModel):
+    """An option's place on the shortlist (task 055).
+
+    Args:
+        state: `proposed` (Policy Atlas's pick), `added_by_you`, or
+            `set_aside` (a pick the user removed).
+        reason: The one-line reason for a Policy Atlas pick; `null` otherwise.
+    """
+
+    state: ShortlistState
+    reason: str | None = None
+
+
+class MaturityOut(BaseModel):
+    """How well tried an option is, read from its coverage (task 055, item 7).
+
+    Args:
+        rung: `proposal_only` (no document names it) · `described` (documents
+            describe or recommend it) · `evaluated` (a document measured an
+            effect) · `reviewed` (a systematic review or meta-analysis did).
+        design_mix: The evaluating documents' evidence types as text, most
+            frequent first; empty when none evaluated it.
+        none_in_your_setting: It was evaluated, but not in the plan's Where
+            country.
+        latest_evaluation_year: The newest evaluating document's year.
+        stale: The newest evaluation is more than five years old.
+    """
+
+    rung: Literal["proposal_only", "described", "evaluated", "reviewed"]
+    design_mix: str = ""
+    none_in_your_setting: bool = False
+    latest_evaluation_year: int | None = None
+    stale: bool = False
+
+
 class OptionSummaryOut(BaseModel):
     """One option as the list view and the grid show it.
 
@@ -955,6 +996,10 @@ class OptionSummaryOut(BaseModel):
             document measured (R76).
         outcomes_total: The outcome count of the plan the longlist was built
             from (R76).
+        shortlist: Its place on the shortlist (task 055); `null` when it
+            holds none.
+        maturity: Its maturity rung (task 055); `null` for a longlist
+            written before the rung existed.
     """
 
     option_id: uuid.UUID
@@ -983,6 +1028,8 @@ class OptionSummaryOut(BaseModel):
     evaluated_countries: list[EvaluatedCountryOut] = Field(default_factory=list)
     outcomes_evaluated: int = 0
     outcomes_total: int = 0
+    shortlist: ShortlistStateOut | None = None
+    maturity: MaturityOut | None = None
 
 
 class LeverTypeOut(BaseModel):
@@ -995,6 +1042,26 @@ class LeverTypeOut(BaseModel):
 
     key: str
     definition: str
+
+
+class ShortlistOut(BaseModel):
+    """The latest shortlist proposal on a longlist (task 055).
+
+    Args:
+        note: The proposal's short "what this leaves out" note; `null` before
+            the first proposal.
+        provenance: How the proposal was made (prompt version, model,
+            appetite, plan version, …); empty before the first proposal.
+        places_target: How many places a proposal fills to.
+        stale: The proposal does not match the plan's current risk appetite,
+            or a built longlist has no proposal yet. The view then asks the
+            user to press Suggest more to re-propose.
+    """
+
+    note: str | None = None
+    provenance: dict[str, Any] = Field(default_factory=dict)
+    places_target: int = 5
+    stale: bool
 
 
 class LonglistOut(BaseModel):
@@ -1018,6 +1085,11 @@ class LonglistOut(BaseModel):
             earlier version can show that version's wording (task 046).
         taxonomy_version: The lever-type list version.
         depth_label: The depth label every longlist surface carries.
+        shortlist: The latest shortlist proposal (task 055).
+        plan_inputs_changed: The current approved plan differs from the plan
+            the longlist was built from in a field the longlist reads, so a
+            rebuild would give a different longlist. A change to the risk
+            appetite alone leaves it false (task 055, A6).
     """
 
     run_id: uuid.UUID
@@ -1034,6 +1106,8 @@ class LonglistOut(BaseModel):
     )
     taxonomy_version: str | None = None
     depth_label: Literal["scoping pass"] = "scoping pass"
+    shortlist: ShortlistOut
+    plan_inputs_changed: bool = False
 
 
 class EvidenceProfileOut(BaseModel):

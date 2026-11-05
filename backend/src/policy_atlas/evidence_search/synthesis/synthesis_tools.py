@@ -5,7 +5,7 @@ plan-pinned constants, the three read-only scoped tools (``search_chunks`` /
 ``query_findings`` / ``lookup``), the staged retrieval pipeline behind the
 ``retrieve`` seam's first increment, the bounded loop runner, and the
 fail-closed ``context["synthesis"]`` directive parser. The prompt-bearing
-surfaces live in :mod:`policy_atlas.evidence_search.synthesis.synthesis_backend` and
+surfaces live in :mod:`policy_atlas.evidence_search.synthesis.section_prompt` and
 :mod:`policy_atlas.evidence_search.synthesis.grounding_judge`; nothing in this module
 composes prose.
 
@@ -24,18 +24,22 @@ import math
 import re
 import uuid
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, NotRequired, Protocol, TypedDict, cast
 
 from sqlalchemy import ColumnElement, case, func, true
 from sqlalchemy import select as sa_select
+from sqlalchemy import text as sa_text
 from sqlalchemy.engine import Connection
+from sqlalchemy.sql.elements import Label
 
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import (
     EMBEDDING_PROFILE,
     UNIT_CHAR_BUDGET,
     UNIT_POLICY,
+    embed_with_retry,
     validate_vector,
 )
 from policy_atlas.core.schema import (
@@ -57,17 +61,21 @@ from policy_atlas.core.schema import (
     source_snapshot,
     source_tag,
     task_source_snapshot,
+    vector_literal,
 )
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.tags import has_control_character
+from policy_atlas.core.tokens import word_tokens as _tokens
 from policy_atlas.core.usage import UsageAccumulator, UsageResult
+from policy_atlas.evidence_search.assess.appraise import appraisal_tier
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 from policy_atlas.evidence_search.extract.extract import record_ids_by_profile
 from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.evidence_search.extract.quote_verify import QuoteMatcher, build_basis
 
 if TYPE_CHECKING:
-    from policy_atlas.evidence_search.synthesis.synthesis_backend import SectionProseWire
+    from policy_atlas.evidence_search.synthesis.section_prompt import SectionProseWire
 
 # --- Plan-pinned constants (plan.md rev 2 — binding; the caps-bind test
 # asserts these module constants are the values enforced on the live path,
@@ -85,10 +93,6 @@ SECTION_TURN_CAP = 6
 READ_CALLS_PER_TURN_CAP = 6
 SYNTH_CHUNK_TOP_K = 8
 SYNTH_CHUNK_CHAR_BUDGET = 24_000
-# Fail-closed in-memory retrieval ceiling over the screened corpus's embedding
-# units. Beyond it the component fails structurally naming the cap — the
-# index-backed `retrieve` slice is the upgrade, never a degraded sample.
-RETRIEVAL_UNIT_CAP = 20_000
 # Top-N per relevance leg BEFORE fusion (plan review M5): priors/boosts/the
 # reranker operate on this bounded candidate set; "zero-relevance never
 # surfaced by boost alone" is defined as not-in-either-leg's-pool → not a
@@ -399,38 +403,60 @@ class PassThroughChunkReranker:
         return candidates
 
 
-class RetrievalUnitCapError(Exception):
-    """The screened corpus exceeds the in-memory retrieval unit cap.
+#: Opens the connection one search reads through. Synthesis lends its own
+#: component connection (:func:`borrowed_connection`); chat passes
+#: ``engine.connect`` so every search is one short read on a fresh connection.
+ConnectionFactory = Callable[[], AbstractContextManager[Connection]]
+
+
+def borrowed_connection(conn: Connection) -> ConnectionFactory:
+    """Return a connection factory that hands out ``conn`` and never closes it.
+
+    Synthesis searches inside its component transaction (same isolation as every
+    other read there), so the retriever borrows that connection rather than
+    opening its own.
 
     Args:
-        unit_count: Number of embedding units in the scoped corpus.
-        cap: The enforced maximum, normally :data:`RETRIEVAL_UNIT_CAP`.
-    """
+        conn: The open connection to lend.
 
-    def __init__(self, *, unit_count: int, cap: int) -> None:
-        self.unit_count = unit_count
-        self.cap = cap
-        super().__init__(
-            f"retrieval_unit_cap_exceeded: {unit_count} units exceeds "
-            f"RETRIEVAL_UNIT_CAP {cap}"
-        )
+    Returns:
+        A factory whose context manager yields ``conn`` and leaves it open.
+    """
+    return lambda: nullcontext(conn)
 
 
 @dataclass(frozen=True)
 class RetrievalScope:
-    """In-memory retrieval substrate for one synthesis run.
+    """The frozen retrieval scope of one synthesis run or one chat turn (task 057).
+
+    It holds the documents and the snapshot each one's text lives in, read once;
+    every search then runs one SQL statement over those snapshots, so no chunk
+    text or vector is held in memory.
 
     Attributes:
-        docs: Metadata keyed by task_source_snapshot id string.
-        units: Embedding-unit records with frozen unit text and vectors.
-        chunks: Frozen chunk records keyed by chunk id string.
+        docs: Metadata keyed by task_source_snapshot id string (the prior's and
+            the filters' inputs).
+        snapshot_by_tss: The text-bearing snapshot per document (the full-text
+            snapshot when one was ingested, else the envelope), frozen once.
+        chunk_text_basis_by_tss: ``"abstract_only"`` or ``"full_text"`` per
+            document: what its chunks are cut from.
+        connect: Opens the connection each search reads through.
         task_tags: All tag values in the scoped task.
+        unit_count: Embedding units in scope when the scope was built
+            (provenance only).
     """
 
     docs: dict[str, dict[str, Any]]
-    units: list[dict[str, Any]]
-    chunks: dict[str, dict[str, Any]]
+    snapshot_by_tss: dict[str, uuid.UUID]
+    chunk_text_basis_by_tss: dict[str, str]
+    connect: ConnectionFactory
     task_tags: set[str] = field(default_factory=set)
+    unit_count: int = 0
+
+    @property
+    def snapshot_ids(self) -> tuple[uuid.UUID, ...]:
+        """The distinct text-bearing snapshot ids of the scope, sorted."""
+        return tuple(sorted(set(self.snapshot_by_tss.values())))
 
 
 class ToolValidationError(Exception):
@@ -462,6 +488,9 @@ class SectionLoopResult(TypedDict):
     # and were salvaged away (backend per-claim salvage) — counted, never
     # silent; the component lands them in claims_rejected_structural.
     malformed_claims: int
+    # Further tool calls a forced final turn carried beyond the emission that
+    # was taken (task 056 D10: parallel tool calls stay on for that turn).
+    extra_tool_calls_ignored: int
     usage_totals: dict[str, int]
 
 
@@ -471,6 +500,7 @@ class LoopTurn(TypedDict):
     emission: Any | None
     tool_calls: list[dict[str, Any]]
     malformed: int
+    extra_ignored: NotRequired[int]
 
 
 class ToolLoopResult(TypedDict):
@@ -483,6 +513,7 @@ class ToolLoopResult(TypedDict):
     rejected_tool_calls: int
     turn_cap_hit: bool
     malformed_claims: int
+    extra_tool_calls_ignored: int
     usage_totals: dict[str, int]
 
 
@@ -508,7 +539,6 @@ _SECTION_KEYS_WITH_GROUPS = {"title", "focus", "group_ids"}
 _SECTION_KEYS_OPTIONAL: set[str] = {"nav_label", "turn_cap"}
 _SECTION_KEYS_ALLOWED: set[str] = _SECTION_KEYS_WITH_GROUPS | _SECTION_KEYS_OPTIONAL
 _BOOST_KEYS = {"columns", "tags", "appraisal_tier", "screen_confidence"}
-_TOKEN_RE = re.compile(r"[0-9A-Za-z]+")
 GROUP_ID_EXPECTED_FORM = "<facet>:gNN"
 _QUALIFIED_GROUP_ID_RE = re.compile(r"^[a-z][a-z0-9_]*:g[0-9]{2,}$")
 
@@ -1133,7 +1163,11 @@ def _doc_record(row: Any, selected_tss_ids: set[uuid.UUID]) -> dict[str, Any]:
         "origin": row.origin,
         "primary_evidence_type": row.primary_evidence_type,
         "text_basis": row.text_basis,
-        "appraisal_tier": str(row.quality_score) if row.quality_score is not None else None,
+        # "4" for a scored row, "Unrated" for a row with no score (task 056); None
+        # only when the document has no appraisal row, which keeps it uncitable.
+        "appraisal_tier": appraisal_tier(
+            row.quality_score, unrated=bool(getattr(row, "unrated", False))
+        ),
         "tags": [],
         "selected": cast("uuid.UUID", row.tss_id) in selected_tss_ids,
         "screen_confidence": row.screen_decision_confidence,
@@ -1193,8 +1227,14 @@ def build_retrieval_scope(
     scope_id: uuid.UUID,
     selected_tss_ids: set[uuid.UUID],
     extra_scope_ids: Sequence[uuid.UUID] = (),
+    connect: ConnectionFactory,
 ) -> RetrievalScope:
     """Load the screened-in chunk retrieval scope.
+
+    Reads the documents and the snapshot each one's text lives in, once; no
+    chunk text, unit or vector is loaded (task 057 N8). Every later search reads
+    the chunks of exactly these snapshots through ``connect``, so documents
+    screened in after this call never join a running synthesis.
 
     **Several scopes** (task 045, S11, P13): an options-scoping chat answers
     over the longlist scope and the option searches' targeted scopes at once.
@@ -1213,14 +1253,11 @@ def build_retrieval_scope(
         selected_tss_ids: Referenced selection set, used only as a soft prior.
         extra_scope_ids: Further evidence scopes whose relevant screened
             documents join the corpus under the precedence rule.
+        connect: Opens the connection each search reads through (see
+            :data:`ConnectionFactory`).
 
     Returns:
-        Frozen document, chunk and unit records for in-memory retrieval.
-
-    Raises:
-        RetrievalUnitCapError: If the scoped embedding-unit count exceeds
-            :data:`RETRIEVAL_UNIT_CAP`.
-        ValueError: If a persisted vector or unit locator is malformed.
+        The frozen document records and snapshot list.
     """
     # The text-bearing snapshot per document: the fetched full-text snapshot when
     # the fetch pipeline ingested one, else the envelope snapshot acquired for
@@ -1273,6 +1310,7 @@ def build_retrieval_scope(
             source_snapshot.c.text_basis,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
+            source_appraisal_result.c.unrated,
             ranked.c.screen_decision_confidence,
             ranked.c.screen_stage,
         )
@@ -1310,11 +1348,6 @@ def build_retrieval_scope(
         .where(ranked.c._scope_rank == 1)
         .subquery()
     )
-    chunk_text_basis = chunk_text_basis_case(
-        chunk_table.c.source_snapshot_id,
-        screened_docs.c.envelope_snapshot_id,
-        screened_docs.c.text_basis,
-    )
     unit_count = int(
         conn.execute(
             sa_select(func.count())
@@ -1327,15 +1360,28 @@ def build_retrieval_scope(
             .where(chunk_embedding.c.unit_policy == UNIT_POLICY)
         ).scalar_one()
     )
-    if unit_count > RETRIEVAL_UNIT_CAP:
-        raise RetrievalUnitCapError(unit_count=unit_count, cap=RETRIEVAL_UNIT_CAP)
-
+    # Every chunk of a document sits on its text snapshot, so the shared
+    # chunk_text_basis_case rule gives one answer per document.
+    chunk_text_basis = cast(
+        "Label[str]",
+        chunk_text_basis_case(
+            screened_docs.c.text_snapshot_id,
+            screened_docs.c.envelope_snapshot_id,
+            screened_docs.c.text_basis,
+        ),
+    ).element.label("chunk_text_basis")
     doc_rows = conn.execute(
-        sa_select(screened_docs).order_by(screened_docs.c.tss_id)
+        sa_select(screened_docs, chunk_text_basis).order_by(screened_docs.c.tss_id)
     ).fetchall()
     docs = {
         str(row.tss_id): _doc_record(row, selected_tss_ids)
         for row in doc_rows
+    }
+    snapshot_by_tss = {
+        str(row.tss_id): cast("uuid.UUID", row.text_snapshot_id) for row in doc_rows
+    }
+    chunk_text_basis_by_tss = {
+        str(row.tss_id): cast("str", row.chunk_text_basis) for row in doc_rows
     }
 
     tags_rows = conn.execute(
@@ -1367,89 +1413,14 @@ def build_retrieval_scope(
     ).fetchall()
     task_tags = {row.tag for row in task_tag_rows if isinstance(row.tag, str)}
 
-    unit_rows = conn.execute(
-        sa_select(
-            chunk_embedding.c.chunk_embedding_id,
-            chunk_embedding.c.chunk_id,
-            chunk_embedding.c.unit_locator,
-            chunk_embedding.c.vector,
-            chunk_table.c.sequence,
-            chunk_table.c.content,
-            chunk_table.c.segmentation_policy,
-            chunk_text_basis,
-            screened_docs.c.tss_id,
-        )
-        .select_from(chunk_embedding)
-        .join(chunk_table, chunk_table.c.chunk_id == chunk_embedding.c.chunk_id)
-        .join(
-            screened_docs,
-            screened_docs.c.text_snapshot_id == chunk_table.c.source_snapshot_id,
-        )
-        .where(chunk_embedding.c.embedding_profile == EMBEDDING_PROFILE)
-        .where(chunk_embedding.c.unit_policy == UNIT_POLICY)
-        .order_by(
-            screened_docs.c.tss_id,
-            chunk_table.c.sequence,
-            chunk_embedding.c.unit_index,
-            chunk_embedding.c.chunk_embedding_id,
-        )
-    ).fetchall()
-
-    chunks: dict[str, dict[str, Any]] = {}
-    units: list[dict[str, Any]] = []
-    for row in unit_rows:
-        chunk_id = str(row.chunk_id)
-        content = cast("str", row.content)
-        chunks.setdefault(
-            chunk_id,
-            {
-                "content": content,
-                "sequence": cast("int", row.sequence),
-                "tss_id": str(row.tss_id),
-                "segmentation_policy": cast("str", row.segmentation_policy),
-                "text_basis": cast("str", row.text_basis),
-            },
-        )
-        locator = row.unit_locator
-        if not isinstance(locator, dict):
-            raise ValueError("chunk embedding unit_locator must be an object")
-        start = locator.get("start")
-        end = locator.get("end")
-        if (
-            isinstance(start, bool)
-            or isinstance(end, bool)
-            or not isinstance(start, int)
-            or not isinstance(end, int)
-            or start < 0
-            or end < start
-            or end > len(content)
-        ):
-            raise ValueError("chunk embedding unit_locator has invalid offsets")
-        units.append(
-            {
-                "unit_id": str(row.chunk_embedding_id),
-                "chunk_id": chunk_id,
-                "tss_id": str(row.tss_id),
-                "vector": validate_vector(row.vector),
-                "text": content[start:end],
-                "start": start,
-                "end": end,
-            }
-        )
-    return RetrievalScope(docs=docs, units=units, chunks=chunks, task_tags=task_tags)
-
-
-def _tokens(text: str) -> set[str]:
-    return {match.group(0).casefold() for match in _TOKEN_RE.finditer(text)}
-
-
-def _ranked_pool(
-    scored: list[tuple[float, dict[str, Any]]],
-) -> list[tuple[float, dict[str, Any]]]:
-    nonzero = [(score, unit) for score, unit in scored if score > 0.0]
-    return sorted(nonzero, key=lambda item: (-item[0], str(item[1]["unit_id"])))[
-        :CANDIDATE_POOL_PER_LEG
-    ]
+    return RetrievalScope(
+        docs=docs,
+        snapshot_by_tss=snapshot_by_tss,
+        chunk_text_basis_by_tss=chunk_text_basis_by_tss,
+        connect=connect,
+        task_tags=task_tags,
+        unit_count=unit_count,
+    )
 
 
 def _sorted_json(value: Any) -> Any:
@@ -1458,6 +1429,305 @@ def _sorted_json(value: Any) -> Any:
     if isinstance(value, list):
         return [_sorted_json(item) for item in value]
     return value
+
+
+def oversized_chunk_window(
+    content_length: int, anchor_start: int, anchor_end: int
+) -> tuple[int, int] | None:
+    """Return the window an oversized chunk is cut to, or ``None`` to send it whole.
+
+    The one window rule for every place that hands chunk text to the section
+    writer: the ``search_chunks`` tool return (anchored on the winning
+    embedding unit) and the repair's dependency chunks (anchored on the cited
+    quote, task 056 N5). A chunk at or under ``UNIT_CHAR_BUDGET`` characters is
+    never windowed. An oversized one becomes the anchor stretch widened by
+    ``OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS`` on each side, clipped to the chunk.
+    The caller marks the cut record with ``window_start`` / ``window_end``.
+
+    Args:
+        content_length: The full chunk's length in characters.
+        anchor_start: Chunk-local start of the stretch to keep (inclusive).
+        anchor_end: Chunk-local end of the stretch to keep (exclusive).
+
+    Returns:
+        ``(window_start, window_end)`` for an oversized chunk; ``None`` otherwise.
+
+    Raises:
+        ValueError: If an oversized chunk's anchor lies outside the chunk.
+    """
+    if content_length <= UNIT_CHAR_BUDGET:
+        return None
+    if anchor_start < 0 or anchor_end < anchor_start or anchor_end > content_length:
+        raise ValueError("matched retrieval unit offsets are required for windows")
+    return (
+        max(0, anchor_start - OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS),
+        min(content_length, anchor_end + OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS),
+    )
+
+
+def _longest_shared_stretch(haystack: str, needle: str) -> tuple[int, int] | None:
+    """Return ``(position in haystack, length)`` of the longest piece of ``needle``.
+
+    Deterministic: the longest length wins; among equal lengths, the earliest
+    start in ``needle``, then its first occurrence in ``haystack``. ``None``
+    when the two share no character at all.
+    """
+
+    def first_hit(length: int) -> int | None:
+        for start in range(len(needle) - length + 1):
+            position = haystack.find(needle[start : start + length])
+            if position != -1:
+                return position
+        return None
+
+    # A shared piece of length L contains one of every shorter length, so the
+    # longest length is found by bisection.
+    low, high, best = 1, len(needle), None
+    while low <= high:
+        middle = (low + high) // 2
+        position = first_hit(middle)
+        if position is None:
+            high = middle - 1
+        else:
+            best = (position, middle)
+            low = middle + 1
+    return best
+
+
+def _quote_anchor(content: str, quote: str) -> tuple[tuple[int, int], bool] | None:
+    """Locate ``quote`` in ``content``: ``((start, end), found)`` or ``None``.
+
+    The quote is matched the way verification matches it (the qv_v2
+    normalisation of :class:`QuoteMatcher`). When it is not there, the anchor
+    is the longest stretch of the normalised quote that is (``found`` False).
+    ``None`` when the quote shares nothing with the chunk.
+    """
+    basis = build_basis([(None, content)])
+    match = QuoteMatcher(basis).find(quote)
+    if match.spans:
+        return (match.spans[0].start, match.spans[-1].end), True
+    normalised_quote = build_basis([(None, quote)]).normalised
+    stretch = _longest_shared_stretch(basis.normalised, normalised_quote)
+    if stretch is None:
+        return None
+    position, length = stretch
+    return (basis.raw_start[position], basis.raw_end[position + length - 1]), False
+
+
+def _repair_chunk_anchor(
+    content: str, cited_quotes: Sequence[str], grounding_quotes: Sequence[str]
+) -> tuple[int, int] | None:
+    """The stretch of a repair dependency chunk its window is cut around.
+
+    Quotes cited on this chunk all count (found, or their longest matching
+    stretch). Finding grounding quotes are not bound to one chunk, so only the
+    ones found here count, else the single longest stretch among them. The
+    anchor is the span covering every counted stretch; ``None`` when there is
+    nothing to anchor on (the chunk is then sent whole).
+    """
+    stretches: list[tuple[int, int]] = []
+    for quote in cited_quotes:
+        anchor = _quote_anchor(content, quote)
+        if anchor is not None:
+            stretches.append(anchor[0])
+    grounding = [
+        anchor for quote in grounding_quotes if (anchor := _quote_anchor(content, quote))
+    ]
+    found = [span for span, was_found in grounding if was_found]
+    if found:
+        stretches.extend(found)
+    elif grounding:
+        stretches.append(max((span for span, _ in grounding), key=lambda s: s[1] - s[0]))
+    if not stretches:
+        return None
+    return min(start for start, _ in stretches), max(end for _, end in stretches)
+
+
+def window_repair_dependency_chunks(failing: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Cut each failing claim's oversized dependency chunks to a window (task 056 N5).
+
+    Each dependency chunk over the oversized threshold goes through
+    :func:`oversized_chunk_window`, anchored on the claim's citation quote for
+    that chunk (a finding claim's anchor chunks: its findings' grounding
+    quotes), and carries the same ``window_start`` / ``window_end`` marker as a
+    windowed ``search_chunks`` return. Chunks at or under the threshold, chunks
+    already windowed by the tool return, and chunks with nothing to anchor on
+    are sent whole. The input records are not mutated.
+
+    Args:
+        failing: Dependency-complete failing-claim records for the repair.
+
+    Returns:
+        The records, with oversized dependency chunks windowed.
+    """
+    windowed: list[dict[str, Any]] = []
+    for record in failing:
+        dependencies = record.get("dependencies")
+        chunks = dependencies.get("chunks") if isinstance(dependencies, dict) else None
+        if not isinstance(dependencies, dict) or not isinstance(chunks, dict):
+            windowed.append(record)
+            continue
+        claim = record.get("claim")
+        citations = claim.get("citations") if isinstance(claim, dict) else None
+        cited: dict[str, list[str]] = {}
+        for citation in citations if isinstance(citations, list) else []:
+            if isinstance(citation, dict) and isinstance(citation.get("quote"), str):
+                chunk_id = str(citation.get("chunk_record_id") or "")
+                cited.setdefault(chunk_id, []).append(citation["quote"])
+        findings = dependencies.get("findings")
+        grounding_quotes = [
+            grounding["quote"]
+            for finding in (findings.values() if isinstance(findings, dict) else [])
+            if isinstance(finding, dict) and isinstance(finding.get("grounding"), list)
+            for grounding in finding["grounding"]
+            if isinstance(grounding, dict) and isinstance(grounding.get("quote"), str)
+        ]
+        new_chunks: dict[str, Any] = {}
+        for chunk_id, chunk_record in chunks.items():
+            content = chunk_record.get("content") if isinstance(chunk_record, dict) else None
+            window = None
+            if (
+                isinstance(chunk_record, dict)
+                and isinstance(content, str)
+                and "window_start" not in chunk_record
+                and len(content) > UNIT_CHAR_BUDGET
+            ):
+                anchor = _repair_chunk_anchor(
+                    content, cited.get(str(chunk_id), []), grounding_quotes
+                )
+                if anchor is not None:
+                    window = oversized_chunk_window(len(content), *anchor)
+            if window is None or not isinstance(content, str):
+                new_chunks[chunk_id] = chunk_record
+                continue
+            window_start, window_end = window
+            new_chunks[chunk_id] = {
+                **chunk_record,
+                "content": content[window_start:window_end],
+                "window_start": window_start,
+                "window_end": window_end,
+            }
+        windowed.append({**record, "dependencies": {**dependencies, "chunks": new_chunks}})
+    return windowed
+
+
+# The one statement behind ``ChunkRetriever.search`` (task 057 N8, D7). It
+# reproduces the in-memory Python retriever it replaced, rule for rule:
+#
+# - The units searched are the scope's units: the chunks of the frozen
+#   text-bearing snapshots this search may read (``:snapshot_ids``, paired with
+#   the document each belongs to in ``:tss_ids``), at this embedding profile and
+#   unit policy.
+# - Vector leg: cosine distance ``<=>``; only units with a positive cosine
+#   (distance below 1) count, as the Python leg kept scores above 0.0. A zero
+#   query or unit vector makes the distance NaN, which fails ``< 1``, which is
+#   the Python rule that scored zero norms 0.0 and so left them out. The leg is
+#   cut to its best ``:pool`` units, ties broken on the unit id (a uuid orders
+#   like its text form, which the Python tie-break compared).
+# - Word leg: the share of the query's distinct words found in the unit's
+#   ``tokens`` (D7: the product's own score, not Postgres full-text ranking);
+#   ``tokens && query`` keeps units sharing at least one word (served by the GIN
+#   index). Cut and tie-break as the vector leg.
+# - Reciprocal-rank fusion per unit: the sum of 1 / (:rrf_k + rank) over the legs
+#   the unit is in, in double precision, added in the Python order.
+# - Best unit per chunk: the highest fused score; on a tie, the unit that ranks
+#   higher in the vector leg, then in the word leg (the Python retriever kept the
+#   first unit it saw, and it saw the vector leg first, in rank order).
+# Every fused chunk comes back (at most two pools' worth); Python applies the
+# soft prior, sorts, reranks and cuts.
+CHUNK_SEARCH_SQL = """
+WITH scope_docs AS (
+    SELECT d.snapshot_id, d.tss_id
+    FROM unnest(CAST(:snapshot_ids AS uuid[]), CAST(:tss_ids AS uuid[]))
+        AS d(snapshot_id, tss_id)
+),
+scope_units AS NOT MATERIALIZED (
+    -- NOT MATERIALIZED on purpose: a MATERIALIZED chunk list was tried on the dev
+    -- corpus (2026-11-03) and the planner then scanned the whole chunk_embedding
+    -- table instead of probing it by chunk id (about 60 s a query). The planner
+    -- repeats the chunk join once per leg this way (about 100 ms each on the dev
+    -- corpus), which is the cheaper of the two.
+    SELECT e.chunk_embedding_id AS unit_id, e.chunk_id, d.tss_id, e.embedding, e.tokens
+    FROM scope_docs d
+    JOIN chunk c ON c.source_snapshot_id = d.snapshot_id
+    JOIN chunk_embedding e ON e.chunk_id = c.chunk_id
+    WHERE e.embedding_profile = :embedding_profile
+      AND e.unit_policy = :unit_policy
+),
+vector_leg AS (
+    SELECT unit_id, chunk_id, tss_id,
+           row_number() OVER (ORDER BY distance, unit_id) AS leg_rank
+    FROM (
+        SELECT unit_id, chunk_id, tss_id, distance
+        FROM (
+            SELECT unit_id, chunk_id, tss_id,
+                   embedding <=> CAST(:query_vector AS vector) AS distance
+            FROM scope_units
+        ) scored
+        WHERE distance < 1
+        ORDER BY distance, unit_id
+        LIMIT :pool
+    ) pool
+),
+word_leg AS (
+    SELECT unit_id, chunk_id, tss_id,
+           row_number() OVER (ORDER BY score DESC, unit_id) AS leg_rank
+    FROM (
+        SELECT unit_id, chunk_id, tss_id,
+               CAST((SELECT count(*)
+                     FROM unnest(CAST(:query_words AS text[])) AS q(word)
+                     WHERE q.word = ANY(u.tokens)) AS float8)
+                   / :query_word_count AS score
+        FROM scope_units u
+        WHERE u.tokens && CAST(:query_words AS text[])
+        ORDER BY score DESC, unit_id
+        LIMIT :pool
+    ) pool
+),
+fused AS (
+    SELECT coalesce(v.unit_id, w.unit_id) AS unit_id,
+           coalesce(v.chunk_id, w.chunk_id) AS chunk_id,
+           coalesce(v.tss_id, w.tss_id) AS tss_id,
+           v.leg_rank AS vector_rank,
+           w.leg_rank AS word_rank,
+           coalesce(CAST(1 AS float8) / (:rrf_k + v.leg_rank), 0)
+             + coalesce(CAST(1 AS float8) / (:rrf_k + w.leg_rank), 0) AS fused_score
+    FROM vector_leg v
+    FULL JOIN word_leg w ON w.unit_id = v.unit_id
+),
+best AS (
+    SELECT DISTINCT ON (chunk_id) chunk_id, unit_id, tss_id, fused_score
+    FROM fused
+    ORDER BY chunk_id, fused_score DESC, vector_rank ASC NULLS LAST, word_rank ASC
+)
+SELECT b.chunk_id, b.tss_id, b.fused_score, c.content, c.sequence, e.unit_locator
+FROM best b
+JOIN chunk c ON c.chunk_id = b.chunk_id
+JOIN chunk_embedding e ON e.chunk_embedding_id = b.unit_id
+"""
+
+
+def _unit_offsets(locator: Any, content_length: int) -> tuple[int, int]:
+    """Return a unit locator's ``(start, end)``, checked against its chunk.
+
+    Raises:
+        ValueError: If the locator is not an object of valid in-chunk offsets.
+    """
+    if not isinstance(locator, dict):
+        raise ValueError("chunk embedding unit_locator must be an object")
+    start = locator.get("start")
+    end = locator.get("end")
+    if (
+        isinstance(start, bool)
+        or isinstance(end, bool)
+        or not isinstance(start, int)
+        or not isinstance(end, int)
+        or start < 0
+        or end < start
+        or end > content_length
+    ):
+        raise ValueError("chunk embedding unit_locator has invalid offsets")
+    return start, end
 
 
 @dataclass(frozen=True)
@@ -1471,13 +1741,21 @@ class _ChunkScopeFilters:
 
 
 class ChunkRetriever:
-    """Deterministic staged chunk retriever for one synthesis run.
+    """Deterministic staged chunk retriever for one synthesis run or chat turn.
+
+    Each search is one SQL statement (:data:`CHUNK_SEARCH_SQL`) over the scope's
+    frozen snapshots; Python embeds the query, turns the filters into the
+    documents the search may read, applies the soft prior, sorts, reranks, cuts
+    to :data:`SYNTH_CHUNK_TOP_K`, windows oversized chunks and records
+    provenance for the chunks it returns.
 
     Args:
-        scope: In-memory retrieval scope loaded from the screened corpus.
+        scope: The frozen retrieval scope (documents, snapshots, connection factory).
         embedder: Injected embedding backend; no network is opened here.
         directive: Parsed synthesis directive with retrieval boosts.
         reranker: Reranker seam applied after fusion and soft priors.
+        selection_reference_resolved: Whether a selection run was referenced,
+            which switches the screen-confidence factor off.
     """
 
     def __init__(
@@ -1495,23 +1773,6 @@ class ChunkRetriever:
         self._reranker = reranker
         self._selection_reference_resolved = selection_reference_resolved
         self._query_vectors: dict[str, list[float]] = {}
-        # Unit text is frozen for the retriever's lifetime — tokenize once,
-        # not on every search() call.
-        self._unit_tokens: list[set[str]] = [
-            _tokens(cast("str", unit["text"])) for unit in scope.units
-        ]
-        # Unit vectors are equally frozen — precompute their norms once so
-        # search() pays one sumprod per unit, not a norm recomputation per pair
-        # (task 023 WP10c).
-        self._unit_norms: list[float] = [
-            math.sqrt(
-                math.sumprod(
-                    cast("list[float]", unit["vector"]),
-                    cast("list[float]", unit["vector"]),
-                )
-            )
-            for unit in scope.units
-        ]
         self._executed_boosts: dict[str, Any] = {}
         self._unmatched_boosts: dict[str, Any] = {}
         self._soft_prior_factors: dict[str, dict[str, Any]] = {}
@@ -1523,7 +1784,7 @@ class ChunkRetriever:
     def search(
         self, query: str, *, filters: _ChunkScopeFilters | None = None
     ) -> list[ChunkSearchResult]:
-        """Search frozen chunks with hybrid content relevance and soft priors.
+        """Search the scope's chunks with hybrid content relevance and soft priors.
 
         Args:
             query: Content query supplied by the section loop.
@@ -1531,62 +1792,42 @@ class ChunkRetriever:
 
         Returns:
             Ranked chunk records capped to :data:`SYNTH_CHUNK_TOP_K`.
+
+        Raises:
+            ValueError: If a matched unit's stored offsets are malformed.
         """
         query_vector = self._query_vector(query)
-        query_tokens = _tokens(query)
-        query_norm = math.sqrt(math.sumprod(query_vector, query_vector))
-        unit_pairs = [
-            (unit, unit_tokens, unit_norm)
-            for unit, unit_tokens, unit_norm in zip(
-                self._scope.units, self._unit_tokens, self._unit_norms, strict=True
-            )
-            if self._unit_matches_filters(unit, filters)
-        ]
-        # math.sumprod is C-speed and length-strict like the zip(strict=True) loop
-        # it replaced; extended-precision accumulation can differ from naive
-        # summation in the last ulps (task 023 WP10c — recorded precision class).
-        cosine_pool = _ranked_pool([
-            (
-                0.0
-                if query_norm == 0.0 or unit_norm == 0.0
-                else math.sumprod(
-                    query_vector, cast("list[float]", unit["vector"])
+        query_words = sorted(_tokens(query))
+        snapshot_ids, tss_ids = self._searchable_snapshots(filters)
+        rows: list[Any] = []
+        if snapshot_ids:
+            with self._scope.connect() as conn:
+                rows = list(
+                    conn.execute(
+                        sa_text(CHUNK_SEARCH_SQL),
+                        {
+                            "snapshot_ids": snapshot_ids,
+                            "tss_ids": tss_ids,
+                            "embedding_profile": EMBEDDING_PROFILE,
+                            "unit_policy": UNIT_POLICY,
+                            "query_vector": vector_literal(query_vector),
+                            "query_words": query_words,
+                            "query_word_count": max(1, len(query_words)),
+                            "pool": CANDIDATE_POOL_PER_LEG,
+                            "rrf_k": RRF_K,
+                        },
+                    )
                 )
-                / (query_norm * unit_norm),
-                unit,
-            )
-            for unit, _unit_tokens, unit_norm in unit_pairs
-        ])
-        lexical_pool = _ranked_pool([
-            (
-                len(query_tokens & unit_tokens) / max(1, len(query_tokens)),
-                unit,
-            )
-            for unit, unit_tokens, _unit_norm in unit_pairs
-        ])
 
-        fused_by_unit: dict[str, tuple[float, dict[str, Any]]] = {}
-        for rank, (_score, unit) in enumerate(cosine_pool, start=1):
-            unit_id = str(unit["unit_id"])
-            current = fused_by_unit.get(unit_id, (0.0, unit))[0]
-            fused_by_unit[unit_id] = (current + 1.0 / (RRF_K + rank), unit)
-        for rank, (_score, unit) in enumerate(lexical_pool, start=1):
-            unit_id = str(unit["unit_id"])
-            current = fused_by_unit.get(unit_id, (0.0, unit))[0]
-            fused_by_unit[unit_id] = (current + 1.0 / (RRF_K + rank), unit)
-
-        best_by_chunk: dict[str, tuple[float, dict[str, Any]]] = {}
-        for fused, unit in fused_by_unit.values():
-            chunk_id = str(unit["chunk_id"])
-            current_best = best_by_chunk.get(chunk_id)
-            if current_best is None or fused > current_best[0]:
-                best_by_chunk[chunk_id] = (fused, unit)
-
-        candidates = []
-        for chunk_id, (fused, unit) in best_by_chunk.items():
-            prior = self._soft_prior(chunk_id)
+        candidates: list[ChunkSearchResult] = []
+        factors_by_chunk: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            chunk_id = str(row.chunk_id)
+            tss_id = str(row.tss_id)
+            prior, factors = self._soft_prior(tss_id)
+            factors_by_chunk[chunk_id] = factors
             candidates.append(
-                self._result_for_chunk(chunk_id, fused * prior, matched_unit=unit)
+                self._result_for_row(row, chunk_id, tss_id, float(row.fused_score) * prior)
             )
         ordered = sorted(
             candidates,
@@ -1597,7 +1838,13 @@ class ChunkRetriever:
         sanitized = [
             candidate for candidate in reranked if candidate["chunk_record_id"] in allowed_ids
         ]
-        return sanitized[:SYNTH_CHUNK_TOP_K]
+        returned = sanitized[:SYNTH_CHUNK_TOP_K]
+        # Provenance records the prior factors of the returned chunks only
+        # (owner, 2026-11-03).
+        for candidate in returned:
+            chunk_id = candidate["chunk_record_id"]
+            self._soft_prior_factors[chunk_id] = factors_by_chunk[chunk_id]
+        return returned
 
     def provenance(self) -> dict[str, Any]:
         """Return retrieval provenance for roll-up recording."""
@@ -1609,7 +1856,7 @@ class ChunkRetriever:
             "soft_prior_factors": _sorted_json(self._soft_prior_factors),
             "confidence_suppressed": self._selection_reference_resolved,
             "doc_count": len(self._scope.docs),
-            "unit_count": len(self._scope.units),
+            "unit_count": self._scope.unit_count,
         }
 
     def warm_queries(self, queries: Sequence[str]) -> None:
@@ -1637,7 +1884,7 @@ class ChunkRetriever:
             uncached.append(query)
         if not uncached:
             return
-        vectors = self._embedder.embed_texts(uncached, kind="query")
+        vectors = embed_with_retry(self._embedder, uncached, kind="query")
         if len(vectors) != len(uncached):
             raise RuntimeError("embedding backend returned wrong query vector count")
         for query, vector in zip(uncached, vectors, strict=True):
@@ -1646,19 +1893,45 @@ class ChunkRetriever:
     def _query_vector(self, query: str) -> list[float]:
         vector = self._query_vectors.get(query)
         if vector is None:
-            vectors = self._embedder.embed_texts([query], kind="query")
+            vectors = embed_with_retry(self._embedder, [query], kind="query")
             if len(vectors) != 1:
                 raise RuntimeError("embedding backend returned wrong query vector count")
             vector = validate_vector(vectors[0])
             self._query_vectors[query] = vector
         return vector
 
-    def _unit_matches_filters(
-        self, unit: dict[str, Any], filters: _ChunkScopeFilters | None
+    def _searchable_snapshots(
+        self, filters: _ChunkScopeFilters | None
+    ) -> tuple[list[uuid.UUID], list[uuid.UUID]]:
+        """Return the snapshots this search may read, each with its document.
+
+        A snapshot shared by two documents of the scope is searched once, under
+        one of the documents the filters allow, chosen by its priors: a selected
+        document before an unselected one, then an appraised one (an appraisal
+        tier or quality score) before one without, then the smaller id.
+        """
+
+        # task 057 review: Codex 4 - the document that carries the boosts and the
+        # citation identity is chosen by priors, not by whichever id sorts first.
+        def priority(tss_id: str) -> tuple[bool, bool, str]:
+            doc = self._scope.docs[tss_id]
+            appraised = (
+                doc.get("appraisal_tier") is not None or doc.get("quality_score") is not None
+            )
+            return (not doc.get("selected"), not appraised, tss_id)
+
+        tss_by_snapshot: dict[uuid.UUID, str] = {}
+        for tss_id in sorted(self._scope.docs, key=priority):
+            if self._doc_matches_filters(tss_id, filters):
+                tss_by_snapshot.setdefault(self._scope.snapshot_by_tss[tss_id], tss_id)
+        snapshot_ids = sorted(tss_by_snapshot)
+        return snapshot_ids, [uuid.UUID(tss_by_snapshot[s]) for s in snapshot_ids]
+
+    def _doc_matches_filters(
+        self, tss_id: str, filters: _ChunkScopeFilters | None
     ) -> bool:
         if filters is None:
             return True
-        tss_id = str(unit["tss_id"])
         doc = self._scope.docs[tss_id]
         if filters.doc_ids is not None and tss_id not in filters.doc_ids:
             return False
@@ -1676,42 +1949,27 @@ class ChunkRetriever:
                 return False
         return True
 
-    def _result_for_chunk(
-        self, chunk_id: str, score: float, *, matched_unit: dict[str, Any]
+    def _result_for_row(
+        self, row: Any, chunk_id: str, tss_id: str, score: float
     ) -> ChunkSearchResult:
-        chunk = self._scope.chunks[chunk_id]
-        tss_id = cast("str", chunk["tss_id"])
         doc = self._scope.docs[tss_id]
-        frozen_content = cast("str", chunk["content"])
+        frozen_content = cast("str", row.content)
         content = frozen_content
         window_start: int | None = None
         window_end: int | None = None
         if len(frozen_content) > UNIT_CHAR_BUDGET:
-            unit_start = matched_unit.get("start")
-            unit_end = matched_unit.get("end")
-            if (
-                isinstance(unit_start, bool)
-                or isinstance(unit_end, bool)
-                or not isinstance(unit_start, int)
-                or not isinstance(unit_end, int)
-                or unit_start < 0
-                or unit_end < unit_start
-                or unit_end > len(frozen_content)
-            ):
-                raise ValueError("matched retrieval unit offsets are required for windows")
-            window_start = max(0, unit_start - OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS)
-            window_end = min(
-                len(frozen_content),
-                unit_end + OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS,
-            )
-            content = frozen_content[window_start:window_end]
+            unit_start, unit_end = _unit_offsets(row.unit_locator, len(frozen_content))
+            window = oversized_chunk_window(len(frozen_content), unit_start, unit_end)
+            if window is not None:
+                window_start, window_end = window
+                content = frozen_content[window_start:window_end]
         result: ChunkSearchResult = {
             "chunk_record_id": chunk_id,
             "tss_id": tss_id,
             "document_title": cast("str", doc["title"]),
-            "sequence": cast("int", chunk["sequence"]),
+            "sequence": cast("int", row.sequence),
             "content": content,
-            "text_basis": cast("str", chunk["text_basis"]),
+            "text_basis": self._scope.chunk_text_basis_by_tss[tss_id],
             "origin": "selected" if doc.get("selected") else "unselected_screened",
             "appraised": doc.get("appraisal_tier") is not None,
             "fused_score": score,
@@ -1738,9 +1996,9 @@ class ChunkRetriever:
             result["cited_by"] = cited_by
         return result
 
-    def _soft_prior(self, chunk_id: str) -> float:
-        chunk = self._scope.chunks[chunk_id]
-        doc = self._scope.docs[cast("str", chunk["tss_id"])]
+    def _soft_prior(self, tss_id: str) -> tuple[float, dict[str, Any]]:
+        """Return a document's clamped prior multiplier and its recorded factors."""
+        doc = self._scope.docs[tss_id]
         selection_factor = (
             SELECTION_PRIOR_BOOST if self._has_selected_docs and doc.get("selected") else 1.0
         )
@@ -1778,7 +2036,7 @@ class ChunkRetriever:
         executed_multiplier = min(
             BOOST_CLAMP_MAX, max(BOOST_CLAMP_MIN, raw_multiplier)
         )
-        self._soft_prior_factors[chunk_id] = {
+        return executed_multiplier, {
             "selection": selection_factor,
             "columns": column_factors,
             "tags": tag_factors,
@@ -1788,7 +2046,6 @@ class ChunkRetriever:
             "raw_multiplier": raw_multiplier,
             "executed_multiplier": executed_multiplier,
         }
-        return executed_multiplier
 
     def _refresh_boost_matches(self) -> None:
         executed_columns: dict[str, list[str]] = {}
@@ -2040,9 +2297,11 @@ def _finding_record(row: Any) -> FindingRecord:
     evidence_type = getattr(row, "primary_evidence_type", None)
     if evidence_type is not None:
         record["evidence_type"] = cast("str", evidence_type)
-    quality_score = getattr(row, "quality_score", None)
-    if quality_score is not None:
-        record["appraisal_label"] = str(quality_score)
+    label = appraisal_tier(
+        getattr(row, "quality_score", None), unrated=bool(getattr(row, "unrated", False))
+    )
+    if label is not None:
+        record["appraisal_label"] = label
     venue = _metadata_venue(metadata)
     if venue is not None:
         record["venue"] = venue
@@ -2082,9 +2341,11 @@ def _icf_finding_record(row: Any) -> ICFFindingRecord:
     evidence_type = getattr(row, "primary_evidence_type", None)
     if evidence_type is not None:
         record["evidence_type"] = cast("str", evidence_type)
-    quality_score = getattr(row, "quality_score", None)
-    if quality_score is not None:
-        record["appraisal_label"] = str(quality_score)
+    label = appraisal_tier(
+        getattr(row, "quality_score", None), unrated=bool(getattr(row, "unrated", False))
+    )
+    if label is not None:
+        record["appraisal_label"] = label
     venue = _metadata_venue(metadata)
     if venue is not None:
         record["venue"] = venue
@@ -2126,6 +2387,7 @@ def _load_iof_finding_records(
             source_snapshot.c.metadata,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
+            source_appraisal_result.c.unrated,
         )
         .select_from(intervention_outcome_finding)
         .join(
@@ -2207,6 +2469,7 @@ def _load_icf_finding_records(
             source_snapshot.c.metadata,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
+            source_appraisal_result.c.unrated,
         )
         .select_from(implementation_context_finding)
         .join(
@@ -2787,6 +3050,50 @@ def _grouping_summary(groups_payload: Any) -> dict[str, Any]:
     }
 
 
+#: Lookup kinds that need a referenced upstream run; the reader below fails
+#: them (``"<kind> requires <stage>"``) when that run id is absent. Every
+#: other kind is always servable (it may return an empty or absent record).
+LOOKUP_KIND_REQUIRED_RUN: dict[str, str] = {
+    "selection_rationale": "selection",
+    "characterisation_summary": "characterisation",
+    "grouping_groups": "grouping",
+}
+
+
+def available_lookup_kinds(
+    *,
+    characterisation_run_id: uuid.UUID | None,
+    selection_run_id: uuid.UUID | None,
+    grouping_run_id: uuid.UUID | None,
+) -> list[str]:
+    """Return the lookup kinds a run can serve, in :data:`LOOKUP_QUERY_KINDS` order.
+
+    The same facts :func:`make_lookup_reader` checks before it reads: a kind in
+    :data:`LOOKUP_KIND_REQUIRED_RUN` is servable only when its upstream run id
+    is referenced. The section writer's ``lookup`` tool then offers only these
+    kinds (task 056 X3), so the model never spends a turn on a kind that can
+    only fail.
+
+    Args:
+        characterisation_run_id: The referenced characterisation run, if any.
+        selection_run_id: The referenced selection run, if any.
+        grouping_run_id: The referenced grouping run, if any.
+
+    Returns:
+        The servable kinds.
+    """
+    present = {
+        "characterisation": characterisation_run_id is not None,
+        "selection": selection_run_id is not None,
+        "grouping": grouping_run_id is not None,
+    }
+    return [
+        kind
+        for kind in LOOKUP_QUERY_KINDS
+        if kind not in LOOKUP_KIND_REQUIRED_RUN or present[LOOKUP_KIND_REQUIRED_RUN[kind]]
+    ]
+
+
 def make_lookup_reader(
     conn: Connection,
     *,
@@ -2841,6 +3148,7 @@ def make_lookup_reader(
                     sa_select(
                         source_appraisal_result.c.quality_score,
                         source_appraisal_result.c.rubric_version,
+                        source_appraisal_result.c.unrated,
                     )
                     .where(source_appraisal_result.c.task_id == task_id)
                     .where(source_appraisal_result.c.evidence_scope_id.in_(scope_ids))
@@ -2861,6 +3169,10 @@ def make_lookup_reader(
                         "rubric_version": row.rubric_version,
                     }
                 )
+                if row is not None and row.unrated:
+                    # Only on an Unrated row (no score, task 056), so a scored
+                    # row's result is unchanged.
+                    result["unrated"] = True
             elif kind == "classification_by_doc":
                 row = conn.execute(
                     sa_select(source_classification_result.c.primary_evidence_type)
@@ -3159,6 +3471,7 @@ def run_tool_loop(
     tool_call_counts: dict[str, int] = {}
     rejected_tool_calls = 0
     malformed_claims = 0
+    extra_tool_calls_ignored = 0
     usage_totals = UsageAccumulator()
 
     for turn in range(1, turn_cap + 1):
@@ -3181,6 +3494,7 @@ def run_tool_loop(
         emission = result.get("emission")
         tool_calls = result.get("tool_calls", [])
         malformed_claims += int(result.get("malformed", 0))
+        extra_tool_calls_ignored += int(result.get("extra_ignored", 0))
         if emission is not None:
             return {
                 "emission": emission,
@@ -3190,6 +3504,7 @@ def run_tool_loop(
                 "rejected_tool_calls": rejected_tool_calls,
                 "turn_cap_hit": force_emit,
                 "malformed_claims": malformed_claims,
+                "extra_tool_calls_ignored": extra_tool_calls_ignored,
                 "usage_totals": usage_totals.payload(),
             }
         if force_emit and tool_calls:
@@ -3292,6 +3607,7 @@ def run_section_loop(
             "emission": result.get("claims"),
             "tool_calls": result.get("tool_calls", []),
             "malformed": int(result.get("malformed_claims", 0)),
+            "extra_ignored": int(result.get("extra_tool_calls_ignored", 0)),
         }, usage
 
     result = run_tool_loop(
@@ -3309,6 +3625,7 @@ def run_section_loop(
         "rejected_tool_calls": result["rejected_tool_calls"],
         "turn_cap_hit": result["turn_cap_hit"],
         "malformed_claims": result["malformed_claims"],
+        "extra_tool_calls_ignored": result["extra_tool_calls_ignored"],
         "usage_totals": result["usage_totals"],
     }
 

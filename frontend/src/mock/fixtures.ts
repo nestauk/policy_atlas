@@ -116,7 +116,7 @@ export const mockEvidence: components["schemas"]["EvidenceItemOut"][] = [
   { source_id: "10000000-0000-4000-8000-000000000001", title: "Childhood obesity prevention in urban primary schools", year: 2024, venue: "Public Health Nutrition", origin: "OpenAlex", status: "found", cited: false, read_in_full: false },
   { source_id: "10000000-0000-4000-8000-000000000002", title: "Borough food strategy consultation", year: 2023, venue: "Tower Hamlets Council", origin: "Overton", status: "screened_out", screen_status: "excluded_retracted", screen_confidence: 1, status_reason: "The record was retracted", cited: false, read_in_full: false },
   { source_id: "10000000-0000-4000-8000-000000000003", title: "Universal breakfast clubs and diet quality", year: 2022, venue: "BMJ Open", origin: "OpenAlex", status: "relevant", evidence_type: "Cohort study", appraisal_tier: "Moderate confidence", screen_status: "relevant", screen_confidence: 0.91, screen_basis: "title_abstract", screen_stage: 2, screen_reason: "Universal breakfast provision is a primary-school food-environment exposure in scope.", classification_reason: "Prospective cohort following ten schools over two academic years.", url: "https://example.org/universal-breakfast", cited: false, read_in_full: false },
-  { source_id: "10000000-0000-4000-8000-000000000004", title: "Healthy High Streets programme review", year: 2023, venue: "London Assembly", origin: "Overton", status: "not_selected", status_reason: "Lower transferability", screen_status: "relevant", screen_confidence: 0.72, screen_reason: "Covers food-environment levers around schools, though at borough rather than school level.", cited: false, read_in_full: false },
+  { source_id: "10000000-0000-4000-8000-000000000004", title: "Healthy High Streets programme review", year: 2023, venue: "London Assembly", origin: "Overton", status: "not_selected", status_reason: "Lower transferability", evidence_type: "Unknown / Insufficient information", appraisal_tier: "Unrated", screen_status: "relevant", screen_confidence: 0.72, screen_reason: "Covers food-environment levers around schools, though at borough rather than school level.", cited: false, read_in_full: false },
   { source_id: "10000000-0000-4000-8000-000000000005", title: "School meals and child weight outcomes", year: 2021, venue: "The Lancet Child & Adolescent Health", origin: "OpenAlex", status: "selected", evidence_type: "Systematic review", screen_status: "relevant", screen_confidence: 0.88, screen_reason: "Directly evaluates school-meal policies against child weight outcomes.", classification_reason: "Explicit systematic search and synthesis across 42 trials.", cited: false, read_in_full: false },
   { source_id: "10000000-0000-4000-8000-000000000006", title: "Neighbourhood food access and family choices", year: 2020, venue: "Health & Place", origin: "OpenAlex", status: "read_in_full", evidence_type: "Qualitative study", screen_status: "relevant", screen_confidence: 0.81, screen_reason: "Family food-choice mechanisms around primary schools are in scope.", cited: false, read_in_full: true },
   { source_id: "10000000-0000-4000-8000-000000000007", title: "Active travel incentives: implementation findings", year: 2024, venue: "Local Government Studies", origin: "OpenAlex", status: "findings_extracted", evidence_type: "Mixed methods", screen_status: "relevant", screen_confidence: 0.86, screen_reason: "Implementation evidence for an in-scope active-travel lever.", cited: false, read_in_full: true },
@@ -353,7 +353,7 @@ export const mockArtefactSectionProse: Record<number, string> = {
  *
  * `role` is `"standard"` throughout because that is what the read model
  * returns: the Sources block is written with role `"sources"` and coerced
- * (`api/readmodels/repository.py`). The section ORDER is what puts Sources
+ * (`api/read_models/repository.py`). The section ORDER is what puts Sources
  * last, not its role.
  */
 export const mockBaselineArtefact: components["schemas"]["ArtefactOut"] = {
@@ -713,13 +713,15 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
         "Suggest options, search widely, read every abstract for the interventions it covers, cluster them into options, apply your constraints.",
     },
     {
-      stage: "select",
-      label: "Shortlist and assessment",
-      blurb: "Review the proposed reading set. Assessment runs only when you say so. Not in this release.",
+      stage: "shortlist",
+      label: "Shortlist",
+      blurb:
+        "Policy Atlas proposes about five places for close reading, one reason each, mixed to your risk appetite. Add, remove, ask for more. Assessment of the shortlisted options is not in this release.",
     },
   ],
   time_band: "10-15 minutes",
   baseline_confirmed: null,
+  risk_appetite: "mostly_tried",
   ready: true,
 };
 
@@ -973,11 +975,11 @@ const MOCK_LONGLIST_COST_PREFERENCE = "Prefer options with a lower cost per part
 
 type ProfileFixture = NonNullable<OptionOutFixture["profile"]>;
 
-/** One eight-line profile for a longlist fixture: a sentence per line and a
+/** One nine-line profile for a longlist fixture: a sentence per line and a
  *  mark where the option stands out (`who_decides` and `dependencies` never
  *  carry one). */
 function mockProfile(
-  marks: Partial<Record<"cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "coordination" | "delivery_complexity", "less" | "more">>,
+  marks: Partial<Record<"cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "coordination" | "delivery_complexity" | "potential_impact", "less" | "more">>,
   settings: string[],
 ): ProfileFixture {
   const line = (key: ProfileFixture["lines"][number]["key"], sentence: string) => ({
@@ -995,6 +997,7 @@ function mockProfile(
       line("dependencies", "Depends on shared data between schools and Jobcentre Plus."),
       line("coordination", "Schools, Jobcentres and councils must agree who refers whom."),
       line("delivery_complexity", "One referral route; few moving parts once the data is shared."),
+      line("potential_impact", "Moderate if it works: it targets late referral, a main driver of the baseline; would apply to 16 to 24 year olds, tried on 18 to 24 year olds; the records describe proposals only."),
     ],
     settings,
   };
@@ -1036,7 +1039,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     secondary_lever_types: ["regulate"],
     ambition: "more",
     ambition_reason: "Changes who is entitled to a national benefit, not just how it is delivered.",
-    profile: mockProfile({ cost: "less", time_to_effect: "more", coordination: "more" }, ["Jobcentre", "Secondary school"]),
+    profile: mockProfile({ cost: "less", time_to_effect: "more", coordination: "more", potential_impact: "more" }, ["Jobcentre", "Secondary school"]),
     authority: {
       label: "needs_action_by",
       body: "the Department for Work and Pensions",
@@ -1219,7 +1222,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     secondary_lever_types: ["provide a service"],
     ambition: "less",
     ambition_reason: "Reorganises the existing offer into one application rather than adding anything new.",
-    profile: mockProfile({ cost: "less", delivery_complexity: "more", time_to_set_up: "less" }, ["Jobcentre", "Community centre"]),
+    profile: mockProfile({ cost: "less", delivery_complexity: "more", time_to_set_up: "less", potential_impact: "less" }, ["Jobcentre", "Community centre"]),
     authority: { label: "unclear", body: null, reason: "The sources do not say who could merge the application routes." },
     taxonomy_version: "lever-types-v1",
     document_count: 9,
@@ -1284,13 +1287,72 @@ function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixt
     evaluated_countries: option.evaluated_countries,
     outcomes_evaluated: option.outcomes_evaluated,
     outcomes_total: option.outcomes_total,
+    shortlist: option.shortlist ?? null,
+    maturity: option.maturity ?? null,
   };
+}
+
+/** The shortlist's in-memory state (task 055, A17): the note, whether the
+ *  proposal is stale against the plan's appetite, and the appetite the
+ *  mock's plan holds. The shortlist routes in `api.ts` change it. */
+export const mockShortlistState: { note: string | null; stale: boolean; inputsChanged: boolean } = {
+  note: null,
+  stale: false,
+  inputsChanged: false,
+};
+
+/** Places the shortlist fills up to. */
+export const MOCK_SHORTLIST_PLACES_TARGET = 5;
+
+/** Put the shortlist fixtures back to where they start: one pick with a
+ *  reason (the bundle), one place added by you, one pick set aside, a
+ *  maturity rung on every option and a note. Runs at load and on
+ *  `resetMockScenario`. */
+export function resetMockShortlist() {
+  const cards = mockLonglistOptionCards;
+  cards[MOCK_OPTION_ID_PACKAGE].shortlist = { state: "proposed", reason: "Mock reason: names a fact on the card." };
+  cards[MOCK_OPTION_ID_ADDED_BY_YOU].shortlist = { state: "added_by_you", reason: null };
+  cards[MOCK_OPTION_ID_NO_IN_SCOPE].shortlist = { state: "set_aside", reason: null };
+  cards[MOCK_OPTION_ID_EXCLUDED].shortlist = null;
+  cards[MOCK_OPTION_ID_EXCLUDED].maturity = {
+    rung: "evaluated",
+    design_mix: "1 RCT, 2 observational",
+    none_in_your_setting: false,
+    latest_evaluation_year: 2021,
+    stale: false,
+  };
+  cards[MOCK_OPTION_ID_NO_IN_SCOPE].maturity = {
+    rung: "evaluated",
+    design_mix: "2 observational",
+    none_in_your_setting: true,
+    latest_evaluation_year: 2016,
+    stale: true,
+  };
+  cards[MOCK_OPTION_ID_ADDED_BY_YOU].maturity = {
+    rung: "proposal_only",
+    design_mix: "",
+    none_in_your_setting: false,
+    latest_evaluation_year: null,
+    stale: false,
+  };
+  cards[MOCK_OPTION_ID_PACKAGE].maturity = {
+    rung: "reviewed",
+    design_mix: "1 systematic review, 4 observational",
+    none_in_your_setting: false,
+    latest_evaluation_year: 2023,
+    stale: false,
+  };
+  for (const id of mockLonglistExtraOptionIds) mockLonglistOptionCards[id].shortlist = null;
+  mockShortlistState.note = "Mock note: nothing here tackles the wider labour market.";
+  mockShortlistState.stale = false;
+  mockShortlistState.inputsChanged = false;
 }
 
 /** Option ids added by hand or by chat verb since the walk built the four
  *  fixture options above (`POST /options`, `mockFetch`) — always unthemed,
  *  like a real rebuild's new entrants. */
 export const mockLonglistExtraOptionIds: string[] = [];
+resetMockShortlist();
 
 /** Build one `OptionOut` for `POST /options` (the button's and the chat
  *  verb's shared path, D13): minted *added by you*, zero documents, not yet
@@ -1471,5 +1533,12 @@ export function mockLonglist(): components["schemas"]["LonglistOut"] {
     },
     taxonomy_version: "lever-types-v1",
     depth_label: "scoping pass",
+    shortlist: {
+      note: mockShortlistState.note,
+      provenance: {},
+      places_target: MOCK_SHORTLIST_PLACES_TARGET,
+      stale: mockShortlistState.stale,
+    },
+    plan_inputs_changed: mockShortlistState.inputsChanged,
   };
 }

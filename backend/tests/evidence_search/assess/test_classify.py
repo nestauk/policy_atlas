@@ -27,8 +27,8 @@ from policy_atlas.evidence_search.assess.classification_backend import (
 )
 from policy_atlas.evidence_search.assess.classify import ClassifyContext, classify_sources
 from policy_atlas.evidence_search.assess.classify_prompt import (
+    CLASSIFY_EFFORT,
     CLASSIFY_MODEL,
-    CLASSIFY_REASONING_EFFORT,
     TAG_MAX_CHARS,
     TAGS_MAX_PER_DOC,
     ClassifyEnvelopePayload,
@@ -538,7 +538,14 @@ def test_harness_classify_component(conn: Connection) -> None:
     assert {"classified", "by_type", "skipped"} <= set(summary.keys())
     assert summary["classified"] == 1
     assert summary["skipped"] == 1
-    assert summary["usage_totals"] == {"prompt": 11, "completion": 7, "total": 18, "cached": 0}
+    assert summary["usage_totals"] == {
+        "prompt": 11,
+        "completion": 7,
+        "total": 18,
+        "cached": 0,
+        "cache_write": 0,
+        "reasoning": 0,
+    }
 
     # Run ended as succeeded
     run_row = conn.execute(select(runs).where(runs.c.run_id == rid_classify)).one()
@@ -666,16 +673,19 @@ def test_classify_backend_passes_model_and_reasoning_effort() -> None:
     assert usage is None
     [kwargs] = fake_client.chat.completions.calls
     assert kwargs["model"] == CLASSIFY_MODEL
-    assert kwargs["reasoning_effort"] == "high"
-    assert kwargs["reasoning_effort"] == CLASSIFY_REASONING_EFFORT
+    assert kwargs["reasoning_effort"] == "medium"  # task 056 P5: medium
+    assert kwargs["reasoning_effort"] == CLASSIFY_EFFORT
 
 
-def test_openai_kwargs_omits_reasoning_effort_when_none() -> None:
-    kwargs = openai_kwargs("gpt-5.4-mini")
-    assert kwargs == {"model": "gpt-5.4-mini"}
-    assert "reasoning_effort" not in kwargs
+def test_openai_kwargs_always_sends_reasoning_effort() -> None:
+    kwargs = openai_kwargs(
+        "gpt-5.4-mini", reasoning_effort="medium", prompt_cache="auto", timeout_s=60
+    )
+    assert kwargs == {"model": "gpt-5.4-mini", "reasoning_effort": "medium", "timeout": 60}
 
 
 def test_openai_kwargs_includes_reasoning_effort_when_set() -> None:
-    kwargs = openai_kwargs("gpt-5.4-mini", reasoning_effort="xhigh")
-    assert kwargs == {"model": "gpt-5.4-mini", "reasoning_effort": "xhigh"}
+    kwargs = openai_kwargs(
+        "gpt-5.4-mini", reasoning_effort="xhigh", prompt_cache="auto", timeout_s=60
+    )
+    assert kwargs == {"model": "gpt-5.4-mini", "reasoning_effort": "xhigh", "timeout": 60}

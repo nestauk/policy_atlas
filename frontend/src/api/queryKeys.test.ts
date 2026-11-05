@@ -16,6 +16,7 @@ describe("queryKeys.evidence", () => {
       { origin: "Overton" },
       { evidence_type: "Systematic review" },
       { strength: "Weak" },
+      { strength: "Unrated" },
       { year_from: 2019 },
       { year_to: 2024 },
     ];

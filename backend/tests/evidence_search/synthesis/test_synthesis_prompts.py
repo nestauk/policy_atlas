@@ -15,15 +15,10 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     build_envelope,
     build_judge_messages,
 )
-from policy_atlas.evidence_search.synthesis.summary_prompts import (
-    ARTEFACT_SUMMARY_SYSTEM_PROMPT,
-    SUMMARISER_PROMPT_VERSION,
-)
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     CASE_STUDIES_PROMPT_VERSION,
     CASE_STUDIES_SYSTEM_PROMPT,
     EMIT_SECTION_TOOL_SCHEMA,
-    FORBIDDEN_SECTION_TITLES,
     FULL_REPORT_INTRO_PROMPT_VERSION,
     KEY_FINDINGS_GAP_MAX,
     KEY_FINDINGS_PROMPT_VERSION,
@@ -33,6 +28,7 @@ from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     NAV_LABEL_MAX,
     QUERY_FINDINGS_TOOL_SCHEMA,
     SECTION_PROMPT_VERSION,
+    SECTION_REPAIR_PROMPT_VERSION,
     SECTION_SYSTEM_PROMPT,
     SECTION_TOOL_SCHEMAS,
     SECTIONS_PROMPT_VERSION,
@@ -47,6 +43,11 @@ from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     build_section_repair_messages,
     build_sections_messages,
 )
+from policy_atlas.evidence_search.synthesis.summary_prompts import (
+    ARTEFACT_SUMMARY_SYSTEM_PROMPT,
+    SUMMARISER_PROMPT_VERSION,
+)
+from policy_atlas.evidence_search.synthesis.synthesis_backend import FORBIDDEN_SECTION_TITLES
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     REASONING_CLAIMS_MAX,
     SECTION_CAP,
@@ -60,8 +61,9 @@ from policy_atlas.evidence_search.synthesis.voice_prompt import VOICE_PRINCIPLES
 
 def test_prompt_versions_are_distinct_constants() -> None:
     assert SECTIONS_PROMPT_VERSION == "synthesise_sections_v5"
-    assert SECTION_PROMPT_VERSION == "synthesise_section_v10"
-    assert JUDGE_PROMPT_VERSION == "grounding_judge_v2"
+    assert SECTION_PROMPT_VERSION == "synthesise_section_v11"
+    assert SECTION_REPAIR_PROMPT_VERSION == "synthesise_repair_v2"
+    assert JUDGE_PROMPT_VERSION == "grounding_judge_v3"
     assert ENVELOPE_VERSION == "synthesis_envelope_v2"
     assert CASE_STUDIES_PROMPT_VERSION == "synthesise_case_studies_v1"
     assert MOST_RELEVANT_NOTE_PROMPT_VERSION == "most_relevant_note_v1"
@@ -230,7 +232,8 @@ def test_section_repair_is_loop_free_and_reword_down() -> None:
             }
         ],
     )
-    assert [message["role"] for message in messages] == ["system", "user", "user"]
+    # Task 056 D10: system, run and section task (the section prefix), then the repair.
+    assert [message["role"] for message in messages] == ["system", "user", "user", "user"]
     repair = messages[-1]["content"]
     assert "you cannot make tool calls" in repair
     assert "Reword each claim DOWN" in " ".join(repair.split())
@@ -323,13 +326,33 @@ def test_note_wire_shape() -> None:
 
 
 def test_summariser_prompt_carries_voice_and_bans_confidence() -> None:
-    assert SUMMARISER_PROMPT_VERSION == "summariser_v2"
+    assert SUMMARISER_PROMPT_VERSION == "summariser_v3"
     assert VOICE_PRINCIPLES in ARTEFACT_SUMMARY_SYSTEM_PROMPT
     assert "no confidence language" in ARTEFACT_SUMMARY_SYSTEM_PROMPT
     assert "In brief" in ARTEFACT_SUMMARY_SYSTEM_PROMPT
 
 
-# --- grounding_judge_v2 ---
+def test_summariser_v3_and_judge_v2_carry_the_task_056_rules() -> None:
+    """Task 056 O3: gaps stay gaps, labels travel, the retry carries the judge's reason,
+    and the judge decides by "would a reader who never opens the detail be misled"."""
+    from policy_atlas.evidence_search.synthesis.summary_prompts import (
+        BLOCK_SUMMARY_SYSTEM_PROMPT,
+        SUMMARY_JUDGE_PROMPT_VERSION,
+        SUMMARY_JUDGE_SYSTEM_PROMPT,
+    )
+
+    for prompt in (BLOCK_SUMMARY_SYSTEM_PROMPT, ARTEFACT_SUMMARY_SYSTEM_PROMPT):
+        assert "Gaps stay gaps." in prompt
+        assert "Labels travel." in prompt
+        assert "`previous_attempt`" in prompt
+    assert SUMMARY_JUDGE_PROMPT_VERSION == "summary_judge_v2"
+    assert "would a reader who never" in SUMMARY_JUDGE_SYSTEM_PROMPT
+    assert "Omission alone is never a fault" in SUMMARY_JUDGE_SYSTEM_PROMPT
+    assert "Be strict" not in SUMMARY_JUDGE_SYSTEM_PROMPT
+    assert "quote the summary words at fault" in SUMMARY_JUDGE_SYSTEM_PROMPT
+
+
+# --- grounding_judge_v3 ---
 
 
 def test_judge_prompt_negative_rules() -> None:

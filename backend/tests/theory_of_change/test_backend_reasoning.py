@@ -1,4 +1,4 @@
-"""The ToC backend sends the route's reasoning setting with each call."""
+"""The ToC backend sends the step's reasoning effort and timeout with each call."""
 
 from types import SimpleNamespace
 from typing import Any
@@ -30,7 +30,7 @@ class _Client:
         return self._response
 
 
-def test_the_judge_call_carries_the_route_s_reasoning_setting() -> None:
+def test_the_judge_call_carries_the_step_s_effort_and_timeout() -> None:
     client = _Client()
     backend = OpenAITocBackend.__new__(OpenAITocBackend)
     backend._client = client
@@ -45,7 +45,6 @@ def test_the_judge_call_carries_the_route_s_reasoning_setting() -> None:
         year=2000,
         text="abc",
     )
-    model = route().model_for("toc_judge")
-    assert client.kwargs["model"] == model
-    expected = route().reasoning_effort_for(model)
-    assert client.kwargs.get("reasoning_effort") == expected
+    assert client.kwargs["model"] == route().model_for("toc_judge")
+    assert client.kwargs["reasoning_effort"] == route().effort_for("toc_judge")
+    assert client.kwargs["timeout"] == route().timeout_for("toc_judge")

@@ -642,3 +642,59 @@
   [event-log sequence](event-log-sequence.md), [block content_hash](block-content-hash.md)).
 * **Update**: Added the [plan→config compile fails-closed](plan-compile-fails-closed.md) invariant —
   also verified by task 001, missed in the initial seed.
+* **Update** (2026-10-27, task 055 review): four concepts — [wire max_length truncates](wire-max-length-truncates-not-fails.md),
+  [plan-field additions carry from previous](plan-field-additions-carry-from-previous.md),
+  [recovery copy names a route that recovers](recovery-copy-names-a-route-that-recovers.md),
+  [short ids leak into free text](short-ids-leak-into-free-text.md); folds into
+  [docker wedge](macos-swap-presents-as-docker-wedge.md) (engine stops answering; `docker desktop restart`),
+  [live-check runbook](live-check-drive-runbook.md) (`--reload` waits on the event stream),
+  [executor fan-out](executor-fanout-context-and-usage.md) (thread-order assertions),
+  [gate snapshots](gate-snapshots-commit-from-tree-ids.md) (splitting a gated tree),
+  [evidence readbacks](evidence-readbacks-name-the-task-they-read.md) (hand marks written back).
+  Declined as knowledge: the stub `to_ready` helper adds a turn per plan part and
+  `_folded_coverage` copies only `outcome_counts` (both code-local, recorded in 055 verification.md).
+
+## 2026-11-03
+* **Update** (task 057 review): seven concepts —
+  [queued-row writes guard on the owning run](queued-row-writes-guard-on-the-owning-run.md),
+  [Lambda runs the image as its own user](lambda-runs-the-image-as-its-own-user.md),
+  [scoped SQL retrieval: planner and parity](scoped-sql-retrieval-planner-and-parity.md),
+  [measure a commit from a second worktree](measure-a-commit-from-a-second-worktree.md),
+  [parallel-agent test databases](parallel-agent-test-databases.md),
+  [judge effort needs a content read](judge-effort-needs-a-content-read.md),
+  [the markup rule must not delete content](markup-rule-must-not-delete-content.md);
+  one concept extended, [client timeout sized to the healthy tail](client-timeout-sized-to-healthy-tail.md)
+  (three attempts, derive at the width, the 15 s floor, failed attempts carry no input).
+  Extended again after the owner's probes 2 and 4 and the Bedrock research: the stalls are
+  the provider's (do not engineer the client for them) and `max_completion_tokens` is a
+  quota reservation on Bedrock (screen and classify caps trimmed, F22).
+  Authored from both sources: the build's 22 knowledge candidates (verification.md § Review
+  handoff) and the stack's findings. Folded: the zsh word-split, the two-walk cap, the
+  cherry-pick abort, the `--theirs` rule, the store's like-for-like effect, the pool's probe
+  cost, the overhead timer's noise and the envelope-embedding over-count into the worktree
+  runbook; the `127.0.0.1` refusal, the extension precondition and the contended backfill
+  timing into the agent-database rule; the tokens rule, the `EXPLAIN (ANALYZE, BUFFERS)`
+  reading, the float32 order and the buffer-pool reading into the retrieval concept; the
+  CLI import, the two sync lines and the emulator into the Lambda concept. Declined as
+  knowledge: none of the 22 (each is in a concept above). The review's own lessons
+  (the status-only guard, the unknown send, the test-only socket deny, the 60 s token) are
+  in the first and fifth concepts.
+
+## 2026-11-02
+* **Update** (task 056 review): ten concepts —
+  [Langfuse usage buckets](langfuse-usage-buckets-are-exclusive.md),
+  [pydantic docstrings are prompt text](pydantic-docstrings-in-tool-schemas-are-prompt-text.md),
+  [cost basis before target](cost-per-run-basis-before-target.md),
+  [omitted effort is medium, GPT-6 shapes](reasoning-effort-omitted-is-medium-gpt6-shapes.md),
+  [client timeout sized to the healthy tail](client-timeout-sized-to-healthy-tail.md),
+  [cache measurement needs isolated prefixes](cache-measurement-needs-isolated-prefixes.md),
+  [executor capacity counts database rows](run-executor-capacity-counts-database-rows.md),
+  [poll-deadline tests under parallel load](poll-deadline-tests-under-parallel-load.md) (two of the build's widened deadlines were races; made deterministic at review),
+  [frontend label lists mirror the backend vocabulary](frontend-label-lists-mirror-backend-vocabulary.md),
+  [parallel-agent briefs forbid git stash](parallel-agent-briefs-forbid-git-stash.md).
+  Folded: the SDK's missing `cache_write_tokens` and the v1-only observations API into the
+  Langfuse concept; embedding dominating ingest on bedrock into the cost basis; the 409 on two
+  servers, the kept plan after 409 and the worktree migration step into the executor concept;
+  the xdist name collision into the poll-deadline concept. The build's "re-run alone" and
+  "the fix is the deadline" candidates were ordered, not contradicted. Declined as knowledge:
+  the walk's `extract:interventions` stall figures (task-specific, in verification.md).

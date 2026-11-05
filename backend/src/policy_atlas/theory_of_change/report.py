@@ -34,7 +34,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.api.readmodels.repository import _authorships, _url, _venue
+from policy_atlas.api.read_models.repository import _authorships, _url, _venue
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.schema import source_snapshot, task_source_snapshot
 from policy_atlas.core.usage import UsageAccumulator

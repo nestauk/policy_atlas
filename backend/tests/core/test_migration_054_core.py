@@ -25,7 +25,7 @@ from policy_atlas.core.schema import toc_box, toc_item_evidence, toc_link
 from tests.conftest import _alembic_cfg
 from tests.helpers import delete_task_data, now, seed_task_and_run, seed_toc_task
 
-PRE_REVISION = "f1b6d3a8c2e5"
+PRE_REVISION = "0914321f8de4"  # dev's head; the 054 chain follows it (rebased 2026-11-05)
 
 _NEW_TABLES = {
     "toc_box",

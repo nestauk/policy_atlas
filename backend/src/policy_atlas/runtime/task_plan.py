@@ -125,6 +125,7 @@ OPTIONS_SCOPING_STEPS: tuple[str, ...] = (
     "option_profile",
     "constrain",
     "theme",
+    "shortlist",
 )
 #: The steps only a theory-of-change chain composes (task 054, S3).
 TOC_STEPS: tuple[str, ...] = (

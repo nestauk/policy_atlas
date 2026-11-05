@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 import pytest
@@ -17,30 +19,30 @@ from policy_atlas.core.embeddings import (
 )
 from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.schema import chunk as chunk_table
-from policy_atlas.core.schema import chunk_embedding, task_source_snapshot
+from policy_atlas.core.schema import chunk_embedding, source_snapshot, task_source_snapshot
+from policy_atlas.core.tokens import word_tokens
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.evidence_search.synthesis import synthesis_tools
-from policy_atlas.evidence_search.synthesis.synthesis_backend import SectionProseWire
+from policy_atlas.evidence_search.synthesis.section_prompt import SectionProseWire
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     BOOST_CLAMP_MAX,
     BOOST_CLAMP_MIN,
     CANDIDATE_POOL_PER_LEG,
     OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS,
     READ_CALLS_PER_TURN_CAP,
-    RETRIEVAL_UNIT_CAP,
     SECTION_TURN_CAP,
     SYNTH_CHUNK_TOP_K,
     ChunkRetriever,
     ChunkSearchResult,
     PassThroughChunkReranker,
     RetrievalScope,
-    RetrievalUnitCapError,
     SynthesisDirective,
     SynthesisDirectiveError,
     ToolExchange,
     ToolValidationError,
     _group_member_ids,
+    borrowed_connection,
     build_retrieval_scope,
     build_section_tools,
     gathered_ids,
@@ -126,15 +128,114 @@ def _claims(text: str = "x") -> SectionProseWire:
     )
 
 
+@dataclass(frozen=True)
+class _SeededScope:
+    """A retrieval scope written to the test database, with readable names.
+
+    Attributes:
+        scope: The scope the retriever searches.
+        ids: Database id string per record name (documents, chunks).
+        names: Record name per database id string.
+    """
+
+    scope: RetrievalScope
+    ids: dict[str, str]
+    names: dict[str, str]
+
+    def name_list(self, results: Sequence[Mapping[str, Any]]) -> list[str]:
+        """Return the record names of ``results``' chunk ids, in order."""
+        return [self.names[str(result["chunk_record_id"])] for result in results]
+
+
+def _ordered_ids(kind: int, names: Sequence[str]) -> dict[str, str]:
+    """Give each name a uuid whose text sorts like the names; a uuid name stays."""
+    ids: dict[str, str] = {}
+    for index, name in enumerate(sorted(names)):
+        try:
+            ids[name] = str(uuid.UUID(name))
+        except ValueError:
+            ids[name] = str(uuid.UUID(int=(kind << 64) | (index + 1)))
+    return ids
+
+
 def _scope(
+    conn: Connection,
     docs: dict[str, dict[str, Any]],
     chunks: dict[str, dict[str, Any]],
     units: list[dict[str, Any]],
-) -> RetrievalScope:
-    return RetrievalScope(docs=docs, chunks=chunks, units=units)
+) -> _SeededScope:
+    """Write chunks and units to the database and build a scope over them.
+
+    The document records stay in memory exactly as given (the prior and the
+    filters read them), keyed by id; each document gets one snapshot holding its
+    chunks. A unit's words come from its ``text`` and its offsets default to the
+    whole chunk. Ids keep the names' sort order, so tie-breaks read naturally.
+    """
+    doc_ids = _ordered_ids(1, list(docs))
+    chunk_ids = _ordered_ids(2, list(chunks))
+    unit_ids = _ordered_ids(3, [str(unit["unit_id"]) for unit in units])
+    snapshot_by_doc = {name: uuid.uuid4() for name in docs}
+    for name, snapshot_id in snapshot_by_doc.items():
+        conn.execute(source_snapshot.insert().values(
+            source_snapshot_id=snapshot_id,
+            content_hash=f"test-{snapshot_id}",
+            text_basis="full_text",
+            source_locator=f"test://{name}",
+            metadata={},
+            created_at=now(),
+        ))
+    for name, record in chunks.items():
+        conn.execute(chunk_table.insert().values(
+            chunk_id=uuid.UUID(chunk_ids[name]),
+            source_snapshot_id=snapshot_by_doc[record["tss_id"]],
+            sequence=record["sequence"],
+            content=record["content"],
+            content_hash=content_hash(record["content"]),
+            locator={},
+            segmentation_policy=record.get("segmentation_policy", "manual_v1"),
+            created_at=now(),
+        ))
+    unit_index: dict[str, int] = {}
+    for unit in units:
+        content = chunks[unit["chunk_id"]]["content"]
+        index = unit_index.get(unit["chunk_id"], 0)
+        unit_index[unit["chunk_id"]] = index + 1
+        conn.execute(chunk_embedding.insert().values(
+            chunk_embedding_id=uuid.UUID(unit_ids[str(unit["unit_id"])]),
+            chunk_id=uuid.UUID(chunk_ids[unit["chunk_id"]]),
+            embedding_profile=EMBEDDING_PROFILE,
+            unit_policy=UNIT_POLICY,
+            unit_index=index,
+            unit_locator={"start": unit.get("start", 0), "end": unit.get("end", len(content))},
+            embedding=unit["vector"],
+            tokens=sorted(word_tokens(unit["text"])),
+            created_at=now(),
+        ))
+    chunk_basis = {
+        record["tss_id"]: record.get("text_basis", "full_text") for record in chunks.values()
+    }
+    scope = RetrievalScope(
+        docs={doc_ids[name]: dict(record) for name, record in docs.items()},
+        snapshot_by_tss={doc_ids[name]: snapshot_by_doc[name] for name in docs},
+        chunk_text_basis_by_tss={
+            doc_ids[name]: chunk_basis.get(name, "full_text") for name in docs
+        },
+        connect=borrowed_connection(conn),
+        unit_count=len(units),
+    )
+    ids = {**doc_ids, **chunk_ids}
+    return _SeededScope(scope=scope, ids=ids, names={v: k for k, v in ids.items()})
 
 
-def _one_chunk_scope(*, selected_a: bool = False, selected_b: bool = False) -> RetrievalScope:
+def _one_chunk_scope(
+    conn: Connection, *, selected_a: bool = False, selected_b: bool = False
+) -> _SeededScope:
+    return _scope(conn, *_one_chunk_records(selected_a=selected_a, selected_b=selected_b))
+
+
+def _one_chunk_records(
+    *, selected_a: bool = False, selected_b: bool = False
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], list[dict[str, Any]]]:
     docs = {
         "doc-a": {
             "title": "A",
@@ -187,7 +288,7 @@ def _one_chunk_scope(*, selected_a: bool = False, selected_b: bool = False) -> R
             "text": "beta policy evidence",
         },
     ]
-    return _scope(docs, chunks, units)
+    return docs, chunks, units
 
 
 def test_parse_synthesis_directive_default_absent() -> None:
@@ -313,12 +414,15 @@ def test_query_findings_group_id_requires_qualified_form_in_tool_loop() -> None:
     assert result["rejected_tool_calls"] == 1
 
 
-def test_run_section_loop_batches_a_turns_uncached_query_embeddings() -> None:
+def test_run_section_loop_batches_a_turns_uncached_query_embeddings(
+    conn: Connection,
+) -> None:
     """022 rider 16: N distinct search_chunks queries requested in one turn
     embed in ONE backend call, not N sequential single-text calls."""
     embedder = FakeEmbedder({"alpha": _vector(1.0), "beta": _vector(0.1)})
+    seeded = _one_chunk_scope(conn)
     retriever = ChunkRetriever(
-        _one_chunk_scope(),
+        seeded.scope,
         embedder=embedder,
         directive=SynthesisDirective(),
         reranker=PassThroughChunkReranker(),
@@ -361,7 +465,7 @@ def test_run_section_loop_batches_a_turns_uncached_query_embeddings() -> None:
         if exchange["arguments"].get("query") == "alpha"
         for chunk in exchange["result"]["chunks"]
     }
-    assert "chunk-a" in alpha_chunks
+    assert seeded.ids["chunk-a"] in alpha_chunks
 
 
 def test_query_findings_group_member_map_rejects_legacy_group_ids() -> None:
@@ -418,8 +522,11 @@ def test_parse_synthesis_directive_screen_confidence_defaults_and_bounds() -> No
             )
 
 
-def test_retriever_ranking_is_deterministic_and_lexical_match_is_reachable() -> None:
-    scope = _scope(
+def test_retriever_ranking_is_deterministic_and_lexical_match_is_reachable(
+    conn: Connection,
+) -> None:
+    seeded = _scope(
+        conn,
         docs={
             "doc-a": {
                 "title": "A",
@@ -451,7 +558,7 @@ def test_retriever_ranking_is_deterministic_and_lexical_match_is_reachable() -> 
         ],
     )
     retriever = ChunkRetriever(
-        scope,
+        seeded.scope,
         embedder=FakeEmbedder({"needle": _vector(1.0)}),
         directive=SynthesisDirective(),
         reranker=PassThroughChunkReranker(),
@@ -459,25 +566,50 @@ def test_retriever_ranking_is_deterministic_and_lexical_match_is_reachable() -> 
     first = retriever.search("needle")
     second = retriever.search("needle")
     assert first == second
-    assert [chunk["chunk_record_id"] for chunk in first] == ["chunk-a"]
+    assert seeded.name_list(first) == ["chunk-a"]
 
 
-def test_retriever_selection_prior_reorders_without_excluding_unselected() -> None:
+def test_retriever_selection_prior_reorders_without_excluding_unselected(
+    conn: Connection,
+) -> None:
+    seeded = _one_chunk_scope(conn, selected_b=True)
     retriever = ChunkRetriever(
-        _one_chunk_scope(selected_b=True),
+        seeded.scope,
         embedder=FakeEmbedder({"policy": _vector(1.0)}),
         directive=SynthesisDirective(),
         reranker=PassThroughChunkReranker(),
     )
     results = retriever.search("policy")
-    assert [chunk["chunk_record_id"] for chunk in results] == ["chunk-b", "chunk-a"]
+    assert seeded.name_list(results) == ["chunk-b", "chunk-a"]
     assert {chunk["origin"] for chunk in results} == {"selected", "unselected_screened"}
     assert retriever.provenance()["selection_prior"] == 2.0
 
 
-def test_retriever_search_results_expose_chunk_text_basis_values() -> None:
+def test_shared_snapshot_is_searched_under_the_selected_document(conn: Connection) -> None:
+    """task 057 review (Codex 4): two scope documents share one snapshot; the
+    unselected one has the smaller id, yet the selected one carries the hit."""
+    seeded = _one_chunk_scope(conn, selected_b=True)
+    doc_a, doc_b = seeded.ids["doc-a"], seeded.ids["doc-b"]
+    assert doc_a < doc_b
+    snapshots = dict(seeded.scope.snapshot_by_tss)
+    snapshots[doc_b] = snapshots[doc_a]  # doc-b now holds doc-a's text
     retriever = ChunkRetriever(
-        _one_chunk_scope(),
+        replace(seeded.scope, snapshot_by_tss=snapshots),
+        embedder=FakeEmbedder({"policy": _vector(1.0)}),
+        directive=SynthesisDirective(),
+        reranker=PassThroughChunkReranker(),
+    )
+    results = retriever.search("policy")
+    assert [(seeded.names[r["chunk_record_id"]], r["tss_id"]) for r in results] == [
+        ("chunk-a", doc_b)
+    ]
+    assert results[0]["origin"] == "selected"
+
+
+def test_retriever_search_results_expose_chunk_text_basis_values(conn: Connection) -> None:
+    seeded = _one_chunk_scope(conn)
+    retriever = ChunkRetriever(
+        seeded.scope,
         embedder=FakeEmbedder({"policy": _vector(1.0)}),
         directive=SynthesisDirective(),
         reranker=PassThroughChunkReranker(),
@@ -485,14 +617,16 @@ def test_retriever_search_results_expose_chunk_text_basis_values() -> None:
 
     results = retriever.search("policy")
 
-    assert {chunk["chunk_record_id"]: chunk["text_basis"] for chunk in results} == {
+    assert {seeded.names[chunk["chunk_record_id"]]: chunk["text_basis"] for chunk in results} == {
         "chunk-a": "full_text",
         "chunk-b": "abstract_only",
     }
 
 
-def test_retriever_directive_boosts_reweight_but_do_not_surface_zero_relevance() -> None:
-    docs = _one_chunk_scope().docs
+def test_retriever_directive_boosts_reweight_but_do_not_surface_zero_relevance(
+    conn: Connection,
+) -> None:
+    docs, chunks, units = _one_chunk_records()
     docs["doc-c"] = {
         "title": "C",
         "origin": "acquired",
@@ -502,7 +636,6 @@ def test_retriever_directive_boosts_reweight_but_do_not_surface_zero_relevance()
         "tags": ["boosted"],
         "selected": False,
     }
-    chunks = _one_chunk_scope().chunks
     chunks["chunk-c"] = {
         "content": "irrelevant text",
         "sequence": 1,
@@ -510,7 +643,6 @@ def test_retriever_directive_boosts_reweight_but_do_not_surface_zero_relevance()
         "segmentation_policy": "manual_v1",
         "text_basis": "full_text",
     }
-    units = _one_chunk_scope().units
     units.append({
         "unit_id": "unit-c",
         "chunk_id": "chunk-c",
@@ -522,20 +654,23 @@ def test_retriever_directive_boosts_reweight_but_do_not_surface_zero_relevance()
         column_boosts={"origin": {"acquired": 10.0}},
         tag_boosts={"boosted": 10.0, "missing": 2.0},
     )
+    seeded = _scope(conn, docs, chunks, units)
     retriever = ChunkRetriever(
-        _scope(docs, chunks, units),
+        seeded.scope,
         embedder=FakeEmbedder({"policy": _vector(1.0)}),
         directive=directive,
         reranker=PassThroughChunkReranker(),
     )
     results = retriever.search("policy")
-    ids = [chunk["chunk_record_id"] for chunk in results]
+    ids = seeded.name_list(results)
     assert ids[0] == "chunk-b"
     assert "chunk-c" not in ids
     assert retriever.provenance()["unmatched_boosts"] == {"tags": ["missing"]}
 
 
-def test_retriever_screen_confidence_multiplier_defaults_missing_and_suppresses() -> None:
+def test_retriever_screen_confidence_multiplier_defaults_missing_and_suppresses(
+    conn: Connection,
+) -> None:
     directive = parse_synthesis_directive(
         {
             "synthesis": {
@@ -544,7 +679,8 @@ def test_retriever_screen_confidence_multiplier_defaults_missing_and_suppresses(
         },
         grouping_group_ids=None,
     )
-    scope = _scope(
+    seeded = _scope(
+        conn,
         docs={
             "doc-conf": {
                 "title": "Confident",
@@ -599,6 +735,7 @@ def test_retriever_screen_confidence_multiplier_defaults_missing_and_suppresses(
             },
         ],
     )
+    scope = seeded.scope
     retriever = ChunkRetriever(
         scope,
         embedder=FakeEmbedder({"policy": _vector(1.0)}),
@@ -607,10 +744,10 @@ def test_retriever_screen_confidence_multiplier_defaults_missing_and_suppresses(
     )
     retriever.search("policy")
     factors = retriever.provenance()["soft_prior_factors"]
-    assert factors["chunk-conf"]["screen_confidence"] == 2.5
-    assert factors["chunk-conf"]["executed_multiplier"] == 2.5
-    assert factors["chunk-missing"]["screen_confidence"] == 1.0
-    assert factors["chunk-missing"]["executed_multiplier"] == 1.0
+    assert factors[seeded.ids["chunk-conf"]]["screen_confidence"] == 2.5
+    assert factors[seeded.ids["chunk-conf"]]["executed_multiplier"] == 2.5
+    assert factors[seeded.ids["chunk-missing"]]["screen_confidence"] == 1.0
+    assert factors[seeded.ids["chunk-missing"]]["executed_multiplier"] == 1.0
 
     suppressed = ChunkRetriever(
         scope,
@@ -623,21 +760,24 @@ def test_retriever_screen_confidence_multiplier_defaults_missing_and_suppresses(
     suppressed_provenance = suppressed.provenance()
     assert suppressed_provenance["confidence_suppressed"] is True
     assert (
-        suppressed_provenance["soft_prior_factors"]["chunk-conf"][
+        suppressed_provenance["soft_prior_factors"][seeded.ids["chunk-conf"]][
             "screen_confidence"
         ]
         == 1.0
     )
     assert (
-        suppressed_provenance["soft_prior_factors"]["chunk-conf"][
+        suppressed_provenance["soft_prior_factors"][seeded.ids["chunk-conf"]][
             "confidence_suppressed"
         ]
         is True
     )
 
 
-def test_retriever_soft_prior_product_clamps_and_records_raw_factors() -> None:
-    scope = _scope(
+def test_retriever_soft_prior_product_clamps_and_records_raw_factors(
+    conn: Connection,
+) -> None:
+    seeded = _scope(
+        conn,
         docs={
             "doc-high": {
                 "title": "High",
@@ -699,13 +839,16 @@ def test_retriever_soft_prior_product_clamps_and_records_raw_factors() -> None:
         appraisal_tier_boosts={"5": 10.0, "1": 0.1},
     )
     retriever = ChunkRetriever(
-        scope,
+        seeded.scope,
         embedder=FakeEmbedder({"policy": _vector(1.0)}),
         directive=directive,
         reranker=PassThroughChunkReranker(),
     )
     retriever.search("policy")
-    factors = retriever.provenance()["soft_prior_factors"]
+    factors = {
+        seeded.names[chunk_id]: value
+        for chunk_id, value in retriever.provenance()["soft_prior_factors"].items()
+    }
 
     assert factors["chunk-high"]["selection"] == 2.0
     assert factors["chunk-high"]["columns"] == {"origin": {"uploaded": 10.0}}
@@ -719,7 +862,7 @@ def test_retriever_soft_prior_product_clamps_and_records_raw_factors() -> None:
     assert factors["chunk-low"]["executed_multiplier"] == BOOST_CLAMP_MIN
 
 
-def test_retriever_reranker_invoked_and_top_k_cap_enforced() -> None:
+def test_retriever_reranker_invoked_and_top_k_cap_enforced(conn: Connection) -> None:
     docs: dict[str, dict[str, Any]] = {}
     chunks: dict[str, dict[str, Any]] = {}
     units: list[dict[str, Any]] = []
@@ -746,12 +889,14 @@ def test_retriever_reranker_invoked_and_top_k_cap_enforced() -> None:
             "unit_id": f"unit-{index:02d}",
             "chunk_id": chunk_id,
             "tss_id": doc_id,
-            "vector": _vector(1.0 + index / 100),
+            # Cosine falls as the index rises, so chunk-10 ranks last.
+            "vector": _vector(1.0, index / 100),
             "text": f"policy evidence {index}",
         })
     reranker = ReverseReranker()
+    seeded = _scope(conn, docs, chunks, units)
     retriever = ChunkRetriever(
-        _scope(docs, chunks, units),
+        seeded.scope,
         embedder=FakeEmbedder({"policy": _vector(1.0)}),
         directive=SynthesisDirective(),
         reranker=reranker,
@@ -759,10 +904,10 @@ def test_retriever_reranker_invoked_and_top_k_cap_enforced() -> None:
     results = retriever.search("policy")
     assert reranker.calls == [{"query": "policy", "candidate_count": SYNTH_CHUNK_TOP_K + 3}]
     assert len(results) == SYNTH_CHUNK_TOP_K
-    assert results[0]["chunk_record_id"] == "chunk-10"
+    assert seeded.name_list(results)[0] == "chunk-10"
 
 
-def test_retriever_tie_breaks_by_unit_and_chunk_id() -> None:
+def test_retriever_tie_breaks_by_unit_and_chunk_id(conn: Connection) -> None:
     docs: dict[str, dict[str, Any]] = {
         "doc-a": {
             "title": "A",
@@ -815,20 +960,14 @@ def test_retriever_tie_breaks_by_unit_and_chunk_id() -> None:
             "text": "same",
         },
     ]
+    seeded = _scope(conn, docs, chunks, units)
     retriever = ChunkRetriever(
-        _scope(docs, chunks, units),
+        seeded.scope,
         embedder=FakeEmbedder({"same": _vector(1.0)}),
         directive=SynthesisDirective(),
         reranker=PassThroughChunkReranker(),
     )
-    assert [result["chunk_record_id"] for result in retriever.search("same")] == ["a", "b"]
-
-
-def test_retrieval_unit_cap_error_names_cap() -> None:
-    error = RetrievalUnitCapError(unit_count=RETRIEVAL_UNIT_CAP + 1, cap=RETRIEVAL_UNIT_CAP)
-    assert error.unit_count == RETRIEVAL_UNIT_CAP + 1
-    assert error.cap == RETRIEVAL_UNIT_CAP
-    assert "RETRIEVAL_UNIT_CAP" in str(error)
+    assert seeded.name_list(retriever.search("same")) == ["a", "b"]
 
 
 def test_build_section_tools_substrate_availability_and_argument_validation() -> None:
@@ -852,10 +991,13 @@ def test_build_section_tools_substrate_availability_and_argument_validation() ->
         tools["lookup"]({"kind": "coverage_records", "extra": True})
 
 
-def test_search_chunks_char_budget_charges_only_new_content_and_repeats_stay_citable() -> None:
-    scope = _one_chunk_scope()
+def test_search_chunks_char_budget_charges_only_new_content_and_repeats_stay_citable(
+    conn: Connection,
+) -> None:
+    seeded = _one_chunk_scope(conn)
+    a_id, b_id = seeded.ids["chunk-a"], seeded.ids["chunk-b"]
     retriever = ChunkRetriever(
-        scope,
+        seeded.scope,
         embedder=FakeEmbedder({"policy": _vector(1.0)}),
         directive=SynthesisDirective(),
         reranker=PassThroughChunkReranker(),
@@ -869,14 +1011,11 @@ def test_search_chunks_char_budget_charges_only_new_content_and_repeats_stay_cit
     first = tools["search_chunks"]({"query": "policy"})
     # chunk-a fits the budget; chunk-b exceeds the remainder and leaves an
     # honest skip marker (review-stack fix, 022 step 7).
-    assert [chunk["chunk_record_id"] for chunk in first["chunks"]] == [
-        "chunk-a",
-        "chunk-b",
-    ]
+    assert seeded.name_list(first["chunks"]) == ["chunk-a", "chunk-b"]
     assert first["chunks"][0]["text_basis"] == "full_text"
     assert first["chunks"][1] == {
-        "id": "chunk-b",
-        "chunk_record_id": "chunk-b",
+        "id": b_id,
+        "chunk_record_id": b_id,
         "skipped_over_budget": True,
     }
     assert first["truncated"] is True
@@ -886,13 +1025,13 @@ def test_search_chunks_char_budget_charges_only_new_content_and_repeats_stay_cit
     # The budget-skipped chunk-b was never returned, so it repeats its skip
     # marker rather than an already_returned reference.
     assert second["chunks"] == [
-        {"id": "chunk-a", "chunk_record_id": "chunk-a", "already_returned": True},
-        {"id": "chunk-b", "chunk_record_id": "chunk-b", "skipped_over_budget": True},
+        {"id": a_id, "chunk_record_id": a_id, "already_returned": True},
+        {"id": b_id, "chunk_record_id": b_id, "skipped_over_budget": True},
     ]
     assert second["truncated"] is True
     assert gathered_ids([
         {"tool": "search_chunks", "arguments": {}, "result": second},
-    ]) == {"chunk_ids": {"chunk-a"}, "finding_ids": set()}
+    ]) == {"chunk_ids": {a_id}, "finding_ids": set()}
 
 
 def test_section_tools_deduplicate_findings_and_lookup_records() -> None:
@@ -939,10 +1078,13 @@ def test_section_tools_deduplicate_findings_and_lookup_records() -> None:
     assert second_lookup["id"].startswith("lookup:")
 
 
-def test_search_chunks_budget_skip_and_continue_returns_later_smaller_candidate() -> None:
+def test_search_chunks_budget_skip_and_continue_returns_later_smaller_candidate(
+    conn: Connection,
+) -> None:
     doc_big = str(uuid.uuid4())
     doc_small = str(uuid.uuid4())
-    scope = _scope(
+    seeded = _scope(
+        conn,
         docs={
             doc_big: {
                 "title": "Big",
@@ -996,8 +1138,9 @@ def test_search_chunks_budget_skip_and_continue_returns_later_smaller_candidate(
             },
         ],
     )
+    big_id, small_id = seeded.ids["chunk-big"], seeded.ids["chunk-small"]
     retriever = ChunkRetriever(
-        scope,
+        seeded.scope,
         embedder=FakeEmbedder({"policy": _vector(1.0)}),
         directive=SynthesisDirective(),
         reranker=PassThroughChunkReranker(),
@@ -1013,14 +1156,11 @@ def test_search_chunks_budget_skip_and_continue_returns_later_smaller_candidate(
 
     # The over-budget higher-ranked chunk leaves an honest skip marker (no
     # content, not citable); the later smaller candidate still lands.
-    assert [chunk["chunk_record_id"] for chunk in result["chunks"]] == [
-        "chunk-big",
-        "chunk-small",
-    ]
+    assert seeded.name_list(result["chunks"]) == ["chunk-big", "chunk-small"]
     skipped, kept = result["chunks"]
     assert skipped == {
-        "id": "chunk-big",
-        "chunk_record_id": "chunk-big",
+        "id": big_id,
+        "chunk_record_id": big_id,
         "skipped_over_budget": True,
     }
     assert "content" in kept
@@ -1029,10 +1169,12 @@ def test_search_chunks_budget_skip_and_continue_returns_later_smaller_candidate(
     # citation-eligible transcript record set.
     assert gathered_ids(
         [{"tool": "search_chunks", "arguments": {}, "result": result}]
-    ) == {"chunk_ids": {"chunk-small"}, "finding_ids": set()}
+    ) == {"chunk_ids": {small_id}, "finding_ids": set()}
 
 
-def test_windowed_returns_only_for_oversized_chunks_and_use_retained_offsets() -> None:
+def test_windowed_returns_only_for_oversized_chunks_and_use_retained_offsets(
+    conn: Connection,
+) -> None:
     normal_doc = str(uuid.uuid4())
     oversized_doc = str(uuid.uuid4())
     normal_content = "normal chunk content with policy signal"
@@ -1043,7 +1185,8 @@ def test_windowed_returns_only_for_oversized_chunks_and_use_retained_offsets() -
     )
     match_start = oversized_content.index("matched")
     match_end = match_start + len("matched oversized policy unit")
-    scope = _scope(
+    seeded = _scope(
+        conn,
         docs={
             normal_doc: {
                 "title": "Normal",
@@ -1102,7 +1245,7 @@ def test_windowed_returns_only_for_oversized_chunks_and_use_retained_offsets() -
         ],
     )
     retriever = ChunkRetriever(
-        scope,
+        seeded.scope,
         embedder=FakeEmbedder(
             {"normal": _vector(1.0), "oversized": _vector(2.0)}
         ),
@@ -1113,7 +1256,7 @@ def test_windowed_returns_only_for_oversized_chunks_and_use_retained_offsets() -
     normal = next(
         chunk
         for chunk in retriever.search("normal")
-        if chunk["chunk_record_id"] == "chunk-normal"
+        if chunk["chunk_record_id"] == seeded.ids["chunk-normal"]
     )
     assert normal["content"] == normal_content
     assert "window_start" not in normal
@@ -1123,17 +1266,20 @@ def test_windowed_returns_only_for_oversized_chunks_and_use_retained_offsets() -
         len(oversized_content),
         match_end + OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS,
     )
-    assert oversized["chunk_record_id"] == "chunk-oversized"
+    assert oversized["chunk_record_id"] == seeded.ids["chunk-oversized"]
     assert oversized["content"] == oversized_content[window_start:window_end]
     assert oversized["content"] in oversized_content
     assert oversized["window_start"] == window_start
     assert oversized["window_end"] == window_end
 
 
-def test_search_chunks_scope_filters_fail_closed_per_argument_and_combine() -> None:
+def test_search_chunks_scope_filters_fail_closed_per_argument_and_combine(
+    conn: Connection,
+) -> None:
     doc_a = str(uuid.uuid4())
     doc_b = str(uuid.uuid4())
-    scope = _scope(
+    seeded = _scope(
+        conn,
         docs={
             doc_a: {
                 "title": "A",
@@ -1188,7 +1334,7 @@ def test_search_chunks_scope_filters_fail_closed_per_argument_and_combine() -> N
         ],
     )
     retriever = ChunkRetriever(
-        scope,
+        seeded.scope,
         embedder=FakeEmbedder({"policy": _vector(1.0)}),
         directive=SynthesisDirective(),
         reranker=PassThroughChunkReranker(),
@@ -1218,7 +1364,7 @@ def test_search_chunks_scope_filters_fail_closed_per_argument_and_combine() -> N
         "evidence_types": [EVIDENCE_TYPE],
         "tags": ["housing"],
     })
-    assert [chunk["chunk_record_id"] for chunk in result["chunks"]] == ["chunk-a"]
+    assert seeded.name_list(result["chunks"]) == ["chunk-a"]
 
 
 def test_loop_runner_voluntary_emission_before_cap() -> None:
@@ -1415,7 +1561,7 @@ def test_gathered_ids_extracts_chunks_and_findings() -> None:
     }
 
 
-def test_retriever_candidate_pool_cap_prevents_boost_only_surface() -> None:
+def test_retriever_candidate_pool_cap_prevents_boost_only_surface(conn: Connection) -> None:
     docs: dict[str, dict[str, Any]] = {}
     chunks: dict[str, dict[str, Any]] = {}
     units: list[dict[str, Any]] = []
@@ -1445,13 +1591,14 @@ def test_retriever_candidate_pool_cap_prevents_boost_only_surface() -> None:
             "vector": _vector(1.0),
             "text": f"content {index}",
         })
+    seeded = _scope(conn, docs, chunks, units)
     retriever = ChunkRetriever(
-        _scope(docs, chunks, units),
+        seeded.scope,
         embedder=FakeEmbedder({"content": _vector(1.0)}),
         directive=SynthesisDirective(column_boosts={"origin": {"acquired": 10.0}}),
         reranker=PassThroughChunkReranker(),
     )
-    ids = [result["chunk_record_id"] for result in retriever.search("content")]
+    ids = seeded.name_list(retriever.search("content"))
     assert f"chunk-{CANDIDATE_POOL_PER_LEG:03d}" not in ids
 
 
@@ -1459,7 +1606,7 @@ def test_loop_runner_malformed_emission_consumes_turn_and_recovers() -> None:
     """A MalformedEmissionError is a turn-consuming error exchange (the model
     reads the bounded error as data and re-emits); on the forced final turn it
     is a structural failure, never an extension."""
-    from policy_atlas.evidence_search.synthesis.synthesis_backend import SectionProseWire
+    from policy_atlas.evidence_search.synthesis.section_prompt import SectionProseWire
     from policy_atlas.evidence_search.synthesis.synthesis_tools import (
         MalformedEmissionError,
         run_section_loop,
@@ -1644,13 +1791,18 @@ def test_build_retrieval_scope_exposes_abstract_basis_search_chunks(
             unit_policy=UNIT_POLICY,
             unit_index=0,
             unit_locator={"start": 0, "end": len(content)},
-            vector=_vector(1.0),
+            embedding=_vector(1.0),
+            tokens=sorted(word_tokens(content)),
             created_at=now(),
         )
     )
 
     scope = build_retrieval_scope(
-        conn, task_id=task_id, scope_id=scope_id, selected_tss_ids=set()
+        conn,
+        task_id=task_id,
+        scope_id=scope_id,
+        selected_tss_ids=set(),
+        connect=borrowed_connection(conn),
     )
     retriever = ChunkRetriever(
         scope,
@@ -1666,7 +1818,7 @@ def test_build_retrieval_scope_exposes_abstract_basis_search_chunks(
 
     result = tools["search_chunks"]({"query": "subsidy"})
 
-    assert scope.chunks[str(chunk_id)]["text_basis"] == "abstract_only"
+    assert scope.chunk_text_basis_by_tss[str(tss_id)] == "abstract_only"
     assert result["chunks"][0]["chunk_record_id"] == str(chunk_id)
     assert result["chunks"][0]["text_basis"] == "abstract_only"
 
@@ -1695,7 +1847,8 @@ def _seed_chunk_and_embed(
             unit_policy=UNIT_POLICY,
             unit_index=0,
             unit_locator={"start": 0, "end": len(content)},
-            vector=_vector(1.0),
+            embedding=_vector(1.0),
+            tokens=sorted(word_tokens(content)),
             created_at=now(),
         )
     )
@@ -1750,8 +1903,26 @@ def test_search_chunks_result_carries_default_metadata_set_present_and_absent(
         conn, snapshot_id=bare_snap, content="bare subsidy evidence appears here."
     )
 
+    # Unrated doc (task 056, D7): an appraisal row with no score.
+    unrated_tss = seed_select_doc(
+        conn, task_id, run_id, scope_id, title="Unrated doc",
+        evidence_type="Unknown / Insufficient information", unrated=True,
+    )
+    unrated_snap = conn.execute(
+        select(task_source_snapshot.c.source_snapshot_id).where(
+            task_source_snapshot.c.task_source_snapshot_id == unrated_tss
+        )
+    ).scalar_one()
+    unrated_chunk = _seed_chunk_and_embed(
+        conn, snapshot_id=unrated_snap, content="unrated subsidy evidence appears here."
+    )
+
     scope = build_retrieval_scope(
-        conn, task_id=task_id, scope_id=scope_id, selected_tss_ids=set()
+        conn,
+        task_id=task_id,
+        scope_id=scope_id,
+        selected_tss_ids=set(),
+        connect=borrowed_connection(conn),
     )
     retriever = ChunkRetriever(
         scope,
@@ -1768,6 +1939,12 @@ def test_search_chunks_result_carries_default_metadata_set_present_and_absent(
         chunk["chunk_record_id"]: chunk
         for chunk in tools["search_chunks"]({"query": "subsidy"})["chunks"]
     }
+
+    unrated = results[str(unrated_chunk)]
+    assert unrated["appraisal_label"] == "Unrated"
+    assert unrated["evidence_type"] == "Unknown / Insufficient information"
+    assert unrated["appraised"] is True
+    assert results[str(bare_chunk)]["appraised"] is False
 
     rich = results[str(rich_chunk)]
     assert rich["year"] == 2024
@@ -2597,3 +2774,88 @@ def test_loop_runner_traces_each_executed_tool_as_a_tool_observation() -> None:
     )
     assert [(name, kind) for name, kind, _ in client.opened] == [("tool:lookup", "tool")]
     assert client.opened[0][2].updates == [{"input": {"id": "x"}, "output": {"found": "x"}}]
+
+
+def test_borrowed_connection_search_reads_the_open_transaction_and_keeps_it(
+    conn: Connection,
+) -> None:
+    """Task 057 N8: synthesis lends its component connection. A search reads
+    rows that transaction has written but not committed (so it ran on that
+    connection), and the connection stays open and in its transaction."""
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    tss_id = seed_select_doc(conn, task_id, run_id, scope_id, title="Uncommitted doc")
+    snapshot_id = conn.execute(
+        select(task_source_snapshot.c.source_snapshot_id).where(
+            task_source_snapshot.c.task_source_snapshot_id == tss_id
+        )
+    ).scalar_one()
+    chunk_id = _seed_chunk_and_embed(
+        conn, snapshot_id=snapshot_id, content="uncommitted subsidy evidence"
+    )
+    scope = build_retrieval_scope(
+        conn,
+        task_id=task_id,
+        scope_id=scope_id,
+        selected_tss_ids=set(),
+        connect=borrowed_connection(conn),
+    )
+    retriever = ChunkRetriever(
+        scope,
+        embedder=FakeEmbedder({"subsidy": _vector(1.0)}),
+        directive=SynthesisDirective(),
+        reranker=PassThroughChunkReranker(),
+    )
+
+    first = retriever.search("subsidy")
+    second = retriever.search("subsidy")
+
+    assert [result["chunk_record_id"] for result in first] == [str(chunk_id)]
+    assert first == second
+    assert not conn.closed
+    assert conn.in_transaction()
+
+
+def test_provenance_records_prior_factors_for_returned_chunks_only(
+    conn: Connection,
+) -> None:
+    """Owner ruling 2026-11-03: the prior's factors are recorded for the chunks
+    a search returns, not for every fused candidate."""
+    docs: dict[str, dict[str, Any]] = {}
+    chunks: dict[str, dict[str, Any]] = {}
+    units: list[dict[str, Any]] = []
+    for index in range(SYNTH_CHUNK_TOP_K + 3):
+        docs[f"doc-{index:02d}"] = {
+            "title": f"Doc {index}",
+            "origin": "uploaded",
+            "primary_evidence_type": None,
+            "text_basis": "full_text",
+            "appraisal_tier": None,
+            "tags": [],
+            "selected": False,
+        }
+        chunks[f"chunk-{index:02d}"] = {
+            "content": f"policy evidence {index}",
+            "sequence": index,
+            "tss_id": f"doc-{index:02d}",
+        }
+        units.append({
+            "unit_id": f"unit-{index:02d}",
+            "chunk_id": f"chunk-{index:02d}",
+            "vector": _vector(1.0, index / 100),
+            "text": f"policy evidence {index}",
+        })
+    seeded = _scope(conn, docs, chunks, units)
+    retriever = ChunkRetriever(
+        seeded.scope,
+        embedder=FakeEmbedder({"policy": _vector(1.0)}),
+        directive=SynthesisDirective(),
+        reranker=PassThroughChunkReranker(),
+    )
+
+    results = retriever.search("policy")
+
+    factors = retriever.provenance()["soft_prior_factors"]
+    assert len(results) == SYNTH_CHUNK_TOP_K
+    assert set(factors) == {result["chunk_record_id"] for result in results}
+    assert retriever.provenance()["unit_count"] == SYNTH_CHUNK_TOP_K + 3

@@ -1,9 +1,14 @@
 """Tests for the embeddings module — schema, unit derivation, embed pass, stubs."""
 
+import concurrent.futures
 import io
 import json
 import random
+import struct
+import threading
+import time
 import uuid
+from collections.abc import Mapping, Sequence
 from types import SimpleNamespace
 from typing import Any, Literal, cast
 
@@ -16,6 +21,7 @@ from botocore.stub import ANY, Stubber
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
+from structlog.testing import capture_logs
 
 from policy_atlas.api import deps
 from policy_atlas.core import embeddings as embeddings_module
@@ -26,11 +32,14 @@ from policy_atlas.core.embeddings import (
     EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS,
     UNIT_CHAR_BUDGET,
     UNIT_POLICY,
+    AdaptivePool,
     CohereEmbeddingBackend,
     OpenAIEmbeddingBackend,
     StubEmbeddingBackend,
+    Throttled,
     derive_units,
     embed_pending_chunks,
+    embed_with_retry,
     validate_vector,
 )
 from policy_atlas.core.schema import (
@@ -41,6 +50,7 @@ from policy_atlas.core.schema import (
     metadata,
     task_source_snapshot,
 )
+from policy_atlas.core.tokens import word_tokens
 from policy_atlas.evidence_search.sourcing.acquire import (
     AcquireContext,
     SearchBackend,
@@ -77,6 +87,38 @@ def _insert_chunk(
     return chunk_id
 
 
+def _f32(value: float) -> float:
+    """Round a float to single precision, as pgvector stores it."""
+    return float(struct.unpack("f", struct.pack("f", value))[0])
+
+
+def _assert_two_columns_agree(conn: Connection, chunk_ids: list[uuid.UUID]) -> int:
+    """Assert ``embedding`` and ``tokens`` are right on every row of the chunks.
+
+    Task 057 writes the vector to pgvector's binary column only (the JSON column is
+    gone): it must hold the stub backend's floats for the unit's text at single
+    precision, and ``tokens`` the unit's words by ``core.tokens``.
+    """
+    rows = conn.execute(
+        sa.text(
+            "SELECT ce.embedding, ce.tokens, ce.unit_locator, c.content "
+            "FROM chunk_embedding ce JOIN chunk c ON c.chunk_id = ce.chunk_id "
+            "WHERE ce.chunk_id = ANY(:ids)"
+        ),
+        {"ids": chunk_ids},
+    ).fetchall()
+    assert rows
+    stub = StubEmbeddingBackend()
+    for row in rows:
+        unit_text = row.content[row.unit_locator["start"] : row.unit_locator["end"]]
+        assert row.embedding is not None
+        stored = [float(v) for v in row.embedding.strip("[]").split(",")]
+        expected = stub.embed_texts([unit_text])[0]
+        assert [_f32(v) for v in stored] == [_f32(v) for v in expected]
+        assert row.tokens == sorted(word_tokens(unit_text))
+    return len(rows)
+
+
 # --- Migration / table presence ---
 
 
@@ -106,7 +148,7 @@ def test_uq_chunk_embedding_unit_rejects_duplicate(conn: Connection) -> None:
             unit_policy=UNIT_POLICY,
             unit_index=0,
             unit_locator={"start": 0, "end": 25},
-            vector=vector,
+            embedding=vector,
             created_at=now(),
         )
     )
@@ -119,7 +161,7 @@ def test_uq_chunk_embedding_unit_rejects_duplicate(conn: Connection) -> None:
                 unit_policy=UNIT_POLICY,
                 unit_index=0,
                 unit_locator={"start": 0, "end": 25},
-                vector=vector,
+                embedding=vector,
                 created_at=now(),
             )
         )
@@ -228,6 +270,7 @@ def test_embed_pending_chunks_idempotent_and_stamps_every_row(conn: Connection) 
     for row in rows:
         assert row.embedding_profile == EMBEDDING_PROFILE
         assert row.unit_policy == UNIT_POLICY
+    assert _assert_two_columns_agree(conn, chunk_ids) == 3
 
     # Canonical chunk content is untouched by the embed pass.
     for i, chunk_id in enumerate(chunk_ids, start=1):
@@ -438,10 +481,6 @@ def test_openai_embedding_backend_requires_api_key(monkeypatch: pytest.MonkeyPat
         OpenAIEmbeddingBackend()
 
 
-class _FakeRateLimitError(Exception):
-    pass
-
-
 class _FakeEmbeddingCreate:
     def __init__(self, outcomes: list[Any]) -> None:
         self._outcomes = outcomes
@@ -468,26 +507,57 @@ def _embedding_response(*vectors: list[float]) -> Any:
     )
 
 
-def test_openai_embedding_backend_rate_limit_backoff_then_success(
+class _FakeRateLimitError(Exception):
+    def __init__(self, message: str, retry_after: str | None = None) -> None:
+        super().__init__(message)
+        self.response = SimpleNamespace(
+            headers={"retry-after": retry_after} if retry_after is not None else {}
+        )
+
+
+def test_openai_embedding_backend_raises_throttled_at_once_on_429(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Task 057 (D6): a 429 is the pool's to wait out; the backend makes one call."""
+    sleeps: list[float] = []
+    monkeypatch.setattr(embeddings_module, "RateLimitError", _FakeRateLimitError)
+    monkeypatch.setattr(embeddings_module, "_sleep", sleeps.append)
+    backend: OpenAIEmbeddingBackend = object.__new__(OpenAIEmbeddingBackend)
+    fake_client = _FakeEmbeddingClient([_FakeRateLimitError("429", retry_after="7")])
+    cast("Any", backend)._client = fake_client
+
+    with pytest.raises(Throttled) as caught:
+        backend.embed_texts(["hello"])
+
+    assert (caught.value.provider, caught.value.retry_after_s) == ("openai", 7.0)
+    assert sleeps == []
+    assert len(fake_client.embeddings.calls) == 1
+
+
+def test_embed_with_retry_waits_out_throttling_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One-off calls (query embedding) keep today's patience: the backoff curve,
+    or the provider's Retry-After when it gives one."""
     sleeps: list[float] = []
     monkeypatch.setattr(embeddings_module, "RateLimitError", _FakeRateLimitError)
     monkeypatch.setattr(embeddings_module, "_sleep", sleeps.append)
     monkeypatch.setattr(random, "uniform", lambda _lo, _hi: 0.0)
     response = _embedding_response([0.25] * EMBEDDING_DIMENSIONS)
     backend: OpenAIEmbeddingBackend = object.__new__(OpenAIEmbeddingBackend)
-    fake_client = _FakeEmbeddingClient([_FakeRateLimitError("429"), response])
+    fake_client = _FakeEmbeddingClient(
+        [_FakeRateLimitError("429"), _FakeRateLimitError("429", retry_after="3"), response]
+    )
     cast("Any", backend)._client = fake_client
 
-    vectors = backend.embed_texts(["hello"])
+    vectors = embed_with_retry(backend, ["hello"], kind="query")
 
     assert vectors == [[0.25] * EMBEDDING_DIMENSIONS]
-    assert sleeps == [2.0]
-    assert len(fake_client.embeddings.calls) == 2
+    assert sleeps == [2.0, 3.0]
+    assert len(fake_client.embeddings.calls) == 3
 
 
-def test_openai_embedding_backend_rate_limit_exhaustion_fails_loudly(
+def test_embed_with_retry_gives_up_after_the_last_attempt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sleeps: list[float] = []
@@ -495,14 +565,16 @@ def test_openai_embedding_backend_rate_limit_exhaustion_fails_loudly(
     monkeypatch.setattr(embeddings_module, "_sleep", sleeps.append)
     monkeypatch.setattr(random, "uniform", lambda _lo, _hi: 0.0)
     backend: OpenAIEmbeddingBackend = object.__new__(OpenAIEmbeddingBackend)
-    fake_client = _FakeEmbeddingClient([_FakeRateLimitError("429") for _ in range(4)])
+    fake_client = _FakeEmbeddingClient(
+        [_FakeRateLimitError("429") for _ in range(EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS)]
+    )
     cast("Any", backend)._client = fake_client
 
-    with pytest.raises(_FakeRateLimitError):
-        backend.embed_texts(["hello"])
+    with pytest.raises(Throttled):
+        embed_with_retry(backend, ["hello"])
 
     assert sleeps == [2.0, 4.0, 8.0]
-    assert len(fake_client.embeddings.calls) == 4
+    assert len(fake_client.embeddings.calls) == EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS
 
 
 # --- Cohere Bedrock embedding backend ---
@@ -631,46 +703,32 @@ def test_cohere_embedding_backend_does_not_retry_validation_error() -> None:
         stubber.deactivate()
 
 
-def test_cohere_embedding_backend_retries_throttling_then_succeeds(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("code", "message"),
+    [
+        ("ThrottlingException", "Rate exceeded"),
+        ("ServiceUnavailableException", "Too many tokens, please wait before trying again."),
+    ],
+)
+def test_cohere_embedding_backend_raises_throttled_after_one_call(
+    monkeypatch: pytest.MonkeyPatch, code: str, message: str
 ) -> None:
-    client, stubber, _captured = _bedrock_client()
+    """Task 057 (D6): Bedrock's throttling (by code, or its "Too many tokens"
+    message) is raised as ``Throttled`` after one call; nothing sleeps here."""
+    client, stubber, captured = _bedrock_client()
     sleeps: list[float] = []
     monkeypatch.setattr(embeddings_module, "_sleep", sleeps.append)
-    monkeypatch.setattr(random, "uniform", lambda _lo, _hi: 0.0)
     try:
         stubber.add_client_error(
             "invoke_model",
-            service_error_code="ThrottlingException",
+            service_error_code=code,
+            service_message=message,
             expected_params=_expected_bedrock_params(),
         )
-        stubber.add_response(
-            "invoke_model",
-            _bedrock_response([[0.0] * EMBEDDING_DIMENSIONS]),
-            _expected_bedrock_params(),
-        )
-        assert CohereEmbeddingBackend(client=client).embed_texts(["policy"]) == [
-            [0.0] * EMBEDDING_DIMENSIONS
-        ]
-        assert sleeps == [2.0]
-    finally:
-        stubber.deactivate()
-
-
-def test_cohere_embedding_backend_stops_after_repeated_throttling(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client, stubber, _captured = _bedrock_client()
-    monkeypatch.setattr(embeddings_module, "_sleep", lambda _delay: None)
-    try:
-        for _ in range(EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS):
-            stubber.add_client_error(
-                "invoke_model",
-                service_error_code="ThrottlingException",
-                expected_params=_expected_bedrock_params(),
-            )
-        with pytest.raises(ClientError, match="ThrottlingException"):
+        with pytest.raises(Throttled) as caught:
             CohereEmbeddingBackend(client=client).embed_texts(["policy"])
+        assert caught.value.provider == "cohere"
+        assert len(captured) == 1 and sleeps == []
     finally:
         stubber.deactivate()
 
@@ -751,7 +809,7 @@ def test_pending_chunks_with_old_profile_are_pending_for_cohere(
             unit_policy=UNIT_POLICY,
             unit_index=0,
             unit_locator={"start": 0, "end": 19},
-            vector=[0.0] * EMBEDDING_DIMENSIONS,
+            embedding=[0.0] * EMBEDDING_DIMENSIONS,
             created_at=now(),
         )
     )
@@ -836,7 +894,7 @@ def test_judgment_one_vector_per_unit_no_mean_pooling_path(conn: Connection) -> 
         select(
             chunk_embedding.c.unit_index,
             chunk_embedding.c.unit_locator,
-            chunk_embedding.c.vector,
+            chunk_embedding.c.embedding,
         )
         .where(chunk_embedding.c.chunk_id == chunk_id)
         .order_by(chunk_embedding.c.unit_index)
@@ -844,12 +902,28 @@ def test_judgment_one_vector_per_unit_no_mean_pooling_path(conn: Connection) -> 
     assert len(rows) == len(units)
 
     stub = StubEmbeddingBackend()
-    for row in rows:
-        unit_text = chunk_content[row.unit_locator["start"] : row.unit_locator["end"]]
-        assert row.vector == stub.embed_texts([unit_text])[0]
+    # Each row holds the stub's floats for the text its locator points at.
+    assert _assert_two_columns_agree(conn, [chunk_id]) == len(units)
+    # The ORM read of the binary column parses back to the stub's floats (float32).
+    embeddings = conn.execute(
+        select(chunk_embedding.c.embedding)
+        .where(chunk_embedding.c.chunk_id == chunk_id)
+        .order_by(chunk_embedding.c.unit_index)
+    ).scalars().all()
+    for unit, embedding in zip(units, embeddings, strict=True):
+        expected = stub.embed_texts([unit["text"]])[0]
+        assert embedding is not None
+        assert [_f32(v) for v in embedding] == [_f32(v) for v in expected]
 
+    # No vector-pooling path. The request pool (task 057, D6: how many embedding
+    # requests are in flight) is a different thing and is named as such.
+    request_pool_names = {
+        "AdaptivePool", "POOL_START_WIDTH", "POOL_CLEAN_RUN", "POOL_MAX_THROTTLES_PER_BATCH",
+        "POOL_RETRY_AFTER_CAP_S", "PoolResult", "ThreadPoolExecutor",
+    }
     assert not any(
-        "mean" in name.casefold() or "pool" in name.casefold() for name in dir(embeddings_module)
+        "mean" in name.casefold() or "pool" in name.casefold()
+        for name in set(dir(embeddings_module)) - request_pool_names
     )
 
 
@@ -896,3 +970,230 @@ def test_embed_pending_chunks_budget_path_returns_uniform_shape(conn: Connection
     ok = embed_pending_chunks(conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid)
     assert ok["budget_exceeded"] == 0
     assert set(result) == set(ok)
+
+
+# --- The adaptive pool (task 057, D6) ---
+
+
+class _QuotaFakeBackend:
+    """A provider with an allowance: a request that arrives while ``limit``
+    others are being served is throttled at once; the others take ``hold_s``.
+
+    With every request taking the same time, "at most ``limit`` in flight" is
+    the same as a token budget per minute: the pool must find that width.
+    """
+
+    mode = "stub"
+
+    def __init__(self, limit: int, hold_s: float = 0.02) -> None:
+        self.limit = limit
+        self.hold_s = hold_s
+        self._lock = threading.Lock()
+        self._in_flight = 0
+        self.peak = 0
+        self.throttles = 0
+        self.call_sizes: list[int] = []
+
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
+        with self._lock:
+            self.call_sizes.append(len(texts))
+            if self._in_flight >= self.limit:
+                self.throttles += 1
+                raise Throttled(provider="cohere")
+            self._in_flight += 1
+            self.peak = max(self.peak, self._in_flight)
+        try:
+            time.sleep(self.hold_s)
+            return StubEmbeddingBackend().embed_texts(texts)
+        finally:
+            with self._lock:
+                self._in_flight -= 1
+
+
+def _widths(logs: Sequence[Mapping[str, Any]]) -> list[tuple[int, str]]:
+    return [(e["width"], e["reason"]) for e in logs if e["event"] == "embed.pool_width"]
+
+
+def test_adaptive_pool_converges_under_a_quota_and_never_splits_for_throttling(
+    conn: Connection,
+) -> None:
+    """D6: under an allowance of 3 requests the pool, starting at 2 with a cap of
+    8, climbs, is throttled, halves, and settles between 2 and 4 (at or just
+    under the allowance, never at the cap); no batch is split because of
+    throttling, and every chunk ends with a vector."""
+    pid, rid = seed_task_and_run(conn)
+    snap_id, _tss_id = seed_source(conn, pid)
+    chunk_ids = [
+        _insert_chunk(conn, snap_id, i + 1, f"Quota chunk {i} about housing.") for i in range(160)
+    ]
+    # hold_s 0.2: "in flight" is measured by the fake, so the requests of one pass must
+    # still overlap when the pool's threads start late (under a full parallel suite a
+    # 20 ms hold let the width climb past the allowance before any throttle; the
+    # task 057 exit gate caught it once in about ten runs).
+    backend = _QuotaFakeBackend(limit=3, hold_s=0.2)
+    sleeps: list[float] = []
+    pool = AdaptivePool(start=2, cap=8, clean_run=5, backoff=lambda _n: 0.5, sleep=sleeps.append)
+
+    with capture_logs() as logs:
+        result = embed_pending_chunks(
+            conn, embedder=backend, task_id=pid, run_id=rid, batch_size=2, pool=pool
+        )
+
+    assert (result["embedded"], result["failed"]) == (160, 0)
+    embedded = set(
+        conn.execute(
+            select(chunk_embedding.c.chunk_id).where(chunk_embedding.c.chunk_id.in_(chunk_ids))
+        ).scalars()
+    )
+    assert embedded == set(chunk_ids)
+    # Never split: every request carried a whole batch of 2.
+    assert set(backend.call_sizes) == {2}
+    assert backend.throttles >= 1
+    widths = _widths(logs)
+    assert (3, "clean_run") in widths  # it climbed
+    first_throttle = next(i for i, (_w, why) in enumerate(widths) if why == "throttled")
+    assert max(w for w, _why in widths) <= backend.limit + 1
+    assert {w for w, _why in widths[first_throttle:]} <= {2, 3, 4}
+    assert 2 <= pool.width <= backend.limit + 1
+    # Each throttled round waited and said so, in the event stage_walls.py reads.
+    rate_limited = [e for e in logs if e["event"] == "embedding.cohere_rate_limited"]
+    assert len(rate_limited) == len(sleeps) >= 1
+    assert all(e["sleep_s"] == 0.5 for e in rate_limited)
+
+
+def test_adaptive_pool_climbs_to_its_cap_when_never_throttled() -> None:
+    backend = _QuotaFakeBackend(limit=100, hold_s=0.005)
+    pool = AdaptivePool(start=2, cap=4, clean_run=5, sleep=lambda _s: None)
+    with capture_logs() as logs:
+        results = list(pool.run(list(range(40)), lambda job: backend.embed_texts([str(job)])))
+    assert sorted(r.index for r in results) == list(range(40))
+    assert all(r.value is not None and r.error is None for r in results)
+    assert _widths(logs) == [(3, "clean_run"), (4, "clean_run")]
+    assert pool.width == 4
+    assert backend.peak <= 4 and backend.throttles == 0
+
+
+def test_adaptive_pool_round_with_a_throttle_grants_no_clean_credit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """task 057 review (Codex 10): a round that completes one throttle and
+    ``clean_run`` successes together ends at the halved width; the successes do
+    not widen the pool again before the backoff sleep."""
+    # Every round waits for all its futures, so the first round completes all three.
+    monkeypatch.setattr(
+        embeddings_module, "wait",
+        lambda fs, return_when: concurrent.futures.wait(
+            fs, return_when=concurrent.futures.ALL_COMPLETED
+        ),
+    )
+    seen: set[int] = set()
+
+    def fn(job: int) -> int:
+        if job == 0 and job not in seen:
+            seen.add(job)
+            raise Throttled(provider="cohere")
+        return job
+
+    pool = AdaptivePool(start=3, cap=8, clean_run=2, sleep=lambda _s: None)
+    results = pool.run([0, 1, 2], fn)
+    first = next(results)  # the first round has been processed
+    assert pool.width == 1
+    assert sorted([first.index, *(r.index for r in results)]) == [0, 1, 2]
+
+
+def test_adaptive_pool_gives_a_batch_up_after_its_throttle_budget(conn: Connection) -> None:
+    """A batch throttled ``max_throttles`` times comes back as an error result;
+    ``embed_pending_chunks`` counts its chunks as ``deferred`` (not ``failed``),
+    writes no vector and leaves them pending for the next pass; the width never
+    drops below 1."""
+    class _AlwaysThrottled:
+        calls = 0
+
+        def __call__(self, _job: int) -> list[float]:
+            type(self).calls += 1
+            raise Throttled(provider="openai", retry_after_s=120.0)
+
+    sleeps: list[float] = []
+    pool = AdaptivePool(start=4, cap=4, max_throttles=3, sleep=sleeps.append)
+    results = list(pool.run([0, 1], _AlwaysThrottled()))
+    assert sorted(r.index for r in results) == [0, 1]
+    assert all(r.value is None and isinstance(r.error, Throttled) for r in results)
+    assert _AlwaysThrottled.calls == 6
+    assert pool.width == 1
+    # Retry-After is honoured, capped at the backoff cap.
+    assert set(sleeps) == {embeddings_module.POOL_RETRY_AFTER_CAP_S}
+
+    # task 057 review (code-review 5): the pass reports the given-up batch as deferred.
+    class _ThrottlingBackend:
+        mode = "stub"
+
+        def embed_texts(
+            self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+        ) -> list[list[float]]:
+            raise Throttled(provider="cohere")
+
+    pid, rid = seed_task_and_run(conn)
+    snap_id, _tss_id = seed_source(conn, pid)
+    _insert_chunk(conn, snap_id, 1, "Deferred chunk about housing.")
+    with capture_logs() as logs:
+        result = embed_pending_chunks(
+            conn, embedder=_ThrottlingBackend(), task_id=pid, run_id=rid,
+            pool=AdaptivePool(start=1, cap=1, max_throttles=1, sleep=lambda _s: None),
+        )
+    assert (result["embedded"], result["failed"], result["deferred"]) == (0, 0, 1)
+    events = {e["event"] for e in logs}
+    assert "embed.batch_deferred" in events and "embed.batch_failed" not in events
+
+
+def test_throttling_is_never_split_by_failure_isolation() -> None:
+    class _Throttling:
+        mode = "stub"
+
+        def __init__(self) -> None:
+            self.call_sizes: list[int] = []
+
+        def embed_texts(
+            self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+        ) -> list[list[float]]:
+            self.call_sizes.append(len(texts))
+            raise Throttled(provider="cohere")
+
+    units = [
+        embeddings_module._UnitWork(
+            chunk_id=uuid.uuid4(), unit_index=0, start=0, end=1, text=f"unit {i}"
+        )
+        for i in range(16)
+    ]
+    embedder = _Throttling()
+    with pytest.raises(Throttled):
+        embeddings_module._embed_units_with_isolation(embedder, units)
+    assert embedder.call_sizes == [16]
+
+
+def test_embed_pending_chunks_with_connect_commits_each_batch(engine: Any) -> None:
+    """With ``connect`` and no ``conn`` (the stage's embedding thread), the pass
+    reads in one short transaction and each batch's rows are committed on their
+    own, so another connection sees them at once."""
+    with engine.connect() as c:
+        pid, rid = seed_task_and_run(c)
+        snap_id, _tss_id = seed_source(c, pid)
+        chunk_ids = [_insert_chunk(c, snap_id, i + 1, f"Committed chunk {i}.") for i in range(5)]
+        c.commit()
+    try:
+        result = embed_pending_chunks(
+            None, connect=engine.begin, embedder=StubEmbeddingBackend(), task_id=pid,
+            run_id=rid, batch_size=2, snapshot_ids=[snap_id],
+        )
+        assert result["embedded"] == 5
+        with engine.connect() as c:
+            n = c.execute(
+                select(sa.func.count()).select_from(chunk_embedding)
+                .where(chunk_embedding.c.chunk_id.in_(chunk_ids))
+            ).scalar_one()
+        assert n == 5
+    finally:
+        with engine.connect() as c:
+            delete_task_data(c, pid)
+            c.commit()

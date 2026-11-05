@@ -628,7 +628,7 @@ def test_an_admin_read_line_says_which_request_produced_it(
     `structlog` context supplies the missing half.
 
     The keys are asserted *through the emission site that already existed*:
-    nothing in `_access.py` was edited to carry them, because
+    nothing in `access.py` was edited to carry them, because
     `merge_contextvars` is first in the processor chain. `capture_logs` is
     given that processor explicitly — it replaces the configured chain, so
     without it the context is invisible to the capture and this would pass
@@ -829,11 +829,11 @@ def test_no_write_under_the_api_can_set_is_admin() -> None:
 #: readers**; this is what they are in code, and the mapping between the two
 #: lists is deliberate rather than incidental:
 #:
-#: - `routers/_access.py::admin_read_leg` — the SQL leg. Serves reader **(i)**
+#: - `routers/access.py::admin_read_leg` — the SQL leg. Serves reader **(i)**
 #:   the row-access helper's admin leg *and* reader **(ii)** the listing scope
 #:   resolver, because both resolve through `_read_legs`, which is the one
 #:   seam the leg attaches to.
-#: - `routers/_access.py::_is_admin` — the same question asked in Python.
+#: - `routers/access.py::_is_admin` — the same question asked in Python.
 #:   Serves reader **(iii)** the `owner_email` gate (which must raise 422) and
 #:   the trace decision inside reader **(ii)** (which must know whether the
 #:   request owes an audit line). Neither can be answered by a SQL leg.
@@ -846,7 +846,7 @@ def test_no_write_under_the_api_can_set_is_admin() -> None:
 #:
 #: A fifth entry is a defect, and the most likely fifth entry is a write path.
 _IS_ADMIN_READERS = {
-    "routers/_access.py": {"admin_read_leg", "_is_admin"},
+    "routers/access.py": {"admin_read_leg", "_is_admin"},
     "routers/me.py": {"get_me"},
     "contract/tenancy.py": {"MeOut"},
 }

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,8 +23,12 @@ vi.mock("../../api/queries", () => ({
 const excludeMutate = vi.fn();
 const includeMutate = vi.fn();
 
+const shortlistMutate = vi.fn();
+const unshortlistMutate = vi.fn();
+
 vi.mock("../../api/mutations", () => ({
   useOptionVerb: vi.fn(),
+  useShortlistVerb: vi.fn(),
 }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
@@ -46,6 +50,12 @@ function renderCard(optionId: string, overrides: Record<string, unknown> = {}) {
         typeof mutations.useOptionVerb
       >,
   );
+  vi.mocked(mutations.useShortlistVerb).mockImplementation(
+    (_taskId, verb) =>
+      ({ mutate: verb === "shortlist" ? shortlistMutate : unshortlistMutate, isPending: false }) as unknown as ReturnType<
+        typeof mutations.useShortlistVerb
+      >,
+  );
   return render(
     <TooltipProvider>
       <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/options/${optionId}`]}>
@@ -60,6 +70,48 @@ function renderCard(optionId: string, overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   excludeMutate.mockClear();
   includeMutate.mockClear();
+  shortlistMutate.mockClear();
+  unshortlistMutate.mockClear();
+});
+
+describe("OptionCard — shortlist (task 055)", () => {
+  it("shows the maturity rung line above the Evidence opener", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    expect(screen.getByText("Evaluated · 1 RCT, 2 observational")).toBeInTheDocument();
+  });
+
+  it("shows both modifiers on the rung line", () => {
+    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
+    expect(
+      screen.getByText(
+        `Evaluated · 2 observational · none in your setting · most recent evaluation before ${new Date().getFullYear() - 5}`,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no rung line for a card written before the rung existed", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, { maturity: null });
+    expect(screen.queryByText(/^Evaluated · /)).not.toBeInTheDocument();
+  });
+
+  it("offers Remove from shortlist on a place and Add to shortlist on an option holding none", async () => {
+    const user = userEvent.setup();
+    renderCard(MOCK_OPTION_ID_ADDED_BY_YOU);
+    await user.click(screen.getByRole("button", { name: "Remove from shortlist" }));
+    expect(unshortlistMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_ADDED_BY_YOU }, expect.anything());
+  });
+
+  it("offers Add to shortlist on a set-aside option", async () => {
+    const user = userEvent.setup();
+    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
+    await user.click(screen.getByRole("button", { name: "Add to shortlist" }));
+    expect(shortlistMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_NO_IN_SCOPE }, expect.anything());
+  });
+
+  it("offers no shortlist action on an excluded option", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    expect(screen.queryByRole("button", { name: /shortlist/ })).not.toBeInTheDocument();
+  });
 });
 
 describe("OptionCard", () => {
@@ -200,8 +252,8 @@ describe("OptionCard", () => {
     expect(screen.queryByText(/Outcomes measured/)).not.toBeInTheDocument();
   });
 
-  // The profile section: collapsed = seven cells, with "Middle" for no mark.
-  it("opens 'What it would take' collapsed: seven cells in order, 'Middle' for no mark", () => {
+  // The profile section: collapsed = eight cells, with "Middle" for no mark.
+  it("opens 'What it would take' collapsed: eight cells in order, 'Middle' for no mark", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
     const at = (title: string) => headings.findIndex((text) => text?.startsWith(title));
@@ -220,6 +272,7 @@ describe("OptionCard", () => {
       "Workforce requirementsMiddle",
       "Coordination requirementsHigher",
       "Delivery complexityMiddle",
+      "Potential impactHigher",
     ]);
     expect(within(section).queryByText("Who decides")).not.toBeInTheDocument();
     expect(within(section).queryByText("Dependencies")).not.toBeInTheDocument();
@@ -233,13 +286,13 @@ describe("OptionCard", () => {
     expect(within(section).getAllByRole("listitem")[0]).toHaveTextContent("AmbitionMiddle");
   });
 
-  it("shows a table after a click on the heading, Ambition first, then the eight lines", async () => {
+  it("shows a table after a click on the heading, Ambition first, then the nine lines", async () => {
     const user = userEvent.setup();
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     await user.click(screen.getByRole("button", { name: /What it would take/ }));
     const section = document.getElementById("what-it-would-take") as HTMLElement;
     const rows = within(section).getAllByRole("row");
-    expect(rows).toHaveLength(9);
+    expect(rows).toHaveLength(10);
     expect(within(rows[0]).getByRole("rowheader")).toHaveTextContent("Ambition");
     expect(rows[0]).toHaveTextContent("Bigger");
     expect(rows[0]).toHaveTextContent("Changes who is entitled to a national benefit");
@@ -252,11 +305,41 @@ describe("OptionCard", () => {
       "Dependencies",
       "Coordination requirements",
       "Delivery complexity",
+      "Potential impact",
     ]);
+    expect(rows[9]).toHaveTextContent("Moderate if it works");
+    expect(rows[9]).toHaveTextContent("Higher");
     expect(rows[1]).toHaveTextContent("Cheaper");
     expect(rows[2]).toHaveTextContent("Middle");
     expect(within(section).getByText("Costs are mostly staff time; no capital spend is reported.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /What it would take/ })).toHaveTextContent("Policy Atlas's estimate");
+  });
+
+  it("shows eight lines for a profile written before Potential impact existed", async () => {
+    const user = userEvent.setup();
+    const profile = mockLonglistOptionCards[MOCK_OPTION_ID_EXCLUDED].profile;
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      profile: { ...profile, lines: profile!.lines.filter((line) => line.key !== "potential_impact") },
+    });
+    await user.click(screen.getByRole("button", { name: /What it would take/ }));
+    const section = document.getElementById("what-it-would-take") as HTMLElement;
+    expect(within(section).getAllByRole("row")).toHaveLength(9);
+    expect(within(section).queryByRole("rowheader", { name: "Potential impact" })).not.toBeInTheDocument();
+    expect(within(section).queryByText("Potential impact")).not.toBeInTheDocument();
+  });
+
+  // Task 055: Potential impact carries a mark (the owner, 2026-10-27).
+  it("words the Potential impact mark: Higher for more, Middle for none", async () => {
+    const user = userEvent.setup();
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    await user.click(screen.getByRole("button", { name: /What it would take/ }));
+    const marked = screen.getByRole("rowheader", { name: "Potential impact" }).closest("tr") as HTMLElement;
+    expect(within(marked).getByText("Higher")).toBeInTheDocument();
+    cleanup();
+    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
+    await user.click(screen.getByRole("button", { name: /What it would take/ }));
+    const unmarked = screen.getByRole("rowheader", { name: "Potential impact" }).closest("tr") as HTMLElement;
+    expect(within(unmarked).getByText("Middle")).toBeInTheDocument();
   });
 
   // Amendment 3 (§ 2.5): the authority label sits on the "Who decides" row, only with an entry.

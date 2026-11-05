@@ -111,7 +111,7 @@ export interface EvidenceQuery extends PageQuery {
   theme?: string;
   origin?: "OpenAlex" | "Overton" | "Uploaded";
   evidence_type?: string;
-  strength?: "Very strong" | "Strong" | "Moderate" | "Limited" | "Weak";
+  strength?: "Very strong" | "Strong" | "Moderate" | "Limited" | "Weak" | "Unrated";
   year_from?: number;
   year_to?: number;
 }
@@ -284,7 +284,7 @@ export function useCheckIns(
 // --- Read-model hooks (task 025 §6) -----------------------------------
 //
 // These resources landed in the generated contract mid-build (a backend
-// slice building `policy_atlas.api.readmodels` concurrently with this
+// slice building `policy_atlas.api.read_models` concurrently with this
 // one) — `gen/types.ts` now exposes `funnel`/`landscape`/`evidence`/
 // `findings`/`decisions`/`artefact` alongside `groups`/`coverage` (the
 // latter two aren't named in the task brief's hook list and are left for

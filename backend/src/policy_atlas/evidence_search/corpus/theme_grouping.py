@@ -15,16 +15,19 @@ from policy_atlas.core.openai_client import parse_structured, resolve_openai_cli
 from policy_atlas.core.prompt_fields import splice_guidance
 from policy_atlas.core.tags import has_control_character
 from policy_atlas.core.usage import UsageResult
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 
 log = structlog.get_logger()
 
 PROMPT_VERSION = "characterise_grouping_v1"
-DISCOVERY_MODEL = route().model_for("theme_discovery")
+DISCOVERY_MODEL = route().model_for("characterise_discover")
+DISCOVERY_EFFORT = route().effort_for("characterise_discover")
 # Plan pinned gpt-5-nano; flipped to gpt-5-mini on live evidence (2026-07-06): nano
 # emits an empty assignments list on realistic 25-doc batches at any reasoning effort
 # (16K reasoning tokens -> `{"assignments":[]}`), mini assigns 25/25 cleanly. Deviation
 # flagged in verification.md; the nano-class pin was plan-gate detail, not contract.
-ASSIGNMENT_MODEL = route().model_for("theme_assignment")
+ASSIGNMENT_MODEL = route().model_for("characterise_assign")
+ASSIGNMENT_EFFORT = route().effort_for("characterise_assign")
 BATCH_SIZE = 40
 MAX_CONCURRENT_BATCHES = 4
 DISCOVERY_RETRY_CAP = 1
@@ -32,7 +35,9 @@ ASSIGNMENT_REPAIR_CAP = 1
 MIN_THEMES = 3
 MAX_THEMES = 12
 THEME_NAME_MAX = 80
-THEME_DESC_MAX = 240
+# The prompt asks the model for at most 240 characters. The check allows 400, because
+# staging runs failed whole when one description was 243-315 characters long.
+THEME_DESC_MAX = 400
 UNCLUSTERED = "unclustered"
 
 DISCOVERY_SYSTEM_PROMPT = """\
@@ -320,12 +325,10 @@ class OpenAIThemeGroupingBackend:
     mode = "live"
 
     def __init__(self, api_key: str | None = None) -> None:
-        # The call budget in characterise.py counts logical discover/assign calls;
-        # the SDK additionally retries transient 429/5xx failures, so the HTTP
-        # attempt ceiling is (1 + max_retries) x the logical budget maximum.
-        self._client = resolve_openai_client(
-            api_key, backend_name="OpenAIThemeGroupingBackend", timeout=60.0, max_retries=2
-        )
+        # The call budget in characterise.py counts logical discover/assign calls.
+        # The client never retries on its own (task 057, D12); each request's timeout
+        # comes from its route step.
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIThemeGroupingBackend")
 
     def discover(
         self,
@@ -373,6 +376,9 @@ class OpenAIThemeGroupingBackend:
             usage_event="grouping.discover.usage",
             label="discovery",
             model=DISCOVERY_MODEL,
+            reasoning_effort=DISCOVERY_EFFORT,
+            prompt_cache=cache_mode_for("characterise_discover"),
+            timeout_s=route().timeout_for("characterise_discover"),
         )
         return (
             [
@@ -416,6 +422,9 @@ class OpenAIThemeGroupingBackend:
             usage_event="grouping.assign.usage",
             label="assignment",
             model=ASSIGNMENT_MODEL,
+            reasoning_effort=ASSIGNMENT_EFFORT,
+            prompt_cache=cache_mode_for("characterise_assign"),
+            timeout_s=route().timeout_for("characterise_assign"),
         )
 
         assignments: dict[str, str] = {}

@@ -33,7 +33,7 @@ from __future__ import annotations
 import os
 
 # The scoring calls go to OpenAI directly on the 6.x models, whatever backend/.env selects.
-os.environ["POLICY_ATLAS_MODEL_ROUTE"] = "openai-6x"
+os.environ["POLICY_ATLAS_MODEL_ROUTE"] = "openai-direct"
 
 import argparse
 import datetime as dt
@@ -594,7 +594,7 @@ class Api:
             log_path.parent.mkdir(parents=True, exist_ok=True)
             env = {
                 **os.environ,
-                "POLICY_ATLAS_MODEL_ROUTE": "openai-6x",
+                "POLICY_ATLAS_MODEL_ROUTE": "openai-direct",
                 "POLICY_ATLAS_THEORY_OF_CHANGE": "1",
             }
             # Another checkout's backend (e.g. a worktree at a fixed commit) runs on this
@@ -919,9 +919,7 @@ class Models:
         from policy_atlas.core.model_routes import route
         from policy_atlas.core.openai_client import resolve_openai_client
 
-        self.client = resolve_openai_client(
-            None, backend_name="gt_eval", timeout=300.0, max_retries=2
-        )
+        self.client = resolve_openai_client(None, backend_name="gt_eval")
         self.route = route()
         self.usd = 0.0
 
@@ -932,7 +930,7 @@ class Models:
         wire: type[BaseModel],
         label: str,
     ) -> Any:
-        from policy_atlas.core.openai_client import openai_kwargs, parse_structured
+        from policy_atlas.core.openai_client import parse_structured
         from policy_atlas.theory_of_change.cost import usd
 
         parsed, usage = parse_structured(
@@ -942,9 +940,11 @@ class Models:
             usage_event=f"{label}.usage",
             label=label,
             max_completion_tokens=4000,
-            **openai_kwargs(
-                model, reasoning_effort=self.route.reasoning_effort_for(model)
-            ),
+            model=model,
+            # As before task 056: Terra at "none", the provider default elsewhere.
+            reasoning_effort="none" if "terra" in model else "medium",
+            prompt_cache="off",
+            timeout_s=300.0,
         )
         self.usd += (
             usd(
@@ -1315,7 +1315,7 @@ def main() -> None:
     scoring = sum(r.get("score_usd") or 0 for r in rows)
     facts = {
         "date": dt.datetime.now().isoformat(timespec="minutes"),
-        "app route": "openai-6x (fast gpt-6-luna, standard gpt-6.1-terra, frontier gpt-6.1-sol)",
+        "app route": "openai-direct (fast gpt-6-luna, standard gpt-6.1-terra, frontier gpt-6.1-sol)",
         "judge": JUDGE_MODEL,
         "reviewer": REVIEW_MODEL,
         "app time, all cases (s)": round(sum(r.get("t_total_s") or 0 for r in rows), 1),

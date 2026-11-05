@@ -24,6 +24,7 @@ from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import resolve_openai_client, traced_parse
 from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.evidence_search.extract.extract import _scrub_nul
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 from policy_atlas.runtime.capability_registry import (
     EVIDENCE_SEARCH,
     TaskAgentProfile,
@@ -44,7 +45,7 @@ from policy_atlas.runtime.task_plan import TaskPlan, registry_component_for, tim
 log = structlog.get_logger()
 
 # Model from the route file (task 053); see core/model_routes.py.
-TASK_AGENT_MODEL = route().model_for("task_agent")
+TASK_AGENT_MODEL = route().model_for("task_agent_turn")
 
 # The Task Agent turn as emitted by any backend; the wire model IS the turn
 # shape, code-side and model-side — no separate dataclass to keep in sync.
@@ -202,12 +203,7 @@ class OpenAITaskAgentBackend:
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAITaskAgentBackend",
-            timeout=180.0,
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAITaskAgentBackend")
         self._langfuse_client = langfuse_client
 
     def turn(
@@ -241,7 +237,11 @@ class OpenAITaskAgentBackend:
             self._langfuse_client,
             messages=profile.build_messages(turns, previous_draft, inputs),
             response_format=profile.wire,
-            model=profile.model,
+            model=route().model_for(profile.step),
+            step=profile.step,
+            reasoning_effort=route().effort_for(profile.step),
+            timeout_s=route().timeout_for(profile.step),
+            prompt_cache=cache_mode_for(profile.step),
             max_output_tokens=profile.max_output_tokens,
             usage_event=profile.usage_event,
             label=profile.label,
@@ -530,7 +530,7 @@ EVIDENCE_SEARCH_TASK_AGENT = TaskAgentProfile(
     capability=EVIDENCE_SEARCH,
     wire=PlannerTurnWire,
     build_messages=lambda turns, previous, _inputs: build_planner_messages(turns, previous),
-    model=TASK_AGENT_MODEL,
+    step="task_agent_turn",
     max_output_tokens=PLANNER_MAX_OUTPUT_TOKENS,
     prompt_version=PLANNER_PROMPT_VERSION,
     trace_name="task_agent:turn",

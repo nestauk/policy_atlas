@@ -1008,7 +1008,9 @@ def test_full_chain_over_both_fixture_corpora(conn: Connection) -> None:
         context=AppraiseContext(scope_id=scope_id, intent="Test intent", context={}),
     )
     assert appraised["appraised"] == 0
-    assert appraised["skipped_unknown"] == classified["classified"]
+    # Task 056 (D7): Unknown documents are appraised as Unrated, not skipped.
+    assert appraised["appraised_unrated"] == classified["classified"]
+    assert appraised["skipped_unknown"] == 0
 
 
 # --- Cleanup helper ---
@@ -1133,10 +1135,17 @@ def test_acquire_module_has_no_http_client() -> None:
         re.MULTILINE,
     )
     api_http_homes = (src_dir / "api" / "auth.py", src_dir / "api" / "app.py")
+    # task 057 review (security 1): ingest_full_text.py names ``socket`` only to
+    # replace ``socket.socket`` with a refuser inside the parse worker; its own
+    # guard (test_ingest_module_has_no_http_client) forbids constructing one.
+    socket_denial_home = src_dir / "evidence_search" / "sourcing" / "ingest_full_text.py"
     for module in src_dir.rglob("*.py"):
         if module.name in ("search_live.py", "fetch_live.py") or module in api_http_homes:
             continue
-        assert not forbidden.search(module.read_text()), f"HTTP client import in {module}"
+        text = module.read_text()
+        if module == socket_denial_home:
+            text = text.replace("import socket\n", "", 1)
+        assert not forbidden.search(text), f"HTTP client import in {module}"
 
     live_import = re.compile(
         r"^\s*(import|from)\s+policy_atlas\.evidence_search\.sourcing\.search_live\b|"

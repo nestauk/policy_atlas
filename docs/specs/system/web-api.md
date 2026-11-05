@@ -707,13 +707,15 @@ Frame vocabulary (discriminated union, `type` names are contract):
 | `checkin.resolved` | `{check_in_id, response, decided_by}` | `steering.decision` |
 | `plan.updated` | `{plan, version}` | plan row supersession |
 | `task.updated` | `{name?, question?, status?}` | lifecycle audit events |
-| `tick` | `{stage?, note, ephemeral: true}` | **ephemeral channel** — never persisted, never state-bearing, no `id:` |
+| `tick` | `{stage?, note, fetched, parsed, total, ephemeral: true}` (the three counts null when absent) | **ephemeral channel** — never persisted, never state-bearing, no `id:` |
 
 `stage` keys are the pinned stable component vocabulary (`acquire`,
-`screen`, `classify`, `appraise`, `characterise`, `select`, `extract`,
-`group`, `synthesise`); labels/blurbs are server-supplied presentation and
-may change. Nothing else internal (module names, model ids, raw payload
-keys) is observable. The frontend store must rebuild idempotently from
+`screen`, `classify`, `appraise`, `ingest` ("Reading the full texts"),
+`characterise`, `select`, `extract`, `group`, `synthesise`); labels/blurbs
+are server-supplied presentation and may change. A `tick`'s optional integer
+counts `fetched`, `parsed` and `total` (the `ingest` stage's documents fetched,
+read and eligible, task 056) are null when absent. Nothing else internal
+(module names, model ids, raw payload keys) is observable. The frontend store must rebuild idempotently from
 replay alone — mid-run refresh, server restart with a parked pending
 check-in, and reconnect-mid-stream are the tested cases.
 

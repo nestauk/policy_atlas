@@ -23,7 +23,7 @@ from sqlalchemy.engine import Engine
 from policy_atlas.api.chat_scope import ResolvedRunScope, build_chat_readers
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
-from policy_atlas.core.usage import usage_details, usage_metadata
+from policy_atlas.core.usage import usage_metadata
 from policy_atlas.evidence_search.extract.quote_verify import (
     BasisText,
     build_basis,
@@ -143,10 +143,12 @@ def apply_appraisal_labels(citations: list[dict[str, Any]]) -> list[dict[str, An
     Returns:
         The same citations with ``appraisal_label`` set from
         ``appraisal_score`` (via ``SCORE_LABELS``) wherever a score is
-        present and known; ``appraisal_score`` itself is not re-exposed —
-        the frontend contract has only ever carried the label.
+        present and known, or to "Unrated" where the citation persisted
+        ``appraisal_unrated`` (an appraisal with no score, task 056);
+        neither persisted key is re-exposed — the frontend contract has only
+        ever carried the label.
     """
-    from policy_atlas.evidence_search.assess.appraise import SCORE_LABELS
+    from policy_atlas.evidence_search.assess.appraise import appraisal_label
 
     labelled: list[dict[str, Any]] = []
     for citation in citations:
@@ -154,12 +156,14 @@ def apply_appraisal_labels(citations: list[dict[str, Any]]) -> list[dict[str, An
             labelled.append(citation)
             continue
         score = citation.get("appraisal_score")
-        if score is None:
+        unrated = citation.get("appraisal_unrated") is True
+        if score is None and not unrated:
             labelled.append(citation)
             continue
         merged = dict(citation)
         merged.pop("appraisal_score", None)
-        label = SCORE_LABELS.get(score)
+        merged.pop("appraisal_unrated", None)
+        label = appraisal_label(score, unrated=unrated)
         if label is not None:
             merged["appraisal_label"] = label
         labelled.append(merged)
@@ -169,7 +173,7 @@ def apply_appraisal_labels(citations: list[dict[str, Any]]) -> list[dict[str, An
 def _snapped_chunk_quote(basis: BasisText, quote: str) -> tuple[str, bool] | None:
     """Locate ``quote`` uniquely in a chunk's ``quote_verify`` basis.
 
-    Reuses ``quote_verify.locate_unique_span`` (qv_v1) — the canonical
+    Reuses ``quote_verify.locate_unique_span`` (qv_v2) — the canonical
     overlap-aware, word-boundary-guarded, case-fold-round-tripped locator —
     instead of a third parallel matcher. Returns the verbatim raw source text
     of the located span and whether it differs from the model's emitted
@@ -331,7 +335,11 @@ def _resolve_citation_sources(
         source_id = source_facts.get("source_id")
         if source_id is not None:
             label = labels.get(uuid.UUID(source_id))
-            if label is not None and label.quality_score is not None:
+            if label is not None and label.unrated:
+                # No score to persist: the flag persists instead, and
+                # apply_appraisal_labels reads it as "Unrated" (task 056).
+                merged["appraisal_unrated"] = True
+            elif label is not None and label.quality_score is not None:
                 # The score, not the label, persists (evidence_search.assess.appraise's
                 # read-time-copy pin) — apply_appraisal_labels derives the label
                 # fresh on every read from this score.
@@ -492,7 +500,6 @@ def answer_over_scope(
         def _record(span: Any, result: tuple[dict[str, Any], Any]) -> None:
             response, usage = result
             span.update(
-                usage_details=usage_details(usage),
                 input={
                     "messages": messages,
                     "tool_exchanges": len(transcript),
@@ -504,17 +511,16 @@ def answer_over_scope(
                     "call_index": call_count,
                     **usage_metadata(usage),
                 },
-                model=CHAT_MODEL,
             )
 
-        # The streaming adapter bypasses the instrumented-client path,
-        # so the generation observation is opened here — without it the
-        # turn's trace holds no model I/O at all (review stack,
-        # live-trace lane).
+        # The turn's span. The model calls themselves are generations opened
+        # inside the chat backend (tool turn and final parse, one traced
+        # retry each; the prose stream is exempt, task 057 D12) and nest here,
+        # so tokens and cost are recorded once, on those.
         response, usage = tracing.traced_call(
             backends.langfuse,
             name="chat:call",
-            as_type="generation",
+            as_type="span",
             call=_call,
             update=_record,
         )

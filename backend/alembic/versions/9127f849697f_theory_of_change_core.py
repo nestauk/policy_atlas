@@ -33,8 +33,13 @@ Downgrade — the refusal (the 044 A5 pattern)
     four checks narrowed.
 
 Revision ID: 9127f849697f
-Revises: f1b6d3a8c2e5
+Revises: 0914321f8de4
 Create Date: 2026-10-26 00:00:00.000000
+
+Rebased onto dev's head (2026-11-05, owner): the task 054 chain first hung off
+``f1b6d3a8c2e5`` beside dev's tasks 055 to 057; it now follows them, so dev's
+migrations stay as written. A local database that ran the old order is
+re-labelled once with ``alembic stamp`` (docs/tasks/054-toc-integration/verification.md).
 
 """
 
@@ -45,7 +50,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "9127f849697f"
-down_revision: Union[str, None] = "f1b6d3a8c2e5"
+down_revision: Union[str, None] = "0914321f8de4"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -75,8 +80,9 @@ _WIDENED: tuple[tuple[str, str, str, str, str], ...] = (
         "ck_scope_purpose",
         "evidence_scope",
         "purpose",
-        "('baseline', 'longlist', 'variant', 'targeted')",
-        "('baseline', 'longlist', 'variant', 'targeted', 'toc')",
+        # As task 055's b33ffb8c3a16 left it.
+        "('baseline', 'longlist', 'variant', 'targeted', 'shortlist')",
+        "('baseline', 'longlist', 'variant', 'targeted', 'shortlist', 'toc')",
     ),
     (
         "ck_conversation_kind",

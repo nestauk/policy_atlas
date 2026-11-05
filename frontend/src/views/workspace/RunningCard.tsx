@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import { scrub } from "../../lib/scrub";
-import type { PlanDraft, RunStatus, StageEntry } from "../../store";
+import type { PlanDraft, RunStatus, StageEntry, StageLiveness } from "../../store";
 import { cn } from "../../ui/brand/cn";
 import {
   CHAT_PRIMARY_CTA_CLASS,
@@ -10,6 +10,7 @@ import {
   elapsedSeconds,
   formatElapsed,
   resultsSignpost,
+  rowLabel,
   walkKind,
   RUNNING_CARD_RULE_CLASS,
   RUNNING_CARD_SHELL_CLASS,
@@ -83,7 +84,7 @@ function StepRow({
         </button>
       ) : (
         <div className="flex items-baseline justify-between gap-3 py-2.5">
-          <span className={labelClass}>{scrub(row.label)}</span>
+          <span className={labelClass}>{scrub(rowLabel(row))}</span>
           {statusLabel !== null && <span className={statusClass}>{statusLabel}</span>}
         </div>
       )}
@@ -123,10 +124,13 @@ export function RunningCard({
   onSeePlan,
   capability,
   purpose,
+  liveness,
 }: {
   taskId: string;
   status: RunStatus | undefined;
   stages: StageEntry[];
+  /** Transient tick notes per stage — the in-flight row's live counts. */
+  liveness?: Record<string, StageLiveness>;
   /** The task's capability — the card's words follow the walk kind (task 045). */
   capability?: string | null;
   /** The run's own purpose (`RunOut.purpose`) — an added option's search
@@ -142,7 +146,7 @@ export function RunningCard({
 }) {
   const kind = walkKind(capability, stages, purpose);
   const { eyebrow, title, tone } = runningCardCopy(status, kind);
-  const rows = stageRows(stages, plan);
+  const rows = stageRows(stages, plan, liveness);
   const ticking = status === "running" || status === "paused";
   const elapsed = useElapsedSeconds(startedAt, endedAt, ticking);
   const elapsedLabel = formatElapsed(elapsed);
@@ -230,14 +234,16 @@ export function RunningCardDock({
   plan,
   elapsedLabel,
   onOpen,
+  liveness,
 }: {
   status: RunStatus | undefined;
   stages: StageEntry[];
   plan: PlanDraft | null | undefined;
   elapsedLabel: string;
   onOpen: () => void;
+  liveness?: Record<string, StageLiveness>;
 }) {
-  const rows = stageRows(stages, plan);
+  const rows = stageRows(stages, plan, liveness);
   return (
     <button
       type="button"

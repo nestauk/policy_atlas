@@ -1,0 +1,267 @@
+{
+  "option_id": "11111111-1111-4111-8111-111111111111",
+  "name": "Wage subsidy for first jobs",
+  "description": "Employers receive part of a young recruit's wage for six months.",
+  "outcomes_served": [
+    "the NEET rate"
+  ],
+  "origin": "from_evidence_search",
+  "from_section": "Employer incentives section",
+  "state": "included",
+  "exclusion": {
+    "constraint": "Zanzibar exclusion constraint",
+    "reason": "Quokka exclusion reason",
+    "by": "user"
+  },
+  "no_in_scope_evidence": true,
+  "in_scope": {
+    "restriction": "documents published after 2015",
+    "in_scope_documents": 0,
+    "documents": 3
+  },
+  "search_pending": true,
+  "primary_lever_type": "subsidise",
+  "lever_none_fits_reason": null,
+  "lever_reason": "Pays employers to take on young recruits.",
+  "secondary_lever_types": [
+    "regulate"
+  ],
+  "ambition": "more",
+  "ambition_reason": "Covers every young jobseeker nationally.",
+  "profile": {
+    "lines": [
+      {
+        "key": "cost",
+        "sentence": "Costs about a fifth of a wage per recruit.",
+        "mark": "more"
+      },
+      {
+        "key": "time_to_set_up",
+        "sentence": "Needs a payment scheme set up.",
+        "mark": null
+      },
+      {
+        "key": "time_to_effect",
+        "sentence": "Hiring responds within months.",
+        "mark": "less"
+      },
+      {
+        "key": "workforce",
+        "sentence": "Needs a small claims team.",
+        "mark": null
+      },
+      {
+        "key": "who_decides",
+        "sentence": "The employment ministry sets the scheme.",
+        "mark": null
+      },
+      {
+        "key": "dependencies",
+        "sentence": "Depends on employers taking it up.",
+        "mark": null
+      },
+      {
+        "key": "coordination",
+        "sentence": "Needs the tax office to share wage data.",
+        "mark": "more"
+      },
+      {
+        "key": "delivery_complexity",
+        "sentence": "Simple claims, but fraud checks.",
+        "mark": "less"
+      },
+      {
+        "key": "potential_impact",
+        "sentence": "Moderate if it works: more first jobs through lower hiring costs.",
+        "mark": null
+      }
+    ],
+    "settings": [
+      "workplace"
+    ]
+  },
+  "authority": {
+    "label": "needs_action_by",
+    "body": "the Treasury",
+    "reason": "It spends public money."
+  },
+  "taxonomy_version": "v2",
+  "document_count": 3,
+  "evaluated_count": 2,
+  "relations": [
+    {
+      "kind": "part_of",
+      "other_option_id": "22222222-2222-4222-8222-222222222222",
+      "other_name": "Youth guarantee package"
+    }
+  ],
+  "also_found_as": [
+    "Hiring subsidy"
+  ],
+  "evaluated_countries": [
+    {
+      "country": "United Kingdom",
+      "documents": 1
+    },
+    {
+      "country": "Denmark",
+      "documents": 1
+    }
+  ],
+  "outcomes_evaluated": 1,
+  "outcomes_total": 2,
+  "shortlist": {
+    "state": "proposed",
+    "reason": "Narwhal shortlist reason"
+  },
+  "maturity": {
+    "rung": "evaluated",
+    "design_mix": "1 RCT, 1 Quasi-experimental",
+    "none_in_your_setting": true,
+    "latest_evaluation_year": 2012,
+    "stale": true
+  },
+  "design": {
+    "name": "Wage subsidy for first jobs",
+    "description": "Employers receive part of a young recruit's wage for six months.",
+    "design_features": [
+      "six-month wage top-up",
+      "paid to employers",
+      "for 16 to 24 year olds"
+    ],
+    "outcomes_served": [
+      "the NEET rate"
+    ],
+    "assumed": [],
+    "version": 1
+  },
+  "design_features": [
+    "six-month wage top-up",
+    "paid to employers",
+    "for 16 to 24 year olds"
+  ],
+  "evidence": {
+    "outcome_counts": {
+      "evaluating_documents": 2,
+      "by_outcome": [
+        {
+          "outcome": "the NEET rate",
+          "documents": 3,
+          "evaluated": 2
+        },
+        {
+          "outcome": "earnings at age 25",
+          "documents": 1,
+          "evaluated": 0
+        }
+      ]
+    }
+  },
+  "judgements": [
+    {
+      "constraint_id": "req-1",
+      "constraint_text": "Must cost under 10 million a year.",
+      "verdict": "breaks",
+      "reason": "A national scheme costs more."
+    },
+    {
+      "constraint_id": "req-2",
+      "constraint_text": "Must start within a year.",
+      "verdict": "cannot_check",
+      "reason": "Set-up time is not stated."
+    },
+    {
+      "constraint_id": "req-3",
+      "constraint_text": "Must be legal.",
+      "verdict": "passes",
+      "reason": "Ocelot passing reason."
+    },
+    {
+      "constraint_id": "relevant",
+      "constraint_text": "Relevant to the question",
+      "verdict": "passes",
+      "reason": "Built-in check reason."
+    }
+  ],
+  "guesses": [
+    {
+      "constraint_id": "pref-1",
+      "constraint_text": "Prefer low admin.",
+      "guess": "Claims add some admin for employers.",
+      "leaning": "likely_falls_short"
+    },
+    {
+      "constraint_id": "pref-2",
+      "constraint_text": "Prefer local delivery.",
+      "guess": "Delivery is national.",
+      "leaning": "cannot_say"
+    },
+    {
+      "constraint_id": "pref-3",
+      "constraint_text": "Prefer quick wins.",
+      "guess": "Lemur meets reason.",
+      "leaning": "likely_meets"
+    }
+  ],
+  "documents": [
+    {
+      "task_source_snapshot_id": "33333333-3333-4333-8333-333333333333",
+      "title": "Randomised trial of hiring subsidies",
+      "role": "evaluated",
+      "evidence_type": "RCT",
+      "tier": "High",
+      "year": 2012,
+      "place": "United Kingdom",
+      "programme_name": "Kickstart",
+      "tried_on_kind": "young jobseekers",
+      "measured": "the NEET rate",
+      "place_detail": "Manchester",
+      "records_count": 2
+    },
+    {
+      "task_source_snapshot_id": "44444444-4444-4444-8444-444444444444",
+      "title": "Danish wage subsidy evaluation",
+      "role": "evaluated",
+      "evidence_type": "Quasi-experimental",
+      "tier": "Moderate",
+      "year": null,
+      "place": "Denmark",
+      "programme_name": null,
+      "tried_on_kind": "unemployed youth",
+      "measured": "employment",
+      "place_detail": null,
+      "records_count": 1
+    },
+    {
+      "task_source_snapshot_id": null,
+      "title": "Policy brief on youth hiring",
+      "role": "recommended",
+      "evidence_type": null,
+      "tier": null,
+      "year": 2020,
+      "place": "Not stated",
+      "programme_name": "Hidden programme",
+      "tried_on_kind": null,
+      "measured": null,
+      "place_detail": null,
+      "records_count": 0
+    }
+  ],
+  "run_id": "55555555-5555-4555-8555-555555555555",
+  "capability_run_id": "66666666-6666-4666-8666-666666666666",
+  "plan_version": 3,
+  "place_sentences": [
+    {
+      "place": "United Kingdom",
+      "sentence": "One trial with young jobseekers in Manchester.",
+      "generated": true,
+      "where": true
+    },
+    {
+      "place": "Denmark",
+      "sentence": "One national evaluation of unemployed youth.",
+      "generated": true,
+      "where": false
+    }
+  ]
+}

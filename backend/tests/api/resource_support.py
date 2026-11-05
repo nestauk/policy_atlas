@@ -135,14 +135,16 @@ def to_ready(
     *,
     fresh: bool = True,
 ) -> dict[str, Any]:
-    """Drive the stub scoping conversation to a ready plan in three turns.
+    """Drive the stub scoping conversation to a ready plan in four turns.
+
+    The turns are: question, target, depth, then the risk appetite.
 
     Args:
         fresh: The conversation starts here, so each turn's part (settings,
             then depth) is checked; pass ``False`` after earlier turns.
 
     Returns:
-        The third turn's body, whose plan is ready.
+        The fourth turn's body, whose plan is ready.
     """
     first = task_agent_turn_ok(client, headers, task_id, "Young people are not getting into work.")
     second = task_agent_turn_ok(client, headers, task_id, "16 to 24 year olds")
@@ -151,8 +153,14 @@ def to_ready(
         assert first["part"]["id"] == "settings"
         assert second["scoping_plan"]["ready"] is False
         assert second["part"]["id"] == "depth"
-    ready = task_agent_turn_ok(
+    third = task_agent_turn_ok(
         client, headers, task_id, "[confirm part=depth option=standard_pass]"
+    )
+    if fresh:
+        assert third["scoping_plan"]["ready"] is False
+        assert third["part"]["id"] == "appetite"
+    ready = task_agent_turn_ok(
+        client, headers, task_id, "[confirm part=appetite option=appetite_mostly]"
     )
     assert ready["scoping_plan"]["ready"] is True
     return ready
@@ -180,6 +188,19 @@ def await_walks_ended(engine: Engine, task_ids: list[uuid.UUID]) -> None:
         if active is None:
             return
         time.sleep(0.1)
+
+
+def end_walks(engine: Engine, task_id: uuid.UUID) -> None:
+    """End a test's walks that no thread runs (set ``running`` by hand, or
+    opened by a recording executor), so :func:`await_walks_ended` does not
+    wait out its 60 seconds for them."""
+    with engine.begin() as conn:
+        conn.execute(
+            capability_run.update()
+            .where(capability_run.c.task_id == task_id)
+            .where(capability_run.c.status.in_(("running", "paused")))
+            .values(status="interrupted", ended_at=now())
+        )
 
 
 @pytest.fixture(autouse=True)

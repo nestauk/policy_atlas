@@ -275,6 +275,9 @@ def test_apply_removes_every_scoping_row_and_then_the_downgrade_succeeds(
             message = str(caught.value)
             assert "ops_remove_scoping_tasks" in message
         finally:
+            # One transaction per revision (task 057): the refused downgrade left
+            # the revisions above the guard undone; the sweep needs head's tables.
+            command.upgrade(cfg, "head")
             assert ops.run(engine, apply=True, task_ids=_every_scoping_task(engine)) == 0
 
         with engine.connect() as conn:

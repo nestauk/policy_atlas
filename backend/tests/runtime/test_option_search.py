@@ -235,7 +235,7 @@ def child_run_plan(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[Any], 
 def test_a_stub_longlist_walk_fans_out_after_suggest_and_joins_before_the_screen(
     engine: Engine,
 ) -> None:
-    """inherit → suggest → [fan-out] → acquire → [join] → screen_abstract … theme.
+    """inherit → suggest → [fan-out] → acquire → [join] → screen_abstract … shortlist.
 
     Every entrant (the user's two, the stub's one suggestion) gets one child
     walk under its own targeted record naming the option, with the design's
@@ -264,6 +264,7 @@ def test_a_stub_longlist_walk_fans_out_after_suggest_and_joins_before_the_screen
             "option_profile",
             "constrain",
             "theme",
+            "shortlist",
         ]
 
         children = _children(engine, task_id, parent)
@@ -701,8 +702,12 @@ def test_a_finished_child_never_closes_the_task_agent_conversation(
 # --- the pool and the semaphores --------------------------------------------
 
 
-def test_option_searches_run_at_width_four(engine: Engine, child_run_plan: Any) -> None:
-    """The cross-walk bound: eight searches, never more than four at once."""
+def test_option_searches_run_at_the_configured_width(engine: Engine, child_run_plan: Any) -> None:
+    """The cross-walk bound: more searches than the width, never more at once than it.
+
+    The width is ``OPTION_SEARCH_WIDTH`` (4 until task 057, 10 since); the test seeds two
+    more options than the width so the pool's ceiling, not the option count, sets the peak.
+    """
     task_id: uuid.UUID | None = None
     lock = threading.Lock()
     live = 0
@@ -722,7 +727,8 @@ def test_option_searches_run_at_width_four(engine: Engine, child_run_plan: Any) 
         plan = _longlist_plan()
         task_id, scope_id, plan_id = _seed_longlist(engine, plan)
         parent = _seed_walk(engine, task_id, scope_id, plan_id)
-        for i in range(8):
+        option_count = OPTION_SEARCH_WIDTH + 2
+        for i in range(option_count):
             _seed_option(engine, task_id, f"Own {i}", "added_by_you")
         children = option_search.dispatch_option_searches(
             engine,
@@ -733,8 +739,11 @@ def test_option_searches_run_at_width_four(engine: Engine, child_run_plan: Any) 
             backends=_runner_backends(),
             session_id=task_id,
         )
-        assert len(children) == 8
-        deadline = time.monotonic() + 10
+        assert len(children) == option_count
+        # 30 s, not 10 (task 056, 2026-11-02): under the eight-worker suite the child
+        # runs' rows and statuses arrive later than on an idle core; the assertions below
+        # are unchanged, only the wait is longer.
+        deadline = time.monotonic() + 30
         while time.monotonic() < deadline and not all(
             option_search._ended(child, None) for child in children
         ):
@@ -790,36 +799,43 @@ def test_the_classify_slots_bound_every_walk_together() -> None:
 
 
 def test_the_ingest_slots_are_all_returned() -> None:
-    """Each parse job holds one slot while it runs and gives it back."""
+    """Each parse job holds one slot while it runs and gives it back, including
+    a job killed at its timeout (task 057: one process per document)."""
     from policy_atlas.evidence_search.sourcing.ingest_full_text import (
         DEFAULT_MAX_WORKERS,
-        _run_parse_jobs,
+        run_parse_worker,
     )
     from tests.evidence_search.sourcing.test_ingest_full_text import _sleep_by_marker_parse
 
-    results = _run_parse_jobs(
-        [(0, b"fast", "text/plain"), (1, b"fast", "text/plain")],
-        max_workers=2,
-        parse_timeout=20.0,
-        thin_min=0,
-        parse_fn=_sleep_by_marker_parse,
+    fast = run_parse_worker(
+        _sleep_by_marker_parse, b"fast", "text/plain", thin_min=0, timeout=20.0
     )
-    assert set(results) == {0, 1}
+    slow = run_parse_worker(
+        _sleep_by_marker_parse, b"slow", "text/plain", thin_min=0, timeout=1.0
+    )
+    assert fast["status"] == "ok"
+    assert slow == {"status": "error", "reason": "timeout"}
     assert walk_pool.INGEST_SLOTS._value == DEFAULT_MAX_WORKERS
 
 
 # --- the parent's end cleans up its children (A2, A6, A11) -------------------
 
 
-def _stuck_until(release: threading.Event, engine: Engine) -> Callable[..., None]:
+def _stuck_until(
+    release: threading.Event, engine: Engine, opened: threading.Event | None = None
+) -> Callable[..., None]:
     """A child that opens its row as the runner does, then waits to be released.
 
     Like the runner it ends itself at once when abandoned before its row
     existed; released, it finishes ``succeeded`` through ``_finish_run``.
+    ``opened`` (when given) is set once the row exists, for a test that must
+    not race the pool: a child cancelled before it starts never opens a row.
     """
 
     def child(*args: Any, **kwargs: Any) -> None:
         _open_row(engine, kwargs)
+        if opened is not None:
+            opened.set()
         if option_search.end_if_abandoned(
             engine, task_id=kwargs["task_id"], child_id=kwargs["capability_run_id"]
         ):
@@ -840,7 +856,8 @@ def _stuck_until(release: threading.Event, engine: Engine) -> Callable[..., None
 def _await_statuses(
     engine: Engine, task_id: uuid.UUID, children: list[uuid.UUID], want: str
 ) -> dict[uuid.UUID, str]:
-    deadline = time.monotonic() + 10.0
+    # 30 s, not 10: see test_option_searches_run_at_width_four (the parallel suite).
+    deadline = time.monotonic() + 30.0
     found: dict[uuid.UUID, str] = {}
     while time.monotonic() < deadline:
         with engine.connect() as conn:
@@ -944,17 +961,24 @@ def test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent(
     names it) is still ended."""
     task_id: uuid.UUID | None = None
     release = threading.Event()
+    opened = threading.Event()
     sent: list[uuid.UUID] = []
     original = option_search.run_option_search
 
     def second_breaks(*args: Any, **kwargs: Any) -> uuid.UUID:
         if sent:
+            # Let the first child open its row before the fan-out raises: a child
+            # the pool has not started yet is cancelled and leaves no row to end
+            # (that path is the join's own test). Under a loaded suite the pool
+            # thread can lag the raise by seconds, which read as a flake at 10 s
+            # and again at 30 s.
+            assert opened.wait(timeout=30), "the first child never opened its row"
             raise RuntimeError("the second dispatch broke")
         sent.append(original(*args, **kwargs))
         return sent[-1]
 
     try:
-        child_run_plan(_stuck_until(release, engine))
+        child_run_plan(_stuck_until(release, engine, opened))
         monkeypatch.setattr(option_search, "run_option_search", second_breaks)
         plan = _longlist_plan()
         task_id, scope_id, plan_id = _seed_longlist(engine, plan)
@@ -982,6 +1006,30 @@ def test_a_fan_out_that_raises_part_way_interrupts_the_children_it_sent(
         if task_id is not None:
             _await_children_ended(engine, task_id)
         _cleanup(engine, task_id)
+
+
+def test_interrupting_a_still_queued_child_does_not_deadlock(engine: Engine) -> None:
+    """A queued child's cancel runs its done callback (``_forget``) in the
+    calling thread; with the handles lock held there, the thread waited on
+    itself forever (the intermittent CI hang)."""
+    from concurrent.futures import Future
+
+    child = uuid.uuid4()
+    queued: Future[None] = Future()
+    with option_search._handles_lock:
+        option_search._futures[child] = queued
+    queued.add_done_callback(lambda _done: option_search._forget(child))
+    worker = threading.Thread(
+        target=option_search._interrupt_children,
+        args=(engine,),
+        kwargs={"task_id": uuid.uuid4(), "child_ids": [child]},
+        daemon=True,
+    )
+    worker.start()
+    worker.join(timeout=10)
+    assert not worker.is_alive(), "interrupting a queued child deadlocked"
+    assert queued.cancelled()
+    assert child not in option_search._futures
 
 
 def test_a_child_abandoned_before_its_row_ends_interrupted_on_opening(engine: Engine) -> None:

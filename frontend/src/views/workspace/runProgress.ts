@@ -1,5 +1,5 @@
 import { LIFECYCLE_LABELS, countOf } from "../../lib/vocabulary";
-import type { PlanDraft, RunStatus, StageEntry, StageStatus } from "../../store";
+import type { PlanDraft, RunStatus, StageEntry, StageLiveness, StageStatus } from "../../store";
 import { isScoping } from "../scopingActivity";
 import { timelineSummary } from "./journey/presentation";
 import { stepsForAnalysisDepth, type PlanStepPreview } from "./planVocabulary";
@@ -38,7 +38,7 @@ export const SEE_PLAN_CTA_CLASS =
  *  scoping task's baseline walk, its longlist walk, or an added option's own
  *  search. The words on the card and the finished notice follow it — "the
  *  evidence base is ready" is wrong for a longlist. */
-export type WalkKind = "evidence_search" | "baseline" | "longlist" | "option_search";
+export type WalkKind = "evidence_search" | "baseline" | "longlist" | "option_search" | "shortlist";
 
 const LONGLIST_STAGES = new Set([
   "inherit",
@@ -61,8 +61,11 @@ export function walkKind(
 ): WalkKind {
   if (!isScoping({ capability })) return "evidence_search";
   if (purpose === "targeted") return "option_search";
-  if (purpose === "longlist" || purpose === "baseline") return purpose;
-  return stages.some((entry) => LONGLIST_STAGES.has(entry.stage)) ? "longlist" : "baseline";
+  if (purpose === "longlist" || purpose === "baseline" || purpose === "shortlist") return purpose;
+  // The longlist walk ends in a shortlist step; a walk with only that step
+  // is the standalone shortlist walk.
+  if (stages.some((entry) => LONGLIST_STAGES.has(entry.stage))) return "longlist";
+  return stages.some((entry) => entry.stage === "shortlist") ? "shortlist" : "baseline";
 }
 
 const DONE_TITLE: Record<WalkKind, string> = {
@@ -70,6 +73,7 @@ const DONE_TITLE: Record<WalkKind, string> = {
   baseline: "The baseline is ready",
   longlist: "The longlist is ready",
   option_search: "The option's search is done",
+  shortlist: "The shortlist is proposed",
 };
 
 const RESULTS_LABEL: Record<WalkKind, string> = {
@@ -77,6 +81,7 @@ const RESULTS_LABEL: Record<WalkKind, string> = {
   baseline: "Read the baseline",
   longlist: "Read the longlist",
   option_search: "Read the longlist",
+  shortlist: "Read the shortlist",
 };
 
 /** The finished notice, split around the Result-tab link it carries. */
@@ -85,10 +90,24 @@ export const FINISHED_NOTICE: Record<WalkKind, { before: string; after: string }
   baseline: { before: "The baseline is written. Read it in the", after: "tab." },
   longlist: { before: "The longlist is built. Open it in the", after: "tab." },
   option_search: { before: "The option's search is done. See it in the", after: "tab." },
+  shortlist: { before: "Policy Atlas has proposed a shortlist. Open it in the", after: "tab." },
 };
+
+/** The finished notice for this walk and status: a degraded shortlist walk
+ *  means the proposal failed (its one step is non-spine), so it says so. */
+export function finishedNotice(kind: WalkKind, status: RunStatus | undefined): { before: string; after: string } {
+  if (kind === "shortlist" && status === "degraded") {
+    return {
+      before: "Policy Atlas could not propose a shortlist. Your places are unchanged. Open the",
+      after: "tab.",
+    };
+  }
+  return FINISHED_NOTICE[kind];
+}
 
 function resultHref(taskId: string, kind: WalkKind): string {
   if (kind === "longlist" || kind === "option_search") return `/tasks/${taskId}/result?view=longlist`;
+  if (kind === "shortlist") return `/tasks/${taskId}/result?view=shortlist`;
   if (kind === "baseline") return `/tasks/${taskId}/result?view=baseline`;
   return `/tasks/${taskId}/result`;
 }
@@ -105,6 +124,9 @@ export function runningCardCopy(
   if (status === "paused") {
     return { tone: "paused", eyebrow: "PAUSED", title: "Paused — waiting on you" };
   }
+  if (kind === "shortlist" && status === "degraded") {
+    return { tone: "stopped", eyebrow: "STOPPED", title: "Policy Atlas could not propose" };
+  }
   if (status === "succeeded" || status === "degraded") {
     return { tone: "done", eyebrow: "DONE", title: DONE_TITLE[kind] };
   }
@@ -113,6 +135,9 @@ export function runningCardCopy(
   }
   if (kind === "option_search") {
     return { tone: "running", eyebrow: "RUNNING", title: "Searching for the option's evidence" };
+  }
+  if (kind === "shortlist") {
+    return { tone: "running", eyebrow: "RUNNING", title: "Proposing a shortlist…" };
   }
   return { tone: "running", eyebrow: "RUNNING", title: "Analysis running…" };
 }
@@ -223,7 +248,30 @@ Every acquire/screen SSE entry is kept so Broad/Broadest rounds do not
 collapse to the last one. Ingest is omitted from Searching by the server
 (unmapped from public acquire).
 */
-export function stageRows(stages: StageEntry[], plan: PlanDraft | null | undefined): StageRow[] {
+export function stageRows(
+  stages: StageEntry[],
+  plan: PlanDraft | null | undefined,
+  liveness: Record<string, StageLiveness> = {},
+): StageRow[] {
+  return withLiveCounts(stagedRows(stages, plan), liveness);
+}
+
+/** Tick counts (task 056: full-text reading) ride on an in-flight row's
+ *  summary, where `beatSentence` reads them; a finished row keeps its own. */
+function withLiveCounts(rows: StageRow[], liveness: Record<string, StageLiveness>): StageRow[] {
+  return rows.map((row) => {
+    const live = liveness[row.stage];
+    if (row.status !== "started" || live === undefined) return row;
+    const counts: Record<string, number> = {};
+    for (const key of ["fetched", "parsed", "total"] as const) {
+      const value = live[key];
+      if (value !== undefined) counts[key] = value;
+    }
+    return Object.keys(counts).length === 0 ? row : { ...row, summary: { ...row.summary, ...counts } };
+  });
+}
+
+function stagedRows(stages: StageEntry[], plan: PlanDraft | null | undefined): StageRow[] {
   const liveByStage = new Map<string, StageEntry>(stages.map((entry) => [entry.stage, entry]));
   const scope = plan?.backend_scope;
   const vocab = vocabByStage(scope);
@@ -295,10 +343,17 @@ export function stageRows(stages: StageEntry[], plan: PlanDraft | null | undefin
   });
 }
 
+/** What a row reads as: an in-flight row with live counts reads as its beat
+ *  sentence (full-text reading, task 056), every other row as its label. */
+export function rowLabel(row: StageRow): string {
+  if (row.status !== "started") return row.label;
+  return beatSentence(row.stage, row.summary) ?? row.label;
+}
+
 /** Label of the in-flight step, else the last completed one. */
 function currentStepLabel(rows: StageRow[]): string | null {
   const started = rows.find((row) => row.status === "started");
-  if (started !== undefined) return started.label;
+  if (started !== undefined) return rowLabel(started);
   const completed = [...rows].reverse().find((row) => row.status === "completed");
   return completed?.label ?? rows[0]?.label ?? null;
 }
@@ -380,6 +435,16 @@ export function beatSentence(
       if (themes === null) return null;
       return `${countOf(themes, "theme", "themes")}`;
     }
+    case "ingest": {
+      // Live counts from the stage's ticks (task 056, S5); none → the label alone.
+      const total = num(summary, "total");
+      if (total === null) return null;
+      const parsed = num(summary, "parsed") ?? 0;
+      const fetched = num(summary, "fetched") ?? 0;
+      if (parsed > 0) return `Reading the full texts: ${parsed} of ${total} read`;
+      if (fetched > 0) return `Reading the full texts: ${fetched} fetched`;
+      return null;
+    }
     // option_profile (task 046, R37): the step's label is its only sentence.
     default:
       return null;
@@ -440,7 +505,7 @@ export function runFinishedSignpost(
   kind: WalkKind = "evidence_search",
 ): StageSignpost | null {
   if (status === "succeeded" || status === "degraded") {
-    const notice = FINISHED_NOTICE[kind];
+    const notice = finishedNotice(kind, status);
     return {
       href: resultHref(taskId, kind),
       label: LIFECYCLE_LABELS.result,
@@ -475,7 +540,7 @@ export function resultsSignpost(
   kind: WalkKind = "evidence_search",
 ): StageSignpost | null {
   if (status === "succeeded" || status === "degraded") {
-    const notice = FINISHED_NOTICE[kind];
+    const notice = finishedNotice(kind, status);
     return {
       href: resultHref(taskId, kind),
       label: RESULTS_LABEL[kind],

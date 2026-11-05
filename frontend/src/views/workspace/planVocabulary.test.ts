@@ -13,6 +13,7 @@ import {
   constraintEffectLines,
   constraintKindLines,
   PROFILE_LINE_LABELS,
+  RISK_APPETITE_LABELS,
   RESEARCH_APPROACH_CUSTOM,
   researchApproachId,
   researchApproachLabel,
@@ -159,7 +160,15 @@ describe("stepsForAnalysisDepth", () => {
     const landscape = stepsForAnalysisDepth("landscape").map((step) => step.stage);
     const standard = stepsForAnalysisDepth("standard").map((step) => step.stage);
     const deep = stepsForAnalysisDepth("deep").map((step) => step.stage);
-    expect(landscape).toEqual(["acquire", "screen", "classify", "appraise", "characterise", "synthesise"]);
+    expect(landscape).toEqual([
+      "acquire",
+      "screen",
+      "classify",
+      "appraise",
+      "ingest",
+      "characterise",
+      "synthesise",
+    ]);
     expect(standard).toContain("select");
     expect(standard).not.toContain("extract");
     expect(deep).toEqual([
@@ -167,6 +176,7 @@ describe("stepsForAnalysisDepth", () => {
       "screen",
       "classify",
       "appraise",
+      "ingest",
       "characterise",
       "select",
       "extract",
@@ -260,8 +270,8 @@ describe("options-scoping plan vocabulary (task 044)", () => {
     ]);
   });
 
-  it("names the nine profile lines and labels a consideration only", () => {
-    expect(Object.keys(PROFILE_LINE_LABELS)).toHaveLength(9);
+  it("names the ten profile labels and labels a consideration only", () => {
+    expect(Object.keys(PROFILE_LINE_LABELS)).toHaveLength(10);
     expect(PROFILE_LINE_LABELS.workforce).toBe("Workforce requirements");
     expect(constraintKindLines(constraint({ kind: "boundary" }))).toEqual([]);
     expect(constraintKindLines(constraint({ kind: "consideration", aspect: "cost", hard: true }))).toEqual([
@@ -279,5 +289,16 @@ describe("options-scoping plan vocabulary (task 044)", () => {
       "Language: not yet applied at retrieval",
     ]);
     expect(constraintEffectLines(constraint({ kind: "boundary", languages: [] }))).toHaveLength(1);
+  });
+});
+
+describe("RISK_APPETITE_LABELS", () => {
+  it("holds the three approved answers, one per generated enum value", () => {
+    expect(RISK_APPETITE_LABELS).toEqual({
+      tried_only: "Cautious: only options that have been evaluated somewhere",
+      mostly_tried: "Balanced: mostly evaluated, plus one or two not yet evaluated",
+      open_to_untested: "Ambitious: the biggest ideas, even those never implemented",
+    });
+    expect(Object.keys(RISK_APPETITE_LABELS).sort()).toEqual(["mostly_tried", "open_to_untested", "tried_only"]);
   });
 });

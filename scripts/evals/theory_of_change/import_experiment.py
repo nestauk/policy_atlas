@@ -9,7 +9,7 @@ Scored against the answer keys of ``import_diagrams.py``: box recall and
 precision (fuzzy text match), layer accuracy, arrow recall and precision
 (direction counts), assumptions and arrow labels found.
 
-Run from this folder, once per route (``bedrock-local`` checks the same call
+Run from this folder, once per route (``bedrock`` checks the same call
 works on Amazon Bedrock)::
 
     uv run --project ../../../backend --env-file ../../../backend/.env python \\
@@ -160,7 +160,7 @@ def main() -> None:
     parser.add_argument("--tier", default="toc_draft", help="A step on the tier to use (toc_draft = frontier).")
     parser.add_argument("--files", nargs="*", default=[], help="Real images: transcribe only, no scoring.")
     args = parser.parse_args()
-    client = resolve_openai_client(None, backend_name="toc_import_exp", timeout=300.0, max_retries=1)
+    client = resolve_openai_client(None, backend_name="toc_import_exp")
     model = route().model_for(args.tier)
     print(f"route {_ROUTE}, model {model}")
 
@@ -185,7 +185,10 @@ def main() -> None:
                 messages=messages,
                 response_format=ImportResponse,
                 model=model,
-                reasoning_effort=route().reasoning_effort_for(model),
+                step="toc_import",
+                reasoning_effort=route().effort_for("toc_import"),
+                timeout_s=300.0,
+                prompt_cache="off",
                 max_output_tokens=8000,
                 usage_event="toc_import_exp.usage",
                 label="toc_import_exp",
@@ -217,7 +220,10 @@ def main() -> None:
                 ],
                 response_format=ImportResponse,
                 model=model,
-                reasoning_effort=route().reasoning_effort_for(model),
+                step="toc_import",
+                reasoning_effort=route().effort_for("toc_import"),
+                timeout_s=300.0,
+                prompt_cache="off",
                 max_output_tokens=12000,
                 usage_event="toc_import_exp.usage",
                 label="toc_import_exp",

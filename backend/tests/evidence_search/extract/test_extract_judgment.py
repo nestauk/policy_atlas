@@ -550,7 +550,7 @@ def test_fingerprint_provenance_lists_every_component(conn: Connection) -> None:
     assert prov["schema"] == "iof_v3"
     assert prov["prompt"] == "extract_iof_v7"
     assert prov["field_rules"] == "iof_rules_v3"
-    assert prov["verifier"] == "qv_v1"
+    assert prov["verifier"] == "qv_v2"
     assert prov["model"] and prov["mode"] == "stub"
     assert {"char_budget", "overlap", "oversize_policy", "oversize_overlap"} <= set(
         prov["window"]
@@ -591,7 +591,6 @@ def test_fingerprint_changes_on_any_single_component(monkeypatch: pytest.MonkeyP
     vetter_changes: list[tuple[str, object]] = [
         ("FINDING_VETTER_PROMPT_VERSION", "changed"),
         ("FINDING_VETTER_MODEL", "changed"),
-        ("FINDING_VETTER_REASONING_EFFORT", "changed"),
         ("FINDING_VETTER_MAX_OUTPUT_TOKENS", 1_024),
     ]
     for name, value in vetter_changes:
@@ -601,6 +600,17 @@ def test_fingerprint_changes_on_any_single_component(monkeypatch: pytest.MonkeyP
                 extraction_fingerprint("stub", finding_vetter_active=True)[0]
                 != vetted_baseline
             ), name
+    # The effort is read from the route file, so change it through the route.
+    class _ChangedEffortRoute:
+        @staticmethod
+        def effort_for(step: str) -> str:
+            return "changed"
+
+    with monkeypatch.context() as m:
+        m.setattr(extract_module, "route", _ChangedEffortRoute)
+        assert (
+            extraction_fingerprint("stub", finding_vetter_active=True)[0] != vetted_baseline
+        ), "vetter reasoning effort"
 
 
 # --- 6. Repeated-quote cursor through the component -------------------------

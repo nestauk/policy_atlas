@@ -66,10 +66,6 @@ from policy_atlas.options_scoping.longlist.longlist import (
     discovery_bounds,
     longlist_scope,
 )
-from policy_atlas.options_scoping.longlist.longlist_backend import (
-    STUB_DISCOVERED_LABEL,
-    StubLonglistBackend,
-)
 from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     NOT_AN_OPTION_LABEL,
     DiscoveredOptionWire,
@@ -82,7 +78,11 @@ from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
     LeverTypingResponse,
     LeverTypingWire,
 )
-from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
+from policy_atlas.options_scoping.scoping_backend import (
+    STUB_DISCOVERED_LABEL,
+    StubLonglistBackend,
+)
+from policy_atlas.options_scoping.theme.theme_prompt import (
     ThemeAssignmentsResponse,
     ThemeAssignmentWire,
     ThemeDiscoveryResponse,
@@ -245,6 +245,9 @@ class _Scripted:
 
     def profile_line(self, **kwargs: Any) -> Any:
         return self.profiler.profile_line(**kwargs)
+
+    def profile_potential_impact(self, **kwargs: Any) -> Any:
+        return self.profiler.profile_potential_impact(**kwargs)
 
     def profile_ambition(self, **kwargs: Any) -> Any:
         return self.profiler.profile_ambition(**kwargs)
@@ -1392,6 +1395,28 @@ def test_a_user_s_option_and_a_user_held_seed_are_never_folded(conn: Connection)
     folds = walk.result(run_id).provenance["folds"]
     assert folds["accepted"] == []
     assert folds["rejected_by_reason"] == {"added_by_you": 1, "user_held": 1}
+
+
+def test_a_seed_on_the_user_s_shortlist_is_never_folded(conn: Connection) -> None:
+    """Task 055 (P11, O1): a user's shortlist place stays as itself at a Rebuild."""
+    walk = _Walk(conn)
+    placed = walk.option("Placed suggestion", shortlist_state="added_by_you")
+    walk.option("Wider option")
+    doc = walk.doc()
+    walk.record(doc, "something")
+    walk.rollup(walk.scope_id, [doc])
+    backend = _Scripted(
+        folds=[FoldWire(seed_label="Placed suggestion", into_label="Wider option")],
+        routes={"something": ("Wider option", False)},
+    )
+    run_id, _ = walk.build(backend)
+    row = walk.options()["Placed suggestion"]
+    assert row.option_id == placed
+    assert row.merged_into_option_id is None
+    assert row.shortlist_state == "added_by_you"
+    folds = walk.result(run_id).provenance["folds"]
+    assert folds["accepted"] == []
+    assert folds["rejected_by_reason"] == {"user_held": 1}
 
 
 def test_a_fold_into_an_unknown_label_or_a_folded_seed_is_rejected_and_counted(

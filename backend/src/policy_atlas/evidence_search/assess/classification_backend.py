@@ -8,19 +8,21 @@ from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
 
 from policy_atlas.core import tracing
-from policy_atlas.core.openai_client import openai_kwargs, parse_structured, resolve_openai_client
+from policy_atlas.core.model_routes import route
+from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import confidence_is_valid, scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.assess.classify_prompt import (
+    CLASSIFY_EFFORT,
     CLASSIFY_MAX_OUTPUT_TOKENS,
     CLASSIFY_MODEL,
     CLASSIFY_PROMPT_VERSION,
-    CLASSIFY_REASONING_EFFORT,
     ClassifyEnvelopePayload,
     ClassifyWire,
     EvidenceType,
     build_classify_messages,
 )
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 
 
 class ClassificationBackend(Protocol):
@@ -80,12 +82,7 @@ class OpenAIClassificationBackend:
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAIClassificationBackend",
-            timeout=180.0,
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIClassificationBackend")
         self._langfuse_client = langfuse_client
 
     def _classify_once(
@@ -99,7 +96,10 @@ class OpenAIClassificationBackend:
             usage_event="classification.classify.usage",
             label="classification",
             max_completion_tokens=CLASSIFY_MAX_OUTPUT_TOKENS,
-            **openai_kwargs(CLASSIFY_MODEL, reasoning_effort=CLASSIFY_REASONING_EFFORT),
+            model=CLASSIFY_MODEL,
+            reasoning_effort=CLASSIFY_EFFORT,
+            prompt_cache=cache_mode_for("classify_document"),
+            timeout_s=route().timeout_for("classify_document"),
         )
         return _scrub_classification(parsed), usage
 
@@ -155,10 +155,10 @@ class OpenAIClassificationBackend:
                 data_type="NUMERIC",
             )
 
-        wire, usage = tracing.traced_call(
+        wire, usage = tracing.traced_attempts(
             langfuse_client,
             name="classify:document",
-            as_type="generation",
+            step="classify_document",
             call=lambda: self._classify_once(messages),
             update=_update,
             after=_score_trace,

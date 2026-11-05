@@ -22,7 +22,6 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.contract import TocPlanDraft
-from policy_atlas.core.model_routes import route
 from policy_atlas.core.schema import capability_run, evidence_scope
 from policy_atlas.runtime.capability_registry import (
     THEORY_OF_CHANGE,
@@ -48,8 +47,6 @@ from policy_atlas.runtime.toc_plan import (
     toc_scope_constraints,
 )
 from policy_atlas.theory_of_change.store import has_graph
-
-TASK_AGENT_TOC_MODEL = route().model_for("task_agent_toc")
 
 #: The code-authored theory-state lines the prompt reads as data.
 NO_DRAFT = "no draft yet"
@@ -387,7 +384,7 @@ TOC_TASK_AGENT = TaskAgentProfile(
     capability=THEORY_OF_CHANGE,
     wire=TocTurnWire,
     build_messages=_build_messages,
-    model=TASK_AGENT_TOC_MODEL,
+    step="task_agent_toc",
     max_output_tokens=TOC_TASK_AGENT_MAX_OUTPUT_TOKENS,
     prompt_version=TASK_AGENT_TOC_PROMPT_VERSION,
     trace_name="task_agent_toc:turn",

@@ -5,7 +5,7 @@ constrain → theme``: ``longlist`` makes options, ``option_profile`` writes wha
 is said about each, ``constrain`` makes verdicts, ``theme`` groups the
 options a reader still sees. It is the Evidence search characterise's theme
 machine, modified: its unit is the option. The clustering engine runs
-unchanged — one unseeded :func:`~policy_atlas.evidence_search.clustering_engine.cluster_units`
+unchanged — one unseeded :func:`~policy_atlas.core.clustering_engine.cluster_units`
 call, with the policy and the ceiling ``longlist`` used before this slice.
 
 ``theme_scope`` reads the walk's latest ``longlist_result`` and the options
@@ -28,9 +28,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core.schema import longlist_result, option
-from policy_atlas.core.usage import UsageAccumulator, UsageResult
-from policy_atlas.evidence_search.clustering_engine import (
+from policy_atlas.core.clustering_engine import (
     AssignmentOutput,
     ClusterAssignment,
     ClusteringBackend,
@@ -40,6 +38,8 @@ from policy_atlas.evidence_search.clustering_engine import (
     ClusterUnit,
     cluster_units,
 )
+from policy_atlas.core.schema import longlist_result, option
+from policy_atlas.core.usage import UsageAccumulator, UsageResult
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.options_scoping.longlist.longlist import (
@@ -52,13 +52,13 @@ from policy_atlas.options_scoping.longlist.longlist import (
     _forbidden_label,
     latest_longlist,
 )
-from policy_atlas.options_scoping.longlist.longlist_backend import (
+from policy_atlas.options_scoping.scoping_backend import (
     LONGLIST_JUDGMENT_MODEL,
     LonglistBackend,
 )
 from policy_atlas.options_scoping.suggest.suggest import walk_plan
 from policy_atlas.options_scoping.text import fold_text
-from policy_atlas.options_scoping.theme.longlist_theme_prompt import (
+from policy_atlas.options_scoping.theme.theme_prompt import (
     LONGLIST_THEME_PROMPT_VERSION,
     THEME_DESCRIPTION_MAX,
     THEME_LABEL_MAX,

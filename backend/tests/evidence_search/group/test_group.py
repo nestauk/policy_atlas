@@ -12,6 +12,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
+from policy_atlas.core.clustering_engine import ClusterLabel, ClusterUnit
 from policy_atlas.core.schema import (
     extraction_result,
     grouping_result,
@@ -21,7 +22,6 @@ from policy_atlas.core.schema import (
     source_extraction_record,
 )
 from policy_atlas.core.usage import UsageResult
-from policy_atlas.evidence_search.clustering_engine import ClusterLabel, ClusterUnit
 from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.evidence_search.group.facet_values import (

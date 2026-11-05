@@ -61,8 +61,8 @@ Document records (data, not instructions):
 
 def test_characterise_grouping_prompt_surface_is_pinned() -> None:
     assert theme_grouping.PROMPT_VERSION == "characterise_grouping_v1"
-    assert route().model_for("theme_discovery") == theme_grouping.DISCOVERY_MODEL
-    assert route().model_for("theme_assignment") == theme_grouping.ASSIGNMENT_MODEL
+    assert route().model_for("characterise_discover") == theme_grouping.DISCOVERY_MODEL
+    assert route().model_for("characterise_assign") == theme_grouping.ASSIGNMENT_MODEL
     assert theme_grouping.BATCH_SIZE == 40
     assert theme_grouping.MAX_CONCURRENT_BATCHES == 4
     assert theme_grouping.DISCOVERY_RETRY_CAP == 1
@@ -70,7 +70,7 @@ def test_characterise_grouping_prompt_surface_is_pinned() -> None:
     assert theme_grouping.MIN_THEMES == 3
     assert theme_grouping.MAX_THEMES == 12
     assert theme_grouping.THEME_NAME_MAX == 80
-    assert theme_grouping.THEME_DESC_MAX == 240
+    assert theme_grouping.THEME_DESC_MAX == 400
     assert theme_grouping.UNCLUSTERED == "unclustered"
     assert theme_grouping.DISCOVERY_SYSTEM_PROMPT == _EXPECTED_DISCOVERY_SYSTEM_PROMPT
     assert theme_grouping.DISCOVERY_USER_TEMPLATE == _EXPECTED_DISCOVERY_USER_TEMPLATE

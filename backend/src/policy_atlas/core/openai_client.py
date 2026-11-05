@@ -12,7 +12,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from openai import OpenAI
 from pydantic import BaseModel
@@ -26,6 +26,31 @@ from policy_atlas.core.usage import (
     usage_metadata,
 )
 
+#: How a call site uses the provider's prompt cache (task 056, contract D3).
+#:
+#: In plain terms, the provider can store the start (the "prefix") of a prompt and
+#: bill it far more cheaply when a later call starts with the same text:
+#:
+#: - ``"auto"``: the provider's default. On every call over 1,024 tokens whose
+#:   prefix is not already stored, it stores the prefix at 1.25 times the normal
+#:   input price; when the prefix repeats, it reads it back at 5 to 10% of the price.
+#: - ``"off"``: no storing and no reading. For one-shot prompts that never repeat,
+#:   this saves the 25% storing surcharge. Measured caveat (GPT-6 re-test,
+#:   2026-11-02): on OpenAI direct this is a true off; on Bedrock it stops the
+#:   store (the cache write) being reported, but identical requests can still
+#:   read a stored prefix.
+#: - ``"breakpoint"``: store and read only the stable prefix (the system message).
+#:   For sites whose system prompt repeats across calls but whose user message
+#:   never does. It sends the same request body as ``"off"`` (explicit mode, so the
+#:   provider stores nothing on its own) plus one breakpoint on the system message
+#:   (the one place it may store). Without explicit mode the provider would still
+#:   store every whole request at 1.25x, which is what the per-site measurement
+#:   (``experiments/cache-modes-per-site-2026-11-02``) was careful not to send.
+#:
+#: The per-step table is ``evidence_search.synthesis.cache_modes.CACHE_MODES``,
+#: which re-exports this type (it lives here so ``core`` never imports
+#: ``evidence_search`` when it loads).
+PromptCache = Literal["auto", "off", "breakpoint"]
 
 @dataclass
 class CallBudget:
@@ -46,26 +71,26 @@ class CallBudget:
         return True
 
 
-def resolve_openai_client(
-    api_key: str | None,
-    *,
-    backend_name: str,
-    timeout: float,
-    max_retries: int,
-) -> OpenAI:
+def resolve_openai_client(api_key: str | None, *, backend_name: str) -> OpenAI:
     """Resolve the OpenAI API key and construct a client, failing loudly.
 
-    Shared by both live backends so key-resolution policy lives in one place.
+    Shared by every live backend so key-resolution policy lives in one place.
     The base address always comes from the selected route, so ``OPENAI_BASE_URL``
     in the environment is never consulted.
+
+    The client never retries on its own (``max_retries=0``) and carries no
+    timeout of its own (task 057, D12). Each request sends its step's timeout
+    (``openai_kwargs(..., timeout_s=route().timeout_for(step))``), and the retries
+    a model call gets (up to ``MODEL_CALL_ATTEMPTS`` attempts, three today; task 057
+    review: code-review 9) are made by :func:`policy_atlas.core.tracing.traced_attempts`,
+    so every attempt is its own Langfuse generation. Before task 057 the SDK
+    retried up to twice, silently and untraced.
 
     Args:
         api_key: Explicit key, or ``None`` to read the variable the route names
             (``OPENAI_API_KEY`` on ``openai-direct``, ``AWS_BEARER_TOKEN_BEDROCK``
             on the Bedrock routes).
         backend_name: Backend class name for the error message.
-        timeout: Per-request timeout in seconds.
-        max_retries: SDK-level retry cap for transient failures.
 
     Raises:
         RuntimeError: If no API key is provided or configured.
@@ -76,21 +101,81 @@ def resolve_openai_client(
     return OpenAI(
         api_key=resolved_key,
         base_url=route().openai_base_url,
-        timeout=timeout,
-        max_retries=max_retries,
+        max_retries=0,
     )
 
 
-def openai_kwargs(model: str, *, reasoning_effort: str | None = None) -> dict[str, Any]:
-    """Request kwargs shared by OpenAI chat-completions call sites.
+def openai_kwargs(
+    model: str, *, reasoning_effort: str, prompt_cache: PromptCache, timeout_s: float
+) -> dict[str, Any]:
+    """Request kwargs shared by every OpenAI chat-completions call site.
 
-    Omits reasoning_effort when None so non-reasoning call sites are byte-identical.
-    Provider-neutral by shape: a future Bedrock backend maps or ignores the string.
+    Every call site states its reasoning effort (task 056, D4) and its timeout
+    (task 057, D12): both come from the route file (``route().effort_for(step)``
+    and ``route().timeout_for(step)``), never from a literal in code.
+    ``"none"`` is sent as the string the provider expects.
+
+    Args:
+        model: The model id for this call site's route step.
+        reasoning_effort: One of the route file's effort values.
+        prompt_cache: The step's prompt-cache mode (:data:`PromptCache`).
+            ``"off"`` and ``"breakpoint"`` add the request body that turns
+            automatic storing off (``"breakpoint"`` then stores only at the
+            breakpoint set on the messages, see :func:`with_system_breakpoint`);
+            ``"auto"`` adds nothing.
+        timeout_s: Seconds this one request may take before the SDK gives up
+            on it (sent as the SDK's per-request ``timeout`` option).
+
+    Returns:
+        Keyword arguments for ``chat.completions.create`` / ``parse``.
     """
-    kwargs: dict[str, Any] = {"model": model}
-    if reasoning_effort is not None:
-        kwargs["reasoning_effort"] = reasoning_effort
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "reasoning_effort": reasoning_effort,
+        "timeout": timeout_s,
+    }
+    if prompt_cache in ("off", "breakpoint"):
+        kwargs["extra_body"] = {"prompt_cache_options": {"mode": "explicit"}}
     return kwargs
+
+
+def with_system_breakpoint(messages: list[Any]) -> list[Any]:
+    """Return the messages with a cache breakpoint on the first system message.
+
+    The breakpoint tells the provider to store and read only the prompt up to the
+    end of the system message (the ``"breakpoint"`` mode). The first system
+    message is rewritten into the content-part shape carrying the breakpoint;
+    every other message is passed through untouched. The caller's list and
+    message objects are never changed: a new list is returned.
+
+    Args:
+        messages: Chat messages; the first ``system`` message must hold its text
+            as a plain string.
+
+    Returns:
+        A new list with the first system message rewritten (or an unchanged copy
+        when there is no system message).
+    """
+    rewritten = list(messages)
+    for index, message in enumerate(rewritten):
+        if isinstance(message, Mapping) and message.get("role") == "system":
+            if not isinstance(message.get("content"), str):
+                raise TypeError(
+                    "with_system_breakpoint: the first system message must hold its text "
+                    f"as a plain string, not {type(message.get('content')).__name__}"
+                )
+            rewritten[index] = {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": message["content"],
+                        "prompt_cache_breakpoint": {"mode": "explicit"},
+                    }
+                ],
+            }
+            break
+    return rewritten
 
 
 def require_parsed(response: Any, *, label: str) -> Any:
@@ -121,6 +206,10 @@ def parse_structured[T: BaseModel](
     response_format: type[T],
     usage_event: str,
     label: str,
+    model: str,
+    reasoning_effort: str,
+    prompt_cache: PromptCache,
+    timeout_s: float,
     **parse_kwargs: Any,
 ) -> UsageResult[T]:
     """Run one ``chat.completions.parse`` call and apply the shared guards.
@@ -136,9 +225,14 @@ def parse_structured[T: BaseModel](
         response_format: The pydantic wire type to parse into.
         usage_event: structlog event name for usage logging.
         label: Human-readable call label used in guard error messages.
+        model: The model id for this call site's route step.
+        reasoning_effort: The step's effort (``route().effort_for(step)``).
+        prompt_cache: The step's prompt-cache mode (:data:`PromptCache`);
+            ``"breakpoint"`` sends the messages through
+            :func:`with_system_breakpoint`.
+        timeout_s: The step's request timeout (``route().timeout_for(step)``).
         **parse_kwargs: Additional keyword arguments forwarded to
-            ``chat.completions.parse`` (``model``, ``max_completion_tokens``,
-            ``reasoning_effort``, ...).
+            ``chat.completions.parse`` (``max_completion_tokens``, ...).
 
     Returns:
         The parsed structured output plus provider-neutral token usage.
@@ -147,8 +241,14 @@ def parse_structured[T: BaseModel](
         RuntimeError: If the response has no choices or was not parsed.
     """
     response = client.chat.completions.parse(
-        messages=messages,
+        messages=with_system_breakpoint(messages) if prompt_cache == "breakpoint" else messages,
         response_format=response_format,
+        **openai_kwargs(
+            model,
+            reasoning_effort=reasoning_effort,
+            prompt_cache=prompt_cache,
+            timeout_s=timeout_s,
+        ),
         **parse_kwargs,
     )
     log_usage(usage_event, response.usage)
@@ -163,6 +263,9 @@ def traced_parse[T: BaseModel](
     messages: list[Any],
     response_format: type[T],
     model: str,
+    step: str,
+    reasoning_effort: str,
+    timeout_s: float,
     max_output_tokens: int,
     usage_event: str,
     label: str,
@@ -171,13 +274,17 @@ def traced_parse[T: BaseModel](
     session_id: uuid.UUID | None = None,
     metadata: Mapping[str, Any] | None = None,
     clean: Callable[[T], T] | None = None,
-    reasoning_effort: str | None = None,
+    prompt_cache: PromptCache,
 ) -> UsageResult[T]:
-    """Run :func:`parse_structured` under one Langfuse generation.
+    """Run :func:`parse_structured` under Langfuse generations, one per attempt.
 
-    The span records the messages, the parsed output, the model, the prompt
-    version, any extra metadata and the token usage (``usage_details``, so
-    Langfuse can price the call).
+    The call runs under :func:`policy_atlas.core.tracing.traced_attempts`: a
+    timeout or a passing provider failure is tried again, up to
+    ``MODEL_CALL_ATTEMPTS`` attempts (three today; task 057 review: code-review 9),
+    and each attempt is its own generation carrying the step, the attempt number and a shared
+    call id. The successful attempt's span records the messages, the parsed
+    output, the model, the prompt version, any extra metadata and the token
+    usage (``usage_details``, so Langfuse can price the call).
 
     Args:
         client: The OpenAI client.
@@ -185,6 +292,9 @@ def traced_parse[T: BaseModel](
         messages: Chat messages for the call.
         response_format: The pydantic wire type to parse into.
         model: Model id.
+        step: The route step name (recorded on every attempt's generation).
+        reasoning_effort: The step's effort (``route().effort_for(step)``).
+        timeout_s: The step's request timeout (``route().timeout_for(step)``).
         max_output_tokens: Completion token cap.
         usage_event: structlog event name for usage logging.
         label: Call label used in guard error messages.
@@ -194,8 +304,9 @@ def traced_parse[T: BaseModel](
         metadata: Extra span metadata, after the prompt version.
         clean: Optional step applied to the parsed output before it is
             traced and returned (for example a NUL scrub).
-        reasoning_effort: The route's ``reasoning_effort`` for the model, or
-            ``None`` to send none (the request is then unchanged).
+        prompt_cache: The step's prompt-cache mode (:data:`PromptCache`),
+            forwarded to :func:`parse_structured` and recorded in the span
+            metadata.
 
     Returns:
         The parsed (and cleaned) output plus token usage.
@@ -213,8 +324,11 @@ def traced_parse[T: BaseModel](
             response_format=response_format,
             usage_event=usage_event,
             label=label,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            prompt_cache=prompt_cache,
+            timeout_s=timeout_s,
             max_completion_tokens=max_output_tokens,
-            **openai_kwargs(model, reasoning_effort=reasoning_effort),
         )
         return (clean(parsed) if clean is not None else parsed), usage
 
@@ -227,15 +341,17 @@ def traced_parse[T: BaseModel](
             model=model,
             metadata={
                 "prompt_version": prompt_version,
+                "reasoning_effort": reasoning_effort,
+                "prompt_cache": prompt_cache,
                 **(metadata or {}),
                 **usage_metadata(usage),
             },
         )
 
-    return tracing.traced_call(
+    return tracing.traced_attempts(
         langfuse_client,
         name=name,
-        as_type="generation",
+        step=step,
         call=_call,
         session_id=session_id,
         update=_update,

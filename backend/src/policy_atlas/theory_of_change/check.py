@@ -2026,7 +2026,7 @@ def _document_vectors(
     """The embedding vectors acquire stored for each document's text, by document."""
     out: dict[uuid.UUID, list[list[float]]] = {}
     for row in conn.execute(
-        select(task_source_snapshot.c.task_source_snapshot_id, chunk_embedding.c.vector)
+        select(task_source_snapshot.c.task_source_snapshot_id, chunk_embedding.c.embedding)
         .select_from(
             chunk_embedding.join(chunk, chunk.c.chunk_id == chunk_embedding.c.chunk_id).join(
                 task_source_snapshot,
@@ -2036,8 +2036,10 @@ def _document_vectors(
         .where(task_source_snapshot.c.task_source_snapshot_id.in_(list(tss_ids)))
         .where(chunk_embedding.c.embedding_profile == EMBEDDING_PROFILE)
         .where(chunk_embedding.c.unit_policy == UNIT_POLICY)
+        .where(chunk_embedding.c.embedding.is_not(None))
     ):
-        out.setdefault(row.task_source_snapshot_id, []).append(validate_vector(row.vector))
+        # The pgvector column (task 057 dropped the JSON copy); its type reads a list of floats.
+        out.setdefault(row.task_source_snapshot_id, []).append(validate_vector(row.embedding))
     return out
 
 

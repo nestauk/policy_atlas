@@ -36,7 +36,13 @@ import {
   rowMetaParts,
   themeSummary,
 } from "./longlistPresentation";
-import { ExcludeReasonForm, OptionActionButton, REASON_INPUT_CLASS, useOptionActions } from "./optionActions";
+import {
+  ExcludeReasonForm,
+  OptionActionButton,
+  REASON_INPUT_CLASS,
+  ShortlistActionButton,
+  useOptionActions,
+} from "./optionActions";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
@@ -47,7 +53,9 @@ const GROUP_BY: { key: GroupBy; label: string }[] = [
   { key: "lever", label: "Lever type" },
 ];
 
-const MODES: { key: "list" | "grid"; label: string }[] = [
+type Mode = "list" | "grid";
+
+const MODES: { key: Mode; label: string }[] = [
   { key: "list", label: "List" },
   { key: "grid", label: "Grid" },
 ];
@@ -79,7 +87,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
   const plan = usePlan(taskId);
   const addOption = useAddOption(taskId);
 
-  const [mode, setMode] = useState<"list" | "grid">("list");
+  const [mode, setMode] = useState<Mode>("list");
   const [groupBy, setGroupBy] = useState<GroupBy>("theme");
   const [showExcludedInGrid, setShowExcludedInGrid] = useState(false);
   const [addText, setAddText] = useState("");
@@ -128,12 +136,15 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
           >
             {scrub(option.name)}
           </Link>
-          <OptionActionButton
-            actions={actions}
-            optionId={option.option_id}
-            excluded={excluded}
-            className="-my-2 flex-none"
-          />
+          <div className="-my-2 flex flex-none items-center gap-2">
+            <ShortlistActionButton
+              actions={actions}
+              optionId={option.option_id}
+              shortlistState={option.shortlist?.state}
+              excluded={excluded}
+            />
+            <OptionActionButton actions={actions} optionId={option.option_id} excluded={excluded} />
+          </div>
         </div>
         <p className={cn("mt-1 max-w-[44em] text-body", excluded ? "text-grey" : "text-ink")}>
           {scrub(option.description)}
@@ -228,7 +239,7 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
   const excludedOptions = options.filter((option) => option.state === "excluded");
 
   const entries: SidebarEntry[] =
-    mode === "grid"
+    mode !== "list"
       ? []
       : [
           ...themeGroups.map((group) => ({ id: group.id, title: group.name })),

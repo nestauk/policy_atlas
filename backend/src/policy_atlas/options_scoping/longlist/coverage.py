@@ -32,8 +32,10 @@ the same count once; a document without a DOI counts as itself.
 
 **Labels.** Unknown and Non-evidence are their own evidence-type buckets
 (they are classification results); a document with no label (the resolver's
-``absent``) is ``not rated``; an inherited label counts as its type and tier,
-and ``inherited_labels`` says how many documents' labels came through a link.
+``absent``) is ``not rated``; an Unrated appraisal (no score, task 056) is its
+own tier bucket, ``Unrated``, never folded into ``not rated`` or a score; an
+inherited label counts as its type and tier, and ``inherited_labels`` says how
+many documents' labels came through a link.
 """
 
 from __future__ import annotations
@@ -47,6 +49,7 @@ from typing import Any
 
 import structlog
 
+from policy_atlas.evidence_search.assess.appraise import appraisal_tier
 from policy_atlas.options_scoping.labels import DocumentLabels
 from policy_atlas.options_scoping.longlist.where_tried import (
     ABBREVIATIONS,
@@ -169,6 +172,8 @@ class CoverageMember:
         outcome_tag: The record's outcome tag (a plan outcome's text or
             ``other``), ``None`` when not tagged and for a linked finding
             (R42).
+        year: The document's publication year, ``None`` when absent or
+            malformed (task 055, A3).
     """
 
     unit_kind: str
@@ -186,6 +191,25 @@ class CoverageMember:
     outcome_tag: str | None = None
     programme_name: str | None = None
     study_country: str | None = None
+    year: int | None = None
+
+
+def document_year(metadata: Mapping[str, Any] | None) -> int | None:
+    """A document's publication year from its snapshot metadata.
+
+    The same two-key rule as the read path's ``_year``: ``publication_year``,
+    then ``year``. Anything that is not a whole number is ``None``.
+
+    Args:
+        metadata: The snapshot metadata, or ``None``.
+
+    Returns:
+        The year, or ``None``.
+    """
+    if not metadata:
+        return None
+    value = metadata.get("publication_year", metadata.get("year"))
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 @dataclass(frozen=True)
@@ -391,7 +415,9 @@ def _pick_label(candidates: list[DocumentLabels]) -> DocumentLabels | None:
         label
         for label in candidates
         if label.provenance != "absent"
-        and (label.evidence_type is not None or label.quality_score is not None)
+        and (
+            label.evidence_type is not None or label.quality_score is not None or label.unrated
+        )
     ]
     if not resolved:
         return candidates[0] if candidates else None
@@ -399,7 +425,7 @@ def _pick_label(candidates: list[DocumentLabels]) -> DocumentLabels | None:
         enumerate(resolved),
         key=lambda item: (
             item[1].provenance != "own",
-            item[1].quality_score is None,
+            item[1].quality_score is None and not item[1].unrated,
             item[1].evidence_type is None,
             item[0],
         ),
@@ -623,6 +649,8 @@ def option_coverage(
     abstract_only = 0
     inherited_labels = 0
     evaluating_documents = 0
+    evaluating_evidence_type: Counter[str] = Counter()
+    evaluation_years: list[int] = []
     outcome_documents = dict.fromkeys((fold_text(o) for o in plan_outcomes), 0)
     outcome_evaluated = dict.fromkeys(outcome_documents, 0)
     measures_lookup = fold_lookup(folds, "measures")
@@ -639,12 +667,21 @@ def option_coverage(
             tier[NOT_RATED] += 1
         else:
             evidence_type[label.evidence_type or NOT_RATED] += 1
-            tier[str(label.quality_score) if label.quality_score is not None else NOT_RATED] += 1
+            tier[appraisal_tier(label.quality_score, unrated=label.unrated) or NOT_RATED] += 1
             inherited_labels += int(label.provenance == "inherited")
         for role_key in {m.role for m in doc_members if m.role in role}:
             role[role_key] += 1
         evaluated = [m for m in doc_members if m.role == "evaluated"]
         evaluating_documents += int(bool(evaluated))
+        if evaluated:
+            if label is None or label.provenance == "absent":
+                evaluating_evidence_type[NOT_RATED] += 1
+            else:
+                evaluating_evidence_type[label.evidence_type or NOT_RATED] += 1
+            # A DOI-collapsed document takes the newest year among its copies.
+            years = [m.year for m in doc_members if m.year is not None]
+            if years:
+                evaluation_years.append(max(years))
         doc_outcomes = {fold_text(m.outcome_tag) for m in doc_members if m.outcome_tag}
         doc_outcomes_evaluated = {fold_text(m.outcome_tag) for m in evaluated if m.outcome_tag}
         if measures_lookup is not None:
@@ -720,6 +757,8 @@ def option_coverage(
         "evidence_type": _sorted(evidence_type),
         "tier": _sorted(tier),
         "role": role,
+        "evaluating_evidence_type": _sorted(evaluating_evidence_type),
+        "latest_evaluation_year": max(evaluation_years) if evaluation_years else None,
         "settings": _sorted(settings),
         "tried_on": [
             {"unit": unit, "documents": documents}

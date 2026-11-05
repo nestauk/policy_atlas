@@ -257,6 +257,7 @@ def test_a_429_pauses_every_threads_admission(monkeypatch: pytest.MonkeyPatch) -
     # itself (review finding, 2026-10-09: with the back-off in place the old
     # assertion held with the pause deleted).
     monkeypatch.setattr(search_live, "RETRY_BACKOFF_S", 0.0)
+    monkeypatch.setattr(search_live, "RATE_LIMIT_BACKOFF_S", 0.0)
     fetch = ScriptedFetch(
         [search_live.SearchTransportError(429, "api.openalex.org"), {"results": []}]
     )

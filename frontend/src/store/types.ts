@@ -55,10 +55,14 @@ interface TaskSummary {
   status?: "active" | "archived" | null;
 }
 
-/** Last tick note for one stage (or the global key, for stage-less ticks). */
-interface StageLiveness {
+/** Last tick note for one stage (or the global key, for stage-less ticks).
+ *  The full-text reading stage's ticks also carry document counts (task 056). */
+export interface StageLiveness {
   note: string;
   occurredAt: string;
+  fetched?: number;
+  parsed?: number;
+  total?: number;
 }
 
 /** One presentation-only artefact section received through the live SSE

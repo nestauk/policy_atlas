@@ -51,6 +51,7 @@ implementation lands — see the flow-back in [README](README).
   - [system/execution-orchestration.md](system/execution-orchestration.md)
   - [system/plan-as-object.md](system/plan-as-object.md)
   - [system/prompting.md](system/prompting.md) — doctrine for every prompt surface
+  - [system/data-flow-queued-ingest.md](system/data-flow-queued-ingest.md) — the queued full-text ingest data flow (the DPIA addendum's input)
     (promoted from the 018 research + loop method; not distilled from the frozen sources).
 - Capability specs (instances of the framework):
   - [capabilities/evidence-search/](capabilities/evidence-search/) — the first v3.0 capability.
