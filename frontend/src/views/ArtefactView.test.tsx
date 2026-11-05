@@ -11,6 +11,8 @@ import {
   draftParagraphs,
   highlightParts,
   LiveArtefactBody,
+  liveCaseStudyCards,
+  liveReferences,
   minutesSince,
   orderSections,
   ProvenanceSheet,
@@ -198,6 +200,7 @@ describe("LiveArtefactBody", () => {
   });
 
   it("appends drafted prose as plain text with paragraph breaks and no claim marker", () => {
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame", "setTimeout", "clearTimeout", "performance"] });
     const { rerender, container } = render(
       <LiveArtefactBody stream={writingStream({ draft: "Cost is" }, "Writing")} />,
     );
@@ -206,11 +209,17 @@ describe("LiveArtefactBody", () => {
         stream={writingStream({ draft: `${LEAD} **Bold?** [1]\n\nSubsidy design matters.` }, "Writing")}
       />,
     );
+    // Paced in the browser: the text is revealed over a few frames.
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
     const costs = screen.getByRole("heading", { name: "Costs" }).closest("section") as HTMLElement;
+    // Laid out as the committed prose is: one paragraph element, a blank
+    // line between paragraphs (owner, round 7: nothing moves at the swap).
     const paragraphs = costs.querySelectorAll("p.whitespace-pre-line");
-    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0].textContent).toBe(`${LEAD} **Bold?** [1]\n\nSubsidy design matters.`);
     // Plain text: Markdown is not interpreted, and nothing is a marker.
-    expect(paragraphs[0]).toHaveTextContent(`${LEAD} **Bold?** [1]`);
     expect(container.querySelector(".citation-marker")).toBeNull();
     expect(within(costs).queryByRole("button")).toBeNull();
   });
@@ -433,7 +442,7 @@ describe("evidence shown live (task 058, owner 2026-11-05)", () => {
     expect(screen.queryByTestId("drawing-on")).toBeNull();
   });
 
-  it("puts a hollow provisional mark after each cited span, named for its sources, under the revising blur too", () => {
+  it("puts a muted marker chip after each cited span, named for its sources, under the revising blur too", () => {
     const draft = `${LEAD} ${FAILED}`;
     const failedAt = draft.indexOf(FAILED);
     const claims = [
@@ -454,9 +463,14 @@ describe("evidence shown live (task 058, owner 2026-11-05)", () => {
     expect(marks[0]).toHaveAttribute("title", "Smith 2023; DfE 2022");
     expect(marks[1]).toHaveAccessibleName("Cited, being checked: Sustrans 2020");
     for (const mark of marks) {
-      // The status mark's 6 px square, hollow in Line 2; not blue, not a control.
-      expect(mark.className).toContain("size-1.5");
-      expect(mark.className).toContain("border-line-2");
+      // The final marker's chip in its muted look, a dot for the number
+      // (owner, round 7); not blue, not a control.
+      expect(mark).toHaveTextContent("[·]");
+      expect(mark.className).toContain("citation-marker");
+      expect(mark.className).toContain("border-line");
+      expect(mark.className).toContain("bg-ground");
+      expect(mark.className).toContain("text-grey");
+      expect(mark.className).toContain("text-caption");
       expect(mark.className).not.toMatch(/blue/);
       expect(mark.tagName).toBe("SPAN");
     }
@@ -486,6 +500,202 @@ describe("evidence shown live (task 058, owner 2026-11-05)", () => {
         { text: " b.", revising: false },
       ],
       [{ text: "C d.", revising: false, marks: [tail] }],
+    ]);
+  });
+});
+
+describe("the live page looks like the final page (task 058, owner round 7)", () => {
+  const SMITH = "Smith 2023";
+  const DFE = "DfE 2022";
+  const citation = (start: number, end: number, n: number, title: string, tier: string | null = "tier_2") => ({
+    start,
+    end,
+    n,
+    sourceId: `s${n}`,
+    title,
+    tier,
+  });
+
+  it("gives a checked section the report's numbered markers after the cited words, not controls yet", () => {
+    const prose = `${LEAD} Subsidy design matters.`;
+    render(
+      <LiveArtefactBody
+        stream={writingStream({
+          state: "filled",
+          prose,
+          draft: undefined,
+          citations: [citation(0, LEAD.length, 3, SMITH), citation(0, LEAD.length, 5, DFE), citation(LEAD.length + 1, prose.length, 3, SMITH)],
+        })}
+      />,
+    );
+    const costs = screen.getByRole("heading", { name: "Costs" }).closest("section") as HTMLElement;
+    const markers = within(costs).getAllByRole("img", { name: /details when the report is ready$/ });
+    expect(markers).toHaveLength(2);
+    expect(markers[0]).toHaveTextContent("[3,5]");
+    expect(markers[0]).toHaveAccessibleName("Citations 3, 5, Smith 2023; DfE 2022; details when the report is ready");
+    expect(markers[1]).toHaveAccessibleName("Citation 3, Smith 2023; details when the report is ready");
+    expect(markers[1]).toHaveAttribute("title", SMITH);
+    // The final marker's look, without the control's cursor.
+    expect(markers[0].className).toContain("bg-blue-tint-2");
+    expect(markers[0].className).not.toContain("cursor-pointer");
+    expect(markers[0].previousElementSibling).toHaveTextContent(LEAD);
+    expect(within(costs).queryByRole("button")).toBeNull();
+    // The report's own prose component sets it.
+    expect(costs.querySelectorAll("p.whitespace-pre-line")).toHaveLength(1);
+  });
+
+  it("keeps the pending markers on the draft layer as it fades, and the numbered ones under it", () => {
+    mockReducedMotion(false);
+    const claims = [{ start: 0, end: LEAD.length, sources: [{ sourceId: "s3", title: SMITH }] }];
+    const { rerender } = render(
+      <LiveArtefactBody stream={writingStream({ draft: LEAD, claims }, "Checking claims")} />,
+    );
+    rerender(
+      <LiveArtefactBody
+        stream={writingStream({
+          state: "filled",
+          prose: LEAD,
+          draft: undefined,
+          claims: undefined,
+          citations: [citation(0, LEAD.length, 1, SMITH)],
+        })}
+      />,
+    );
+    const costs = screen.getByRole("heading", { name: "Costs" }).closest("section") as HTMLElement;
+    const ghost = costs.querySelector(".anim-settle-out") as HTMLElement;
+    expect(within(ghost).getByTestId("provisional-mark")).toHaveTextContent("[·]");
+    expect(within(costs).getByRole("img", { name: /^Citation 1, Smith 2023/ })).toHaveTextContent("[1]");
+  });
+
+  it("orders the sections as the report does and heads the parts, with contents beside the page", () => {
+    const stream = streamWith(
+      [
+        { index: 0, title: "Key findings", focus: "", state: "planned", role: "key_findings" },
+        { index: 1, title: "Costs", focus: "", state: "writing", role: "body" },
+        { index: 2, title: "Conclusions", focus: "", state: "planned", role: "body" },
+        { index: 3, title: "Case studies", focus: "", state: "planned", role: "case_studies" },
+      ],
+      "running",
+    );
+    render(<LiveArtefactBody stream={stream} question="What raises take-up?" />);
+    const page = screen.getByRole("main");
+    expect(within(page).getByText("Report")).toBeInTheDocument();
+    const headings = within(page)
+      .getAllByRole("heading", { level: 2 })
+      .map((heading) => heading.textContent);
+    expect(headings).toEqual(["Executive summary", "Key findings", "Case studies", "Full report", "Costs", "Conclusions"]);
+    // Anchored as the committed report anchors them, so the contents work live.
+    const nav = screen.getByRole("navigation");
+    // Anchored by the committed order (case studies second on the page).
+    expect(within(nav).getByRole("link", { name: "Costs" })).toHaveAttribute("href", "#section-2-costs");
+    expect(document.getElementById("section-2-costs")).not.toBeNull();
+    // No download, facts strip, ask link or most relevant sources while live.
+    expect(screen.queryByText("Most relevant sources")).toBeNull();
+    expect(screen.queryByText("Ask about this analysis")).toBeNull();
+  });
+
+  it("orders by the skeleton's own roles: case studies last in the skeleton, second on the page", () => {
+    const stream = streamWith(
+      [
+        { index: 0, title: "Key findings", focus: "", state: "planned", role: "key_findings" },
+        { index: 1, title: "Costs", focus: "", state: "planned", role: "body" },
+        { index: 2, title: "Conclusions", focus: "", state: "planned", role: "body" },
+        { index: 3, title: "Examples", focus: "", state: "planned", role: "case_studies" },
+      ] as unknown as LiveSection[],
+      "running",
+    );
+    render(<LiveArtefactBody stream={stream} />);
+    const headings = within(screen.getByRole("main"))
+      .getAllByRole("heading", { level: 2 })
+      .map((heading) => heading.textContent);
+    expect(headings).toEqual(["Executive summary", "Key findings", "Examples", "Full report", "Costs", "Conclusions"]);
+  });
+
+  it("lays the case-study cards out as the report does, one by one as each closes", () => {
+    const stream = streamWith(
+      [
+        { index: 0, title: "Key findings", focus: "", state: "planned" },
+        {
+          index: 1,
+          title: "Case studies",
+          focus: "",
+          state: "writing",
+          role: "case_studies",
+          cards: [{ title: "Leeds pilot", prose: "Take-up rose after direct payment." }],
+        },
+      ],
+      "running",
+    );
+    render(<LiveArtefactBody stream={stream} />);
+    const section = screen.getByRole("heading", { name: "Case studies" }).closest("section") as HTMLElement;
+    expect(within(section).getByText("Relevant examples from the cited evidence.")).toBeInTheDocument();
+    const cards = within(section).getAllByRole("listitem");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toHaveClass("border", "border-line", "p-4");
+    expect(within(cards[0]).getByText("Leeds pilot")).toHaveClass("font-bold");
+    expect(cards[0]).toHaveTextContent("Take-up rose after direct payment.");
+    expect(within(section).queryByTestId("placeholder-lines")).toBeNull();
+  });
+
+  it("renders a completed case-studies slot as its cards with their markers, never as bold markup", () => {
+    const prose = "**Leeds pilot**\nTake-up rose.\n\n**Bristol letters**\nLetters helped.";
+    const stream = streamWith(
+      [
+        { index: 0, title: "Key findings", focus: "", state: "planned", role: "key_findings" },
+        {
+          index: 1,
+          title: "Case studies",
+          focus: "",
+          state: "filled",
+          role: "case_studies",
+          prose,
+          citations: [citation(16, 29, 2, SMITH)],
+        },
+      ],
+      "running",
+    );
+    render(<LiveArtefactBody stream={stream} />);
+    const section = screen.getByRole("heading", { name: "Case studies" }).closest("section") as HTMLElement;
+    expect(section).not.toHaveTextContent("**");
+    const cards = within(section).getAllByRole("listitem");
+    expect(cards.map((card) => within(card).getByText(/Leeds pilot|Bristol letters/).textContent)).toEqual([
+      "Leeds pilot",
+      "Bristol letters",
+    ]);
+    expect(within(cards[0]).getByRole("img", { name: /^Citation 2, Smith 2023/ })).toHaveTextContent("[2]");
+  });
+
+  it("reads a completed case-studies slot back into its cards, each with its own markers", () => {
+    const prose = "**Leeds pilot**\nTake-up rose.\n\n**Bristol letters**\nLetters helped.";
+    const bristolAt = Array.from(prose).length - "Letters helped.".length;
+    const cards = liveCaseStudyCards(prose, [citation(16, 29, 2, SMITH), citation(bristolAt, bristolAt + 15, 4, DFE)]);
+    expect(cards.map((card) => [card.title, card.prose])).toEqual([
+      ["Leeds pilot", "Take-up rose."],
+      ["Bristol letters", "Letters helped."],
+    ]);
+    expect(cards[0].claims?.[0].span).toEqual([0, 13]);
+    expect(cards[1].claims?.[0].span).toEqual([0, 15]);
+    expect(cards[1].claims?.[0].citations?.[0].n).toBe(4);
+  });
+
+  it("grows a numbered references list as sections are checked: titles only, no links", () => {
+    const stream = streamWith(
+      [
+        { index: 0, title: "Key findings", focus: "", state: "planned" },
+        { index: 1, title: "Costs", focus: "", state: "filled", prose: LEAD, citations: [citation(0, 10, 2, DFE), citation(0, 10, 1, SMITH)] },
+        { index: 2, title: "Outreach", focus: "", state: "filled", prose: LEAD, citations: [citation(0, 10, 1, SMITH)] },
+      ],
+      "running",
+    );
+    render(<LiveArtefactBody stream={stream} />);
+    const references = screen.getByRole("region", { name: "References" });
+    const items = within(references).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([`[1]${SMITH}`, `[2]${DFE}`]);
+    for (const item of items) expect(within(item).queryByRole("button")).toBeNull();
+    expect(within(references).queryByRole("link")).toBeNull();
+    expect(liveReferences(Object.values(stream.liveSections))).toEqual([
+      { n: 1, title: SMITH },
+      { n: 2, title: DFE },
     ]);
   });
 });

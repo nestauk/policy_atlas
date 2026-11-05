@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { createContext, Fragment, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
@@ -38,7 +38,7 @@ import { usePlanPanel } from "./planPanel";
 import { ShortlistView } from "./longlist/ShortlistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
-import type { LiveClaim, LiveSection, RunStreamState } from "../store";
+import type { LiveCitation, LiveClaim, LiveSection, RunStreamState } from "../store";
 import { Card, LiveMark } from "../ui/brand/Card";
 import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
@@ -64,6 +64,7 @@ import { Tooltip } from "../ui/radix/Tooltip";
 import { AuthorsLine, InstitutionsLine, SourceDossierBody, useDossierRecords } from "./SourcesView";
 import { referenceAuthorsLine } from "./artefactPresentation";
 import { useActiveConversation } from "./workspace/chat/conversationState";
+import { scrollPane, useFollowTail, useHoldHeightWhileShorter, useRevealedText } from "./streamPacing";
 
 type CitationOut = components["schemas"]["CitationOut"];
 type GapOut = components["schemas"]["GapOut"];
@@ -691,6 +692,7 @@ function ClaimSpan({
   text,
   onOpen,
   showCitationMarker = true,
+  live = false,
 }: {
   claim: ClaimLike;
   text: string;
@@ -698,10 +700,38 @@ function ClaimSpan({
   /** When false, the [n] marker button is suppressed — used for the lead
    *  half of a colon-crossing citation so the marker shows only once. */
   showCitationMarker?: boolean;
+  /** True on the report while it is written: the marker shows its number in
+   *  the report's look but is not a control yet (the provenance sheet needs
+   *  the committed report). */
+  live?: boolean;
 }) {
+  const swap = useContext(ReportSwapContext);
   // Dev-facing markings (source-check flags, connective reasoning) carry no
   // user-facing detail: their prose renders unmarked (owner, 2026-07-29).
   if (UNMARKED_TYPES.has(claim.claim_type)) return <span>{scrub(text)}</span>;
+  const citationNumbers = [...new Set((claim.citations ?? []).map((citation) => citation.n))];
+  if (live) {
+    const titles = [...new Set((claim.citations ?? []).map((citation) => scrub(citation.source_title)))];
+    return (
+      <span>
+        <span>{scrub(text)}</span>
+        {claim.claim_type === "citation" && citationNumbers.length > 0 && showCitationMarker && (
+          <span
+            role="img"
+            aria-label={`${citationNumbers.length === 1 ? "Citation" : "Citations"} ${citationNumbers.join(", ")}, ${titles.join("; ")}; details when the report is ready`}
+            title={titles.join("; ")}
+            className={CITATION_MARKER_LIVE_CLASS}
+          >
+            [{citationNumbers.join(",")}]
+          </span>
+        )}
+      </span>
+    );
+  }
+  // A marker whose number changed at the swap fades its new number in; the
+  // text around it does not move (owner, round 7).
+  const before = swap.liveNumbers.get(markerKey(claim.span, text));
+  const renumbered = swap.arriving && before !== undefined && before !== citationNumbers.join(",");
   const first = (claim.citations ?? [])[0];
   const tier = first?.grounding_tier ?? null;
   const tip =
@@ -740,7 +770,6 @@ function ClaimSpan({
       <span className="text-meta">{TYPE_HINT[claim.claim_type] ?? "Claim"}</span>
     );
   const typeLabel = TYPE_LABEL[claim.claim_type];
-  const citationNumbers = [...new Set((claim.citations ?? []).map((citation) => citation.n))];
   return (
     <span>
       {/* A real <button> is an ATOMIC inline-block: a sentence-length span
@@ -772,7 +801,7 @@ function ClaimSpan({
           type="button"
           aria-label={`Citations ${citationNumbers.join(", ")}`}
           onClick={() => onOpen(claim)}
-          className={CITATION_MARKER_CLASS}
+          className={renumbered ? `${CITATION_MARKER_CLASS} anim-swap-in` : CITATION_MARKER_CLASS}
         >
           [{citationNumbers.join(",")}]
         </button>
@@ -857,6 +886,7 @@ function sliceSegment(segment: BulletSegment, start: number, end: number): Bulle
 function renderLeadColonBullet(
   segments: BulletSegment[],
   onOpenClaim: (claim: ClaimLike) => void,
+  live = false,
 ): ReactNode {
   const cleaned: BulletSegment[] = segments.map((segment, index) => {
     const text = stripBulletPrefix(segment.text, index === 0);
@@ -881,6 +911,7 @@ function renderLeadColonBullet(
           claim={segment.claim}
           text={segment.text}
           onOpen={onOpenClaim}
+          live={live}
           showCitationMarker={
             suppressMarkerIds !== undefined
               ? !suppressMarkerIds.has(segment.claim.claim_id)
@@ -943,9 +974,12 @@ function renderLeadColonBullet(
 export function AnnotatedProse({
   block,
   onOpenClaim,
+  live = false,
 }: {
   block: BlockLike;
   onOpenClaim: (claim: ClaimLike) => void;
+  /** True on the report while it is written (markers are not controls yet). */
+  live?: boolean;
 }) {
   const segments = useMemo(() => spanSegments(block.prose, block.claims ?? []), [block]);
 
@@ -996,19 +1030,19 @@ export function AnnotatedProse({
                   aria-hidden="true"
                   className={`mt-2 h-1.5 w-1.5 shrink-0 ${isGap ? "bg-yellow" : "bg-blue"}`}
                 />
-                <span>{renderLeadColonBullet(bullet, onOpenClaim)}</span>
+                <span>{renderLeadColonBullet(bullet, onOpenClaim, live)}</span>
               </li>
             );
           })}
         </ul>
         {crossing.map((claim) => (
           <p key={claim.claim_id} className="mt-2 text-lead text-grey max-md:text-body">
-            <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
+            <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} live={live} />
           </p>
         ))}
         {unspanned.map((claim) => (
           <p key={claim.claim_id} className="mt-2 text-lead text-grey max-md:text-body">
-            <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
+            <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} live={live} />
           </p>
         ))}
       </div>
@@ -1023,13 +1057,13 @@ export function AnnotatedProse({
             return <span key={index}>{scrub(segment.text)}</span>;
           }
           return (
-            <ClaimSpan key={index} claim={segment.claim} text={segment.text} onOpen={onOpenClaim} />
+            <ClaimSpan key={index} claim={segment.claim} text={segment.text} onOpen={onOpenClaim} live={live} />
           );
         })}
       </p>
       {unspanned.map((claim) => (
         <p key={claim.claim_id} className="mt-2 text-lead text-grey max-md:text-body">
-          <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
+          <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} live={live} />
         </p>
       ))}
     </div>
@@ -1185,13 +1219,13 @@ const PLACEHOLDER_WIDTHS: readonly (readonly number[])[] = [
   [91, 64],
 ];
 
-function PlaceholderLines({ index, still }: { index: number; still: boolean }) {
+function PlaceholderLines({ index, still, className = "" }: { index: number; still: boolean; className?: string }) {
   const widths = PLACEHOLDER_WIDTHS[index % PLACEHOLDER_WIDTHS.length];
   return (
     <div
       aria-hidden="true"
       data-testid="placeholder-lines"
-      className={`mt-3 flex max-w-prose-measure flex-col gap-4 py-2 max-md:gap-3.5 ${still ? "" : "anim-breathe"}`}
+      className={`flex max-w-prose-measure flex-col gap-4 py-2 max-md:gap-3.5 ${still ? "" : "anim-breathe"} ${className}`}
     >
       {widths.map((width, line) => (
         <span key={line} className="block h-2.5 bg-line" style={{ width: `${width}%` }} />
@@ -1252,11 +1286,21 @@ export function draftParagraphs(
   return paragraphs.filter((paragraph) => paragraph.length > 0);
 }
 
-/** The writer's own citation, placed after the cited words while the section
- *  is written (task 058, owner 2026-11-05): the status mark's 6 px square,
- *  hollow in Line 2, not a control and not blue (blue belongs to the checked
- *  markers the committed section brings). Its titles are the hover text. */
-function ProvisionalMark({ claim }: { claim: LiveClaim }) {
+/** The citation marker while the claim is still being checked (task 058,
+ *  owner round 7): the final marker's chip in its muted look (Line border,
+ *  Ground fill, grey text), a dot in place of the number. Not a control. */
+export const CITATION_MARKER_PENDING_CLASS =
+  "citation-marker mx-1 border border-line bg-ground px-1.5 align-[2px] text-caption font-semibold text-grey";
+
+/** The checked marker while the report is still live: the final marker's
+ *  look, without the control's cursor and hover (the provenance sheet needs
+ *  the committed report). */
+export const CITATION_MARKER_LIVE_CLASS =
+  "citation-marker mx-1 border border-blue/25 bg-blue-tint-2 px-1.5 align-[2px] text-caption font-semibold text-blue/80";
+
+/** The writer's own citation while the section is written: the marker's chip,
+ *  muted, after the cited words. Its titles are the hover text. */
+function PendingMarker({ claim }: { claim: LiveClaim }) {
   const titles = claim.sources.map((source) => scrub(source.title)).join("; ");
   return (
     <span
@@ -1264,43 +1308,167 @@ function ProvisionalMark({ claim }: { claim: LiveClaim }) {
       aria-label={`Cited, being checked: ${titles}`}
       title={titles}
       data-testid="provisional-mark"
-      className="ml-1 inline-block size-1.5 border border-line-2 align-middle"
-    />
+      className={CITATION_MARKER_PENDING_CLASS}
+    >
+      [·]
+    </span>
   );
 }
 
-/** Drafted prose: plain text, no Markdown, no checked citation. A span the
- *  checker failed blurs in place while the writer revises it; the writer's
- *  own citations show as provisional marks after the words they cite. */
+/** One drafted paragraph: its runs, the span under repair blurred in place,
+ *  the pending markers after the words they cite. */
+function DraftParagraph({ runs }: { runs: DraftRun[] }) {
+  return (
+    <>
+      {runs.map((run, runAt) => (
+        <span key={runAt}>
+          {run.revising ? (
+            <span data-revising="true" className="draft-revising">
+              {scrub(run.text)}
+            </span>
+          ) : (
+            scrub(run.text)
+          )}
+          {run.marks?.map((claim, markAt) => <PendingMarker key={markAt} claim={claim} />)}
+        </span>
+      ))}
+    </>
+  );
+}
+
+/** The live paragraph: as `DraftParagraph`, with the words each frame
+ *  revealed wrapped in one span per batch that fades in over 150 ms,
+ *  opacity only (task 058, owner round 7). Pieces are keyed by where they
+ *  start, so a batch fades once. The spans go when the paragraph settles. */
+function FadingParagraph({ runs, start, batches }: { runs: DraftRun[]; start: number; batches: readonly number[] }) {
+  const cuts = batches.filter((cut) => cut > start);
+  const lengths = runs.map((run) => Array.from(run.text).length);
+  const starts = lengths.map((_, at) => start + lengths.slice(0, at).reduce((sum, length) => sum + length, 0));
+  return (
+    <>
+      {runs.map((run, runAt) => {
+        const chars = Array.from(run.text);
+        const runStart = starts[runAt];
+        const runEnd = runStart + chars.length;
+        const bounds = [runStart, ...cuts.filter((cut) => cut > runStart && cut < runEnd), runEnd];
+        const pieces = bounds.slice(0, -1).map((from, at) => {
+          const text = scrub(chars.slice(from - runStart, bounds[at + 1] - runStart).join(""));
+          const fading = cuts.some((cut) => cut <= from);
+          return fading ? (
+            <span key={from} className="anim-word-in">
+              {text}
+            </span>
+          ) : (
+            <Fragment key={from}>{text}</Fragment>
+          );
+        });
+        return (
+          <span key={runAt}>
+            {run.revising ? (
+              <span data-revising="true" className="draft-revising">
+                {pieces}
+              </span>
+            ) : (
+              pieces
+            )}
+            {run.marks?.map((claim, markAt) => <PendingMarker key={markAt} claim={claim} />)}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+/** Whether two drafted paragraphs render the same: their text, the spans
+ *  under repair and the citations that end in them. */
+export function sameParagraph(previous: { runs: DraftRun[] }, next: { runs: DraftRun[] }): boolean {
+  const a = previous.runs;
+  const b = next.runs;
+  if (a.length !== b.length) return false;
+  return a.every((run, at) => {
+    const other = b[at];
+    if (run.text !== other.text || run.revising !== other.revising) return false;
+    const marks = run.marks ?? [];
+    const otherMarks = other.marks ?? [];
+    return (
+      marks.length === otherMarks.length &&
+      marks.every(
+        (mark, markAt) =>
+          mark.start === otherMarks[markAt].start &&
+          mark.end === otherMarks[markAt].end &&
+          mark.sources.map((source) => source.title).join("\u0000") ===
+            otherMarks[markAt].sources.map((source) => source.title).join("\u0000"),
+      )
+    );
+  });
+}
+
+/** A paragraph the writer has moved past: frozen, so only the live tail
+ *  re-renders as text is revealed (task 058, owner round 7). */
+export const SettledParagraph = memo(DraftParagraph, sameParagraph);
+
+/** Drafted prose: plain text, no Markdown, laid out as the committed prose
+ *  is (one paragraph element, blank lines between paragraphs), so the settle
+ *  and the swap move nothing. Every paragraph but the last is frozen; the
+ *  last is the live tail. No `text-wrap: pretty` or `balance` here: the live
+ *  lines must not re-break as words arrive. */
 function DraftProse({
   draft,
   revising,
   claims,
+  batches,
   className = "",
 }: {
   draft: string;
   revising?: readonly { start: number; end: number }[];
   claims?: readonly LiveClaim[];
+  /** Where each recent reveal began (the live draft only): the live
+   *  paragraph fades those words in. */
+  batches?: readonly number[];
   className?: string;
 }) {
+  const paragraphs = draftParagraphs(draft, revising, claims);
+  const tail = paragraphs.at(-1) ?? [];
+  const tailText = tail.map((run) => run.text).join("");
+  const tailStart = Array.from(draft.slice(0, Math.max(0, draft.lastIndexOf(tailText)))).length;
   return (
-    <div className={`max-w-prose-measure space-y-4 ${REPORT_BODY_CLASS} ${className}`}>
-      {draftParagraphs(draft, revising, claims).map((paragraph, at) => (
-        <p key={at} className="whitespace-pre-line">
-          {paragraph.map((run, runAt) => (
-            <span key={runAt}>
-              {run.revising ? (
-                <span data-revising="true" className="draft-revising">
-                  {scrub(run.text)}
-                </span>
-              ) : (
-                scrub(run.text)
-              )}
-              {run.marks?.map((claim, markAt) => <ProvisionalMark key={markAt} claim={claim} />)}
-            </span>
-          ))}
-        </p>
-      ))}
+    <div data-testid="draft-prose" className={`max-w-prose-measure ${REPORT_BODY_CLASS} ${className}`}>
+      <p className="whitespace-pre-line">
+        {paragraphs.map((runs, at) => (
+          <Fragment key={at}>
+            {at > 0 && "\n\n"}
+            {at < paragraphs.length - 1 ? (
+              <SettledParagraph runs={runs} />
+            ) : batches !== undefined && batches.length > 0 ? (
+              <FadingParagraph runs={runs} start={tailStart} batches={batches} />
+            ) : (
+              <DraftParagraph runs={runs} />
+            )}
+          </Fragment>
+        ))}
+      </p>
+    </div>
+  );
+}
+
+/** The draft as it streams: paced in the browser (`useRevealedText`), its
+ *  height held while a revision shortens it. */
+function LiveDraft({
+  draft,
+  revising,
+  claims,
+  complete,
+}: {
+  draft: string;
+  revising?: readonly { start: number; end: number }[];
+  claims?: readonly LiveClaim[];
+  complete: boolean;
+}) {
+  const revealed = useRevealedText(draft, complete);
+  const [box, held] = useHoldHeightWhileShorter(revealed.text.length);
+  return (
+    <div ref={box} style={held}>
+      <DraftProse draft={revealed.text} revising={revising} claims={claims} batches={revealed.batches} />
     </div>
   );
 }
@@ -1312,52 +1480,101 @@ function tickNamesSection(sectionLine: string | undefined, title: string): boole
   return sectionLine === undefined || sectionLine.endsWith(title);
 }
 
-function LiveSectionBlock({
+/** A live section's role on the page, from the skeleton's own `role`, ranked
+ *  as the committed report ranks it: key findings, case studies, then the
+ *  body (`body` takes the committed `standard` rank). The conclusions, the
+ *  code-injected last body section, keep their committed role so their rule
+ *  above them is there before the swap. A stream with no roles (an old
+ *  replay) knows only the key findings, by their slot. */
+function liveRole(section: LiveSection): NonNullable<SectionLike["role"]> {
+  if (section.role === "key_findings" || section.role === "case_studies") return section.role;
+  if (section.role === undefined && isKeyFindingsSlot(section)) return "key_findings";
+  return section.title === CONCLUSIONS_SLOT_TITLE ? "conclusions" : "standard";
+}
+
+/** The checked citations of a completed section as the committed report's
+ *  claims (one claim per cited span, its citations in order), so the live
+ *  page renders them with the report's own prose component. */
+export function liveClaims(prose: string, citations: readonly LiveCitation[] | undefined): ClaimLike[] {
+  const chars = Array.from(prose);
+  const bySpan = new Map<string, ClaimLike>();
+  for (const citation of citations ?? []) {
+    const key = `${citation.start}:${citation.end}`;
+    let claim = bySpan.get(key);
+    if (claim === undefined) {
+      claim = {
+        claim_id: `live:${key}`,
+        claim_type: "citation",
+        text: chars.slice(citation.start, citation.end).join(""),
+        span: [citation.start, citation.end],
+        citations: [],
+      };
+      bySpan.set(key, claim);
+    }
+    claim.citations?.push({
+      n: citation.n,
+      source_title: citation.title,
+      grounding_tier: citation.tier,
+      source_id: citation.sourceId,
+      quote: "",
+    } as unknown as CitationOut);
+  }
+  return [...bySpan.values()];
+}
+
+/** A completed case-studies slot's prose ("**Title**\nText", cards apart by a
+ *  blank line) back into its cards, each with its citations re-based onto
+ *  its own text, as the committed report holds them. */
+export function liveCaseStudyCards(
+  prose: string,
+  citations: readonly LiveCitation[] | undefined,
+): CaseStudyCardLike[] {
+  const chars = Array.from(prose);
+  const text = chars.join("");
+  const cards: CaseStudyCardLike[] = [];
+  const header = /\*\*(.+?)\*\*\n/g;
+  const heads = [...text.matchAll(header)];
+  heads.forEach((match, at) => {
+    // Offsets in code points, as the server counts them.
+    const headStart = Array.from(text.slice(0, match.index)).length;
+    const bodyStart = headStart + Array.from(match[0]).length;
+    const next = heads[at + 1];
+    const bodyEnd = next === undefined ? chars.length : Array.from(text.slice(0, next.index)).length - 2;
+    const body = chars.slice(bodyStart, Math.max(bodyStart, bodyEnd)).join("");
+    const own = (citations ?? [])
+      .filter((citation) => citation.start >= bodyStart && citation.end <= bodyEnd)
+      .map((citation) => ({ ...citation, start: citation.start - bodyStart, end: citation.end - bodyStart }));
+    cards.push({ title: match[1], prose: body, claims: liveClaims(body, own) });
+  });
+  return cards;
+}
+
+/** The references the checked sections cite so far, numbered as the
+ *  committed report numbers them; titles only. */
+export function liveReferences(sections: readonly LiveSection[]): { n: number; title: string }[] {
+  const byNumber = new Map<number, string>();
+  for (const section of sections) {
+    for (const citation of section.citations ?? []) {
+      if (!byNumber.has(citation.n)) byNumber.set(citation.n, citation.title);
+    }
+  }
+  return [...byNumber.entries()].sort(([a], [b]) => a - b).map(([n, title]) => ({ n, title }));
+}
+
+/** The lines under a live section's heading: the key findings' note, the
+ *  sources the writer is drawing on, and the action line with the live mark. */
+function LiveSubhead({
   section,
   active,
   activity,
   terminal,
-  reduceMotion,
 }: {
-  section: LiveSection;
+  section: LiveSection & { role: NonNullable<SectionLike["role"]> };
   active: boolean;
   activity: string | null;
   terminal: boolean;
-  reduceMotion: boolean;
 }) {
-  const draft = section.draft ?? "";
-  const prose = section.prose ?? "";
-  const filled = section.state === "filled" && prose !== "";
-  const keyFindings = isKeyFindingsSlot(section);
-
-  // The draft layer fades off the settled prose when the section completes:
-  // the repaired sentence resolves out of its blur, nothing else moves.
-  // Kept in state from the render that saw the change, so the settled prose
-  // never shows a frame without it.
-  const [seen, setSeen] = useState({
-    state: section.state,
-    draft,
-    revising: section.revising,
-    streamed: draft !== "",
-  });
-  const [ghost, setGhost] = useState<{ draft: string; revising?: LiveSection["revising"] } | null>(null);
-  if (seen.state !== section.state || seen.draft !== draft || seen.revising !== section.revising) {
-    if (section.state === "filled" && seen.state !== "filled" && seen.draft !== "" && !reduceMotion) {
-      setGhost({ draft: seen.draft, revising: seen.revising });
-    }
-    setSeen({
-      state: section.state,
-      draft,
-      revising: section.revising,
-      streamed: seen.streamed || draft !== "",
-    });
-  }
-  useEffect(() => {
-    if (ghost === null) return undefined;
-    const done = window.setTimeout(() => setGhost(null), SETTLE_MS);
-    return () => window.clearTimeout(done);
-  }, [ghost]);
-
+  const filled = section.state === "filled" && (section.prose ?? "") !== "";
   // The action line under the heading opens while the section is being
   // written and carries the run's live mark at its start (owner,
   // 2026-11-05: "◆ Looking for: …", "◆ Writing", "◆ Checking claims"). Its
@@ -1370,11 +1587,9 @@ function LiveSectionBlock({
   // The sources the writer has read, from the first read until the checked
   // section replaces the draft (task 058, owner 2026-11-05). Not links.
   const drawingOn = filled || terminal ? null : drawingOnLine(section.sources);
-
   return (
-    <section className="mt-9" aria-busy={writing ? true : undefined}>
-      <h2 className={REPORT_SECTION_HEADING_CLASS}>{scrub(section.title)}</h2>
-      {keyFindings && !filled && !active && !terminal && (
+    <>
+      {section.role === "key_findings" && !filled && !active && !terminal && (
         <p className="mt-1.5 text-body text-grey">Written last, after the sections are checked.</p>
       )}
       {drawingOn !== null && (
@@ -1397,73 +1612,336 @@ function LiveSectionBlock({
           </span>
         </p>
       </div>
-      {filled ? (
-        <div className="relative mt-2">
-          {/* The same paragraph layout as the draft, so the settle moves
-              nothing. */}
-          <DraftProse draft={prose} className={seen.streamed ? "" : "anim-rise"} />
-          {ghost !== null && (
-            <DraftProse
-              draft={ghost.draft}
-              revising={ghost.revising}
-              className="anim-settle-out pointer-events-none absolute inset-0 bg-paper"
-            />
-          )}
-        </div>
-      ) : draft !== "" ? (
-        <DraftProse draft={draft} revising={section.revising} claims={section.claims} className="mt-2" />
-      ) : terminal ? (
-        <p className="mt-2 text-body italic text-grey">
-          {section.focus !== "" ? scrub(section.focus) : "Waiting to be written."}
-        </p>
-      ) : (
-        <PlaceholderLines index={section.index} still={reduceMotion} />
-      )}
-    </section>
+    </>
   );
+}
+
+/** A section's body, live or committed, through one component so the
+ *  committed report updates the live section in place (owner, round 7).
+ *
+ *  Live: placeholder lines, then the draft, then the checked prose through
+ *  the report's own prose component with its numbered markers. The draft
+ *  layer, pending markers and all, fades off the checked prose when the
+ *  section completes, so the markers arrive without a flash. Committed: the
+ *  report's blocks, with their markers live. */
+function SectionBody({
+  section,
+  blocks,
+  onOpenClaim,
+  terminal = false,
+  reduceMotion = false,
+}: {
+  /** The live section, while the report is written. */
+  section?: LiveSection;
+  /** The committed report's blocks, once it has landed. */
+  blocks?: BlockLike[];
+  onOpenClaim?: (claim: ClaimLike) => void;
+  terminal?: boolean;
+  reduceMotion?: boolean;
+}) {
+  const state = section?.state ?? "filled";
+  const draft = section?.draft ?? "";
+  const prose = section?.prose ?? "";
+  const filled = state === "filled" && prose !== "";
+  // Kept in state from the render that saw the change, so the settled prose
+  // never shows a frame without the draft layer over it.
+  const [seen, setSeen] = useState({
+    state,
+    draft,
+    revising: section?.revising,
+    claims: section?.claims,
+    streamed: draft !== "",
+  });
+  const [ghost, setGhost] = useState<{
+    draft: string;
+    revising?: LiveSection["revising"];
+    claims?: LiveSection["claims"];
+  } | null>(null);
+  if (
+    section !== undefined &&
+    (seen.state !== state || seen.draft !== draft || seen.revising !== section.revising || seen.claims !== section.claims)
+  ) {
+    if (state === "filled" && seen.state !== "filled" && seen.draft !== "" && !reduceMotion) {
+      setGhost({ draft: seen.draft, revising: seen.revising, claims: seen.claims });
+    }
+    setSeen({
+      state,
+      draft,
+      revising: section.revising,
+      claims: section.claims,
+      streamed: seen.streamed || draft !== "",
+    });
+  }
+  useEffect(() => {
+    if (ghost === null) return undefined;
+    const done = window.setTimeout(() => setGhost(null), SETTLE_MS);
+    return () => window.clearTimeout(done);
+  }, [ghost]);
+  const citations = section?.citations;
+  const liveBlocks = useMemo(
+    () => [{ block_id: "live", prose, claims: liveClaims(prose, citations) }],
+    [prose, citations],
+  );
+
+  if (blocks !== undefined || filled) {
+    return (
+      <SectionProse
+        blocks={blocks ?? liveBlocks}
+        live={blocks === undefined}
+        onOpenClaim={onOpenClaim}
+        className={blocks === undefined && !seen.streamed ? "anim-rise" : ""}
+      >
+        {ghost !== null && (
+          <DraftProse
+            draft={ghost.draft}
+            revising={ghost.revising}
+            claims={ghost.claims}
+            className="anim-settle-out pointer-events-none absolute inset-0 bg-paper"
+          />
+        )}
+      </SectionProse>
+    );
+  }
+  if (draft !== "") {
+    return <LiveDraft draft={draft} revising={section?.revising} claims={section?.claims} complete={terminal} />;
+  }
+  if (terminal) {
+    return (
+      <p className="text-body italic text-grey">
+        {section?.focus ? scrub(section.focus) : "Waiting to be written."}
+      </p>
+    );
+  }
+  return <PlaceholderLines index={section?.index ?? 0} still={reduceMotion} />;
 }
 
 /** How long the draft takes to settle into the final prose. */
 const SETTLE_MS = 400;
 
-/**
- * The report while it is being written (task 058, N8; annex scene 6).
- *
- * The question is the title. Every proposed section shows placeholder lines
- * until its prose arrives; the section being written carries a dot after its
- * heading and the writer's action line under it, then its draft as plain
- * text. A sentence under repair blurs in place; on completion the draft
- * settles into the final prose and nothing marks the section afterwards.
- * After the last ordinary section the footer says claims are being checked,
- * then that the report is ready. If the run ends badly with sections
- * already streamed, they stay under the drafted-not-final banner.
- *
- * Args:
- *   stream: The live run stream.
- *   question: The task's question, the page title.
- */
-export function LiveArtefactBody({
-  stream,
-  question,
+/** The code-injected last section's title (`synthesise.py`). */
+const CONCLUSIONS_SLOT_TITLE = "Conclusions";
+
+/** A section's prose as the report sets it, block after block; the live
+ *  page's settle layer rides in the same box. Blocks are keyed by position,
+ *  so the committed report's blocks update the live ones in place. */
+function SectionProse({
+  blocks,
+  live = false,
+  onOpenClaim = () => undefined,
+  className = "",
+  children,
 }: {
-  stream: RunStreamState;
-  question?: string | null;
+  blocks: BlockLike[];
+  live?: boolean;
+  onOpenClaim?: (claim: ClaimLike) => void;
+  className?: string;
+  children?: ReactNode;
 }) {
-  const sections = Object.values(stream.liveSections).sort((a, b) => a.index - b.index);
+  return (
+    <div className={`relative space-y-4 ${className}`}>
+      {blocks.map((block, at) => (
+        <AnnotatedProse key={at} block={block} onOpenClaim={onOpenClaim} live={live} />
+      ))}
+      {children}
+    </div>
+  );
+}
+
+/** Whether the page is arriving from the live view: controls that come with
+ *  the committed report fade in once (300 ms, the strong ease-out) instead of
+ *  appearing at a cut, and a marker whose number changed fades its new
+ *  number in. Off on an ordinary load and under reduced motion. */
+type ReportSwap = {
+  arriving: boolean;
+  /** The live markers' numbers by span and words, from the last live page. */
+  liveNumbers: ReadonlyMap<string, string>;
+};
+const ReportSwapContext = createContext<ReportSwap>({ arriving: false, liveNumbers: new Map() });
+
+/** The class for an element that arrives with the committed report. */
+function useArrivingClass(): string {
+  return useContext(ReportSwapContext).arriving ? "anim-swap-in" : "";
+}
+
+/** A claim's identity across the swap: its span and its words. */
+function markerKey(span: number[] | null | undefined, text: string): string {
+  return `${span?.[0] ?? ""}:${span?.[1] ?? ""}:${text}`;
+}
+
+/** The page's anchored blocks: sections, the part headings, references. */
+const PLACE_SELECTOR = "main.artefact-page section[id], main.artefact-page #full-report, main.artefact-page #executive-summary";
+
+/** The first anchored block still showing at the top of the scrolling pane,
+ *  and how far its top sits from the pane's top. */
+function readingPlace(): { id: string; top: number } | null {
+  const main = document.querySelector<HTMLElement>("main.artefact-page");
+  if (main === null) return null;
+  const paneTop = scrollPane(main).getBoundingClientRect().top;
+  for (const block of document.querySelectorAll<HTMLElement>(PLACE_SELECTOR)) {
+    const rect = block.getBoundingClientRect();
+    if (rect.bottom > paneTop) return { id: block.id, top: rect.top - paneTop };
+  }
+  return null;
+}
+
+/**
+ * Keep the reader's place when the committed report takes the live page
+ * (owner, round 7: the scroll position stays). While live, the block at the
+ * top of the pane and its offset are noted on every render and scroll; when
+ * the committed report lands, before paint, the pane is moved by however far
+ * that block moved, so what grew above the reader (the facts strip, the
+ * most relevant sources) does not push the text down.
+ */
+function useKeepReadingPlace(live: boolean, swapped: boolean): void {
+  const place = useRef<{ id: string; top: number } | null>(null);
+  useLayoutEffect(() => {
+    if (live) place.current = readingPlace();
+  });
+  useEffect(() => {
+    const main = document.querySelector<HTMLElement>("main.artefact-page");
+    if (!live || main === null) return undefined;
+    const pane = scrollPane(main);
+    const target: HTMLElement | Window = pane === document.scrollingElement ? window : pane;
+    const note = () => {
+      place.current = readingPlace();
+    };
+    target.addEventListener("scroll", note, { passive: true });
+    return () => target.removeEventListener("scroll", note);
+  }, [live]);
+  useLayoutEffect(() => {
+    const before = place.current;
+    if (!swapped || before === null) return;
+    place.current = null;
+    const block = document.getElementById(before.id);
+    const main = document.querySelector<HTMLElement>("main.artefact-page");
+    if (block === null || main === null) return;
+    const pane = scrollPane(main);
+    const moved = block.getBoundingClientRect().top - pane.getBoundingClientRect().top - before.top;
+    if (Math.abs(moved) >= 1) pane.scrollTop += moved;
+  }, [swapped]);
+}
+
+/** Each checked live marker's numbers, by its span and words, so a marker
+ *  the committed report renumbers can fade its new number in. */
+function liveMarkerNumbers(stream: RunStreamState): ReadonlyMap<string, string> {
+  const numbers = new Map<string, string>();
+  for (const section of Object.values(stream.liveSections)) {
+    for (const claim of liveClaims(section.prose ?? "", section.citations)) {
+      const ns = [...new Set((claim.citations ?? []).map((citation) => citation.n))].join(",");
+      numbers.set(markerKey(claim.span, claim.text), ns);
+    }
+  }
+  return numbers;
+}
+
+/** The live sections in the committed report's order, with their roles. */
+function orderedLiveSections(stream: RunStreamState): (LiveSection & { role: NonNullable<SectionLike["role"]> })[] {
+  const sections = Object.values(stream.liveSections)
+    .filter((section) => !(section.state === "filled" && (section.prose ?? "") === ""))
+    .sort((a, b) => a.index - b.index)
+    .map((section) => ({ ...section, role: liveRole(section) }));
+  return orderSections(sections);
+}
+
+/**
+ * The report while it is being written (task 058, N8; annex scene 6; owner
+ * round 7: the live page looks like the final page).
+ *
+ * The same page as the committed report: the kind row, the question as the
+ * title, "See the plan", the part headings, the sections in the report's
+ * order through the report's own section and prose components, the
+ * case-study cards in the report's card layout as they close, and a
+ * references list that grows as sections are checked. Every proposed section
+ * shows placeholder lines until its prose arrives; the section being written
+ * carries the live mark and the writer's action line under its heading, then
+ * its draft as plain text with a muted marker after each cited sentence. On
+ * completion the draft settles into the checked prose with its numbered
+ * markers. What only the committed report has (links into provenance, the
+ * download, the facts strip, the most relevant sources, the method) is
+ * absent, with no placeholder.
+ *
+ * Returns the page's contents entries and its children, for the
+ * committed report to render through the same `ReportPage` element, so
+ * React updates the page in place at the swap.
+ */
+function useLiveReport(
+  stream: RunStreamState,
+  question: string | null | undefined,
+  onSeePlan: (() => void) | undefined,
+): { entries: SidebarEntry[]; children: ReactNode } {
+  const reduceMotion = usePrefersReducedMotion();
+  const sections = orderedLiveSections(stream);
   const terminalPartial = hasTerminalPartialLiveArtefact(stream);
   const finished = stream.run?.status === "succeeded" || stream.run?.status === "degraded";
-  const reduceMotion = usePrefersReducedMotion();
-  const visible = sections.filter(
-    (section: LiveSection) => !(section.state === "filled" && (section.prose ?? "") === ""),
-  );
+  const terminal = terminalPartial || finished;
   const writer = stream.liveness["synthesise"];
-  const active = finished || terminalPartial ? undefined : visible.find((section) => section.state === "writing");
+  const active = terminal ? undefined : sections.find((section) => section.state === "writing");
   const activity =
     active !== undefined && writer !== undefined && tickNamesSection(writer.section, active.title)
       ? writer.activity
       : null;
-  return (
-    <ReportPage>
+  // A run with no key findings slot is a baseline: one linear profile, no
+  // summary and full-report parts (as the committed baseline renders).
+  const report = sections.some((section) => section.role === "key_findings");
+  const anchored = sections.map((section, at) => ({ section, id: sectionAnchor(section.title, at) }));
+  const firstBody = anchored.findIndex(
+    ({ section }) => section.role !== "key_findings" && section.role !== "case_studies",
+  );
+  const front = firstBody === -1 ? anchored : anchored.slice(0, firstBody);
+  const body = firstBody === -1 ? [] : anchored.slice(firstBody);
+  const references = liveReferences(sections);
+
+  const entries: SidebarEntry[] = [
+    ...(report ? [{ kind: "part" as const, id: EXECUTIVE_SUMMARY_ANCHOR, title: "Executive summary" }] : []),
+    ...front.map(({ section, id }) => ({ id, title: sectionNavLabel({ title: section.title }, 28) })),
+    ...(report && body.length > 0 ? [{ kind: "part" as const, id: FULL_REPORT_ANCHOR, title: "Full report" }] : []),
+    ...body.map(({ section, id }) => ({ id, title: sectionNavLabel({ title: section.title }, 28) })),
+    ...(references.length > 0 ? [{ id: "references", title: "References" }] : []),
+  ];
+
+  const renderSection = ({ section, id }: (typeof anchored)[number]) => {
+    const isActive = section === active;
+    const subhead = (
+      <LiveSubhead section={section} active={isActive} activity={isActive ? activity : null} terminal={terminal} />
+    );
+    if (section.role === "case_studies") {
+      const cards =
+        section.state === "filled" ? liveCaseStudyCards(section.prose ?? "", section.citations) : (section.cards ?? []);
+      return (
+        <CaseStudiesSection
+          key={`section:${id}`}
+          section={{ title: section.title, role: "case_studies", cards }}
+          id={id}
+          live
+          busy={isActive}
+          subhead={subhead}
+          pending={
+            cards.length === 0 ? (
+              terminal ? null : (
+                <PlaceholderLines index={section.index} still={reduceMotion} className="mt-3" />
+              )
+            ) : null
+          }
+        />
+      );
+    }
+    return (
+      <SectionDisclosure
+        key={`section:${id}`}
+        id={id}
+        section={{ title: section.title, role: section.role }}
+        collapsible={false}
+        defaultOpen
+        busy={isActive}
+        subhead={subhead}
+      >
+        <SectionBody section={section} terminal={terminal} reduceMotion={reduceMotion} />
+      </SectionDisclosure>
+    );
+  };
+
+  const children = [
+    <div key="notice">
       {terminalPartial && (
         <div
           role="alert"
@@ -1477,22 +1955,66 @@ export function LiveArtefactBody({
           </p>
         </div>
       )}
+    </div>,
+    <header key="header" id="answer" className="mb-8">
+      <ReportKindRow kind={report ? "Report" : "Baseline"} />
       {question != null && question !== "" && <h1 className={REPORT_TITLE_CLASS}>{scrub(question)}</h1>}
+      {onSeePlan !== undefined && <SeePlanLink onClick={onSeePlan} />}
       <p role="status" aria-live="polite" className="sr-only">
         {active !== undefined ? `${scrub(active.title)} is being written` : ""}
       </p>
-      {visible.map((section) => (
-        <LiveSectionBlock
-          key={section.index}
-          section={section}
-          active={section === active}
-          activity={section === active ? activity : null}
-          terminal={terminalPartial || finished}
-          reduceMotion={reduceMotion}
-        />
-      ))}
-    </ReportPage>
-  );
+    </header>,
+    report ? (
+      <h2 key="executive-summary" id={EXECUTIVE_SUMMARY_ANCHOR} className={`mb-6 ${REPORT_PART_HEADING_CLASS}`}>
+        Executive summary
+      </h2>
+    ) : null,
+    ...front.map(renderSection),
+    <FullReportExpandProvider key="full-report">
+      {report && body.length > 0 && (
+        <div id={FULL_REPORT_ANCHOR} className="mb-6 mt-10 border-t border-line pt-4">
+          <div className="flex items-baseline gap-2">
+            <h2 className={`flex-1 ${REPORT_PART_HEADING_CLASS}`}>Full report</h2>
+          </div>
+        </div>
+      )}
+      {body.map(renderSection)}
+      {references.length > 0 && <ReferencesSection references={references} defaultOpen />}
+    </FullReportExpandProvider>,
+    <TailFollower key="tail" active={active !== undefined} />,
+  ];
+  return { entries, children };
+}
+
+/** Keeps a reader who is at the end of the page at the end while text
+ *  streams; never moves anyone else (`useFollowTail`). */
+function TailFollower({ active }: { active: boolean }) {
+  const anchor = useRef<HTMLSpanElement>(null);
+  useFollowTail(anchor, active);
+  return <span ref={anchor} aria-hidden="true" className="block h-0" />;
+}
+
+/**
+ * The report while it is being written, on its own (the Result tab renders
+ * the same page through `ArtefactReport`, so the swap to the committed
+ * report happens in place).
+ *
+ * Args:
+ *   stream: The live run stream.
+ *   question: The task's question, the page title.
+ *   onSeePlan: Opens the plan document.
+ */
+export function LiveArtefactBody({
+  stream,
+  question,
+  onSeePlan,
+}: {
+  stream: RunStreamState;
+  question?: string | null;
+  onSeePlan?: () => void;
+}) {
+  const live = useLiveReport(stream, question, onSeePlan);
+  return <ReportPage entries={live.entries}>{live.children}</ReportPage>;
 }
 
 /**
@@ -1584,73 +2106,89 @@ export function RerunNotice({
 function CaseStudyCardProse({
   card,
   onOpenClaim,
+  live = false,
 }: {
   card: CaseStudyCardLike;
   onOpenClaim: (claim: ClaimLike) => void;
+  live?: boolean;
 }) {
   const claims = card.claims ?? [];
-  if (claims.length === 0) {
-    return <p className={`mt-1 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(card.prose)}</p>;
-  }
-
-  const block: BlockLike = { block_id: card.card_id ?? card.title, prose: card.prose, claims };
-  const segments = spanSegments(block.prose, block.claims ?? []);
+  // One paragraph element either way, so a card that gains its markers at
+  // the swap updates in place.
+  const segments: SpanSegment<ClaimLike>[] =
+    claims.length === 0 ? [{ kind: "plain", text: card.prose }] : spanSegments(card.prose, claims);
 
   return (
     <p className={`mt-1 max-w-prose-measure whitespace-pre-line ${REPORT_BODY_CLASS}`}>
       {segments.map((segment, index) => {
         if (segment.kind === "plain") return <span key={index}>{scrub(segment.text)}</span>;
         const isResult = card.result_claim_id != null && segment.claim.claim_id === card.result_claim_id;
-        return (
-          <span key={index}>
-            {isResult ? (
-              <strong>
-                <ClaimSpan claim={segment.claim} text={segment.text} onOpen={onOpenClaim} />
-              </strong>
-            ) : (
-              <ClaimSpan claim={segment.claim} text={segment.text} onOpen={onOpenClaim} />
-            )}
-          </span>
-        );
+        const span = <ClaimSpan claim={segment.claim} text={segment.text} onOpen={onOpenClaim} live={live} />;
+        return <span key={index}>{isResult ? <strong>{span}</strong> : span}</span>;
       })}
     </p>
   );
 }
 
+/**
+ * The case studies: heading, the one-line intro and a card per example.
+ *
+ * The report while it is written renders the same section (task 058, owner
+ * round 7): its cards arrive one by one as each closes in the writer's
+ * reply, in the report's card layout, with no evidence chips until the
+ * committed report brings them.
+ */
 function CaseStudiesSection({
   section,
   id,
-  onOpenClaim,
+  onOpenClaim = () => undefined,
+  live = false,
+  busy = false,
+  subhead,
+  pending,
 }: {
   section: SectionLike;
   id: string;
-  onOpenClaim: (claim: ClaimLike) => void;
+  onOpenClaim?: (claim: ClaimLike) => void;
+  live?: boolean;
+  busy?: boolean;
+  /** The live page's lines under the heading. */
+  subhead?: ReactNode;
+  /** What stands in for the cards before the first one closes (live only). */
+  pending?: ReactNode;
 }) {
   useScrollWhenNavigated(id);
+  const arriving = useArrivingClass();
   const cards = section.cards ?? [];
-  if (cards.length === 0) return null;
+  if (cards.length === 0 && !live) return null;
   return (
-    <section id={id} className="mb-9">
+    <section id={id} aria-busy={busy ? true : undefined} className="mb-9">
       <h2 className={REPORT_SECTION_HEADING_CLASS}>{scrub(section.title)}</h2>
+      {subhead}
       <p className={`mt-1.5 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{CASE_STUDIES_INTRO}</p>
-      <ul role="list" className="mt-3 grid gap-3">
-        {cards.map((card) => {
-          const { strength, design, sinceYear } = cardEvidenceMeta(card);
-          return (
-            <li key={card.card_id ?? card.title} className="border border-line p-4">
-              <p className={`${REPORT_BODY_CLASS} font-bold`}>{scrub(card.title)}</p>
-              <CaseStudyCardProse card={card} onOpenClaim={onOpenClaim} />
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {strength != null && (
-                  <AppraisalChip label={strength} evidenceType={design} />
-                )}
-                {design != null && <Chip tone="soft">{scrub(design)}</Chip>}
-                {sinceYear != null && <Chip tone="soft">Since {sinceYear}</Chip>}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      {cards.length === 0 ? (
+        pending
+      ) : (
+        <ul role="list" className="mt-3 grid gap-3">
+          {cards.map((card, at) => {
+            const { strength, design, sinceYear } = cardEvidenceMeta(card);
+            return (
+              <li key={`${at}:${card.title}`} className={`border border-line p-4 ${live ? "anim-rise" : ""}`}>
+                <p className={`${REPORT_BODY_CLASS} font-bold`}>{scrub(card.title)}</p>
+                <CaseStudyCardProse card={card} onOpenClaim={onOpenClaim} live={live} />
+                {/* Empty while live; the chips fade in with the committed report. */}
+                <div className={`mt-2 flex flex-wrap gap-1.5 ${arriving}`}>
+                  {strength != null && (
+                    <AppraisalChip label={strength} evidenceType={design} />
+                  )}
+                  {design != null && <Chip tone="soft">{scrub(design)}</Chip>}
+                  {sinceYear != null && <Chip tone="soft">Since {sinceYear}</Chip>}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 }
@@ -1848,7 +2386,36 @@ function ArtefactReport() {
     !task.isFetching &&
     !artefact.isFetching;
   const readyHere = finishedHere && !committedLanded;
-  const liveBody = <LiveArtefactBody stream={stream} question={question} />;
+  const reduceMotion = usePrefersReducedMotion();
+  const live = useLiveReport(stream, question, isPublicView ? undefined : planPanel.openPlan);
+  // The swap (owner, round 7): the live page and the committed report are
+  // the same element tree (the swap context, then `ReportPage`, then keyed
+  // slots), so React updates the page in place; the scroll position stays.
+  // What arrives with the committed report fades in once over 300 ms; under
+  // reduced motion it is a cut.
+  const renderingLive = showLive || readyHere;
+  const [swap, setSwap] = useState<{ live: boolean; swapped: boolean } & ReportSwap>({
+    live: false,
+    swapped: false,
+    arriving: false,
+    liveNumbers: new Map(),
+  });
+  if (renderingLive && !swap.live) {
+    setSwap({ live: true, swapped: false, arriving: false, liveNumbers: new Map() });
+  } else if (!renderingLive && swap.live && artefact.data != null) {
+    setSwap({ live: false, swapped: true, arriving: !reduceMotion, liveNumbers: liveMarkerNumbers(stream) });
+  }
+  const swapValue = useMemo<ReportSwap>(
+    () => ({ arriving: swap.arriving, liveNumbers: swap.liveNumbers }),
+    [swap.arriving, swap.liveNumbers],
+  );
+  const arriving = swap.arriving ? "anim-swap-in" : "";
+  useKeepReadingPlace(renderingLive, swap.swapped);
+  const liveBody = (
+    <ReportSwapContext.Provider value={swapValue}>
+      <ReportPage entries={live.entries}>{live.children}</ReportPage>
+    </ReportSwapContext.Provider>
+  );
   // A new run over an existing report: not the replay of the run that made it.
   const rerunLive =
     !isPublicView &&
@@ -2049,147 +2616,155 @@ function ArtefactReport() {
     { id: "gathered", title: "Method" },
   ];
 
+  const sectionBlocks = (section: SectionLike) => (
+    <SectionBody blocks={section.blocks ?? []} onOpenClaim={setDetailClaim} />
+  );
+  const renderSection = ({ section, index }: { section: SectionLike; index: number }) => {
+    const id = sectionAnchor(section.title, index);
+    return section.role === "case_studies" ? (
+      <CaseStudiesSection key={`section:${id}`} section={section} id={id} onOpenClaim={setDetailClaim} />
+    ) : (
+      <SectionDisclosure
+        key={`section:${id}`}
+        id={id}
+        section={section as OutlineSection}
+        collapsible={section.role !== "key_findings"}
+        defaultOpen={false}
+        arrivingClass={arriving}
+      >
+        {sectionBlocks(section)}
+      </SectionDisclosure>
+    );
+  };
+
   return (
-    <ReportPage entries={outlineEntries}>
-      {rerunLive && rerunStartedAt !== undefined && (
-        <RerunNotice taskId={taskId} artefactId={data.artefact_id} runStartedAt={rerunStartedAt} />
-      )}
-      <header id="answer" className="mb-8">
-        <ReportKindRow kind={baseline ? "Baseline" : "Report"}>
-          {/* The kind-of-artefact slot. The roll-up's depth label
-              ("scoping pass") stays on the wire for the later per-row
-              surfaces; the Result's heading says what the reader is looking
-              at (owner ruling 2026-09-18). */}
-          <ArtefactDownload artefact={data} />
-        </ReportKindRow>
-        <h1 className={REPORT_TITLE_CLASS}>{scrub(data.title)}</h1>
-        {!isPublicView && <SeePlanLink onClick={planPanel.openPlan} />}
-        <SnapshotCells cells={snapshotCells} />
-        {!isPublicView && (
-          <button
-            type="button"
-            onClick={askAboutAnalysis}
-            disabled={!chatsEnabled}
-            title={chatsEnabled ? undefined : COPY.newChatUnavailable}
-            className="print-hide mt-3 text-caption font-bold text-blue hover:underline disabled:text-grey disabled:no-underline"
-          >
-            Ask about this analysis
-          </button>
-        )}
-        {/* Coverage banner removed (owner, 2026-07-29): the adequacy verdict
-            surfaces where it matters — inside each gap claim's detail. */}
-      </header>
-
-      {/* Executive summary part — In brief hidden (034 owner steer: overlaps key findings).
-          A baseline has no summary half to head (see the outline above). */}
-      {!baseline && (
-        <h2 id={EXECUTIVE_SUMMARY_ANCHOR} className={`mb-6 ${REPORT_PART_HEADING_CLASS}`}>
-          Executive summary
-        </h2>
-      )}
-
-      {frontSections.map(({ section, index }) =>
-        section.role === "case_studies" ? (
-          <CaseStudiesSection key={index} section={section} id={sectionAnchor(section.title, index)} onOpenClaim={setDetailClaim} />
-        ) : (
-          <SectionDisclosure
-            key={index}
-            id={sectionAnchor(section.title, index)}
-            section={section as OutlineSection}
-            collapsible={section.role !== "key_findings"}
-            defaultOpen={false}
-          >
-            {(section.blocks ?? []).map((block) => (
-              <AnnotatedProse key={block.block_id} block={block} onOpenClaim={setDetailClaim} />
-            ))}
-          </SectionDisclosure>
-        ),
-      )}
-
-      {/* A baseline writes no most-relevant-source notes and cites few sources
-          per section, so the report's "cited most often" block would rank two
-          or three documents as if that were a finding. Report only (task 044). */}
-      {baseline ? null : <MostRelevantSources sources={topSources} onOpenDossier={openDossier} />}
-
-      {/* Full report part */}
-      {bodySections.length > 0 ? (
-        <FullReportExpandProvider key={data.artefact_id}>
-          {baseline ? (
-            // The baseline's sections ARE the document — no "Full report"
-            // part to open, just the one control that opens them all.
-            <div className="mb-6 flex justify-end">
-              <FullReportExpandAllButton />
+    <ReportSwapContext.Provider value={swapValue}>
+      <ReportPage entries={outlineEntries}>
+        {[
+          <div key="notice">
+            {rerunLive && rerunStartedAt !== undefined && (
+              <RerunNotice taskId={taskId} artefactId={data.artefact_id} runStartedAt={rerunStartedAt} />
+            )}
+          </div>,
+          <header key="header" id="answer" className="mb-8">
+            <ReportKindRow kind={baseline ? "Baseline" : "Report"}>
+              {/* The kind-of-artefact slot. The roll-up's depth label
+                  ("scoping pass") stays on the wire for the later per-row
+                  surfaces; the Result's heading says what the reader is
+                  looking at (owner ruling 2026-09-18). */}
+              <span className={arriving}>
+                <ArtefactDownload artefact={data} />
+              </span>
+            </ReportKindRow>
+            <h1 className={REPORT_TITLE_CLASS}>{scrub(data.title)}</h1>
+            {!isPublicView && <SeePlanLink onClick={planPanel.openPlan} />}
+            <div className={arriving}>
+              <SnapshotCells cells={snapshotCells} />
             </div>
-          ) : (
-            <div id={FULL_REPORT_ANCHOR} className="mb-6 mt-10 border-t border-line pt-4">
-              <div className="flex items-baseline gap-2">
-                <h2 className={`flex-1 ${REPORT_PART_HEADING_CLASS}`}>Full report</h2>
-                <FullReportExpandAllButton />
-              </div>
-              {roadmapText !== null && (
-                <p className={`mt-1.5 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(roadmapText)}</p>
-              )}
-            </div>
-          )}
+            {!isPublicView && (
+              <button
+                type="button"
+                onClick={askAboutAnalysis}
+                disabled={!chatsEnabled}
+                title={chatsEnabled ? undefined : COPY.newChatUnavailable}
+                className={`print-hide mt-3 text-caption font-bold text-blue hover:underline disabled:text-grey disabled:no-underline ${arriving}`}
+              >
+                Ask about this analysis
+              </button>
+            )}
+            {/* Coverage banner removed (owner, 2026-07-29): the adequacy verdict
+                surfaces where it matters — inside each gap claim's detail. */}
+          </header>,
 
-          {bodySections.map(({ section, index }) => (
-            <SectionDisclosure
-              key={index}
-              id={sectionAnchor(section.title, index)}
-              section={section as OutlineSection}
-              collapsible={section.role !== "key_findings"}
-              defaultOpen={false}
-            >
-              {(section.blocks ?? []).map((block) => (
-                <AnnotatedProse key={block.block_id} block={block} onOpenClaim={setDetailClaim} />
+          /* Executive summary part — In brief hidden (034 owner steer: overlaps
+             key findings). A baseline has no summary half to head (see the
+             outline above). */
+          baseline ? null : (
+            <h2 key="executive-summary" id={EXECUTIVE_SUMMARY_ANCHOR} className={`mb-6 ${REPORT_PART_HEADING_CLASS}`}>
+              Executive summary
+            </h2>
+          ),
+
+          ...frontSections.map(renderSection),
+
+          /* A baseline writes no most-relevant-source notes and cites few
+             sources per section, so the report's "cited most often" block
+             would rank two or three documents as if that were a finding.
+             Report only (task 044). */
+          <div key="most-relevant" className={arriving}>
+            {baseline ? null : <MostRelevantSources sources={topSources} onOpenDossier={openDossier} />}
+          </div>,
+
+          /* Full report part */
+          <FullReportExpandProvider key="full-report">
+            {bodySections.length > 0 &&
+              (baseline ? (
+                // The baseline's sections ARE the document — no "Full report"
+                // part to open, just the one control that opens them all.
+                <div className={`mb-6 flex justify-end ${arriving}`}>
+                  <FullReportExpandAllButton />
+                </div>
+              ) : (
+                <div id={FULL_REPORT_ANCHOR} className="mb-6 mt-10 border-t border-line pt-4">
+                  <div className="flex items-baseline gap-2">
+                    <h2 className={`flex-1 ${REPORT_PART_HEADING_CLASS}`}>Full report</h2>
+                    <span className={arriving}>
+                      <FullReportExpandAllButton />
+                    </span>
+                  </div>
+                  {roadmapText !== null && (
+                    <p className={`mt-1.5 max-w-prose-measure ${REPORT_BODY_CLASS} ${arriving}`}>{scrub(roadmapText)}</p>
+                  )}
+                </div>
               ))}
-            </SectionDisclosure>
-          ))}
 
-          {(data.references ?? []).length > 0 && (
-            <ReferencesSection
-              references={data.references ?? []}
-              onOpenReference={openDossier}
+            {bodySections.map(renderSection)}
+
+            {(data.references ?? []).length > 0 && (
+              <ReferencesSection references={data.references ?? []} onOpenReference={openDossier} />
+            )}
+
+            <div className={arriving}>
+              <GatheredSection taskId={taskId} id="gathered" />
+            </div>
+          </FullReportExpandProvider>,
+
+          <ClaimPanel
+            key="claim-panel"
+            taskId={taskId}
+            claim={detailClaim}
+            onClose={() => setDetailClaim(null)}
+            onOpenDossier={(title) => {
+              setDetailClaim(null);
+              openDossier(title);
+            }}
+          />,
+
+          dossierSource !== null ? (
+            <SourceDossier
+              key="dossier"
+              taskId={taskId}
+              sourceRef={dossierSource}
+              optionId={dossierOption}
+              onClose={closeDossier}
             />
-          )}
-
-          <GatheredSection taskId={taskId} id="gathered" />
-        </FullReportExpandProvider>
-      ) : (
-        <>
-          {(data.references ?? []).length > 0 && (
-            <ReferencesSection
-              references={data.references ?? []}
-              onOpenReference={openDossier}
-            />
-          )}
-          <GatheredSection taskId={taskId} id="gathered" />
-        </>
-      )}
-
-      <ClaimPanel
-        taskId={taskId}
-        claim={detailClaim}
-        onClose={() => setDetailClaim(null)}
-        onOpenDossier={(title) => {
-          setDetailClaim(null);
-          openDossier(title);
-        }}
-      />
-
-      {dossierSource !== null && (
-        <SourceDossier taskId={taskId} sourceRef={dossierSource} optionId={dossierOption} onClose={closeDossier} />
-      )}
-    </ReportPage>
+          ) : null,
+        ]}
+      </ReportPage>
+    </ReportSwapContext.Provider>
   );
 }
 
 /** References as a collapsible entry with an always-visible summary line —
  *  it is the ArtefactOut.references collection, not a synthesis section
- *  (028 strand 10, binding record). */
+ *  (028 strand 10, binding record). While the report is written the same
+ *  list grows as sections are checked, open, titles only and no links
+ *  (task 058, owner round 7); the committed report adds the links and the
+ *  authors in place. */
 export function ReferencesSection({
   references,
   onOpenReference,
+  defaultOpen = false,
 }: {
   references: Array<{
     n: number;
@@ -2198,9 +2773,12 @@ export function ReferencesSection({
     venue?: string | null;
     authorships?: components["schemas"]["AuthorshipOut"][];
   }>;
-  onOpenReference: (title: string) => void;
+  /** Absent while the report is live: the titles are not links yet. */
+  onOpenReference?: (title: string) => void;
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
+  const arriving = useArrivingClass();
   useOpenWhenNavigated("references", setOpen);
   useExpandForPrint(setOpen);
   useExpandAll(setOpen);
@@ -2232,20 +2810,26 @@ export function ReferencesSection({
               <li key={reference.n} className="flex gap-2">
                 <span className="font-bold text-blue">[{reference.n}]</span>
                 <span>
-                  <button
-                    type="button"
-                    className="cursor-pointer text-left hover:underline"
-                    onClick={() => onOpenReference(reference.title)}
-                  >
-                    {scrub(reference.title)}
-                  </button>
-                  {authors !== null && <span className="text-grey"> — {scrub(authors)}</span>}
-                  {reference.year !== null && reference.year !== undefined && (
-                    <span className="text-grey"> ({reference.year})</span>
+                  {onOpenReference === undefined ? (
+                    <span>{scrub(reference.title)}</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="cursor-pointer text-left hover:underline"
+                      onClick={() => onOpenReference(reference.title)}
+                    >
+                      {scrub(reference.title)}
+                    </button>
                   )}
-                  {reference.venue !== null && reference.venue !== undefined && (
-                    <span className="text-grey"> · {scrub(reference.venue)}</span>
-                  )}
+                  <span className={arriving}>
+                    {authors !== null && <span className="text-grey"> — {scrub(authors)}</span>}
+                    {reference.year !== null && reference.year !== undefined && (
+                      <span className="text-grey"> ({reference.year})</span>
+                    )}
+                    {reference.venue !== null && reference.venue !== undefined && (
+                      <span className="text-grey"> · {scrub(reference.venue)}</span>
+                    )}
+                  </span>
                 </span>
               </li>
             );

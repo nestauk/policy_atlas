@@ -234,44 +234,6 @@
   }
 }
 
-/* The step note (task 058, owner round 6): slides out of the rail's Task
-   Agent mark into the page, a reveal from its left edge plus a short travel,
-   on the strong ease-out; it retracts the same way, faster. The clip reaches
-   past the box so the overlay lift's shadow is not cut off. A transition, not
-   keyframes, so a note that is held or replaced mid-slide retargets.
-   Under reduced motion it appears and goes without sliding. */
-@utility step-note {
-  clip-path: inset(-16px -48px -48px -16px);
-  transform: translateX(0);
-  opacity: 1;
-  transition:
-    clip-path 240ms var(--ease-out-strong),
-    transform 240ms var(--ease-out-strong),
-    opacity 120ms ease;
-  @starting-style {
-    clip-path: inset(-16px 100% -48px -16px);
-    transform: translateX(-12px);
-    opacity: 0;
-  }
-  &[data-shown="false"] {
-    clip-path: inset(-16px 100% -48px -16px);
-    transform: translateX(-12px);
-    opacity: 0;
-    transition-duration: 160ms, 160ms, 160ms;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    &,
-    &[data-shown="false"] {
-      clip-path: none;
-      transform: none;
-    }
-    @starting-style {
-      clip-path: none;
-      transform: none;
-    }
-  }
-}
-
 @keyframes breathe {
   0%,
   100% {
@@ -415,4 +377,43 @@
 }
 @utility anim-settle-out {
   animation: settle-out 400ms ease both;
+}
+
+/* The swap from the live report to the committed one (task 058, owner round
+   7): the page updates in place, and only what the committed report adds
+   (the download, the facts strip, the most relevant sources, the expand
+   controls, the chips, the reference details, a renumbered marker) fades in
+   once over 300 ms on the strong ease-out. Under reduced motion it is a cut. */
+@keyframes swap-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* Streamed prose (task 058, owner round 7): the words each frame reveals in
+   the live paragraph fade in over 150 ms, opacity only, so it never clashes
+   with the revision blur. Under reduced motion they appear at once (the
+   pacing stays: it is not motion). */
+@keyframes word-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@utility anim-word-in {
+  animation: word-in 150ms var(--ease-out-strong) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility anim-swap-in {
+  animation: swap-in 300ms var(--ease-out-strong) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
 }

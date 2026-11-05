@@ -5,8 +5,9 @@ import { Figures } from "../../lib/figures";
 import { STALL_AFTER_MS, useFreshness, useNow } from "../../lib/freshness";
 import { scrub } from "../../lib/scrub";
 import type { PlanDraft, RunStatus, StageEntry, StageLiveness, TaskAgentThreadRun } from "../../store";
-import { LiveMark, StatusMark, type StatusTone } from "../../ui/brand/Card";
+import { Card, LiveMark, StatusMark, type StatusTone } from "../../ui/brand/Card";
 import { cn } from "../../ui/brand/cn";
+import { useRegisterTrace } from "../taskLive";
 import { RUN_BLOCK_STATUS } from "./planVocabulary";
 import {
   STALLED_LINE,
@@ -53,6 +54,10 @@ function bound(text: string): string {
   return text.replaceAll(" · ", SEP);
 }
 
+/** The card's top line: the state word in the label style (uppercase,
+ *  Extrabold, tracked, grey), as the running card first had it. */
+const TOP_LINE_LABEL = "font-extrabold uppercase tracking-label text-grey";
+
 /** The deep green of the green tint's text: green words that pass contrast. */
 const GREEN_TEXT = "text-[#0c6b5a]";
 
@@ -93,17 +98,8 @@ export type RowContext = {
  *  its wall time and its link ("Searching and screening · 312 found · 118
  *  relevant · 1 min 4 s · Sources →"). A stopped or skipped row says so after
  *  the label. */
-export function FinishedLine({
-  row,
-  context,
-  withTime = true,
-}: {
-  row: CardRow;
-  context: RowContext;
-  /** False for the step note, which reads without the wall time (lead, round 6). */
-  withTime?: boolean;
-}) {
-  const seconds = withTime ? rowSeconds(row, context.nowMs) : null;
+export function FinishedLine({ row, context }: { row: CardRow; context: RowContext }) {
+  const seconds = rowSeconds(row, context.nowMs);
   const words =
     row.state === "failed" ? ["Stopped"] : row.state === "skipped" ? ["Skipped"] : rowCounts(row);
   const meta = [...words, ...(seconds === null ? [] : [formatElapsed(seconds)])];
@@ -248,15 +244,16 @@ function SpineRow({
 
 /**
  * The run trace (task 058; annex § The run trace, owner 2026-11-05): the one
- * place a run's progress shows, as a borderless block at the run's place in
- * the Task Agent thread, in the Agent tab and the sidebar alike.
+ * place a run's progress shows, at the run's place in the Task Agent thread,
+ * in the Agent tab and the sidebar alike.
  *
- * Live or paused, its header line carries the mark, the current step and what
- * it is doing now, and the run's elapsed time; under it the running card's
- * body (owner, round 6): one row per plan step in plan order, top to bottom,
- * each with its mark on a hairline spine and a hairline rule between rows,
- * and "See plan" at the foot. The list stays open. Paused, the mark turns
- * orange and the header says a check-in waits. Ended, it folds to one line
+ * Live or paused it is the running card (owner, round 7): a Card whose top
+ * line is the turning fold mark, "Running" in the label style and the run's
+ * elapsed time at the right; under it one row per plan step in plan order,
+ * top to bottom, each with its mark on a hairline spine and a hairline rule
+ * between rows, and "See plan" at the foot. The list stays open. Paused, the
+ * mark is the orange square and the top line says a check-in waits. Ended,
+ * the frame goes and the trace folds to one line
  * ("Report ready · 14 min · Read it →"), the run's one destination, whose
  * chevron opens the rows. Every label and count is the server's.
  */
@@ -298,6 +295,8 @@ export function RunTrace({
 }) {
   const [open, setOpen] = useState(false);
   const listId = useId();
+  // While a trace is mounted the run strip's live region stays quiet.
+  useRegisterTrace();
   const kind = walkKind(capability, stages, purpose);
   const ended = endedLine(status, kind);
   const ticking = ended === null && (status === "running" || status === "paused");
@@ -385,15 +384,84 @@ export function RunTrace({
     </>
   );
 
+  const list = showRows && (
+    <div id={listId} className={ended === null ? "px-4 pt-0.5 pb-3 max-sm:px-3" : "mt-1.5"}>
+      <ol aria-label="Run steps">
+        {rows.map((step, index) => (
+          <SpineRow
+            key={step.key}
+            row={step}
+            context={context}
+            first={index === 0}
+            last={index === rows.length - 1}
+            landed={landed.has(step.key)}
+            indent={foldable}
+            paused={paused}
+            liveness={liveness}
+            stalled={stalled && step.key === progress?.key}
+          />
+        ))}
+      </ol>
+      {onSeePlan !== undefined && (
+        <button
+          type="button"
+          className={cn(QUIET_CONTROL_CLASS, "mt-2", foldable ? "ml-[38px]" : "ml-[22px]")}
+          onClick={onSeePlan}
+        >
+          See plan
+        </button>
+      )}
+    </div>
+  );
+
+  // The header's words for a screen reader, announced as they change; the
+  // ticking clock stays out of it.
+  const announce = (
+    <p role="status" aria-live="polite" className="sr-only">
+      {scrub(words)}
+    </p>
+  );
+
+  if (ended === null) {
+    // Live or paused, the trace is the running card we first designed (owner,
+    // round 7, reversing round 6's borderless block): the Card frame, a top
+    // line of the turning mark, the state word in the label style and the
+    // run's elapsed time at the right, then the rows on their spine. No
+    // Minimise: the rows stay open while the run is live.
+    return (
+      <Card role="region" aria-label="Analysis run" className="@container">
+        {announce}
+        <div
+          data-testid="trace-header"
+          className="flex items-start justify-between gap-3 border-b border-line px-4 pt-3.5 pb-2.5 max-sm:px-3"
+        >
+          <p className="flex min-w-0 items-start gap-2 text-meta">
+            <span className={FIRST_LINE_BOX}>{paused ? <StatusMark tone="paused" /> : <LiveMark />}</span>
+            <span key={paused ? "paused" : "running"} className={cn("min-w-0", paused && "anim-rise")}>
+              <span className={TOP_LINE_LABEL}>{paused ? head : "Running"}</span>
+              {paused && doing !== "" && (
+                <span className="text-grey">
+                  {SEP}
+                  <Figures text={bound(doing)} />
+                </span>
+              )}
+            </span>
+          </p>
+          <span className="shrink-0 whitespace-nowrap text-body text-grey">
+            <Figures text={time} />
+          </span>
+        </div>
+        {list}
+      </Card>
+    );
+  }
+
   return (
     <div role="region" aria-label="Analysis run" className="@container mr-8">
-      {/* The header's words for a screen reader, announced as they change;
-          the ticking clock stays out of it. */}
-      <p role="status" aria-live="polite" className="sr-only">
-        {scrub(words)}
-      </p>
-      {/* The header reads at the chat's size (owner, 2026-11-05): Lead in the
-          thread, as the agent's prose and the settled parts are. */}
+      {announce}
+      {/* Ended, the trace folds to one line at the chat's size (owner,
+          2026-11-05): Lead in the thread, as the agent's prose and the
+          settled parts are. */}
       <div data-testid="trace-header" className="flex min-w-0 items-start gap-x-1.5 text-lead">
         {foldable ? (
           <button
@@ -408,7 +476,7 @@ export function RunTrace({
         ) : (
           <p className="inline-flex max-w-full min-w-0 items-start gap-2">{headerInner}</p>
         )}
-        {ended?.link && (
+        {ended.link && (
           <span className={cn("shrink-0 whitespace-nowrap", GREEN_TEXT)}>
             <span aria-hidden="true">· </span>
             <Link to={resultHref(taskId, kind)} className={cn("font-semibold underline-offset-[3px] hover:underline", GREEN_TEXT)}>
@@ -417,36 +485,7 @@ export function RunTrace({
           </span>
         )}
       </div>
-
-      {showRows && (
-        <div id={listId} className="mt-1.5">
-          <ol aria-label="Run steps">
-            {rows.map((step, index) => (
-              <SpineRow
-                key={step.key}
-                row={step}
-                context={context}
-                first={index === 0}
-                last={index === rows.length - 1}
-                landed={landed.has(step.key)}
-                indent={foldable}
-                paused={paused}
-                liveness={liveness}
-                stalled={stalled && step.key === progress?.key}
-              />
-            ))}
-          </ol>
-          {onSeePlan !== undefined && (
-            <button
-              type="button"
-              className={cn(QUIET_CONTROL_CLASS, "mt-2", foldable ? "ml-[38px]" : "ml-[22px]")}
-              onClick={onSeePlan}
-            >
-              See plan
-            </button>
-          )}
-        </div>
-      )}
+      {list}
     </div>
   );
 }

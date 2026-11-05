@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -211,6 +211,84 @@ describe("ArtefactView around a run", () => {
     view.rerender(page());
     expect(await screen.findByRole("heading", { name: "The old report" })).toBeInTheDocument();
     expect(screen.queryByText("Report ready")).toBeNull();
+  });
+
+  it("swaps in place: the same page and section elements, sections left open, what arrives fades in", async () => {
+    const LIVE_PROSE = "Costs prose.";
+    const view = render(page());
+    world.stream = streamOf("running", SECTIONS);
+    view.rerender(page());
+    world.stream = streamOf("succeeded", [
+      { ...SECTIONS[0], state: "filled", prose: "Headline." },
+      {
+        ...SECTIONS[1],
+        state: "filled",
+        prose: LIVE_PROSE,
+        citations: [{ start: 0, end: 12, n: 2, sourceId: "s1", title: "Smith 2023", tier: "tier_2" }],
+      },
+    ]);
+    view.rerender(page());
+    const main = screen.getByRole("main");
+    const costs = screen.getByRole("heading", { name: "Costs and funding" }).closest("section") as HTMLElement;
+    expect(within(costs).getByRole("img", { name: /^Citation 2, Smith 2023/ })).toHaveTextContent("[2]");
+
+    world.latestRun = { capability_run_id: "run-2", status: "succeeded", started_at: "2026-11-05T09:58:00Z", ended_at: "2026-11-05T10:00:00Z" };
+    world.artefact = {
+      ...committedArtefact,
+      title: QUESTION,
+      sections: [
+        { title: "Key findings", role: "key_findings" as const, blocks: [{ block_id: "kf", prose: "Headline.", claims: [] }] },
+        {
+          title: "Costs and funding",
+          role: "standard" as const,
+          blocks: [
+            {
+              block_id: "costs",
+              prose: LIVE_PROSE,
+              claims: [
+                {
+                  claim_id: "c1",
+                  claim_type: "citation" as const,
+                  text: LIVE_PROSE,
+                  span: [0, 12],
+                  citations: [{ citation_id: "x", n: 1, source_title: "Smith 2023", quote: "q", grounding_tier: "tier_2" }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as unknown as typeof committedArtefact;
+    view.rerender(page());
+    // The page and the section are the same elements: React updated them.
+    expect(screen.getByRole("main")).toBe(main);
+    const after = screen.getByRole("heading", { name: "Costs and funding" }).closest("section") as HTMLElement;
+    expect(after).toBe(costs);
+    // The section the reader was reading stays open; its control fades in.
+    expect(within(after).getByRole("button", { name: /Costs and funding/ })).toHaveAttribute("aria-expanded", "true");
+    expect(within(after).getAllByText("Collapse −")[0]).toHaveClass("anim-swap-in");
+    // The marker is a control now, and its new number fades in.
+    const marker = within(after).getByRole("button", { name: "Citations 1" });
+    expect(marker).toHaveClass("anim-swap-in");
+  });
+
+  it("swaps at a cut under reduced motion", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("reduce"),
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    const view = render(page());
+    world.stream = streamOf("running", SECTIONS);
+    view.rerender(page());
+    world.stream = streamOf("succeeded", [{ ...SECTIONS[1], state: "filled", prose: "Costs prose." }]);
+    view.rerender(page());
+    world.latestRun = { capability_run_id: "run-2", status: "succeeded", started_at: "2026-11-05T09:58:00Z", ended_at: "2026-11-05T10:00:00Z" };
+    world.artefact = committedArtefact;
+    view.rerender(page());
+    expect(document.querySelector(".anim-swap-in")).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it("opens the report at once when the run had finished before the page loaded", () => {

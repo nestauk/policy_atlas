@@ -479,17 +479,21 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(page.getByRole("button", { name: "Minimise" })).toHaveCount(0);
   });
 
-  // (r) Paused on another tab (028 contract: pause salience; task 058: the
-  // trace is the one progress surface). No strip and no banner show the
-  // pause on History; opening the sidebar from its rail lands on the Task
-  // Agent, whose trace says the check-in waits, with the check-in under it.
-  test("paused run: other tabs show no strip or banner, and the sidebar's trace says a check-in waits", async ({ page }) => {
+  // (r) Paused on another tab (028 contract: pause salience; task 058, owner
+  // round 7: the run strip returns under the tabs, status only). The strip
+  // says the check-in waits on History, with no link and no banner; opening
+  // the sidebar from its rail lands on the Task Agent, whose trace says the
+  // same, with the check-in under it.
+  test("paused run: other tabs show the paused strip, no banner, and the sidebar's trace says a check-in waits", async ({ page }) => {
     await openWorkspaceFromLanding(page);
     await page.getByRole("button", { name: "Start the search" }).click();
     await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
 
     await lifecycleNav(page).getByRole("link", { name: "History", exact: true }).click();
-    await expect(page.getByText(/Paused\s·\sa check-in is waiting on you/)).toHaveCount(0);
+    const strip = page.getByTestId("run-strip");
+    await expect(strip).toHaveAttribute("data-open", "true");
+    await expect(strip).toContainText(/Paused\s·\sa check-in is waiting on you/);
+    await expect(strip.getByRole("link")).toHaveCount(0);
     await expect(page.getByText("The analysis is paused — a check-in is waiting on you")).toHaveCount(0);
     await page.getByRole("button", { name: "Open the Agent" }).click();
     const sidebar = page.getByRole("complementary", { name: "Agent" });
@@ -828,15 +832,44 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     // The action line, then the streamed prose growing, then the check.
     await seen(page, "Looking for: evidence on subsidy uptake among low-income households");
     // The sources the writer reads are named under the heading as the reads
-    // land, and its own citations show as hollow marks once they close
-    // (task 058, evidence shown live).
+    // land, and its own citations show as the marker's muted chip once they
+    // close (task 058, evidence shown live; owner round 7).
+    // A checked section carries the report's numbered marker while live, not
+    // yet a control, and the references list grows at the foot (round 7).
+    await expect(page.getByRole("img", { name: /^Citation 1, .*; details when the report is ready$/ })).toHaveText(
+      "[1]",
+      { timeout: 20_000 },
+    );
+    await expect(page.getByRole("region", { name: "References" }).getByRole("listitem").first()).toHaveText(
+      `[1]${CITED_SOURCE_TITLE}`,
+    );
     await seen(page, "Drawing on 2 sources · Smith 2023 · DfE 2022");
     await seen(page, "Drawing on 5 sources · Smith 2023 · DfE 2022 · Nesta 2021 · and 2 more");
     await expect(page.getByRole("img", { name: /^Cited, being checked: / })).toHaveCount(2, { timeout: 20_000 });
-    await expect(page.getByRole("img", { name: "Cited, being checked: Sustrans 2020" })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Cited, being checked: Sustrans 2020" })).toHaveText("[·]");
+    // The run strip under the tabs says the same step (owner, round 7).
+    await expect(page.getByTestId("run-strip")).toContainText(/^Writing/);
     await seen(page, "Checking claims");
     await seen(page, "Revising 1 claim");
-    await seen(page, /walking bus saw 6 more children arrive on foot in every 100\.$/, 30_000);
+    await seen(page, /walking bus saw 6 more children arrive on foot in every 100\.(\s*\[[\d,]+\])?$/, 30_000);
+    // Checked, the section keeps its markers in the report's look, not yet
+    // controls: one claim citing reference 2, and the repaired sentence
+    // citing 2 and 3 on one span, which the report sets as one marker.
+    const implications = page.locator("section", { has: page.getByRole("heading", { name: "Implications for local action" }) });
+    await expect(implications.getByRole("img", { name: /details when the report is ready$/ })).toHaveText(["[2]", "[2,3]"], {
+      timeout: 30_000,
+    });
+    // The case studies stream card by card in the report's card layout; the
+    // first card carries its marker, live or committed.
+    await seen(page, "Leeds — Breakfast in every primary", 30_000);
+    await seen(page, "Bristol — Walking bus pilots", 30_000);
+    const caseStudies = page.locator("section", { has: page.getByRole("heading", { name: "Case studies" }) });
+    await expect(caseStudies.getByRole("listitem").first().getByText("[2]")).toBeVisible({ timeout: 30_000 });
+    await expect(caseStudies).not.toContainText("**");
+    // The references at the foot have grown to the report's three.
+    await expect(page.getByRole("region", { name: "References" }).getByRole("listitem")).toHaveCount(3, {
+      timeout: 30_000,
+    });
 
     const growing = (await seenLines(page)).filter((line) => line.startsWith("Pair school food action with"));
     expect(new Set(growing.map((line) => line.length)).size).toBeGreaterThan(3);
@@ -853,16 +886,18 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await neverSeen(page, /attaching citations/);
   });
 
-  test("scene 7: on Sources only the sidebar's trace shows the run: it runs, pauses and folds to Report ready", async ({
+  test("scene 7: on Sources the strip and the sidebar's trace show the run: it runs, pauses and folds to Report ready", async ({
     page,
   }) => {
     await watchPage(page);
     await startRun(page);
     await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
     await taskNav(page).getByRole("link", { name: /^Sources/ }).click();
-    // No strip under the tabs: nothing on the page names the run or its pause.
-    await expect(page.getByText(/^Searching and screening\s·\s/)).toHaveCount(0);
-    await expect(page.getByText(/a check-in is waiting on you/)).toHaveCount(0);
+    // The strip under the tabs says the run waits (owner, round 7); status
+    // only, no link.
+    const strip = page.getByTestId("run-strip");
+    await expect(strip).toContainText(/a check-in is waiting on you/);
+    await expect(strip.getByRole("link")).toHaveCount(0);
 
     // The sidebar's trace is the run view: opening it lands on the waiting
     // check-in; answer it there, then watch the trace to the end.
@@ -877,15 +912,19 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await seen(page, /^Writing · Section \d of \d/, 30_000);
     await expect(trace.getByRole("link", { name: "Read it →" })).toBeVisible({ timeout: 30_000 });
     await expect(trace.getByTestId("trace-header")).toContainText("Report ready");
+    // The run has ended: the strip closes.
+    await expect(strip).toHaveAttribute("data-open", "false");
   });
 
-  test("scene 7: no strip and no banner on another tab while a check-in waits", async ({ page }) => {
+  test("scene 7: the paused strip and no banner on another tab while a check-in waits", async ({ page }) => {
     await useScenario(page, "paused-strip");
     await startRun(page);
     await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
+    // Not on the Agent tab.
+    await expect(page.getByTestId("run-strip")).toHaveAttribute("data-open", "false");
     await taskNav(page).getByRole("link", { name: "History", exact: true }).click();
 
-    await expect(page.getByText(/Paused\s·\sa check-in is waiting on you/)).toHaveCount(0);
+    await expect(page.getByTestId("run-strip")).toContainText(/Paused\s·\sa check-in is waiting on you/);
     await expect(page.getByText("Go to the check-in")).toHaveCount(0);
     await expect(page.getByText("The analysis is paused — a check-in is waiting on you")).toHaveCount(0);
   });
@@ -903,7 +942,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await seen(page, /^Pair school food action with/, 20_000);
     const lines = (await seenLines(page)).filter((line) => line.startsWith("Pair school food action with"));
     expect(lines[0].length).toBeGreaterThan(80);
-    await seen(page, /walking bus saw 6 more children arrive on foot in every 100\.$/, 30_000);
+    await seen(page, /walking bus saw 6 more children arrive on foot in every 100\.(\s*\[[\d,]+\])?$/, 30_000);
   });
 
   test("scene 14: a section landing marks Result, visiting clears it, the title announces the report", async ({

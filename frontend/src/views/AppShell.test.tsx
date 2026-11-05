@@ -246,19 +246,24 @@ describe("AppShell — the live layer without a strip (task 058; owner 2026-11-0
     taskState.latestRun = null;
   });
 
-  it("shows no run line under the tabs: the trace in the chat is the one progress surface", () => {
+  it("shows the run strip under the tabs on Sources: the step and what it is doing, status only", () => {
     renderShell(`/tasks/${TASK_ID}/sources`);
     connect();
     feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching and screening"), tickFrame("acquire", "searching · 184 found so far"));
-    expect(screen.queryByText(/Searching and screening/)).toBeNull();
-    expect(screen.queryByText(/184 found so far/)).toBeNull();
+    const strip = screen.getByTestId("run-strip");
+    expect(strip).toHaveAttribute("data-open", "true");
+    expect(strip).toHaveTextContent(/Searching and screening.*184 found so far/);
+    expect(within(strip).queryByRole("link")).toBeNull();
   });
 
-  it("shows no paused line and no paused banner while a check-in waits", () => {
+  it("shows the paused strip and no paused banner while a check-in waits", () => {
     renderShell(`/tasks/${TASK_ID}/sources`);
     connect();
     feed(runStatus("running"), runStatus("paused"));
-    expect(screen.queryByText(/a check-in is waiting on you/)).toBeNull();
+    const strip = screen.getByTestId("run-strip");
+    expect(strip).toHaveAttribute("data-open", "true");
+    expect(strip.querySelector("[data-tone='paused']")).not.toBeNull();
+    expect(strip).toHaveTextContent(/^Paused/);
     expect(screen.queryByText(/Go to the check-in/)).toBeNull();
   });
 

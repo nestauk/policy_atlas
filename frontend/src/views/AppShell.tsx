@@ -18,6 +18,7 @@ import { lifecycleTabs, publicLifecycleTabs, sourcesLanding, withChat, withSourc
 import { PlanPanelProvider, usePlanPanel } from "./planPanel";
 import { PublicViewProvider } from "./publicView";
 import { isScoping, tabRunStatus } from "./scopingActivity";
+import { RunStrip } from "./RunStrip";
 import { TaskLiveProvider, useTaskLive, withTabMarks } from "./taskLive";
 import { useTabOptions } from "./taskResult";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
@@ -501,6 +502,9 @@ export function AppShell() {
           </div>
         </NavBar>
       )}
+      {/* The run strip returns under the tabs on every tab but Agent (task
+          058, owner round 7): status only. */}
+      {liveShell && <RunStrip />}
       {liveShell && <LiveReconnectingBanner />}
       <SensitiveInfoBanner />
       {/* The Agent overlay beside every task view outside the Agent tab

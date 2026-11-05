@@ -110,8 +110,7 @@ function RailButton({
  *     `runLive` turns the Task Agent's mark while a run is live (task 058,
  *     owner 2026-11-05: the fold mark, at the rail's own size so nothing
  *     jumps); `runWords` and `runStartedAt` give the mark its hover words
- *     and the elapsed figure under it, and `besideTaskAgent` sits at the
- *     mark's height (the step note; owner, round 6).
+ *     and the elapsed figure under it.
  */
 export function ConversationRail({
   toggleLabel,
@@ -129,7 +128,6 @@ export function ConversationRail({
   runLive = false,
   runWords,
   runStartedAt,
-  besideTaskAgent,
 }: {
   toggleLabel: string;
   expanded: boolean;
@@ -150,8 +148,6 @@ export function ConversationRail({
   runWords?: string;
   /** While a run is live: when it started, for the elapsed figure under the mark. */
   runStartedAt?: string;
-  /** Rendered beside the Task Agent mark, at its height (the step note). */
-  besideTaskAgent?: ReactNode;
 }) {
   const live = runLive && runWords !== undefined && runWords !== "";
   const taskAgentName = live ? `${COPY.taskAgent} · ${runWords}` : COPY.taskAgent;
@@ -184,7 +180,6 @@ export function ConversationRail({
             {runLive ? <LiveMark size={RAIL_MARK_SIZE} /> : <FoldMarkIcon size={RAIL_MARK_SIZE} />}
           </RailButton>
           {elapsedFrom !== null && <RailElapsed startedAt={elapsedFrom} />}
-          {besideTaskAgent}
         </div>
         {recent.map((chat) => (
           <RailButton

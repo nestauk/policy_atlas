@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useLocation } from "react-router";
 
 import { TitleMarkerProvider } from "../lib/title";
@@ -108,6 +108,24 @@ interface TaskLive {
 
 const TaskLiveContext = createContext<TaskLive | null>(null);
 
+/** Registers a mounted run trace; returns the unregister. */
+type RegisterTrace = () => () => void;
+const RegisterTraceContext = createContext<RegisterTrace | null>(null);
+const MountedTracesContext = createContext(0);
+
+/** Called by every run trace while it is mounted, so the run strip can keep
+ *  its own live region quiet then: one change is announced once (task 058,
+ *  owner round 7). A no-op outside the signed-in task shell. */
+export function useRegisterTrace(): void {
+  const register = useContext(RegisterTraceContext);
+  useEffect(() => (register === null ? undefined : register()), [register]);
+}
+
+/** How many run traces are mounted (the Agent tab's, the sidebar's). */
+export function useMountedTraces(): number {
+  return useContext(MountedTracesContext);
+}
+
 /** The task shell's live layer, or `null` outside a signed-in task. */
 export function useTaskLive(): TaskLive | null {
   return useContext(TaskLiveContext);
@@ -160,10 +178,24 @@ export function TaskLiveProvider({
   next = visitMarks(next, tab, looking);
   if (next !== marks) setMarks(next);
 
+  const [traces, setTraces] = useState(0);
+  const registerTrace = useCallback(() => {
+    setTraces((count) => count + 1);
+    return () => setTraces((count) => count - 1);
+  }, []);
+
   const kind = walkKind(capability, stream.stages);
+  const value = useMemo(
+    () => (enabled ? { taskId, tab, stream, marks, capability, isOwner } : null),
+    [enabled, taskId, tab, stream, marks, capability, isOwner],
+  );
   return (
-    <TaskLiveContext.Provider value={enabled ? { taskId, tab, stream, marks, capability, isOwner } : null}>
-      <TitleMarkerProvider ready={enabled && marks.ready ? READY_WORDS[kind] : null}>{children}</TitleMarkerProvider>
+    <TaskLiveContext.Provider value={value}>
+      <RegisterTraceContext.Provider value={registerTrace}>
+        <MountedTracesContext.Provider value={traces}>
+          <TitleMarkerProvider ready={enabled && marks.ready ? READY_WORDS[kind] : null}>{children}</TitleMarkerProvider>
+        </MountedTracesContext.Provider>
+      </RegisterTraceContext.Provider>
     </TaskLiveContext.Provider>
   );
 }

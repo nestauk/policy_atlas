@@ -110,20 +110,23 @@ function stubReducedMotion(reduce: boolean) {
 }
 
 describe("RunTrace — live (annex § The run trace; owner round 6: the card's body)", () => {
-  it("has a header line, not a button: the turning mark and the run's elapsed time only", () => {
+  it("is the running card: the Card frame, the turning mark, 'Running' in the label style and the time at the right", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     render(trace());
     expect(within(header()).queryByRole("button")).toBeNull();
     // The step's words live on its row (lead, round 6). No step count and
     // no "hide steps": the rows are open under it.
-    expect(flat(header().textContent)).toBe("6 min 12 s");
+    expect(flat(header().textContent)).toBe("Running6 min 12 s");
     // Live, the mark is the fold mark at 14 px, not the square (owner, 2026-11-05).
     expect(liveMark()).toHaveStyle({ width: "14px" });
     expect(mark()).toBeNull();
-    // No card frame, no state word in capitals, no Minimise.
-    expect(screen.queryByText("RUNNING")).toBeNull();
+    // The card we first designed (owner, round 7): frame, label, no Minimise.
+    expect(within(header()).getByText("Running")).toHaveClass("uppercase", "font-extrabold", "tracking-label", "text-grey");
+    expect(header().lastElementChild).toHaveClass("shrink-0", "text-grey");
+    expect(header().lastElementChild).toHaveTextContent(/^6 min 12 s$/);
+    expect(header()).toHaveClass("justify-between", "border-b", "border-line");
     expect(screen.queryByRole("button", { name: "Minimise" })).toBeNull();
-    expect(screen.getByRole("region", { name: "Analysis run" }).className).not.toMatch(/\bborder\b|shadow/);
+    expect(screen.getByRole("region", { name: "Analysis run" })).toHaveClass("border", "border-line-2", "bg-paper");
   });
 
   it("announces the header's words politely, without the ticking clock", () => {
@@ -234,33 +237,24 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
     expect(fresh).not.toHaveClass("anim-rise");
   });
 
-  it("keeps the elapsed time out of the words, so it stays in view on a phone and in the sidebar", () => {
+  it("keeps the elapsed time at the right of the top line, so it stays in view on a phone and in the sidebar", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     render(trace({ status: "paused" }));
     const words = header().querySelector(".anim-rise") as HTMLElement;
-    // Narrow: up to two lines of words, then the line wraps; wide: one
-    // truncated line. The trace's own width decides (a container query).
-    expect(screen.getByRole("region", { name: "Analysis run" })).toHaveClass("@container");
-    expect(words).toHaveClass("line-clamp-2", "@xl:truncate", "min-w-0");
-    const clock = words.nextElementSibling as HTMLElement;
+    const clock = words.closest("p")?.nextElementSibling as HTMLElement;
     expect(clock).toHaveTextContent(/^6 min 12 s$/);
-    expect(words.textContent?.endsWith("\u00A0·")).toBe(true);
     expect(clock).toHaveClass("shrink-0", "whitespace-nowrap");
-    expect(words.parentElement).toHaveClass("flex-wrap", "@xl:flex-nowrap");
+    expect(words).toHaveClass("min-w-0");
   });
 
-  it("reads at the chat's size: the header's words Lead, the time grey, the rows Body", () => {
+  it("sets the state word as a label and what waits in grey; the rows read at Body", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     render(trace({ status: "paused", isOwner: false }));
     const words = header().querySelector(".anim-rise") as HTMLElement;
-    expect(header()).toHaveClass("text-lead");
-    expect(words).toHaveClass("text-navy");
-    // The first word semibold, the rest regular (lead, 2026-11-05).
-    expect(within(words).getByText("Paused")).toHaveClass("font-semibold");
-    expect(words).not.toHaveClass("font-semibold");
-    expect(words.nextElementSibling).toHaveClass("text-grey");
+    expect(within(words).getByText("Paused")).toHaveClass("uppercase", "font-extrabold");
+    expect(within(words).getByText("Paused").nextElementSibling).toHaveClass("text-grey");
+    expect(within(words).getByText("Paused").nextElementSibling).not.toHaveClass("uppercase");
     expect(rowOf("Classifying")).toHaveClass("text-body");
-    expect(screen.getByRole("region", { name: "Analysis run" }).className).not.toMatch(/text-meta/);
   });
 
   it("reads 'Still working on this step' after two minutes with no tick, with no counter", () => {
@@ -290,7 +284,7 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
   it("shows the mark and the time only before the first stage frame, with the plan's steps to come", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     render(trace({ stages: [], liveness: {} }));
-    expect(flat(header().textContent)).toBe("6 min 12 s");
+    expect(flat(header().textContent)).toBe("Running6 min 12 s");
     expect(within(screen.getByRole("list", { name: "Run steps" })).getAllByRole("listitem")).toHaveLength(6);
   });
 });
@@ -302,7 +296,7 @@ describe("RunTrace — paused", () => {
     expect(mark()).toHaveClass("bg-orange", "size-1.5");
     expect(mark()).not.toHaveClass("anim-breathe");
     expect(liveMark()).toBeNull();
-    expect(flat(header().textContent)).toMatch(/^Paused · a check-in is waiting on you ·6 min 12 s$/);
+    expect(flat(header().textContent)).toMatch(/^Paused · a check-in is waiting on you6 min 12 s$/);
     // Nothing turns while the run waits on a person: the step's mark is the
     // orange square too.
     expect(screen.getByRole("list", { name: "Run steps" })).toBeVisible();
@@ -317,7 +311,7 @@ describe("RunTrace — paused", () => {
   it("tells a colleague where the run stopped instead", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     render(trace({ status: "paused", isOwner: false }));
-    expect(flat(header().textContent)).toMatch(/^Paused · Classifying ·6 min 12 s/);
+    expect(flat(header().textContent)).toMatch(/^Paused · Classifying6 min 12 s/);
     expect(header()).not.toHaveTextContent(/waiting on you/);
   });
 

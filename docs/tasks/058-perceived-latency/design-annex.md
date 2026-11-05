@@ -526,6 +526,8 @@ fold mark too; the writing section's action line reads "◆ Writing" for the who
   rules (the agent's view: the rules already make the list one object, and a Card frame would
   make the trace the heaviest block in a thread that already holds the settled cards and the
   check-in card; the folded green ended line already makes a finished run easy to find).
+  **Reversed by the owner on seeing it live (2026-11-05, round 7):** the live and paused
+  trace takes the running card's frame again; see § Owner round 7.
 - lead, 2026-11-05, round 6: no green pulse on the rail's mark when a step note arrives.
 - lead, 2026-11-05, round 6: a step note for every step except Writing finishing (the title
   marker, the tab mark and the swap to the report already say it).
@@ -533,6 +535,55 @@ fold mark too; the writing section's action line reads "◆ Writing" for the who
   face, uppercase, grey); the part's name stays the Meta label.
 - lead, 2026-11-05, round 6: the step note reads without the wall time ("Searching and
   screening · 312 found · 118 relevant · Sources →").
+
+## Owner round 7 (2026-11-05, live-run notes): notes and rulings
+
+1. **Citation marks while streaming look like the final marker, and stay.** A provisional
+   citation is the final marker's chip in its muted look (Line border, Ground fill, grey
+   Caption Semibold) with "·" for the number, "[·]", after the cited sentence; not a control,
+   the source titles as hover text, named "Cited, being checked: <titles>". On completion the
+   section's checked citations (`artefact.section_completed` `citations`) give the report's
+   numbered marker in the report's look, not a control while live, named "Citation 3, Smith
+   2023; details when the report is ready". The draft layer carries the muted chips as it
+   fades off the checked prose, so nothing flashes. The final page has no muted chip for an
+   unsupported claim (its tier shows only in the tooltip), so neither has the live page.
+2. **The live page is the final page, and the swap is in place.** The live Result tab renders
+   through the committed report's own page, section, prose and case-study components: the
+   contents beside it, the kind row, the question as the title, "See the plan", the
+   "Executive summary" and "Full report" part headings, the sections in `orderSections`
+   order, case-study cards in the final card layout as each closes, and a references list at
+   the foot that grows as sections are checked (numbered, titles only, no links, open). The
+   committed report renders the same keyed tree, so React updates it in place: the scroll
+   position stays, a section the reader was reading stays open (a section that becomes
+   collapsible keeps showing), and what arrives fades in once over 300 ms on the strong
+   ease-out (the download, the facts strip, "Ask about this analysis", the most relevant
+   sources, the expand controls, the case-study chips, the references' authors and years,
+   the method, and a marker whose number changed); under reduced motion it is a cut.
+   "Written last, after the sections are checked." and the key-findings order stay.
+3. **Streaming smoothness** (recipe: `research/streaming-text-smoothness.md`). The store's
+   draft stays the arrival target; the page reveals it at max(0.15 chars/ms, backlog /
+   800 ms), snapped to whole words, one state update per frame; a quiet draft shows its
+   trailing word after 500 ms (tuning values, not sourced). Settled paragraphs are memoised;
+   only the live paragraph re-renders. A revision cuts the revealed text back during render
+   and holds the section's height until the text regrows. The page follows the text only for
+   a reader within 40 px of the end and stops on the first upward scroll. Owner (2026-11-05):
+   the words each frame reveals fade in over 150 ms, opacity only, one span per batch,
+   dropped when the paragraph settles; no fade under reduced motion; no caret.
+4. **The trace looks like the card we first designed.** Live or paused, the trace is a Card
+   with the card's top line: the turning fold mark, "Running" in the label style, the elapsed
+   time right-aligned in tabular figures; paused, the orange square and "Paused · a check-in
+   is waiting on you" (the state word in the label style, the rest in grey) with the time at
+   the right. No Minimise; the rows, spine and rules as round 6 built them, inside the frame.
+   Ended, it folds to the frameless green line as before. The sidebar shows the same card.
+5. owner, 2026-11-05, round 7: the step note withdrawn (it did not look right); the run strip
+   returns under the tabs on every non-Agent tab, status only, because it is now the only
+   progress surface outside the Agent tab.
+
+Rulings on the build (agent, for the lead to confirm): the live card spans the thread's
+column like the check-in card (round 6's right margin stays on the ended line); the live
+page's kind row reads "Baseline" when the skeleton has no key-findings slot; the slot before a
+case-studies slot at index 1 is read as the key findings (the server's order), which the
+mock's skeleton relies on.
 
 ## Polish log
 
@@ -544,8 +595,9 @@ fold mark too; the writing section's action line reads "◆ Writing" for the who
 | 4 | build, owner pass (round 3 of 3) | 2026-11-05 | option order as the planner gives it; no reason line; settled lines show the question and the chips; settled lines rise in | owner |
 | 5 | build, owner questions on a live run | 2026-11-05 | no Result footer; automatic swap to the report; no event-log echoes in the thread; settled scope lines per group; the streaming fix; the run trace with the blue square mark in place of the card, dock and strip | owner |
 | 6 | build, owner round 6 (live-run notes) | 2026-11-05 | settled part cards take the user bubble's surface, the part's name a grey label; the live trace is the running card's body (rows in plan order on a spine, hairline rules, the fold mark on the step in progress, no step count or last-finished line); the shut rail shows the run's elapsed minutes under its mark and a step note slides out of it as each step finishes; the rail's mark turns on the Result tab too | owner |
-| 7 | review, agent pass | | | lead |
-| 8 | review, owner pass | | | owner |
+| 7 | build, owner round 7 (live-run notes) | 2026-11-05 | citation marks while streaming are the final marker's muted chip, and checked markers stay; the live page is the final page and the swap updates it in place; streamed prose paced with word snapping, frozen paragraphs and a 150 ms fade per batch; the trace is the running card again; the step note withdrawn and the run strip returns | owner |
+| 8 | review, agent pass | | | lead |
+| 9 | review, owner pass | | | owner |
 
 ## Deferred polish
 

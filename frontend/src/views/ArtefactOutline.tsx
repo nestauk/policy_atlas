@@ -326,6 +326,11 @@ export function ContentsSidebar({
  * title + one-line summary visible while collapsed. Key findings is NOT
  * collapsible — it always renders in full. The fallback summary carries its
  * marker; a failed summary never renders as a summary.
+ *
+ * The report while it is written renders its sections through this same
+ * component, not collapsible, so the committed report updates them in place
+ * (task 058, owner round 7): a section that was showing when it becomes
+ * collapsible stays open, and its "Collapse −" control fades in.
  */
 export function SectionDisclosure({
   id,
@@ -334,6 +339,9 @@ export function SectionDisclosure({
   collapsible,
   meta,
   summaryNode,
+  subhead,
+  busy = false,
+  arrivingClass = "",
   children,
 }: {
   id: string;
@@ -345,9 +353,24 @@ export function SectionDisclosure({
   /** Shown while collapsed in place of the summary sentence (the option
    *  card's "What it would take" row of cells). */
   summaryNode?: React.ReactNode;
+  /** Lines under the heading, before the body (the live page's "Drawing
+   *  on" and action lines). */
+  subhead?: React.ReactNode;
+  /** True while the section is being written (`aria-busy`). */
+  busy?: boolean;
+  /** A class for controls that arrive with the committed report (the
+   *  swap's fade-in), empty otherwise. */
+  arrivingClass?: string;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  // A section the reader could already read (the live page's, never
+  // collapsible) stays open when the committed report makes it collapsible.
+  const [wasCollapsible, setWasCollapsible] = useState(collapsible);
+  if (wasCollapsible !== collapsible) {
+    setWasCollapsible(collapsible);
+    if (collapsible) setOpen(true);
+  }
   useOpenWhenNavigated(id, setOpen);
   useExpandForPrint(setOpen);
   useExpandAll(setOpen, collapsible);
@@ -363,6 +386,7 @@ export function SectionDisclosure({
   return (
     <section
       id={id}
+      aria-busy={busy ? true : undefined}
       className={section.role === "conclusions" ? "mb-9 border-t border-line pt-6" : "mb-9"}
     >
       {collapsible ? (
@@ -376,7 +400,7 @@ export function SectionDisclosure({
             {scrub(section.title)}
             {metaSpan}
           </h2>
-          <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
+          <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden ${arrivingClass}`}>
             {expanded ? "Collapse −" : "Expand +"}
           </span>
         </button>
@@ -386,6 +410,7 @@ export function SectionDisclosure({
           {metaSpan}
         </h2>
       )}
+      {subhead}
       {/* Fallback (first-sentence) summaries render unmarked — the checked/
           fallback distinction is provenance for reviewers, not users
           (owner, 2026-08-05). */}
