@@ -158,23 +158,23 @@ describe("the live paragraph's words fade in, a batch at a time", () => {
 });
 
 describe("settled paragraphs are frozen", () => {
-  const runs = (text: string): DraftRun[] => [{ text, revising: false }];
+  const runs = (text: string): DraftRun[] => [{ text, start: 0, revising: false }];
 
   it("is a memo whose comparator looks at the text, the repair spans and the marks", () => {
     expect((SettledParagraph as unknown as { compare: unknown }).compare).toBe(sameParagraph);
     expect(sameParagraph({ runs: runs("Cost is the barrier.") }, { runs: runs("Cost is the barrier.") })).toBe(true);
     expect(sameParagraph({ runs: runs("Cost is the barrier.") }, { runs: runs("Cost is the barrier") })).toBe(false);
     expect(
-      sameParagraph({ runs: runs("Cost.") }, { runs: [{ text: "Cost.", revising: true }] }),
+      sameParagraph({ runs: runs("Cost.") }, { runs: [{ text: "Cost.", start: 0, revising: true }] }),
     ).toBe(false);
     const mark = { start: 0, end: 5, sources: [{ sourceId: "a", title: "Smith 2023" }] };
     expect(
       sameParagraph(
-        { runs: [{ text: "Cost.", revising: false, marks: [mark] }] },
-        { runs: [{ text: "Cost.", revising: false, marks: [{ ...mark, sources: [...mark.sources] }] }] },
+        { runs: [{ text: "Cost.", start: 0, revising: false, marks: [mark] }] },
+        { runs: [{ text: "Cost.", start: 0, revising: false, marks: [{ ...mark, sources: [...mark.sources] }] }] },
       ),
     ).toBe(true);
-    expect(sameParagraph({ runs: runs("Cost.") }, { runs: [{ text: "Cost.", revising: false, marks: [mark] }] })).toBe(
+    expect(sameParagraph({ runs: runs("Cost.") }, { runs: [{ text: "Cost.", start: 0, revising: false, marks: [mark] }] })).toBe(
       false,
     );
   });

@@ -244,3 +244,68 @@ export function useFollowTail(anchorRef: RefObject<HTMLElement | null>, active: 
     };
   }, [anchorRef, active]);
 }
+
+/** How long a section's height takes to follow its text when repaired
+ *  sentences change length (task 058, owner round 8). */
+export const EASE_HEIGHT_MS = 300;
+
+/** The strong ease-out (`--ease-out-strong`). */
+const EASE_OUT_STRONG = "cubic-bezier(0.23, 1, 0.32, 1)";
+
+/**
+ * Ease a box to its content's new height instead of jumping, so a sentence
+ * that grows or shrinks moves the text below it smoothly (task 058, owner
+ * round 8: repairs of several claims).
+ *
+ * The content is watched with a ResizeObserver, whose callback runs after
+ * layout and before paint; each change starts a 300 ms height animation on
+ * the box (Web Animations, strong ease-out) from wherever the box is now, so
+ * a change during a change carries on from the current height. The box clips
+ * while it animates and is left alone otherwise. Off (`active` false) it does
+ * nothing, and the caller turns it off under reduced motion.
+ *
+ * Args:
+ *   active: True while the height should ease.
+ *
+ * Returns:
+ *   The refs for the box and for its content (the box's only child).
+ */
+export function useEasedHeight(
+  active: boolean,
+): [RefObject<HTMLDivElement | null>, RefObject<HTMLDivElement | null>] {
+  const box = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const outer = box.current;
+    const inner = content.current;
+    if (!active || outer === null || inner === null || typeof ResizeObserver === "undefined") return undefined;
+    if (typeof outer.animate !== "function") return undefined;
+    let last = inner.offsetHeight;
+    let running: Animation | null = null;
+    const observer = new ResizeObserver(() => {
+      const next = inner.offsetHeight;
+      if (Math.abs(next - last) < 1) return;
+      const from = running !== null ? outer.getBoundingClientRect().height : last;
+      running?.cancel();
+      last = next;
+      outer.style.overflow = "clip";
+      const animation = outer.animate([{ height: `${from}px` }, { height: `${next}px` }], {
+        duration: EASE_HEIGHT_MS,
+        easing: EASE_OUT_STRONG,
+      });
+      running = animation;
+      animation.onfinish = () => {
+        if (running !== animation) return;
+        running = null;
+        outer.style.overflow = "";
+      };
+    });
+    observer.observe(inner);
+    return () => {
+      observer.disconnect();
+      running?.cancel();
+      outer.style.overflow = "";
+    };
+  }, [active]);
+  return [box, content];
+}

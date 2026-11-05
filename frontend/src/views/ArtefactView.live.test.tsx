@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -224,7 +225,9 @@ describe("ArtefactView around a run", () => {
         ...SECTIONS[1],
         state: "filled",
         prose: LIVE_PROSE,
-        citations: [{ start: 0, end: 12, n: 2, sourceId: "s1", title: "Smith 2023", tier: "tier_2" }],
+        citations: [
+          { start: 0, end: 12, n: 2, sourceId: "s1", title: "Smith 2023", tier: "tier_2", citationId: null, claimId: null, quote: "" },
+        ],
       },
     ]);
     view.rerender(page());
@@ -289,6 +292,165 @@ describe("ArtefactView around a run", () => {
     view.rerender(page());
     expect(document.querySelector(".anim-swap-in")).toBeNull();
     vi.unstubAllGlobals();
+  });
+
+  it("serves the hover and the provenance sheet from a checked section while the run is live (round 8)", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const PROSE = "Costs prose.";
+    world.stream = streamOf("running", [
+      SECTIONS[0],
+      {
+        ...SECTIONS[1],
+        state: "filled",
+        prose: PROSE,
+        citations: [
+          {
+            start: 0,
+            end: 12,
+            n: 2,
+            sourceId: "s1",
+            title: "Smith 2023",
+            tier: "tier_2",
+            citationId: "cit-1",
+            claimId: "claim-1",
+            quote: "Charges stopped families taking a place.",
+          },
+        ],
+      },
+      { index: 2, title: "Outreach", focus: "", state: "writing" },
+    ]);
+    render(page());
+    const costs = screen.getByRole("heading", { name: "Costs and funding" }).closest("section") as HTMLElement;
+    // The judged marker is a control now, as on the committed report.
+    const marker = within(costs).getByRole("button", { name: "Citations 2" });
+    expect(marker).toHaveTextContent("[2]");
+    // Hover: the citation's title, its quote and its tier.
+    await user.hover(within(costs).getByRole("button", { name: PROSE }));
+    const tip = await screen.findByRole("tooltip");
+    expect(tip).toHaveTextContent("Smith 2023");
+    expect(tip).toHaveTextContent("Charges stopped families taking a place.");
+    expect(tip).toHaveTextContent("Tier 2 · grounded");
+    await user.unhover(within(costs).getByRole("button", { name: PROSE }));
+    // Click: the sheet, built from what the run knows.
+    await user.click(marker);
+    const sheet = await screen.findByRole("dialog");
+    expect(within(sheet).getByText(PROSE)).toBeInTheDocument();
+    expect(within(sheet).getByText("Tier 2 · grounded")).toBeInTheDocument();
+    // The title is not a link before the commit; the quote stands in for the
+    // passage the lookup could not give here; no rationale, no appraisal.
+    expect(within(sheet).getByText("Smith 2023").closest("button")).toBeNull();
+    expect(await within(sheet).findByText("“Charges stopped families taking a place.”")).toBeInTheDocument();
+    expect(within(sheet).queryByText(/^Judge:/)).toBeNull();
+  });
+
+  it("keeps a live claim's sheet on what the run knows while an older report is held under the re-run", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    world.artefact = {
+      ...committedArtefact,
+      sections: [
+        {
+          title: "Body",
+          role: "standard" as const,
+          blocks: [
+            {
+              block_id: "body",
+              prose: "Body prose.",
+              claims: [
+                {
+                  claim_id: "claim-1",
+                  claim_type: "citation" as const,
+                  text: "Body prose.",
+                  span: [0, 11],
+                  citations: [{ citation_id: "old", n: 1, source_id: "s1", source_title: "Smith 2023", quote: "Old quote." }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as unknown as typeof committedArtefact;
+    world.stream = streamOf("running", [
+      {
+        ...SECTIONS[1],
+        state: "filled",
+        prose: "Costs prose.",
+        citations: [
+          { start: 0, end: 12, n: 2, sourceId: "s1", title: "Smith 2023", tier: "tier_2", citationId: "cit-1", claimId: "claim-1", quote: "New quote." },
+        ],
+      },
+      { index: 2, title: "Outreach", focus: "", state: "writing" },
+    ]);
+    render(page());
+    await user.click(screen.getByRole("button", { name: "Citations 2" }));
+    const sheet = await screen.findByRole("dialog");
+    expect(within(sheet).getByText("Costs prose.")).toBeInTheDocument();
+    expect(within(sheet).getByText("Smith 2023").closest("button")).toBeNull();
+    expect(await within(sheet).findByText("“New quote.”")).toBeInTheDocument();
+  });
+
+  it("keeps the opening paragraph and the most relevant sources in place at the swap; only their additions fade in", () => {
+    const INTRO = "This report sets out what raises take-up.";
+    const NOTE = "The largest trial of direct payment.";
+    const view = render(page());
+    world.stream = {
+      ...streamOf("succeeded", [
+        { index: 0, title: "Key findings", focus: "", state: "filled", role: "key_findings", prose: "- Headline." },
+        { index: 1, title: "Costs and funding", focus: "", state: "filled", role: "body", prose: "Costs prose." },
+        { index: 2, title: "Full report", focus: "", state: "filled", role: "intro", prose: INTRO },
+      ]),
+      liveSourceNotes: [{ sourceId: "s1", title: "Smith 2023", note: NOTE }],
+    } as RunStreamState;
+    // Watched while it ran.
+    world.stream = { ...world.stream, run: { id: "run-2", status: "running", startedAt: "2026-11-05T09:58:00Z" } };
+    view.rerender(page());
+    world.stream = { ...world.stream, run: { id: "run-2", status: "succeeded", startedAt: "2026-11-05T09:58:00Z" } };
+    view.rerender(page());
+    const liveIntro = screen.getByText(INTRO);
+    const liveNote = screen.getByText(NOTE).closest("li") as HTMLElement;
+
+    world.latestRun = { capability_run_id: "run-2", status: "succeeded", started_at: "2026-11-05T09:58:00Z", ended_at: "2026-11-05T10:00:00Z" };
+    world.artefact = {
+      ...committedArtefact,
+      title: QUESTION,
+      full_report_intro: INTRO,
+      most_relevant_notes: [{ source_id: "s1", note: NOTE }],
+      sections: [
+        { title: "Key findings", role: "key_findings" as const, blocks: [{ block_id: "kf", prose: "- Headline.", claims: [] }] },
+        {
+          title: "Costs and funding",
+          role: "standard" as const,
+          blocks: [
+            {
+              block_id: "costs",
+              prose: "Costs prose.",
+              claims: [
+                {
+                  claim_id: "c1",
+                  claim_type: "citation" as const,
+                  text: "Costs prose.",
+                  span: [0, 12],
+                  citations: [
+                    { citation_id: "x", n: 1, source_id: "s1", source_title: "Smith 2023", quote: "q", grounding_tier: "tier_2", appraisal_label: "Strong" },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as unknown as typeof committedArtefact;
+    view.rerender(page());
+    // The same elements, not faded in again.
+    const intro = screen.getByText(INTRO);
+    expect(intro).toBe(liveIntro);
+    expect(intro).not.toHaveClass("anim-swap-in");
+    const note = screen.getByText(NOTE).closest("li") as HTMLElement;
+    expect(note).toBe(liveNote);
+    expect(note.closest(".anim-swap-in")).toBeNull();
+    // What the committed report adds to them does fade in: the title as a
+    // link, the chips.
+    expect(within(note).getByRole("button", { name: "Smith 2023" })).toBeInTheDocument();
+    expect(within(note).getByText("Cited by 1 claim").closest(".anim-swap-in")).not.toBeNull();
   });
 
   it("opens the report at once when the run had finished before the page loaded", () => {

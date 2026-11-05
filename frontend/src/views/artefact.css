@@ -1,0 +1,62 @@
+/* ---------------------------------------------------------------------------
+ * The report while it is written: task 058, owner round 8.
+ *
+ * - The muted citation chips breathe in turn while the judge checks the
+ *   section's claims (the 1.6 s breathe of the live mark, each chip 150 ms
+ *   after the one before). The judge checks the whole section in one call,
+ *   so the page cannot know which claim it is on and does not pretend:
+ *   nothing else moves. Still under reduced motion.
+ * - Repairs of several claims settle one by one: on the settling layer a
+ *   span still waiting for its new words holds the revising blur without
+ *   replaying its entrance, and a span that has taken them resolves out of
+ *   the blur over 400 ms on the strong ease-out. The view staggers both by
+ *   120 ms in document order and never builds the layer under reduced
+ *   motion (the checked prose replaces the draft at a cut).
+ * ------------------------------------------------------------------------- */
+
+@keyframes checking-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.draft-checking .pending-mark {
+  animation: checking-breathe 1.6s ease-in-out infinite;
+  animation-delay: calc(var(--mark-at, 0) * 150ms);
+}
+
+.draft-revised-held {
+  filter: blur(2px);
+  opacity: 0.55;
+}
+
+@keyframes settle-in {
+  from {
+    filter: blur(2px);
+    opacity: 0.55;
+  }
+  to {
+    filter: blur(0);
+    opacity: 1;
+  }
+}
+
+.draft-settle-in {
+  animation: settle-in 400ms var(--ease-out-strong) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .draft-checking .pending-mark {
+    animation: none;
+  }
+  .draft-revised-held {
+    filter: none;
+  }
+  .draft-settle-in {
+    animation: none;
+  }
+}

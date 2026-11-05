@@ -2,9 +2,11 @@ import { expect, test, type Page } from "@playwright/test";
 
 import {
   MOCK_CHAT_CLAIM_TEXT,
+  MOCK_FULL_REPORT_INTRO,
   MOCK_TASK_ID,
   mockCheckIn,
   mockEvidence,
+  mockSourceNotes,
   mockTask,
 } from "../src/mock/fixtures";
 
@@ -55,7 +57,8 @@ function traceFold(page: Page) {
 }
 
 /** Show the trace's step list: open already while the run is live or
- *  paused; once it has ended, opened from the header's chevron. */
+ *  paused; once it has ended and folded to its card, opened from the card's
+ *  chevron. */
 async function openSteps(page: Page): Promise<void> {
   if ((await traceFold(page).count()) > 0 && (await traceFold(page).getAttribute("aria-expanded")) !== "true") {
     await traceFold(page).click();
@@ -63,7 +66,8 @@ async function openSteps(page: Page): Promise<void> {
   await expect(page.getByRole("list", { name: "Run steps" })).toBeVisible();
 }
 
-/** The ended trace's one destination: "Report ready · 14 min · Read it →". */
+/** The ended trace's one destination, on its folded card: "Report ready ·
+ *  14 min · Read it →". */
 function runCompletionLink(page: Page) {
   return runTrace(page).getByRole("link", { name: "Read it →" });
 }
@@ -194,7 +198,7 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(page.getByRole("list", { name: "Run steps" })).toBeVisible();
     await expect(traceFold(page)).toHaveCount(0);
     const timeline = page.getByRole("list", { name: "Run steps" });
-    await expect(timeline.getByText("Searching and screening").first()).toBeVisible({ timeout: 15_000 });
+    await expect(timeline.getByText(/^Searching\b/).first()).toBeVisible({ timeout: 15_000 });
     await expect(timeline.getByRole("listitem").filter({ hasText: /^Writing/ })).toBeVisible({ timeout: 15_000 });
     // No stage signposts under the trace (owner, polish round 2): its own
     // row links point at the outputs.
@@ -480,8 +484,9 @@ test.describe("mock task-lifecycle journey", () => {
   });
 
   // (r) Paused on another tab (028 contract: pause salience; task 058, owner
-  // round 7: the run strip returns under the tabs, status only). The strip
-  // says the check-in waits on History, with no link and no banner; opening
+  // round 7: the run strip returns under the tabs; round 8: the strip is a
+  // button that opens the Task Agent). The strip says the check-in waits on
+  // History, with no link and no banner; opening
   // the sidebar from its rail lands on the Task Agent, whose trace says the
   // same, with the check-in under it.
   test("paused run: other tabs show the paused strip, no banner, and the sidebar's trace says a check-in waits", async ({ page }) => {
@@ -751,25 +756,26 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     // Live, the header is the turning mark and the elapsed time; the step
     // in progress names itself and what it is doing on its row (lead,
     // round 6), and a screen reader hears the same words from the header.
-    await expect(page.getByRole("list", { name: "Run steps" }).getByText("Searching and screening").first()).toBeVisible({
+    await expect(page.getByRole("list", { name: "Run steps" }).getByText(/^Searching\b/).first()).toBeVisible({
       timeout: 15_000,
     });
-    await seen(page, /^Searching and screening · searching · \d+ found so far/);
-    await seen(page, /^Searching and screening · screening \d+ new abstracts · \d+ relevant so far/);
+    await seen(page, /^Searching · searching · \d+ found so far/);
+    await seen(page, /^Screening · screening \d+ new abstracts · \d+ relevant so far/);
 
     // At the check-in the last finished line carries the counts and link;
     // open, upcoming rows are names only, in plan order.
     await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
-    // The trace binds each "·" to the word before it with a no-break space
-    // (a separator never starts a line), so the match takes any space.
-    await expect(runTrace(page).getByText(/312 found\s·\s118 relevant/)).toBeVisible();
+    // Searching and screening are two rows (round 8), so their counts sit on
+    // two lines.
+    await expect(runTrace(page).getByText(/312 found/)).toBeVisible();
+    await expect(runTrace(page).getByText(/118 relevant/)).toBeVisible();
     await openSteps(page);
     const timeline = page.getByRole("list", { name: "Run steps" });
     const rows = await timeline.getByRole("listitem").allInnerTexts();
-    const order = ["Searching and screening", "Classifying", "Mapping", "Writing"].map((label) =>
+    const order = ["Searching", "Screening", "Classifying", "Mapping", "Writing"].map((label) =>
       rows.findIndex((row) => row.startsWith(label)),
     );
-    expect(order).toEqual([0, 1, 2, 3]);
+    expect(order).toEqual([0, 1, 2, 3, 4]);
     for (const upcoming of ["Classifying", "Mapping", "Writing"]) {
       const row = rows.find((text) => text.startsWith(upcoming)) ?? "";
       expect(row).not.toContain("·");
@@ -834,15 +840,24 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     // The sources the writer reads are named under the heading as the reads
     // land, and its own citations show as the marker's muted chip once they
     // close (task 058, evidence shown live; owner round 7).
-    // A checked section carries the report's numbered marker while live, not
-    // yet a control, and the references list grows at the foot (round 7).
-    await expect(page.getByRole("img", { name: /^Citation 1, .*; details when the report is ready$/ })).toHaveText(
-      "[1]",
-      { timeout: 20_000 },
-    );
+    // A checked section carries the report's numbered marker while live, and
+    // the references list grows at the foot (round 7). Its hover and its
+    // sheet work while later sections are still written (round 8).
+    const findings = page.locator("section", { has: page.getByRole("heading", { name: "What appears to help" }) });
+    const firstMarker = findings.getByRole("button", { name: "Citations 1" });
+    await expect(firstMarker).toHaveText("[1]", { timeout: 20_000 });
     await expect(page.getByRole("region", { name: "References" }).getByRole("listitem").first()).toHaveText(
       `[1]${CITED_SOURCE_TITLE}`,
     );
+    await firstMarker.click();
+    const sheet = page.getByRole("dialog");
+    await expect(sheet.getByText("Where this comes from")).toBeVisible();
+    await expect(sheet.getByText(CITED_SOURCE_TITLE)).toBeVisible();
+    // Not a link before the report is committed.
+    await expect(sheet.getByRole("button", { name: CITED_SOURCE_TITLE })).toHaveCount(0);
+    await expect(page.getByTestId("run-strip")).toContainText(/^Writing/);
+    await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
     await seen(page, "Drawing on 2 sources · Smith 2023 · DfE 2022");
     await seen(page, "Drawing on 5 sources · Smith 2023 · DfE 2022 · Nesta 2021 · and 2 more");
     await expect(page.getByRole("img", { name: /^Cited, being checked: / })).toHaveCount(2, { timeout: 20_000 });
@@ -852,11 +867,12 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await seen(page, "Checking claims");
     await seen(page, "Revising 1 claim");
     await seen(page, /walking bus saw 6 more children arrive on foot in every 100\.(\s*\[[\d,]+\])?$/, 30_000);
-    // Checked, the section keeps its markers in the report's look, not yet
-    // controls: one claim citing reference 2, and the repaired sentence
-    // citing 2 and 3 on one span, which the report sets as one marker.
+    // Checked, the section keeps its markers in the report's look, controls
+    // already (round 8): one claim citing reference 2, and the repaired
+    // sentence citing 2 and 3 on one span, which the report sets as one
+    // marker.
     const implications = page.locator("section", { has: page.getByRole("heading", { name: "Implications for local action" }) });
-    await expect(implications.getByRole("img", { name: /details when the report is ready$/ })).toHaveText(["[2]", "[2,3]"], {
+    await expect(implications.getByRole("button", { name: /^Citations / })).toHaveText(["[2]", "[2,3]"], {
       timeout: 30_000,
     });
     // The case studies stream card by card in the report's card layout; the
@@ -870,6 +886,12 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await expect(page.getByRole("region", { name: "References" }).getByRole("listitem")).toHaveCount(3, {
       timeout: 30_000,
     });
+    // The most relevant sources appear as each note is written, and the
+    // introduction streams under the Full report heading (round 8).
+    await seen(page, mockSourceNotes[0].note, 30_000);
+    await seen(page, mockSourceNotes[1].note, 30_000);
+    await seen(page, "Writing the introduction", 30_000);
+    await seen(page, MOCK_FULL_REPORT_INTRO, 30_000);
 
     const growing = (await seenLines(page)).filter((line) => line.startsWith("Pair school food action with"));
     expect(new Set(growing.map((line) => line.length)).size).toBeGreaterThan(3);
@@ -893,8 +915,8 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await startRun(page);
     await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
     await taskNav(page).getByRole("link", { name: /^Sources/ }).click();
-    // The strip under the tabs says the run waits (owner, round 7); status
-    // only, no link.
+    // The strip under the tabs says the run waits (owner, round 7); it is a
+    // button that opens the Task Agent (round 8), not a link.
     const strip = page.getByTestId("run-strip");
     await expect(strip).toContainText(/a check-in is waiting on you/);
     await expect(strip.getByRole("link")).toHaveCount(0);

@@ -19,6 +19,8 @@ import {
   ReferencesSection,
   reportDateLabel,
   ReportToBe,
+  settlePlan,
+  settleStep,
   showLiveArtefact,
 } from "./ArtefactView";
 import { drawingOnLine, liveSourceName } from "./artefactPresentation";
@@ -241,7 +243,7 @@ describe("LiveArtefactBody", () => {
     expect(costs.querySelectorAll("[data-revising='true']")).toHaveLength(1);
   });
 
-  it("settles the draft into the final prose with a fading layer, then marks nothing", () => {
+  it("settles the draft into the final prose with a settling layer, then marks nothing", () => {
     mockReducedMotion(false);
     vi.useFakeTimers();
     const draft = `${LEAD} ${FAILED}`;
@@ -257,10 +259,22 @@ describe("LiveArtefactBody", () => {
       />,
     );
     const costs = screen.getByRole("heading", { name: "Costs" }).closest("section") as HTMLElement;
-    // The draft layer sits over the settled prose while it fades.
-    const ghost = costs.querySelector(".anim-settle-out");
-    expect(ghost).not.toBeNull();
-    expect(ghost).toHaveTextContent(FAILED);
+    // The settling layer holds the blurred sentence, in the flow, the
+    // checked prose waiting unseen under it (round 8).
+    const layer = within(costs).getByTestId("draft-prose");
+    expect(layer).toHaveAttribute("aria-hidden", "true");
+    expect(layer.querySelector(".draft-revised-held")).toHaveTextContent(FAILED);
+    // Then the sentence takes its new words, resolving out of the blur.
+    act(() => {
+      vi.advanceTimersByTime(0);
+    });
+    expect(layer.querySelector(".draft-settle-in")).toHaveTextContent(REPAIRED);
+    expect(layer).not.toHaveTextContent(FAILED);
+    // Then the layer fades off the checked prose.
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(costs.querySelector(".anim-settle-out")).not.toBeNull();
     act(() => {
       vi.advanceTimersByTime(500);
     });
@@ -295,16 +309,21 @@ describe("LiveArtefactBody", () => {
     expect(region).toHaveAttribute("aria-live", "polite");
   });
 
-  it("drops the key-findings note when its turn comes, with no footer under the sections", () => {
-    const stream = streamWith(
-      [
-        { index: 0, title: "Key findings", focus: "", state: "writing" },
-        { index: 1, title: "Costs", focus: "", state: "filled", prose: "Costs prose." },
-        { index: 2, title: "Outreach", focus: "", state: "filled", prose: "Outreach prose." },
-      ],
-      "running",
+  it("keeps the key-findings note until their words arrive, with no footer under the sections", () => {
+    const sections: LiveSection[] = [
+      { index: 0, title: "Key findings", focus: "", state: "writing" },
+      { index: 1, title: "Costs", focus: "", state: "filled", prose: "Costs prose." },
+      { index: 2, title: "Outreach", focus: "", state: "filled", prose: "Outreach prose." },
+    ];
+    const stream = streamWith(sections, "running");
+    const { rerender } = render(<LiveArtefactBody stream={stream} />);
+    // Owner, round 8: the note stays until the key findings' deltas start.
+    expect(screen.getByText("Written last, after the sections are checked.")).toBeInTheDocument();
+    rerender(
+      <LiveArtefactBody
+        stream={streamWith([{ ...sections[0], draft: "- Cost" }, sections[1], sections[2]], "running")}
+      />,
     );
-    render(<LiveArtefactBody stream={stream} />);
     expect(screen.queryByText("Written last, after the sections are checked.")).toBeNull();
     const keyFindings = screen.getByRole("heading", { name: "Key findings" }).closest("section") as HTMLElement;
     expect(within(keyFindings).getByTestId("section-mark")).toBeInTheDocument();
@@ -387,11 +406,11 @@ describe("draftParagraphs", () => {
     const paragraphs = draftParagraphs(draft, [{ start: 2, end: 3 }]);
     expect(paragraphs).toHaveLength(2);
     expect(paragraphs[0]).toEqual([
-      { text: "A ", revising: false },
-      { text: "\u{1F600}", revising: true },
-      { text: " b.", revising: false },
+      { text: "A ", start: 0, revising: false },
+      { text: "\u{1F600}", start: 2, revising: true, reviseAt: 0 },
+      { text: " b.", start: 3, revising: false },
     ]);
-    expect(paragraphs[1]).toEqual([{ text: "C d.", revising: false }]);
+    expect(paragraphs[1]).toEqual([{ text: "C d.", start: 8, revising: false }]);
   });
 });
 
@@ -496,10 +515,10 @@ describe("evidence shown live (task 058, owner 2026-11-05)", () => {
     const paragraphs = draftParagraphs(draft, [], [claim, tail, { start: 0, end: 99, sources: [] }]);
     expect(paragraphs).toEqual([
       [
-        { text: "A \u{1F600}", revising: false, marks: [claim] },
-        { text: " b.", revising: false },
+        { text: "A \u{1F600}", start: 0, revising: false, marks: [claim], markAt: 0 },
+        { text: " b.", start: 3, revising: false },
       ],
-      [{ text: "C d.", revising: false, marks: [tail] }],
+      [{ text: "C d.", start: 8, revising: false, marks: [tail], markAt: 1 }],
     ]);
   });
 });
@@ -507,6 +526,7 @@ describe("evidence shown live (task 058, owner 2026-11-05)", () => {
 describe("the live page looks like the final page (task 058, owner round 7)", () => {
   const SMITH = "Smith 2023";
   const DFE = "DfE 2022";
+  // The pre-round-8 frame: no ids, no quote, so the markers are inert.
   const citation = (start: number, end: number, n: number, title: string, tier: string | null = "tier_2") => ({
     start,
     end,
@@ -514,6 +534,9 @@ describe("the live page looks like the final page (task 058, owner round 7)", ()
     sourceId: `s${n}`,
     title,
     tier,
+    citationId: null,
+    claimId: null,
+    quote: "",
   });
 
   it("gives a checked section the report's numbered markers after the cited words, not controls yet", () => {
@@ -697,6 +720,292 @@ describe("the live page looks like the final page (task 058, owner round 7)", ()
       { n: 1, title: SMITH },
       { n: 2, title: DFE },
     ]);
+  });
+});
+
+describe("round 8: the Result tab while it is written (task 058, owner notes 2026-11-05)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+  const SMITH = { sourceId: "s1", title: "Smith 2023" };
+  const DFE = { sourceId: "s2", title: "DfE 2022" };
+  const SECOND = "Subsidy design matters more than its size.";
+
+  it("breathes the muted chips in turn while the claims are checked, and only then", () => {
+    const draft = `${LEAD} ${SECOND}`;
+    const claims = [
+      { start: 0, end: LEAD.length, sources: [SMITH] },
+      { start: LEAD.length + 1, end: draft.length, sources: [DFE] },
+    ];
+    const { rerender } = render(<LiveArtefactBody stream={writingStream({ draft, claims }, "Writing")} />);
+    const costs = () => screen.getByRole("heading", { name: "Costs" }).closest("section") as HTMLElement;
+    expect(within(costs()).getByTestId("draft-prose")).not.toHaveClass("draft-checking");
+    rerender(<LiveArtefactBody stream={writingStream({ draft, claims }, "Checking claims")} />);
+    expect(within(costs()).getByTestId("draft-prose")).toHaveClass("draft-checking");
+    // Each chip knows its turn in the section, in document order (the
+    // stylesheet offsets each by 150 ms).
+    const chips = within(costs()).getAllByTestId("provisional-mark");
+    expect(chips.map((chip) => chip.style.getPropertyValue("--mark-at"))).toEqual(["0", "1"]);
+    expect(chips[0]).toHaveClass("pending-mark");
+    // A repair is not a check: the chips are still.
+    rerender(<LiveArtefactBody stream={writingStream({ draft, claims }, "Revising 1 claim")} />);
+    expect(within(costs()).getByTestId("draft-prose")).not.toHaveClass("draft-checking");
+  });
+
+  it("reads the key findings' and the introduction's own section lines as theirs", () => {
+    const stream = streamWith(
+      [
+        { index: 0, title: "What appears to help", focus: "", state: "writing", role: "key_findings", draft: "Breakfast" },
+        { index: 1, title: "Costs", focus: "", state: "filled", role: "body", prose: "Costs prose." },
+      ],
+      "running",
+    );
+    render(
+      <LiveArtefactBody
+        stream={{
+          ...stream,
+          liveness: {
+            synthesise: {
+              activity: "Checking claims",
+              section: "Key findings",
+              heartbeat: false,
+              dropped: 0,
+              occurredAt: "2026-07-21T10:05:00Z",
+            },
+          },
+        }}
+      />,
+    );
+    const findings = screen.getByRole("heading", { name: "What appears to help" }).closest("section") as HTMLElement;
+    expect(within(findings).getByTestId("action-line")).toHaveTextContent("Checking claims");
+    // A plain sentence stays prose: only "- " lines make the list.
+    expect(within(findings).queryByRole("listitem")).toBeNull();
+  });
+
+  it("staggers the revising blur by 120 ms per span, in document order", () => {
+    const draft = `${LEAD} ${FAILED} ${SECOND}`;
+    const failedAt = draft.indexOf(FAILED);
+    const secondAt = draft.indexOf(SECOND);
+    render(
+      <LiveArtefactBody
+        stream={writingStream(
+          {
+            draft,
+            revising: [
+              { start: secondAt, end: secondAt + SECOND.length },
+              { start: failedAt, end: failedAt + FAILED.length },
+            ],
+          },
+          "Revising 2 claims",
+        )}
+      />,
+    );
+    const spans = [...document.querySelectorAll<HTMLElement>("[data-revising='true']")];
+    expect(spans.map((span) => span.textContent)).toEqual([FAILED, SECOND]);
+    expect(spans[0].style.animationDelay).toBe("");
+    expect(spans[1].style.animationDelay).toBe("120ms");
+  });
+
+  it("settles several repairs one by one, 120 ms apart, then fades the layer off the checked prose", () => {
+    mockReducedMotion(false);
+    vi.useFakeTimers();
+    const NEW_SECOND = "Subsidy design matters more than how large it is, in three studies.";
+    const draft = `${LEAD} ${FAILED} ${SECOND}`;
+    const failedAt = draft.indexOf(FAILED);
+    const secondAt = draft.indexOf(SECOND);
+    const revising = [
+      { start: failedAt, end: failedAt + FAILED.length },
+      { start: secondAt, end: secondAt + SECOND.length },
+    ];
+    const { rerender } = render(
+      <LiveArtefactBody stream={writingStream({ draft, revising }, "Revising 2 claims")} />,
+    );
+    rerender(
+      <LiveArtefactBody
+        stream={writingStream({
+          state: "filled",
+          prose: `${LEAD} ${REPAIRED} ${NEW_SECOND}`,
+          draft: undefined,
+          revising: undefined,
+        })}
+      />,
+    );
+    const costs = screen.getByRole("heading", { name: "Costs" }).closest("section") as HTMLElement;
+    const layer = within(costs).getByTestId("draft-prose");
+    act(() => {
+      vi.advanceTimersByTime(0);
+    });
+    // The first repair has its new words; the second still waits, blurred.
+    expect([...layer.querySelectorAll(".draft-settle-in")].map((span) => span.textContent)).toEqual([REPAIRED]);
+    expect(layer.querySelector(".draft-revised-held")).toHaveTextContent(SECOND);
+    act(() => {
+      vi.advanceTimersByTime(120);
+    });
+    expect([...layer.querySelectorAll(".draft-settle-in")].map((span) => span.textContent)).toEqual([
+      REPAIRED,
+      NEW_SECOND,
+    ]);
+    expect(layer.querySelector(".draft-revised-held")).toBeNull();
+    // The checked prose waited under the layer, unseen, and takes over.
+    expect(costs.querySelector(".opacity-0")).not.toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(costs.querySelector(".anim-settle-out")).not.toBeNull();
+    expect(costs.querySelector(".opacity-0")).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(within(costs).queryByTestId("draft-prose")).toBeNull();
+    expect(costs).toHaveTextContent(`${LEAD} ${REPAIRED} ${NEW_SECOND}`);
+  });
+
+  it("lines the repaired spans up with the checked prose, or settles at once when they do not line up", () => {
+    const draft = `${LEAD} ${FAILED} ${SECOND}`;
+    const failedAt = draft.indexOf(FAILED);
+    const secondAt = draft.indexOf(SECOND);
+    const revising = [
+      { start: failedAt, end: failedAt + FAILED.length },
+      { start: secondAt, end: secondAt + SECOND.length },
+    ];
+    // Two failed sentences one space apart: the shared " " is placed after
+    // the full stop nearest where the new text's length puts it.
+    const plan = settlePlan(draft, `${LEAD} ${REPAIRED} Shorter. Two sentences now.`, revising);
+    expect(plan).toEqual([
+      { kind: "same", text: `${LEAD} `, from: 0 },
+      { kind: "repaired", old: FAILED, text: REPAIRED, from: failedAt, at: 0 },
+      { kind: "same", text: " ", from: failedAt + FAILED.length },
+      { kind: "repaired", old: SECOND, text: "Shorter. Two sentences now.", from: secondAt, at: 1 },
+    ]);
+    expect(settlePlan(draft, "Something else entirely.", revising)).toBeNull();
+    expect(settlePlan(draft, draft, [])).toBeNull();
+    // A citation that ends in a settled span follows its new words.
+    const single = settlePlan(`${LEAD} ${FAILED}`, `${LEAD} ${REPAIRED}`, [revising[0]]) ?? [];
+    const step = settleStep(single, 1, [{ start: failedAt, end: failedAt + FAILED.length, sources: [SMITH] }]);
+    expect(step.text).toBe(`${LEAD} ${REPAIRED}`);
+    expect(step.settling).toEqual([{ start: failedAt, end: failedAt + REPAIRED.length }]);
+    expect(step.claims[0].end).toBe(failedAt + REPAIRED.length);
+  });
+
+  it("writes the key findings as the report's list: items, bold leads, muted chips", () => {
+    const draft = "- Cost decides take-up: more than the subsidy's size.\n- Outreach works when";
+    const claims = [{ start: 2, end: 53, sources: [SMITH] }];
+    const stream = streamWith(
+      [
+        { index: 0, title: "Key findings", focus: "", state: "writing", role: "key_findings", draft, claims },
+        { index: 1, title: "Costs", focus: "", state: "filled", prose: "Costs prose." },
+      ],
+      "running",
+    );
+    render(<LiveArtefactBody stream={stream} />);
+    const findings = screen.getByRole("heading", { name: "Key findings" }).closest("section") as HTMLElement;
+    const items = within(findings).getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0].querySelector("strong")).toHaveTextContent("Cost decides take-up:");
+    expect(items[0]).toHaveTextContent("Cost decides take-up: more than the subsidy's size.[·]");
+    expect(items[0]).not.toHaveTextContent("- Cost");
+    expect(within(items[0]).getByTestId("provisional-mark")).toBeInTheDocument();
+    expect(items[1]).toHaveTextContent("Outreach works when");
+    expect(within(findings).queryByText("Written last, after the sections are checked.")).toBeNull();
+  });
+
+  it("writes the introduction under the Full report heading, with no heading of its own", () => {
+    const sections: LiveSection[] = [
+      { index: 0, title: "Key findings", focus: "", state: "filled", role: "key_findings", prose: "- Headline." },
+      { index: 1, title: "Costs", focus: "", state: "filled", role: "body", prose: "Costs prose." },
+      { index: 2, title: "Full report", focus: "", state: "planned", role: "intro" },
+    ];
+    const { rerender } = render(<LiveArtefactBody stream={streamWith(sections, "running")} />);
+    const headings = () =>
+      within(screen.getByRole("main"))
+        .getAllByRole("heading", { level: 2 })
+        .map((heading) => heading.textContent);
+    // Not a section: the page's order and contents are as before.
+    expect(headings()).toEqual(["Executive summary", "Key findings", "Full report", "Costs"]);
+    expect(screen.queryByTestId("intro-draft")).toBeNull();
+    expect(within(screen.getByRole("navigation")).queryAllByRole("link", { name: "Full report" })).toHaveLength(1);
+
+    const writing = { ...sections[2], state: "writing" as const, draft: "This report sets out" };
+    rerender(
+      <LiveArtefactBody
+        stream={{
+          ...streamWith([sections[0], sections[1], writing], "running"),
+          liveness: {
+            synthesise: {
+              activity: "Writing the introduction",
+              section: "Full report",
+              heartbeat: false,
+              dropped: 0,
+              occurredAt: "2026-07-21T10:05:00Z",
+            },
+          },
+        }}
+      />,
+    );
+    const part = document.getElementById("full-report") as HTMLElement;
+    expect(within(part).getByTestId("intro-draft")).toHaveTextContent("This report sets out");
+    expect(within(part).getByTestId("action-line")).toHaveTextContent("Writing the introduction");
+    expect(within(part).queryByTestId("drawing-on")).toBeNull();
+    expect(headings()).toEqual(["Executive summary", "Key findings", "Full report", "Costs"]);
+
+    rerender(
+      <LiveArtefactBody
+        stream={streamWith(
+          [sections[0], sections[1], { ...sections[2], state: "filled", prose: "This report sets out what works." }],
+          "running",
+        )}
+      />,
+    );
+    const intro = within(document.getElementById("full-report") as HTMLElement).getByText(
+      "This report sets out what works.",
+    );
+    expect(intro.tagName).toBe("P");
+    expect(intro).toHaveClass("max-w-prose-measure");
+  });
+
+  it("shows the most relevant sources as each note is written, in the final layout", () => {
+    const stream = streamWith(
+      [
+        { index: 0, title: "Key findings", focus: "", state: "filled", role: "key_findings", prose: "- Headline." },
+        { index: 1, title: "Costs", focus: "", state: "filled", role: "body", prose: "Costs prose." },
+      ],
+      "running",
+    );
+    const { rerender } = render(<LiveArtefactBody stream={stream} />);
+    expect(screen.queryByRole("heading", { name: "Most relevant sources" })).toBeNull();
+    const notes = [{ sourceId: "s1", title: "Smith 2023", note: "The largest trial of direct payment." }];
+    rerender(<LiveArtefactBody stream={{ ...stream, liveSourceNotes: notes } as RunStreamState} />);
+    const block = screen.getByRole("heading", { name: "Most relevant sources" }).closest("section") as HTMLElement;
+    expect(within(block).getByText("Sources cited most often in this report.")).toBeInTheDocument();
+    const items = within(block).getAllByRole("listitem");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveClass("border", "border-line", "p-4", "anim-rise");
+    expect(within(items[0]).getByText("Smith 2023")).toHaveClass("font-bold");
+    expect(within(items[0]).getByText("The largest trial of direct payment.")).toBeInTheDocument();
+    // Not links yet, no chips yet.
+    expect(within(block).queryByRole("button")).toBeNull();
+    expect(within(block).queryByText(/Cited by/)).toBeNull();
+    // In the executive summary, before the full report, as the report sets it.
+    expect(
+      block.compareDocumentPosition(screen.getAllByRole("heading", { name: "Full report" })[0]) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(within(screen.getByRole("navigation")).getByRole("link", { name: "Most relevant sources" })).toHaveAttribute(
+      "href",
+      "#sources",
+    );
+    rerender(
+      <LiveArtefactBody
+        stream={
+          {
+            ...stream,
+            liveSourceNotes: [...notes, { sourceId: "s2", title: "DfE 2022", note: "The national survey." }],
+          } as RunStreamState
+        }
+      />,
+    );
+    expect(within(block).getAllByRole("listitem")).toHaveLength(2);
   });
 });
 
