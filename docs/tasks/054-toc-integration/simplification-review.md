@@ -14,6 +14,31 @@ win is not the line count but the drift risk: the same query, the same rule or t
 widget is written two to six times in several places, and the copies have already started
 to disagree (see § 4).
 
+## 0. Status (2026-11-05, same day)
+
+Applied in five commits on `task/054-1-core` (bc0917ce, 97f86c2a, 0a32853d, f81d8989,
+97e7e397). `make verify-fast` is green: 4,364 tests, mypy and ruff clean, drift-check and
+prompt-guard pass. Net about 1,000 lines less.
+
+Owner decisions on § 1: the chat sidebar opens by itself only on a theory-of-change task;
+finish alerts stay for every task kind; History reads the theory only for a ToC task; only a
+ToC search writes `source.seen_again`; the child plan is parsed at dispatch again; Langfuse
+masking stays global (measured 0.8 ms per call on a 1.4 MB payload).
+
+Skipped, with the reason: the `TocBackend` Protocol and `admit_and_mint` shape (house
+convention); `DraftFailure` (the runner records the exception's class name); `route_ops`
+(the two builders are not byte-identical); the `DEFAULT_PUBLISHED_AFTER` double default
+(it would change the stored plan payload); `usePanelWidth` on `useRail` (different start
+and keyboard semantics; dev's rail at risk); the code-splitter merge (different boundary
+rules); the third upload preview (not a link); the two step-label vocabularies (a copy
+decision). Three gate fixes rode along: migrations before every conformance request,
+timeout sites for the ToC steps, and the mypy errors in two ToC test files.
+
+Visible differences, all small: the chat pane's paperclip uses the New Task page's glyph;
+the More menu opens with the Download menu's 150 ms scale-in and closes on Esc; the
+Download and More menus now show in full screen (a bug fix). § 4 is still open for the
+adversarial review.
+
 ## 1. Shared files that change evidence search or options scoping
 
 The branch was meant to leave the other two capabilities alone. These hunks do not. Each
