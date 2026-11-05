@@ -4,6 +4,8 @@ import type { components } from "../../api/gen/types";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
+import { LABEL_CLASS } from "../../ui/brand/label";
+import { PLAN_PARTS } from "./planVocabulary";
 
 type PartProposal = components["schemas"]["PartProposalOut"];
 type PartChip = components["schemas"]["PartChipOut"];
@@ -226,220 +228,398 @@ function EditableChip({
 }
 
 /**
- * One structured part proposal in the task_agent thread (028 fork A; binding
- * record: mockup/task_agent-stage.html). Renders ONLY what the reply carries —
- * server-supplied labels, never enum keys. Superseded proposals stay in the
- * history but render inert; the ✓ state derives from later confirm turns.
+ * Option ids the planners reserve for "let me say it in my own words"
+ * (`task_agent_prompt.py`: refine, change; `task_agent_scoping_prompt.py`:
+ * i_have_some). Choosing one opens a short input inside the card with its own
+ * Send; every other option is a choice and sends at once.
+ */
+const WORDS_OPTION_IDS = new Set(["refine", "change", "i_have_some"]);
+
+/** Whether choosing this option asks the user for words rather than sending. */
+export function optionNeedsWords(option: PartOption): boolean {
+  return !option.primary && WORDS_OPTION_IDS.has(option.id);
+}
+
+/** The planner's primary option first, the rest in the order it gave them
+ *  (annex block H: one shape for a choice). */
+export function orderedOptions(options: PartOption[]): PartOption[] {
+  return [...options.filter((option) => option.primary), ...options.filter((option) => !option.primary)];
+}
+
+/** One step of the plan, as the stepper names it. */
+export interface PlanStep {
+  id: string;
+  name: string;
+  settled: boolean;
+}
+
+/**
+ * The plan's steps for the stepper (task 058, N18): the capability's parts
+ * in the planner's order, computed on the client rather than read off the
+ * model's `step_label`. An optional part counts only once the transcript
+ * carries it; a step is settled when its newest proposal was confirmed.
+ *
+ * Args:
+ *   capability: The task's capability; unknown or absent reads as Evidence search.
+ *   turns: The durable transcript.
+ *   states: `derivePartStates(turns)`.
+ *
+ * Returns:
+ *   The steps in order.
+ */
+export function planSteps(
+  capability: string | null | undefined,
+  turns: TaskAgentTurn[],
+  states: Map<number, PartState>,
+): PlanStep[] {
+  const parts = PLAN_PARTS[capability ?? "evidence_search"] ?? PLAN_PARTS.evidence_search;
+  const newest = new Map<string, number>();
+  for (const turn of turns) {
+    if (turn.part != null) newest.set(turn.part.id, Math.max(turn.turn_index, newest.get(turn.part.id) ?? -1));
+  }
+  return parts
+    .filter((part) => part.optional !== true || newest.has(part.id))
+    .map((part) => {
+      const index = newest.get(part.id);
+      const settled = index !== undefined && (states.get(index)?.confirmedOptionId ?? null) !== null;
+      return { id: part.id, name: part.name, settled };
+    });
+}
+
+/**
+ * The one small line above the active part card: the settled steps named in
+ * grey, then "Plan · step n of M · <part>" (annex scene 11).
+ *
+ * Args:
+ *   steps: `planSteps(...)`.
+ *   activeId: The active card's part id.
+ *
+ * Returns:
+ *   The line, or null when the part is not one of the capability's steps.
+ */
+export function PlanStepper({ steps, activeId }: { steps: PlanStep[]; activeId: string }) {
+  const index = steps.findIndex((step) => step.id === activeId);
+  if (index === -1) return null;
+  const settled = steps.filter((step) => step.settled && step.id !== activeId);
+  return (
+    <p data-testid="plan-stepper" className={cn(LABEL_CLASS, "flex flex-wrap items-baseline gap-x-3 gap-y-1")}>
+      {settled.map((step) => (
+        <span key={step.id}>
+          {step.name} <span aria-hidden="true">✓</span>
+          <span className="sr-only">, done</span>
+        </span>
+      ))}
+      <span className="text-navy">
+        Plan · step {index + 1} of {steps.length} · {steps[index].name}
+      </span>
+    </p>
+  );
+}
+
+/**
+ * One choice in a radio list (annex block H: one shape for a choice): the
+ * label, then its plain sentences in grey. Nothing is pre-selected; the dot
+ * fills only once the user has chosen.
+ */
+export function ChoiceRow({
+  label,
+  sentences,
+  selected,
+  disabled,
+  onChoose,
+  ...data
+}: {
+  label: string;
+  /** The option's sentence, then its reason, when it has them. */
+  sentences: Array<string | null | undefined>;
+  selected: boolean;
+  disabled: boolean;
+  onChoose: () => void;
+  [dataAttribute: `data-${string}`]: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      disabled={disabled}
+      className="-mx-2 flex w-[calc(100%+1rem)] cursor-pointer items-start gap-3 px-2 py-2 text-left transition-colors duration-150 hover:bg-paper-2 focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-default disabled:hover:bg-transparent"
+      onClick={onChoose}
+      {...data}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "mt-1 flex size-4 shrink-0 items-center justify-center rounded-full border-2",
+          selected ? "border-navy" : "border-navy/40",
+        )}
+      >
+        {selected ? <span className="size-2 rounded-full bg-navy" /> : null}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-body font-semibold text-navy">{scrub(label)}</span>
+        {sentences
+          .filter((sentence): sentence is string => sentence != null && sentence !== "")
+          .map((sentence) => (
+            <span key={sentence} className="block text-body text-grey">
+              {scrub(sentence)}
+            </span>
+          ))}
+      </span>
+    </button>
+  );
+}
+
+/** The short input an option opens inside its card, with its own Send. */
+export function WordsInput({
+  label,
+  disabled,
+  onSend,
+  sendLabel = "Send",
+}: {
+  label: string;
+  disabled: boolean;
+  onSend: (text: string) => void;
+  sendLabel?: string;
+}) {
+  const [text, setText] = useState("");
+  return (
+    <form
+      className="mt-2 flex items-center gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const trimmed = text.trim();
+        if (trimmed === "") return;
+        onSend(trimmed);
+        setText("");
+      }}
+    >
+      <input
+        // The input opens because the user just asked for it.
+        autoFocus
+        type="text"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        placeholder="What should change?"
+        aria-label={label}
+        disabled={disabled}
+        className="min-w-0 flex-1 border border-line-2 bg-paper px-3 py-2 text-body text-ink focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground"
+      />
+      <Button
+        type="submit"
+        size="sm"
+        variant="secondary"
+        className="border border-line-2"
+        disabled={disabled || text.trim() === ""}
+      >
+        {sendLabel}
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * One structured part proposal in the task_agent thread (task 058, N18;
+ * annex scene 11). A radio list: each option's label, then its one plain
+ * sentence; the planner's primary option first with its reason under it;
+ * nothing pre-selected and no "Recommended" word. An option that needs words
+ * opens a short input inside the card with its own Send. A confirmed part
+ * collapses to one line, "<Part> · <choice> · Change". Renders ONLY what the
+ * reply carries — server-supplied labels, never enum keys. Superseded
+ * proposals stay in the history but render inert.
  */
 export function PartCard({
   part,
+  partName,
   state,
   disabled,
+  steps,
   onSend,
-  onPrefill,
 }: {
   part: PartProposal;
+  /** The stepper's name for this part ("Scope"); falls back to the title. */
+  partName?: string;
   state: PartState;
   /** True while the composer is disabled (run active / turn in flight). */
   disabled: boolean;
-  /** Send a canned message as an ordinary task_agent turn. */
+  /** The plan's steps; the stepper line renders above a live, open card. */
+  steps?: PlanStep[];
+  /** Send a message as an ordinary task_agent turn. */
   onSend: (message: string) => void;
-  /** Put text in the composer for the user to finish. */
-  onPrefill: (message: string) => void;
 }) {
   const [staged, setStaged] = useState<ChipEdit[]>([]);
   const [adding, setAdding] = useState(false);
   const [addText, setAddText] = useState("");
   const [pickedId, setPickedId] = useState<string | null>(null);
+  const [changing, setChanging] = useState(false);
   const interactive = state.live && state.confirmedOptionId === null && !disabled;
   const confirmedOption =
     state.confirmedOptionId === null
       ? null
       : part.options.find((option) => option.id === state.confirmedOptionId) ?? null;
+  const name = partName ?? part.title;
 
-  // Presets (options carrying a sub line) are concrete choices — they send.
-  // A bare secondary option is an invitation to say more — it prefills.
-  const sendsDirectly = (option: PartOption) => option.primary || option.sub != null;
-
-  return (
-    <div data-testid="part-card" className="anim-rise mr-8 border border-line-2 bg-paper px-4 py-3 shadow-sm">
-      <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">
-        {scrub(part.step_label)}
-      </p>
-      <h3 className="mt-1 max-w-prose-measure text-lead font-bold text-navy">
-        {scrub(part.title)}
-      </h3>
-
-      {(part.chips ?? []).length > 0 && (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {(part.chips ?? []).map((chip) => (
-            <EditableChip
-              key={chip.label}
-              chip={chip}
-              disabled={!interactive}
-              onStage={(edit) => setStaged((edits) => [...edits, edit])}
-            />
-          ))}
-          {interactive && !adding && (
-            <button
-              type="button"
-              className="cursor-pointer border border-dashed border-line-2 bg-paper px-2 py-1 text-meta font-semibold text-grey hover:text-navy"
-              onClick={() => setAdding(true)}
-            >
-              + add
-            </button>
-          )}
-          {adding && (
-            <span className="inline-flex items-center gap-1">
-              <input
-                type="text"
-                value={addText}
-                onChange={(event) => setAddText(event.target.value)}
-                placeholder="New constraint"
-                aria-label="New constraint"
-                className="border border-line-2 px-1.5 py-0.5 text-caption"
-              />
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  if (addText.trim() !== "") {
-                    setStaged((edits) => [...edits, { kind: "add", label: addText, detail: addText }]);
-                  }
-                  setAddText("");
-                  setAdding(false);
-                }}
-              >
-                Save
-              </Button>
-            </span>
-          )}
-        </div>
-      )}
-
-      {staged.length > 0 && (
-        <div className="mt-2 border border-yellow bg-yellow-tint/40 px-3 py-2">
-          <p className="text-caption font-bold text-navy">Staged changes</p>
-          <ul className="mt-1 space-y-0.5 text-lead text-ink">
-            {staged.map((edit, index) => (
-              <li key={`${edit.kind}-${edit.label}-${index}`}>
-                {edit.kind === "remove"
-                  ? `Remove "${edit.label}"`
-                  : edit.kind === "add"
-                    ? `Add: ${edit.detail}`
-                    : `Change "${edit.label}" to ${edit.detail}`}
-              </li>
-            ))}
-          </ul>
-          <div className="mt-2 flex gap-2">
-            <Button
-              size="sm"
-              disabled={disabled}
-              onClick={() => {
-                onSend(chipEditMessage(staged));
-                setStaged([]);
-              }}
-            >
-              Apply changes
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => setStaged([])}>
-              Discard
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {confirmedOption !== null ? (
-        <p className="mt-2 text-lead font-bold text-green-strong">
-          ✓ Confirmed{confirmedOption.label !== "" ? ` — ${scrub(confirmedOption.label)}` : ""}
+  if (confirmedOption !== null) {
+    return (
+      <div data-testid="part-settled" className="mr-8">
+        <p className="text-body text-grey">
+          <span className="font-semibold text-navy">{scrub(name)}</span> · {scrub(confirmedOption.label)}
           {state.live && (
-            <button
-              type="button"
-              className="ml-2 cursor-pointer text-body font-semibold text-grey underline"
-              disabled={disabled}
-              onClick={() => onPrefill("Change this part: ")}
-            >
-              Change
-            </button>
+            <>
+              {" · "}
+              <button
+                type="button"
+                aria-expanded={changing}
+                className="cursor-pointer font-semibold text-grey underline underline-offset-[3px] hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-default disabled:no-underline"
+                disabled={disabled}
+                onClick={() => setChanging((open) => !open)}
+              >
+                Change
+              </button>
+            </>
           )}
         </p>
-      ) : part.options.some((option) => option.sub != null && option.sub !== "") ? (
-        <div
-          role="radiogroup"
-          aria-label={part.title}
-          className="mt-3 flex max-w-prose-measure flex-col gap-3"
-        >
-          {part.options.map((option) => {
-            const selected = pickedId === option.id;
-            return (
-            <button
-              key={option.id}
-              type="button"
-              role="radio"
-              data-option-id={option.id}
-              data-part-option={option.primary ? "primary" : "secondary"}
-              aria-checked={selected}
-              disabled={!interactive}
-              className="flex cursor-pointer items-start gap-3 text-left disabled:cursor-default"
-              onClick={() => {
-                setPickedId(option.id);
-                if (sendsDirectly(option)) {
-                  onSend(confirmMessage(part, option));
-                } else {
-                  onPrefill(`${option.label}: `);
-                }
-              }}
-            >
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
-                  selected ? "border-navy" : "border-navy/40",
-                )}
+        {changing && state.live && (
+          <WordsInput
+            label={`Change ${name}`}
+            disabled={disabled}
+            onSend={(text) => {
+              onSend(`Change this part: ${text}`);
+              setChanging(false);
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
+  const chips = part.chips ?? [];
+  return (
+    <div className="anim-rise mr-8 space-y-2">
+      {steps !== undefined && interactive && <PlanStepper steps={steps} activeId={part.id} />}
+      <div data-testid="part-card" className="border border-line-2 bg-paper px-5 py-4">
+        <h3 className="max-w-prose-measure text-lead font-bold text-navy">{scrub(part.title)}</h3>
+        {part.body != null && part.body !== "" && (
+          <p className="mt-1 max-w-prose-measure text-body text-ink">{scrub(part.body)}</p>
+        )}
+
+        {chips.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            {chips.map((chip) => (
+              <EditableChip
+                key={chip.label}
+                chip={chip}
+                disabled={!interactive}
+                onStage={(edit) => setStaged((edits) => [...edits, edit])}
+              />
+            ))}
+            {interactive && !adding && (
+              <button
+                type="button"
+                className="cursor-pointer border border-dashed border-line-2 bg-paper px-2 py-1 text-meta font-semibold text-grey hover:text-navy"
+                onClick={() => setAdding(true)}
               >
-                {selected ? <span className="h-2.5 w-2.5 rounded-full bg-navy" /> : null}
+                + add
+              </button>
+            )}
+            {adding && (
+              <span className="inline-flex items-center gap-1">
+                <input
+                  type="text"
+                  value={addText}
+                  onChange={(event) => setAddText(event.target.value)}
+                  placeholder="New constraint"
+                  aria-label="New constraint"
+                  className="border border-line-2 px-1.5 py-0.5 text-caption"
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    if (addText.trim() !== "") {
+                      setStaged((edits) => [...edits, { kind: "add", label: addText, detail: addText }]);
+                    }
+                    setAddText("");
+                    setAdding(false);
+                  }}
+                >
+                  Save
+                </Button>
               </span>
-              <span>
-                <span className="block text-lead font-bold text-navy">{scrub(option.label)}</span>
-                {option.sub != null && option.sub !== "" && (
-                  <span className="block text-lead font-normal text-grey">{scrub(option.sub)}</span>
+            )}
+          </div>
+        )}
+
+        {staged.length > 0 && (
+          <div className="mt-3 border border-yellow bg-yellow-tint/40 px-3 py-2">
+            <p className="text-caption font-bold text-navy">Staged changes</p>
+            <ul className="mt-1 space-y-0.5 text-lead text-ink">
+              {staged.map((edit, index) => (
+                <li key={`${edit.kind}-${edit.label}-${index}`}>
+                  {edit.kind === "remove"
+                    ? `Remove "${edit.label}"`
+                    : edit.kind === "add"
+                      ? `Add: ${edit.detail}`
+                      : `Change "${edit.label}" to ${edit.detail}`}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2 flex gap-2">
+              <Button
+                size="sm"
+                disabled={disabled}
+                onClick={() => {
+                  onSend(chipEditMessage(staged));
+                  setStaged([]);
+                }}
+              >
+                Apply changes
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setStaged([])}>
+                Discard
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div role="radiogroup" aria-label={part.title} className="mt-3 flex max-w-prose-measure flex-col gap-1">
+          {orderedOptions(part.options).map((option) => {
+            const selected = pickedId === option.id;
+            const words = optionNeedsWords(option);
+            return (
+              <div key={option.id}>
+                <ChoiceRow
+                  label={option.label}
+                  sentences={[option.sub, option.primary ? option.reason : null]}
+                  selected={selected}
+                  disabled={!interactive}
+                  data-option-id={option.id}
+                  data-part-option={option.primary ? "primary" : "secondary"}
+                  onChoose={() => {
+                    setPickedId(option.id);
+                    if (!words) onSend(confirmMessage(part, option));
+                  }}
+                />
+                {words && selected && interactive && (
+                  <div className="pl-7">
+                    <WordsInput
+                      label={option.label}
+                      disabled={disabled}
+                      onSend={(text) => {
+                        onSend(`${option.label}: ${text}`);
+                        setPickedId(null);
+                      }}
+                    />
+                  </div>
                 )}
-              </span>
-            </button>
+              </div>
             );
           })}
         </div>
-      ) : (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {part.options.map((option) => (
-            <Button
-              key={option.id}
-              data-option-id={option.id}
-              data-part-option={option.primary ? "primary" : "secondary"}
-              variant={option.primary ? "primary" : "secondary"}
-              disabled={!interactive}
-              className="justify-start"
-              onClick={() =>
-                sendsDirectly(option)
-                  ? onSend(confirmMessage(part, option))
-                  : onPrefill(`${option.label}: `)
-              }
-            >
-              <span className="text-left">{scrub(option.label)}</span>
-            </Button>
-          ))}
-        </div>
-      )}
-      {confirmedOption === null && part.options.some((option) => option.reason != null && option.reason !== "") && (
-        <p className="mt-1.5 max-w-prose-measure text-lead text-grey">
-          {part.options
-            .filter((option) => option.reason != null && option.reason !== "")
-            .map((option) => scrub(option.reason ?? ""))}
-        </p>
-      )}
-      {!state.live && state.confirmedOptionId === null && (
-        <p className="mt-2 text-lead text-grey">Updated below — this version is kept for the record.</p>
-      )}
+        {!state.live && (
+          <p className="mt-2 text-body text-grey">Updated below — this version is kept for the record.</p>
+        )}
+      </div>
     </div>
   );
 }

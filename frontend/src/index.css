@@ -203,17 +203,19 @@
   }
 }
 
+/* The "waiting on you" glow is orange, the one colour of a check-in that
+   waits (task 058, D15): one 900 ms ring as the card arrives. */
 @keyframes glow-in {
   0% {
     opacity: 0;
-    box-shadow: 0 0 0 0 rgb(253 182 51 / 0);
+    box-shadow: 0 0 0 0 rgb(255 110 71 / 0);
   }
   50% {
-    box-shadow: 0 0 0 6px rgb(253 182 51 / 0.25);
+    box-shadow: 0 0 0 6px rgb(255 110 71 / 0.25);
   }
   100% {
     opacity: 1;
-    box-shadow: 0 0 0 0 rgb(253 182 51 / 0);
+    box-shadow: 0 0 0 0 rgb(255 110 71 / 0);
   }
 }
 @utility anim-glow {
@@ -229,7 +231,8 @@
     opacity: 1;
   }
   50% {
-    opacity: 0.35;
+    /* 0.5 trough: the yellow dot on white nearly vanished at 0.35 (task 058 design review). */
+    opacity: 0.5;
   }
 }
 @utility anim-breathe {
@@ -315,4 +318,54 @@
       scroll-behavior: auto !important;
     }
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * Task 058, brief P: the report while it is written.
+ *
+ * - shadow-paper: the Card's navy ambient shadow as a token, so the report
+ *   sheet wears the same paper weight as every card (it dropped Tailwind's
+ *   grey shadow-sm).
+ * - draft-revising: a sentence the checker failed blurs in place while the
+ *   writer revises it (2px, dimmed, eased over 300ms). Under reduced motion
+ *   it only dims.
+ * - anim-settle-out: the draft layer fading off the settled prose over 400ms,
+ *   so the revised sentence resolves out of its blur and nothing else moves.
+ *   The view skips the layer entirely under reduced motion (instant swap).
+ * The placeholder lines reuse anim-breathe (the dot's 1.6s opacity rhythm).
+ * ------------------------------------------------------------------------- */
+@theme {
+  --shadow-paper: 0 1px 3px rgba(15, 41, 74, 0.05), 0 8px 24px rgba(15, 41, 74, 0.04);
+}
+
+@keyframes revise-in {
+  from {
+    filter: blur(0);
+    opacity: 1;
+  }
+  to {
+    filter: blur(2px);
+    opacity: 0.55;
+  }
+}
+@utility draft-revising {
+  filter: blur(2px);
+  opacity: 0.55;
+  animation: revise-in 300ms var(--ease-out-strong) both;
+  @media (prefers-reduced-motion: reduce) {
+    filter: none;
+    animation: none;
+  }
+}
+
+@keyframes settle-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@utility anim-settle-out {
+  animation: settle-out 400ms ease both;
 }

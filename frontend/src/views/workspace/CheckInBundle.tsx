@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
+import { LABEL_CLASS } from "../../ui/brand/label";
 import {
   backendLabel,
   CHECK_IN_SEARCH_HEADING,
@@ -79,7 +80,7 @@ function ListBlock({
 }) {
   return (
     <div className="mt-3 border border-line bg-paper-2 px-3 py-2.5">
-      <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">{heading}</p>
+      <p className={LABEL_CLASS}>{heading}</p>
       {children}
     </div>
   );

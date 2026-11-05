@@ -5,9 +5,11 @@ import { useArtefact, useConversations, useTask } from "../api/queries";
 import { useDocumentTitle } from "../lib/title";
 import { LIFECYCLE_LABELS } from "../lib/vocabulary";
 import { useRunStream } from "../store";
+import { usePlanEdits } from "../store/planEdits";
 import { cn } from "../ui/brand/cn";
 import { NotFoundView } from "../ui/feedback/NotFoundView";
 import { AppFooter } from "./AppFooter";
+import { usePlanPanel } from "./planPanel";
 import { isScoping } from "./scopingActivity";
 import { useChatsEnabled } from "./taskResult";
 import { ChatPane } from "./workspace/chat/ChatPane";
@@ -16,7 +18,6 @@ import { ConversationSidebar } from "./workspace/chat/ConversationSidebar";
 import { DRAFT_CHAT_ID, isTaskAgentConversation, taskAgentConversationId, useActiveConversation } from "./workspace/chat/conversationState";
 import { PlanDocument } from "./workspace/PlanDocument";
 import { TaskAgentPane } from "./workspace/TaskAgentPane";
-import type { PlanOverlay } from "./workspace/planOverlay";
 
 /**
  * The Agent tab: the Task's conversations in a sidebar, the selected one in
@@ -55,9 +56,12 @@ export function WorkspaceView() {
     setFooterOpen(false);
   }
   const hasRun = stream.run !== null;
-  const [planOpen, setPlanOpen] = useState(false);
-  const [planPlacement, setPlanPlacement] = useState<"center" | "side">("center");
-  const [planOverlay, setPlanOverlay] = useState<PlanOverlay>({});
+  // Shared with the task nav's "Plan" control and the sidebar (task 058,
+  // N15): one open state, and the side panel by default.
+  const { open: planOpen, openPlan: showPlan, closePlan } = usePlanPanel();
+  const [planPlacement, setPlanPlacement] = useState<"center" | "side">("side");
+  // Plan edits live in the store (task 058, N20): leaving the tab keeps them.
+  const [planOverlay, setPlanOverlay] = usePlanEdits(taskId);
   useDocumentTitle(task.data?.name, LIFECYCLE_LABELS.agent);
 
   const runActive = stream.run?.status === "running" || stream.run?.status === "paused";
@@ -70,8 +74,8 @@ export function WorkspaceView() {
   const isOwner = task.data?.is_owner === true;
   const scoping = isScoping(task.data);
   const openPlan = () => {
-    setPlanPlacement("center");
-    setPlanOpen(true);
+    setPlanPlacement("side");
+    showPlan();
   };
   const planDocument = (
     <PlanDocument
@@ -89,11 +93,11 @@ export function WorkspaceView() {
       // ever run, leaving that state unreachable. Only an ACTIVE walk locks
       // a scoping plan; ownership still gates both.
       readOnly={(scoping ? runActive : hasRun) || !isOwner}
-      onClose={() => setPlanOpen(false)}
+      onClose={closePlan}
       onDock={() => setPlanPlacement("side")}
       onStarted={() => {
         setPlanOverlay({});
-        setPlanOpen(false);
+        closePlan();
       }}
       overlay={planOverlay}
       onOverlayChange={setPlanOverlay}

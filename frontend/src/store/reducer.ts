@@ -186,6 +186,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
             status: "completed",
             summary: frame.summary,
             seconds: frame.seconds,
+            counts: frame.counts,
           },
           frame.occurred_at,
         ),

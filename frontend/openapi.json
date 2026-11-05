@@ -7588,7 +7588,7 @@
         ]
       },
       "StageCompletedFrame": {
-        "description": "A component reached its terminal (successful) outcome.",
+        "description": "A component reached its terminal (successful) outcome.\n\nArgs:\n    counts: The counts the done row shows, in order, each with the\n        server's noun (task 058, N17: the client keeps no copy of which\n        summary keys a stage shows). Empty when the stage names none.",
         "properties": {
           "capability_run_id": {
             "anyOf": [
@@ -7602,6 +7602,13 @@
             ],
             "default": null,
             "title": "Capability Run Id"
+          },
+          "counts": {
+            "items": {
+              "$ref": "#/components/schemas/StageCount"
+            },
+            "title": "Counts",
+            "type": "array"
           },
           "label": {
             "title": "Label",
@@ -7684,6 +7691,25 @@
           "label"
         ],
         "title": "StageCompletedFrame",
+        "type": "object"
+      },
+      "StageCount": {
+        "description": "One count a done row shows, with its noun: `312 found` (task 058, N17).",
+        "properties": {
+          "noun": {
+            "title": "Noun",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value",
+          "noun"
+        ],
+        "title": "StageCount",
         "type": "object"
       },
       "StageFailedFrame": {

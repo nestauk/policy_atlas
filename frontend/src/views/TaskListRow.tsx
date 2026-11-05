@@ -2,11 +2,14 @@ import { Link } from "react-router";
 
 import type { components } from "../api/gen/types";
 import { capabilityLabel } from "../lib/capabilities";
+import { Figures } from "../lib/figures";
+import { useFreshness, useNow } from "../lib/freshness";
 import { scrub } from "../lib/scrub";
 import { StatusDot } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { taskStatus } from "./landingPresentation";
 import { taskListRowGridClass, taskListRowGridClassWithOwner } from "./listPageChrome";
+import { elapsedSeconds, formatMinutes } from "./workspace/runProgress";
 
 type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 
@@ -22,6 +25,9 @@ type TaskListRowProps = {
   sourceCount?: number | null;
   updatedAt?: string | null;
   latestRun?: LatestRun;
+  /** The walk running now (`TaskOut.active_run`): while it runs, the row
+   *  reads its stage and elapsed time (task 058, N15). */
+  activeRun?: LatestRun;
   /** Task 033 phase 10b: render the owner column, and the string to show
    *  when `owner_display` is null (`"—"`, or the admin-wide-list's "No
    *  organisation" — the caller decides which, this row just renders it). */
@@ -39,10 +45,18 @@ export function TaskListRow({
   sourceCount,
   updatedAt,
   latestRun,
+  activeRun,
   ownerDisplay,
   ownerlessLabel = "—",
 }: TaskListRowProps) {
   const status = taskStatus(latestRun);
+  const running = activeRun?.status === "running" && Boolean(activeRun.stage_label);
+  const nowMs = useNow(running);
+  // The dot breathes for a moment when the polled stage changes, then rests.
+  const fresh = useFreshness(running ? (activeRun?.stage_label ?? null) : null);
+  const statusLabel = running
+    ? `${activeRun?.stage_label} · ${formatMinutes(elapsedSeconds(activeRun?.started_at, undefined, nowMs))}`
+    : status.label;
   const safeName = scrub(name);
   const safeProject = projectName != null ? scrub(projectName) : null;
   const ariaLabel =
@@ -72,8 +86,10 @@ export function TaskListRow({
         {capabilityLabel(capabilityKey)}
       </Chip>
       <span className="inline-flex min-w-0 items-center gap-1.5 text-meta text-grey">
-        <StatusDot tone={status.dot} />
-        <span className="truncate">{status.label}</span>
+        <StatusDot tone={running ? "running" : status.dot} className={running && fresh ? "anim-breathe" : undefined} />
+        <span className="truncate" title={statusLabel}>
+          <Figures text={scrub(statusLabel)} />
+        </span>
       </span>
       {showOwner && (
         <span className="truncate text-right text-meta text-grey">

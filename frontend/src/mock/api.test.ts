@@ -18,6 +18,9 @@ import {
   mockSectionOneRevisingSpan,
   mockEvidenceThemeIds,
   mockMeEnrolled,
+  foldMockOptionRows,
+  mockWalkLonglist,
+  seedMockOptionRows,
 } from "./fixtures";
 
 interface MockChatTurn {
@@ -814,6 +817,57 @@ describe("mock API", () => {
         expect(options.options.filter((row) => row.merged_into_option_id !== null).map((row) => row.name)).toEqual(["Transport subsidies for young job seekers"]);
         expect(options.options.slice(12).map((row) => row.origin)).toEqual(["clustered", "clustered"]);
         expect((await mockFetch(`${base}/longlist`)).status).toBe(200);
+      });
+
+      it("serves the longlist read over the same option ids as the options read", async () => {
+        const frames = await playScopingWalk();
+        // Poll quickly: the walk-time longlist read ends when the walk does.
+        await vi.waitFor(async () => expect((await mockFetch(`${base}/longlist`)).status).toBe(200), { interval: 1, timeout: 8000 });
+        const longlist = (await (await mockFetch(`${base}/longlist`)).json()) as { options: { option_id: string; name: string; origin: string }[] };
+        const rows = (await (await mockFetch(`${base}/options`)).json()) as {
+          options: { option_id: string; name: string; origin: string; merged_into_option_id: string | null }[];
+        };
+        const live = rows.options.filter((row) => row.merged_into_option_id === null);
+        expect(longlist.options.map((option) => [option.option_id, option.name, option.origin])).toEqual(
+          live.map((row) => [row.option_id, row.name, row.origin]),
+        );
+        expect(rows.options).toHaveLength(14);
+        expect(live).toHaveLength(13);
+        await vi.waitFor(() => expect(walkDone(frames)).toBe(true), { timeout: 8000 });
+      });
+
+      it("grows the longlist read in four steps after the longlist stage", () => {
+        const rows = foldMockOptionRows(seedMockOptionRows()).map((row, index) => ({ ...row, found: row.found ?? 100 + index }));
+        const read = (stage: Parameters<typeof mockWalkLonglist>[1]) => mockWalkLonglist(rows, stage);
+
+        const built = read("longlist");
+        expect(built.options).toHaveLength(13);
+        expect(built.options!.every((option) => option.document_count > 0)).toBe(true);
+        expect(built.options!.every((option) => option.primary_lever_type == null && option.ambition_reason == null)).toBe(true);
+        expect(built.options!.every((option) => option.state === "included" && option.exclusion == null)).toBe(true);
+        expect(built.themes).toEqual([]);
+        expect(built.options!.every((option) => option.shortlist == null)).toBe(true);
+
+        const profiled = read("option_profile");
+        expect(profiled.options!.every((option) => option.primary_lever_type != null && option.ambition_reason != null)).toBe(true);
+        expect(profiled.options!.some((option) => option.state === "excluded")).toBe(false);
+        expect(profiled.themes).toEqual([]);
+
+        const constrained = read("constrain");
+        const excluded = constrained.options!.filter((option) => option.state === "excluded");
+        expect(excluded).toHaveLength(2);
+        expect(excluded.every((option) => (option.exclusion?.reason ?? "") !== "")).toBe(true);
+        expect(constrained.themes).toEqual([]);
+        expect(constrained.options!.every((option) => option.shortlist == null)).toBe(true);
+
+        const themed = read("theme");
+        expect(themed.themes).toHaveLength(2);
+        const themedIds = themed.themes!.flatMap((theme) => theme.option_ids ?? []);
+        expect(themedIds.sort()).toEqual(themed.options!.filter((option) => option.state === "included").map((option) => option.option_id).sort());
+        expect(themed.options!.every((option) => option.shortlist == null)).toBe(true);
+
+        const shortlisted = read("shortlist");
+        expect(shortlisted.options!.filter((option) => option.shortlist != null)).toHaveLength(3);
       });
 
       it("shows rows from the end of suggest, queued then searching then searched", async () => {

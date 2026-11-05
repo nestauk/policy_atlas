@@ -12,9 +12,10 @@ import { READING_COLUMN_MAX_W } from "./listPageChrome";
  * kind row above the title, and the bordered snapshot cells.
  */
 
-/** The paper: reading column, white, hairline ring; flat on small screens. */
+/** The paper: reading column, white, hairline ring, the Card's navy ambient
+ *  shadow (task 058, N8); flat on small screens. */
 export const REPORT_PAGE_CLASS =
-  `artefact-page anim-rise my-8 min-w-0 ${READING_COLUMN_MAX_W} flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line ` +
+  `artefact-page anim-rise my-8 min-w-0 ${READING_COLUMN_MAX_W} flex-1 bg-paper px-10 py-9 shadow-paper ring-1 ring-line ` +
   "max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0";
 
 /** Sidebar + paper, side by side from md up, stacked below. */

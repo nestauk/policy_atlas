@@ -261,7 +261,15 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
         capability,
         fromTaskIds,
       },
-      { onSuccess: (task) => void navigate(`/tasks/${task.task_id}`) },
+      {
+        // The Agent tab streams the opening turn (task 058, N9): the words
+        // the person typed travel with the navigation, with the turn id
+        // minted here so a repeated mount can never post it twice.
+        onSuccess: (task) =>
+          void navigate(`/tasks/${task.task_id}`, {
+            state: { openingTurn: { message: question.trim(), clientTurnId: crypto.randomUUID() } },
+          }),
+      },
     );
   };
 

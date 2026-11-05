@@ -15,6 +15,7 @@ import {
   mockSectionOneRevisingSpan,
   mockCheckIn,
   mockPlannerTurn,
+  STAGE_COUNTS,
   STAGE_PRESENTATION,
   MOCK_OPTION_COUNT,
   foldMockOptionRows,
@@ -55,6 +56,8 @@ import {
   mockLonglist,
   mockLonglistExtraOptionIds,
   mockLonglistOptionCards,
+  mockWalkLonglist,
+  type MockWalkLonglistStage,
   mockShortlistState,
   MOCK_SHORTLIST_PLACES_TARGET,
   resetMockShortlist,
@@ -952,6 +955,8 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/longlist`)) {
     // The longlist does not exist until the walk's longlist stage completes.
     if (mockLonglistBuilding) return json({ detail: "resource not found" }, 404);
+    // While a walk runs the read grows stage by stage over the options read's rows.
+    if (mockLonglistWalkStage !== null) return json(mockWalkLonglist(mockOptionRows, mockLonglistWalkStage));
     return json(mockLonglist());
   }
   // Task 058, N22: the options read, served from the end of the suggest stage.
@@ -1272,6 +1277,8 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       };
 
       emit(runStatus("running", nextSequence()));
+      // The approved plan's steps give the card its rows to come (task 058, N5).
+      emit({ type: "plan.updated", plan: currentPlan, scoping: null, version: 1, occurred_at: frameTime(), sequence: nextSequence() });
       await walkStage(emit, emitTick, nextSequence, "acquire", wait, [
         { activity: "searching · 62 found so far" },
         { activity: "searching · 184 found so far" },
@@ -1565,7 +1572,8 @@ function stageStarted(stage: StageKey, sequence: number, runId: string = MOCK_RU
 }
 
 function stageCompleted(stage: StageKey, summary: Record<string, number>, sequence: number, runId: string = MOCK_RUN_ID): SseFrame {
-  return { type: "stage.completed", capability_run_id: runId, stage, label: STAGE_PRESENTATION[stage][0], summary, seconds: 4, occurred_at: frameTime(), sequence };
+  const counts = STAGE_COUNTS[stage].flatMap(([key, noun]) => (typeof summary[key] === "number" ? [{ value: summary[key], noun }] : []));
+  return { type: "stage.completed", capability_run_id: runId, stage, label: STAGE_PRESENTATION[stage][0], summary, seconds: 4, counts, occurred_at: frameTime(), sequence };
 }
 
 function stageFailed(stage: StageKey, reason: string, sequence: number): SseFrame {
@@ -1621,6 +1629,9 @@ function sleep(ms: number): Promise<void> {
 let mockLonglistBuilding = false;
 /** The options read while the walk builds: empty until suggest completes. */
 let mockOptionRows: components["schemas"]["OptionProgressOut"][] = [];
+/** The last stage the longlist read has caught up with while a walk runs;
+ *  `null` outside a walk (the finished longlist is then served). */
+let mockLonglistWalkStage: MockWalkLonglistStage | null = null;
 
 /** The scoping plan's current version; edits and confirms move it. */
 let mockScopingPlanVersion = 1;
@@ -1636,6 +1647,7 @@ function resetMockLonglistWalks() {
   mockLonglistPending = [];
   mockLonglistWake = createDeferred();
   mockLonglistBuilding = false;
+  mockLonglistWalkStage = null;
   mockOptionRows = [];
   mockTask.active_run = null;
   mockTask.has_longlist = false;
@@ -1719,7 +1731,7 @@ async function mockLonglistWalk(
   emit: (frame: SseFrame) => void,
   nextSequence: () => number,
 ) {
-  const counts = mockLonglist().counts;
+  const counts = mockWalkLonglist(foldMockOptionRows(seedMockOptionRows()), "shortlist").counts;
   const planVersion = mockLonglistWalks.find((walk) => walk.capability_run_id === walkId)?.plan_version ?? 1;
   const begin = (stage: StageKey) => {
     emit(stageStarted(stage, nextSequence(), walkId));
@@ -1811,22 +1823,33 @@ async function mockLonglistWalk(
     { activity: "Assigning sources to options · batch 2 of 2", done: 2, total: 2, unit: "batches" },
   ], { options: counts.options, themes: counts.themes, unclustered: 5, not_an_option: 2 }, () => {
     mockOptionRows = foldMockOptionRows(mockOptionRows);
+    mockLonglistWalkStage = "longlist";
     mockLonglistBuilding = false;
   });
   await runStage("option_profile", [
     { activity: "Typing options · batch 1 of 1", done: 1, total: 1, unit: "batches" },
     { activity: `Writing place sentences · ${counts.options} of ${counts.options} options`, done: counts.options, total: counts.options, unit: "options" },
-  ], { profiled: counts.options });
+  ], { profiled: counts.options }, () => {
+    mockLonglistWalkStage = "option_profile";
+  });
   await runStage("constrain", [
     { activity: "Checking constraints · batch 1 of 1", done: 1, total: 1, unit: "batches" },
-  ], { excluded: counts.excluded, no_in_scope: counts.no_in_scope });
+  ], { excluded: counts.excluded, no_in_scope: counts.no_in_scope }, () => {
+    mockLonglistWalkStage = "constrain";
+  });
   await runStage("theme", [
     { activity: "Assigning options to themes · batch 1 of 1", done: 1, total: 1, unit: "batches" },
-  ], { themes: counts.themes });
+  ], { themes: counts.themes }, () => {
+    mockLonglistWalkStage = "theme";
+  });
   const placed = Object.values(mockLonglistOptionCards).filter(
     (option) => option.shortlist?.state === "proposed" || option.shortlist?.state === "added_by_you",
   ).length;
-  await runStage("shortlist", [{ activity: "Choosing the shortlist" }], { kept: placed });
+  await runStage("shortlist", [{ activity: "Choosing the shortlist" }], { kept: placed }, () => {
+    mockLonglistWalkStage = "shortlist";
+  });
+  // The walk is over: the finished longlist (with its working cards) takes over.
+  mockLonglistWalkStage = null;
 
   const endedAt = new Date().toISOString();
   mockLonglistWalks = mockLonglistWalks.map((walk) =>

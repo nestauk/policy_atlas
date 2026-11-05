@@ -55,21 +55,13 @@ const CHECK_IN_COUNT_LABELS: Record<string, string> = {
   failed: "Failed",
 };
 
-/** Public fallback labels for renders received before a stage frame. */
-const STAGE_LABELS: Record<string, string> = {
-  acquire: "Searching sources",
-  screen: "Screening sources",
-  classify: "Classifying evidence",
-  appraise: "Appraising quality",
-  characterise: "Mapping the landscape",
-  synthesise: "Writing the report",
-};
-
 interface PresentedCheckInRender {
   stageLabel: string;
   status: "completed";
   seconds: string;
   counts: Array<{ label: string; value: string }>;
+  /** The question the check-in asks (the render's first line), or null. */
+  question: string | null;
 }
 
 /**
@@ -82,13 +74,20 @@ export function presentCheckInRender(
   stage: string | null,
   stages: StageEntry[],
 ): PresentedCheckInRender | null {
-  const match = /^\s*([^:|]+):\s*([^|]+?)\s*\|\s*wall_clock=([0-9]+(?:\.[0-9]+)?)s\s*\|\s*counts:\s*(.*?)\s*$/.exec(render);
+  // The render's first line is the question the check-in asks (task 058,
+  // N19) and its machine line follows; a render without a question is the
+  // machine line alone.
+  const lines = render.split("\n").map((line) => line.trim()).filter((line) => line !== "");
+  const machine = lines.find((line) => /\|\s*wall_clock=/.test(line)) ?? render;
+  const match = /^\s*([^:|]+):\s*([^|]+?)\s*\|\s*wall_clock=([0-9]+(?:\.[0-9]+)?)s\s*\|\s*counts:\s*(.*?)\s*$/.exec(machine);
   if (match === null) return null;
   const [, component, rawStatus, seconds, rawCounts] = match;
+  const question = lines[0] !== undefined && lines[0] !== machine ? lines[0] : null;
   if (rawStatus.trim() !== "succeeded") return null;
   const stageKey = stage ?? component.trim();
-  const stageLabel =
-    [...stages].reverse().find((entry) => entry.stage === stageKey)?.label ?? STAGE_LABELS[stageKey];
+  // The stage frame carries the server's label (task 058, N17); without one
+  // the render stays prose rather than guessing a name.
+  const stageLabel = [...stages].reverse().find((entry) => entry.stage === stageKey)?.label;
   if (stageLabel === undefined) return null;
   const counts = rawCounts.split(",").flatMap((part) => {
     const count = /^\s*([a-z_]+)\s*=\s*(-?[0-9]+(?:\.[0-9]+)?)\s*$/.exec(part);
@@ -96,7 +95,7 @@ export function presentCheckInRender(
     const label = CHECK_IN_COUNT_LABELS[count[1]];
     return label === undefined ? [] : [{ label, value: count[2] }];
   });
-  return { stageLabel, status: "completed", seconds, counts };
+  return { stageLabel, status: "completed", seconds, counts, question };
 }
 
 /** Friendly copy for the known steering-trigger keys
@@ -168,6 +167,8 @@ const BASELINE_SETTING_LABELS: Array<[string, string]> = [
   ["where", "Where"],
   ["outcomes", "Outcomes"],
   ["depth", "Depth"],
+  // The server sends the label the user sees (`RISK_APPETITE_LABELS`, N19).
+  ["risk_appetite", "Risk appetite"],
 ];
 
 /**
@@ -204,4 +205,82 @@ export function baselineGateCard(bundle: Record<string, unknown> | null): Baseli
       return typeof value === "string" && value !== "" ? [{ label, value }] : [];
     }),
   };
+}
+
+/** The check-in's question and its one line of facts (task 058, N19; annex
+ *  scene 12). */
+export interface CheckInHeadline {
+  /** The question, shown as the card's title. */
+  title: string;
+  /** One line of facts, or null when the render carries none. */
+  facts: string | null;
+}
+
+/**
+ * Read the card's title and facts line off the check-in's deterministic
+ * render, the content of record. A prose render leads with its question and
+ * puts its facts on the next line; a component-completion render has no
+ * question, so its stage label is the title and its counts are the facts.
+ *
+ * Args:
+ *   render: The check-in's `render`.
+ *   stage: The check-in's stage key.
+ *   stages: The run's stage entries (they carry the server's labels).
+ *
+ * Returns:
+ *   The title and the facts line.
+ */
+export function checkInHeadline(render: string, stage: string | null, stages: StageEntry[]): CheckInHeadline {
+  const presented = presentCheckInRender(render, stage, stages);
+  if (presented !== null) {
+    const facts = presented.counts.map(({ label, value }) => `${label} ${value}`).join(" · ");
+    // The server's question is the title; the stage label only when the
+    // render carries none.
+    return { title: presented.question ?? presented.stageLabel, facts: facts === "" ? null : facts };
+  }
+  const lines = render.split("\n").map((line) => line.trim()).filter((line) => line !== "");
+  return { title: lines[0] ?? "", facts: lines.length > 1 ? lines.slice(1).join(" · ") : null };
+}
+
+/** The check-in's place in the run, in the stage's own words: "after
+ *  searching and screening". Null when the stream has no label for it. */
+export function checkInWhen(stage: string | null | undefined, stages: StageEntry[]): string | null {
+  if (stage == null) return null;
+  const label = [...stages].reverse().find((entry) => entry.stage === stage)?.label;
+  return label === undefined ? null : `after ${label.toLowerCase()}`;
+}
+
+/** The words on the check-in's one stop link, and the line it leaves. */
+export const STOP_THE_RUN = "Stop the run";
+
+/**
+ * The answered check-in's one line, "You chose: <label> · <when>", built from
+ * the durable `checkin.resolved` frame (task 058, N19): the chosen option's
+ * label off the check-in's own options, never a session-local echo.
+ *
+ * Args:
+ *   decision: The resolved decision from the stream.
+ *   checkIn: The check-in it answered, when the check-ins read has it.
+ *   stages: The run's stage entries, for the "after …" place.
+ *
+ * Returns:
+ *   The line, or null when the frame names nothing the card can word.
+ */
+export function chosenLine(
+  decision: ResolvedDecision,
+  checkIn: { options?: Array<{ id: string; label: string }>; stage: string | null; component: string | null } | undefined,
+  stages: StageEntry[],
+): string | null {
+  const response = decision.response;
+  const optionId = response["option_id"];
+  const choice =
+    response["kind"] === "abort"
+      ? STOP_THE_RUN
+      : typeof optionId === "string"
+        ? (checkIn?.options ?? []).find((option) => option.id === optionId)?.label ?? null
+        : decisionProse(decision);
+  if (choice === null) return null;
+  const who = decision.decidedBy === null || decision.decidedBy === "user" ? "You chose" : DECIDED_BY_LABEL[decision.decidedBy];
+  const when = checkInWhen(checkIn?.stage ?? checkIn?.component, stages);
+  return [`${who ?? "You chose"}: ${choice}`, when].filter((part): part is string => part !== null).join(" · ");
 }

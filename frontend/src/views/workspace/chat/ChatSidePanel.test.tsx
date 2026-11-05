@@ -17,6 +17,11 @@ const state = vi.hoisted(() => ({
   chatsResolved: true,
   rows: [] as unknown[],
   runStatus: undefined as string | undefined,
+  pendingCheckIn: null as { check_in_id: string; kind: string } | null,
+  openPlan: vi.fn(),
+}));
+vi.mock("../../planPanel", () => ({
+  usePlanPanel: () => ({ open: false, openPlan: state.openPlan, closePlan: vi.fn() }),
 }));
 
 vi.mock("react-router", () => ({
@@ -38,9 +43,22 @@ vi.mock("../../../api/queries", () => ({
   // stream mock carries the run state these tests vary.
   useTask: () => ({ data: undefined }),
 }));
-vi.mock("../../../store", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../store")>()),
-  useRunStream: () => ({ run: state.runStatus === undefined ? null : { status: state.runStatus }, stages: [] }),
+vi.mock("../../../store", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../store")>();
+  return {
+    ...actual,
+    // The panel reads the task's one run stream (task 058, N13).
+    useRunStream: () => ({
+      ...actual.createInitialRunStreamState(),
+      run: state.runStatus === undefined ? null : { id: "run-1", status: state.runStatus, startedAt: "2026-11-05T09:00:00Z" },
+      pendingCheckIn: state.pendingCheckIn,
+    }),
+  };
+});
+vi.mock("./SidebarRun", () => ({
+  SidebarRun: ({ stream }: { stream: { run: { status: string } | null } }) => (
+    <div data-testid="sidebar-run" data-status={stream.run?.status} />
+  ),
 }));
 vi.mock("./conversationState", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./conversationState")>();
@@ -69,8 +87,27 @@ vi.mock("../TaskAgentPane", () => ({
   // the "ChatSidePanel duplicate" the rubric names can be checked for
   // threading `isOwner` through to the task_agent surface without re-testing
   // TaskAgentPane's own read-only rendering here (that's TaskAgentPane.test.tsx).
-  TaskAgentPane: ({ isOwner }: { isOwner: boolean }) => (
-    <div data-testid="task_agent-pane" data-is-owner={String(isOwner)} />
+  TaskAgentPane: ({
+    isOwner,
+    runStatus,
+    stream,
+    onReviewPlan,
+  }: {
+    isOwner: boolean;
+    runStatus: string | undefined;
+    stream: { run: { id: string } | null };
+    onReviewPlan?: () => void;
+  }) => (
+    <div
+      data-testid="task_agent-pane"
+      data-is-owner={String(isOwner)}
+      data-run-status={runStatus ?? "none"}
+      data-run-id={stream.run?.id ?? "none"}
+    >
+      <button type="button" onClick={onReviewPlan}>
+        Review the plan
+      </button>
+    </div>
   ),
 }));
 
@@ -79,7 +116,9 @@ describe("ChatSidePanel", () => {
     state.chatsResolved = true;
     state.rows = [CHAT_ROW];
     state.runStatus = "succeeded";
+    state.pendingCheckIn = null;
     state.draftEntryArtefactId = null;
+    state.navigate.mockClear();
     state.setActiveConversation.mockClear();
     state.openDraftChat.mockClear();
     state.create.mockClear();
@@ -223,5 +262,56 @@ describe("ChatSidePanel", () => {
     expect(screen.getByTestId("draft-chat-pane")).toBeInTheDocument();
     expect(screen.getByText("New chat")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
+  });
+
+  describe("the same agent as the Agent tab (task 058, N13)", () => {
+    it("mounts the Task Agent on the task's real stream and run status", () => {
+      state.activeConversationId = "plan-1";
+      state.rows = [PLAN_ROW, CHAT_ROW];
+      render(<ChatSidePanel taskId="p1" isOwner />);
+      const pane = screen.getByTestId("task_agent-pane");
+      expect(pane).toHaveAttribute("data-run-status", "succeeded");
+      expect(pane).toHaveAttribute("data-run-id", "run-1");
+    });
+
+    it.each(["running", "paused"])("folds to the compact run view while the run is %s", (status) => {
+      state.activeConversationId = "plan-1";
+      state.rows = [PLAN_ROW, CHAT_ROW];
+      state.runStatus = status;
+      render(<ChatSidePanel taskId="p1" isOwner />);
+      expect(screen.getByTestId("sidebar-run")).toHaveAttribute("data-status", status);
+      expect(screen.queryByTestId("task_agent-pane")).toBeNull();
+    });
+
+    it("keeps the full pane at the scoping gate, whose composer takes a question", () => {
+      state.activeConversationId = "plan-1";
+      state.rows = [PLAN_ROW, CHAT_ROW];
+      state.runStatus = "paused";
+      state.pendingCheckIn = { check_in_id: "g1", kind: "baseline_confirm" };
+      render(<ChatSidePanel taskId="p1" isOwner />);
+      expect(screen.getByTestId("task_agent-pane")).toBeInTheDocument();
+    });
+
+    it("opens on the Task Agent from the rail while a check-in waits, even with chats", async () => {
+      state.activeConversationId = null;
+      state.rows = [PLAN_ROW, CHAT_ROW];
+      state.runStatus = "paused";
+      state.pendingCheckIn = { check_in_id: "k1", kind: "steer_point" };
+      const user = userEvent.setup();
+      render(<ChatSidePanel taskId="p1" isOwner />);
+      await user.click(screen.getByRole("button", { name: "Open the Agent" }));
+      expect(state.setActiveConversation).toHaveBeenCalledWith("plan-1");
+    });
+
+    it("opens the shell's plan document from Review the plan, staying on the tab", async () => {
+      state.activeConversationId = "plan-1";
+      state.rows = [PLAN_ROW, CHAT_ROW];
+      state.openPlan.mockClear();
+      const user = userEvent.setup();
+      render(<ChatSidePanel taskId="p1" isOwner />);
+      await user.click(screen.getByRole("button", { name: "Review the plan" }));
+      expect(state.openPlan).toHaveBeenCalledTimes(1);
+      expect(state.navigate).not.toHaveBeenCalled();
+    });
   });
 });

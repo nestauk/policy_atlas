@@ -68,14 +68,28 @@ class StageStartedFrame(_StageFrameBase):
     blurb: str
 
 
+class StageCount(BaseModel):
+    """One count a done row shows, with its noun: `312 found` (task 058, N17)."""
+
+    value: int
+    noun: str
+
+
 class StageCompletedFrame(_StageFrameBase):
-    """A component reached its terminal (successful) outcome."""
+    """A component reached its terminal (successful) outcome.
+
+    Args:
+        counts: The counts the done row shows, in order, each with the
+            server's noun (task 058, N17: the client keeps no copy of which
+            summary keys a stage shows). Empty when the stage names none.
+    """
 
     type: Literal["stage.completed"]
     stage: StageKey
     label: str
     summary: dict[str, int | float | str] = Field(default_factory=dict)
     seconds: float | None = None
+    counts: list[StageCount] = Field(default_factory=list)
 
 
 class StageFailedFrame(_StageFrameBase):

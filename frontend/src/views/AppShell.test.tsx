@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,7 +8,9 @@ import { AppShell } from "./AppShell";
 import { SITE_DISCLAIMER } from "./AppFooter";
 import { PrivacyView } from "./legal/PrivacyView";
 import { TermsView } from "./legal/TermsView";
+import { useDocumentTitle } from "../lib/title";
 import { TASK } from "../lib/vocabulary";
+import type { SseFrame } from "../api/sseFrame";
 import { BETA_CHIP_HINT } from "../ui/brand/Nav";
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
@@ -43,7 +45,18 @@ const taskState = vi.hoisted(() => ({
 // conversations fetch or a real SSE connect would mean access was assumed
 // before it was known.
 const useConversationsState = vi.hoisted(() => ({ mock: vi.fn(() => ({ data: { data: [] } })) }));
-const sseState = vi.hoisted(() => ({ connect: vi.fn(() => ({ close: vi.fn() })) }));
+type StreamHandlers = {
+  onConnected?: () => void;
+  onDisconnected?: () => void;
+  onFrame?: (frame: SseFrame) => void;
+};
+const sseState = vi.hoisted(() => ({
+  handlers: null as StreamHandlers | null,
+  connect: vi.fn((options: StreamHandlers) => {
+    sseState.handlers = options;
+    return { close: vi.fn() };
+  }),
+}));
 
 vi.mock("../api/queries", () => ({
   useMe: () => ({ data: meState.data }),
@@ -74,6 +87,17 @@ vi.mock("../api/queries", () => ({
   useApiClient: () => ({}),
 }));
 
+// The plan document reads its own queries; here only its opening matters.
+vi.mock("./workspace/PlanDocument", () => ({
+  PlanDocument: ({ onClose, readOnly }: { onClose: () => void; readOnly?: boolean }) => (
+    <aside aria-label="Search plan" data-readonly={String(readOnly)}>
+      <button type="button" onClick={onClose}>
+        Close the search plan
+      </button>
+    </aside>
+  ),
+}));
+
 vi.mock("../api/mutations", () => ({
   useUpdateTask: () => ({ mutate: vi.fn(), isPending: false }),
   useArchiveTask: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
@@ -96,6 +120,12 @@ vi.mock("../api/sse", () => ({
   connectEventStream: sseState.connect,
 }));
 
+/** A task page that sets its title the way every task view does. */
+function TitledTask() {
+  useDocumentTitle("Acme task", "Sources");
+  return <div>task</div>;
+}
+
 function renderShell(initialPath: string) {
   // The header's task-settings popover (028 F.5) wires rename/archive
   // mutations, which resolve useQueryClient — a real QueryClient is needed
@@ -111,7 +141,7 @@ function renderShell(initialPath: string) {
             <Route path="/projects" element={<div>tasks</div>} />
             <Route path="/privacy" element={<PrivacyView />} />
             <Route path="/terms" element={<TermsView />} />
-            <Route path="/tasks/:taskId/*" element={<div>task</div>} />
+            <Route path="/tasks/:taskId/*" element={<TitledTask />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -153,24 +183,196 @@ describe("AppShell — mobile bottom tab bar (040 D2)", () => {
   });
 });
 
-describe("AppShell — the check-in banner is owner-scoped (task 033 phase 10b, rubric 38)", () => {
+const RUN_ID = "22222222-2222-2222-2222-222222222222";
+let sequence = 0;
+const now = () => new Date().toISOString();
+const runStatus = (status: "running" | "paused" | "succeeded"): SseFrame =>
+  ({ type: "run.status", capability_run_id: RUN_ID, status, occurred_at: now(), sequence: ++sequence }) as SseFrame;
+const stageFrame = (type: "stage.started" | "stage.completed", stage: string, label: string): SseFrame =>
+  ({
+    type,
+    capability_run_id: RUN_ID,
+    stage,
+    label,
+    blurb: "",
+    summary: {},
+    seconds: 4,
+    occurred_at: now(),
+    sequence: ++sequence,
+  }) as SseFrame;
+const tickFrame = (stage: string, activity: string): SseFrame =>
+  ({
+    type: "tick",
+    stage,
+    activity,
+    done: null,
+    total: null,
+    unit: null,
+    section: null,
+    heartbeat: false,
+    dropped: 0,
+    ephemeral: true,
+    occurred_at: now(),
+  }) as SseFrame;
+
+/** Feed frames to the shell's one stream, as the server would. */
+function feed(...frames: SseFrame[]) {
+  act(() => {
+    for (const frame of frames) sseState.handlers?.onFrame?.(frame);
+  });
+}
+
+function connect() {
+  act(() => {
+    sseState.handlers?.onConnected?.();
+  });
+}
+
+/** Let the replay window pass, so what lands next is news. */
+function settle() {
+  act(() => {
+    vi.advanceTimersByTime(3_000);
+  });
+}
+
+describe("AppShell — the run strip (task 058, N12, D8)", () => {
   beforeEach(() => {
-    authState.signOut.mockClear();
-  });
-
-  it("shows the cross-tab pause banner for the Task's owner", () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     taskState.isOwner = true;
-    renderShell(`/tasks/${TASK_ID}/sources`);
-    expect(
-      screen.getByText(/a check-in is waiting on you/),
-    ).toBeInTheDocument();
+    taskState.access = "full";
+    taskState.latestRun = { status: "running" };
+    sseState.handlers = null;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    taskState.latestRun = null;
   });
 
-  it("a colleague reading a non-owned Task is never told a check-in is waiting on them", () => {
+  it("shows the current row and its activity under the tabs, status only", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching and screening"), tickFrame("acquire", "searching · 184 found so far"));
+    const strip = screen.getByText((_, el) => el?.tagName === "P" && /^Searching and screening · searching · 184 found so far · /.test(el.textContent ?? ""));
+    expect(strip.querySelector("a")).toBeNull();
+  });
+
+  it("is not on the Agent tab", () => {
+    renderShell(`/tasks/${TASK_ID}`);
+    connect();
+    feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching and screening"));
+    expect(screen.queryByText(/^Searching and screening · /)).toBeNull();
+  });
+
+  it("turns orange while a check-in waits, and replaces the old paused banner", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"), runStatus("paused"));
+    const strip = screen.getByText("Paused · a check-in is waiting on you");
+    expect(strip.closest("p")?.querySelector(".bg-orange")).not.toBeNull();
+    expect(screen.queryByText(/Go to the check-in/)).toBeNull();
+  });
+
+  it("never tells a colleague a check-in is waiting on them", () => {
     taskState.isOwner = false;
     renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"), stageFrame("stage.completed", "acquire", "Searching and screening"), runStatus("paused"));
     expect(screen.queryByText("Check-in pending")).not.toBeInTheDocument();
     expect(screen.queryByText(/a check-in is waiting on you/)).not.toBeInTheDocument();
+    expect(screen.getByText(/^Paused · Searching and screening · /)).toBeInTheDocument();
+  });
+
+  it("carries its one link when the run finishes, and the title says so", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"));
+    settle();
+    feed(runStatus("succeeded"));
+    const link = screen.getByRole("link", { name: "Read it →" });
+    expect(link).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
+    expect(link.closest("p")).toHaveTextContent("Report ready · Read it →");
+    expect(document.title).toBe("● Report ready · Acme task · Policy Atlas");
+  });
+
+  it("does not announce an old finish replayed when the page opens", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"), runStatus("succeeded"));
+    settle();
+    expect(screen.queryByRole("link", { name: "Read it →" })).toBeNull();
+    expect(document.title).not.toContain("Report ready");
+  });
+
+  it("mounts the reconnecting banner while the live connection is lapsed", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    act(() => {
+      sseState.handlers?.onDisconnected?.();
+    });
+    expect(screen.getByText(/Reconnecting to live updates/)).toBeInTheDocument();
+  });
+
+  it("is not in the public task view", () => {
+    taskState.access = "public";
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    expect(sseState.handlers).toBeNull();
+    expect(screen.queryByRole("button", { name: "Plan" })).toBeNull();
+  });
+});
+
+describe("AppShell — new content marks its tab (task 058, N14)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    taskState.isOwner = true;
+    taskState.access = "full";
+    taskState.latestRun = { status: "running" };
+    sseState.handlers = null;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    taskState.latestRun = null;
+  });
+
+  it("dots Result when a section lands while the user is on Sources, and not Sources itself", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"));
+    settle();
+    feed(
+      stageFrame("stage.completed", "acquire", "Searching and screening"),
+      { type: "artefact.skeleton", sections: [{ index: 0, title: "Why take-up matters", focus: "" }], occurred_at: now(), sequence: ++sequence } as SseFrame,
+      { type: "artefact.section_completed", index: 0, prose: "Take-up is lowest among the families it was designed for.", occurred_at: now(), sequence: ++sequence } as SseFrame,
+    );
+    const taskNav = screen.getByRole("navigation", { name: TASK.one });
+    expect(within(taskNav).getByRole("link", { name: /Result/ })).toHaveTextContent("New content");
+    expect(within(taskNav).getByRole("link", { name: /Sources/ })).not.toHaveTextContent("New content");
+  });
+
+  it("dots Sources when sources land while the user is elsewhere", () => {
+    renderShell(`/tasks/${TASK_ID}/history`);
+    connect();
+    feed(runStatus("running"));
+    settle();
+    feed(stageFrame("stage.completed", "screen", "Searching and screening"));
+    const taskNav = screen.getByRole("navigation", { name: TASK.one });
+    expect(within(taskNav).getByRole("link", { name: /Sources/ })).toHaveTextContent("New content");
+  });
+});
+
+describe("AppShell — the Plan control (task 058, N15)", () => {
+  it("opens the plan document as a read-only side panel from a non-Agent tab, and closes it", async () => {
+    taskState.isOwner = true;
+    taskState.access = "full";
+    const user = userEvent.setup();
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    const controls = screen.getAllByRole("button", { name: "Plan" });
+    // Two placements: the task nav (md+) and the bottom bar.
+    expect(controls).toHaveLength(2);
+    await user.click(controls[0]);
+    const panel = screen.getByRole("complementary", { name: "Search plan" });
+    expect(panel).toHaveAttribute("data-readonly", "true");
+    await user.click(screen.getByRole("button", { name: "Close the search plan" }));
+    expect(screen.queryByRole("complementary", { name: "Search plan" })).toBeNull();
   });
 });
 

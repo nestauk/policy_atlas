@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useLonglist, useTask, useSourceDossier } from "../api/queries";
+import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useLonglist, useRuns, useTask, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
 import {
   cardEvidenceMeta,
@@ -24,22 +24,25 @@ import type { TopSource } from "./artefactPresentation";
 import type { SidebarEntry } from "./ArtefactOutline";
 import { ArtefactDownload } from "./ArtefactDownload";
 import { errorCode } from "../lib/errors";
+import { useFreshness, useNow } from "../lib/freshness";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { COPY } from "../lib/vocabulary";
 import { RESULT_VIEWS, resultView } from "./lifecycle";
 import { hasLonglist, isBaselineArtefact, statusRun } from "./scopingActivity";
 import { useChatsEnabled } from "./taskResult";
-import { LonglistView } from "./longlist/LonglistView";
+import { LonglistBuilding, LonglistView } from "./longlist/LonglistView";
+import { isLonglistBuilding } from "./longlist/longlistPresentation";
 import { ShortlistView } from "./longlist/ShortlistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
+import { Button } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
 import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
-import { LIFECYCLE_PAGE_CLASS, READING_COLUMN_MAX_W } from "./listPageChrome";
+import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
 import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage, SnapshotCells, type SnapshotCell } from "./reportPage";
 import { usePublicView } from "./publicView";
 import {
@@ -1124,28 +1127,311 @@ export function showLiveArtefact(
     stream.run?.id === latestRun.capability_run_id &&
     (latestRun.status === "succeeded" || latestRun.status === "degraded");
   if (replayingFinished) return false;
-  return stream.run?.status === "running" || hasTerminalPartialLiveArtefact(stream);
+  return (
+    stream.run?.status === "running" ||
+    // A run parked on a check-in keeps the live body (task 058, N11).
+    stream.run?.status === "paused" ||
+    hasTerminalPartialLiveArtefact(stream)
+  );
 }
 
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+function subscribeReducedMotion(onChange: () => void): () => void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
+  const query = window.matchMedia(REDUCED_MOTION_QUERY);
+  query.addEventListener?.("change", onChange);
+  return () => query.removeEventListener?.("change", onChange);
+}
+
+function reducedMotionNow(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia(REDUCED_MOTION_QUERY).matches
+    : false;
+}
+
+/** True when the reader asked the system for reduced motion. */
+export function usePrefersReducedMotion(): boolean {
+  return useSyncExternalStore(subscribeReducedMotion, reducedMotionNow, () => false);
+}
+
+/** The latest non-null value seen, kept after the value goes null, so a
+ *  line can collapse with its last words instead of blanking first. */
+function useLatched<T>(value: T | null): T | null {
+  const [latched, setLatched] = useState<T | null>(value);
+  if (value !== null && value !== latched) setLatched(value);
+  return value ?? latched;
+}
+
+/** The server's key-findings slot: generated last, presented first, always
+ *  index 0 with this title (`runtime/progress.py` `emit_skeleton`). The
+ *  skeleton carries no role, so the slot is recognised by both. */
+const KEY_FINDINGS_SLOT_TITLE = "Key findings";
+
+export function isKeyFindingsSlot(section: Pick<LiveSection, "index" | "title">): boolean {
+  return section.index === 0 && section.title === KEY_FINDINGS_SLOT_TITLE;
+}
+
+/** The writer's verb while prose is streaming. The action line stands aside
+ *  for the draft while it reads this, and returns for the check and the
+ *  repair ("Checking claims", "Revising 1 claim"). */
+const WRITING_VERB = "Writing";
+
+/** Placeholder line widths (percent of the measure), two or three lines a
+ *  section, varied by index so the page does not read as a template. */
+const PLACEHOLDER_WIDTHS: readonly (readonly number[])[] = [
+  [100, 93, 58],
+  [97, 71],
+  [100, 88, 42],
+  [94, 100, 66],
+  [100, 79],
+  [100, 96, 37],
+  [91, 64],
+];
+
+function PlaceholderLines({ index, still }: { index: number; still: boolean }) {
+  const widths = PLACEHOLDER_WIDTHS[index % PLACEHOLDER_WIDTHS.length];
+  return (
+    <div
+      aria-hidden="true"
+      data-testid="placeholder-lines"
+      className={`mt-3 flex max-w-prose-measure flex-col gap-4 py-2 max-md:gap-3.5 ${still ? "" : "anim-breathe"}`}
+    >
+      {widths.map((width, line) => (
+        <span key={line} className="block h-2.5 bg-line" style={{ width: `${width}%` }} />
+      ))}
+    </div>
+  );
+}
+
+/** Split drafted text into paragraphs (blank lines) and mark the spans
+ *  under repair. Spans are code-point offsets into the draft, as the server
+ *  counts them. */
+export function draftParagraphs(
+  draft: string,
+  revising: readonly { start: number; end: number }[] = [],
+): { text: string; revising: boolean }[][] {
+  const chars = Array.from(draft);
+  const marked = new Array<boolean>(chars.length).fill(false);
+  for (const { start, end } of revising) {
+    for (let at = Math.max(0, start); at < Math.min(end, chars.length); at += 1) marked[at] = true;
+  }
+  const runs: { text: string; revising: boolean }[] = [];
+  chars.forEach((char, at) => {
+    const last = runs.at(-1);
+    if (last !== undefined && last.revising === marked[at]) last.text += char;
+    else runs.push({ text: char, revising: marked[at] });
+  });
+  const paragraphs: { text: string; revising: boolean }[][] = [[]];
+  for (const run of runs) {
+    run.text.split(/\n[ \t]*\n\s*/).forEach((piece, pieceAt) => {
+      if (pieceAt > 0) paragraphs.push([]);
+      if (piece !== "") paragraphs[paragraphs.length - 1].push({ text: piece, revising: run.revising });
+    });
+  }
+  return paragraphs.filter((paragraph) => paragraph.length > 0);
+}
+
+/** Drafted prose: plain text, no Markdown, no claim marker, no citation. A
+ *  span the checker failed blurs in place while the writer revises it. */
+function DraftProse({
+  draft,
+  revising,
+  className = "",
+}: {
+  draft: string;
+  revising?: readonly { start: number; end: number }[];
+  className?: string;
+}) {
+  return (
+    <div className={`max-w-prose-measure space-y-4 ${REPORT_BODY_CLASS} ${className}`}>
+      {draftParagraphs(draft, revising).map((paragraph, at) => (
+        <p key={at} className="whitespace-pre-line">
+          {paragraph.map((run, runAt) =>
+            run.revising ? (
+              <span key={runAt} data-revising="true" className="draft-revising">
+                {scrub(run.text)}
+              </span>
+            ) : (
+              <span key={runAt}>{scrub(run.text)}</span>
+            ),
+          )}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/** Whether the writer's tick names this section: its section line ends with
+ *  the section's title, or the tick has no section line at all (key
+ *  findings). */
+function tickNamesSection(sectionLine: string | undefined, title: string): boolean {
+  return sectionLine === undefined || sectionLine.endsWith(title);
+}
+
+function LiveSectionBlock({
+  section,
+  active,
+  activity,
+  breathing,
+  terminal,
+  reduceMotion,
+}: {
+  section: LiveSection;
+  active: boolean;
+  activity: string | null;
+  breathing: boolean;
+  terminal: boolean;
+  reduceMotion: boolean;
+}) {
+  const draft = section.draft ?? "";
+  const prose = section.prose ?? "";
+  const filled = section.state === "filled" && prose !== "";
+  const keyFindings = isKeyFindingsSlot(section);
+
+  // The draft layer fades off the settled prose when the section completes:
+  // the repaired sentence resolves out of its blur, nothing else moves.
+  // Kept in state from the render that saw the change, so the settled prose
+  // never shows a frame without it.
+  const [seen, setSeen] = useState({
+    state: section.state,
+    draft,
+    revising: section.revising,
+    streamed: draft !== "",
+  });
+  const [ghost, setGhost] = useState<{ draft: string; revising?: LiveSection["revising"] } | null>(null);
+  if (seen.state !== section.state || seen.draft !== draft || seen.revising !== section.revising) {
+    if (section.state === "filled" && seen.state !== "filled" && seen.draft !== "" && !reduceMotion) {
+      setGhost({ draft: seen.draft, revising: seen.revising });
+    }
+    setSeen({
+      state: section.state,
+      draft,
+      revising: section.revising,
+      streamed: seen.streamed || draft !== "",
+    });
+  }
+  useEffect(() => {
+    if (ghost === null) return undefined;
+    const done = window.setTimeout(() => setGhost(null), SETTLE_MS);
+    return () => window.clearTimeout(done);
+  }, [ghost]);
+
+  // The action line: before the first delta, then again for the check and
+  // the repair. It collapses with its last words when the section settles.
+  const showAction = active && !terminal && activity !== null && (draft === "" || activity !== WRITING_VERB);
+  const actionText = useLatched(showAction ? activity : null);
+
+  return (
+    <section className="mt-9" aria-busy={active && !terminal ? true : undefined}>
+      <h2 className={`flex items-center gap-2.5 ${REPORT_SECTION_HEADING_CLASS}`}>
+        <span>{scrub(section.title)}</span>
+        {active && !terminal && (
+          <span
+            aria-hidden="true"
+            data-testid="section-dot"
+            data-breathing={breathing ? "true" : "false"}
+            className={`inline-block size-2 flex-none rounded-full bg-yellow ${breathing ? "anim-breathe" : ""}`}
+          />
+        )}
+      </h2>
+      {keyFindings && !filled && !active && !terminal && (
+        <p className="mt-1.5 text-body text-grey">Written last, after the sections are checked.</p>
+      )}
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-[var(--ease-out-strong)] ${showAction ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+      >
+        <p
+          data-testid="action-line"
+          aria-hidden={showAction ? undefined : true}
+          className="min-h-0 overflow-hidden text-body text-grey"
+        >
+          <span className="block pt-1.5">{actionText === null ? "" : scrub(actionText)}</span>
+        </p>
+      </div>
+      {filled ? (
+        <div className="relative mt-2">
+          {/* The same paragraph layout as the draft, so the settle moves
+              nothing. */}
+          <DraftProse draft={prose} className={seen.streamed ? "" : "anim-rise"} />
+          {ghost !== null && (
+            <DraftProse
+              draft={ghost.draft}
+              revising={ghost.revising}
+              className="anim-settle-out pointer-events-none absolute inset-0 bg-paper"
+            />
+          )}
+        </div>
+      ) : draft !== "" ? (
+        <DraftProse draft={draft} revising={section.revising} className="mt-2" />
+      ) : terminal ? (
+        <p className="mt-2 text-body italic text-grey">
+          {section.focus !== "" ? scrub(section.focus) : "Waiting to be written."}
+        </p>
+      ) : (
+        <PlaceholderLines index={section.index} still={reduceMotion} />
+      )}
+    </section>
+  );
+}
+
+/** How long the draft takes to settle into the final prose. */
+const SETTLE_MS = 400;
+
 /**
- * The artefact-in-progress (strand 13): all planned section headings with
- * focus placeholders, "Writing this section now…" on the active one, prose
- * filling in place as each completes — whole-section grain. If the run ends
- * badly with sections already streamed, they stay visible under an explicit
- * terminal banner: drafted sections, not the evidence base.
+ * The report while it is being written (task 058, N8; annex scene 6).
+ *
+ * The question is the title. Every proposed section shows placeholder lines
+ * until its prose arrives; the section being written carries a dot after its
+ * heading and the writer's action line under it, then its draft as plain
+ * text. A sentence under repair blurs in place; on completion the draft
+ * settles into the final prose and nothing marks the section afterwards.
+ * After the last ordinary section the footer says claims are being checked,
+ * then that the report is ready. If the run ends badly with sections
+ * already streamed, they stay under the drafted-not-final banner.
+ *
+ * Args:
+ *   stream: The live run stream.
+ *   question: The task's question, the page title.
+ *   onReadReport: Opens the committed report once the run has finished.
  */
-export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
+export function LiveArtefactBody({
+  stream,
+  question,
+  onReadReport,
+}: {
+  stream: RunStreamState;
+  question?: string | null;
+  onReadReport?: () => void;
+}) {
   const sections = Object.values(stream.liveSections).sort((a, b) => a.index - b.index);
   const terminalPartial = hasTerminalPartialLiveArtefact(stream);
+  const finished = stream.run?.status === "succeeded" || stream.run?.status === "degraded";
+  const reduceMotion = usePrefersReducedMotion();
   const visible = sections.filter(
     (section: LiveSection) => !(section.state === "filled" && (section.prose ?? "") === ""),
   );
+  const writer = stream.liveness["synthesise"];
+  const active = finished || terminalPartial ? undefined : visible.find((section) => section.state === "writing");
+  const activity =
+    active !== undefined && writer !== undefined && tickNamesSection(writer.section, active.title)
+      ? writer.activity
+      : null;
+  const breathing = useFreshness(
+    active === undefined ? undefined : `${active.index}:${writer?.occurredAt ?? ""}:${(active.draft ?? "").length}`,
+  );
+  const ordinary = sections.filter((section) => !isKeyFindingsSlot(section));
+  const ordinaryDone = ordinary.length > 0 && ordinary.every((section) => section.state === "filled");
+  // The footer breathes while the key-findings pass and the citation step
+  // are still sending updates.
+  const footerBreathing = useFreshness(ordinaryDone && !finished ? writer?.occurredAt : undefined);
+
   return (
-    <main className={`artefact-page anim-rise mx-auto my-8 ${READING_COLUMN_MAX_W} bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0`}>
-      {terminalPartial ? (
+    <ReportPage>
+      {terminalPartial && (
         <div
           role="alert"
-          className="border-l-[3px] border-l-red bg-red-tint px-3.5 py-2.5 text-body leading-relaxed text-navy"
+          className="mb-8 border-l-[3px] border-l-red bg-red-tint px-3.5 py-2.5 text-body leading-relaxed text-navy"
         >
           <p className="font-bold">This run ended before the write-up completed.</p>
           <p className="mt-0.5">
@@ -1154,37 +1440,109 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
             artefact.
           </p>
         </div>
-      ) : (
-        <p role="status" className="flex items-center gap-2 text-body text-grey">
-          <span aria-hidden="true" className="anim-breathe inline-block h-2 w-2 bg-blue" />
-          Being written now — sections appear as they are drafted
-        </p>
       )}
+      {question != null && question !== "" && <h1 className={REPORT_TITLE_CLASS}>{scrub(question)}</h1>}
+      <p role="status" aria-live="polite" className="sr-only">
+        {active !== undefined ? `${scrub(active.title)} is being written` : ""}
+      </p>
       {visible.map((section) => (
-        <section key={section.index} className="mt-9">
-          <h2 className="text-heading font-bold text-navy">{scrub(section.title)}</h2>
-          {section.state === "filled" && (section.prose ?? "") !== "" ? (
-            <p className="anim-rise mt-2 max-w-prose-measure whitespace-pre-line text-lead text-ink">
-              {scrub(section.prose ?? "")}
-            </p>
-          ) : section.state === "writing" && !terminalPartial ? (
-            <p role="status" className="anim-breathe mt-2 text-body text-grey">
-              Writing this section now…
-            </p>
-          ) : (
-            <p className="mt-2 text-body italic text-grey">
-              {section.focus !== "" ? scrub(section.focus) : "Waiting to be written."}
-            </p>
-          )}
-        </section>
+        <LiveSectionBlock
+          key={section.index}
+          section={section}
+          active={section === active}
+          activity={section === active ? activity : null}
+          breathing={breathing}
+          terminal={terminalPartial || finished}
+          reduceMotion={reduceMotion}
+        />
       ))}
-      {!terminalPartial && (
-        <p className="mt-10 border-t border-line pt-4 text-body text-grey">
-          Citations and source provenance are attached when the write-up completes and is
-          checked.
-        </p>
+      {finished ? (
+        <div className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-line pt-5">
+          <p role="status" className="flex items-center gap-2.5 text-body font-semibold text-[#0c6b5a]">
+            <span aria-hidden="true" className="inline-block size-2 flex-none rounded-full bg-green" />
+            Report ready
+          </p>
+          {onReadReport !== undefined && <Button onClick={onReadReport}>Read the full report</Button>}
+        </div>
+      ) : (
+        ordinaryDone &&
+        !terminalPartial && (
+          <p role="status" className="mt-12 flex items-center gap-2.5 border-t border-line pt-5 text-body text-grey">
+            <span
+              aria-hidden="true"
+              data-testid="footer-dot"
+              data-breathing={footerBreathing ? "true" : "false"}
+              className={`inline-block size-2 flex-none rounded-full bg-yellow ${footerBreathing ? "anim-breathe" : ""}`}
+            />
+            Checking claims and attaching citations
+          </p>
+        )
       )}
-    </main>
+    </ReportPage>
+  );
+}
+
+/**
+ * The Result tab before writing (task 058, N11; annex scene 5): the report
+ * to be, titled with the question, and one sentence. The run strip above it
+ * says where the run is.
+ */
+export function ReportToBe({
+  question,
+  ended = false,
+}: {
+  question: string | null | undefined;
+  /** The run ended before any section was proposed (failed, aborted, interrupted). */
+  ended?: boolean;
+}) {
+  return (
+    <ReportPage>
+      {question != null && question !== "" && <h1 className={REPORT_TITLE_CLASS}>{scrub(question)}</h1>}
+      <p className="mt-4 text-body text-grey">
+        {ended ? "This run ended before writing began." : "The report's sections are set out when writing begins."}
+      </p>
+    </ReportPage>
+  );
+}
+
+/** "3 November", with the year only when it is not this year. */
+export function reportDateLabel(iso: string, now: Date = new Date()): string {
+  const date = new Date(iso);
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+  });
+}
+
+/** Whole minutes since `iso`, never below one. */
+export function minutesSince(iso: string, nowMs: number): number {
+  return Math.max(1, Math.floor((nowMs - new Date(iso).getTime()) / 60_000));
+}
+
+/**
+ * The one plain line above an existing report while a new run is under way
+ * (task 058, N11; annex scene 8). No button: the strip above carries the
+ * stage, and the sidebar rail and the Agent tab are the routes to the run.
+ */
+export function RerunNotice({
+  taskId,
+  artefactId,
+  runStartedAt,
+}: {
+  taskId: string;
+  artefactId: string;
+  runStartedAt: string;
+}) {
+  const runs = useRuns(taskId, { page_size: 50, parentless: true });
+  const nowMs = useNow(true, 30_000);
+  const madeBy = (runs.data?.data ?? []).find((run) => run.artefact_id === artefactId);
+  if (madeBy?.ended_at == null) return null;
+  return (
+    <p data-testid="rerun-notice" className="mb-6 border-b border-line pb-4 text-body text-grey">
+      This report is from {reportDateLabel(madeBy.ended_at)}. A new run started{" "}
+      {minutesSince(runStartedAt, nowMs) < 1 ? "just now" : `${minutesSince(runStartedAt, nowMs)} min ago`}.
+    </p>
   );
 }
 
@@ -1332,13 +1690,17 @@ export function ArtefactView() {
   const { taskId = "" } = useParams();
   const isPublicView = usePublicView();
   const task = useTask(taskId);
-  if (isPublicView || !hasLonglist(task.data)) return <ArtefactReport />;
-  return <ScopingResult taskId={taskId} />;
+  const stream = useRunStream(taskId);
+  // While a longlist walk runs the Result is the longlist being built
+  // (task 058, N24), before and after the longlist read first answers.
+  const building = !isPublicView && isLonglistBuilding(task.data, stream.stages);
+  if (isPublicView || (!hasLonglist(task.data) && !building)) return <ArtefactReport />;
+  return <ScopingResult taskId={taskId} building={building} />;
 }
 
-/** A scoping task's Result once its longlist exists: the switch, then the
- *  chosen view. */
-function ScopingResult({ taskId }: { taskId: string }) {
+/** A scoping task's Result once its longlist exists or is being built: the
+ *  switch, then the chosen view. */
+function ScopingResult({ taskId, building }: { taskId: string; building: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const longlist = useLonglist(taskId);
   const view = resultView(searchParams.get("view"));
@@ -1373,6 +1735,8 @@ function ScopingResult({ taskId }: { taskId: string }) {
       </Tabs>
       {view === "baseline" ? (
         <ArtefactReport />
+      ) : building && (view === "longlist" || longlist.data == null) ? (
+        <LonglistBuilding taskId={taskId} />
       ) : longlist.data != null ? (
         view === "shortlist" ? (
           <ShortlistView taskId={taskId} longlist={longlist.data} />
@@ -1425,6 +1789,46 @@ function ArtefactReport() {
   // band under the title came off).
   const baseline = isBaselineArtefact(artefact.data);
   useDocumentTitle(task.data?.name, baseline ? "Baseline" : "Report");
+  const latestRun = statusRun(task.data);
+  const question = task.data?.question ?? stream.task.question ?? task.data?.name ?? null;
+  const showLive = showLiveArtefact(stream, latestRun);
+  // A run watched while it wrote keeps its page when it finishes: the footer
+  // says the report is ready and the reader opens it (task 058, N8). A run
+  // that had already finished when the page loaded opens the report at once.
+  const [watchedRunId, setWatchedRunId] = useState<string | null>(null);
+  const [openedRunId, setOpenedRunId] = useState<string | null>(null);
+  const liveRunId = stream.run?.id ?? null;
+  if (
+    showLive &&
+    task.data !== undefined &&
+    stream.run?.status === "running" &&
+    liveRunId !== null &&
+    watchedRunId !== liveRunId
+  ) {
+    setWatchedRunId(liveRunId);
+  }
+  const readyHere =
+    liveRunId !== null &&
+    liveRunId === watchedRunId &&
+    liveRunId !== openedRunId &&
+    (stream.run?.status === "succeeded" || stream.run?.status === "degraded") &&
+    Object.keys(stream.liveSections).length > 0;
+  const liveBody = (
+    <LiveArtefactBody
+      stream={stream}
+      question={question}
+      onReadReport={liveRunId === null ? undefined : () => setOpenedRunId(liveRunId)}
+    />
+  );
+  // A new run over an existing report: not the replay of the run that made it.
+  const rerunLive =
+    !isPublicView &&
+    task.data !== undefined &&
+    stream.run !== null &&
+    (stream.run.status === "running" || stream.run.status === "paused") &&
+    !(latestRun?.capability_run_id === stream.run.id && latestRun.ended_at != null);
+  const rerunStartedAt =
+    latestRun?.capability_run_id === stream.run?.id ? latestRun?.started_at : stream.run?.startedAt;
 
   const openDossier = (title: string) => {
     setSearchParams((current) => {
@@ -1495,19 +1899,12 @@ function ArtefactReport() {
   if (artefact.isError || artefact.data === undefined || artefact.data === null) {
     // No committed artefact: show the in-progress skeleton when sections are
     // streaming (or streamed before a bad ending) — otherwise the empty state.
-    if (showLiveArtefact(stream, statusRun(task.data))) {
-      return <LiveArtefactBody stream={stream} />;
-    }
-    return (
-      <main className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
-        <Card role="status" className="p-8 text-center">
-          <h1 className="text-title font-bold text-navy">Preparing your results...</h1>
-          <p className="mt-1.5 text-body text-grey">
-          Your synthesised report will appear here when the Writing step begins.
-          </p>
-        </Card>
-      </main>
-    );
+    if (showLive || readyHere) return liveBody;
+    const endedEarly =
+      stream.run?.status === "failed" ||
+      stream.run?.status === "aborted" ||
+      stream.run?.status === "interrupted";
+    return <ReportToBe question={question} ended={endedEarly} />;
   }
 
   const data = artefact.data;
@@ -1518,9 +1915,7 @@ function ArtefactReport() {
   // hiding that behind the old artefact would be dishonest (live-check
   // adjudication, 2026-07-29). A new run or a fresh mount clears it. Replay
   // of a finished succeeded run must not flash through this view.
-  if (showLiveArtefact(stream, statusRun(task.data))) {
-    return <LiveArtefactBody stream={stream} />;
-  }
+  if (showLive || readyHere) return liveBody;
 
   const snapshot = data.coverage_snapshot;
   // Study types and years count the CITED set (the live cited-scope
@@ -1625,6 +2020,9 @@ function ArtefactReport() {
 
   return (
     <ReportPage entries={outlineEntries}>
+      {rerunLive && rerunStartedAt !== undefined && (
+        <RerunNotice taskId={taskId} artefactId={data.artefact_id} runStartedAt={rerunStartedAt} />
+      )}
       <header id="answer" className="mb-8">
         <ReportKindRow kind={baseline ? "Baseline" : "Report"}>
           {/* The kind-of-artefact slot. The roll-up's depth label

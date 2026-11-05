@@ -5,7 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthApi } from "../auth/types";
-import { taskNameFromQuestion, useCreateTask, useUpdateProject, useUpdateTask } from "./mutations";
+import {
+  TaskAgentStreamInterruptedError,
+  consumeTaskAgentStream,
+  taskNameFromQuestion,
+  useCreateTask,
+  useUpdateProject,
+  useUpdateTask,
+} from "./mutations";
 
 describe("taskNameFromQuestion", () => {
   it("drops a trailing question mark", () => {
@@ -294,5 +301,47 @@ describe("useCreateTask — one create request carrying projects and links", () 
     result.current.mutate({ question: "A question", projectId: "project-1" });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // Task 058 (N9): the Agent tab streams the opening turn; create never posts it.
+    const calledUrls = fetchMock.mock.calls.map(([req]) => (req as Request).url);
+    expect(calledUrls.some((url) => url.includes("/task-agent-turns"))).toBe(false);
+  });
+});
+
+describe("consumeTaskAgentStream (task 058, N9)", () => {
+  function body(lines: string[], splitAt?: number): ReadableStream<Uint8Array> {
+    const text = lines.map((line) => `${line}\n`).join("");
+    const encoder = new TextEncoder();
+    const pieces = splitAt === undefined ? [text] : [text.slice(0, splitAt), text.slice(splitAt)];
+    return new ReadableStream({
+      start(controller) {
+        for (const piece of pieces) controller.enqueue(encoder.encode(piece));
+        controller.close();
+      },
+    });
+  }
+
+  it("hands over progress and deltas in order, then returns the one terminal event", async () => {
+    const events: string[] = [];
+    const terminal = await consumeTaskAgentStream(
+      body(
+        [
+          JSON.stringify({ type: "progress", label: "Drafting the plan" }),
+          JSON.stringify({ type: "delta", text: "I can " }),
+          JSON.stringify({ type: "delta", text: "search for this." }),
+          JSON.stringify({ type: "completed", turn: { reply: "I can search for this." } }),
+          JSON.stringify({ type: "delta", text: "ignored after the terminal event" }),
+        ],
+        23,
+      ),
+      (event) => events.push(event.type === "delta" ? event.text : event.type),
+    );
+    expect(events).toEqual(["progress", "I can ", "search for this.", "completed"]);
+    expect(terminal).toMatchObject({ type: "completed", turn: { reply: "I can search for this." } });
+  });
+
+  it("says the connection dropped when the body ends before a terminal event", async () => {
+    await expect(
+      consumeTaskAgentStream(body([JSON.stringify({ type: "delta", text: "half" })]), () => undefined),
+    ).rejects.toBeInstanceOf(TaskAgentStreamInterruptedError);
   });
 });

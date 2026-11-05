@@ -241,6 +241,7 @@ export function TaskListPanel({
             sourceCount={row.source_count}
             updatedAt={row.updated_at}
             latestRun={statusRun(row)}
+            activeRun={row.active_run}
             ownerDisplay={showOwner ? (row.owner_display ?? null) : undefined}
             ownerlessLabel={ownerlessLabel}
           />

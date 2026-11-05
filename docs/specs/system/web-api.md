@@ -719,7 +719,7 @@ Frame vocabulary (discriminated union, `type` names are contract):
 |---|---|---|
 | `run.status` | `{capability_run_id, status}` | walk open/park/finish/interrupt |
 | `stage.started` | `{stage, label, blurb}` | component run start |
-| `stage.completed` | `{stage, label, summary, seconds}` | component terminal |
+| `stage.completed` | `{stage, label, summary, seconds, counts: [{value, noun}]}` (`counts` is what the done row shows, in the server's words; task 058) | component terminal |
 | `stage.failed` | `{stage, label, reason, skipped}` | component failure/skip |
 | `artefact.skeleton` | `{sections: [{index, title, focus}]}` in presentation order | synthesise presentation progress |
 | `artefact.section_started` | `{index}` | synthesise presentation progress |

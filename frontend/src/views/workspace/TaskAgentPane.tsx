@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 
 import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns, useTask } from "../../api/queries";
 import { useComposerSeed } from "../../lib/composerSeed";
@@ -26,6 +26,7 @@ import type {
   StageEntry,
 } from "../../store";
 import { Button } from "../../ui/brand/Button";
+import { StatusDot } from "../../ui/brand/Card";
 import { cn } from "../../ui/brand/cn";
 import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
 import { ReauthRedirect } from "../../ui/feedback";
@@ -36,14 +37,13 @@ import { ChatAnswer } from "./chat/ChatMessages";
 import { JumpToEnd } from "./chat/JumpToEnd";
 import { useFooterReveal } from "./chat/useFooterReveal";
 import { usePinToBottom } from "./chat/usePinToBottom";
-import { sessionAnsweredCheckIn } from "../../store/thread";
 import { AnsweredCheckIn } from "./AnsweredCheckIn";
 import { CheckInCard } from "./CheckInCard";
 import { BASELINE_GATE_KIND } from "./checkInPresentation";
-import { PartCard, type PartState, confirmTarget, derivePartStates } from "./PartCard";
+import { PartCard, type PartState, type PlanStep, confirmTarget, derivePartStates, planSteps } from "./PartCard";
 import { PlanCard } from "./PlanCard";
 import type { PlanOverlay } from "./planOverlay";
-import { COMPONENT_LABEL, RUN_BLOCK_STATUS } from "./planVocabulary";
+import { RUN_BLOCK_STATUS } from "./planVocabulary";
 import { RunningCard, RunningCardDock } from "./RunningCard";
 import {
   completedSignposts,
@@ -147,10 +147,7 @@ export function baselineGateInput(
   const resolved = stream.decisions.find((entry) => entry.checkInId === checkIn.check_in_id) ?? null;
   if (resolved === null) return { checkIn, decision: null };
   const optionId = resolved.response["option_id"];
-  const label =
-    (checkIn.options ?? []).find((option) => option.id === optionId)?.label ??
-    sessionAnsweredCheckIn(checkIn.check_in_id)?.chosenOptionLabel ??
-    null;
+  const label = (checkIn.options ?? []).find((option) => option.id === optionId)?.label ?? null;
   return {
     // A resolved decision is definitive: the read model may still be showing
     // the pre-decision row until its refetch lands.
@@ -300,9 +297,11 @@ export function Composer({
   );
 }
 
-function UserBubble({ text }: { text: string }) {
+/** `rise`: only a bubble that is arriving now rises; the durable row that
+ *  replaces a streamed one appears in place, so nothing animates twice. */
+function UserBubble({ text, rise = false }: { text: string; rise?: boolean }) {
   return (
-    <div className="anim-rise ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5">
+    <div className={cn(rise && "anim-rise", "ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5")}>
       <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>
     </div>
   );
@@ -312,9 +311,22 @@ function UserBubble({ text }: { text: string }) {
  *  `.task_agent`); only part cards and the plan card are bordered. */
 function TaskAgentBubble({ text }: { text: string }) {
   return (
-    <div className="anim-rise mr-8">
+    <div className="mr-8">
       <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>
     </div>
+  );
+}
+
+/** The grey action line under a streaming planner reply (task 058, N9;
+ *  annex scene 10): what the planner is doing, with the breathing dot while
+ *  the reply is arriving. After a dropped connection the dot holds still
+ *  while the transcript is re-read. */
+function PlannerActionLine({ label, live }: { label: string; live: boolean }) {
+  return (
+    <p role="status" className="mr-8 flex items-center gap-2 text-body text-grey">
+      <StatusDot tone="running" className={cn(live && "anim-breathe")} />
+      {scrub(label)}
+    </p>
   );
 }
 
@@ -370,8 +382,8 @@ function DurableTurn({
   onRetry,
   retryDisabled,
   partState,
+  steps,
   onSend,
-  onPrefill,
 }: {
   taskId: string;
   turn: TaskAgentThreadTurn;
@@ -379,17 +391,17 @@ function DurableTurn({
   onRetry: (input: { message: string; clientTurnId: string }) => void;
   retryDisabled: boolean;
   partState: PartState | undefined;
+  /** The plan's steps, for the stepper above the active part card. */
+  steps: PlanStep[];
   onSend: (message: string) => void;
-  onPrefill: (message: string) => void;
 }) {
   // A button-confirm turn's record is the ✓ on its part card — the canned
   // marker bubble would only duplicate it (binding record: task_agent-stage).
   const isConfirmTurn = confirmTarget(turn.user_message) !== null;
   // A turn stored before task 044 carries no kind: it is a reply.
   const kind = turn.kind ?? "reply";
-  const taskAgentText = [turn.reply, turn.part?.body]
-    .filter((piece): piece is string => piece != null && piece !== "")
-    .join("\n\n");
+  // A part's body renders inside its card, under its title (annex scene 11).
+  const taskAgentText = turn.reply ?? "";
   if (kind === "answer") {
     return (
       <div className="space-y-6">
@@ -432,10 +444,11 @@ function DurableTurn({
       {turn.part != null && partState !== undefined && (
         <PartCard
           part={turn.part}
+          partName={steps.find((step) => step.id === turn.part?.id)?.name}
           state={partState}
           disabled={retryDisabled}
+          steps={steps}
           onSend={onSend}
-          onPrefill={onPrefill}
         />
       )}
       {turn.status === "pending" && (
@@ -487,9 +500,10 @@ export function presentRunDecisions(
             (value): value is string => typeof value === "string",
           )
         : undefined;
+    // The stage frame carries the server's label (task 058, N17); a
+    // component the run never framed has no line.
     const stageLabel =
-      (component === undefined ? undefined : [...stages].reverse().find((stage) => stage.stage === component)?.label)
-      ?? (component === undefined ? undefined : COMPONENT_LABEL[component]);
+      component === undefined ? undefined : [...stages].reverse().find((stage) => stage.stage === component)?.label;
     return stageLabel === undefined ? [] : [{ ...decision, summary: `Completed: ${stageLabel}` }];
   });
 
@@ -529,15 +543,18 @@ export function presentRunDecisions(
 function AnsweredCheckIns({
   answered,
   checkIns,
+  stages,
 }: {
   answered: ResolvedDecision[];
   checkIns: ReturnType<typeof useCheckIns>["data"];
+  stages: StageEntry[];
 }) {
   return answered.map((decision) => (
     <AnsweredCheckIn
       key={decision.checkInId}
       decision={decision}
       checkIn={checkIns?.data.find((checkIn) => checkIn.check_in_id === decision.checkInId)}
+      stages={stages}
     />
   ));
 }
@@ -612,7 +629,7 @@ function RunBlock({
           </p>
         </div>
       ))}
-      <AnsweredCheckIns answered={answered} checkIns={checkIns} />
+      <AnsweredCheckIns answered={answered} checkIns={checkIns} stages={stages} />
       {/* The chat's own destination once the run lands (owner, 2026-08-05):
           a completed run's last word shouldn't be a quiet stage echo. */}
       {/* Its kind is its own run's (task 045, A8) — never the live stream's. */}
@@ -675,13 +692,17 @@ export function TaskAgentPane({
   const checkInsQuery = useCheckIns(taskId, "all");
   const funnel = useFunnel(taskId);
   const [message, setMessage] = useState("");
-  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [runMinimised, setRunMinimised] = useState(false);
   const [cardOffscreen, setCardOffscreen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   useComposerSeed(setMessage);
 
-  const durableTurns = (transcript.data?.data ?? []) as TaskAgentThreadTurn[];
+  // A turn still streaming (or re-read after a dropped connection) shows as
+  // its local row until it lands, so its durable row is held back meanwhile.
+  const inFlightIds = new Set(transcript.optimisticTurns.map((turn) => turn.clientTurnId));
+  const durableTurns = ((transcript.data?.data ?? []) as TaskAgentThreadTurn[]).filter(
+    (turn) => !inFlightIds.has(turn.client_turn_id),
+  );
   const { boundaries, runDecisions } = threadInputs(
     durableTurns,
     runsQuery.data?.data ?? [],
@@ -706,6 +727,12 @@ export function TaskAgentPane({
   const latestTurnIndex =
     durableTurns.length > 0 ? Math.max(...durableTurns.map((turn) => turn.turn_index)) : null;
   const partStates = derivePartStates(durableTurns);
+  const steps = planSteps(
+    planQuery.data?.capability ?? durableTurns.at(-1)?.capability,
+    durableTurns,
+    partStates,
+  );
+  const streaming = transcript.isSubmitting;
 
   const runActive = runStatus === "running" || runStatus === "paused";
   // Task 044 Phase 5.5: a scoping walk parked on the baseline gate keeps the
@@ -794,7 +821,6 @@ export function TaskAgentPane({
           hasFindings={hasFindings}
           minimised={runMinimised}
           onMinimisedChange={setRunMinimised}
-          onSeePlan={onReviewPlan}
           capability={planQuery.data?.capability}
           purpose={liveRunPurpose}
         />
@@ -817,16 +843,47 @@ export function TaskAgentPane({
     const trimmed = input.message.trim();
     if (trimmed.length === 0 || composerDisabled) return;
     setMessage("");
-    void transcript
-      .send({ message: trimmed, clientTurnId: input.clientTurnId })
-      .then((result) => setSuggestions(result?.suggestions ?? []))
-      .catch(() => setSuggestions([]));
+    // A failure stays on its own row with a retry; nothing to do here.
+    void transcript.send({ message: trimmed, clientTurnId: input.clientTurnId }).catch(() => undefined);
   };
+
+  // The opening turn (task 058, N9): the New Task screen navigates here at
+  // once with the question, and this tab streams the planner's first reply.
+  // The turn id was minted there, so the server's idempotency covers a
+  // repeated mount; the navigation state is cleared once it is sent.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const opening = (location.state as { openingTurn?: { message: string; clientTurnId: string } } | null)
+    ?.openingTurn;
+  const openingSent = useRef<string | null>(null);
+  const transcriptLoaded = transcript.data !== undefined;
+  const { send: sendTurn } = transcript;
+  useEffect(() => {
+    if (opening === undefined || !transcriptLoaded || !isOwner) return;
+    if (openingSent.current === opening.clientTurnId) return;
+    openingSent.current = opening.clientTurnId;
+    void navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+    void sendTurn(opening).catch(() => undefined);
+  }, [opening, transcriptLoaded, isOwner, sendTurn, navigate, location.pathname, location.search]);
+
+  // The planner's clarifying question and its quick replies come from the
+  // stored turn (N10), so they survive a reload. They belong to the latest
+  // turn only, and a turn that carries a part card answers through the card.
+  const lastItem = thread.at(-1);
+  const askingTurn =
+    lastItem?.type === "task_agent_turn" && lastItem.turn.status === "completed" && lastItem.turn.part == null
+      ? lastItem.turn
+      : null;
+  const suggestions = askingTurn?.suggestions ?? [];
+  const question = askingTurn?.question ?? null;
 
   // The landing (no conversation yet) is a bare centred prompt — no pane
   // heading, no helper copy (Claude design concept; owner, 2026-08-05).
   const landing =
-    transcript.data !== undefined && thread.length === 0 && transcript.optimisticTurns.length === 0;
+    transcript.data !== undefined &&
+    thread.length === 0 &&
+    transcript.optimisticTurns.length === 0 &&
+    opening === undefined;
 
   return (
     <section aria-label="Task Agent conversation" className="flex h-full min-h-0 flex-col">
@@ -902,13 +959,13 @@ export function TaskAgentPane({
                 onRetry={send}
                 retryDisabled={composerDisabled}
                 partState={partStates.get(item.turn.turn_index)}
+                steps={steps}
                 onSend={(text) => send({ message: text, clientTurnId: crypto.randomUUID() })}
-                onPrefill={setMessage}
               />
             ) : item.run.capability_run_id === liveRunId && liveCard !== null ? (
               <div key="live-run-block" className="space-y-6">
                 {liveCard}
-                <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} />
+                <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} stages={stream.stages} />
                 {signpostBubbles}
                 <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={liveKind} />
               </div>
@@ -927,7 +984,7 @@ export function TaskAgentPane({
               />
             );
           return index === planCardAt - 1
-            ? [rendered, <PlanCard key="plan-card" taskId={taskId} runActive={runActive} started={planStarted} isOwner={isOwner} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} onDiscardOverlay={onDiscardOverlay} />]
+            ? [rendered, <PlanCard key="plan-card" taskId={taskId} runActive={runActive} streaming={streaming} started={planStarted} isOwner={isOwner} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} onDiscardOverlay={onDiscardOverlay} />]
             : [rendered];
         })}
 
@@ -935,7 +992,11 @@ export function TaskAgentPane({
           <div key={turn.clientTurnId} className="space-y-6">
             {/* Button-confirm turns never show a bubble — durable turns hide
                 them too; the ✓ on the part card is the record. */}
-            {confirmTarget(turn.userMessage) === null && <UserBubble text={turn.userMessage} />}
+            {confirmTarget(turn.userMessage) === null && <UserBubble text={turn.userMessage} rise />}
+            {turn.reply !== undefined && turn.reply !== "" && <TaskAgentBubble text={turn.reply} />}
+            {turn.status !== "failed" && turn.progressLabel !== undefined && (
+              <PlannerActionLine label={turn.progressLabel} live={turn.status === "pending"} />
+            )}
             {turn.status === "failed" && (
               <div className="mr-8 border border-line bg-paper px-3.5 py-2.5">
                 <p className="text-body text-ink">
@@ -973,18 +1034,16 @@ export function TaskAgentPane({
           </div>
         ))}
 
-        {transcript.isSubmitting && (
-          <div role="status" className="anim-breathe mr-8 flex items-center gap-2 px-3.5 text-body text-grey">
-            <span aria-hidden="true" className="h-2 w-2 bg-blue" />
-            Planning…
-          </div>
-        )}
-
-        {/* Suggestion chips send a task_agent turn (task 033 phase 10c,
-            contract § 11 / rubric 37) — owner-only, hidden for a colleague
-            rather than left clickable to a 403. */}
-        {isOwner && suggestions.length > 0 && !transcript.isSubmitting && !composerFenced && (
-          <div className="flex flex-wrap gap-1.5">
+        {/* The planner's question, then its quick replies (N10). The chips
+            send a task_agent turn (task 033 phase 10c, contract § 11 / rubric
+            37) — owner-only, hidden for a colleague rather than left
+            clickable to a 403. */}
+        {isOwner && suggestions.length > 0 && !streaming && !composerFenced && (
+          <div className="mr-8 space-y-2">
+            {question !== null && question !== "" && (
+              <p className="max-w-prose-measure text-body font-semibold text-navy">{scrub(question)}</p>
+            )}
+            <div className="flex flex-wrap gap-1.5">
             {suggestions.map((suggestion) => (
               <button
                 key={suggestion}
@@ -995,6 +1054,7 @@ export function TaskAgentPane({
                 {scrub(suggestion)}
               </button>
             ))}
+            </div>
           </div>
         )}
 
@@ -1010,7 +1070,7 @@ export function TaskAgentPane({
         {liveCard !== null && !threadHasLiveRun && (
           <div key="live-run-fallback" className="space-y-6">
             {liveCard}
-            <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} />
+            <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} stages={stream.stages} />
             {signpostBubbles}
             <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={liveKind} />
           </div>

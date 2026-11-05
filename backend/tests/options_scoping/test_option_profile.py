@@ -1586,7 +1586,7 @@ def test_typing_publishes_batches_done_of_total(
         walk.option(f"Seed option {i}", origin="added_by_you")
     walk.build(_Scripted())
 
-    typing_calls = [c for c in calls if c["unit"] == "batches"]
+    typing_calls = [c for c in calls if c.get("unit") == "batches"]
     assert all(c["total"] == 3 for c in typing_calls)
     assert sorted(c["done"] for c in typing_calls) == [0, 1, 2, 3]
     assert max(typing_calls, key=lambda c: c["done"])["activity"] == (
@@ -1612,7 +1612,7 @@ def test_place_sentences_publish_options_done_and_a_retry_does_not_move_it(
     stats = walk.result(run_id).provenance["option_profile"]["place_sentences"]
 
     assert stats["retries"] == 1  # the one option's call was tried twice
-    place_calls = [c for c in calls if c["unit"] == "options"]
+    place_calls = [c for c in calls if c.get("unit") == "options"]
     assert all(c["total"] == 1 for c in place_calls)
     assert [c["done"] for c in place_calls] == [0, 1]
     assert place_calls[-1]["activity"] == "Writing place sentences · 1 of 1 options"

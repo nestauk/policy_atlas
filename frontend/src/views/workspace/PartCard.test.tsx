@@ -4,7 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   PartCard,
+  type PlanStep,
   type TaskAgentTurn,
+  optionNeedsWords,
+  planSteps,
   chipDisplayLabel,
   chipEditMessage,
   confirmMessage,
@@ -97,129 +100,114 @@ describe("chipEditMessage", () => {
   });
 });
 
-describe("PartCard", () => {
-  it("sends the canned confirm for the primary; bare secondary options prefill", async () => {
-    const user = userEvent.setup();
-    const onSend = vi.fn();
-    const onPrefill = vi.fn();
-    render(
-      <PartCard
-        part={proposal("scope")}
-        state={{ live: true, confirmedOptionId: null }}
-        disabled={false}
-        onSend={onSend}
-        onPrefill={onPrefill}
-      />,
+describe("PartCard (task 058, N18; annex scene 11)", () => {
+  function renderPart(
+    part: NonNullable<TaskAgentTurn["part"]>,
+    state = { live: true, confirmedOptionId: null as string | null },
+    onSend = vi.fn(),
+    extra: { partName?: string; steps?: PlanStep[] } = {},
+  ) {
+    render(<PartCard part={part} state={state} disabled={false} onSend={onSend} {...extra} />);
+    return onSend;
+  }
+
+  it("is a radio list: the primary first with its reason under it, nothing chosen, no Recommended", () => {
+    renderPart(
+      proposal("question", {
+        options: [
+          { id: "refine", label: "Narrow it", sub: "Tell me what to add or leave out.", primary: false, reason: null },
+          { id: "confirm", label: "That's my question", sub: null, primary: true, reason: "It names the outcome, the group and the setting." },
+        ],
+      }),
     );
-    await user.click(screen.getByRole("button", { name: /Looks right/ }));
+    const radios = screen.getAllByRole("radio");
+    expect(radios.map((radio) => radio.getAttribute("data-option-id"))).toEqual(["confirm", "refine"]);
+    expect(radios[0]).toHaveTextContent("That's my question");
+    expect(radios[0]).toHaveTextContent("It names the outcome, the group and the setting.");
+    expect(radios[1]).toHaveTextContent("Tell me what to add or leave out.");
+    expect(radios.every((radio) => radio.getAttribute("aria-checked") === "false")).toBe(true);
+    expect(screen.queryByText(/Recommended/)).toBeNull();
+  });
+
+  it("sends the canned confirm for a choice", async () => {
+    const user = userEvent.setup();
+    const onSend = renderPart(proposal("scope"));
+    await user.click(screen.getByRole("radio", { name: /Looks right/ }));
     expect(onSend).toHaveBeenCalledWith("Looks right\n\n[confirm part=scope option=confirm]");
-    await user.click(screen.getByRole("button", { name: /Change it/ }));
-    expect(onPrefill).toHaveBeenCalledWith("Change it: ");
   });
 
-  it("renders every option as secondary when none is primary (task 044: scoping depth has no default, ruling 25)", () => {
-    const part = proposal("depth", {
-      options: [
-        { id: "rapid", label: "Rapid scoping", sub: null, primary: false, reason: null },
-        { id: "standard", label: "Standard scoping", sub: null, primary: false, reason: null },
-      ],
-    });
-    render(
-      <PartCard
-        part={part}
-        state={{ live: true, confirmedOptionId: null }}
-        disabled={false}
-        onSend={vi.fn()}
-        onPrefill={vi.fn()}
-      />,
-    );
-    const rapid = screen.getByRole("button", { name: "Rapid scoping" });
-    const standard = screen.getByRole("button", { name: "Standard scoping" });
-    expect(rapid.dataset.partOption).toBe("secondary");
-    expect(standard.dataset.partOption).toBe("secondary");
-    // Neither option carries the primary button's solid-blue treatment.
-    expect(rapid.className).not.toContain("bg-blue");
-    expect(standard.className).not.toContain("bg-blue");
-  });
-
-  it("options carrying a sub line (presets) send directly even when secondary", async () => {
+  it("an option that needs words opens an input in the card with its own Send, never the composer", async () => {
     const user = userEvent.setup();
-    const onSend = vi.fn();
-    const part = proposal("thoroughness", {
-      options: [
-        { id: "standard_review", label: "Standard report", sub: "Get a cited answer from the strongest sources. Broad search (up to 100 relevant results per database).", primary: true, reason: null },
-        { id: "quick_look", label: "Rapid overview", sub: "Get a fast picture of the evidence.", primary: false, reason: null },
-      ],
-    });
-    render(
-      <PartCard
-        part={part}
-        state={{ live: true, confirmedOptionId: null }}
-        disabled={false}
-        onSend={onSend}
-        onPrefill={vi.fn()}
-      />,
-    );
-    await user.click(screen.getByRole("radio", { name: /Rapid overview/ }));
-    expect(onSend).toHaveBeenCalledWith(
-      "Rapid overview\n\n[confirm part=thoroughness option=quick_look]",
-    );
-    expect(screen.getByRole("radio", { name: /Rapid overview/ })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-    expect(screen.getByRole("radio", { name: /Standard report/ })).toHaveAttribute(
-      "aria-checked",
-      "false",
-    );
+    const onSend = renderPart(proposal("scope"));
+    await user.click(screen.getByRole("radio", { name: /Change it/ }));
+    expect(onSend).not.toHaveBeenCalled();
+    const input = screen.getByRole("textbox", { name: "Change it" });
+    expect(input).toHaveFocus();
+    expect(input).toHaveAttribute("placeholder", "What should change?");
+    await user.type(input, "Exclude pre-2010 studies");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(onSend).toHaveBeenCalledWith("Change it: Exclude pre-2010 studies");
+    // The line closes once sent.
+    expect(screen.queryByRole("textbox", { name: "Change it" })).toBeNull();
   });
 
-  it("renders ✓ with the confirmed option label instead of buttons", () => {
-    render(
-      <PartCard
-        part={proposal("question")}
-        state={{ live: true, confirmedOptionId: "confirm" }}
-        disabled={false}
-        onSend={vi.fn()}
-        onPrefill={vi.fn()}
-      />,
+  it("renders every option as a choice when none is primary (task 044: scoping depth has no default, ruling 25)", async () => {
+    const user = userEvent.setup();
+    const onSend = renderPart(
+      proposal("depth", {
+        options: [
+          { id: "rapid", label: "Rapid scoping", sub: null, primary: false, reason: null },
+          { id: "standard", label: "Standard scoping", sub: null, primary: false, reason: null },
+        ],
+      }),
     );
-    expect(screen.getByText(/✓ Confirmed — Looks right/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Change it/ })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Proposal for question" }).className).toContain(
-      "text-lead",
+    expect(screen.getByRole("radio", { name: /Rapid scoping/ }).dataset.partOption).toBe("secondary");
+    expect(screen.getByRole("radio", { name: /Standard scoping/ }).dataset.partOption).toBe("secondary");
+    await user.click(screen.getByRole("radio", { name: /Standard scoping/ }));
+    expect(onSend).toHaveBeenCalledWith("Standard scoping\n\n[confirm part=depth option=standard]");
+  });
+
+  it("presets send directly and show their own sub text, band included", async () => {
+    const user = userEvent.setup();
+    const onSend = renderPart(
+      proposal("thoroughness", {
+        options: [
+          { id: "standard_review", label: "Standard report", sub: "Reads the strongest sources in full. · ~20 to 40 min", primary: true, reason: null },
+          { id: "quick_look", label: "Rapid overview", sub: "Abstracts only. · ~10 to 15 min", primary: false, reason: null },
+        ],
+      }),
     );
-    expect(screen.getByText(/✓ Confirmed — Looks right/).className).toContain("text-lead");
+    expect(screen.getByText("Abstracts only. · ~10 to 15 min")).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /Rapid overview/ }));
+    expect(onSend).toHaveBeenCalledWith("Rapid overview\n\n[confirm part=thoroughness option=quick_look]");
+    expect(screen.getByRole("radio", { name: /Rapid overview/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: /Standard report/ })).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("a confirmed part collapses to <Part> · <choice> · Change, and Change opens a line in place", async () => {
+    const user = userEvent.setup();
+    const onSend = renderPart(proposal("scope"), { live: true, confirmedOptionId: "confirm" }, vi.fn(), {
+      partName: "Scope",
+    });
+    expect(screen.getByTestId("part-settled")).toHaveTextContent(/^Scope · Looks right · Change$/);
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByText(/Confirmed/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Change" }));
+    await user.type(screen.getByRole("textbox", { name: "Change Scope" }), "UK only");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(onSend).toHaveBeenCalledWith("Change this part: UK only");
   });
 
   it("a superseded proposal renders inert with its history note", () => {
-    render(
-      <PartCard
-        part={proposal("scope")}
-        state={{ live: false, confirmedOptionId: null }}
-        disabled={false}
-        onSend={vi.fn()}
-        onPrefill={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole("button", { name: /Looks right/ })).toBeDisabled();
+    renderPart(proposal("scope"), { live: false, confirmedOptionId: null });
+    expect(screen.getByRole("radio", { name: /Looks right/ })).toBeDisabled();
     expect(screen.getByText(/kept for the record/)).toBeInTheDocument();
   });
 
   it("stages chip edits and applies them as one batched turn", async () => {
     const user = userEvent.setup();
-    const onSend = vi.fn();
-    const part = proposal("scope", {
-      chips: [{ label: "UK primary", kind: "text", value: "UK as the primary study setting" }],
-    });
-    render(
-      <PartCard
-        part={part}
-        state={{ live: true, confirmedOptionId: null }}
-        disabled={false}
-        onSend={onSend}
-        onPrefill={vi.fn()}
-      />,
+    const onSend = renderPart(
+      proposal("scope", { chips: [{ label: "UK primary", kind: "text", value: "UK as the primary study setting" }] }),
     );
     await user.click(screen.getByRole("button", { name: "Remove Screen: UK primary" }));
     await user.click(screen.getByRole("button", { name: "Apply changes" }));
@@ -235,36 +223,93 @@ describe("PartCard", () => {
 
   it("labels the chip-edit commit Save, not Stage", async () => {
     const user = userEvent.setup();
-    const onSend = vi.fn();
-    const part = proposal("scope", {
-      chips: [{ label: "UK primary", kind: "text", value: "UK as the primary study setting" }],
-    });
-    render(
-      <PartCard
-        part={part}
-        state={{ live: true, confirmedOptionId: null }}
-        disabled={false}
-        onSend={onSend}
-        onPrefill={vi.fn()}
-      />,
-    );
+    renderPart(proposal("scope", { chips: [{ label: "UK primary", kind: "text", value: "UK as the primary study setting" }] }));
     expect(screen.getByText("Screen: UK primary")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Edit Screen: UK primary" }));
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Stage" })).toBeNull();
   });
 
-  it("does not render Notes on the card", () => {
+  it("shows the part's body under its title, with no Notes label", () => {
+    renderPart(proposal("question", { title: "Your question", body: "What works to raise take-up?" }));
+    expect(screen.queryByText("Notes")).toBeNull();
+    expect(screen.getByTestId("part-card")).toHaveTextContent("What works to raise take-up?");
+  });
+
+  it("puts the stepper above the active card only", () => {
+    const steps: PlanStep[] = [
+      { id: "question", name: "Question", settled: true },
+      { id: "scope", name: "Scope", settled: false },
+      { id: "thoroughness", name: "Thoroughness", settled: false },
+    ];
+    const { unmount } = render(
+      <PartCard part={proposal("scope")} state={{ live: true, confirmedOptionId: null }} disabled={false} onSend={vi.fn()} steps={steps} />,
+    );
+    expect(screen.getByTestId("plan-stepper")).toHaveTextContent(/^Question ✓, done\s*Plan · step 2 of 3 · Scope$/);
+    unmount();
+    render(
+      <PartCard part={proposal("scope")} state={{ live: false, confirmedOptionId: null }} disabled={false} onSend={vi.fn()} steps={steps} />,
+    );
+    expect(screen.queryByTestId("plan-stepper")).toBeNull();
+  });
+});
+
+describe("planSteps (task 058, N18)", () => {
+  it("counts the Evidence search parts and marks the settled ones", () => {
+    const turns = [
+      turn(1, "opening", proposal("question")),
+      turn(2, "That's my question\n\n[confirm part=question option=confirm]", proposal("scope")),
+    ];
+    expect(planSteps("evidence_search", turns, derivePartStates(turns))).toEqual([
+      { id: "question", name: "Question", settled: true },
+      { id: "scope", name: "Scope", settled: false },
+      { id: "thoroughness", name: "Thoroughness", settled: false },
+    ]);
+  });
+
+  it("counts the scoping parts, adding Who can act and Your options only once proposed", () => {
+    const before = planSteps("options_scoping", [turn(1, "opening", proposal("question"))], new Map());
+    expect(before.map((step) => step.name)).toEqual(["Question", "Settings", "Constraints", "Depth", "Risk appetite"]);
+    const turns = [turn(1, "opening", proposal("question")), turn(2, "next", proposal("who_can_act")), turn(3, "next", proposal("your_options"))];
+    const after = planSteps("options_scoping", turns, derivePartStates(turns));
+    expect(after.map((step) => step.name)).toEqual([
+      "Question",
+      "Settings",
+      "Constraints",
+      "Who can act",
+      "Your options",
+      "Depth",
+      "Risk appetite",
+    ]);
+  });
+
+  it("renders the two scoping parts the planner proposes, by their names", () => {
+    const turns = [turn(1, "opening", proposal("who_can_act")), turn(2, "next", proposal("your_options"))];
+    const steps = planSteps("options_scoping", turns, derivePartStates(turns));
     render(
       <PartCard
-        part={proposal("scope", { body: "Dates filter the search itself." })}
+        part={proposal("your_options", {
+          title: "Options you already have in mind",
+          options: [
+            { id: "none_yet", label: "None yet", sub: null, primary: true, reason: null },
+            { id: "i_have_some", label: "I have some", sub: null, primary: false, reason: null },
+          ],
+        })}
         state={{ live: true, confirmedOptionId: null }}
         disabled={false}
         onSend={vi.fn()}
-        onPrefill={vi.fn()}
+        steps={steps}
       />,
     );
-    expect(screen.queryByText("Notes")).toBeNull();
-    expect(screen.queryByText("Dates filter the search itself.")).toBeNull();
+    expect(screen.getByTestId("plan-stepper")).toHaveTextContent("Plan · step 5 of 7 · Your options");
+    expect(screen.getByRole("radio", { name: /I have some/ })).toBeInTheDocument();
+  });
+
+  it("asks for words only on the planners' words options", () => {
+    expect(optionNeedsWords({ id: "refine", label: "Refine it", primary: false })).toBe(true);
+    expect(optionNeedsWords({ id: "change", label: "Change", primary: false })).toBe(true);
+    expect(optionNeedsWords({ id: "i_have_some", label: "I have some", primary: false })).toBe(true);
+    expect(optionNeedsWords({ id: "national_too", label: "Also national", primary: false })).toBe(false);
+    expect(optionNeedsWords({ id: "confirm", label: "Looks right", primary: true })).toBe(false);
   });
 });

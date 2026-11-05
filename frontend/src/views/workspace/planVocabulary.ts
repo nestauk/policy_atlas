@@ -114,100 +114,28 @@ export const STEERING_MODE_LABEL: Record<string, string> = {
 };
 
 /**
- * Display bands seeded from the runtime `TIME_BANDS` table — search effort
- * × analysis depth. Kept here so the plan panel can update the estimate
- * without a task_agent round-trip.
+ * The parts the planner builds a plan from, per capability, in the order it
+ * asks them, with the stepper's name for each (task 058, N18; annex block H).
+ * `optional` parts are asked only in some conversations (the scoping
+ * planner asks "Who can act" only below national level), so they count as a
+ * step only once the transcript carries one.
  */
-const TIME_BANDS: Record<string, Record<string, string>> = {
-  rapid: {
-    landscape: "~10-15 min",
-    standard: "~30-45 min",
-    deep: "~75-90 min",
-  },
-  standard: {
-    landscape: "~15-20 min",
-    standard: "~10-20 min",
-    deep: "~80-95 min",
-  },
-  deep: {
-    landscape: "~20-25 min",
-    standard: "~35-50 min",
-    deep: "~90-100 min",
-  },
+export const PLAN_PARTS: Record<string, ReadonlyArray<{ id: string; name: string; optional?: boolean }>> = {
+  evidence_search: [
+    { id: "question", name: "Question" },
+    { id: "scope", name: "Scope" },
+    { id: "thoroughness", name: "Thoroughness" },
+  ],
+  options_scoping: [
+    { id: "question", name: "Question" },
+    { id: "settings", name: "Settings" },
+    { id: "constraints", name: "Constraints" },
+    { id: "who_can_act", name: "Who can act", optional: true },
+    { id: "your_options", name: "Your options", optional: true },
+    { id: "depth", name: "Depth" },
+    { id: "appetite", name: "Risk appetite" },
+  ],
 };
-
-export type PlanStepPreview = { stage: string; label: string; blurb: string };
-
-const ALWAYS_STEPS: readonly PlanStepPreview[] = [
-  { stage: "acquire", label: "Searching", blurb: "Querying academic and policy databases." },
-  { stage: "screen", label: "Screening", blurb: "Checking title and abstract against your criteria." },
-  { stage: "classify", label: "Sorting by evidence type", blurb: "Labelling each document by its evidence type." },
-  { stage: "appraise", label: "Appraising", blurb: "Calculating evidence strength scores." },
-  {
-    stage: "ingest",
-    label: "Reading the full texts",
-    blurb: "Fetching each selected document's full text and reading it into sections.",
-  },
-];
-
-const CHARACTERISE_STEP: PlanStepPreview = {
-  stage: "characterise",
-  label: "Mapping",
-  blurb: "Assessing coverage and summarising themes.",
-};
-const SELECT_STEP: PlanStepPreview = {
-  stage: "select",
-  label: "Shortlisting",
-  blurb: "Selecting the strongest and most varied set for close reading.",
-};
-const EXTRACT_STEP: PlanStepPreview = {
-  stage: "extract",
-  label: "Extracting findings",
-  blurb: "Detailed extraction of interventions and outcomes.",
-};
-const GROUP_STEP: PlanStepPreview = {
-  stage: "group",
-  label: "Grouping findings",
-  blurb: "Clustering findings into coherent groups.",
-};
-const SYNTHESISE_STEP: PlanStepPreview = {
-  stage: "synthesise",
-  label: "Writing",
-  blurb: "Synthesising a report with citations.",
-};
-
-/** Searching-step blurb for the selected source libraries. */
-export function acquireSearchBlurb(backendScope?: string | null): string {
-  if (backendScope === "academic_only") return "Querying academic databases.";
-  if (backendScope === "grey_lit_only") return "Querying policy databases.";
-  return "Querying academic and policy databases.";
-}
-
-/** Public agreed-steps list for an analysis-depth rung — same collapse as the API. */
-export function stepsForAnalysisDepth(
-  depth: string,
-  backendScope?: string | null,
-): PlanStepPreview[] {
-  const steps = ALWAYS_STEPS.map((step) =>
-    step.stage === "acquire" ? { ...step, blurb: acquireSearchBlurb(backendScope) } : step,
-  );
-  if (depth === "landscape" || depth === "standard" || depth === "deep") {
-    steps.push(CHARACTERISE_STEP);
-  }
-  if (depth === "standard" || depth === "deep") {
-    steps.push(SELECT_STEP);
-  }
-  if (depth === "deep") {
-    steps.push(EXTRACT_STEP, GROUP_STEP);
-  }
-  steps.push(SYNTHESISE_STEP);
-  return steps;
-}
-
-/** Expected run-time band for a search-effort × analysis-depth pair. */
-export function timeBandFor(effort: string, depth: string): string | null {
-  return TIME_BANDS[effort]?.[depth] ?? null;
-}
 
 /** Run-block status labels for the task_agent thread's run divider ("Analysis
  *  run — running/paused/completed/…"). Unknown status → the caller omits. */
@@ -219,17 +147,6 @@ export const RUN_BLOCK_STATUS: Record<string, string> = {
   failed: "failed",
   interrupted: "interrupted",
   aborted: "stopped",
-};
-
-/** Pre-ready component labels: the same public stage vocabulary the server's
- *  STAGE_PRESENTATION serves for approved-plan steps (D‑7b: the wire carries
- *  no steps before `ready`, so the pane lists the planned components). */
-export const COMPONENT_LABEL: Record<string, string> = {
-  characterise: "Mapping the landscape",
-  screen_full: "Screening for relevance",
-  select: "Shortlisting",
-  extract: "Extracting findings",
-  group: "Grouping findings",
 };
 
 /** Look a key up in a locked map. Unknown key → null (the caller omits). */

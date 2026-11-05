@@ -282,6 +282,25 @@ def test_stage_completed_frame_discriminates() -> None:
     )
     assert isinstance(model, StageCompletedFrame)
     assert model.summary == {"found": 58}
+    assert model.counts == []  # task 058 (N17): the done row's counts ride on the frame
+
+
+def test_stage_completed_frame_carries_its_counts_in_the_servers_words() -> None:
+    """Task 058 (N17): `counts` names what the done row shows, value and noun."""
+    model = _adapter().validate_python(
+        {
+            "type": "stage.completed",
+            "sequence": 3,
+            "occurred_at": _now().isoformat(),
+            "stage": "acquire",
+            "label": "Searching and screening",
+            "summary": {"acquired": 312},
+            "seconds": 64.0,
+            "counts": [{"value": 312, "noun": "found"}],
+        }
+    )
+    assert isinstance(model, StageCompletedFrame)
+    assert [(count.value, count.noun) for count in model.counts] == [(312, "found")]
 
 
 def test_stage_failed_frame_discriminates() -> None:

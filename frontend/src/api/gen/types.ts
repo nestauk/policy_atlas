@@ -5025,6 +5025,11 @@ export interface components {
         /**
          * StageCompletedFrame
          * @description A component reached its terminal (successful) outcome.
+         *
+         *     Args:
+         *         counts: The counts the done row shows, in order, each with the
+         *             server's noun (task 058, N17: the client keeps no copy of which
+         *             summary keys a stage shows). Empty when the stage names none.
          */
         StageCompletedFrame: {
             /**
@@ -5032,6 +5037,8 @@ export interface components {
              * @default null
              */
             capability_run_id: string | null;
+            /** Counts */
+            counts?: components["schemas"]["StageCount"][];
             /** Label */
             label: string;
             /**
@@ -5060,6 +5067,16 @@ export interface components {
              * @enum {string}
              */
             type: "stage.completed";
+        };
+        /**
+         * StageCount
+         * @description One count a done row shows, with its noun: `312 found` (task 058, N17).
+         */
+        StageCount: {
+            /** Noun */
+            noun: string;
+            /** Value */
+            value: number;
         };
         /**
          * StageFailedFrame

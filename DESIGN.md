@@ -330,10 +330,10 @@ Flat paper with ambient lift only. Surfaces sit on the grey ground and are separ
 
 ### Shadow Vocabulary
 - **Paper weight** (`box-shadow: 0 1px 3px rgba(15,41,74,0.05), 0 8px 24px rgba(15,41,74,0.04)`): cards at rest. Navy-tinted, near-invisible.
-- **Sheet edge** (Tailwind `shadow-sm`, `0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)`, plus a 1px Line ring): the report page only. The one neutral shadow in the system; it disappears below `md` and in print.
+- **Sheet edge** (`--shadow-paper`: `0 1px 3px rgba(15, 41, 74, 0.05), 0 8px 24px rgba(15, 41, 74, 0.04)`, the Card's navy ambient shadow, plus a 1px Line ring): the report page. It disappears below `md` and in print. (Task 058 moved it off Tailwind's grey `shadow-sm`; four other surfaces still carry the grey one and are a later sweep.)
 - **Tooltip lift** (`box-shadow: 0 4px 16px rgba(15,41,74,0.12)`): tooltips only.
 - **Overlay lift** (`box-shadow: 0 10px 30px rgba(15,41,74,0.14)`): popovers, sheets, toasts.
-- **Check-in glow** (`0 0 0 6px rgb(253 182 51 / 0.25)` at the animation midpoint): a one-shot yellow ring marking a newly arrived check-in; it fades to nothing.
+- **Check-in glow** (`0 0 0 6px rgb(255 110 71 / 0.25)` at the animation midpoint): a one-shot Orange ring marking a newly arrived check-in; it fades to nothing. Orange is the one "waiting on you" colour (task 058, D15): the paused dot, the run strip's paused state, the check-in's rule and this glow.
 
 ### Named Rules
 **The Hairline First Rule.** Regions are separated by a 1px Line border. A shadow is added only when the surface is temporary and sits above the page.
@@ -402,7 +402,7 @@ Precise and unadorned. Hard edges, hairline borders, no decoration. The cut corn
 The report is a paper sheet in the 780px reading column. Body prose is Lead size on desktop, Body on mobile, within a 44em measure. Cited spans wash to Blue Wash on hover. Numbered citation markers are small square tags: Caption Semibold, 80% Electric Blue text on Blue Wash with a 25% blue border, deepening on hover. In print the sheet loses all chrome and colour; markers become plain black text.
 
 ### Plan card and check-ins (signature)
-A plan step is a Paper card with a Label eyebrow ("PLAN · 2 OF 3 · SCOPE"), a Heading-weight question, a row of editable chips, and a primary button plus a text-only alternative. A pending check-in is a Card with a 2px Orange left rule and a yellow "Waiting on your input" chip; it glows once in Yellow when it arrives. A failed turn renders as a 40% Red Tint surface with a Red Tint border and a secondary Retry button. User messages are indented 32px from the left in a Blue Wash bubble with a 1px Blue Tint border, square corners; agent messages are plain Lead prose at the 44em measure.
+A plan step is a Paper card under one small stepper line the client computes ("Plan · step 2 of 3 · Scope"), with the part's title, a radio list (label, then one plain sentence; the planner's primary option first with its reason under it; no "Recommended" word, no pre-selection), an input inside the card for an option that needs words, and the plan card's one green Start button. A settled part collapses to one line ("Scope · Looks right · Change"). A pending check-in is a Card with a 2px Orange left rule, the question as its title (no eyebrow, no chip), one facts line, the same radio list with the suggested option first, a closed "Or steer in your own words" disclosure and one "Stop the run" link; it glows once in Orange when it arrives (task 058). A failed turn renders as a 40% Red Tint surface with a Red Tint border and a secondary Retry button. User messages are indented 32px from the left in a Blue Wash bubble with a 1px Blue Tint border, square corners; agent messages are plain Lead prose at the 44em measure.
 
 ## Do's and Don'ts
 

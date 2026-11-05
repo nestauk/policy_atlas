@@ -360,3 +360,22 @@ describe("AnnotatedProse bullets (fork B)", () => {
     expect(marker?.className).toContain("bg-yellow");
   });
 });
+
+describe("SectionDisclosure meta (task 058, N24)", () => {
+  it("lets a long meta line wrap instead of holding it on one line (390 px)", () => {
+    render(
+      <SectionDisclosure
+        id="no-theme"
+        section={{ title: "No theme", role: "standard", summary: "", summary_status: "verified" }}
+        defaultOpen={false}
+        collapsible
+        meta="12 options · services, subsidies, regulation, information, procurement and convening"
+      >
+        <p>rows</p>
+      </SectionDisclosure>,
+    );
+    const meta = screen.getByText(/12 options ·/);
+    expect(meta.className).not.toMatch(/whitespace-nowrap/);
+    expect(meta.className).toMatch(/max-w-full/);
+  });
+});

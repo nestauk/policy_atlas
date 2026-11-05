@@ -26,14 +26,22 @@ const buttonVariants = cva(
         ghost:
           "bg-transparent font-semibold text-grey hover:text-navy " +
           "disabled:text-line-2 disabled:hover:text-line-2",
+        // The one action that starts a run: the cut shape in green, the
+        // only green fill in the system (DESIGN.md § Buttons, Start run).
+        start:
+          "cutout bg-green font-bold text-white hover:bg-[#147a6c] " +
+          "disabled:bg-line-2 disabled:text-white",
       },
       size: {
         md: "px-[18px] py-[11px] text-meta",
         sm: "px-[13px] py-2 text-meta",
+        // The entry size: list-page "New task", the New Task submit, Start run.
+        entry: "px-6 py-3.5 text-body",
       },
     },
     compoundVariants: [
       { variant: "primary", size: "sm", class: "cutout-sm" },
+      { variant: "start", size: "sm", class: "cutout-sm" },
       { variant: "secondary", size: "md", class: "px-3.5" },
       { variant: "ghost", size: "md", class: "px-3 py-[9px] text-meta" },
     ],

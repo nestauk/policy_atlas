@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useState, type ReactNode } from "react";
 import { Outlet, useLocation, useParams } from "react-router";
 
 import { useArchiveTask, useUpdateTask } from "../api/mutations";
@@ -11,11 +11,14 @@ import { Button } from "../ui/brand/Button";
 import { StatusDot } from "../ui/brand/Card";
 import { cn } from "../ui/brand/cn";
 import { LifecycleBar, LifecycleBottomBar } from "../ui/brand/LifecycleBar";
+import { ReconnectingBanner } from "../ui/feedback/ReconnectingBanner";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
 import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
 import { lifecycleTabs, publicLifecycleTabs, withChat } from "./lifecycle";
+import { PlanPanelProvider, usePlanPanel } from "./planPanel";
 import { PublicViewProvider } from "./publicView";
 import { activeRun, tabRunStatus } from "./scopingActivity";
+import { RunStrip, TaskLiveProvider, useTaskLive, withTabMarks } from "./taskLive";
 import { useTabOptions } from "./taskResult";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { RunStreamProvider } from "../store";
@@ -23,6 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { AppFooter } from "./AppFooter";
 import { SensitiveInfoBanner } from "./SensitiveInfoBanner";
 import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
+import { PlanDocument } from "./workspace/PlanDocument";
 import { ToastProvider, useToast } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 
@@ -272,6 +276,75 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
   );
 }
 
+type LifecycleItems = Parameters<typeof LifecycleBar>[0]["items"];
+
+/** The lifecycle tabs with the live layer's new-content dots (task 058, N14),
+ *  in either placement. */
+function TaskTabs({
+  items,
+  placement,
+  lead,
+}: {
+  items: LifecycleItems;
+  placement: "nav" | "bottom";
+  lead?: ReactNode;
+}) {
+  const live = useTaskLive();
+  const marked = withTabMarks([...items], live?.marks ?? null);
+  return placement === "nav" ? (
+    <LifecycleBar hint={COPY.lockedHint} items={marked} lead={lead} />
+  ) : (
+    <LifecycleBottomBar hint={COPY.lockedHint} items={marked} lead={lead} />
+  );
+}
+
+/** The task nav's "Plan" control: opens the plan document as a side panel
+ *  from any tab (task 058, N15). Grey text, underlined on hover. */
+function PlanControl() {
+  const plan = usePlanPanel();
+  return (
+    <button
+      type="button"
+      aria-expanded={plan.open}
+      onClick={plan.open ? plan.closePlan : plan.openPlan}
+      className="inline-flex cursor-pointer items-center border-b-[3px] border-transparent pb-1 text-lead font-semibold leading-none text-grey underline-offset-4 hover:text-navy hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue"
+    >
+      Plan
+    </button>
+  );
+}
+
+/** The plan document beside a non-Agent tab (the Agent tab mounts its own,
+ *  with the plan's edits). Read-only here: edits and starts belong to the
+ *  Agent tab. Below `md` it covers the page. */
+function ShellPlanPanel({ taskId }: { taskId: string }) {
+  const plan = usePlanPanel();
+  const live = useTaskLive();
+  const status = live?.stream.run?.status;
+  if (!plan.open) return null;
+  return (
+    <div className="flex min-h-0 shrink-0 max-md:absolute max-md:inset-0 max-md:z-30 md:w-[min(46rem,55%)]">
+      <PlanDocument
+        taskId={taskId}
+        placement="side"
+        readOnly
+        runActive={status === "running" || status === "paused"}
+        onClose={plan.closePlan}
+        overlay={{}}
+        onOverlayChange={() => undefined}
+      />
+    </div>
+  );
+}
+
+/** The mounted reconnect banner (task 058, N15): shows while the live
+ *  connection is lapsed. */
+function LiveReconnectingBanner() {
+  const live = useTaskLive();
+  if (live === null) return null;
+  return <ReconnectingBanner connectionStatus={live.stream.connectionStatus} />;
+}
+
 /** App chrome: global controls always; task stages on a second bar. */
 export function AppShell() {
   const { taskId } = useParams();
@@ -343,6 +416,10 @@ export function AppShell() {
   });
   const hasPendingCheckIn =
     base !== null && !inWorkspace && isOwner && (pendingCheckIns.data?.data.length ?? 0) > 0;
+  // The live layer (run strip, tab dots, the Plan control, the title's
+  // finish) belongs to the signed-in shell only; the public task shell has no
+  // stream (task 058, N12).
+  const liveShell = base !== null && taskResolved && !publicAccess;
 
   // Task views lock to the viewport so the app/lifecycle chrome stays put
   // and only the panes below scroll. List pages keep normal document scroll.
@@ -435,29 +512,25 @@ export function AppShell() {
             )}
           </div>
           <div className="max-md:hidden">
-            <LifecycleBar hint={COPY.lockedHint} items={lifecycleItems ?? []} />
+            <TaskTabs
+              placement="nav"
+              items={lifecycleItems ?? []}
+              lead={liveShell ? <PlanControl /> : undefined}
+            />
           </div>
         </NavBar>
       )}
+      {/* The run strip replaces the old cross-tab paused banner: it carries
+          the paused state itself (task 058, N12, D8). */}
+      {liveShell && <RunStrip />}
+      {liveShell && <LiveReconnectingBanner />}
       <SensitiveInfoBanner />
-      {/* Cross-tab pause banner (028 strand 14 — pause salience): a
-          paused run must be unmissable from every tab; the banner jumps
-          straight to the waiting check-in. */}
-      {hasPendingCheckIn && base !== null && (
-        <div role="status" className="shrink-0 border-b border-orange bg-orange/10 px-5 py-2">
-          <NavItem to={base}>
-            <span className="text-body font-semibold text-navy">
-              The analysis is paused — a check-in is waiting on you. Go to the check-in →
-            </span>
-          </NavItem>
-        </div>
-      )}
       {/* The Agent overlay beside every task view outside the Agent tab
           (029 rev 3.4, 038 V8): the Agent tab hosts the conversation list
           and the conversation itself, so the panel mounts everywhere else. */}
       <div
         className={cn(
-          "flex min-w-0 flex-1",
+          "relative flex min-w-0 flex-1",
           base !== null && "min-h-0 overflow-hidden",
           chatOpen && "lg:min-h-0",
         )}
@@ -488,9 +561,14 @@ export function AppShell() {
           </ErrorBoundary>
           {footerInScrollPane && <AppFooter />}
         </div>
+        {liveShell && !inWorkspace && <ShellPlanPanel taskId={taskId ?? ""} />}
       </div>
       {lifecycleItems !== null && (
-        <LifecycleBottomBar hint={COPY.lockedHint} items={lifecycleItems} />
+        <TaskTabs
+          placement="bottom"
+          items={lifecycleItems}
+          lead={liveShell ? <PlanControl /> : undefined}
+        />
       )}
       {/* List pages only — Plan hosts its own footer in the chat scroll. */}
       {base === null && <AppFooter />}
@@ -510,7 +588,14 @@ export function AppShell() {
               // resolution, access is unknown, so this must not connect
               // either (review fix, task 037).
               <RunStreamProvider taskId={taskId} connect={taskResolved && !publicAccess}>
-                {shellChrome}
+                <TaskLiveProvider
+                  taskId={taskId}
+                  enabled={liveShell}
+                  capability={task.data?.capability}
+                  isOwner={isOwner}
+                >
+                  <PlanPanelProvider key={taskId}>{shellChrome}</PlanPanelProvider>
+                </TaskLiveProvider>
               </RunStreamProvider>
             ) : (
               shellChrome

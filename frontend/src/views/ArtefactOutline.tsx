@@ -353,8 +353,11 @@ export function SectionDisclosure({
   useExpandAll(setOpen, collapsible);
   const summary = sectionSummary(section);
   const expanded = !collapsible || open;
+  // The meta moves to its own line as a whole when it does not fit beside
+  // the title, and wraps inside itself when it is wider than the column (a
+  // list with no themes puts every lever noun on one line; 390 px, task 058).
   const metaSpan = meta !== undefined && (
-    <span className="ml-2 whitespace-nowrap text-meta font-normal text-grey max-md:ml-0 max-md:block">{meta}</span>
+    <span className="ml-2 inline-block max-w-full text-meta font-normal text-grey max-md:ml-0 max-md:block">{meta}</span>
   );
 
   return (
@@ -369,7 +372,7 @@ export function SectionDisclosure({
           onClick={() => setOpen((value) => !value)}
           className="flex w-full cursor-pointer items-baseline gap-2 text-left"
         >
-          <h2 className={`flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>
+          <h2 className={`min-w-0 flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>
             {scrub(section.title)}
             {metaSpan}
           </h2>

@@ -1,20 +1,28 @@
-import { LIFECYCLE_LABELS, countOf } from "../../lib/vocabulary";
-import type { PlanDraft, RunStatus, StageEntry, StageLiveness, StageStatus } from "../../store";
+import { LIFECYCLE_LABELS } from "../../lib/vocabulary";
+import type { PlanDraft, RunStatus, StageEntry, StageLiveness } from "../../store";
 import { isScoping } from "../scopingActivity";
-import { timelineSummary } from "./journey/presentation";
-import { stepsForAnalysisDepth, type PlanStepPreview } from "./planVocabulary";
 
 type RunningCardTone = "running" | "paused" | "done" | "stopped";
 
-export type StageRow = {
-  /** Unique among rows on this card — stage repeats across search rounds. */
-  id: string;
-  stage: string;
+/** How a card row reads: done, in progress, still to come, or ended badly. */
+export type RowState = "done" | "progress" | "upcoming" | "failed" | "skipped";
+
+/**
+ * One row of the running card (task 058, D5, direction C): one plan step, or
+ * several stages the server says share a row ("Searching and screening" is
+ * search plus screen; "Categorising" is classify plus appraise).
+ */
+export type CardRow = {
+  /** The server's row key from `PlanStep.row`, or the frame label for a row
+   *  built from stage frames alone. Unique on the card. */
+  key: string;
+  /** The server's label for the row. */
   label: string;
-  status: StageStatus | "upcoming";
-  blurb?: string;
-  summary?: StageEntry["summary"];
-  seconds?: number | null;
+  /** The row's stage keys, in plan order (or arrival order). */
+  stages: string[];
+  /** The row's stage frames, in arrival order. */
+  entries: StageEntry[];
+  state: RowState;
 };
 
 type StageSignpost = { href: string; label: string; message: string };
@@ -22,17 +30,6 @@ type StageSignpost = { href: string; label: string; message: string };
 /** Chat-thread primary CTA — same size as Review the plan / Start search. */
 export const CHAT_PRIMARY_CTA_CLASS =
   "cutout inline-block bg-blue px-6 py-3.5 text-body font-bold text-white";
-
-/** Option C running-card shell: 15% Nesta-green tint, green as the accent. */
-export const RUNNING_CARD_SHELL_CLASS =
-  "border-2 border-[#17A88D] bg-[#DDF2EE] text-navy";
-
-/** Row rules on the tinted card — Nesta green at 40% opacity. */
-export const RUNNING_CARD_RULE_CLASS = "border-t border-[rgba(23,168,141,0.4)]";
-
-/** Outline CTA on the tinted running card (See plan). */
-export const SEE_PLAN_CTA_CLASS =
-  "inline-block cursor-pointer border-2 border-blue bg-paper px-6 py-3.5 text-body font-bold text-blue";
 
 /** What kind of walk a run card describes (task 045): an Evidence search, a
  *  scoping task's baseline walk, its longlist walk, or an added option's own
@@ -68,8 +65,10 @@ export function walkKind(
   return stages.some((entry) => entry.stage === "shortlist") ? "shortlist" : "baseline";
 }
 
-const DONE_TITLE: Record<WalkKind, string> = {
-  evidence_search: "The evidence base is ready",
+/** The run strip's finished words, before its one link (annex § scene 7;
+ *  "the capability's wording" for the scoping walks). */
+export const READY_WORDS: Record<WalkKind, string> = {
+  evidence_search: "Report ready",
   baseline: "The baseline is ready",
   longlist: "The longlist is ready",
   option_search: "The option's search is done",
@@ -105,50 +104,56 @@ export function finishedNotice(kind: WalkKind, status: RunStatus | undefined): {
   return FINISHED_NOTICE[kind];
 }
 
-function resultHref(taskId: string, kind: WalkKind): string {
+/** The Result tab, opened on the view this walk produced. */
+export function resultHref(taskId: string, kind: WalkKind): string {
   if (kind === "longlist" || kind === "option_search") return `/tasks/${taskId}/result?view=longlist`;
   if (kind === "shortlist") return `/tasks/${taskId}/result?view=shortlist`;
   if (kind === "baseline") return `/tasks/${taskId}/result?view=baseline`;
   return `/tasks/${taskId}/result`;
 }
 
-/** Eyebrow and title for the in-thread running card. */
+/** Whether a run has finished with something to read (`degraded` opens the
+ *  report like `succeeded`; task 058, N14). */
+export function isFinished(status: RunStatus | undefined): boolean {
+  return status === "succeeded" || status === "degraded";
+}
+
+/** The card's top-line word and tone for a run status. */
 export function runningCardCopy(
   status: RunStatus | undefined,
   kind: WalkKind = "evidence_search",
-): {
-  tone: RunningCardTone;
-  eyebrow: string;
-  title: string;
-} {
-  if (status === "paused") {
-    return { tone: "paused", eyebrow: "PAUSED", title: "Paused — waiting on you" };
-  }
-  if (kind === "shortlist" && status === "degraded") {
-    return { tone: "stopped", eyebrow: "STOPPED", title: "Policy Atlas could not propose" };
-  }
-  if (status === "succeeded" || status === "degraded") {
-    return { tone: "done", eyebrow: "DONE", title: DONE_TITLE[kind] };
-  }
+): { tone: RunningCardTone; eyebrow: string } {
+  if (status === "paused") return { tone: "paused", eyebrow: "PAUSED" };
+  if (kind === "shortlist" && status === "degraded") return { tone: "stopped", eyebrow: "STOPPED" };
+  if (isFinished(status)) return { tone: "done", eyebrow: "DONE" };
   if (status === "failed" || status === "aborted" || status === "interrupted") {
-    return { tone: "stopped", eyebrow: "STOPPED", title: "Analysis stopped" };
+    return { tone: "stopped", eyebrow: "STOPPED" };
   }
-  if (kind === "option_search") {
-    return { tone: "running", eyebrow: "RUNNING", title: "Searching for the option's evidence" };
-  }
-  if (kind === "shortlist") {
-    return { tone: "running", eyebrow: "RUNNING", title: "Proposing a shortlist…" };
-  }
-  return { tone: "running", eyebrow: "RUNNING", title: "Analysis running…" };
+  return { tone: "running", eyebrow: "RUNNING" };
 }
 
-/** Compact elapsed-time label for the card (`13s`, `2m 4s`). */
+/**
+ * A duration in the card's words: `45 s`, `6 min 12 s`, `1 h 4 min`. Elapsed
+ * time only, never a countdown (annex § Voice rules).
+ */
 export function formatElapsed(seconds: number): string {
-  const rounded = Math.max(0, Math.round(seconds));
-  if (rounded < 60) return `${rounded}s`;
-  const minutes = Math.floor(rounded / 60);
-  const rest = rounded % 60;
-  return rest === 0 ? `${minutes}m` : `${minutes}m ${rest}s`;
+  const total = Math.max(0, Math.round(seconds));
+  if (total < 60) return `${total} s`;
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (hours > 0) return minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`;
+  const rest = total % 60;
+  return rest === 0 ? `${minutes} min` : `${minutes} min ${rest} s`;
+}
+
+/** A duration to the minute, for the run strip and the task list (`14 min`). */
+export function formatMinutes(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  if (total < 60) return `${total} s`;
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (hours > 0) return minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`;
+  return `${minutes} min`;
 }
 
 /**
@@ -170,291 +175,171 @@ export function elapsedSeconds(
   return Math.max(0, (endMs - started) / 1000);
 }
 
-function vocabByStage(backendScope?: string | null): Map<string, PlanStepPreview> {
-  return new Map(stepsForAnalysisDepth("deep", backendScope).map((step) => [step.stage, step]));
-}
-
-function rowFromVocab(
-  step: PlanStepPreview,
-  live: StageEntry | undefined,
-  { label = step.label, id }: { label?: string; id: string },
-): StageRow {
-  return {
-    id,
-    stage: step.stage,
-    label,
-    blurb: step.blurb,
-    status: live?.status ?? "upcoming",
-    summary: live?.summary,
-    seconds: live?.seconds,
-  };
-}
-
-const SEARCH_CYCLE_STAGES = new Set(["acquire", "screen"]);
-
-function roundIndexOf(entry: StageEntry): number {
-  const value = entry.summary?.round_index;
-  return typeof value === "number" && Number.isFinite(value) ? value : 1;
-}
-
-/** Screen payloads often omit `round_index`; inherit the last Searching round. */
-function cycleRounds(stages: StageEntry[]): number[] {
-  let lastAcquireRound = 1;
-  return stages.map((entry) => {
-    if (entry.stage === "acquire") {
-      lastAcquireRound = roundIndexOf(entry);
-      return lastAcquireRound;
-    }
-    if (entry.stage === "screen") {
-      const explicit = entry.summary?.round_index;
-      return typeof explicit === "number" && Number.isFinite(explicit)
-        ? explicit
-        : lastAcquireRound;
-    }
-    return roundIndexOf(entry);
-  });
-}
-
-function cycleLabel(base: string, roundIndex: number, maxRound: number): string {
-  if (maxRound <= 1) return base;
-  return `${base} (Round ${roundIndex})`;
-}
-
-function nextRowId(counts: Map<string, number>, stage: string, roundIndex: number): string {
-  const key = `${stage}:${roundIndex}`;
-  const n = (counts.get(key) ?? 0) + 1;
-  counts.set(key, n);
-  return `${key}:${n}`;
-}
-
-/** Agreed plan steps with live SSE status/counts overlaid — labels from the plan panel.
-
-Every acquire/screen SSE entry is kept so Broad/Broadest rounds do not
-collapse to the last one. Ingest is omitted from Searching by the server
-(unmapped from public acquire).
-*/
-export function stageRows(
+/**
+ * The card's rows: the plan's steps grouped by the server's `row` key, with
+ * the stage frames laid over them (task 058, D5, N17). Labels are the
+ * server's. Upcoming rows come from the plan only, so a walk with no plan
+ * steps on the stream (the scoping walks) builds its rows from the frames as
+ * they arrive and shows none still to come. A stage the plan does not name
+ * joins the row whose label it shares, else gets its own row.
+ */
+export function cardRows(
   stages: StageEntry[],
   plan: PlanDraft | null | undefined,
-  liveness: Record<string, StageLiveness> = {},
-): StageRow[] {
-  return withLiveCounts(stagedRows(stages, plan), liveness);
-}
+  status?: RunStatus,
+): CardRow[] {
+  const rows: CardRow[] = [];
+  const byKey = new Map<string, CardRow>();
+  const rowOfStage = new Map<string, CardRow>();
+  const planned = new Set<string>();
 
-/** Tick counts (task 056: full-text reading) ride on an in-flight row's
- *  summary, where `beatSentence` reads them; a finished row keeps its own. */
-function withLiveCounts(rows: StageRow[], liveness: Record<string, StageLiveness>): StageRow[] {
-  return rows.map((row) => {
-    const live = liveness[row.stage];
-    if (row.status !== "started" || live === undefined) return row;
-    const counts: Record<string, number> = {};
-    for (const key of ["fetched", "parsed", "total"] as const) {
-      const value = live[key];
-      if (value !== undefined) counts[key] = value;
+  for (const step of plan?.steps ?? []) {
+    let row = byKey.get(step.row);
+    if (row === undefined) {
+      row = { key: step.row, label: step.label, stages: [], entries: [], state: "upcoming" };
+      byKey.set(step.row, row);
+      rows.push(row);
     }
-    return Object.keys(counts).length === 0 ? row : { ...row, summary: { ...row.summary, ...counts } };
-  });
-}
-
-function stagedRows(stages: StageEntry[], plan: PlanDraft | null | undefined): StageRow[] {
-  const liveByStage = new Map<string, StageEntry>(stages.map((entry) => [entry.stage, entry]));
-  const scope = plan?.backend_scope;
-  const vocab = vocabByStage(scope);
-  const depth = plan?.analysis_depth;
-  const agreed =
-    depth !== undefined && depth !== null ? stepsForAnalysisDepth(depth, scope) : [];
-  const rounds = cycleRounds(stages);
-  const maxRound = Math.max(1, ...rounds.filter((_, index) => SEARCH_CYCLE_STAGES.has(stages[index]?.stage ?? "")));
-  const ids = new Map<string, number>();
-
-  const labelled = (
-    step: PlanStepPreview,
-    entry: StageEntry | undefined,
-    roundIndex: number,
-  ): StageRow => {
-    const id = nextRowId(ids, step.stage, SEARCH_CYCLE_STAGES.has(step.stage) ? roundIndex : 1);
-    if (entry !== undefined && SEARCH_CYCLE_STAGES.has(entry.stage)) {
-      return rowFromVocab(step, entry, {
-        id,
-        label: cycleLabel(step.label, roundIndex, maxRound),
-      });
-    }
-    return rowFromVocab(step, entry, { id });
-  };
-
-  if (agreed.length > 0) {
-    const seen = new Set(agreed.map((step) => step.stage));
-    const extras = stages.flatMap((entry, index) => {
-      if (seen.has(entry.stage)) return [];
-      const step = vocab.get(entry.stage);
-      return step === undefined ? [] : [labelled(step, entry, rounds[index] ?? 1)];
-    });
-    const rows: StageRow[] = [];
-    for (const step of agreed) {
-      if (SEARCH_CYCLE_STAGES.has(step.stage)) {
-        const matches = stages.flatMap((entry, index) =>
-          entry.stage === step.stage ? [{ entry, roundIndex: rounds[index] ?? 1 }] : [],
-        );
-        if (matches.length === 0) {
-          rows.push(rowFromVocab(step, undefined, { id: nextRowId(ids, step.stage, 1) }));
-        } else {
-          for (const match of matches) rows.push(labelled(step, match.entry, match.roundIndex));
-        }
-      } else {
-        rows.push(labelled(step, liveByStage.get(step.stage), 1));
-      }
-    }
-    return [...rows, ...extras];
+    if (!row.stages.includes(step.stage)) row.stages.push(step.stage);
+    rowOfStage.set(step.stage, row);
+    planned.add(step.stage);
   }
 
-  return stages.map((entry, index) => {
-    const roundIndex = rounds[index] ?? 1;
-    const step = vocab.get(entry.stage);
-    if (step === undefined) {
-      const base = entry.label;
-      return {
-        id: nextRowId(ids, entry.stage, SEARCH_CYCLE_STAGES.has(entry.stage) ? roundIndex : 1),
-        stage: entry.stage,
-        label: SEARCH_CYCLE_STAGES.has(entry.stage)
-          ? cycleLabel(base, roundIndex, maxRound)
-          : base,
-        blurb: entry.blurb,
-        status: entry.status,
-        summary: entry.summary,
-        seconds: entry.seconds,
-      };
+  for (const entry of stages) {
+    let row = rowOfStage.get(entry.stage) ?? rows.find((candidate) => candidate.label === entry.label);
+    if (row === undefined) {
+      row = { key: `stage:${entry.stage}`, label: entry.label, stages: [], entries: [], state: "upcoming" };
+      byKey.set(row.key, row);
+      rows.push(row);
     }
-    return labelled(step, entry, roundIndex);
+    if (!row.stages.includes(entry.stage)) row.stages.push(entry.stage);
+    rowOfStage.set(entry.stage, row);
+    row.entries.push(entry);
+  }
+
+  const live = status === "running" || status === "paused";
+  const lastActive = rows.reduce((last, row, index) => (row.entries.length > 0 ? index : last), -1);
+  return rows.map((row, index) => ({ ...row, state: rowState(row, index, lastActive, planned, live) }));
+}
+
+function rowState(
+  row: CardRow,
+  index: number,
+  lastActive: number,
+  planned: ReadonlySet<string>,
+  live: boolean,
+): RowState {
+  if (row.entries.length === 0) return "upcoming";
+  if (row.entries.some((entry) => entry.status === "started")) return "progress";
+  if (row.entries.some((entry) => entry.status === "failed")) return "failed";
+  if (row.entries.every((entry) => entry.status === "skipped")) return "skipped";
+  // Between two stages of one row (search done, screening about to start)
+  // the row is still the one in progress.
+  const seen = new Set<string>(row.entries.map((entry) => entry.stage));
+  const waiting = row.stages.some((stage) => planned.has(stage) && !seen.has(stage));
+  return waiting && live && index === lastActive ? "progress" : "done";
+}
+
+/** The row being worked on now, else the last row that has run. */
+export function currentRow(rows: CardRow[]): CardRow | null {
+  return (
+    rows.find((row) => row.state === "progress") ??
+    [...rows].reverse().find((row) => row.entries.length > 0) ??
+    null
+  );
+}
+
+const COUNT_FORMAT = new Intl.NumberFormat("en-GB");
+
+/** The counts a done row shows: `312 found`, `118 relevant`. A stage that ran
+ *  twice (a second search pass) shows its latest counts. */
+export function rowCounts(row: CardRow): string[] {
+  return row.stages.flatMap((stage) => {
+    const latest = [...row.entries].reverse().find((entry) => entry.stage === stage);
+    // The server names the counts and their nouns on the frame (task 058, N17).
+    return (latest?.counts ?? []).map(({ value, noun }) => `${COUNT_FORMAT.format(value)} ${noun}`);
   });
 }
 
-/** What a row reads as: an in-flight row with live counts reads as its beat
- *  sentence (full-text reading, task 056), every other row as its label. */
-export function rowLabel(row: StageRow): string {
-  if (row.status !== "started") return row.label;
-  return beatSentence(row.stage, row.summary) ?? row.label;
-}
-
-/** Label of the in-flight step, else the last completed one. */
-function currentStepLabel(rows: StageRow[]): string | null {
-  const started = rows.find((row) => row.status === "started");
-  if (started !== undefined) return rowLabel(started);
-  const completed = [...rows].reverse().find((row) => row.status === "completed");
-  return completed?.label ?? rows[0]?.label ?? null;
-}
-
-/** Read a finite number out of a stage summary, else `null`. */
-function num(summary: StageEntry["summary"] | undefined, key: string): number | null {
-  const value = summary?.[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+function parsed(at: string | undefined): number | null {
+  if (at === undefined || at === "") return null;
+  const ms = Date.parse(at);
+  return Number.isNaN(ms) ? null : ms;
 }
 
 /**
- * One code-authored beat sentence for a completed stage, read from the
- * frame's `summary` counts. `null` for stages with no beat (including every
- * Evidence search stage) or when the gating count is absent. No full stop;
- * never a percentage.
+ * A row's wall time in seconds. A done row with one stage frame shows that
+ * stage's `seconds`; a row that ran several (search then screen) spans from
+ * the first frame's start to the last frame's end. An in-progress row counts
+ * up from its first frame's start. `null` when the frames do not say.
  */
-export function beatSentence(
-  stage: string,
-  summary: StageEntry["summary"] | undefined,
-): string | null {
-  switch (stage) {
-    case "suggest": {
-      const suggested = num(summary, "suggested");
-      if (suggested === null) return null;
-      const fromReport = num(summary, "from_report") ?? 0;
-      let out = `Suggested ${countOf(suggested, "option", "options")}`;
-      if (fromReport > 0) out += ` · ${fromReport} from your evidence search`;
-      return out;
-    }
-    case "option_searches": {
-      const total = num(summary, "total");
-      if (total === null) return null;
-      if (total === 0) return "No option searches to run";
-      const finished = num(summary, "finished") ?? 0;
-      const failed = num(summary, "failed") ?? 0;
-      let out = `Searched for ${finished} of ${countOf(total, "option", "options")}`;
-      if (failed > 0) out += ` · ${failed} failed`;
-      return out;
-    }
-    case "inherit": {
-      const documents = num(summary, "documents");
-      if (documents === null) return null;
-      const links = num(summary, "links") ?? 0;
-      const failedLinks = num(summary, "failed_links") ?? 0;
-      let out = `${countOf(documents, "document", "documents")} from ${countOf(links, "linked task", "linked tasks")}`;
-      if (failedLinks > 0) out += ` · ${failedLinks} could not be read`;
-      return out;
-    }
-    case "extract_interventions": {
-      const documents = num(summary, "documents");
-      const records = num(summary, "records");
-      if (documents === null && records === null) return null;
-      const parts: string[] = [];
-      if (documents !== null) parts.push(`Read ${countOf(documents, "abstract", "abstracts")}`);
-      if (records !== null) parts.push(`${countOf(records, "intervention", "interventions")} covered`);
-      return parts.join(" · ");
-    }
-    case "longlist": {
-      const options = num(summary, "options");
-      if (options === null) return null;
-      const unclustered = num(summary, "unclustered");
-      const notAnOption = num(summary, "not_an_option");
-      const parts: string[] = [countOf(options, "option", "options")];
-      if (unclustered !== null) parts.push(`${countOf(unclustered, "record", "records")} unclustered`);
-      if (notAnOption !== null) parts.push(`${notAnOption} not an option`);
-      return parts.join(" · ");
-    }
-    case "constrain": {
-      const excluded = num(summary, "excluded");
-      const noInScope = num(summary, "no_in_scope");
-      if (excluded === null && noInScope === null) return null;
-      const parts: string[] = [];
-      if (excluded !== null) parts.push(`${excluded} excluded`);
-      if (noInScope !== null) parts.push(`${noInScope} with no in-scope evidence`);
-      return parts.join(" · ");
-    }
-    case "theme": {
-      const themes = num(summary, "themes");
-      if (themes === null) return null;
-      return `${countOf(themes, "theme", "themes")}`;
-    }
-    case "ingest": {
-      // Live counts from the stage's ticks (task 056, S5); none → the label alone.
-      const total = num(summary, "total");
-      if (total === null) return null;
-      const parsed = num(summary, "parsed") ?? 0;
-      const fetched = num(summary, "fetched") ?? 0;
-      if (parsed > 0) return `Reading the full texts: ${parsed} of ${total} read`;
-      if (fetched > 0) return `Reading the full texts: ${fetched} fetched`;
-      return null;
-    }
-    // option_profile (task 046, R37): the step's label is its only sentence.
-    default:
-      return null;
+export function rowSeconds(row: CardRow, nowMs: number): number | null {
+  const first = row.entries[0];
+  const last = row.entries[row.entries.length - 1];
+  if (first === undefined || last === undefined) return null;
+  const start = parsed(first.startedAt);
+  if (row.state === "progress") return start === null ? null : Math.max(0, (nowMs - start) / 1000);
+  if (row.entries.length === 1) return typeof last.seconds === "number" ? last.seconds : null;
+  const lastStart = parsed(last.startedAt);
+  if (start !== null && lastStart !== null && typeof last.seconds === "number") {
+    return Math.max(0, (lastStart + last.seconds * 1000 - start) / 1000);
   }
+  const known = row.entries.map((entry) => entry.seconds).filter((value): value is number => typeof value === "number");
+  return known.length > 0 ? known.reduce((sum, value) => sum + value, 0) : null;
 }
 
-/** Extra lines shown when a completed step is expanded. */
-export function stageDetailLines(row: StageRow): string[] {
-  const lines: string[] = [];
-  if (row.blurb !== undefined && row.blurb !== "") lines.push(row.blurb);
-  const counts = timelineSummary(row);
-  const countsLine = counts.length > 0 ? counts.join(" · ") : null;
-  if (countsLine !== null) lines.push(countsLine);
-  const beat = beatSentence(row.stage, row.summary);
-  if (beat !== null && beat !== countsLine) lines.push(beat);
-  if (row.status === "completed" && typeof row.seconds === "number") {
-    lines.push(`Took ${formatElapsed(row.seconds)}`);
+/** The newest tick among a row's stages: what the model is doing on it now. */
+export function rowLiveness(
+  row: CardRow,
+  liveness: Record<string, StageLiveness> | undefined,
+): StageLiveness | undefined {
+  let newest: StageLiveness | undefined;
+  for (const stage of row.stages) {
+    const tick = liveness?.[stage];
+    if (tick === undefined) continue;
+    if (newest === undefined || (parsed(tick.occurredAt) ?? 0) >= (parsed(newest.occurredAt) ?? 0)) newest = tick;
   }
-  const reason = typeof row.summary?.reason === "string" ? row.summary.reason : null;
-  if (reason !== null) lines.push(reason);
-  return lines;
+  return newest;
+}
+
+/**
+ * Where a done row points (annex § The running card): the Sources table after
+ * searching and screening, the landscape after mapping (and after
+ * categorising once mapping is done), the findings once there are any, the
+ * report after writing. Shortlisting and reading have nowhere to point. Only
+ * an Evidence search's rows link.
+ */
+export function rowLink(
+  row: CardRow,
+  rows: CardRow[],
+  taskId: string,
+  kind: WalkKind,
+  hasFindings: boolean,
+): { href: string; label: string } | null {
+  if (kind !== "evidence_search" || row.state !== "done") return null;
+  const has = (stage: string) => row.stages.includes(stage);
+  const mapped = rows.some((other) => other.stages.includes("characterise") && other.state === "done");
+  if (has("acquire") || has("screen")) return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
+  if (has("characterise") || ((has("classify") || has("appraise")) && mapped)) {
+    return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
+  }
+  if (has("extract") && hasFindings) return { href: `/tasks/${taskId}/sources/findings`, label: "Findings" };
+  if (has("synthesise")) return { href: `/tasks/${taskId}/result`, label: "Report" };
+  return null;
+}
+
+/** The run strip's middle part: the writer's section while writing, else the
+ *  activity line, in the server's words. */
+export function rowDetail(tick: StageLiveness | undefined): string | null {
+  if (tick === undefined) return null;
+  const section = tick.section?.trim();
+  if (section) return section;
+  const activity = tick.activity.trim();
+  return activity === "" ? null : activity;
 }
 
 /** Link to a lifecycle tab that now has something to read. */
-export function signpostForStage(
+function signpostForStage(
   stage: string,
   taskId: string,
   hasFindings: boolean,
@@ -489,15 +374,13 @@ export function runFinishedSignpost(
   status: RunStatus | undefined,
   kind: WalkKind = "evidence_search",
 ): StageSignpost | null {
-  if (status === "succeeded" || status === "degraded") {
-    const notice = finishedNotice(kind, status);
-    return {
-      href: resultHref(taskId, kind),
-      label: LIFECYCLE_LABELS.result,
-      message: `${notice.before} ${LIFECYCLE_LABELS.result} ${notice.after}`,
-    };
-  }
-  return null;
+  if (!isFinished(status)) return null;
+  const notice = finishedNotice(kind, status);
+  return {
+    href: resultHref(taskId, kind),
+    label: LIFECYCLE_LABELS.result,
+    message: `${notice.before} ${LIFECYCLE_LABELS.result} ${notice.after}`,
+  };
 }
 
 /** Completed-stage signposts in timeline order, one per destination. */
@@ -524,24 +407,22 @@ export function resultsSignpost(
   status: RunStatus | undefined,
   kind: WalkKind = "evidence_search",
 ): StageSignpost | null {
-  if (status === "succeeded" || status === "degraded") {
-    const notice = finishedNotice(kind, status);
-    return {
-      href: resultHref(taskId, kind),
-      label: RESULTS_LABEL[kind],
-      message: `${notice.before} ${LIFECYCLE_LABELS.result} ${notice.after}`,
-    };
-  }
-  return null;
+  if (!isFinished(status)) return null;
+  const notice = finishedNotice(kind, status);
+  return {
+    href: resultHref(taskId, kind),
+    label: RESULTS_LABEL[kind],
+    message: `${notice.before} ${LIFECYCLE_LABELS.result} ${notice.after}`,
+  };
 }
 
-/** One-line collapsed status (`RUNNING · Searching · 13s`). */
+/** One-line collapsed status (`RUNNING · Searching and screening · 13 s`). */
 export function collapsedStatusLine(
   status: RunStatus | undefined,
-  rows: StageRow[],
+  rows: CardRow[],
   elapsedLabel: string,
 ): string {
   const { eyebrow } = runningCardCopy(status);
-  const step = currentStepLabel(rows);
-  return step === null ? `${eyebrow} · ${elapsedLabel}` : `${eyebrow} · ${step} · ${elapsedLabel}`;
+  const row = currentRow(rows);
+  return row === null ? `${eyebrow} · ${elapsedLabel}` : `${eyebrow} · ${row.label} · ${elapsedLabel}`;
 }

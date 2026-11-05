@@ -634,6 +634,28 @@ export function useOption(taskId: string, optionId: string) {
   });
 }
 
+/** `GET /api/v1/tasks/{task_id}/options` — every option row of a scoping
+ *  task with its own search's status, served from the end of the suggest
+ *  stage while the longlist is still being built (task 058, N22). An empty
+ *  list before suggest; a 404 is treated as absence. Keyed
+ *  `["tasks", id, "options"]`: the run stream refreshes that prefix on a
+ *  child walk's frames (N23), and the whole task on the walk's own. */
+export function useOptions(taskId: string, options?: { enabled?: boolean }) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: [...queryKeys.taskRoot(taskId), "options"] as const,
+    queryFn: async () => {
+      const { data, error, response } = await client.GET("/api/v1/tasks/{task_id}/options", {
+        params: { path: { task_id: taskId } },
+      });
+      if (response.status === 404) return null;
+      if (error) throw error;
+      return data ?? null;
+    },
+    enabled: Boolean(taskId) && (options?.enabled ?? true),
+  });
+}
+
 /** `GET /api/v1/tasks/{task_id}/longlist` — an options-scoping task's
  *  longlist (task 045), or `null` while none exists. The `useArtefact`
  *  shape: a 404 is the normal pre-longlist state, not an error. Keyed under

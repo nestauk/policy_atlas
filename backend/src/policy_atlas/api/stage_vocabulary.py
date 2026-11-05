@@ -191,6 +191,7 @@ ACTIVITY: dict[str, str] = {
     "select.batches": "Ranking sources · batch {done} of {total}",
     "characterise.batches": "Assigning themes · batch {done} of {total}",
     "group.batches": "Assigning findings · batch {done} of {total}",
+    "longlist.clustering": "options may be folded together or added",
     "longlist.batches": "Assigning sources to options · batch {done} of {total}",
     "theme.batches": "Assigning options to themes · batch {done} of {total}",
     "constrain.batches": "Checking constraints · batch {done} of {total}",

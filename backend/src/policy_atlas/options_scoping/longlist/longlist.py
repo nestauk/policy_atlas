@@ -83,6 +83,8 @@ from pydantic import ValidationError
 from sqlalchemy import and_, select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import liveness
 from policy_atlas.core.clustering_engine import (
     AssignmentOutput,
     ClusterAssignment,
@@ -1646,6 +1648,9 @@ def longlist_scope(
         LonglistFailure: If clustering fails or the exhaustiveness invariant
             (units = memberships + unclustered + not an option) breaks.
     """
+    # The stage line while the discovery call runs (task 058, N24): the
+    # loop's own words, which the wrapper's verb never overwrites.
+    liveness.publish_progress(activity=activity("longlist.clustering"))
     plan, plan_version = walk_plan(
         conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id
     )

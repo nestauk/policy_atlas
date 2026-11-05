@@ -7,6 +7,7 @@ import { errorCode } from "../lib/errors";
 import { safeHref } from "../lib/safeHref";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
+import { useRunStream } from "../store";
 import { Button } from "../ui/brand/Button";
 import { Card, Divider, PaneHeading } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
@@ -33,6 +34,7 @@ import {
 } from "./sourcesPresentation";
 import { numberedAuthorships } from "./artefactPresentation";
 import { isScoping } from "./scopingActivity";
+import { isFinished } from "./workspace/runProgress";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -49,9 +51,17 @@ export function SourcesView() {
   useDocumentTitle(task.data?.name, "Sources");
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedStatus = searchParams.get("status");
-  // No explicit status → Included (the screened-in set), the owner default.
+  const stream = useRunStream(taskId);
+  // No explicit status → Included (the screened-in set), the owner default,
+  // once screening has finished. Before that the screened-in set is empty or
+  // partial, so the default is All (task 058, N16).
+  const screened = stream.run !== null
+    ? isFinished(stream.run.status) ||
+      stream.stages.some((entry) => entry.stage === "screen" && entry.status === "completed")
+    : task.data?.latest_run?.status !== "running" && task.data?.latest_run?.status !== "paused";
   const statusFilter =
-    STATUS_FILTERS.find((filter) => filter.key === requestedStatus)?.key ?? "Included";
+    STATUS_FILTERS.find((filter) => filter.key === requestedStatus)?.key ??
+    (screened || isScoping(task.data) ? "Included" : "all");
   const citedFilter = searchParams.get("cited") === "true";
   const originFilter = ORIGIN_FILTER_OPTIONS.find((value) => value === searchParams.get("origin"));
   const typeFilter = searchParams.get("type") ?? undefined;

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthApi } from "../auth/types";
-import { useChatTurns, useMe, useTask } from "./queries";
+import { useChatTurns, useMe, useOptions, useTask } from "./queries";
 
 const conversationId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
@@ -183,5 +183,46 @@ describe("useTask", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect((result.current.error as Error & { status?: number }).status).toBe(404);
+  });
+});
+
+describe("useOptions (task 058, N22)", () => {
+  const taskId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+
+  it("reads the task's option rows from GET /tasks/{id}/options", async () => {
+    const body = {
+      options: [
+        {
+          option_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+          name: "Youth hubs",
+          description: "One local place.",
+          origin: "suggested",
+          state: "included",
+          merged_into_option_id: null,
+          search_status: "searching",
+          found: null,
+        },
+      ],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), "http://localhost:3000");
+      expect(url.pathname).toBe(`/api/v1/tasks/${taskId}/options`);
+      return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useOptions(taskId), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.data?.options).toHaveLength(1));
+    expect(result.current.data?.options?.[0]).toMatchObject({ name: "Youth hubs", search_status: "searching" });
+  });
+
+  it("reads a 404 as no rows yet, not an error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ detail: "not found" }), { status: 404, headers: { "Content-Type": "application/json" } })),
+    );
+    const { result } = renderHook(() => useOptions(taskId), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeNull();
   });
 });

@@ -3,13 +3,18 @@ import { Link } from "react-router";
 
 import type { components } from "../../api/gen/types";
 import { useAddOption } from "../../api/mutations";
-import { usePlan, useTask } from "../../api/queries";
+import { useLonglist, useOptions, usePlan, useTask } from "../../api/queries";
 import { actionFailedNotice } from "../../lib/errors";
+import { Figures } from "../../lib/figures";
+import { useFreshness } from "../../lib/freshness";
 import { scrub } from "../../lib/scrub";
 import { countOf } from "../../lib/vocabulary";
+import { useRunStream } from "../../store";
 import { Button } from "../../ui/brand/Button";
+import { StatusDot } from "../../ui/brand/Card";
 import { Chip } from "../../ui/brand/Chip";
 import { cn } from "../../ui/brand/cn";
+import { cardRows, currentRow, rowDetail, rowLiveness } from "../workspace/runProgress";
 import { REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 import {
   FullReportExpandAllButton,
@@ -24,6 +29,8 @@ import { FILTER_CHIP_CLASS } from "../sourcesPresentation";
 import { LonglistGrid } from "./LonglistGrid";
 import {
   SCOPING_PASS_SENTENCE,
+  SHORTLIST_WORD,
+  buildingLayout,
   byLeverThenName,
   capitalise,
   constraintLabel,
@@ -34,7 +41,10 @@ import {
   leverLabel,
   longlistTitle,
   rowMetaParts,
+  stageLineText,
   themeSummary,
+  type BuildingLayout,
+  type BuildingRow,
 } from "./longlistPresentation";
 import {
   ExcludeReasonForm,
@@ -413,6 +423,174 @@ export function LonglistView({ taskId, longlist }: { taskId: string; longlist: L
           </p>
         )}
       </form>
+    </ReportPage>
+  );
+}
+
+/** Theme sections rise one after another, 60 ms apart; under reduced
+ *  motion every wave appears at once. Literal classes so the build keeps them. */
+const RISE_DELAY_CLASSES = [
+  "",
+  "motion-safe:[animation-delay:60ms]",
+  "motion-safe:[animation-delay:120ms]",
+  "motion-safe:[animation-delay:180ms]",
+  "motion-safe:[animation-delay:240ms]",
+];
+
+/** What can arrive while the page is open, each with its own key. Anything
+ *  already on screen when the page opened does not animate. */
+function arrivalKeys(layout: BuildingLayout): Set<string> {
+  const keys = new Set<string>();
+  const add = (row: BuildingRow) => {
+    keys.add(`row:${row.id}`);
+    if (row.lever !== null) keys.add(`lever:${row.id}`);
+    if (row.shortlisted) keys.add(`short:${row.id}`);
+    for (const folded of row.folded) keys.add(`fold:${folded.id}`);
+  };
+  for (const group of layout.groups) {
+    if (group.title !== null) keys.add(`theme:${group.key}`);
+    group.rows.forEach(add);
+  }
+  if (layout.excluded.length > 0) keys.add("excluded");
+  layout.excluded.forEach(add);
+  return keys;
+}
+
+/**
+ * The longlist while its walk builds it (task 058, N24; annex scene 15).
+ *
+ * Titled "Longlist" with no qualifier: the stage line and the moving rows
+ * say it is being built. Rows come from the options read as soon as suggest
+ * has written them, each with its own search; from clustering on the
+ * longlist read fills them in place, in waves (counts, lever lines,
+ * exclusions, themes, shortlist marks). The stage line goes when the walk
+ * ends, and the built `LonglistView` takes over.
+ *
+ * Args:
+ *   taskId: The scoping task.
+ */
+export function LonglistBuilding({ taskId }: { taskId: string }) {
+  const task = useTask(taskId);
+  const options = useOptions(taskId);
+  const longlist = useLonglist(taskId);
+  const stream = useRunStream(taskId);
+
+  const layout = buildingLayout(options.data?.options ?? [], longlist.data ?? null);
+  const [initialKeys] = useState(() => arrivalKeys(layout));
+  const arrives = (key: string) => !initialKeys.has(key);
+
+  // The stage line: the run strip's words for the walk's current stage.
+  const runStatus = stream.run?.status;
+  const row = currentRow(cardRows(stream.stages, null, runStatus));
+  const progress = row !== null && row.state === "progress" ? row : null;
+  const tick = progress !== null ? rowLiveness(progress, stream.liveness) : undefined;
+  const paused = runStatus === "paused" || stream.pendingCheckIn !== null;
+  const activeRun = task.data?.active_run ?? null;
+  const line = paused
+    ? stageLineText(progress?.label ?? activeRun?.stage_label, null)
+    : stageLineText(progress?.label ?? activeRun?.stage_label, rowDetail(tick));
+  const lineFresh = useFreshness(tick?.occurredAt);
+  // A searching row's dot breathes while the option searches report in.
+  const searchesFresh = useFreshness(stream.liveness.option_searches?.occurredAt);
+
+  // Rows animate only while the list is flat: regrouping under themes
+  // remounts them, and the theme sections carry that rise instead.
+  const flat = layout.groups.every((group) => group.title === null);
+
+  const renderRow = (item: BuildingRow, excluded = false) => (
+    <li key={item.id} className={cn("border-b border-line py-3.5", flat && !excluded && arrives(`row:${item.id}`) && "anim-rise")}>
+      <div className="flex items-baseline justify-between gap-x-6 gap-y-1 max-sm:flex-col">
+        <p className="min-w-0 text-body">
+          <span className={cn("font-bold", excluded ? "text-grey" : "text-navy")}>{scrub(item.name)}</span>
+          <span className="ml-2.5 whitespace-nowrap text-meta text-grey">{item.origin}</span>
+        </p>
+        <p className="flex flex-none items-center gap-2 whitespace-nowrap text-meta text-grey">
+          {item.shortlisted && (
+            <span className={cn("inline-block font-bold text-navy", arrives(`short:${item.id}`) && "anim-rise")}>
+              {SHORTLIST_WORD}
+              <span aria-hidden="true" className="ml-2 font-normal text-grey">
+                ·
+              </span>
+            </span>
+          )}
+          {item.status.kind === "searching" && (
+            <StatusDot tone="running" className={searchesFresh ? "anim-breathe" : undefined} />
+          )}
+          {item.status.kind === "failed" && <StatusDot tone="failed" />}
+          <span>
+            <Figures text={item.status.text} />
+          </span>
+        </p>
+      </div>
+      {item.lever !== null && (
+        <p className={cn("mt-0.5 text-meta text-grey", flat && arrives(`lever:${item.id}`) && "anim-rise")}>
+          {scrub(item.lever)}
+        </p>
+      )}
+      {item.reason !== null && <p className="mt-0.5 max-w-prose-measure text-meta text-grey">{scrub(item.reason)}</p>}
+      {item.folded.map((folded) => (
+        <div
+          key={folded.id}
+          className={cn("mt-3 border-l border-line-2 pl-4", flat && arrives(`fold:${folded.id}`) && "anim-rise")}
+        >
+          <p className="text-body text-grey">{scrub(folded.name)}</p>
+          <p className="text-meta text-grey">Folded into {scrub(item.name)}</p>
+        </div>
+      ))}
+    </li>
+  );
+
+  return (
+    <ReportPage>
+      <header className="mb-6">
+        <h1 className={REPORT_TITLE_CLASS}>Longlist</h1>
+        {line !== null && (
+          <p className="mt-3 flex items-center gap-2 text-meta text-grey">
+            <StatusDot tone={paused ? "paused" : "running"} className={!paused && lineFresh ? "anim-breathe" : undefined} />
+            <span className="min-w-0">
+              <Figures text={scrub(line)} />
+            </span>
+          </p>
+        )}
+      </header>
+
+      {layout.groups.map((group, index) =>
+        group.title === null ? (
+          <ul key={group.key} role="list" aria-label="Options" className="border-t border-line">
+            {group.rows.map((item) => renderRow(item))}
+          </ul>
+        ) : (
+          <section
+            key={group.key}
+            aria-label={group.title}
+            className={cn(
+              "mt-9 first-of-type:mt-2",
+              arrives(`theme:${group.key}`) && "anim-rise",
+              arrives(`theme:${group.key}`) && RISE_DELAY_CLASSES[Math.min(index, RISE_DELAY_CLASSES.length - 1)],
+            )}
+          >
+            <h2 className={REPORT_SECTION_HEADING_CLASS}>{scrub(group.title)}</h2>
+            <ul role="list" className="mt-3 border-t border-line">
+              {group.rows.map((item) => renderRow(item))}
+            </ul>
+          </section>
+        ),
+      )}
+
+      {layout.excluded.length > 0 && (
+        <div className={cn("mt-10", arrives("excluded") && "anim-rise")}>
+          <SectionDisclosure
+            id={EXCLUDED_ANCHOR}
+            section={{ title: `Excluded · ${layout.excluded.length}`, role: "conclusions", summary: "", summary_status: "verified" }}
+            defaultOpen={false}
+            collapsible
+          >
+            <ul role="list" className="border-t border-line">
+              {layout.excluded.map((item) => renderRow(item, true))}
+            </ul>
+          </SectionDisclosure>
+        </div>
+      )}
     </ReportPage>
   );
 }

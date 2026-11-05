@@ -32,6 +32,7 @@ from policy_atlas.api.contract import (
     RunStatusFrame,
     SectionSpan,
     StageCompletedFrame,
+    StageCount,
     StageFailedFrame,
     StageKey,
     StageStartedFrame,
@@ -51,6 +52,9 @@ from policy_atlas.api.routers.task_agent import plan_slot
 from policy_atlas.api.settings import Settings
 
 # Shared with the check-in read model — one vocabulary, one leak surface.
+from policy_atlas.api.stage_vocabulary import (
+    STAGE_COUNTS,
+)
 from policy_atlas.api.stage_vocabulary import (
     STAGE_PRESENTATION as _STAGE_PRESENTATION,
 )
@@ -312,13 +316,19 @@ def _frames_for_row(
         if stage is None:
             return []
         label, _ = _presentation(stage)
+        summary = _summary(payload)
         return [
             StageCompletedFrame(
                 type="stage.completed",
                 stage=stage,
                 label=label,
-                summary=_summary(payload),
+                summary=summary,
                 seconds=_seconds(conn, task_id=task_id, row=row, payload=payload),
+                counts=[
+                    StageCount(value=int(summary[key]), noun=noun)
+                    for key, noun in STAGE_COUNTS.get(stage, ())
+                    if isinstance(summary.get(key), int | float)
+                ],
                 capability_run_id=stage_walk,
                 **persisted,
             ).model_dump(mode="json")

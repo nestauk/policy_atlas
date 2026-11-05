@@ -28,9 +28,12 @@ type LifecycleBarItem = {
 export function LifecycleBottomBar({
   items,
   hint,
+  lead,
 }: {
   items: readonly LifecycleBarItem[];
   hint: string;
+  /** A control set before the tabs (the task's "Plan" control). */
+  lead?: ReactNode;
 }) {
   return (
     <nav
@@ -38,15 +41,29 @@ export function LifecycleBottomBar({
       className="print-hide shrink-0 border-t border-line bg-paper md:hidden"
     >
       <div className="overflow-x-auto px-4 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
-        <LifecycleBar items={items} hint={hint} />
+        <LifecycleBar items={items} hint={hint} lead={lead} />
       </div>
     </nav>
   );
 }
 
-export function LifecycleBar({ items, hint }: { items: readonly LifecycleBarItem[]; hint: string }) {
+export function LifecycleBar({
+  items,
+  hint,
+  lead,
+}: {
+  items: readonly LifecycleBarItem[];
+  hint: string;
+  /** A control set before the tabs, behind a hairline (the "Plan" control). */
+  lead?: ReactNode;
+}) {
   return (
     <div className="flex items-end gap-5">
+      {lead !== undefined && (
+        <span className="inline-flex items-end gap-5 after:mb-1 after:h-4 after:w-px after:bg-line-2 after:content-['']">
+          {lead}
+        </span>
+      )}
       {items.map((item) =>
         item.locked ? (
           <span

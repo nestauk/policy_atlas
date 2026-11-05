@@ -1,12 +1,14 @@
 import { useCallback, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 
 import { useArtefact, useConversations } from "../../../api/queries";
 import { COPY } from "../../../lib/vocabulary";
-import { createInitialRunStreamState } from "../../../store";
+import { useRunStream } from "../../../store";
 import { cn } from "../../../ui/brand/cn";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
+import { usePlanPanel } from "../../planPanel";
 import { useChatsEnabled } from "../../taskResult";
+import { BASELINE_GATE_KIND } from "../checkInPresentation";
 import { TaskAgentPane } from "../TaskAgentPane";
 import { ChatPane } from "./ChatPane";
 import { ChatsIcon } from "./ChatsIcon";
@@ -22,6 +24,7 @@ import {
 } from "./conversationState";
 import { DraftChatPane } from "./DraftChatPane";
 import { ExpandIcon, PanelCloseIcon, PlusIcon } from "./icons";
+import { SidebarRun } from "./SidebarRun";
 
 /** Resize bounds (px) — the workspace rail's own clamp. */
 const PANEL_MIN = 280;
@@ -93,20 +96,34 @@ const HEADER_BUTTON =
  * rail the Agent tab's sidebar shuts to; the rail's toggle opens the latest
  * chat, or the Task Agent when there is none.
  *
+ * The Task Agent here is the same agent as the Agent tab (task 058, N13): it
+ * reads the task's one run stream, and while a run is live it folds to the
+ * compact run view (`SidebarRun`). While a check-in waits, the rail's toggle
+ * opens the Task Agent, so the panel lands on the check-in.
+ *
  * Args:
  *   props: The owning task id, and `isOwner` for the task_agent duplicate's
  *     read-only gate (task 033 phase 10c, contract § 11 / rubric 37) — this
  *     is the `ChatSidePanel` duplicate the rubric names alongside the
- *     workspace's own `TaskAgentPane`.
+ *     workspace's own `TaskAgentPane`. `onOpenPlan` overrides how "Review the
+ *     plan" and "See plan" open the plan document (the shell's plan panel by
+ *     default).
  *
  * Returns:
  *   The open panel beside the view, or a compact edge toggle when closed.
  */
-export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: boolean }) {
+export function ChatSidePanel({
+  taskId,
+  isOwner,
+  onOpenPlan,
+}: {
+  taskId: string;
+  isOwner: boolean;
+  onOpenPlan?: () => void;
+}) {
   const { activeConversationId, draftEntryArtefactId, setActiveConversation, openDraftChat } = useActiveConversation();
   const [listOpen, setListOpen] = useState(false);
   const panel = usePanelWidth();
-  const navigate = useNavigate();
   const conversations = useConversations(taskId, { status: "active" });
   const rows = conversations.data?.data ?? [];
   const chatRows = rows.filter((row) => row.kind === "chat");
@@ -115,12 +132,26 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   const draftOpen = activeConversationId === DRAFT_CHAT_ID;
   const artefact = useArtefact(taskId);
   const chatsEnabled = useChatsEnabled(taskId);
+  const stream = useRunStream(taskId);
+  const runStatus = stream.run?.status;
+  const checkInWaiting = stream.pendingCheckIn != null;
+  // The scoping gate keeps the thread open (its composer takes a question),
+  // so it stays in the full pane rather than the compact run view.
+  const compactRun =
+    (runStatus === "running" || runStatus === "paused") &&
+    stream.pendingCheckIn?.kind !== BASELINE_GATE_KIND;
   const openLatestOrTaskAgent = () => {
     // The launcher's decision needs the chats list resolved first — before
     // then "no chats" is read off `undefined` data.
     if (!conversations.isSuccess) return;
+    // A waiting check-in wins: opening the panel lands on it (task 058, N13).
+    if (checkInWaiting) return setActiveConversation(taskAgentId);
     setActiveConversation(chatRows.length > 0 ? chatRows[0].id : taskAgentId);
   };
+  // "Review the plan" and "See plan" open the shell's plan document (task
+  // 058, N13, N15) without leaving the tab.
+  const planPanel = usePlanPanel();
+  const openPlan = onOpenPlan ?? planPanel.openPlan;
 
   if (activeConversationId === null) {
     // Shut, the overlay is the same rail the Agent tab's sidebar shuts to
@@ -234,13 +265,17 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
       ) : (
         <div className="min-h-0 flex-1">
           {taskAgentOpen ? (
-            <TaskAgentPane
-              taskId={taskId}
-              runStatus={undefined}
-              stream={createInitialRunStreamState()}
-              isOwner={isOwner}
-              onReviewPlan={() => void navigate(`/tasks/${taskId}`)}
-            />
+            compactRun ? (
+              <SidebarRun taskId={taskId} stream={stream} isOwner={isOwner} />
+            ) : (
+              <TaskAgentPane
+                taskId={taskId}
+                runStatus={runStatus}
+                stream={stream}
+                isOwner={isOwner}
+                onReviewPlan={openPlan}
+              />
+            )
           ) : draftOpen ? (
             <DraftChatPane
               taskId={taskId}

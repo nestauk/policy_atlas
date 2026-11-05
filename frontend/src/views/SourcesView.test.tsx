@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mockCoverage, mockEvidence, mockFunnel, mockLandscape, mockSourceDossiers } from "../mock/fixtures";
+import { createInitialRunStreamState, type RunStreamState, type StageEntry } from "../store";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 import { SourceDossierBody, SourcesView } from "./SourcesView";
 import * as queries from "../api/queries";
@@ -18,6 +19,14 @@ vi.mock("../api/queries", () => ({
   useSourceDossier: vi.fn(),
   useSourceRecords: vi.fn(),
   useFunnel: vi.fn(),
+}));
+
+// The shell's run stream: idle by default, set per test for the default
+// filter during a run (task 058, N16).
+let streamState: RunStreamState = createInitialRunStreamState();
+vi.mock("../store", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../store")>()),
+  useRunStream: () => streamState,
 }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
@@ -64,6 +73,7 @@ function lastEvidenceQuery() {
 }
 
 beforeEach(() => {
+  streamState = createInitialRunStreamState();
   vi.mocked(queries.useTask).mockReturnValue(
     { data: { name: "Tower Hamlets task" } } as unknown as ReturnType<typeof queries.useTask>,
   );
@@ -91,6 +101,39 @@ beforeEach(() => {
     isError: false,
     refetch: vi.fn(),
   } as unknown as ReturnType<typeof queries.useEvidence>);
+});
+
+describe("SourcesView — the default filter during a run (task 058, N16)", () => {
+  const stage = (name: StageEntry["stage"], status: StageEntry["status"]): StageEntry => ({
+    stage: name,
+    label: "Searching and screening",
+    status,
+    startedAt: "2026-11-05T10:00:00Z",
+  });
+  const running = (stages: StageEntry[]): RunStreamState => ({
+    ...createInitialRunStreamState(),
+    run: { id: "run-1", status: "running", startedAt: "2026-11-05T10:00:00Z" },
+    stages,
+  });
+
+  it("shows All while screening has not finished", () => {
+    streamState = running([stage("acquire", "completed"), stage("screen", "started")]);
+    renderSources();
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(lastEvidenceQuery()).toMatchObject({ status: undefined });
+  });
+
+  it("returns to Included once screening has completed", () => {
+    streamState = running([stage("acquire", "completed"), stage("screen", "completed")]);
+    renderSources();
+    expect(screen.getByRole("button", { name: "Included" })).toHaveAttribute("aria-pressed", "true");
+    expect(lastEvidenceQuery()).toMatchObject({ status: ["Included"] });
+  });
+
+  it("keeps Included for a task with no live stream and no run in flight", () => {
+    renderSources();
+    expect(screen.getByRole("button", { name: "Included" })).toHaveAttribute("aria-pressed", "true");
+  });
 });
 
 describe("SourcesView — sortable table (028 strand 7)", () => {

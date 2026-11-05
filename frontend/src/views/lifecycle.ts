@@ -154,8 +154,26 @@ export function taskDestination(
 ): string {
   const base = `/tasks/${taskId}`;
   // Task 045: a scoping task with a longlist opens on it, whatever its
-  // latest walk is doing.
-  return status === "succeeded" || options?.hasLonglist === true ? `${base}/result` : base;
+  // latest walk is doing. A degraded finish opens the report like a
+  // succeeded one (task 058, N14).
+  return hasResult(status) || options?.hasLonglist === true ? `${base}/result` : base;
+}
+
+/**
+ * The lifecycle tab a path inside the task belongs to, or `null` outside it.
+ *
+ * Args:
+ *   pathname: The current location's path.
+ *   base: The task's root path (`/tasks/:taskId`).
+ *
+ * Returns:
+ *   The tab whose page the path is on (Sources' subviews count as Sources).
+ */
+export function tabOfPath(pathname: string, base: string): LifecycleTab | null {
+  if (pathname === base || pathname === `${base}/`) return "agent";
+  if (!pathname.startsWith(`${base}/`)) return null;
+  const segment = pathname.slice(base.length + 1).split("/")[0];
+  return LIFECYCLE_TABS.find((tab) => tab !== "agent" && TAB_PATHS[tab] === `/${segment}`) ?? null;
 }
 
 /** The Result's view switch once a scoping task has a longlist (task 045,

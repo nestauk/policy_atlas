@@ -489,8 +489,34 @@ def pause_points(
     return points
 
 
+#: The question a check-in asks, by the component that just finished (task 058,
+#: N19): the card shows it as its title, so it is the server's copy, in the
+#: plain voice. Components not named here ask the last one.
+CHECK_IN_QUESTIONS: dict[str, str] = {
+    "acquire": "Does this look right before I assess the sources?",
+    "screen_abstract": "Does this look right before I assess the sources?",
+    "screen_full": "Does this look right before I map the evidence?",
+    "classify": "Does the categorising look right before I read the full texts?",
+    "appraise": "Does the categorising look right before I read the full texts?",
+    "ingest_full_text": "Does this look right before I map the evidence?",
+    "characterise": "Does the map look right before I shortlist?",
+    "select": "Does the shortlist look right before I write?",
+    "extract": "Do the findings look right before I group them?",
+    "group": "Do the groups look right before I write?",
+}
+CHECK_IN_QUESTION_DEFAULT = "Does this look right so far?"
+
+
+def check_in_question(component: str) -> str:
+    """Return the question a check-in after ``component`` asks (task 058, N19)."""
+    return CHECK_IN_QUESTIONS.get(component, CHECK_IN_QUESTION_DEFAULT)
+
+
 def render_check_in(step_outcome_payload: dict[str, Any]) -> str:
     """Render one runner check-in payload deterministically.
+
+    The first line is the question the check-in asks (the card's title); the
+    second is the stable machine line (component, status, wall clock, counts).
 
     Args:
         step_outcome_payload: Payload emitted through ``AgentIO.check_in``.
@@ -517,7 +543,7 @@ def render_check_in(step_outcome_payload: dict[str, Any]) -> str:
     reason = step_outcome_payload.get("reason")
     if reason is not None:
         parts.append(f"reason={_stable_value(reason)}")
-    return " | ".join(parts)
+    return check_in_question(component) + "\n" + " | ".join(parts)
 
 
 def render_collation(flagged_events: list[dict[str, Any]]) -> str:

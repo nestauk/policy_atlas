@@ -562,6 +562,201 @@ export function maturityPhrase(
 
 type ShortlistState = NonNullable<OptionSummaryOut["shortlist"]>["state"];
 
+// --- The longlist while it is being built (task 058, N24; annex scene 15) ---
+
+type OptionProgressOut = components["schemas"]["OptionProgressOut"];
+type LonglistOut = components["schemas"]["LonglistOut"];
+
+/** The small grey origin word on a row while the longlist builds. The one
+ *  place the `origin` literal becomes words. */
+export const ORIGIN_WORDS: Record<OptionSummaryOut["origin"], string> = {
+  from_evidence_search: "from your report",
+  suggested: "suggested",
+  added_by_you: "added by you",
+  clustered: "found in the evidence",
+};
+
+/** The clustering stage's note on the stage line (annex scene 15). */
+
+/** The word a shortlisted row gains on the shortlist wave. */
+export const SHORTLIST_WORD = "Shortlist";
+
+/** A longlist walk's stages (the server's keys). "shortlist" is left out on
+ *  purpose: a walk that runs only that stage is the standalone shortlist
+ *  walk, which leaves the built longlist on screen. */
+const LONGLIST_WALK_STAGES: ReadonlySet<string> = new Set([
+  "inherit",
+  "suggest",
+  "option_searches",
+  "extract_interventions",
+  "longlist",
+  "option_profile",
+  "constrain",
+  "theme",
+]);
+
+/**
+ * Whether the scoping Result shows the longlist being built (N24): a
+ * longlist walk is running or paused. The live stream says so first (any of
+ * its stages is a longlist stage, its last one included); the task read
+ * stands in until the stream catches up. No API flag, no qualifier word.
+ *
+ * Args:
+ *   task: The task read model (`capability`, `active_run`).
+ *   streamStages: The tracked walk's stage frames from the run stream.
+ *
+ * Returns:
+ *   `true` while a longlist walk is live.
+ */
+export function isLonglistBuilding(
+  task:
+    | { capability?: string | null; active_run?: { stage?: string | null } | null }
+    | null
+    | undefined,
+  streamStages: readonly { stage: string }[],
+): boolean {
+  if (task?.capability !== "options_scoping" || task.active_run == null) return false;
+  if (streamStages.some((entry) => LONGLIST_WALK_STAGES.has(entry.stage))) return true;
+  const stage = task.active_run.stage;
+  return stage != null && LONGLIST_WALK_STAGES.has(stage);
+}
+
+/** The stage line's words: the server's label, then what it is doing in the
+ *  server's words (the clustering stage's note included, task 058 N17). A
+ *  detail that only repeats the label is dropped. */
+export function stageLineText(label: string | null | undefined, detail: string | null | undefined): string | null {
+  const head = (label ?? "").trim();
+  const tail = (detail ?? "").trim();
+  const parts = [head, tail.toLowerCase() === head.toLowerCase() ? "" : tail].filter((part) => part !== "");
+  return parts.length === 0 ? null : parts.join(" · ");
+}
+
+const FOUND_FORMAT = new Intl.NumberFormat("en-GB");
+
+/** A row's right-hand line: its own search, then its document count once the longlist exists. */
+export type BuildingStatus =
+  | { kind: "queued" | "searching" | "searched" | "failed"; text: string }
+  | { kind: "documents"; text: string };
+
+/** The right-hand line while the option's search is the news. */
+export function searchStatusLine(row: Pick<OptionProgressOut, "search_status" | "found">): BuildingStatus {
+  switch (row.search_status) {
+    case "queued":
+      return { kind: "queued", text: "Queued" };
+    case "searching":
+      return { kind: "searching", text: "Searching" };
+    case "failed":
+      return { kind: "failed", text: "Search failed" };
+    case "searched":
+      return {
+        kind: "searched",
+        text: row.found == null ? "Searched" : `Searched · ${FOUND_FORMAT.format(row.found)} found`,
+      };
+  }
+}
+
+/** One row of the longlist being built. */
+export interface BuildingRow {
+  id: string;
+  name: string;
+  /** The grey origin word ("from your report", "found in the evidence"). */
+  origin: string;
+  status: BuildingStatus;
+  /** The lever line, from the profile wave on. */
+  lever: string | null;
+  /** The exclusion's one-line reason, from the constrain wave on. */
+  reason: string | null;
+  /** True from the shortlist wave on, for a row that holds a place. */
+  shortlisted: boolean;
+  /** The suggestions clustering folded into this option, in row order. */
+  folded: { id: string; name: string }[];
+}
+
+/** A run of rows under one heading; `title` is `null` before the theme wave. */
+export interface BuildingGroup {
+  key: string;
+  title: string | null;
+  rows: BuildingRow[];
+}
+
+export interface BuildingLayout {
+  groups: BuildingGroup[];
+  excluded: BuildingRow[];
+}
+
+/** Whether the profile wave has written this option's lever. */
+function profiled(option: OptionSummaryOut): boolean {
+  return option.profile != null || option.primary_lever_type != null || option.lever_none_fits_reason != null;
+}
+
+/**
+ * The longlist being built, as rows in place (N24, D9).
+ *
+ * The options read gives the rows and their order from the end of suggest,
+ * with each option's search and, from clustering on, the folds. Once the
+ * longlist read exists it fills them in, in waves: document counts, then
+ * lever lines, then exclusions (into their own group), then themes (rows
+ * regroup under them), then shortlist marks. Rows the clustering stage added
+ * join the end; a folded row moves under the option it was folded into.
+ *
+ * Args:
+ *   rows: The options read's rows, oldest first.
+ *   longlist: The longlist read, or `null` while it 404s.
+ *
+ * Returns:
+ *   The groups of included rows in order, and the excluded rows.
+ */
+export function buildingLayout(rows: readonly OptionProgressOut[], longlist: LonglistOut | null | undefined): BuildingLayout {
+  const summaries = new Map((longlist?.options ?? []).map((option) => [option.option_id, option]));
+  const ids = new Set(rows.map((row) => row.option_id));
+  const live = rows.filter((row) => row.merged_into_option_id == null || !ids.has(row.merged_into_option_id));
+
+  const toRow = (id: string, name: string, origin: OptionSummaryOut["origin"], search: BuildingStatus): BuildingRow => {
+    const summary = summaries.get(id);
+    return {
+      id,
+      name: summary?.name ?? name,
+      origin: ORIGIN_WORDS[summary?.origin ?? origin],
+      status: summary !== undefined ? { kind: "documents", text: countOf(summary.document_count, "document", "documents") } : search,
+      lever: summary !== undefined && profiled(summary) ? leverLabel(summary) : null,
+      reason: summary?.state === "excluded" ? (summary.exclusion?.reason ?? "").trim() || null : null,
+      shortlisted: summary !== undefined && holdsPlace(summary),
+      folded: rows
+        .filter((other) => other.merged_into_option_id === id)
+        .map((other) => ({ id: other.option_id, name: other.name })),
+    };
+  };
+
+  const all: BuildingRow[] = [
+    ...live.map((row) => toRow(row.option_id, row.name, row.origin, searchStatusLine(row))),
+    // An option the longlist has that the options read does not (it should
+    // not happen; never drop a row the reader could otherwise see).
+    ...(longlist?.options ?? [])
+      .filter((option) => !ids.has(option.option_id))
+      .map((option) => toRow(option.option_id, option.name, option.origin, { kind: "documents", text: "" })),
+  ];
+  const excludedIds = new Set(
+    [...summaries.values()].filter((option) => option.state === "excluded").map((option) => option.option_id),
+  );
+  const included = all.filter((row) => !excludedIds.has(row.id));
+  const excluded = all.filter((row) => excludedIds.has(row.id));
+
+  const themes = longlist?.themes ?? [];
+  if (themes.length === 0) {
+    return { groups: included.length > 0 ? [{ key: "all", title: null, rows: included }] : [], excluded };
+  }
+  const placed = new Set<string>();
+  const groups: BuildingGroup[] = themes.map((theme) => {
+    const members = new Set(theme.option_ids ?? []);
+    const themed = included.filter((row) => members.has(row.id) && !placed.has(row.id));
+    for (const row of themed) placed.add(row.id);
+    return { key: theme.theme_id, title: theme.name, rows: themed };
+  });
+  const rest = included.filter((row) => !placed.has(row.id));
+  if (rest.length > 0) groups.push({ key: "no-theme", title: "No theme", rows: rest });
+  return { groups: groups.filter((group) => group.rows.length > 0), excluded };
+}
+
 /** Whether the option holds a place (a pick or one added by you); a
  *  set-aside pick holds none. */
 export function holdsPlace(option: Pick<OptionSummaryOut, "shortlist">): boolean {

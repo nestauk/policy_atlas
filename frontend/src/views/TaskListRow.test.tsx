@@ -39,3 +39,30 @@ describe("TaskListRow — the capability label", () => {
     }
   });
 });
+
+// Task 058 (N15): a running task's row says where its run is.
+describe("TaskListRow — the running stage", () => {
+  const startedAt = new Date(Date.now() - 14 * 60_000 - 5_000).toISOString();
+
+  it("reads the active run's stage label and elapsed time", () => {
+    renderRow({
+      latestRun: { capability_run_id: "r1", status: "running", started_at: startedAt },
+      activeRun: { capability_run_id: "r1", status: "running", started_at: startedAt, stage: "synthesise", stage_label: "Writing" },
+    });
+    expect(screen.getByTitle("Writing · 14 min")).toHaveTextContent("Writing · 14 min");
+    expect(screen.queryByText("Analysing the evidence…")).toBeNull();
+  });
+
+  it("keeps the status word when no stage is known, and once the run has finished", () => {
+    renderRow({ latestRun: { capability_run_id: "r1", status: "running", started_at: startedAt } });
+    expect(screen.getByText("Analysing the evidence…")).toBeInTheDocument();
+  });
+
+  it("keeps the paused word while a check-in waits", () => {
+    renderRow({
+      latestRun: { capability_run_id: "r1", status: "paused", started_at: startedAt },
+      activeRun: { capability_run_id: "r1", status: "paused", started_at: startedAt, stage: "screen", stage_label: "Searching and screening" },
+    });
+    expect(screen.getByText("Paused — waiting on your input")).toBeInTheDocument();
+  });
+});

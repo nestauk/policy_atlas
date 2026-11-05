@@ -42,6 +42,30 @@ export const STAGE_PRESENTATION: Record<StageKey, readonly [label: string, blurb
 
 /** The card row each stage belongs to; search and screen share one row, as do
  *  classify and appraise. */
+/** The server's `STAGE_COUNTS` (task 058, N17): the done row's counts, each
+ *  with its noun, copied here so the mock's frames carry what the server's do. */
+export const STAGE_COUNTS: Record<StageKey, ReadonlyArray<readonly [string, string]>> = {
+  acquire: [["acquired", "found"]],
+  screen: [["relevant", "relevant"]],
+  classify: [["classified", "categorised"]],
+  appraise: [],
+  ingest: [["ingested", "read"]],
+  characterise: [["theme_count", "themes"]],
+  select: [["selected_count", "selected"]],
+  extract: [["finding_count", "findings"]],
+  group: [["group_count", "groups"]],
+  synthesise: [["section_count", "sections"]],
+  inherit: [["documents", "documents"]],
+  suggest: [["suggested", "suggested"]],
+  option_searches: [["total", "searches"], ["sources", "sources"]],
+  extract_interventions: [["documents", "abstracts"]],
+  longlist: [["options", "options"]],
+  option_profile: [["profiled", "profiled"]],
+  constrain: [["excluded", "excluded"]],
+  theme: [["themes", "themes"]],
+  shortlist: [["kept", "shortlisted"]],
+};
+
 export const STAGE_ROW: Record<StageKey, string> = {
   acquire: "search_screen",
   screen: "search_screen",
@@ -1057,6 +1081,102 @@ export function foldMockOptionRows(rows: OptionProgress[]): OptionProgress[] {
     found: null,
   }));
   return [...folded, ...added];
+}
+
+/** The stages after which the longlist read gains something, in order. */
+export const MOCK_WALK_LONGLIST_STAGES = ["longlist", "option_profile", "constrain", "theme", "shortlist"] as const;
+export type MockWalkLonglistStage = (typeof MOCK_WALK_LONGLIST_STAGES)[number];
+
+/** Lever types handed to the walk's options in turn once they are profiled. */
+const MOCK_WALK_LEVERS = ["provide a service", "subsidise", "regulate", "inform", "convene", "invest in infrastructure"];
+/** Positions (among the live rows) of the two options the constrain stage excludes. */
+const MOCK_WALK_EXCLUDED_AT = [5, 7];
+/** Positions of the options the shortlist stage picks. */
+const MOCK_WALK_SHORTLIST_AT = [0, 1, 3];
+
+/**
+ * `GET /longlist` while the walk builds: the same option ids as the options
+ * read (folded rows left out, as the API leaves them), growing stage by stage.
+ * `stage` is the last stage that completed. After `longlist` each row has its
+ * document count only; `option_profile` adds the lever lines; `constrain`
+ * excludes two options with a one-line reason; `theme` groups the included
+ * options; `shortlist` marks the picks.
+ */
+export function mockWalkLonglist(
+  rows: readonly OptionProgress[],
+  stage: MockWalkLonglistStage,
+): components["schemas"]["LonglistOut"] {
+  const reached = (target: MockWalkLonglistStage) =>
+    MOCK_WALK_LONGLIST_STAGES.indexOf(stage) >= MOCK_WALK_LONGLIST_STAGES.indexOf(target);
+  const live = rows.filter((row) => row.merged_into_option_id == null);
+  const options = live.map((row, position): OptionSummaryOutFixture => {
+    const excluded = reached("constrain") && MOCK_WALK_EXCLUDED_AT.includes(position);
+    const picked = reached("shortlist") && !excluded && MOCK_WALK_SHORTLIST_AT.includes(position);
+    const profiled = reached("option_profile");
+    return {
+      option_id: row.option_id,
+      name: row.name,
+      description: row.description,
+      outcomes_served: [],
+      origin: row.origin,
+      state: excluded ? "excluded" : "included",
+      exclusion: excluded
+        ? { by: "constrain", constraint: MOCK_LONGLIST_FUNDING_CONSTRAINT, reason: "A local authority cannot fund this directly." }
+        : null,
+      no_in_scope_evidence: false,
+      primary_lever_type: profiled ? MOCK_WALK_LEVERS[position % MOCK_WALK_LEVERS.length] : null,
+      lever_none_fits_reason: null,
+      lever_reason: null,
+      secondary_lever_types: [],
+      ambition: profiled && position % 4 === 1 ? "more" : null,
+      ambition_reason: profiled ? "Builds on what local teams already run rather than adding a new body." : null,
+      profile: null,
+      authority: null,
+      taxonomy_version: "lever-types-v1",
+      document_count: row.found ?? 0,
+      evaluated_count: 0,
+      relations: [],
+      search_pending: false,
+      evaluated_countries: [],
+      outcomes_evaluated: 0,
+      outcomes_total: 2,
+      shortlist: picked ? { state: "proposed", reason: "Mock reason: names a fact on the card." } : null,
+      maturity: null,
+    };
+  });
+  const included = options.filter((option) => option.state === "included");
+  const half = Math.ceil(included.length / 2);
+  const themes = reached("theme")
+    ? [
+        {
+          theme_id: MOCK_LONGLIST_THEME_ID_CONDITIONALITY,
+          name: "Conditionality and support",
+          description: "Options that attach an obligation or targeted help to the existing offer.",
+          option_ids: included.slice(0, half).map((option) => option.option_id),
+        },
+        {
+          theme_id: MOCK_LONGLIST_THEME_ID_UNIVERSAL_OFFER,
+          name: "A universal offer",
+          description: "A single, non-conditional offer replacing today's patchwork.",
+          option_ids: included.slice(half).map((option) => option.option_id),
+        },
+      ]
+    : [];
+  const base = mockLonglist();
+  return {
+    ...base,
+    counts: {
+      options: options.length,
+      themes: themes.length,
+      included: included.length,
+      excluded: options.length - included.length,
+      no_in_scope: 0,
+      none_fits: 0,
+    },
+    themes,
+    unthemed_option_ids: reached("theme") ? [] : options.map((option) => option.option_id),
+    options,
+  };
 }
 
 // --- The options-scoping baseline gate (task 044, Phase 5.5) -------------

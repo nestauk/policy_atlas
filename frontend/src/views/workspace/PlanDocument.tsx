@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { components } from "../../api/gen/types";
 import { usePatchPlan } from "../../api/mutations";
@@ -47,9 +47,7 @@ import {
   SEARCH_SCOPE_TITLE,
   SOURCES_LABEL,
   STEERING_MODE_LABEL,
-  stepsForAnalysisDepth,
   TAG_ORIGIN_LABEL,
-  timeBandFor,
   vocabLabel,
   YOUR_CONTEXT_TYPE_LABEL,
   YOUR_OPTIONS_ASSUMED_TAG,
@@ -62,6 +60,7 @@ import {
 import { RiskAppetiteSelect } from "../longlist/ShortlistView";
 
 type ScopingPlanDraft = components["schemas"]["ScopingPlanDraft"];
+type PlanDraft = components["schemas"]["PlanDraft"];
 type TaggedOut = components["schemas"]["TaggedOut"];
 type ScopingConstraintOut = components["schemas"]["ScopingConstraintOut"];
 type YourContextOut = components["schemas"]["YourContextOut"];
@@ -292,6 +291,13 @@ function PlanChrome({
     "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center p-0 text-[#97a8bc] hover:text-white focus-visible:outline-2 focus-visible:outline-blue";
   return (
     <div className={cn("flex h-8 items-center", className)}>
+      {/* Keyboard hint for the side panel (task 058, N15); a touch screen
+          has no Escape key, so it is not shown there. */}
+      {!showDock && (
+        <span aria-hidden="true" className="mr-2 text-caption text-[#97a8bc] [@media(hover:none)]:hidden">
+          Esc closes
+        </span>
+      )}
       {showDock && onDock !== undefined && (
         <button
           type="button"
@@ -851,9 +857,29 @@ function ScopingPlanSections({
   );
 }
 
+/** The plan's steps as the run card shows them: one per card row, with the
+ *  server's label and its first step's blurb (task 058, N17). */
+function planStepRows(steps: PlanDraft["steps"]): { row: string; label: string; blurb: string }[] {
+  const rows: { row: string; label: string; blurb: string }[] = [];
+  for (const step of steps ?? []) {
+    if (!rows.some((row) => row.row === step.row)) rows.push({ row: step.row, label: step.label, blurb: step.blurb });
+  }
+  return rows;
+}
+
+/** Whether an Escape keypress belongs to something inside the plan (an open
+ *  menu, a field being edited) rather than to the plan itself. */
+function escapeTakenElsewhere(event: KeyboardEvent): boolean {
+  if (event.defaultPrevented) return true;
+  const target = event.target;
+  if (target instanceof HTMLElement && target.closest("input, textarea, select, [contenteditable='true']")) return true;
+  return document.querySelector("[data-radix-popper-content-wrapper]") !== null;
+}
+
 /**
  * The search plan, edited in place. Saves stay local until Start search —
  * a task_agent round-trip on every field would rewrite the whole plan.
+ * Escape closes it (task 058, N15).
  */
 export function PlanDocument({
   taskId,
@@ -901,6 +927,15 @@ export function PlanDocument({
     onOverlayApplied: () => onOverlayChange({}),
     onDiscardOverlay: () => onOverlayChange({}),
   });
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || escapeTakenElsewhere(event)) return;
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
 
   const [editingQuestion, setEditingQuestion] = useState(false);
   const [editingSettings, setEditingSettings] = useState(false);
@@ -976,11 +1011,9 @@ export function PlanDocument({
     draft !== undefined ? displayedEnum(overlay.analysis_depth, draft.analysis_depth) : "";
   const sources = draft !== undefined ? displayedEnum(overlay.backend_scope, draft.backend_scope) : "";
   const checkIns = draft !== undefined ? displayedEnum(overlay.steering_mode, draft.steering_mode) : "";
-  const previewEffort = editingSettings ? settingsDraft.search_effort : searchEffort;
-  const previewDepth = editingSettings ? settingsDraft.analysis_depth : analysisDepth;
-  const previewSources = editingFilters ? filterDraft.backend_scope : sources;
-  const expectedRunTime = timeBandFor(previewEffort, previewDepth) ?? draft?.time_band ?? null;
-  const agreedSteps = stepsForAnalysisDepth(previewDepth, previewSources);
+  // The plan draft's own band (task 058, N20): one table, on the server.
+  const expectedRunTime = draft?.time_band ?? null;
+  const agreedSteps = planStepRows(draft?.steps);
   const closeLabel = scopingPlan ? "Close the scoping plan" : "Close the search plan";
 
   return (
@@ -1334,7 +1367,7 @@ export function PlanDocument({
                 <h3 className={panelLabelClass}>Plan steps</h3>
                 <ol className="mt-3 list-none space-y-2 pl-1 text-lead text-[#e8edf2]">
                   {agreedSteps.map((step, index) => (
-                    <li key={step.stage} className="flex gap-1.5">
+                    <li key={step.row} className="flex gap-1.5">
                       <span aria-hidden="true" className="w-4 shrink-0 tabular-nums">
                         {index + 1}.
                       </span>

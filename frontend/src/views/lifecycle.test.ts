@@ -5,6 +5,7 @@ import {
   isTabOpen,
   lifecycleTabs,
   resultView,
+  tabOfPath,
   taskDestination,
   withChat,
 } from "./lifecycle";
@@ -128,13 +129,25 @@ describe("lifecycleTabs", () => {
   });
 });
 
+describe("tabOfPath", () => {
+  it("names the tab a task path is on, Sources' subviews included", () => {
+    expect(tabOfPath("/tasks/t1", "/tasks/t1")).toBe("agent");
+    expect(tabOfPath("/tasks/t1/result", "/tasks/t1")).toBe("result");
+    expect(tabOfPath("/tasks/t1/sources/landscape", "/tasks/t1")).toBe("sources");
+    expect(tabOfPath("/tasks/t1/history", "/tasks/t1")).toBe("history");
+    expect(tabOfPath("/tasks/t2/result", "/tasks/t1")).toBeNull();
+    expect(tabOfPath("/tasks/t1/nowhere", "/tasks/t1")).toBeNull();
+  });
+});
+
 describe("taskDestination", () => {
-  it("opens Result for a succeeded task", () => {
+  it("opens Result for a succeeded task, and for a degraded one (task 058, N14)", () => {
     expect(taskDestination("p1", "succeeded")).toBe("/tasks/p1/result");
+    expect(taskDestination("p1", "degraded")).toBe("/tasks/p1/result");
   });
 
   it("opens Agent for every other state", () => {
-    for (const status of ["running", "paused", "degraded", "failed", "aborted", "interrupted"] as const) {
+    for (const status of ["running", "paused", "failed", "aborted", "interrupted"] as const) {
       expect(taskDestination("p1", status)).toBe("/tasks/p1");
     }
     expect(taskDestination("p1", null)).toBe("/tasks/p1");

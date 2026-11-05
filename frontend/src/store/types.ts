@@ -14,6 +14,8 @@ export interface StageEntry {
   status: StageStatus;
   summary?: Record<string, number | string>;
   seconds?: number | null;
+  /** The done row's counts with the server's nouns (task 058, N17). */
+  counts?: { value: number; noun: string }[];
   blurb?: string;
   /** When the stage started: the `occurred_at` of its `stage.started`
    *  frame, kept through `stage.completed` / `stage.failed` so the card can

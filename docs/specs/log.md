@@ -9,6 +9,9 @@
   together); two new ephemeral frames `artefact.section_delta` and `artefact.section_revising`,
   display-only, with `section_completed` staying the record; labels, blurbs and activity text come
   from one server table; a plan step's `row` key says which stages share a card row.
+* **Update**: [Web API § SSE](system/web-api.md) — task 058 build: `stage.completed` carries
+  `counts: [{value, noun}]`, the done row's counts in the server's words (N17; the client keeps no
+  table of count keys).
 * **Update**: [Web API § Task Agent turns, § Tasks, § Read models](system/web-api.md) — task 058
   S4: `POST /task-agent-turns` responds with the chat route's event stream; `TaskAgentTurnOut.question`;
   `TaskOut.active_run.stage` and `stage_label`; `GET /tasks/{id}/options` with per-option search

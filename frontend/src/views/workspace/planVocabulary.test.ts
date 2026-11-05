@@ -6,9 +6,7 @@ import {
   ANALYSIS_QUESTION,
   ANALYSIS_SHORTLIST_CAP,
   ANALYSIS_TITLE,
-  acquireSearchBlurb,
   axesForResearchApproach,
-  COMPONENT_LABEL,
   CONSTRAINT_CHECKED_AT_LABEL,
   constraintEffectLines,
   constraintKindLines,
@@ -25,9 +23,7 @@ import {
   SOURCES_LABEL,
   STEERING_MODE_LABEL,
   scopeChips,
-  stepsForAnalysisDepth,
   TAG_ORIGIN_LABEL,
-  timeBandFor,
   vocabLabel,
   YOUR_CONTEXT_TYPE_LABEL,
 } from "./planVocabulary";
@@ -45,7 +41,6 @@ describe("vocabLabel", () => {
     expect(vocabLabel(ANALYSIS_DEPTH_LABEL, "deep")).toBe("Findings synthesis");
     expect(vocabLabel(SOURCES_LABEL, "both")).toBe("Academic + Policy (OpenAlex, Overton)");
     expect(vocabLabel(STEERING_MODE_LABEL, "unattended")).toBe("None");
-    expect(vocabLabel(COMPONENT_LABEL, "screen_full")).toBe("Screening for relevance");
     // The contract's ban: an unknown key must OMIT, not render key.replace(…).
     expect(vocabLabel(SEARCH_EFFORT_LABEL, "warp_speed")).toBeNull();
     expect(vocabLabel(SEARCH_EFFORT_LABEL, null)).toBeNull();
@@ -144,56 +139,6 @@ describe("researchApproach", () => {
       analysis_depth: "landscape",
     });
     expect(axesForResearchApproach("custom")).toBeNull();
-  });
-});
-
-describe("timeBandFor", () => {
-  it("returns the measured band for a search-effort × analysis-depth pair", () => {
-    expect(timeBandFor("standard", "standard")).toBe("~10-20 min");
-    expect(timeBandFor("rapid", "deep")).toBe("~75-90 min");
-    expect(timeBandFor("unknown", "standard")).toBeNull();
-  });
-});
-
-describe("stepsForAnalysisDepth", () => {
-  it("adds shortlisting at standard and the findings chain at deep", () => {
-    const landscape = stepsForAnalysisDepth("landscape").map((step) => step.stage);
-    const standard = stepsForAnalysisDepth("standard").map((step) => step.stage);
-    const deep = stepsForAnalysisDepth("deep").map((step) => step.stage);
-    expect(landscape).toEqual([
-      "acquire",
-      "screen",
-      "classify",
-      "appraise",
-      "ingest",
-      "characterise",
-      "synthesise",
-    ]);
-    expect(standard).toContain("select");
-    expect(standard).not.toContain("extract");
-    expect(deep).toEqual([
-      "acquire",
-      "screen",
-      "classify",
-      "appraise",
-      "ingest",
-      "characterise",
-      "select",
-      "extract",
-      "group",
-      "synthesise",
-    ]);
-  });
-
-  it("adapts the searching blurb to the selected source libraries", () => {
-    expect(acquireSearchBlurb("academic_only")).toBe("Querying academic databases.");
-    expect(acquireSearchBlurb("grey_lit_only")).toBe("Querying policy databases.");
-    expect(acquireSearchBlurb("both")).toBe("Querying academic and policy databases.");
-    expect(stepsForAnalysisDepth("landscape", "academic_only")[0]).toMatchObject({
-      stage: "acquire",
-      label: "Searching",
-      blurb: "Querying academic databases.",
-    });
   });
 });
 

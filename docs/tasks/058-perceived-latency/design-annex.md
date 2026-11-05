@@ -228,6 +228,56 @@ Nesta palette from `index.css`: navy `#0f294a` structural text, grey `#646363` s
 - The mock (version 7) predates these rulings and still shows round counts, the strip's
   diamond, the eyebrow and "provisional"; the annex, not the mock, is the authority.
 
+## Rulings during the build (lead, 2026-11-05)
+
+- The sidebar's header keeps its existing link to the Agent tab (the name with the expand icon); no
+  second text link is added. The Agent tab is the full view, so this is not a third route.
+- The paused run line in the sidebar colours the dot orange and keeps the text dark: orange text on
+  white fails the contrast rule.
+- The sidebar's thread tail shows the activity line only; the run line above already names the row.
+- The Result tab after a run that ended before any section was proposed reads "This run ended before
+  writing began." The re-run line under one minute reads "A new run started just now."
+- The blur eases with the product's strong ease-out, not the mock's ease-in; the settle fades over 400 ms.
+- The check-in's place in the sidebar reads "after <row label>" with the server's row label
+  ("after searching and screening").
+
+- The running card has no title line (the top line is the state word, the elapsed time and
+  Minimise); "See plan" leaves the card (the Plan control is one click from anywhere).
+- The strip's finish wording per walk: "Report ready", "The baseline is ready", "The longlist is
+  ready", "The option's search is done", "The shortlist is proposed", each then "· Read it →", the
+  whole line in green. A colleague who cannot answer a check-in sees "Paused · <row> · <elapsed>".
+- Failed and skipped rows read "Stopped" and "Skipped".
+- The breathing dot's lowest opacity is 0.5 (0.35 nearly vanished on white).
+- The strip shows the writer's whole section line while writing; shortening it to "Section n of M"
+  is a polish item for the owner pass.
+- The done row's counts and nouns come on the `stage.completed` frame from the server; the client
+  keeps no table.
+
+- The longlist's stage line shows the server's activity words after the stage label
+  ("Searching for each option · 4 of 12 searches done · 1,180 sources so far"; "Reading the
+  abstracts · 1,180 of 2,410 abstracts read"); scene 15's shorter forms are superseded. The
+  clustering note comes from the server too.
+- A shortlisted row reads "Shortlist · 38 documents"; a folded row shows its name, then "Folded
+  into <the parent's full name>".
+- When the walk ends the built longlist view takes over (its own header, themes collapsed);
+  keeping the watched rows in place and linking row names to the option card during the build
+  are polish items for the owner pass.
+- While paused, the longlist's stage line shows the orange dot and the stage label only.
+
+- The check-in's question is the first line of the server's render (`runtime/steering.py`
+  `CHECK_IN_QUESTIONS`, one per component: "Does this look right before I assess the sources?"
+  after searching and screening, "Does the categorising look right before I read the full
+  texts?", "Does the map look right before I shortlist?", "Does the shortlist look right before
+  I write?"); the client never writes one.
+- "Go to the check-in" has no home: the rail's diamond and the Agent tab are the two routes and
+  both land on the card. No "The search is paused" line is shown anywhere.
+- Plan card summary: "Search plan · Standard report · ~20 to 40 min" (the preset's label);
+  scoping: "Scoping plan · <time band>". A settled thoroughness line carries the band. The
+  in-card input's placeholder is "What should change?" for every words option. Decisions the
+  user did not take read "The Agent decided: <label> · after <stage>" and "Your standing rule
+  decided: …". A dropped connection mid-reply keeps "Drafting the plan" with a still dot.
+- A turn that carries a part card shows no question or chips beside it.
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |

@@ -12,7 +12,7 @@ import { PublicViewProvider } from "./publicView";
 // route is not on the public surface) — stub the SSE-backed store to its
 // idle shape rather than requiring a real RunStreamProvider connection.
 vi.mock("../store", () => ({
-  useRunStream: () => ({ liveSections: {}, run: null, connectionStatus: "idle" }),
+  useRunStream: () => ({ liveSections: {}, liveness: {}, task: {}, run: null, connectionStatus: "idle" }),
   hasTerminalPartialLiveArtefact: () => false,
 }));
 
