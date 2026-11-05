@@ -11496,6 +11496,18 @@
             "minLength": 1,
             "title": "File Name",
             "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
           }
         },
         "required": [
@@ -11506,10 +11518,36 @@
         "title": "TocUploadIn",
         "type": "object"
       },
+      "TocUploadItemOut": {
+        "additionalProperties": false,
+        "description": "One uploaded diagram that was read.",
+        "properties": {
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "upload_id": {
+            "format": "uuid",
+            "title": "Upload Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_id",
+          "file_name"
+        ],
+        "title": "TocUploadItemOut",
+        "type": "object"
+      },
       "TocUploadOut": {
         "additionalProperties": false,
         "description": "What was read from an uploaded diagram, before the plan uses it.",
         "properties": {
+          "answered": {
+            "default": false,
+            "title": "Answered",
+            "type": "boolean"
+          },
           "content_type": {
             "title": "Content Type",
             "type": "string"
@@ -16669,8 +16707,59 @@
       }
     },
     "/api/v1/tasks/{task_id}/toc/uploads": {
+      "get": {
+        "description": "The task's uploaded diagrams that were read, oldest first, for the chat's pictures.",
+        "operationId": "list_toc_uploads_api_v1_tasks__task_id__toc_uploads_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TocUploadItemOut"
+                  },
+                  "title": "Response List Toc Uploads Api V1 Tasks  Task Id  Toc Uploads Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Toc Uploads",
+        "tags": [
+          "theory-of-change"
+        ]
+      },
       "post": {
-        "description": "Store a user's own theory diagram and read it for the plan (increment 5, C8).\n\nThe file is checked and stored first; the slow vision call runs outside any\ntransaction; the transcription is stored for the Task Agent's next plan.\nOnly before the draft: once the theory is on the canvas the plan is fixed.",
+        "description": "Store a user's own theory diagram and read it (increment 5, C8).\n\nThe file is checked and stored first; the slow vision call runs outside any\ntransaction. Before the draft, the transcription is stored for the Task\nAgent's next plan. Once the theory is drafted, what the diagram adds waits\nas a suggestion, and the chat gets the message and its reply here.",
         "operationId": "upload_toc_theory_api_v1_tasks__task_id__toc_uploads_post",
         "parameters": [
           {

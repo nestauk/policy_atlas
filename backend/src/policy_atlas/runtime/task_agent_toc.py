@@ -91,6 +91,8 @@ class TocInputs:
     theory_outline: str = ""
     #: Before a draft: the user's uploaded diagram, as read (increment 5).
     imported: dict[str, Any] | None = None
+    #: Before a draft: the theory the user drew on the canvas, as text.
+    sketch: str | None = None
 
 
 def read_theory_state(conn: Connection, task_id: uuid.UUID) -> tuple[str, bool]:
@@ -139,21 +141,30 @@ def load_toc_inputs(conn: Connection, task_id: uuid.UUID) -> TocInputs:
         if row is not None
         else None
     )
+    from policy_atlas.theory_of_change.draft import sketch_text, user_sketch
     from policy_atlas.theory_of_change.importing import latest_import
 
     imported = None if drafted else latest_import(conn, task_id)
+    boxes, links = user_sketch(conn, task_id)
+    sketch = sketch_text(boxes, links) if boxes else None
+    # The user's own theory (uploaded, or drawn on the canvas) stands in for
+    # the outline until the draft exists.
     if imported is not None:
-        # The uploaded diagram stands in for the outline until the draft exists.
         state = f"{state}; the user uploaded their own theory of change diagram"
-        outline = imported["text"]
-    else:
-        outline = theory_outline(conn, task_id) if drafted else ""
+    if sketch is not None:
+        state = f"{state}; the user drew their own theory of change on the canvas"
+    outline = (
+        theory_outline(conn, task_id)
+        if drafted
+        else "\n\n".join(part for part in (sketch, imported and imported["text"]) if part)
+    )
     return TocInputs(
         theory_state=state,
         has_draft=drafted,
         approved=approved,
         theory_outline=outline,
         imported=imported,
+        sketch=sketch,
     )
 
 
@@ -313,6 +324,13 @@ def build_toc_plan(draft: TocPlanDraftWire, inputs: TocInputs, turn_index: int) 
             "entry_point": "existing_theory",
             "existing_theory_text": inputs.imported["text"],
             "upload_id": inputs.imported["upload_id"],
+        }
+    if inputs.sketch is not None:
+        # So is the theory drawn on the canvas; the draft reads the canvas as it is then.
+        values |= {
+            "entry_point": "existing_theory",
+            "existing_theory_text": values.get("existing_theory_text") or inputs.sketch,
+            "drawn_on_canvas": True,
         }
     plan = expect_toc_plan(
         validate_plan(

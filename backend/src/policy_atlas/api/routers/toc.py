@@ -66,6 +66,7 @@ from policy_atlas.api.contract.toc import (
     TocTheoryVerdictOut,
     TocUndoOut,
     TocUploadIn,
+    TocUploadItemOut,
     TocUploadOut,
     TocWeightsOut,
 )
@@ -1133,16 +1134,15 @@ def upload_toc_theory(
     backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
     upload_store: Annotated[UploadStore, Depends(get_upload_store)],
 ) -> TocUploadOut:
-    """Store a user's own theory diagram and read it for the plan (increment 5, C8).
+    """Store a user's own theory diagram and read it (increment 5, C8).
 
     The file is checked and stored first; the slow vision call runs outside any
-    transaction; the transcription is stored for the Task Agent's next plan.
-    Only before the draft: once the theory is on the canvas the plan is fixed.
+    transaction. Before the draft, the transcription is stored for the Task
+    Agent's next plan. Once the theory is drafted, what the diagram adds waits
+    as a suggestion, and the chat gets the message and its reply here.
     """
     with engine.begin() as conn:
         _editable_toc(conn, task_id, user)
-        if has_graph(conn, task_id):
-            raise ApiConflict("toc_plan_fixed", "the theory is already drafted")
     try:
         data = base64.b64decode(body.data_base64, validate=True)
     except binascii.Error as exc:
@@ -1167,6 +1167,7 @@ def upload_toc_theory(
             response = importing.transcribe(data, body.content_type, backend)
     except importing.NotATheory as exc:
         raise ApiUnprocessable("upload_not_theory", str(exc)) from exc
+    reply = None
     with engine.begin() as conn:
         stored = importing.store_import(
             conn,
@@ -1175,12 +1176,37 @@ def upload_toc_theory(
             file_name=saved.file_name,
             response=response,
         )
+        if has_graph(conn, task_id):
+            reply = importing.suggest_from_diagram(
+                conn, task_id=task_id, response=response, file_name=saved.file_name
+            )
+    if reply is not None:
+        post_agent_message(engine, task_id=task_id, text=reply, user_message=body.message or "")
     return TocUploadOut(
+        answered=reply is not None,
         upload_id=saved.upload_id,
         file_name=saved.file_name,
         content_type=saved.content_type,
         counts=stored["counts"],
     )
+
+
+@router.get("/uploads", response_model=list[TocUploadItemOut])
+def list_toc_uploads(
+    task_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> list[TocUploadItemOut]:
+    """The task's uploaded diagrams that were read, oldest first, for the chat's pictures."""
+    accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
+    rows = conn.execute(
+        select(event_log.c.payload)
+        .where(event_log.c.task_id == task_id, event_log.c.event_type == importing.IMPORT_EVENT)
+        .order_by(event_log.c.sequence)
+    ).scalars()
+    return [
+        TocUploadItemOut(upload_id=row["upload_id"], file_name=row["file_name"]) for row in rows
+    ]
 
 
 @router.get("/uploads/{upload_id}", response_class=Response)

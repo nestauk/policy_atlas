@@ -188,6 +188,7 @@ class TocPlan(BaseModel):
         dosage: How much of the intervention, when known.
         existing_theory_text: A pasted theory, kept verbatim.
         upload_id: An uploaded theory (increment 5).
+        drawn_on_canvas: The theory the user drew on the canvas is theirs, kept as drawn.
         where: The place the theory is for. Steers the search; never excludes.
         time_horizon: When the impact is expected.
         context: What the user knows about the setting.
@@ -210,6 +211,8 @@ class TocPlan(BaseModel):
     existing_theory_text: Annotated[str, _not_blank("existing_theory_text")] | None = None
     # Lax: the stored payload carries UUIDs as strings (see ``ScopingPlan``).
     upload_id: Annotated[uuid.UUID, Field(strict=False)] | None = None
+    #: The user drew their own theory on the canvas before the plan (owner, 2026-11-05).
+    drawn_on_canvas: bool = False
     where: Annotated[str, _clean("where")] | None = None
     time_horizon: Annotated[str, _clean("time_horizon")] | None = None
     context: Annotated[str, _clean("context")] | None = None
@@ -225,6 +228,7 @@ class TocPlan(BaseModel):
         if isinstance(data, dict) and "use_diagram" in data:
             return {key: value for key, value in data.items() if key != "use_diagram"}
         return data
+
     source_turn_index: int | None = None
 
     @property
@@ -246,13 +250,13 @@ class TocPlan(BaseModel):
 
 
 def as_drawn(plan: TocPlan) -> bool:
-    """Whether the theory is the user's uploaded diagram, put on the canvas as drawn.
+    """Whether the theory is the user's own (uploaded, or drawn on the canvas), kept as drawn.
 
     The canvas starts with only the user's boxes and arrows; what the draft
     adds to complete the theory, and the routes the evidence check finds, wait
     as suggestions (owner, 2026-11-04).
     """
-    return plan.upload_id is not None
+    return plan.upload_id is not None or plan.drawn_on_canvas
 
 
 def toc_scope_constraints(plan: TocPlan) -> ScopeConstraints:

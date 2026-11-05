@@ -709,3 +709,17 @@ describe("review and suggestions (C45, C46)", () => {
     vi.mocked(queries.useTocProposals).mockReturnValue({ data: [], refetch: vi.fn() } as unknown as ReturnType<typeof queries.useTocProposals>);
   });
 });
+
+describe("before any draft", () => {
+  it("lets the owner draw their own theory on an empty canvas, with no check or review yet", async () => {
+    renderResult(tocGraphFixture({ boxes: [], links: [], pathways: [], report: null, check_status: "none", can_edit: true }));
+    expect(screen.getByText(/Draw your own theory here/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add box" })).toBeInTheDocument();
+    expect(screen.queryByText(/Review the theory/)).not.toBeInTheDocument();
+  });
+
+  it("tells a reader there is no theory yet", () => {
+    renderResult(tocGraphFixture({ boxes: [], links: [], pathways: [], report: null, check_status: "none", can_edit: false }));
+    expect(screen.getByText("There is no theory of change yet.")).toBeInTheDocument();
+  });
+});

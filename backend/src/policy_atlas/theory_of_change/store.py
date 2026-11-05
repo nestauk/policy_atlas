@@ -374,9 +374,18 @@ def one_change(
 
 
 def has_graph(conn: Connection, task_id: uuid.UUID) -> bool:
-    """Whether the task already has any box."""
+    """Whether a draft is on the canvas: a box Policy Atlas drafted or read from the user's theory.
+
+    Boxes the user drew themselves before any draft (origin ``user``) do not
+    count: they are the user's own theory, which the draft keeps (owner,
+    2026-11-05). The draft marks them as from the user's theory.
+    """
     return (
-        conn.execute(select(toc_box.c.box_id).where(toc_box.c.task_id == task_id).limit(1)).first()
+        conn.execute(
+            select(toc_box.c.box_id)
+            .where(toc_box.c.task_id == task_id, toc_box.c.origin != "user")
+            .limit(1)
+        ).first()
         is not None
     )
 
@@ -464,6 +473,15 @@ def write_draft(
             link_ids=[ids[key] for key in pathway.links],
             origin="drafted",
         )
+    insert_bands(conn, log, task_id=task_id, draft=draft)
+    record(conn, task_id=task_id, run_id=run_id, step="toc_draft", log=log)
+    return ids
+
+
+def insert_bands(
+    conn: Connection, log: ChangeLog, *, task_id: uuid.UUID, draft: DraftResponse
+) -> None:
+    """Insert the draft's context and supporting activities."""
     for band, texts in (("context", draft.context), ("supporting", draft.supporting_activities)):
         for order, text in enumerate(texts):
             insert(
@@ -479,8 +497,6 @@ def write_draft(
                     "origin": "drafted",
                 },
             )
-    record(conn, task_id=task_id, run_id=run_id, step="toc_draft", log=log)
-    return ids
 
 
 def insert_pathway(

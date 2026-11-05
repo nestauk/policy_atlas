@@ -606,6 +606,17 @@ class TocUploadIn(BaseModel):
     content_type: Literal["image/png", "image/jpeg", "application/pdf"]
     #: The file, base64-encoded; at most 10 MB once decoded.
     data_base64: str = Field(min_length=1, max_length=14_000_000)
+    #: The chat message that sends it: once the theory is drafted, the upload answers it here.
+    message: str | None = Field(default=None, max_length=4000)
+
+
+class TocUploadItemOut(BaseModel):
+    """One uploaded diagram that was read."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    upload_id: uuid.UUID
+    file_name: str
 
 
 class TocUploadOut(BaseModel):
@@ -618,6 +629,8 @@ class TocUploadOut(BaseModel):
     content_type: str
     #: ``boxes``, ``drawn`` and ``inferred`` connections, ``groups``, ``unconnected`` boxes.
     counts: dict[str, int]
+    #: Whether the chat already has the message and its reply (an upload after the draft).
+    answered: bool = False
 
 
 class TocCheckOut(BaseModel):

@@ -34,6 +34,7 @@ vi.mock("../../api/queries", async (importOriginal) => {
     useTask: vi.fn(),
     useToc: vi.fn(() => ({ data: undefined })),
     useTocUploadFile: vi.fn(() => ({ data: undefined })),
+    useTocUploads: vi.fn(() => ({ data: [] })),
   };
 });
 vi.mock("../../api/mutations", async (importOriginal) => {

@@ -298,6 +298,15 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
   const canSend = (question.trim().length > 0 || file !== null) && !create.isPending;
   const copy = FORM_COPY[capability];
 
+  // Straight to the empty canvas: the user draws the theory without the Task Agent (owner, 2026-11-05).
+  const drawYourself = () => {
+    if (create.isPending) return;
+    create.mutate(
+      { question: question.trim() === "" ? "My own theory of change" : question, projectId: projectId === "" ? null : projectId, capability, openingTurn: false },
+      { onSuccess: (task) => void navigate(`/tasks/${task.task_id}/result`) },
+    );
+  };
+
   const submit = () => {
     if (!canSend) return;
     create.mutate(
@@ -369,9 +378,19 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
           </Button>
         </div>
       </div>
-      <p className="mt-2 text-meta font-normal leading-5 text-grey">
-        Enter to send · Shift+Enter for a new line
-      </p>
+      <div className="mt-2 flex items-start justify-between gap-3">
+        <p className="text-meta font-normal leading-5 text-grey">Enter to send · Shift+Enter for a new line</p>
+        {capability === "theory_of_change" && (
+          <button
+            type="button"
+            onClick={drawYourself}
+            disabled={create.isPending}
+            className="shrink-0 cursor-pointer text-meta font-semibold leading-5 text-blue underline-offset-2 hover:underline disabled:cursor-default disabled:text-grey"
+          >
+            Start drafting yourself →
+          </button>
+        )}
+      </div>
 
       {assignableProjects.length > 0 && (
         <div className="mt-8 flex flex-wrap items-center gap-3">

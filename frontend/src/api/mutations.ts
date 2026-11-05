@@ -421,9 +421,11 @@ export function useTocUpload(taskId: string) {
       for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
       const { data, error, response } = await client.POST("/api/v1/tasks/{task_id}/toc/uploads", {
         params: { path: { task_id: taskId } },
-        body: { file_name: file.name, content_type: type, data_base64: btoa(binary) },
+        body: { file_name: file.name, content_type: type, data_base64: btoa(binary), message: uploadMessage(file.name, note) },
       });
       if (data === undefined) raise(error, response.status);
+      // After the draft, the upload itself answers in the chat (its suggestions); before, the planner reads it.
+      if (data.answered === true) return data;
       const turn = await client.POST("/api/v1/tasks/{task_id}/task-agent-turns", {
         params: { path: { task_id: taskId } },
         body: { message: uploadMessage(data.file_name, note), client_turn_id: crypto.randomUUID() },

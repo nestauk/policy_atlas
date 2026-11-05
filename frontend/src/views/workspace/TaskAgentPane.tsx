@@ -3,7 +3,7 @@ import { blobUrl } from "../../lib/blobUrl";
 import { Link, useLocation, useNavigate } from "react-router";
 
 import { UPLOAD_MESSAGE, uploadMessage, useTocUpload, useTocUploading } from "../../api/mutations";
-import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns, useTask, useToc, useTocUploadFile } from "../../api/queries";
+import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns, useTask, useToc, useTocUploadFile, useTocUploads } from "../../api/queries";
 import { useComposerSeed } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { COPY, TASK } from "../../lib/vocabulary";
@@ -348,20 +348,27 @@ export interface TocUploadHandOff {
   note: string;
 }
 
-/** The uploaded diagram, for the bubble that sent it: an object URL and whether it is a PDF. */
-const UploadFile = createContext<{ url: string; pdf: boolean; name: string } | null>(null);
+/** The task's uploaded diagrams, for the bubbles that sent them: the one still uploading, and those read. */
+const UploadFiles = createContext<{ taskId: string; picked: File | null; uploads: { upload_id: string; file_name: string }[] } | null>(null);
 
-function UploadThumb() {
-  const file = useContext(UploadFile);
-  if (file === null) return null;
-  return file.pdf ? (
-    <a href={file.url} target="_blank" rel="noreferrer" className="mb-2 inline-flex items-center gap-2 border border-line bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy">
+/** The diagram an upload bubble names: "I've uploaded my own theory of change (name)." */
+function UploadThumb({ text }: { text: string }) {
+  const files = useContext(UploadFiles);
+  const name = text.slice(UPLOAD_MESSAGE.length).match(/^ \((.+?)\)\./)?.[1] ?? null;
+  const picked = files?.picked != null && files.picked.name === name ? files.picked : null;
+  const uploadId = picked === null ? files?.uploads.findLast((upload) => upload.file_name === name)?.upload_id : undefined;
+  const stored = useTocUploadFile(files?.taskId ?? "", uploadId);
+  const blob = picked ?? stored.data ?? null;
+  if (blob === null || name === null) return null;
+  const url = blobUrl(blob);
+  return blob.type === "application/pdf" ? (
+    <a href={url} target="_blank" rel="noreferrer" className="mb-2 inline-flex items-center gap-2 border border-line bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy">
       <span aria-hidden="true">📄</span>
-      {file.name}
+      {name}
     </a>
   ) : (
-    <a href={file.url} target="_blank" rel="noreferrer" title="Open full size" className="mb-2 block w-fit">
-      <img src={file.url} alt="Your theory of change, as uploaded" className="max-h-40 max-w-[16rem] border border-line bg-paper object-contain" />
+    <a href={url} target="_blank" rel="noreferrer" title="Open full size" className="mb-2 block w-fit">
+      <img src={url} alt="Your theory of change, as uploaded" className="max-h-40 max-w-[16rem] border border-line bg-paper object-contain" />
     </a>
   );
 }
@@ -371,7 +378,7 @@ function UserBubble({ text }: { text: string }) {
   if (text === "") return null;
   return (
     <div className="anim-rise ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5">
-      {text.startsWith(UPLOAD_MESSAGE) && <UploadThumb />}
+      {text.startsWith(UPLOAD_MESSAGE) && <UploadThumb text={text} />}
       <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>
     </div>
   );
@@ -755,13 +762,8 @@ export function TaskAgentPane({
   const uploading = useTocUploading(taskId);
   const picked = uploading?.file ?? null;
   const pickedNote = uploading?.note ?? "";
-  const stored = useTocUploadFile(taskId, picked === null && isToc ? planQuery.data?.toc?.upload_id : null);
-  const shown = picked ?? stored.data ?? null;
-  const shownUrl = shown !== null ? blobUrl(shown) : null;
-  const uploadFile = useMemo(
-    () => (shownUrl === null || shown === null ? null : { url: shownUrl, pdf: shown.type === "application/pdf", name: picked?.name ?? "Your original" }),
-    [shownUrl, shown, picked],
-  );
+  const uploads = useTocUploads(taskId, isToc);
+  const uploadFiles = useMemo(() => ({ taskId, picked, uploads: uploads.data ?? [] }), [taskId, picked, uploads.data]);
   const tocLive = isToc && (tocGraph.data?.check_status === "drafting" || tocGraph.data?.check_status === "checking");
   // The live walk's kind, from the theory's own status: never guessed from steps not yet loaded.
   const tocLiveKind = tocGraph.data?.check_status === "drafting" ? "draft" : "check";
@@ -870,7 +872,7 @@ export function TaskAgentPane({
   const planStarted = isToc
     ? tocGraph.data === undefined
       ? thread.some((item) => item.type === "run_block")
-      : (tocGraph.data?.boxes.length ?? 0) > 0 || tocLive
+      : (tocGraph.data?.check_status ?? "none") !== "none"
     : thread.slice(planCardAt).some((item) => item.type === "run_block");
   // The first walk drafts the theory; every later one checks it.
   const firstTocRunId = isToc ? (thread.find((item) => item.type === "run_block")?.run.capability_run_id ?? null) : null;
@@ -985,7 +987,7 @@ export function TaskAgentPane({
     transcript.data !== undefined && thread.length === 0 && transcript.optimisticTurns.length === 0 && picked === null && handOff === null;
 
   return (
-    <UploadFile.Provider value={uploadFile}>
+    <UploadFiles.Provider value={uploadFiles}>
     <section aria-label="Task Agent conversation" className="flex h-full min-h-0 flex-col">
       {/* The scroll region spans the whole pane so its scrollbar sits at the
           pane's edge like every other tab's; the reading column is inside. */}
@@ -1242,16 +1244,14 @@ export function TaskAgentPane({
           disabled={composerFenced || !isOwner || upload.isPending}
           sendDisabled={composerDisabled || upload.isPending}
           onAttach={
-            // Before the theory is drafted: the user's own diagram becomes the plan.
-            isToc && isOwner && (tocGraph.data?.boxes.length ?? 0) === 0 && stream.run === null
-              ? (file) => attach(file)
-              : undefined
+            // Before the draft the user's own diagram becomes the plan; after it, what it adds waits as suggestions.
+            isToc && isOwner && !tocLive ? (file) => attach(file) : undefined
           }
         />
         </div>
       </div>
       </div>
     </section>
-    </UploadFile.Provider>
+    </UploadFiles.Provider>
   );
 }

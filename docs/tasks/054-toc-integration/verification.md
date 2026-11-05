@@ -297,3 +297,55 @@ tests pinned at 49 since iteration 3, a chain test expecting a named check to wr
 and a route test that needs the local signing key (it passes in the main checkout). The full
 `make verify` for slices A to D: 3,869 passed, 2 failed: the same route test (passes in the main
 checkout) and a model-route test that lists every step (now includes `toc_review`); both pass.
+
+## Increments 3 to 6 in part, and owner feedback rounds (2026-11-03 to 2026-11-05, lead)
+
+Commits `ec58032d`, `795bd710`, `559a4713` and the commit after them, on `task/054-1-core` (draft PR #114).
+These came from the owner's live feedback rounds, not from a separate contract revision. The
+review should check them against the rulings below, which the owner gave in the chat.
+
+**What was built:**
+
+| Area | What it does | Owner ruling |
+|---|---|---|
+| Sense check and verdict | `toc_sense_check` warns in the chat at the plan stage and never blocks. `toc_verdict` leads the report and the end-of-check message. Two axes: the mechanism (plausible or implausible) and the evidence (supported, mixed, too little or against). A whole-programme search and judge runs with every check. | 2026-11-03, after red-team runs where nonsense theories ended "Not enough evidence". There is no "doubtful" level (experiment `plausibility_axes.py`: 93 of 93 judgements right). |
+| Queued checks | A check started while a walk runs waits in a queue. It starts when the walk ends. | — |
+| Chat code links | Box and connection codes in the chat link to the Result tab. | — |
+| Upload your own theory (increment 5, C8) | You can upload a PNG, JPEG or PDF from the new-task page or the chat. A vision call reads it. The canvas shows the diagram as drawn. What would complete it waits as suggestions, route by route. | 2026-11-04: there is no "as drawn or expand" choice. One uploads bucket per environment. The `task_upload` table. Files are kept. Colleagues may see the original, but not on the public leg. |
+| Later uploads | After a draft, an upload becomes one suggestion. The suggestion has the boxes and connections that the canvas does not have yet. You can upload more than once, and the chat shows each file at its own message. | 2026-11-05 (items 10 and 11 in part) |
+| Draw your own | The Result tab opens from the start. Boxes that you draw before any draft are your own sketch. The draft keeps a sketch that has connections and suggests the rest. "Start drafting yourself" on the new-task page opens the empty canvas. | 2026-11-05 (item 9) |
+| Report v7 | The report has these sections: summary, pathways, how it could fail, what to test first, supporting activities, how it could be expanded, and an assumptions table. | 2026-11-04 |
+| Exports (increment 6, in part) | The Download menu exports PDF, PNG, SVG, draw.io, CSV and JSON. All exports are made in the browser. | 2026-11-04: PowerPoint is parked, so there is no `python-pptx` (C12 and plan S14 changed). |
+| Evidence years, seminal works | Each plan has a year range, from 2000 onwards by default. The most-cited works of the pool are offered to every connection. | 2026-11-04 |
+| Editing polish | You can undo an accepted route in one step. Review progress shows in the chat, and you can run Review again. Evidence checks start at once for connections you accept. Suggestions show faded on the canvas. The progress line names the right walk. | 2026-11-05 (items 1 to 8) |
+
+**Migrations:** `c7f2a9d41e08_task_upload`, `e3b9d27c5a14_toc_proposal_discover`, `f5a1c8e93b27_toc_proposal_draft`.
+**Infra:** an uploads bucket and its wiring (`infra/infra/policy_atlas_stack.py`, `infra/pa_config.json`).
+**Prompts changed (lead-only; hashes in `scripts/prompt_hashes.json`):** `task_agent_toc_prompt`,
+`choose_prompt`, `draft_prompt`, `import_prompt` (new), `plausibility_prompt` (new), `report_prompt`.
+**Evals:** `scripts/evals/theory_of_change/{plausibility,plausibility_axes,import_diagrams,import_experiment}.py`
+and the `import_synthetic` dataset.
+
+**Deviations, for adjudication:**
+18. Exports are made in the browser, so there are no export routes on the server. PowerPoint is not built.
+19. Web search (increment 3, C7) and links to option tasks (increment 7) are not built.
+20. The sense check and the verdict are new steps. They are not in the approved contract; the owner ruled on them in the chat.
+21. A box drawn before any draft has `origin "user"`. When the draft adopts the sketch, the box becomes `origin "imported"`, so the box is not flagged as the user's own edit.
+22. A later upload never changes the canvas. It only makes one suggestion.
+23. Multiple uploads are supported in the chat only (one file at a time). The new-task page still takes one file.
+
+**Gates:**
+- Frontend at `559a4713` and after: 971 tests passed. The typecheck and lint are clean.
+- Backend: mypy is clean, and the drift check is OK. Before the last fix, the targeted backend tests had 596 passed and 1 failed. After the fix, that test file passed.
+- The full `make verify` has not run since 2026-10-30.
+
+**Known unverified:**
+- These features have not been tried in the browser: draw your own, later uploads, and "Start drafting yourself".
+- The draw.io file has not been opened by hand in diagrams.net or Miro.
+- The uploads bucket has not been deployed.
+
+**Review handoff:** the review covers `fba53321..HEAD` together with the merge of `dev`. Leave
+these out of the diff: `frontend/openapi.json`, `frontend/src/api/gen/types.ts`, the eval PNG and
+SVG files, and `docs/tasks/054-toc-integration/toc_examples/` (not committed). Run
+`/security-review` on the upload route, the bucket, and colleague access to originals. Use the
+Codex family for the adversarial pass: the lead (Claude) wrote all of this code.

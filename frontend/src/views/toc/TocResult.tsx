@@ -89,10 +89,14 @@ export function TocResult({ taskId }: { taskId: string }) {
       { replace: true },
     );
   }, [wanted, graph, setParams]);
-  if (graph == null || graph.boxes.length === 0) {
+  // Before any draft the owner may draw their own theory here; the draft keeps it as drawn.
+  const sketching = graph != null && graph.check_status === "none" && canEdit;
+  if (graph == null || (graph.boxes.length === 0 && !sketching)) {
     return (
       <main aria-busy={toc.isPending} className="mx-auto my-8 w-full max-w-[1280px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
-        <p className="text-body text-grey">{toc.isPending ? "Loading the theory of change…" : "The theory of change is being drafted."}</p>
+        <p className="text-body text-grey">
+          {toc.isPending ? "Loading the theory of change…" : graph?.check_status === "none" ? "There is no theory of change yet." : "The theory of change is being drafted."}
+        </p>
       </main>
     );
   }
@@ -132,6 +136,12 @@ export function TocResult({ taskId }: { taskId: string }) {
         <p className={`mt-3 max-w-[56em] ${REPORT_BODY_CLASS}`}>{scrub((graph.report.summary.question ?? graph.report.summary.goal).replace(/\.?$/, "."))}</p>
       )}
       {graph.report?.summary_text != null && <p className={`mt-3 max-w-[56em] ${REPORT_BODY_CLASS}`}>{scrub(graph.report.summary_text)}</p>}
+      {sketching && (
+        <p className={`mt-3 max-w-[56em] ${REPORT_BODY_CLASS}`}>
+          Draw your own theory here if you like: add boxes with <b>Add box</b> and join them with <b>Connect</b>. When the Task Agent drafts the theory, it keeps what
+          you drew and suggests the rest.
+        </p>
+      )}
       {running && (
         <p className={`mt-4 max-w-[1100px] ${REPORT_BODY_CLASS}`}>
           Policy Atlas is checking each step against the evidence. Steps take their colour as they are checked.

@@ -1607,15 +1607,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Toc Uploads
+         * @description The task's uploaded diagrams that were read, oldest first, for the chat's pictures.
+         */
+        get: operations["list_toc_uploads_api_v1_tasks__task_id__toc_uploads_get"];
         put?: never;
         /**
          * Upload Toc Theory
-         * @description Store a user's own theory diagram and read it for the plan (increment 5, C8).
+         * @description Store a user's own theory diagram and read it (increment 5, C8).
          *
          *     The file is checked and stored first; the slow vision call runs outside any
-         *     transaction; the transcription is stored for the Task Agent's next plan.
-         *     Only before the draft: once the theory is on the canvas the plan is fixed.
+         *     transaction. Before the draft, the transcription is stored for the Task
+         *     Agent's next plan. Once the theory is drafted, what the diagram adds waits
+         *     as a suggestion, and the chat gets the message and its reply here.
          */
         post: operations["upload_toc_theory_api_v1_tasks__task_id__toc_uploads_post"];
         delete?: never;
@@ -6962,12 +6967,32 @@ export interface components {
             data_base64: string;
             /** File Name */
             file_name: string;
+            /** Message */
+            message?: string | null;
+        };
+        /**
+         * TocUploadItemOut
+         * @description One uploaded diagram that was read.
+         */
+        TocUploadItemOut: {
+            /** File Name */
+            file_name: string;
+            /**
+             * Upload Id
+             * Format: uuid
+             */
+            upload_id: string;
         };
         /**
          * TocUploadOut
          * @description What was read from an uploaded diagram, before the plan uses it.
          */
         TocUploadOut: {
+            /**
+             * Answered
+             * @default false
+             */
+            answered: boolean;
             /** Content Type */
             content_type: string;
             /** Counts */
@@ -9613,6 +9638,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_toc_uploads_api_v1_tasks__task_id__toc_uploads_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocUploadItemOut"][];
                 };
             };
             /** @description Validation Error */

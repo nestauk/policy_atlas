@@ -16,12 +16,12 @@ export function useTabOptions(taskId: string): { options: TabOptions; baselineLo
   const task = useTask(taskId);
   const scoping = isScoping(task.data);
   const artefact = useArtefact(scoping ? taskId : "");
-  const toc = useToc(isToc(task.data) ? taskId : "");
   return {
     options: {
       hasBaseline: isBaselineArtefact(artefact.data),
       hasLonglist: hasLonglist(task.data),
-      hasToc: (toc.data?.boxes.length ?? 0) > 0,
+      // A theory of change's canvas is open from the start: the user may draw their own (owner, 2026-11-05).
+      hasToc: isToc(task.data),
     },
     baselineLoading: scoping && artefact.isLoading,
   };
@@ -39,7 +39,7 @@ export function useChatsEnabled(taskId: string): boolean {
   const toc = useToc(isToc(task.data) ? taskId : "");
   const stream = useRunStream(taskId);
   return (
-    hasTaskResult(task.data, { hasBaseline: isBaselineArtefact(artefact.data), hasToc: (toc.data?.boxes.length ?? 0) > 0 }) ||
+    hasTaskResult(task.data, { hasBaseline: isBaselineArtefact(artefact.data), hasToc: (toc.data?.boxes.length ?? 0) > 0 && toc.data?.check_status !== "none" }) ||
     hasResult(stream.run?.status)
   );
 }

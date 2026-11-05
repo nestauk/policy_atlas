@@ -83,6 +83,8 @@ def test_an_upload_is_read_shown_back_and_becomes_the_plan(tmp_path: Path) -> No
         assert original.headers["content-type"] == "image/png"
         assert original.headers["x-content-type-options"] == "nosniff"
         assert original.headers["content-disposition"] == 'inline; filename="theory.png"'
+        listed = client.get(f"/api/v1/tasks/{task_id}/toc/uploads", headers=owner).json()
+        assert listed == [{"upload_id": body["upload_id"], "file_name": "theory.png"}]
         # Someone who cannot read the task gets the same 404 as for no upload at all.
         hidden = client.get(
             f"/api/v1/tasks/{task_id}/toc/uploads/{body['upload_id']}", headers=other
@@ -109,11 +111,25 @@ def test_a_renamed_or_foreign_file_is_refused(tmp_path: Path) -> None:
         assert missing.status_code == 404
 
 
-def test_no_upload_once_the_theory_is_drafted(engine: Engine, tmp_path: Path) -> None:
+def test_an_upload_after_the_draft_becomes_suggestions(engine: Engine, tmp_path: Path) -> None:
     with api_client(tmp_path, _overrides(tmp_path / "store")) as (client, owner, _other):
         task_id = _toc_task(client, owner)
         with engine.begin() as conn:
             store.write_draft(conn, task_id=uuid.UUID(task_id), run_id=None, draft=stub_draft({}))
-        refused = _upload(client, owner, task_id)
-        assert refused.status_code == 409  # type: ignore[attr-defined]
-        assert refused.json()["error"]["code"] == "toc_plan_fixed"  # type: ignore[attr-defined]
+        response = client.post(
+            f"/api/v1/tasks/{task_id}/toc/uploads",
+            headers=owner,
+            json={
+                "file_name": "v2.png",
+                "content_type": "image/png",
+                "data_base64": base64.b64encode(PNG).decode(),
+                "message": "Here is my updated diagram",
+            },
+        )
+        assert response.status_code == 201, response.text
+        # The chat has the message and its reply already; the plan stays as it was.
+        assert response.json()["answered"] is True
+        offers = client.get(f"/api/v1/tasks/{task_id}/toc/proposals", headers=owner).json()
+        assert [offer["summary"] for offer in offers] == [
+            "From your diagram (v2.png): 3 boxes and 2 connections the canvas does not have"
+        ]

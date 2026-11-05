@@ -743,6 +743,20 @@ export function useTocEvidence(taskId: string) {
 
 /** `GET .../toc/uploads/{upload_id}` — the user's original diagram as a file
  *  (task 054, increment 5): fetched with the user's login, never public. */
+/** `GET /api/v1/tasks/{task_id}/toc/uploads` — the task's diagrams that were read, oldest first. */
+export function useTocUploads(taskId: string, enabled: boolean) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: [...queryKeys.toc(taskId), "uploads"],
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/toc/uploads", { params: { path: { task_id: taskId } } });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: Boolean(taskId) && enabled,
+  });
+}
+
 export function useTocUploadFile(taskId: string, uploadId: string | null | undefined) {
   const client = useApiClient();
   return useQuery({

@@ -170,10 +170,12 @@ export function CanvasBar({
   onSuggestions?: () => void;
 }) {
   const running = graph.check_status === "drafting" || graph.check_status === "checking";
+  // Before the draft there is no plan to check or review against.
+  const drafted = graph.check_status !== "none";
   const unchecked = graph.links.filter((link) => link.state === "unchecked").map((link) => link.link_id);
   const moved = graph.boxes.some((box) => box.position != null);
   const menu = [
-    ...(editor !== null && unchecked.length > 0 && !isQueued(graph, unchecked)
+    ...(editor !== null && drafted && unchecked.length > 0 && !isQueued(graph, unchecked)
       ? [
           {
             label: `Find evidence for new connections (${unchecked.length})`,
@@ -182,7 +184,7 @@ export function CanvasBar({
           },
         ]
       : []),
-    ...(editor !== null ? [{ label: reviewLabel, disabled: reviewDisabled, onClick: onReview }] : []),
+    ...(editor !== null && drafted ? [{ label: reviewLabel, disabled: reviewDisabled, onClick: onReview }] : []),
     { label: guideOpen ? "Hide how to read this" : "How to read this", onClick: onGuide },
   ];
   return (

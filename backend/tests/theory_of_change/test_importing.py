@@ -309,3 +309,116 @@ def test_a_route_brings_a_shared_box_along_and_rejecting_leaves_it_for_the_other
     assert _route_edits(ops, "r2", accept=True) == [0, 3, 4]
     # Rejecting r1 keeps the box r2 still needs.
     assert _route_edits(ops, "r1", accept=False) == [1, 2]
+
+
+def test_a_theory_drawn_on_the_canvas_is_kept_and_the_draft_suggests_the_rest(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    from sqlalchemy import select
+
+    from policy_atlas.core.schema import toc_box, toc_link, toc_pathway, toc_proposal
+    from policy_atlas.runtime.task_agent_toc import load_toc_inputs
+    from policy_atlas.theory_of_change import edits
+    from policy_atlas.theory_of_change.edits import Actor
+    from policy_atlas.theory_of_change.store import has_graph
+
+    me = Actor(user_id="test-user")
+    plan = toc_plan(entry_point="existing_theory", existing_theory_text="x", drawn_on_canvas=True)
+    task_id, plan_row = seed_toc(engine, plan)
+    cleanup.append(task_id)
+    # Before any plan: the user draws three boxes and two connections.
+    with engine.begin() as conn:
+        mine = [
+            edits.create_box(conn, task_id=task_id, actor=me, layer=layer, text=text)
+            for layer, text in (
+                ("input", "Deliver the intervention"),
+                ("output", "The intervention reaches its population"),
+                ("outcome_short", "Behaviour  changes"),
+            )
+        ]
+        for source, target in zip(mine, mine[1:], strict=False):
+            edits.create_link(
+                conn, task_id=task_id, actor=me, source_box_id=source, target_box_id=target
+            )
+        # Not a draft yet: the planner reads the canvas as the user's theory.
+        assert not has_graph(conn, task_id)
+        inputs = load_toc_inputs(conn, task_id)
+    assert not inputs.has_draft and inputs.sketch is not None
+    assert "“Deliver the intervention” → “The intervention reaches its population”" in inputs.sketch
+
+    backend = StubTocBackend({"draft": [_users_part_marked()]})
+    _start(engine, task_id, plan_row, RunnerBackends(search_backends=[Records()], toc=backend))
+    with engine.connect() as conn:
+        boxes = list(conn.execute(select(toc_box).where(toc_box.c.task_id == task_id)))
+        links = list(conn.execute(select(toc_link).where(toc_link.c.task_id == task_id)))
+        pathways = list(conn.execute(select(toc_pathway).where(toc_pathway.c.task_id == task_id)))
+        sources = list(
+            conn.execute(
+                select(toc_proposal.c.source).where(toc_proposal.c.task_id == task_id)
+            ).scalars()
+        )
+        assert has_graph(conn, task_id)
+    # The user's boxes stay (the same rows), now marked as theirs; nothing else is added.
+    assert {box.box_id for box in boxes} == set(mine)
+    assert {box.origin for box in boxes} == {"imported"}
+    # Their connections take the draft's wording; one pathway runs through them.
+    assert len(links) == 2 and all(link.because_text == "of the mechanism" for link in links)
+    assert [(p.kind, p.origin) for p in pathways] == [("success", "imported")]
+    # The rest of the draft waits as suggestions.
+    assert "draft" in sources
+
+
+def test_a_diagram_uploaded_after_the_draft_offers_only_what_the_canvas_lacks(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    from policy_atlas.theory_of_change import proposals
+    from policy_atlas.theory_of_change.importing import suggest_from_diagram
+
+    task_id, plan_row = seed_toc(engine, toc_plan())
+    cleanup.append(task_id)
+    _start(
+        engine, task_id, plan_row, RunnerBackends(search_backends=[Records()], toc=StubTocBackend())
+    )
+    from sqlalchemy import select
+
+    from policy_atlas.core.schema import toc_box, toc_link
+
+    with engine.connect() as conn:
+        link = conn.execute(select(toc_link).where(toc_link.c.task_id == task_id).limit(1)).one()
+        text = dict(
+            conn.execute(
+                select(toc_box.c.box_id, toc_box.c.text).where(toc_box.c.task_id == task_id)
+            ).all()
+        )
+    diagram = ImportResponse(
+        is_theory_of_change=True,
+        title=None,
+        boxes=[
+            # Case and spacing aside, the same box as on the canvas.
+            ImportBoxWire(
+                ref="b1", text="  " + text[link.source_box_id].upper(), layer="input", shown_as=None
+            ),
+            ImportBoxWire(ref="b2", text=text[link.target_box_id], layer="output", shown_as=None),
+            ImportBoxWire(
+                ref="b3", text="Parents talk to schools", layer="outcome_short", shown_as=None
+            ),
+        ],
+        arrows=[
+            ImportArrowWire(source="b1", target="b2", how="drawn", label=None),  # on the canvas
+            ImportArrowWire(source="b2", target="b3", how="drawn", label=None),
+            ImportArrowWire(source="b1", target="b3", how="inferred", label=None),  # a guess
+        ],
+        groups=[],
+        notes=[],
+        unreadable=[],
+    )
+    with engine.begin() as conn:
+        reply = suggest_from_diagram(conn, task_id=task_id, response=diagram, file_name="v2.png")
+        [offer] = [
+            p for p in proposals.open_proposals(conn, task_id) if p.summary.startswith("From")
+        ]
+    assert "1 box and 1 connection the canvas does not have" in reply
+    assert [(op["op"], op.get("text") or op.get("dest")) for op in offer.edits] == [
+        ("add_box", "Parents talk to schools"),
+        ("add_link", "db3"),
+    ]

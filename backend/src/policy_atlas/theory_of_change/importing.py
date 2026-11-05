@@ -12,7 +12,9 @@
    the groups are where the drafter proposes connections, marked as its own.
 
 After the draft, the walk pauses for the user to compare the canvas with their
-original before the evidence check (:func:`review_message`).
+original before the evidence check (:func:`review_message`). A diagram uploaded
+once the theory is drafted becomes a suggestion instead: what it has that the
+canvas does not (:func:`suggest_from_diagram`).
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core import events
-from policy_atlas.core.schema import event_log
+from policy_atlas.core.schema import event_log, toc_box, toc_link
 from policy_atlas.theory_of_change.backend import TocBackend
 from policy_atlas.theory_of_change.import_prompt import ImportResponse
 
@@ -229,3 +231,95 @@ def review_message(
         "Result tab."
     )
     return "\n\n".join(parts)
+
+
+def suggest_from_diagram(
+    conn: Connection, *, task_id: uuid.UUID, response: ImportResponse, file_name: str
+) -> str:
+    """Offer what a diagram uploaded after the draft adds to the canvas (owner, 2026-11-05).
+
+    A box is on the canvas when a box there has the same text (case and
+    spacing ignored); the diagram's other boxes, and its drawn arrows the
+    canvas lacks, wait as one suggestion. Nothing on the canvas changes until
+    the user accepts.
+
+    Returns:
+        The Task Agent's reply about it.
+    """
+    from policy_atlas.theory_of_change.proposals import EditOpWire, create_proposal
+
+    def norm(text: str) -> str:
+        return " ".join(text.split()).casefold()
+
+    rows = list(
+        conn.execute(
+            select(toc_box.c.box_id, toc_box.c.code, toc_box.c.text).where(
+                toc_box.c.task_id == task_id
+            )
+        )
+    )
+    code_of_text = {norm(row.text): row.code for row in rows}
+    code_of_id = {row.box_id: row.code for row in rows}
+    joined = {
+        (code_of_id.get(link.source_box_id), code_of_id.get(link.target_box_id))
+        for link in conn.execute(
+            select(toc_link.c.source_box_id, toc_link.c.target_box_id).where(
+                toc_link.c.task_id == task_id
+            )
+        )
+    }
+
+    def op(**values: object) -> EditOpWire:
+        return EditOpWire.model_validate(
+            {
+                **dict.fromkeys(EditOpWire.model_fields, None),
+                "reason": f"In your diagram ({file_name}).",
+                **values,
+            }
+        )
+
+    ref: dict[str, str] = {}
+    ops: list[EditOpWire] = []
+    for box in response.boxes:
+        code = code_of_text.get(norm(box.text))
+        ref[box.ref] = code if code is not None else f"d{box.ref}"
+        if code is None:
+            ops.append(op(op="add_box", key=ref[box.ref], layer=box.layer, text=box.text))
+    new_boxes = len(ops)
+    for arrow in response.arrows:
+        source, target = ref.get(arrow.source), ref.get(arrow.target)
+        if arrow.how != "drawn" or source is None or target is None or source == target:
+            continue
+        if (source, target) in joined:
+            continue
+        joined.add((source, target))
+        ops.append(
+            op(op="add_link", key=f"d{arrow.source}-{arrow.target}", source=source, dest=target)
+        )
+    new_links = len(ops) - new_boxes
+    if not ops:
+        return (
+            f"I read your diagram ({file_name}): everything in it is already on the canvas, "
+            "so I have nothing to add."
+        )
+
+    found = " and ".join(
+        part
+        for part in (
+            f"{new_boxes} {'box' if new_boxes == 1 else 'boxes'}" if new_boxes else "",
+            f"{new_links} {'connection' if new_links == 1 else 'connections'}" if new_links else "",
+        )
+        if part
+    )
+    create_proposal(
+        conn,
+        task_id=task_id,
+        source="chat",
+        summary=f"From your diagram ({file_name}): {found} the canvas does not have",
+        ops=ops,
+    )
+    return (
+        f"I read your diagram ({file_name}). It has {found} the canvas does not have. They "
+        "wait under Suggestions above the canvas: hover over one to see it there, then accept "
+        "or reject it. Accepted connections get their evidence check."
+    )

@@ -383,16 +383,19 @@ def _review_text(engine: Engine, task_id: uuid.UUID) -> str:
     )
 
 
-def post_agent_message(engine: Engine, *, task_id: uuid.UUID, text: str) -> None:
+def post_agent_message(
+    engine: Engine, *, task_id: uuid.UUID, text: str, user_message: str = ""
+) -> None:
     """Append one code-authored Task Agent line to the task's thread (no model call).
 
-    Written as a completed transcript row with an empty user message, in the
-    task's active Task Agent conversation.
+    Written as a completed transcript row, in the task's active Task Agent
+    conversation; the user message is empty unless the line answers one.
 
     Args:
         engine: Database engine.
         task_id: The task.
         text: The line.
+        user_message: The user's message it answers, if any.
     """
     now = datetime.now(UTC)
     with engine.begin() as conn:
@@ -410,7 +413,7 @@ def post_agent_message(engine: Engine, *, task_id: uuid.UUID, text: str) -> None
                 conversation_id=conversation_id,
                 client_turn_id=uuid.uuid4(),
                 turn_index=int(last) + 1,
-                user_message="",
+                user_message=user_message,
                 reply=text,
                 task_agent_state=None,
                 response=None,

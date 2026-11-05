@@ -974,7 +974,7 @@ def test_an_as_drawn_diagram_gets_found_routes_as_one_suggestion(
                 toc_pathway.c.task_id == task_id, toc_pathway.c.label == "Found route"
             )
         ).all()
-    assert problems == [] and len(added) == 1
+    assert problems.problems == [] and len(added) == 1
 
 
 def test_an_uploaded_diagram_is_put_on_the_canvas_as_drawn() -> None:

@@ -27,7 +27,6 @@ from policy_atlas.theory_of_change import store
 from policy_atlas.theory_of_change.backend import TocBackend
 from policy_atlas.theory_of_change.draft_prompt import (
     TOC_DRAFT_PROMPT_VERSION,
-    DraftLinkWire,
     DraftPathwayWire,
     DraftResponse,
 )
@@ -253,22 +252,11 @@ def drawn_part(draft: DraftResponse) -> DraftResponse | None:
         return None
     layer = {box.key: box.layer for box in boxes}
     text = {box.key: box.text for box in boxes}
-    leaving: dict[str, list[DraftLinkWire]] = {}
-    for link in links:
-        leaving.setdefault(link.source, []).append(link)
-    ends = {link.target for link in links}
-    chains: list[list[DraftLinkWire]] = []
-
-    def walk(path: list[DraftLinkWire]) -> None:
-        onward = [link for link in leaving.get(path[-1].target, []) if link not in path]
-        if not onward:
-            chains.append(path)
-        for link in onward:
-            if len(chains) < MAX_DRAWN_PATHWAYS:
-                walk([*path, link])
-
-    for start in [link for link in links if link.source not in ends] or links[:1]:
-        walk([start])
+    by_key = {link.key: link for link in links}
+    chains = [
+        [by_key[key] for key in chain]
+        for chain in _chains([(link.key, link.source, link.target) for link in links])
+    ]
     named = {tuple(p.links): p.label for p in draft.pathways}
     pathways = [
         DraftPathwayWire(
@@ -290,6 +278,162 @@ def drawn_part(draft: DraftResponse) -> DraftResponse | None:
         }
     )
     return None if draft_problems(drawn, as_drawn=True) else drawn
+
+
+def _chains(steps: list[tuple[str, str, str]]) -> list[list[str]]:
+    """Each route through the steps ``(key, source, target)``, start to end, as step keys.
+
+    Routes start where no step leads in (or at the first step, in a loop); at
+    most :data:`MAX_DRAWN_PATHWAYS`.
+    """
+    leaving: dict[str, list[tuple[str, str, str]]] = {}
+    for step in steps:
+        leaving.setdefault(step[1], []).append(step)
+    ends = {step[2] for step in steps}
+    chains: list[list[str]] = []
+
+    def walk(path: list[tuple[str, str, str]]) -> None:
+        onward = [step for step in leaving.get(path[-1][2], []) if step not in path]
+        if not onward:
+            chains.append([step[0] for step in path])
+        for step in onward:
+            if len(chains) < MAX_DRAWN_PATHWAYS:
+                walk([*path, step])
+
+    for start in [step for step in steps if step[1] not in ends] or steps[:1]:
+        walk([start])
+    return chains[:MAX_DRAWN_PATHWAYS]
+
+
+def user_sketch(conn: Connection, task_id: uuid.UUID) -> tuple[list[Any], list[Any]]:
+    """The boxes and connections the user drew on the canvas before any draft.
+
+    Empty once a draft is on the canvas (:func:`store.has_graph`): then the
+    user's boxes are edits to the draft, not their own theory.
+    """
+    from policy_atlas.core.schema import toc_box, toc_link
+
+    if store.has_graph(conn, task_id):
+        return [], []
+    boxes = list(conn.execute(select(toc_box).where(toc_box.c.task_id == task_id)))
+    links = list(conn.execute(select(toc_link).where(toc_link.c.task_id == task_id)))
+    return boxes, links
+
+
+def sketch_text(boxes: list[Any], links: list[Any]) -> str:
+    """The user's canvas as the drafter's existing-theory text, as a diagram is read."""
+    text = {box.box_id: box.text for box in boxes}
+    lines = [
+        "The user's own theory of change, drawn on the canvas.",
+        "",
+        "Boxes (the user's words; the layer they placed them in):",
+        *(f"- [{box.layer}] {box.text}" for box in boxes),
+    ]
+    if links:
+        lines += [
+            "",
+            "Connections the user drew (the user's; keep each, as from_user_theory):",
+            *(
+                f"- “{text[link.source_box_id]}” → “{text[link.target_box_id]}”"
+                + (f" (because: {link.because_text})" if link.because_text else "")
+                for link in links
+            ),
+        ]
+    return "\n".join(lines)
+
+
+def adopt_sketch(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    draft: DraftResponse,
+    boxes: list[Any],
+    links: list[Any],
+) -> tuple[DraftResponse, dict[str, uuid.UUID]]:
+    """Keep the user's canvas as drawn and fill it in from the draft (owner, 2026-11-05).
+
+    The user's boxes and connections stay where they are. A draft box with
+    the same text is theirs; a draft link between two of them is their
+    connection, and gives its wording to a connection the user left without a
+    reason. Each route through their connections becomes a pathway, and the
+    draft's context and supporting activities are added. Their boxes are
+    marked as from their theory, so the canvas now counts as drafted.
+
+    Returns:
+        The draft's part already on the canvas, and draft key → row id, for
+        :func:`suggest_the_rest`.
+    """
+    from policy_atlas.core.schema import toc_box, toc_link
+
+    log = store.ChangeLog()
+    row_of = {_norm(box.text): box for box in boxes}
+    ids: dict[str, uuid.UUID] = {}
+    kept_boxes = []
+    for box in draft.boxes:
+        row = row_of.get(_norm(box.text))
+        if row is not None and row.box_id not in ids.values():
+            ids[box.key] = row.box_id
+            kept_boxes.append(box)
+    by_ends = {(link.source_box_id, link.target_box_id): link for link in links}
+    kept_links = []
+    for link in draft.links:
+        row = by_ends.get((ids.get(link.source), ids.get(link.target)))
+        if row is None or row.link_id in ids.values():
+            continue
+        ids[link.key] = row.link_id
+        kept_links.append(link)
+        if not row.because_text:
+            store.update(
+                conn,
+                log,
+                toc_link,
+                row.link_id,
+                observed_revision=row.revision,
+                values={
+                    "sentence": link.sentence,
+                    "if_text": link.if_text,
+                    "for_text": link.for_text,
+                    "then_text": link.then_text,
+                    "because_text": link.because_text,
+                    "conditions": list(row.conditions or []) or list(link.conditions),
+                },
+            )
+    for row in boxes:
+        store.update(
+            conn,
+            log,
+            toc_box,
+            row.box_id,
+            observed_revision=row.revision,
+            values={"origin": "imported"},
+        )
+    layer = {box.box_id: box.layer for box in boxes}
+    text = {box.box_id: box.text for box in boxes}
+    target = {str(link.link_id): link.target_box_id for link in links}
+    named = {tuple(str(ids[k]) for k in p.links if k in ids): p.label for p in draft.pathways}
+    for chain in _chains(
+        [(str(link.link_id), str(link.source_box_id), str(link.target_box_id)) for link in links]
+    ):
+        end = target[chain[-1]]
+        store.insert_pathway(
+            conn,
+            log,
+            task_id=task_id,
+            pathway_id=uuid.uuid4(),
+            kind="failure" if layer[end] == "failure_outcome" else "success",
+            label=named.get(tuple(chain)) or " ".join(text[end].split()[:8]),
+            link_ids=[uuid.UUID(key) for key in chain],
+            origin="imported",
+        )
+    store.insert_bands(conn, log, task_id=task_id, draft=draft)
+    store.record(conn, task_id=task_id, run_id=run_id, step="toc_draft", log=log)
+    drawn = draft.model_copy(update={"boxes": kept_boxes, "links": kept_links, "pathways": []})
+    return drawn, ids
+
+
+def _norm(text: str) -> str:
+    return " ".join(text.split()).casefold()
 
 
 def suggest_the_rest(
@@ -422,16 +566,27 @@ def toc_draft_scope(
     plan = walk_toc_plan(conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id)
     data = plan_data(plan)
     usage = UsageAccumulator()
-    draft, call_usage = backend.draft(plan=data, existing_theory=plan.existing_theory_text)
+    # The user's own boxes on the canvas are their theory, with any diagram they uploaded.
+    sketched, sketched_links = user_sketch(conn, task_id)
+    existing = plan.existing_theory_text
+    if sketched:
+        # The canvas as it is now, and the uploaded diagram's reading if there is one.
+        from policy_atlas.theory_of_change.importing import latest_import
+
+        imported = latest_import(conn, task_id) if plan.upload_id is not None else None
+        existing = "\n\n".join(
+            part
+            for part in (sketch_text(sketched, sketched_links), imported and imported["text"])
+            if part
+        )
+    draft, call_usage = backend.draft(plan=data, existing_theory=existing)
     usage.add(call_usage)
     draft = with_trimmed_conditions(draft)
     problems = draft_problems(draft)
     attempts = 1
     if problems:
         log.info("toc_draft.retry", problems=problems)
-        draft, call_usage = backend.draft(
-            plan=data, existing_theory=plan.existing_theory_text, problems=problems
-        )
+        draft, call_usage = backend.draft(plan=data, existing_theory=existing, problems=problems)
         usage.add(call_usage)
         draft = with_trimmed_conditions(draft)
         attempts = 2
@@ -441,12 +596,37 @@ def toc_draft_scope(
     # An uploaded diagram: the canvas starts with the user's own boxes and arrows;
     # what the draft added to complete the theory waits as one suggestion
     # (owner, 2026-11-04).
-    drawn = drawn_part(draft) if as_drawn(plan) else None
+    if sketched_links:
+        kept, ids = adopt_sketch(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            draft=draft,
+            boxes=sketched,
+            links=sketched_links,
+        )
+        suggest_the_rest(conn, task_id=task_id, draft=draft, drawn=kept, ids=ids)
+        return _draft_summary(draft, attempts, backend, usage)
+    if sketched:
+        # Boxes without connections: the draft's reading of them replaces them.
+        from policy_atlas.core.schema import toc_box
+
+        log_ = store.ChangeLog()
+        for row in sketched:
+            store.delete(conn, log_, toc_box, row.box_id)
+        store.record(conn, task_id=task_id, run_id=run_id, step="toc_draft", log=log_)
+    drawn = drawn_part(draft) if as_drawn(plan) or sketched else None
     if drawn is None:
         store.write_draft(conn, task_id=task_id, run_id=run_id, draft=draft)
     else:
         ids = store.write_draft(conn, task_id=task_id, run_id=run_id, draft=drawn)
         suggest_the_rest(conn, task_id=task_id, draft=draft, drawn=drawn, ids=ids)
+    return _draft_summary(draft, attempts, backend, usage)
+
+
+def _draft_summary(
+    draft: DraftResponse, attempts: int, backend: TocBackend, usage: UsageAccumulator
+) -> dict[str, Any]:
     summary = {
         "boxes": len(draft.boxes),
         "links": len(draft.links),
