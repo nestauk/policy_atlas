@@ -69,6 +69,47 @@ id. Selection flags of different kinds combine with AND (``--since`` and
 ``--capability`` narrow ``--task-id``); repeats of one flag combine with OR. Only
 top-level capability runs are selected; their child runs (the scoping fan-out) are
 pulled in automatically. The script only reads: it opens a read-only transaction.
+
+Stream capture mode (``--capture``, task 058, N25)
+--------------------------------------------------
+"How long did the page go without being told anything?" ``--capture <file.jsonl>``
+reads one recording made by ``scripts/stream_capture.py`` (one JSON line per frame,
+keep-alive comment or reconnect, each stamped ``received_at``) and needs no
+database. Every time below is ``received_at``: when the page would have seen it.
+
+- **The run measured**: the run the page follows (the web client's rule: a
+  ``run.status`` for another run while the followed one is running or paused is a
+  child run, such as an option search). When the recording starts with an earlier
+  run replayed from history, the last run to be followed is the one measured.
+- **Active interval**: its first ``run.status`` to its final one (``succeeded``,
+  ``degraded``, ``failed``, ``aborted``, ``interrupted``; the last line of the file
+  when there is none, with ``finished`` false), minus the **parked** intervals: from
+  ``run.status paused`` or ``checkin.pending`` to the next ``run.status running``.
+- **Visible**: every frame, durable or ephemeral (``tick`` frames, heartbeats
+  included, and prose deltas), from any run on the task. Keep-alive comments and
+  reconnect lines are not visible: the page shows nothing for them.
+- **Silent gap**: a stretch of the active interval longer than 30 s with no visible
+  frame. Reported as a count, total seconds, share of active seconds, and the same
+  per **owning stage**: the stage of the measured run's latest ``stage.started``
+  still open (no ``stage.completed`` or ``stage.failed`` yet) when the gap began,
+  or "(between stages)".
+- **Time to first prose**: from the first ``artefact.section_started`` to the first
+  ``artefact.section_delta`` after it, and to the first
+  ``artefact.section_completed`` after it.
+- **Tick rate per stage**: over each stage's open intervals (``stage.started`` to
+  its ``stage.completed`` or ``stage.failed``), the ticks naming that stage, per
+  second; heartbeats (ticks with ``heartbeat`` true) counted separately.
+- **Dropped ticks**: the last tick's ``dropped`` minus the first's (the server's
+  counter only goes up for a task). Blank when no tick carries it.
+- **Healthy run**: ``--healthy true|false``, decided by the caller from the run's
+  trace (no model-call timeout fired, no fallback ran) and carried into the output.
+
+Recordings made before task 058 have the old tick shape (``note``, ``fetched``,
+``parsed``, ``total``); such a tick is read as ``activity = note``, ``done =
+parsed``, ``unit`` empty. Usage::
+
+    python3 scripts/stage_walls.py --capture run.capture.jsonl --healthy true \\
+        --format json --out /tmp/gaps.json
 """
 
 from __future__ import annotations
@@ -719,6 +760,404 @@ def format_markdown(report: dict[str, Any]) -> str:
     return "\n".join(md) + "\n"
 
 
+# --- Stream capture (task 058, N25) ---------------------------------------------
+
+SILENT_GAP_S = 30.0
+TERMINAL_STATUSES = frozenset({"succeeded", "degraded", "failed", "aborted", "interrupted"})
+BETWEEN_STAGES = "(between stages)"
+
+
+def read_capture(path: str) -> tuple[list[dict[str, Any]], int]:
+    """Read a ``stream_capture.py`` recording.
+
+    Args:
+        path: The ``.jsonl`` file.
+
+    Returns:
+        The records in file order, and how many lines could not be read (a
+        capture killed mid-write can end in half a line).
+    """
+    records: list[dict[str, Any]] = []
+    unreadable = 0
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                unreadable += 1
+                continue
+            if isinstance(obj, dict) and isinstance(obj.get("received_at"), str):
+                records.append(obj)
+            else:
+                unreadable += 1
+    return records, unreadable
+
+
+def normalise_tick(data: dict[str, Any]) -> dict[str, Any]:
+    """Read a tick body in today's shape, mapping the pre-058 shape onto it.
+
+    A tick with ``note`` and no ``activity`` is the old shape: ``activity`` is the
+    note, ``done`` is ``parsed``, ``unit`` is ``None``.
+
+    Args:
+        data: The tick frame's body.
+
+    Returns:
+        ``stage``, ``activity``, ``done``, ``total``, ``unit``, ``section``,
+        ``heartbeat`` (bool) and ``dropped`` (``None`` when the tick has none).
+    """
+    old = "activity" not in data and "note" in data
+    return {
+        "stage": data.get("stage"),
+        "activity": data.get("note") if old else data.get("activity"),
+        "done": data.get("parsed") if old else data.get("done"),
+        "total": data.get("total"),
+        "unit": None if old else data.get("unit"),
+        "section": data.get("section"),
+        "heartbeat": bool(data.get("heartbeat", False)),
+        "dropped": data.get("dropped"),
+    }
+
+
+def _frames(records: list[dict[str, Any]]) -> list[tuple[datetime, str, dict[str, Any]]]:
+    """``(received_at, frame name, body)`` for every frame record, in file order."""
+    out = []
+    for r in records:
+        if r.get("kind") != "frame":
+            continue
+        body = r.get("data") if isinstance(r.get("data"), dict) else {}
+        name = r.get("event") or body.get("type") or ""
+        at = ts(r["received_at"])
+        if at is not None:
+            out.append((at, str(name), body))
+    return out
+
+
+def _measured_walk(frames: list[tuple[datetime, str, dict[str, Any]]]) -> str | None:
+    """The last run the page follows (the web client's rule; see the module doc)."""
+    walk: str | None = None
+    status: str | None = None
+    children: set[str] = set()
+    for _, name, body in frames:
+        if name != "run.status":
+            continue
+        rid = body.get("capability_run_id")
+        live = walk is not None and status in ("running", "paused")
+        if rid in children or (live and rid != walk):
+            children.add(rid)
+            continue
+        walk, status = rid, body.get("status")
+    return walk
+
+
+def _iso(moment: datetime) -> str:
+    return moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _share(part: float, whole: float) -> float | None:
+    return part / whole if whole > 0 else None
+
+
+def capture_report(
+    records: list[dict[str, Any]], healthy: bool | None = None, unreadable: int = 0
+) -> dict[str, Any]:
+    """Compute the silent-gap measure and its companions from one recording.
+
+    Args:
+        records: The recording's lines (:func:`read_capture`), in file order.
+        healthy: The caller's healthy-run verdict, carried as given.
+        unreadable: Unreadable line count, carried into ``counts``.
+
+    Returns:
+        A JSON-ready dict: the measured run and its active interval, ``silent_gaps``
+        (count, total, share, ``by_stage``, each gap), ``first_prose``,
+        ``tick_rate`` (per stage), ``dropped_ticks`` and ``counts``.
+    """
+    frames = _frames(records)
+    walk = _measured_walk(frames)
+    counts = {
+        "frames": len(frames),
+        "ticks": 0,
+        "heartbeats": 0,
+        "comments": sum(1 for r in records if r.get("kind") == "comment"),
+        "reconnects": sum(1 for r in records if r.get("kind") == "reconnect"),
+        "unreadable_lines": unreadable,
+    }
+    ticks = [(at, normalise_tick(b)) for at, name, b in frames if name == "tick"]
+    dropped_values = [t["dropped"] for _, t in ticks if isinstance(t["dropped"], int)]
+    dropped = {
+        "first": dropped_values[0] if dropped_values else None,
+        "last": dropped_values[-1] if dropped_values else None,
+        "delta": dropped_values[-1] - dropped_values[0] if dropped_values else None,
+    }
+    report: dict[str, Any] = {
+        "healthy": healthy,
+        "walk": walk,
+        "finished": False,
+        "final_status": None,
+        "active_start": None,
+        "active_end": None,
+        "wall_s": None,
+        "parked_s": None,
+        "active_s": None,
+        "parked": [],
+        "silent_gaps": None,
+        "first_prose": None,
+        "tick_rate": [],
+        "dropped_ticks": dropped,
+        "counts": counts,
+    }
+    mine = [
+        (at, b)
+        for at, name, b in frames
+        if name == "run.status" and b.get("capability_run_id") == walk
+    ]
+    if walk is None or not mine:
+        return report
+    start = mine[0][0]
+    final = next(((at, b) for at, b in mine if b.get("status") in TERMINAL_STATUSES), None)
+    if final is not None:
+        end = final[0]
+        report["finished"], report["final_status"] = True, final[1].get("status")
+    else:
+        end = max(t for r in records if (t := ts(r["received_at"])) is not None)
+    inside = [(at, name, b) for at, name, b in frames if start <= at <= end]
+
+    # Parked intervals: paused or a waiting check-in, until the run runs again.
+    parked: list[tuple[datetime, datetime]] = []
+    since: datetime | None = None
+    for at, name, b in inside:
+        is_mine = name == "run.status" and b.get("capability_run_id") == walk
+        pauses = name == "checkin.pending" or (is_mine and b.get("status") == "paused")
+        if since is None and pauses:
+            since = at
+        elif since is not None and is_mine and b.get("status") == "running":
+            parked.append((since, at))
+            since = None
+    if since is not None:
+        parked.append((since, end))
+    parked_s = sum((b - a).total_seconds() for a, b in parked)
+    wall_s = (end - start).total_seconds()
+    active_s = wall_s - parked_s
+
+    # The measured run's stage intervals (stage frames of child runs are left out).
+    stage_events = [
+        (at, name, b)
+        for at, name, b in inside
+        if name in ("stage.started", "stage.completed", "stage.failed")
+        and b.get("capability_run_id") in (walk, None)
+    ]
+    intervals: dict[str, list[tuple[datetime, datetime]]] = {}
+    open_stages: list[tuple[str, datetime]] = []
+    for at, name, b in stage_events:
+        stage = str(b.get("stage"))
+        if name == "stage.started":
+            open_stages.append((stage, at))
+            intervals.setdefault(stage, [])
+            continue
+        for i in range(len(open_stages) - 1, -1, -1):
+            if open_stages[i][0] == stage:
+                intervals[stage].append((open_stages.pop(i)[1], at))
+                break
+    for stage, opened in open_stages:
+        intervals[stage].append((opened, end))
+
+    def owner(moment: datetime) -> str:
+        stack: list[str] = []
+        for at, name, b in stage_events:
+            if at > moment:
+                break
+            stage = str(b.get("stage"))
+            if name == "stage.started":
+                stack.append(stage)
+            elif stage in stack:
+                del stack[len(stack) - 1 - stack[::-1].index(stage)]
+        return stack[-1] if stack else BETWEEN_STAGES
+
+    # Silent gaps: split the active interval at the parked intervals, then look
+    # for more than 30 s between consecutive visible frames in each piece.
+    segments: list[tuple[datetime, datetime]] = []
+    cursor = start
+    for a, b in parked:
+        if a > cursor:
+            segments.append((cursor, a))
+        cursor = max(cursor, b)
+    if end > cursor:
+        segments.append((cursor, end))
+    visible = sorted(at for at, _, _ in inside)
+    gaps: list[dict[str, Any]] = []
+    for seg_start, seg_end in segments:
+        points = [seg_start, *(t for t in visible if seg_start < t < seg_end), seg_end]
+        for a, b in zip(points, points[1:], strict=False):
+            seconds = (b - a).total_seconds()
+            if seconds > SILENT_GAP_S:
+                gaps.append(
+                    {"start": _iso(a), "end": _iso(b), "seconds": seconds, "stage": owner(a)}
+                )
+    total_gap_s = sum(g["seconds"] for g in gaps)
+    by_stage: dict[str, dict[str, Any]] = {}
+    for g in gaps:
+        row = by_stage.setdefault(g["stage"], {"count": 0, "total_s": 0.0})
+        row["count"] += 1
+        row["total_s"] += g["seconds"]
+    for row in by_stage.values():
+        row["share_of_active"] = _share(row["total_s"], active_s)
+
+    # Time to first prose.
+    first_started = next((at for at, n, _ in inside if n == "artefact.section_started"), None)
+    first_prose = None
+    if first_started is not None:
+        delta = next(
+            (at for at, n, _ in inside if n == "artefact.section_delta" and at >= first_started),
+            None,
+        )
+        done = next(
+            (
+                at
+                for at, n, _ in inside
+                if n == "artefact.section_completed" and at >= first_started
+            ),
+            None,
+        )
+        first_prose = {
+            "section_started_at": _iso(first_started),
+            "to_first_delta_s": (delta - first_started).total_seconds() if delta else None,
+            "to_first_completed_s": (done - first_started).total_seconds() if done else None,
+        }
+
+    # Tick rate per stage, over the stage's open intervals.
+    live_ticks = [(at, t) for at, t in ticks if start <= at <= end]
+    counts["ticks"] = sum(1 for _, t in live_ticks if not t["heartbeat"])
+    counts["heartbeats"] = sum(1 for _, t in live_ticks if t["heartbeat"])
+    tick_rate = []
+    for stage, spans in intervals.items():
+        open_s = sum((b - a).total_seconds() for a, b in spans)
+        in_stage = [
+            t
+            for at, t in live_ticks
+            if t["stage"] == stage and any(a <= at <= b for a, b in spans)
+        ]
+        n_ticks = sum(1 for t in in_stage if not t["heartbeat"])
+        n_beats = sum(1 for t in in_stage if t["heartbeat"])
+        tick_rate.append(
+            {
+                "stage": stage,
+                "open_s": open_s,
+                "ticks": n_ticks,
+                "heartbeats": n_beats,
+                "ticks_per_s": n_ticks / open_s if open_s > 0 else None,
+                "heartbeats_per_s": n_beats / open_s if open_s > 0 else None,
+            }
+        )
+
+    report.update(
+        {
+            "active_start": _iso(start),
+            "active_end": _iso(end),
+            "wall_s": wall_s,
+            "parked_s": parked_s,
+            "active_s": active_s,
+            "parked": [{"start": _iso(a), "end": _iso(b)} for a, b in parked],
+            "silent_gaps": {
+                "threshold_s": SILENT_GAP_S,
+                "count": len(gaps),
+                "total_s": total_gap_s,
+                "share_of_active": _share(total_gap_s, active_s),
+                "by_stage": by_stage,
+                "gaps": gaps,
+            },
+            "first_prose": first_prose,
+            "tick_rate": tick_rate,
+        }
+    )
+    return report
+
+
+def _f1(x: float | None) -> str:
+    return "" if x is None else f"{x:.1f}"
+
+
+def _pct(x: float | None) -> str:
+    return "" if x is None else f"{100 * x:.1f}%"
+
+
+def format_capture_markdown(report: dict[str, Any]) -> str:
+    """Render :func:`capture_report` as Markdown tables.
+
+    Args:
+        report: Output of :func:`capture_report` (``capture`` added by the caller).
+
+    Returns:
+        Markdown text.
+    """
+    healthy = {True: "yes", False: "no", None: "not given"}[report["healthy"]]
+    md = [f"### Stream capture: {report.get('capture') or ''}\n"]
+    if report["silent_gaps"] is None:
+        md.append("No `run.status` frame in the capture: nothing to measure.\n")
+        return "\n".join(md)
+    gaps, dropped = report["silent_gaps"], report["dropped_ticks"]
+    prose = report["first_prose"] or {}
+    md += _table(
+        ["measure", "value"],
+        [
+            ["run", str(report["walk"])],
+            ["healthy run", healthy],
+            ["final status", report["final_status"] or "none (capture ended first)"],
+            ["active interval", f"{report['active_start']} to {report['active_end']}"],
+            ["wall s / parked s / active s",
+             f"{_f1(report['wall_s'])} / {_f1(report['parked_s'])} / {_f1(report['active_s'])}"],
+            ["silent gaps (> 30 s)", str(gaps["count"])],
+            ["silent s", _f1(gaps["total_s"])],
+            ["silent share of active", _pct(gaps["share_of_active"])],
+            ["first section started to first delta s", _f1(prose.get("to_first_delta_s"))],
+            ["first section started to first completed s",
+             _f1(prose.get("to_first_completed_s"))],
+            ["dropped ticks", "" if dropped["delta"] is None else str(dropped["delta"])],
+        ],
+    )
+    md.append("")
+    md.append("#### Silent gaps by owning stage\n")
+    md += _table(
+        ["stage", "gaps", "silent s", "share of active"],
+        [
+            [stage, str(row["count"]), _f1(row["total_s"]), _pct(row["share_of_active"])]
+            for stage, row in gaps["by_stage"].items()
+        ],
+    )
+    md.append("")
+    md.append("#### Each silent gap\n")
+    md += _table(
+        ["start", "end", "s", "stage"],
+        [[g["start"], g["end"], _f1(g["seconds"]), g["stage"]] for g in gaps["gaps"]],
+    )
+    md.append("")
+    md.append("#### Tick rate per stage\n")
+    md += _table(
+        ["stage", "open s", "ticks", "ticks/s", "heartbeats", "heartbeats/s"],
+        [
+            [
+                r["stage"],
+                _f1(r["open_s"]),
+                str(r["ticks"]),
+                "" if r["ticks_per_s"] is None else f"{r['ticks_per_s']:.3f}",
+                str(r["heartbeats"]),
+                "" if r["heartbeats_per_s"] is None else f"{r['heartbeats_per_s']:.3f}",
+            ]
+            for r in report["tick_rate"]
+        ],
+    )
+    md.append("")
+    c = report["counts"]
+    md.append(
+        f"Lines: {c['frames']} frames ({c['ticks']} ticks and {c['heartbeats']} heartbeats "
+        f"in the active interval), {c['comments']} keep-alive comments, {c['reconnects']} "
+        f"reconnects, {c['unreadable_lines']} unreadable."
+    )
+    return "\n".join(md) + "\n"
+
+
 # --- Command line ---------------------------------------------------------------
 
 
@@ -741,7 +1180,29 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--database-url", help="SQLAlchemy URL (default: $DATABASE_URL)")
     parser.add_argument("--format", choices=["md", "json"], default="md")
     parser.add_argument("--out", help="write to this file instead of stdout")
+    parser.add_argument(
+        "--capture", metavar="FILE", help="a stream_capture.py recording (no database)"
+    )
+    parser.add_argument(
+        "--healthy", choices=["true", "false"], help="with --capture: the run was healthy"
+    )
     args = parser.parse_args(argv)
+    if args.capture:
+        if args.run_id or args.task_id or args.since or args.logs:
+            parser.error("--capture reads one recording; drop the database and log flags")
+        records, unreadable = read_capture(args.capture)
+        healthy = None if args.healthy is None else args.healthy == "true"
+        capture = {"capture": Path(args.capture).name}
+        capture |= capture_report(records, healthy, unreadable)
+        _write(
+            json.dumps(capture, indent=1) + "\n"
+            if args.format == "json"
+            else format_capture_markdown(capture),
+            args.out,
+        )
+        return 0
+    if args.healthy is not None:
+        parser.error("--healthy goes with --capture")
     try:
         where, params = build_selection(args.run_id, args.task_id, args.since, args.capability)
     except ValueError as exc:
@@ -757,11 +1218,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.format == "json"
         else format_markdown(report)
     )
-    if args.out:
-        Path(args.out).write_text(text, encoding="utf-8")
+    _write(text, args.out)
+    return 0
+
+
+def _write(text: str, out: str | None) -> None:
+    if out:
+        Path(out).write_text(text, encoding="utf-8")
     else:
         sys.stdout.write(text)
-    return 0
 
 
 if __name__ == "__main__":
