@@ -205,30 +205,34 @@
     transform: translateY(0);
   }
 }
+/* The one arrival (task 058, round 9): a block that appears after the view's
+   first paint rises 8 px and fades in over 300 ms on the strong ease-out,
+   while the thread around it makes room on the same curve. History and a
+   view opening hold still (`ui/motion/arrivals.tsx`). */
 @utility anim-rise {
-  animation: rise 300ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation: rise 300ms var(--ease-out-strong) both;
   @media (prefers-reduced-motion: reduce) {
     animation-duration: 1ms;
   }
 }
 
 /* The "waiting on you" glow is orange, the one colour of a check-in that
-   waits (task 058, D15): one 900 ms ring as the card arrives. */
+   waits (task 058, D15): one 900 ms ring as the card arrives. The ring only
+   (round 9): the card's entrance is the arrival rise, and the ring blooms
+   150 ms after it starts, once the card has landed. */
 @keyframes glow-in {
   0% {
-    opacity: 0;
     box-shadow: 0 0 0 0 rgb(255 110 71 / 0);
   }
   50% {
     box-shadow: 0 0 0 6px rgb(255 110 71 / 0.25);
   }
   100% {
-    opacity: 1;
     box-shadow: 0 0 0 0 rgb(255 110 71 / 0);
   }
 }
 @utility anim-glow {
-  animation: glow-in 900ms ease-out both;
+  animation: glow-in 900ms ease-out 150ms both;
   @media (prefers-reduced-motion: reduce) {
     animation-duration: 1ms;
   }
@@ -467,6 +471,89 @@
 
 @utility anim-swap-in {
   animation: swap-in 300ms var(--ease-out-strong) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* A step's new contents in a card that eases to its new height (task 058,
+   round 9: the check-in's "Confirm your steer"): 150 ms, opacity only. */
+@utility anim-swap-in-fast {
+  animation: swap-in 150ms var(--ease-out-strong) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* An arriving decision card lays itself out (task 058, round 9; the
+   animation sweep's entry 5): its chip groups and radio rows fade up 4 px
+   in turn over 200 ms on the strong ease-out, 80 ms after the card and 40 ms
+   apart, capped at the sixth (`--i` is the row's place). Never blocks a
+   click. None under reduced motion. */
+@keyframes cascade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@utility anim-cascade {
+  animation: cascade-in 200ms var(--ease-out-strong) both;
+  animation-delay: calc(80ms + 40ms * min(var(--i, 0), 5));
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* The sheet leaves the way it came (task 058, round 9): along its own edge
+   (a bottom sheet downwards) over 200 ms on the drawer curve, the scrim
+   fading with it. The global reduced-motion rule makes both a cut. */
+@keyframes sheet-out-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes sheet-out-left {
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes sheet-out-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes scrim-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* The plan document arrives (task 058, round 9): docked at the side it comes
+   16 px in from that edge over 260 ms on the drawer curve; centred it rises
+   8 px in place over 200 ms on the strong ease-out. Both fade in. A cut
+   under reduced motion. */
+@keyframes dock-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@utility anim-dock-in {
+  animation: dock-in 260ms var(--ease-drawer) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+@utility anim-centre-in {
+  animation: rise 200ms var(--ease-out-strong) both;
   @media (prefers-reduced-motion: reduce) {
     animation: none;
   }

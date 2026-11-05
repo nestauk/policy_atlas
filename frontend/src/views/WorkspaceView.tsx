@@ -175,7 +175,7 @@ export function WorkspaceView() {
           grid-row transition animates height without a layout property. */}
       <div
         className={cn(
-          "grid shrink-0 transition-[grid-template-rows] duration-200 ease-out",
+          "grid shrink-0 transition-[grid-template-rows] duration-200 ease-[var(--ease-out-strong)]",
           footerOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
         aria-hidden={!footerOpen}

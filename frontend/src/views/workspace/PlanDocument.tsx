@@ -1016,9 +1016,12 @@ export function PlanDocument({
       aria-label={scopingPlan ? "Scoping plan" : "Search plan"}
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden bg-navy text-white",
+        // It arrives (task 058, round 9; the lead's ruling on the animation
+        // sweep's proposal 3): docked, from the edge it docks to; centred,
+        // rising in place. A cut under reduced motion.
         placement === "side"
-          ? cn("min-w-0 flex-1 border-l border-[#1a3a5c]", READING_COLUMN_MAX_W)
-          : "w-full",
+          ? cn("anim-dock-in min-w-0 flex-1 border-l border-[#1a3a5c]", READING_COLUMN_MAX_W)
+          : "anim-centre-in w-full",
       )}
     >
       {placement === "center" && (

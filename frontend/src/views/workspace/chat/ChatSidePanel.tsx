@@ -164,7 +164,7 @@ export function ChatSidePanel({
         recent={recentChats(rows)}
         onSelectChat={setActiveConversation}
         // The rail's Task Agent mark holds still and carries no run status
-        // (owner, round 8): the run strip beside it says what the run is
+        // (owner, round 8): the run status bar beside it says what the run is
         // doing, and opens the Task Agent.
         className="h-full w-12 flex-col border-r py-2 max-md:hidden"
       />

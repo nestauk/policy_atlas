@@ -88,7 +88,7 @@ function RailButton({
  *     `currentId` are the chat marks and the one on show; `className` sets
  *     the rail's geometry (a column, or a bar that becomes a column at `lg`).
  *     The Task Agent's mark is the still fold mark named "Task Agent", with
- *     no run status or timer (owner, round 8: the run strip and the trace
+ *     no run status or timer (owner, round 8: the run status bar and the trace
  *     carry the run).
  */
 export function ConversationRail({

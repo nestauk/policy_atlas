@@ -146,3 +146,62 @@ describe("ThemesView — while Mapping runs", () => {
     expect(screen.queryByTestId("themes-pending")).toBeNull();
   });
 });
+
+// Owner, round 9: from discovery, the themes show by name and description
+// while documents are assigned, and their counts fill in place.
+describe("ThemesView — the themes while documents are assigned (owner, round 9)", () => {
+  const discovered = [
+    { label: "School food environments", description: "Meal standards, free breakfast, and food access." },
+    { label: "Active travel", description: null },
+  ];
+  const mapping = (): RunStreamState => ({ ...runWith("characterise"), liveThemes: discovered });
+
+  it("lists the discovered themes in their final layout, a pulsing bar where each count will be", () => {
+    streamState = mapping();
+    vi.mocked(queries.useLandscape).mockReturnValue(
+      { data: undefined, isPending: false, isError: true, error: { code: "not_found" }, refetch: vi.fn() } as unknown as ReturnType<typeof queries.useLandscape>,
+    );
+    renderThemes();
+    expect(screen.getByText("School food environments")).toBeInTheDocument();
+    expect(screen.getByText("Active travel")).toBeInTheDocument();
+    expect(screen.getAllByTestId("theme-count-pulse")).toHaveLength(2);
+    expect(screen.queryByTestId("themes-pending")).toBeNull();
+    // Not links until the committed themes carry their ids.
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("fills the counts in place, in the discovered order, when the committed landscape lands", () => {
+    streamState = mapping();
+    vi.mocked(queries.useLandscape).mockReturnValue(
+      { data: { ...mockLandscape, themes: [] }, isPending: false, isError: false, refetch: vi.fn() } as unknown as ReturnType<typeof queries.useLandscape>,
+    );
+    const view = renderThemes();
+    const before = screen.getByText("Active travel").closest("li");
+    vi.mocked(queries.useLandscape).mockReturnValue(
+      {
+        data: {
+          ...mockLandscape,
+          themes: [
+            { name: "Active travel", size: 30, description: "Walking and cycling to school.", theme_id: null },
+            { name: "School food environments", size: 19, description: "Meal standards, free breakfast, and food access.", theme_id: null },
+          ],
+        },
+        isPending: false,
+        isError: false,
+        refetch: vi.fn(),
+      } as unknown as ReturnType<typeof queries.useLandscape>,
+    );
+    view.rerender(
+      <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/sources`]}>
+        <Routes>
+          <Route path="/tasks/:taskId/sources" element={<ThemesView />} />
+          <Route path="/tasks/:taskId/sources/all" element={<div>all sources</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const names = screen.getAllByRole("listitem").map((item) => item.querySelector("p")?.textContent);
+    expect(names).toEqual(["School food environments", "Active travel"]);
+    expect(screen.getByText("Active travel").closest("li")).toBe(before);
+    expect(screen.getByText("30 documents")).toHaveClass("anim-swap-in");
+  });
+});

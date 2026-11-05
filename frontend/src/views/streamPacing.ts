@@ -71,16 +71,23 @@ function tabHidden(): boolean {
  * Args:
  *   draft: The text that has arrived so far.
  *   complete: True when the section or the run has ended: show it all.
+ *   initialShown: How much of `draft` to show at mount (code points), for a
+ *     block that takes over from another mid-reveal (the Task Agent's reply
+ *     as its streamed turn becomes the stored one); default all of it.
  *
  * Returns:
  *   `text`, the revealed prefix of `draft`, and `batches`, the code-point
  *   offsets where each recent frame's reveal began (text already there at
  *   mount is not a batch), for the live paragraph's fade.
  */
-export function useRevealedText(draft: string, complete = false): { text: string; batches: readonly number[] } {
+export function useRevealedText(
+  draft: string,
+  complete = false,
+  initialShown?: number,
+): { text: string; batches: readonly number[] } {
   const chars = useMemo(() => Array.from(draft), [draft]);
   const [state, setState] = useState<{ draft: string; chars: string[]; shown: number; batches: readonly number[] }>(
-    () => ({ draft, chars, shown: chars.length, batches: [] }),
+    () => ({ draft, chars, shown: Math.min(initialShown ?? chars.length, chars.length), batches: [] }),
   );
   let shown = state.shown;
   let batches = state.batches;
@@ -257,34 +264,52 @@ const EASE_OUT_STRONG = "cubic-bezier(0.23, 1, 0.32, 1)";
  * that grows or shrinks moves the text below it smoothly (task 058, owner
  * round 8: repairs of several claims).
  *
- * The content is watched with a ResizeObserver, whose callback runs after
- * layout and before paint; each change starts a 300 ms height animation on
- * the box (Web Animations, strong ease-out) from wherever the box is now, so
- * a change during a change carries on from the current height. The box clips
+ * The content is watched with a MutationObserver, whose callback runs as a
+ * microtask after the DOM changes and before the browser lays out and
+ * paints; each change of the content's height starts a 300 ms height
+ * animation on the box (Web Animations, strong ease-out) from wherever the
+ * box is now, so a change during a change carries on from the current
+ * height. (A ResizeObserver would start the animation inside its own
+ * delivery, resizing the boxes around it that other observers watch, and
+ * the browser reports that as a "ResizeObserver loop"; round 9.) The box clips
  * while it animates and is left alone otherwise. Off (`active` false) it does
  * nothing, and the caller turns it off under reduced motion.
  *
+ * With `growOnly` a shrink passes straight through (the Task Agent thread,
+ * task 058 round 9: a settling card eases its own height, and two height
+ * animations would chase each other).
+ *
  * Args:
  *   active: True while the height should ease.
+ *   growOnly: Ease growth only; a shrink is a cut.
  *
  * Returns:
  *   The refs for the box and for its content (the box's only child).
  */
 export function useEasedHeight(
   active: boolean,
+  growOnly = false,
 ): [RefObject<HTMLDivElement | null>, RefObject<HTMLDivElement | null>] {
   const box = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const outer = box.current;
     const inner = content.current;
-    if (!active || outer === null || inner === null || typeof ResizeObserver === "undefined") return undefined;
+    if (!active || outer === null || inner === null || typeof MutationObserver === "undefined") return undefined;
     if (typeof outer.animate !== "function") return undefined;
     let last = inner.offsetHeight;
     let running: Animation | null = null;
-    const observer = new ResizeObserver(() => {
+    const observer = new MutationObserver(() => {
       const next = inner.offsetHeight;
       if (Math.abs(next - last) < 1) return;
+      if (growOnly && next < last) {
+        // A shrink passes through: drop any growth still running.
+        running?.cancel();
+        running = null;
+        outer.style.overflow = "";
+        last = next;
+        return;
+      }
       const from = running !== null ? outer.getBoundingClientRect().height : last;
       running?.cancel();
       last = next;
@@ -300,12 +325,12 @@ export function useEasedHeight(
         outer.style.overflow = "";
       };
     });
-    observer.observe(inner);
+    observer.observe(inner, { subtree: true, childList: true, characterData: true, attributes: true });
     return () => {
       observer.disconnect();
       running?.cancel();
       outer.style.overflow = "";
     };
-  }, [active]);
+  }, [active, growOnly]);
   return [box, content];
 }

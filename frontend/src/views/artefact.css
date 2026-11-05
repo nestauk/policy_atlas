@@ -2,9 +2,12 @@
  * The report while it is written: task 058, owner round 8.
  *
  * - The muted citation chips breathe in turn while the judge checks the
- *   section's claims (the 1.6 s breathe of the live mark, each chip 150 ms
- *   after the one before). The judge checks the whole section in one call,
- *   so the page cannot know which claim it is on and does not pretend:
+ *   section's claims: each chip goes from its muted look to the checked
+ *   marker's look at the peak (Blue Wash fill, the marker's blue border and
+ *   blue text) and back over 1.2 s, each 150 ms after the one before, so a
+ *   blue wave runs along the section (owner, round 9: the opacity breathe of
+ *   round 8 was barely noticeable). The judge checks the whole section in one
+ *   call, so the page cannot know which claim it is on and does not pretend:
  *   nothing else moves. Still under reduced motion.
  * - Repairs of several claims settle one by one: on the settling layer a
  *   span still waiting for its new words holds the revising blur without
@@ -17,15 +20,20 @@
 @keyframes checking-breathe {
   0%,
   100% {
-    opacity: 1;
+    background-color: var(--color-ground);
+    border-color: var(--color-line);
+    color: var(--color-grey);
   }
   50% {
-    opacity: 0.5;
+    /* The checked marker's own look (CITATION_MARKER_CLASS). */
+    background-color: var(--color-blue-tint-2);
+    border-color: rgb(0 0 255 / 0.25);
+    color: rgb(0 0 255 / 0.8);
   }
 }
 
 .draft-checking .pending-mark {
-  animation: checking-breathe 1.6s ease-in-out infinite;
+  animation: checking-breathe 1.2s ease-in-out infinite;
   animation-delay: calc(var(--mark-at, 0) * 150ms);
 }
 

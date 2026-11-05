@@ -6,6 +6,7 @@ import {
   MOCK_TASK_ID,
   mockCheckIn,
   mockEvidence,
+  mockLiveThemes,
   mockSourceNotes,
   mockTask,
 } from "../src/mock/fixtures";
@@ -342,8 +343,8 @@ test.describe("mock task-lifecycle journey", () => {
     // collection-true shown count.
     await sourcesSubnav.getByRole("link", { name: "All sources" }).click();
     await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/sources/all$`));
-    // Scope to the sources table — S6's Search queries section adds its own
-    // tables below, and a page-wide `row` count would include them.
+    // The search queries sit folded at the top (round 9); folded, they add
+    // no table, so the first table is the sources table.
     const sourcesTable = page.getByRole("table").first();
     const sourceRows = sourcesTable.getByRole("row");
     await expect(sourceRows.first()).toBeVisible();
@@ -353,7 +354,8 @@ test.describe("mock task-lifecycle journey", () => {
       (item) => item.status !== "found" && item.status !== "screened_out",
     ).length;
     await expect(sourceRows).toHaveCount(includedCount + 1);
-    await expect(page.getByRole("heading", { name: "Search queries" })).toBeVisible();
+    const queriesToggle = page.getByRole("button", { name: /^\d+ search queries · [\d,]+ results · Show$/ });
+    await expect(queriesToggle).toBeVisible();
 
     // "All" is one click away and shows the whole collection.
     const sourceFilters = page.getByRole("group", { name: "Filter sources" });
@@ -484,21 +486,21 @@ test.describe("mock task-lifecycle journey", () => {
   });
 
   // (r) Paused on another tab (028 contract: pause salience; task 058, owner
-  // round 7: the run strip returns under the tabs; round 8: the strip is a
-  // button that opens the Task Agent). The strip says the check-in waits on
+  // round 7: the run status bar returns under the tabs; round 8: the status bar is a
+  // button that opens the Task Agent). The status bar says the check-in waits on
   // History, with no link and no banner; opening
   // the sidebar from its rail lands on the Task Agent, whose trace says the
   // same, with the check-in under it.
-  test("paused run: other tabs show the paused strip, no banner, and the sidebar's trace says a check-in waits", async ({ page }) => {
+  test("paused run: other tabs show the paused status bar, no banner, and the sidebar's trace says a check-in waits", async ({ page }) => {
     await openWorkspaceFromLanding(page);
     await page.getByRole("button", { name: "Start the search" }).click();
     await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
 
     await lifecycleNav(page).getByRole("link", { name: "History", exact: true }).click();
-    const strip = page.getByTestId("run-strip");
-    await expect(strip).toHaveAttribute("data-open", "true");
-    await expect(strip).toContainText(/Paused\s·\sa check-in is waiting on you/);
-    await expect(strip.getByRole("link")).toHaveCount(0);
+    const statusBar = page.getByTestId("run-status-bar");
+    await expect(statusBar).toHaveAttribute("data-open", "true");
+    await expect(statusBar).toContainText(/Paused\s·\sa check-in is waiting on you/);
+    await expect(statusBar.getByRole("link")).toHaveCount(0);
     await expect(page.getByText("The analysis is paused — a check-in is waiting on you")).toHaveCount(0);
     await page.getByRole("button", { name: "Open the Agent" }).click();
     const sidebar = page.getByRole("complementary", { name: "Agent" });
@@ -759,8 +761,15 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await expect(page.getByRole("list", { name: "Run steps" }).getByText(/^Searching\b/).first()).toBeVisible({
       timeout: 15_000,
     });
-    await seen(page, /^Searching · searching · \d+ found so far/);
-    await seen(page, /^Screening · screening \d+ new abstracts · \d+ relevant so far/);
+    // Round 9: the search says what it does from its first moment (writing
+    // the queries, each query as it goes out, the citation passes), and the
+    // counts lose "new" and "so far".
+    await seen(page, /^Searching · Writing search queries$/);
+    await seen(page, /^Searching · searching · [\d,]+ found/);
+    await seen(page, /searching · 34 found · primary school food environment obesity/);
+    await seen(page, /following citations · 128 found/);
+    await seen(page, /^Screening · screening \d+ abstracts · \d+ relevant/);
+    await neverSeen(page, /so far|new abstracts/);
 
     // At the check-in the last finished line carries the counts and link;
     // open, upcoming rows are names only, in plan order.
@@ -789,6 +798,54 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
 
     await neverSeen(page, /Round \d/i);
     await neverSeen(page, /Shortlist →/);
+  });
+
+  test("round 9: the queries as they go out, the status bar's link, and the themes while they are assigned", async ({ page }) => {
+    await watchPage(page);
+    await startRun(page);
+    // Off the Agent tab the status bar names the running step's view after the
+    // time, and takes the reader there.
+    // During a run the Sources tab opens on All sources, where the status bar
+    // has no link (the reader is there); from Themes it offers the way back.
+    await taskNav(page).getByRole("link", { name: "Sources" }).click();
+    const statusBar = page.getByTestId("run-status-bar");
+    await expect(page).toHaveURL(/\/sources\/all$/);
+    await expect(statusBar.getByRole("link", { name: "Sources →" })).toHaveCount(0);
+    await page.getByRole("navigation", { name: "Sources" }).getByRole("link", { name: "Themes" }).click();
+    await statusBar.getByRole("link", { name: "Sources →" }).click({ timeout: 10_000 });
+    await expect(page).toHaveURL(/\/sources\/all$/);
+    await expect(statusBar.getByRole("link", { name: "Sources →" })).toHaveCount(0);
+    // The queries at the top, each as it goes out, then its count.
+    await seen(page, "Search queries");
+    await seen(page, "primary school food environment obesity");
+    await seen(page, "Following citations from 50 sources");
+    // A query's count returns into its row: the topic queries' counts land
+    // while the search runs (the citation pass's 184 lands as the stage
+    // ends, so the unit tests hold that row).
+    await seen(page, /^childhood obesity school intervention UK\s+34$/);
+    for (const query of [
+      "childhood obesity school intervention UK",
+      "Tower Hamlets school food policy",
+      "active travel school children obesity",
+      "UK childhood obesity local strategy",
+    ]) {
+      await seen(page, query);
+    }
+    // Once the search has ended the block folds to one line.
+    await expect(page.getByRole("button", { name: /^\d+ search queries · [\d,]+ results · Show$/ })).toBeVisible({
+      timeout: 20_000,
+    });
+
+    // The found themes show on the Themes subtab while their documents are
+    // assigned. (The mock serves the committed landscape throughout, so the
+    // counts are known and no count pulses here; the unit tests hold the
+    // pulse and the in-place fill.)
+    await taskNav(page).getByRole("link", { name: "Agent" }).click();
+    await answerCheckIn(page);
+    await seen(page, /Assigning themes · batch \d of 3/, 30_000);
+    await taskNav(page).getByRole("link", { name: "Sources" }).click();
+    await page.getByRole("navigation", { name: "Sources" }).getByRole("link", { name: "Themes" }).click();
+    for (const theme of mockLiveThemes) await seen(page, theme.label);
   });
 
   test("scene 5: the Result tab before writing is the question and one sentence", async ({ page }) => {
@@ -855,15 +912,15 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await expect(sheet.getByText(CITED_SOURCE_TITLE)).toBeVisible();
     // Not a link before the report is committed.
     await expect(sheet.getByRole("button", { name: CITED_SOURCE_TITLE })).toHaveCount(0);
-    await expect(page.getByTestId("run-strip")).toContainText(/^Writing/);
+    await expect(page.getByTestId("run-status-bar")).toContainText(/^Writing/);
     await page.keyboard.press("Escape");
     await expect(sheet).toHaveCount(0);
     await seen(page, "Drawing on 2 sources · Smith 2023 · DfE 2022");
     await seen(page, "Drawing on 5 sources · Smith 2023 · DfE 2022 · Nesta 2021 · and 2 more");
     await expect(page.getByRole("img", { name: /^Cited, being checked: / })).toHaveCount(2, { timeout: 20_000 });
     await expect(page.getByRole("img", { name: "Cited, being checked: Sustrans 2020" })).toHaveText("[·]");
-    // The run strip under the tabs says the same step (owner, round 7).
-    await expect(page.getByTestId("run-strip")).toContainText(/^Writing/);
+    // The run status bar under the tabs says the same step (owner, round 7).
+    await expect(page.getByTestId("run-status-bar")).toContainText(/^Writing/);
     await seen(page, "Checking claims");
     await seen(page, "Revising 1 claim");
     await seen(page, /walking bus saw 6 more children arrive on foot in every 100\.(\s*\[[\d,]+\])?$/, 30_000);
@@ -891,6 +948,9 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await seen(page, mockSourceNotes[0].note, 30_000);
     await seen(page, mockSourceNotes[1].note, 30_000);
     await seen(page, "Writing the introduction", 30_000);
+    // The status bar names the slot "Introduction" (round 9), not "Full report".
+    await seen(page, /^Writing · Introduction/, 30_000);
+    await neverSeen(page, /^Writing · Full report/);
     await seen(page, MOCK_FULL_REPORT_INTRO, 30_000);
 
     const growing = (await seenLines(page)).filter((line) => line.startsWith("Pair school food action with"));
@@ -908,18 +968,18 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await neverSeen(page, /attaching citations/);
   });
 
-  test("scene 7: on Sources the strip and the sidebar's trace show the run: it runs, pauses and folds to Report ready", async ({
+  test("scene 7: on Sources the status bar and the sidebar's trace show the run: it runs, pauses and folds to Report ready", async ({
     page,
   }) => {
     await watchPage(page);
     await startRun(page);
     await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
     await taskNav(page).getByRole("link", { name: /^Sources/ }).click();
-    // The strip under the tabs says the run waits (owner, round 7); it is a
+    // The status bar under the tabs says the run waits (owner, round 7); it is a
     // button that opens the Task Agent (round 8), not a link.
-    const strip = page.getByTestId("run-strip");
-    await expect(strip).toContainText(/a check-in is waiting on you/);
-    await expect(strip.getByRole("link")).toHaveCount(0);
+    const statusBar = page.getByTestId("run-status-bar");
+    await expect(statusBar).toContainText(/a check-in is waiting on you/);
+    await expect(statusBar.getByRole("link")).toHaveCount(0);
 
     // The sidebar's trace is the run view: opening it lands on the waiting
     // check-in; answer it there, then watch the trace to the end.
@@ -934,19 +994,19 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await seen(page, /^Writing · Section \d of \d/, 30_000);
     await expect(trace.getByRole("link", { name: "Read it →" })).toBeVisible({ timeout: 30_000 });
     await expect(trace.getByTestId("trace-header")).toContainText("Report ready");
-    // The run has ended: the strip closes.
-    await expect(strip).toHaveAttribute("data-open", "false");
+    // The run has ended: the status bar closes.
+    await expect(statusBar).toHaveAttribute("data-open", "false");
   });
 
-  test("scene 7: the paused strip and no banner on another tab while a check-in waits", async ({ page }) => {
+  test("scene 7: the paused status bar and no banner on another tab while a check-in waits", async ({ page }) => {
     await useScenario(page, "paused-strip");
     await startRun(page);
     await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
     // Not on the Agent tab.
-    await expect(page.getByTestId("run-strip")).toHaveAttribute("data-open", "false");
+    await expect(page.getByTestId("run-status-bar")).toHaveAttribute("data-open", "false");
     await taskNav(page).getByRole("link", { name: "History", exact: true }).click();
 
-    await expect(page.getByTestId("run-strip")).toContainText(/Paused\s·\sa check-in is waiting on you/);
+    await expect(page.getByTestId("run-status-bar")).toContainText(/Paused\s·\sa check-in is waiting on you/);
     await expect(page.getByText("Go to the check-in")).toHaveCount(0);
     await expect(page.getByText("The analysis is paused — a check-in is waiting on you")).toHaveCount(0);
   });

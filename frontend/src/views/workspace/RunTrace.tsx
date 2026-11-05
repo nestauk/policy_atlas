@@ -7,6 +7,9 @@ import { scrub } from "../../lib/scrub";
 import type { PlanDraft, RunStatus, StageEntry, StageLiveness, TaskAgentThreadRun } from "../../store";
 import { Card, LiveMark, StatusMark, type StatusTone } from "../../ui/brand/Card";
 import { cn } from "../../ui/brand/cn";
+import { Collapse } from "../../ui/motion/Collapse";
+import { prefersReducedMotion } from "../../ui/motion/motion";
+import { useEasedHeight } from "../streamPacing";
 import { useRegisterTrace } from "../taskLive";
 import { ChevronIcon } from "./chat/icons";
 import { RUN_BLOCK_STATUS } from "./planVocabulary";
@@ -129,10 +132,10 @@ export type RowContext = {
  * link never opens its line with a dot; wide, each takes its column,
  * right-aligned, and an empty cell keeps the column.
  */
-function RightCells({ meta, link }: { meta: string | null; link: ReactNode }) {
+function RightCells({ meta, link, landed = false }: { meta: string | null; link: ReactNode; landed?: boolean }) {
   return (
     <span className={cn(RIGHT_GROUP, "text-meta", LINE)}>
-      <span className="text-grey @lg:text-right">
+      <span className={cn("text-grey @lg:text-right", landed && "anim-swap-in")}>
         {meta !== null && <Figures text={meta} />}
         {meta !== null && link !== null && <NarrowSeparator />}
       </span>
@@ -174,7 +177,10 @@ function SpineRow({
   context: RowContext;
   first: boolean;
   last: boolean;
-  /** True when the step finished while this trace was on screen: it rises in once. */
+  /** True when the step finished while this trace was on screen: it keeps
+   *  its place, its counts and time fade in and its square eases to green
+   *  (lead, round 9: a row that shrank as it landed and rose too read as a
+   *  jump). */
   landed: boolean;
   paused: boolean;
   liveness?: Record<string, StageLiveness>;
@@ -236,7 +242,7 @@ function SpineRow({
             {scrub(row.label)}
             {state}
           </p>
-          <RightCells meta={meta} link={linkNode} />
+          <RightCells meta={meta} link={linkNode} landed={landed} />
         </div>
         {section && <p className={cn("text-body text-navy", LINE)}>{bound(scrub(section))}</p>}
         {activity && (
@@ -251,7 +257,7 @@ function SpineRow({
   }
 
   return (
-    <li data-state={row.state} className={cn("relative flex gap-2 text-body", LINE, landed && "anim-rise")}>
+    <li data-state={row.state} data-landed={landed || undefined} className={cn("relative flex gap-2 text-body", LINE)}>
       {/* The spine: one hairline from the first row's mark to the last's,
           drawn a row at a time. */}
       {!(first && last) && (
@@ -384,7 +390,7 @@ export function RunTrace({
 }) {
   const [open, setOpen] = useState(false);
   const listId = useId();
-  // While a trace is mounted the run strip's live region stays quiet.
+  // While a trace is mounted the run status bar's live region stays quiet.
   useRegisterTrace();
   const kind = walkKind(capability, stages, purpose);
   const ended = endedLine(status, kind);
@@ -403,6 +409,11 @@ export function RunTrace({
   const seconds = elapsedSeconds(startedAt, ticking ? undefined : endedAt, nowMs);
   const context: RowContext = { rows, taskId, kind, hasFindings, nowMs };
   const landed = useLandedRows(rows);
+  // A step that gains or loses its section and activity lines eases the
+  // card to its new height (300 ms, strong ease-out; the animation sweep's
+  // entry 4), so the rows below glide rather than jump. A cut under reduced
+  // motion.
+  const [stepsBox, stepsContent] = useEasedHeight(ticking && !prefersReducedMotion());
 
   const words =
     ended !== null
@@ -428,8 +439,13 @@ export function RunTrace({
   const foldable = ended !== null && rows.length > 0;
   const showRows = rows.length > 0 && (ended === null || open);
 
-  const list = showRows && (
-    <div id={listId} className="px-4 pt-0.5 pb-3 max-sm:px-3">
+  // Ended, the rows fold and open over 200 ms (the chevron's time) by their
+  // height and opacity; a cut under reduced motion.
+  const list = rows.length > 0 && (
+    <Collapse show={showRows} durationMs={200}>
+    <div id={listId} className={cn("px-4 pt-0.5 pb-3 max-sm:px-3", showRows && "border-t border-line")}>
+      <div ref={stepsBox}>
+      <div ref={stepsContent}>
       <ol aria-label="Run steps">
         {rows.map((step, index) => (
           <SpineRow
@@ -445,12 +461,15 @@ export function RunTrace({
           />
         ))}
       </ol>
+      </div>
+      </div>
       {onSeePlan !== undefined && (
         <button type="button" className={cn(QUIET_CONTROL_CLASS, "mt-2", WORDS_INDENT)} onClick={onSeePlan}>
           See plan
         </button>
       )}
     </div>
+    </Collapse>
   );
 
   return (
@@ -462,7 +481,7 @@ export function RunTrace({
       </p>
       <div
         data-testid="trace-header"
-        className={cn("px-4 pt-3 pb-2.5 max-sm:px-3", showRows && "border-b border-line")}
+        className="px-4 pt-3 pb-2.5 max-sm:px-3"
       >
         <TopLine
           mark={mark}

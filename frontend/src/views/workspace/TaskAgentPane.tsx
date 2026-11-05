@@ -31,6 +31,9 @@ import { FoldMarkAnimated } from "../../ui/brand/FoldMarkAnimated";
 import { cn } from "../../ui/brand/cn";
 import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
 import { ReauthRedirect } from "../../ui/feedback";
+import { Arrival, ArrivalProvider, useArrives, useFirstPaintDone } from "../../ui/motion/arrivals";
+import { prefersReducedMotion } from "../../ui/motion/motion";
+import { useEasedHeight } from "../streamPacing";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
 import { hasLonglist, isScoping } from "../scopingActivity";
 import { ChatAnswer } from "./chat/ChatMessages";
@@ -42,6 +45,7 @@ import { CheckInCard } from "./CheckInCard";
 import { BASELINE_GATE_KIND } from "./checkInPresentation";
 import type { components } from "../../api/gen/types";
 import { PartCard, type PartState, type PlanStep, confirmTarget, derivePartStates, planSteps, settledSummary } from "./PartCard";
+import { PacedReply } from "./PacedReply";
 import { PlanCard } from "./PlanCard";
 import type { PlanOverlay } from "./planOverlay";
 import { PastRunLine, RunTrace } from "./RunTrace";
@@ -288,23 +292,27 @@ export function Composer({
   );
 }
 
-/** `rise`: only a bubble that is arriving now rises; the durable row that
- *  replaces a streamed one appears in place, so nothing animates twice. */
-function UserBubble({ text, rise = false }: { text: string; rise?: boolean }) {
+/** The user's message. It rises only when it arrives after the thread's
+ *  first paint; the stored row that replaces a streamed one shares its id
+ *  (the client turn id), so it appears in place and nothing animates twice. */
+function UserBubble({ text, turnId }: { text: string; turnId: string }) {
   return (
-    <div className={cn(rise && "anim-rise", "ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5")}>
+    <Arrival arrivalId={`user:${turnId}`} className="ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5">
       <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>
-    </div>
+    </Arrival>
   );
 }
 
 /** TaskAgent replies are plain text — no box (binding record: task_agent-stage
- *  `.task_agent`); only part cards and the plan card are bordered. */
-function TaskAgentBubble({ text }: { text: string }) {
+ *  `.task_agent`); only part cards and the plan card are bordered. The reply
+ *  rises in as it arrives and its words come at a steady pace (round 9). */
+function TaskAgentBubble({ text, turnId, streamed }: { text: string; turnId: string; streamed: boolean }) {
   return (
-    <div className="mr-8">
-      <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>
-    </div>
+    <Arrival arrivalId={`reply:${turnId}`} className="mr-8">
+      <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">
+        <PacedReply turnId={turnId} text={text} streamed={streamed} />
+      </p>
+    </Arrival>
   );
 }
 
@@ -313,9 +321,10 @@ function TaskAgentBubble({ text }: { text: string }) {
  *  mark turning while the reply is arriving (owner, 2026-11-05: the mark,
  *  not the yellow dot, when the Task Agent is working). After a dropped
  *  connection the mark holds still while the transcript is re-read. */
-function PlannerActionLine({ label, live }: { label: string; live: boolean }) {
+function PlannerActionLine({ label, live, turnId }: { label: string; live: boolean; turnId: string }) {
+  const arrives = useArrives(`action:${turnId}`);
   return (
-    <p role="status" className="mr-8 flex items-center gap-2 text-body text-grey">
+    <p role="status" className={cn("mr-8 flex items-center gap-2 text-body text-grey", arrives && "anim-rise")}>
       <span className="inline-flex size-[17px] shrink-0 items-center justify-center" aria-hidden="true">
         <FoldMarkAnimated size={BRAND_MARK_SIZE} onDark={false} reducedMotion={live ? undefined : true} />
       </span>
@@ -404,7 +413,7 @@ function DurableTurn({
   if (kind === "answer") {
     return (
       <div className="space-y-6">
-        <UserBubble text={turn.user_message} />
+        <UserBubble text={turn.user_message} turnId={turn.client_turn_id} />
         <ChatAnswer
           taskId={taskId}
           turn={taskAgentAnswerRow(turn)}
@@ -419,8 +428,10 @@ function DurableTurn({
   if (kind === "decision" && turn.decision != null) {
     return (
       <div className="space-y-6">
-        {!isConfirmTurn && <UserBubble text={turn.user_message} />}
-        <DecisionLine label={turn.decision.label} planVersion={turn.decision.plan_version} />
+        {!isConfirmTurn && <UserBubble text={turn.user_message} turnId={turn.client_turn_id} />}
+        <Arrival arrivalId={`decision:${turn.client_turn_id}`}>
+          <DecisionLine label={turn.decision.label} planVersion={turn.decision.plan_version} />
+        </Arrival>
       </div>
     );
   }
@@ -430,18 +441,21 @@ function DurableTurn({
   if (kind === "action" && turn.action != null) {
     return (
       <div className="space-y-6">
-        <UserBubble text={turn.user_message} />
-        {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} />}
-        <DecisionLine label={actionLine(turn.action)} planVersion={null} />
+        <UserBubble text={turn.user_message} turnId={turn.client_turn_id} />
+        {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} turnId={turn.client_turn_id} streamed={false} />}
+        <Arrival arrivalId={`decision:${turn.client_turn_id}`}>
+          <DecisionLine label={actionLine(turn.action)} planVersion={null} />
+        </Arrival>
       </div>
     );
   }
   return (
     <div className="space-y-6">
-      {!isConfirmTurn && <UserBubble text={turn.user_message} />}
-      {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} />}
+      {!isConfirmTurn && <UserBubble text={turn.user_message} turnId={turn.client_turn_id} />}
+      {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} turnId={turn.client_turn_id} streamed={false} />}
       {turn.part != null && partState !== undefined && (
         <PartCard
+          arrivalId={`part:${turn.client_turn_id}`}
           part={turn.part}
           partName={steps.find((step) => step.id === turn.part?.id)?.name}
           state={partState}
@@ -515,7 +529,9 @@ function RunBlock({
   return (
     <div className="space-y-6">
       {/* Its words follow its own run's kind (task 045, A8), never the live stream's. */}
-      <PastRunLine run={run} capability={capability} />
+      <Arrival arrivalId={`run:${run.capability_run_id}`}>
+        <PastRunLine run={run} capability={capability} />
+      </Arrival>
       <AnsweredCheckIns answered={answered} checkIns={checkIns} stages={stages} />
     </div>
   );
@@ -645,13 +661,20 @@ export function TaskAgentPane({
   // never renders for (child-owned queries like the plan card, disclosure
   // toggles, font loads).
   const scrollRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
+  // The thread makes room for what arrives (task 058, round 9; the animation
+  // sweep's entry 1): its box eases to the content's new height over 300 ms
+  // on the strong ease-out, growth only (a settling card eases its own
+  // shrink), and the pin follows the eased box, so the thread glides up as a
+  // new block is revealed rather than jumping by its height. Not on the
+  // first paint or a task switch; a cut under reduced motion.
+  const firstPaintDone = useFirstPaintDone(transcript.data !== undefined, taskId);
+  const [roomRef, contentRef] = useEasedHeight(firstPaintDone && !prefersReducedMotion(), true);
   // The site footer lives in `WorkspaceView`, under both columns (038 V8),
   // and opens only on a deliberate nudge past the transcript's end.
   const footer = useFooterReveal(onAtBottomChange);
   // The transcript opens at its end and stays there while new turns land
   // (shared with the chat pane).
-  const pin = usePinToBottom(scrollRef, contentRef, taskId);
+  const pin = usePinToBottom(scrollRef, roomRef, taskId);
 
   // The plan card sits at its chronological position: right after the last
   // task_agent turn (approval always comes from a turn; turns are 409-fenced
@@ -757,6 +780,8 @@ export function TaskAgentPane({
         {/* Bottom-anchor: pushes a short thread to the composer end; the
             landing prompt sits in the top third (1:2 spacer split). */}
         <div aria-hidden="true" className={landing ? "flex-[1]" : "mt-auto"} />
+        <ArrivalProvider settled={firstPaintDone} scopeKey={taskId}>
+        <div ref={roomRef}>
         <div ref={contentRef} className={cn("space-y-6", LIFECYCLE_PAGE_CLASS)}>
         {transcript.isPending && (
           <div role="status" className="anim-breathe text-body text-grey">
@@ -796,11 +821,9 @@ export function TaskAgentPane({
                 isOwner={isOwner}
               />
             ) : item.type === "gate_decision" ? (
-              <DecisionLine
-                key={`gate-decision-${item.decision.checkInId}`}
-                label={item.decision.label}
-                planVersion={item.decision.planVersion}
-              />
+              <Arrival key={`gate-decision-${item.decision.checkInId}`} arrivalId={`gate-decision:${item.decision.checkInId}`}>
+                <DecisionLine label={item.decision.label} planVersion={item.decision.planVersion} />
+              </Arrival>
             ) : item.type === "task_agent_turn" ? (
               <DurableTurn
                 key={`turn-${item.turn.turn_index}`}
@@ -817,7 +840,7 @@ export function TaskAgentPane({
               />
             ) : item.run.capability_run_id === liveRunId && liveTrace !== null ? (
               <div key="live-run-block" className="space-y-6">
-                {liveTrace}
+                <Arrival arrivalId={`run:${liveRunId}`}>{liveTrace}</Arrival>
                 <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} stages={stream.stages} />
               </div>
             ) : (
@@ -841,13 +864,15 @@ export function TaskAgentPane({
           <div key={turn.clientTurnId} className="space-y-6">
             {/* Button-confirm turns never show a bubble — durable turns hide
                 them too; the settled part card is the record. */}
-            {confirmTarget(turn.userMessage) === null && <UserBubble text={turn.userMessage} rise />}
-            {turn.reply !== undefined && turn.reply !== "" && <TaskAgentBubble text={turn.reply} />}
+            {confirmTarget(turn.userMessage) === null && <UserBubble text={turn.userMessage} turnId={turn.clientTurnId} />}
+            {turn.reply !== undefined && turn.reply !== "" && (
+              <TaskAgentBubble text={turn.reply} turnId={turn.clientTurnId} streamed />
+            )}
             {turn.status !== "failed" && turn.progressLabel !== undefined && (
-              <PlannerActionLine label={turn.progressLabel} live={turn.status === "pending"} />
+              <PlannerActionLine label={turn.progressLabel} live={turn.status === "pending"} turnId={turn.clientTurnId} />
             )}
             {turn.status === "failed" && (
-              <div className="mr-8 border border-line bg-paper px-3.5 py-2.5">
+              <Arrival arrivalId={`failed:${turn.clientTurnId}`} className="mr-8 border border-line bg-paper px-3.5 py-2.5">
                 <p className="text-body text-ink">
                   {isConflictCode(turn.errorCode)
                     ? conflictSentences[turn.errorCode]
@@ -878,7 +903,7 @@ export function TaskAgentPane({
                     Retry
                   </Button>
                 )}
-              </div>
+              </Arrival>
             )}
           </div>
         ))}
@@ -888,7 +913,7 @@ export function TaskAgentPane({
             37) — owner-only, hidden for a colleague rather than left
             clickable to a 403. */}
         {isOwner && suggestions.length > 0 && !streaming && !composerFenced && (
-          <div className="mr-8 space-y-2">
+          <Arrival arrivalId={`suggestions:${askingTurn?.client_turn_id ?? ""}`} className="mr-8 space-y-2">
             {question !== null && question !== "" && (
               <p className="max-w-prose-measure text-body font-semibold text-navy">{scrub(question)}</p>
             )}
@@ -898,18 +923,18 @@ export function TaskAgentPane({
                 key={suggestion}
                 type="button"
                 onClick={() => send({ message: suggestion, clientTurnId: crypto.randomUUID() })}
-                className="anim-rise cursor-pointer border border-blue-tint bg-blue-tint px-2.5 py-1 text-caption font-semibold text-blue hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue"
+                className="cursor-pointer border border-blue-tint bg-blue-tint px-2.5 py-1 text-caption font-semibold text-blue hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue"
               >
                 {scrub(suggestion)}
               </button>
             ))}
             </div>
-          </div>
+          </Arrival>
         )}
 
         {liveTrace !== null && !threadHasLiveRun && (
           <div key="live-run-fallback" className="space-y-6">
-            {liveTrace}
+            <Arrival arrivalId={`run:${liveRunId}`}>{liveTrace}</Arrival>
             <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} stages={stream.stages} />
           </div>
         )}
@@ -925,6 +950,8 @@ export function TaskAgentPane({
           />
         )}
         </div>
+        </div>
+        </ArrivalProvider>
         {landing && <div aria-hidden="true" className="flex-[2]" />}
       </div>
       <JumpToEnd visible={!pin.atEnd} onClick={pin.jumpToEnd} />

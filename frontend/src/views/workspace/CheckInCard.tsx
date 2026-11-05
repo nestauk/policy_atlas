@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { useAnswerCheckIn } from "../../api/mutations";
@@ -9,7 +9,10 @@ import { Button } from "../../ui/brand/Button";
 import { Card } from "../../ui/brand/Card";
 import { cn } from "../../ui/brand/cn";
 import { LABEL_CLASS } from "../../ui/brand/label";
+import { useArrives } from "../../ui/motion/arrivals";
+import { ARRIVE_MS, EASE_OUT_STRONG, prefersReducedMotion } from "../../ui/motion/motion";
 import { useToast } from "../../ui/radix/Toast";
+import { useEasedHeight } from "../streamPacing";
 import { CheckInBundle, type SectionRow, type ThemeRename } from "./CheckInBundle";
 import {
   BASELINE_GATE_HEADING,
@@ -37,8 +40,9 @@ type ChangeModeValue = (typeof CHANGE_MODE_VALUES)[number];
  *  links to the Sources tab (annex scene 12). */
 const SOURCES_CHECK_IN_STAGES = new Set(["acquire", "screen"]);
 
-/** The waiting-on-you card: the one orange rule, and one 900 ms orange glow
- *  as it mounts (task 058, D15; reduce motion honoured by `anim-glow`). */
+/** The waiting-on-you card: the one orange rule, and one 900 ms orange ring
+ *  that blooms 150 ms after it arrives (task 058, D15; round 9; reduce
+ *  motion honoured by `anim-glow`). */
 const WAITING_CARD_CLASS = "anim-glow border-l-2 border-l-orange";
 
 /**
@@ -53,19 +57,81 @@ const WAITING_CARD_CLASS = "anim-glow border-l-2 border-l-orange";
  * `VisibilityControl`'s idiom, rather than a read-only render of a form
  * whose every control is a mutation.
  */
-export function CheckInCard({
-  taskId,
-  checkIn,
-  stages,
-  isOwner,
-  compact = false,
-}: {
+type CheckInCardProps = {
   taskId: string;
   checkIn: CheckInOut;
   stages: StageEntry[];
   isOwner: boolean;
   /** The sidebar's reduced-width card: no facts line (annex scene 13). */
   compact?: boolean;
+};
+
+/**
+ * The check-in card's motion (task 058, round 9; the animation sweep's
+ * entry 3 and the lead's ruling on it). It rises in when it arrives after
+ * the thread's first paint, its ring blooming once it has landed. It settles
+ * the moment the user chooses, as the part cards do: its contents fade out
+ * over 150 ms while its box eases to nothing over 300 ms on the strong
+ * ease-out, and the answered line rises in its place in the run block when
+ * the run records the choice. If the answer fails the card comes back open
+ * with its notice. The "Confirm your steer" step eases the card's height to
+ * its new contents, which fade in over 150 ms. Under reduced motion every
+ * step is a cut.
+ */
+export function CheckInCard(props: CheckInCardProps) {
+  const arrives = useArrives(`checkin:${props.checkIn.check_in_id}`);
+  const [leaving, setLeaving] = useState(false);
+  const reduced = prefersReducedMotion();
+  const [box, content] = useEasedHeight(!leaving && !reduced);
+  const shell = useRef<HTMLDivElement>(null);
+
+  // The shell eases to nothing while the contents fade; it holds there until
+  // the stream clears the check-in (the card unmounts) or the answer fails.
+  useEffect(() => {
+    const outer = shell.current;
+    if (!leaving || outer === null || reduced || typeof outer.animate !== "function") return undefined;
+    outer.style.overflow = "clip";
+    const animation = outer.animate([{ height: `${outer.offsetHeight}px` }, { height: "0px" }], {
+      duration: ARRIVE_MS,
+      easing: EASE_OUT_STRONG,
+      fill: "forwards",
+    });
+    return () => {
+      animation.cancel();
+      outer.style.overflow = "";
+    };
+  }, [leaving, reduced]);
+
+  if (!props.isOwner) return null;
+  return (
+    <div
+      ref={shell}
+      data-testid="check-in-shell"
+      data-leaving={leaving || undefined}
+      className={cn(arrives && "anim-rise", leaving && reduced && "hidden")}
+    >
+      <div ref={box}>
+        <div ref={content} inert={leaving} className={cn(leaving && "anim-fade-out")}>
+          <CheckInCardBody {...props} onChosen={() => setLeaving(true)} onFailed={() => setLeaving(false)} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CheckInCardBody({
+  taskId,
+  checkIn,
+  stages,
+  isOwner,
+  compact = false,
+  onChosen,
+  onFailed,
+}: CheckInCardProps & {
+  /** The user chose: the card settles at once. */
+  onChosen: () => void;
+  /** The answer failed: the card comes back open. */
+  onFailed: () => void;
 }) {
   const answer = useAnswerCheckIn(taskId);
   const toast = useToast();
@@ -89,11 +155,13 @@ export function CheckInCard({
       ? conflictSentences[code]
       : "That couldn't be applied. The check-in is still waiting.";
     setNotice(message);
+    onFailed();
     toast.toast({ title: "Check-in update failed", description: message, tone: "error" });
   };
 
   const sendOption = (optionId: string, params?: Record<string, unknown>) => {
     setNotice(null);
+    onChosen();
     // Staged P2 theme renames ride the SINGLE response as validated params on
     // whichever option answers the card (028 strand 14 — no second response).
     const withRenames =
@@ -128,7 +196,7 @@ export function CheckInCard({
 
   if (compiled !== null) {
     return (
-      <Card aria-live="polite" className="border-l-2 border-l-orange p-5">
+      <Card aria-live="polite" className="anim-swap-in-fast border-l-2 border-l-orange p-5">
         <h3 className="text-lead font-bold text-navy">Confirm your steer</h3>
         {steerWords !== null && (
           <div className="mt-2 ml-8 border border-blue-tint bg-blue-tint-2 px-3 py-2">
@@ -150,6 +218,7 @@ export function CheckInCard({
             disabled={answer.isPending}
             onClick={() => {
               setNotice(null);
+              onChosen();
               answer.mutate(
                 {
                   checkInId: checkIn.check_in_id,
@@ -444,6 +513,7 @@ export function CheckInCard({
           disabled={answer.isPending}
           onClick={() => {
             setNotice(null);
+            onChosen();
             answer.mutate(
               { checkInId: checkIn.check_in_id, body: { kind: "abort" } },
               { onError: conflictNotice },

@@ -106,7 +106,7 @@ type RegisterTrace = () => () => void;
 const RegisterTraceContext = createContext<RegisterTrace | null>(null);
 const MountedTracesContext = createContext(0);
 
-/** Called by every run trace while it is mounted, so the run strip can keep
+/** Called by every run trace while it is mounted, so the run status bar can keep
  *  its own live region quiet then: one change is announced once (task 058,
  *  owner round 7). A no-op outside the signed-in task shell. */
 export function useRegisterTrace(): void {

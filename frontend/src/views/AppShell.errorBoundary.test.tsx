@@ -20,7 +20,7 @@ vi.mock("../api/queries", () => ({
   // The header's task-settings popover wires rename/archive mutations,
   // which resolve their client through this hook.
   useApiClient: () => ({}),
-  // The run strip opens the Task Agent, so it reads the task's conversations.
+  // The run status bar opens the Task Agent, so it reads the task's conversations.
   useConversations: () => ({ isSuccess: true, data: { data: [] } }),
 }));
 

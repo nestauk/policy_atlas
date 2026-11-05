@@ -19,6 +19,7 @@ import {
   REVEAL_BASE_RATE,
   REVEAL_CATCH_UP_MS,
   REVEAL_IDLE_FLUSH_MS,
+  useEasedHeight,
   useFollowTail,
   useRevealedText,
   wordBoundary,
@@ -255,5 +256,47 @@ describe("useFollowTail: the scroll rule", () => {
     size(pane, { height: 2400, top: 600 });
     resize();
     expect(pane.scrollTop).toBe(600);
+  });
+});
+
+// Round 9: the thread makes room by easing growth only, and it watches the
+// DOM (a MutationObserver), so it never resizes boxes inside another
+// observer's delivery.
+describe("useEasedHeight — growth only", () => {
+  function Box({ lines }: { lines: number }) {
+    const [box, content] = useEasedHeight(true, true);
+    return (
+      <div ref={box}>
+        <div ref={content}>
+          {Array.from({ length: lines }, (_, index) => (
+            <p key={index}>line</p>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  it("eases the box from its old height when the content grows, and lets a shrink through", async () => {
+    let height = 20;
+    const animate = vi.fn(() => ({ cancel: vi.fn(), onfinish: null }) as unknown as Animation);
+    const restoreAnimate = HTMLElement.prototype.animate;
+    HTMLElement.prototype.animate = animate as unknown as typeof HTMLElement.prototype.animate;
+    const spy = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => height);
+    const view = render(<Box lines={1} />);
+    height = 40;
+    view.rerender(<Box lines={2} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(animate).toHaveBeenCalledWith([{ height: "20px" }, { height: "40px" }], expect.objectContaining({ duration: 300 }));
+    animate.mockClear();
+    height = 20;
+    view.rerender(<Box lines={1} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(animate).not.toHaveBeenCalled();
+    spy.mockRestore();
+    HTMLElement.prototype.animate = restoreAnimate;
   });
 });

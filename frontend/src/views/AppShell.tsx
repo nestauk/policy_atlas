@@ -18,7 +18,7 @@ import { lifecycleTabs, publicLifecycleTabs, sourcesLanding, withChat, withSourc
 import { PlanPanelProvider, usePlanPanel } from "./planPanel";
 import { PublicViewProvider } from "./publicView";
 import { isScoping, tabRunStatus } from "./scopingActivity";
-import { RunStrip } from "./RunStrip";
+import { RunStatusBar } from "./RunStatusBar";
 import { TaskLiveProvider, useTaskLive, withTabMarks } from "./taskLive";
 import { useTabOptions } from "./taskResult";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
@@ -523,14 +523,14 @@ export function AppShell() {
             <ChatSidePanel taskId={taskId ?? ""} isOwner={isOwner} />
           </ErrorBoundary>
         )}
-        {/* The page's column: the run strip on top, then the routed view.
-            The strip starts after the rail (owner, round 8: it no longer
+        {/* The page's column: the run status bar on top, then the routed view.
+            The status bar starts after the rail (owner, round 8: it no longer
             runs under the sidebar to the window's left edge); below md the
             rail hides and the column is the full width. */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {/* The run strip under the tabs on every tab but Agent (task 058,
+          {/* The run status bar under the tabs on every tab but Agent (task 058,
               owner rounds 7 and 8): it opens the Task Agent. */}
-          {liveShell && <RunStrip />}
+          {liveShell && <RunStatusBar />}
           <div
             data-testid={footerInScrollPane ? "task-scroll-pane" : undefined}
             className={cn(

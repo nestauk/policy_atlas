@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
-import { useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 
 import { useConversations } from "../api/queries";
 import { Figures } from "../lib/figures";
@@ -13,7 +13,7 @@ import {
   taskAgentConversationId,
   useActiveConversation,
 } from "./workspace/chat/conversationState";
-import { elapsedSeconds, formatElapsed } from "./workspace/runProgress";
+import { cardRows, currentRow, elapsedSeconds, formatElapsed, rowLink, walkKind } from "./workspace/runProgress";
 import { useRunWords } from "./workspace/runWords";
 
 /** A stream with no run, for the shell before the live layer is enabled. */
@@ -42,10 +42,32 @@ function useSidebarAvailable(): boolean {
   return useSyncExternalStore(subscribeSidebar, sidebarAvailable, () => false);
 }
 
-type Shown = { head: string; rest: string; words: string; paused: boolean; elapsed: string; key: string };
+type Shown = {
+  head: string;
+  rest: string;
+  words: string;
+  paused: boolean;
+  elapsed: string;
+  key: string;
+  link: { href: string; label: string } | null;
+};
+
+/** Whether the reader is already on the view a link opens: the themes are
+ *  the Sources tab's index, so only its own path counts; any other view
+ *  counts with whatever sits under it. */
+export function onLinkedView(pathname: string, href: string): boolean {
+  const path = pathname.replace(/\/+$/, "");
+  if (href.endsWith("/sources")) return path === href;
+  return path === href || path.startsWith(`${href}/`);
+}
+
+/** What changed since the last render, so a tab switch can set the status bar at
+ *  a cut while a run starting or ending, or the sidebar taking the Task
+ *  Agent, still eases it (the animation sweep's entry 9). */
+type Cause = { open: boolean; ticking: boolean; agentInSidebar: boolean; instant: boolean };
 
 /**
- * The run strip (task 058, owner rounds 7 and 8): under the lifecycle tabs
+ * The run status bar (task 058, owner rounds 7 and 8): under the lifecycle tabs
  * on every tab but Agent, while a run is live or paused, and nowhere else.
  * It starts after the rail, so it belongs to the page beside the sidebar
  * (the shell places it at the top of the page's column). One line on paper
@@ -54,16 +76,20 @@ type Shown = { head: string; rest: string; words: string; paused: boolean; elaps
  * what it is doing in grey, and the run's elapsed time at the right in grey
  * tabular figures.
  *
- * The whole strip is the way to the agent (owner, round 8, reversing
- * contract D8's "status only"): it opens the Task Agent in the sidebar, or
- * the Agent tab below `md`, where the sidebar does not show.
+ * The status bar is a bar of two controls (owner, round 9). Its words are the way
+ * to the agent (owner, round 8, reversing contract D8's "status only"): they
+ * open the Task Agent in the sidebar, or the Agent tab below `md`, where the
+ * sidebar does not show. After the time, the step in progress's view
+ * ("Sources →", "Landscape →", "Themes →", "Report →") while the reader is
+ * not on it.
  *
- * It opens and closes over 200 ms on the strong ease-out, so the page eases
- * rather than jumps, and its words rise in when the step changes; both hold
- * still under reduced motion. Its live region is quiet while a run trace is
+ * It opens and closes over 200 ms on the strong ease-out when the run starts
+ * or ends or the sidebar takes the Task Agent, so the page eases rather than
+ * jumps; on a tab switch it is set at a cut. Its words rise in when the step
+ * changes. Both hold still under reduced motion. Its live region is quiet while a run trace is
  * mounted (the sidebar's), so one change is announced once.
  */
-export function RunStrip() {
+export function RunStatusBar() {
   const live = useTaskLive();
   const stream = live?.stream ?? NO_STREAM;
   const run = stream.run;
@@ -73,7 +99,7 @@ export function RunStrip() {
   const { activeConversationId, setActiveConversation } = useActiveConversation();
   const wide = useSidebarAvailable();
   // While the Task Agent is open in the sidebar its trace says the same
-  // words, so the strip steps aside; it returns when the sidebar shuts or
+  // words, so the status bar steps aside; it returns when the sidebar shuts or
   // shows another conversation (lead, round 8).
   const agentInSidebar = wide && isTaskAgentConversation(activeConversationId, conversations.data?.data ?? []);
   const open = live !== null && live.tab !== null && live.tab !== "agent" && ticking && !agentInSidebar;
@@ -81,6 +107,36 @@ export function RunStrip() {
   const { words, row, paused } = useRunWords(stream, live?.isOwner ?? false);
   const traces = useMountedTraces();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  // A tab switch is navigation, seen tens of times a day: the status bar opens or
+  // closes at a cut then. It eases when the run starts or ends or the
+  // sidebar takes the Task Agent (sweep entry 9).
+  const [cause, setCause] = useState<Cause>({ open, ticking, agentInSidebar, instant: true });
+  if (cause.open !== open) {
+    setCause({
+      open,
+      ticking,
+      agentInSidebar,
+      instant: cause.ticking === ticking && cause.agentInSidebar === agentInSidebar,
+    });
+  } else if (cause.ticking !== ticking || cause.agentInSidebar !== agentInSidebar) {
+    setCause({ ...cause, ticking, agentInSidebar });
+  }
+
+  // The step in progress's own view (owner, round 9): "Sources →",
+  // "Landscape →", "Themes →", "Report →" at the status bar's right end, the same
+  // link the trace's running row carries, hidden while the reader is there.
+  const rows = cardRows(stream.stages, stream.plan?.plan, run?.status);
+  const progress = currentRow(rows);
+  const target =
+    progress !== null && progress.state === "progress" && !paused
+      ? rowLink(progress, rows, taskId, walkKind(live?.capability, stream.stages), false)
+      : null;
+  const here =
+    target !== null &&
+    (onLinkedView(pathname, target.href) || (target.href.endsWith("/result") && live?.tab === "result"));
+  const link = target !== null && !here ? target : null;
 
   const [head = "", ...restParts] = words.split(" · ");
   const now: Shown | null =
@@ -92,11 +148,19 @@ export function RunStrip() {
           paused,
           elapsed: formatElapsed(elapsedSeconds(run.startedAt, undefined, nowMs)),
           key: paused ? "paused" : (row?.key ?? "start"),
+          link,
         }
       : null;
-  // Kept as the strip closes, so it folds away with its last words.
+  // Kept as the status bar closes, so it folds away with its last words.
   const [last, setLast] = useState<Shown | null>(now);
-  if (now !== null && (last === null || now.words !== last.words || now.elapsed !== last.elapsed || now.key !== last.key)) {
+  if (
+    now !== null &&
+    (last === null ||
+      now.words !== last.words ||
+      now.elapsed !== last.elapsed ||
+      now.key !== last.key ||
+      now.link?.href !== last.link?.href)
+  ) {
     setLast(now);
   }
   const shown = now ?? last;
@@ -112,22 +176,29 @@ export function RunStrip() {
   return (
     <>
       <div
-        data-testid="run-strip"
+        data-testid="run-status-bar"
         data-open={open}
         aria-hidden={open ? undefined : true}
         className={cn(
-          "grid shrink-0 transition-[grid-template-rows] duration-200 ease-[var(--ease-out-strong)] motion-reduce:transition-none",
-          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+          "grid shrink-0 transition-[grid-template-rows,opacity] duration-200 ease-[var(--ease-out-strong)] motion-reduce:transition-none",
+          open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+          cause.instant && "transition-none",
         )}
       >
         <div className="min-h-0 overflow-hidden">
           {shown !== null && (
+            // Two controls on one bar (owner, round 9): the words open the
+            // Task Agent; the link after the time opens the step's view.
+            <div className="flex items-stretch border-b border-line bg-paper text-meta leading-[1.55rem]">
             <button
               type="button"
               tabIndex={open ? undefined : -1}
               aria-label={`Open the Task Agent: ${shown.words}`}
               onClick={openTaskAgent}
-              className="flex w-full cursor-pointer items-start gap-2 border-b border-line bg-paper px-6 py-2.5 text-left text-meta leading-[1.55rem] transition-colors duration-150 hover:bg-paper-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue max-md:px-4"
+              className={cn(
+                "flex min-w-0 flex-1 cursor-pointer items-start gap-2 py-2.5 pl-6 text-left transition-colors duration-150 hover:bg-paper-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue max-md:pl-4",
+                shown.link === null ? "pr-6 max-md:pr-4" : "pr-3",
+              )}
             >
               {/* The mark sits on the first line of the words. */}
               <span aria-hidden="true" className="flex h-[1lh] w-3.5 shrink-0 items-center justify-center">
@@ -148,6 +219,16 @@ export function RunStrip() {
                 <Figures text={shown.elapsed} />
               </span>
             </button>
+            {shown.link !== null && (
+              <Link
+                to={shown.link.href}
+                tabIndex={open ? undefined : -1}
+                className="flex shrink-0 items-start whitespace-nowrap py-2.5 pr-6 pl-3 font-semibold text-blue no-underline transition-colors duration-150 hover:bg-paper-2 hover:underline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue max-md:pr-4"
+              >
+                {shown.link.label} →
+              </Link>
+            )}
+            </div>
           )}
         </div>
       </div>

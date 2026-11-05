@@ -71,7 +71,9 @@ export function StatusMark({
       aria-hidden="true"
       data-tone={tone}
       className={cn(
-        "inline-block size-1.5 flex-none",
+        // A mark that changes state (a step landing: blue to green) eases
+        // its colour over 150 ms (round 9).
+        "inline-block size-1.5 flex-none transition-colors duration-150 ease-[ease]",
         STATUS_MARK_TONES[tone],
         breathing && tone === "running" && "anim-breathe",
         className,

@@ -33,17 +33,17 @@ Section titles (report order): Key findings (written last, shown first); 1 Why t
 
 ## Owner feedback round 1 (2026-11-04) and the lead's answers
 1. Card clean-up; rounds produced repeated Searching / Screening rows. → One merged row "Searching and screening"; round detail in the activity line. Completed rows are one-liners with the key count and a link; upcoming rows are names only; the duplicate card title goes.
-2. Better navigation between the Agent tab and the task. → Every finished row links to its output; the Result tab carries the run strip with "Follow in the Agent tab →"; signposts stay.
+2. Better navigation between the Agent tab and the task. → Every finished row links to its output; the Result tab carries the run status bar with "Follow in the Agent tab →"; signposts stay.
 3. Stall counter is noisy for short pauses. → No counter. Short pauses show nothing. After 2 minutes of silence the action line reads "Still working on this step" (no timer, count stays). Drop entirely if the owner prefers.
 4. Writing: show the section, then what it is doing in that section. → Two lines: section line persistent, action line changes under it.
-5. Early Result tab needs refining. → Report-shaped page: title, run strip, landed outputs as rows. Section titles cannot appear before writing starts (the writer proposes them); moving the proposal to after Mapping is a backend option for the owner.
+5. Early Result tab needs refining. → Report-shaped page: title, run status bar, landed outputs as rows. Section titles cannot appear before writing starts (the writer proposes them); moving the proposal to after Mapping is a backend option for the owner.
 6. Proposed sections should display in the report with subtly pulsing lines. → At the skeleton every section shows 2 to 3 pulsing placeholder lines until its prose arrives.
 7. How are the writer's tool-call turns shown in the Result tab? → The active section shows the action line ("Looking for: …") above its pulsing lines; prose replaces it when streaming starts.
 
 ## Owner feedback round 2 (2026-11-04) and the lead's answers
 1. Show which claims have been sent for repair. → When the check returns, the sentences it failed get a dotted underline and a small grey "being revised" at the end; when the repair lands the text is replaced, the underline becomes a thin solid one and the word becomes "revised" with the old wording on hover or tap. Sentences that passed get nothing.
-2. The "Checked" / "Writing" pills look busy and generated. → No pills anywhere. Section state is carried by one breathing dot after the heading while the section is being written or checked, and by nothing once it is done. The "Written last" note on Key findings becomes a plain grey sentence under the heading. The run strip and the signpost bubbles use words, not chips.
-3. Early Result tab: the links to other tabs are redundant with the strip and vanish once writing starts. → Dropped. Early Result tab = the run strip, the question as the title, and one grey sentence: "The report's sections are set out when writing begins." Nothing else.
+2. The "Checked" / "Writing" pills look busy and generated. → No pills anywhere. Section state is carried by one breathing dot after the heading while the section is being written or checked, and by nothing once it is done. The "Written last" note on Key findings becomes a plain grey sentence under the heading. The run status bar and the signpost bubbles use words, not chips.
+3. Early Result tab: the links to other tabs are redundant with the status bar and vanish once writing starts. → Dropped. Early Result tab = the run status bar, the question as the title, and one grey sentence: "The report's sections are set out when writing begins." Nothing else.
 4. General polish: a design review with the frontend design skills, against DESIGN.md, applied to the mock.
 
 ## The running card (revised)
@@ -80,11 +80,11 @@ Then the section line becomes "Section 4 of 7 · Information and outreach" and t
 Caption: "During writing: the section first, then what the model is doing in it."
 
 ### 5. Result tab, early in the run
-Result selected. Under the tabs, the run strip (same as scene 7): "● Searching and screening · 184 found so far · 6 min", status only, its text advancing through the stages as in the Agent card. The page is the report-to-be: the question as the title, then one grey sentence: "The report's sections are set out when writing begins." Nothing else. (Round 2 feedback: the output links were redundant with the strip.)
-Caption: "The Result tab is the report before it exists. The strip says where the run is."
+Result selected. Under the tabs, the run status bar (same as scene 7): "● Searching and screening · 184 found so far · 6 min", status only, its text advancing through the stages as in the Agent card. The page is the report-to-be: the question as the title, then one grey sentence: "The report's sections are set out when writing begins." Nothing else. (Round 2 feedback: the output links were redundant with the status bar.)
+Caption: "The Result tab is the report before it exists. The status bar says where the run is."
 
 ### 6. Result tab, streaming
-Run strip under the tabs: "● Writing · Section 3 of 7 · 14 min", status only. Skeleton of 8 headers in report order, each with 2 to 3 placeholder lines of varying width that pulse softly (1.6 s opacity, same as the dot) until that section's prose arrives. No pills or chips anywhere (round 2 feedback). Key findings at the top with a plain grey sentence under the heading, "Written last, after the sections are checked.", and its pulsing lines. Sections 1 and 2 are done: heading, then a short line of real prose each, no marker ("Take-up of the free entitlement is lowest among the families it was designed for." and "Lone parents and families on Universal Credit are the least likely to hold a place."). Section 3 is the active one:
+Run status bar under the tabs: "● Writing · Section 3 of 7 · 14 min", status only. Skeleton of 8 headers in report order, each with 2 to 3 placeholder lines of varying width that pulse softly (1.6 s opacity, same as the dot) until that section's prose arrives. No pills or chips anywhere (round 2 feedback). Key findings at the top with a plain grey sentence under the heading, "Written last, after the sections are checked.", and its pulsing lines. Sections 1 and 2 are done: heading, then a short line of real prose each, no marker ("Take-up of the free entitlement is lowest among the families it was designed for." and "Lone parents and families on Universal Credit are the least likely to hold a place."). Section 3 is the active one:
 - A breathing dot after the heading text (the only state signal). Under the heading, before any prose, the action line in grey, the same text as the Agent card: "Looking for: evidence on subsidy uptake among low-income households" (3 s), "Reading findings" (2 s), "Looking for: childcare cost as a barrier to take-up" (3 s), above the pulsing lines.
 - Then the action line and the pulsing lines go and prose arrives in chunks of 2 to 6 words every 80 to 160 ms, plain text, no Markdown. Use this text (three short paragraphs; the builder may shorten but not change register):
   "Cost is the barrier families name most often. Across the 12 studies that asked parents directly, between a third and a half said the remaining charges for meals, hours outside the funded entitlement, or deposits stopped them taking a place. The effect is strongest for families on Universal Credit and for lone parents.
@@ -100,16 +100,16 @@ Caption: "Prose streams as it is written. A sentence being fixed blurs, then set
 
 ### 7. Elsewhere in the app
 Three panels:
-- Sources tab with the lifecycle bar. Under the tabs the run strip: "● Writing · Section 4 of 7 · 14 min", status only, no link and no mark. When the run finishes it becomes "Report ready · Read it →" in green, the one link it ever carries.
+- Sources tab with the lifecycle bar. Under the tabs the run status bar: "● Writing · Section 4 of 7 · 14 min", status only, no link and no mark. When the run finishes it becomes "Report ready · Read it →" in green, the one link it ever carries.
 - A browser tab strip mock showing the title change from "Childcare take-up · Policy Atlas" to "● Report ready · Policy Atlas".
 - Task list row: status dot, "Writing · Section 4 of 7 · 14 min" instead of "Analysing the evidence…", then "Complete" with the green dot.
 Caption: "The run is visible from every tab, and you are told when it finishes."
 
 ### 8. Re-run and reconnect
-- Result tab with an existing report and one plain line above it: "This report is from 3 November. A new run started 2 min ago." (The strip above reads "Searching and screening · 112 found so far · 2 min".) No button: the strip above it carries the stage, and the sidebar rail and the Agent tab are the routes to the run.
+- Result tab with an existing report and one plain line above it: "This report is from 3 November. A new run started 2 min ago." (The status bar above reads "Searching and screening · 112 found so far · 2 min".) No button: the status bar above it carries the stage, and the sidebar rail and the Agent tab are the routes to the run.
 
 ## Design review round 2 (lead decisions, 2026-11-04)
-Review note: `design-review-round2.md`. Card directions A (tinted, refined), B (paper ledger, recommended), C (step spine) are in the mock behind a "Card: A | B | C" control; the owner chooses. Accepted from the review: paper instead of the green fill in B and C; yellow for running everywhere; counts right-aligned; no pills; repair treatment as in round 2; skeleton bars on the prose pitch; the two copy changes above. Not applied: duration band (owner: out), stop button (owner: cancel deferred), pulsing only the active section (owner asked for all proposed sections to pulse), rewriting the middot data lines as sentences (meta lines keep middots; the voice rule is about prose). For the build: the Result-tab, strip and task-row dots must stop 1.5 s after the last update like the card dot; consider a 0.5 trough for the yellow dot on white.
+Review note: `design-review-round2.md`. Card directions A (tinted, refined), B (paper ledger, recommended), C (step spine) are in the mock behind a "Card: A | B | C" control; the owner chooses. Accepted from the review: paper instead of the green fill in B and C; yellow for running everywhere; counts right-aligned; no pills; repair treatment as in round 2; skeleton bars on the prose pitch; the two copy changes above. Not applied: duration band (owner: out), stop button (owner: cancel deferred), pulsing only the active section (owner asked for all proposed sections to pulse), rewriting the middot data lines as sentences (meta lines keep middots; the voice rule is about prose). For the build: the Result-tab, status bar and task-row dots must stop 1.5 s after the last update like the card dot; consider a 0.5 trough for the yellow dot on white.
 - The reconnecting banner (existing component, now mounted): "Reconnecting to live updates… Updates may be stale." shown for 3 s then gone.
 Caption: "An old report is never mistaken for the new one. A dropped connection says so."
 
@@ -131,7 +131,7 @@ Grounding: `grounding-planning-conversation.md` (27 friction points). Design rul
 - **The plan card starts the run for both capabilities.** Evidence search: "Start the search". Options scoping: "Confirm and build the baseline". Friction 12.
 - **Streaming (block G) runs through all of it.** The reply streams; "Drafting the plan" holds the place; the opening turn streams in the Agent tab instead of blocking on /new. Friction 1.
 - **The sidebar is the same agent.** On any other tab the open sidebar shows the compact progress line, the thread tail, a pending check-in, and the composer locked with the same placeholder as the Agent tab. Its header reads "Task Agent" with no link (the Agent tab in the lifecycle bar is the full view); plan links open the plan document. Friction 17, 18.
-- **Two routes to the agent, never three (owner, rounds 4 and 5).** On any non-Agent tab the sidebar rail's own blue diamond opens the sidebar in place, and the Agent tab is the full view. Nothing else links to the agent: the run strip is status only; the re-run notice has no button; there is no separate paused banner. While a check-in waits, the strip turns orange, "Paused · a check-in is waiting on you", and opening the sidebar from its rail lands on the check-in, which glows once; on the Agent tab the card glows in place.
+- **Two routes to the agent, never three (owner, rounds 4 and 5).** On any non-Agent tab the sidebar rail's own blue diamond opens the sidebar in place, and the Agent tab is the full view. Nothing else links to the agent: the run status bar is status only; the re-run notice has no button; there is no separate paused banner. While a check-in waits, the status bar turns orange, "Paused · a check-in is waiting on you", and opening the sidebar from its rail lands on the check-in, which glows once; on the Agent tab the card glows in place.
 - **New content marks its tab.** When a stage lands something the user has not seen (sources, the landscape, findings, a report section, the report), the lifecycle tab gets a small dot; it clears when the tab is visited. The check-in keeps its orange dot. Friction 21.
 - **Plan is one click away everywhere.** A "Plan" control sits in the task nav beside the tabs and opens the plan document; Escape closes it. Friction 25.
 - **One stop.** The check-in card has one "Stop the run" link, bottom right; no duplicate option. Friction 13.
@@ -157,14 +157,14 @@ Agent tab, card C with Searching and screening done ("312 found · 118 relevant 
 Caption: "A check-in reads like a question. The recommended answer is first, with its reason."
 
 ### 13. The same agent in the sidebar (block I)
-Sources tab at 1100 wide with the sidebar open on the right (320 px). The run strip under the tabs reads "Searching and screening · screening 61 new abstracts · 6 min", status only. The sidebar opens from the rail's diamond. In the sidebar, top to bottom: header "Task Agent"; a compact run line (dot, "Searching and screening · 6 min"); the thread tail, which is the card's current line ("Searching and screening" in navy-grey with "screening 61 new abstracts · 107 relevant so far" under it); the composer locked with the placeholder "Replanning unlocks when this run finishes." Then, at 4 s, the run pauses: the compact line becomes orange "Paused · check-in after searching" and the check-in card from scene 12 appears in the sidebar at reduced width (radio list, no facts line), answerable there. Answering returns the line to "Classifying · 40 of 118 classified · 7 min". (Aligned 2026-11-04 after the builder flagged the writing/searching mismatch.)
+Sources tab at 1100 wide with the sidebar open on the right (320 px). The run status bar under the tabs reads "Searching and screening · screening 61 new abstracts · 6 min", status only. The sidebar opens from the rail's diamond. In the sidebar, top to bottom: header "Task Agent"; a compact run line (dot, "Searching and screening · 6 min"); the thread tail, which is the card's current line ("Searching and screening" in navy-grey with "screening 61 new abstracts · 107 relevant so far" under it); the composer locked with the placeholder "Replanning unlocks when this run finishes." Then, at 4 s, the run pauses: the compact line becomes orange "Paused · check-in after searching" and the check-in card from scene 12 appears in the sidebar at reduced width (radio list, no facts line), answerable there. Answering returns the line to "Classifying · 40 of 118 classified · 7 min". (Aligned 2026-11-04 after the builder flagged the writing/searching mismatch.)
 Caption: "The sidebar shows the same run and the same check-in. Nothing is only on the Agent tab."
 
 ### 14. Finding your way (block J)
 Three panels, as in scene 7:
 - The task nav with a new "Plan" control to the left of the lifecycle tabs (grey text, underline on hover). The lifecycle tabs during a run, the user on Sources: when a section lands, a small navy dot appears beside "Result"; the mock shows it appear, then the user clicks Result (the tab underlines) and the dot goes. The Agent tab shows an orange dot when a check-in is pending.
 - The plan document open as a side panel (not centred) over the Result tab with the hint line "Esc closes" at its top right; the mock closes it after 3 s.
-- The History tab with the run strip in its paused state: orange dot, "Paused · a check-in is waiting on you", no link. The sidebar rail's diamond opens the sidebar with the check-in in view and its orange rule briefly brighter (one 900 ms glow, honouring reduce-motion).
+- The History tab with the run status bar in its paused state: orange dot, "Paused · a check-in is waiting on you", no link. The sidebar rail's diamond opens the sidebar with the check-in in view and its orange rule briefly brighter (one 900 ms glow, honouring reduce-motion).
 Caption: "New content marks its tab. The plan is one click from anywhere. Opening the sidebar lands on the check-in."
 
 ## Block K (owner 2026-11-04): the Options Scoping Result tab during the longlist build
@@ -176,13 +176,13 @@ Grounding: `grounding-scoping-result-tab.md`. What the pipeline can honestly sho
 - The list carries no qualifier word: the stage line and the moving rows say it is being built. The view knows it is building because the longlist does not exist yet while a walk runs; no API flag.
 
 ### 15. The scoping Result tab during the build (block K)
-Scoping task "Reducing youth unemployment", Result tab, card C elsewhere. Run strip under the tabs: "● Suggesting options · 1 min" then advancing. The page is the longlist-to-be:
+Scoping task "Reducing youth unemployment", Result tab, card C elsewhere. Run status bar under the tabs: "● Suggesting options · 1 min" then advancing. The page is the longlist-to-be:
 - Title: "Longlist". Under it one stage line in the activity style, changing with the run: "Searching for each option · 4 of 12 done", "Reading the abstracts · 1,180 of 2,410", "Clustering into options · options may be folded together or added", "Writing what each option would take", "Applying your constraints", "Grouping into themes", "Shortlisting".
 - Rows appear as soon as suggest completes (2 s): 12 rows, each a paper row with the option name, a small grey origin word ("from your report", "suggested", "added by you") and, on the right, a per-row line. Use these names: Youth guarantee with a job or training offer within four months; Wage subsidies for employers hiring under-25s; Expanded apprenticeship incentives; Careers advice in every secondary school; Sector-based work academies; Mental health support in job centres; Transport subsidies for young job seekers; Intermediate labour market programmes; Digital skills bootcamps; Youth hubs co-located with Jobcentre Plus; Enterprise allowance for young founders (added by you); Conditionality reform for under-25s (added by you).
 - Per-row line while the fan-out runs: a breathing dot and "Searching" on rows whose child is running (up to 10 at once), "Searched · 312 found" when a child completes (vary the counts 140 to 410), "Queued" in grey for the two waiting. The stage line counts up "4 of 12 done" to "12 of 12".
 - Then the stage line reads "Reading the abstracts · 1,180 of 2,410" rising; rows are unchanged (no per-row count yet).
 - Then "Clustering into options · options may be folded together or added" with the dot; after 3 s the list changes once: "Transport subsidies for young job seekers" folds into "Youth hubs co-located with Jobcentre Plus" (the row slides under it as a grey line "Folded into Youth hubs"), and two new rows appear at the end with the origin word "found in the evidence": "Employer-led pre-apprenticeship traineeships" and "Benefit run-ons when a young person starts work". Every remaining row's right-hand line becomes a count: "38 documents", "12 documents" and so on.
-- Then "Writing what each option would take" with the dot for 3 s; then, in one wave, every row gains a lever line in grey under its name (for example "Supply-side · Standard ambition"); the stage line moves to "Applying your constraints" for 2 s; then in one wave two rows move to a collapsed "Excluded · 2" group at the bottom with a one-line reason each ("Out of scope: not a youth measure"); then "Grouping into themes" for 2 s; then the rows regroup under three theme headings ("Getting into work", "Staying in work", "Advice and support") with a 300 ms rise; then "Shortlisting" for 2 s; then four rows gain a small navy "Shortlist" word, the stage line goes, and the strip reads "The longlist is ready · Read it →" in green.
+- Then "Writing what each option would take" with the dot for 3 s; then, in one wave, every row gains a lever line in grey under its name (for example "Supply-side · Standard ambition"); the stage line moves to "Applying your constraints" for 2 s; then in one wave two rows move to a collapsed "Excluded · 2" group at the bottom with a one-line reason each ("Out of scope: not a youth measure"); then "Grouping into themes" for 2 s; then the rows regroup under three theme headings ("Getting into work", "Staying in work", "Advice and support") with a 300 ms rise; then "Shortlisting" for 2 s; then four rows gain a small navy "Shortlist" word, the stage line goes, and the status bar reads "The longlist is ready · Read it →" in green.
 - Reduce motion: no slides; each wave appears at once.
 Caption: "The longlist exists from the first minute. Rows search, fold, fill and group as the build moves."
 
@@ -208,7 +208,7 @@ Nesta palette from `index.css`: navy `#0f294a` structural text, grey `#646363` s
 
 ## Rulings at the contract gate (folded into the scenes in version 4)
 
-- Two routes to the agent, never three; the strip is status only; no paused banner; no
+- Two routes to the agent, never three; the status bar is status only; no paused banner; no
   button on the re-run notice (owner, 2026-11-04). Folded into the block rules and scenes 5,
   6, 7, 8, 13 and 14.
 - Per-stage timings on the card: each done row carries its wall time after its count,
@@ -225,7 +225,7 @@ Nesta palette from `index.css`: navy `#0f294a` structural text, grey `#646363` s
   on staging and production is a mapping bug (`stage_for_payload`'s `screen_full` guard tests
   the wrong field); fixed in this slice, and the full-text screen shows as a line on the one
   merged row.
-- The mock (version 7) predates these rulings and still shows round counts, the strip's
+- The mock (version 7) predates these rulings and still shows round counts, the status bar's
   diamond, the eyebrow and "provisional"; the annex, not the mock, is the authority.
 
 ## Rulings during the build (lead, 2026-11-05)
@@ -243,12 +243,12 @@ Nesta palette from `index.css`: navy `#0f294a` structural text, grey `#646363` s
 
 - The running card has no title line (the top line is the state word, the elapsed time and
   Minimise); "See plan" leaves the card (the Plan control is one click from anywhere).
-- The strip's finish wording per walk: "Report ready", "The baseline is ready", "The longlist is
+- The status bar's finish wording per walk: "Report ready", "The baseline is ready", "The longlist is
   ready", "The option's search is done", "The shortlist is proposed", each then "· Read it →", the
   whole line in green. A colleague who cannot answer a check-in sees "Paused · <row> · <elapsed>".
 - Failed and skipped rows read "Stopped" and "Skipped".
 - The breathing dot's lowest opacity is 0.5 (0.35 nearly vanished on white).
-- The strip shows the writer's whole section line while writing; shortening it to "Section n of M"
+- The status bar shows the writer's whole section line while writing; shortening it to "Section n of M"
   is a polish item for the owner pass.
 - The done row's counts and nouns come on the `stage.completed` frame from the server; the client
   keeps no table.
@@ -280,7 +280,7 @@ Nesta palette from `index.css`: navy `#0f294a` structural text, grey `#646363` s
 
 - Polish round 1 (agent) follow-ups by the lead: "A new run started just now" under one minute
   (the minute count may be zero); no re-run line over the baseline while a longlist walk runs
-  (it does not rewrite the report); the strip's writing state keeps "Section n of M" and drops
+  (it does not rewrite the report); the status bar's writing state keeps "Section n of M" and drops
   the title. A check-in option shows the server's sentence and the planner's reason on two
   lines; the annex's reason-only form is the mock's shape. The mid-write failure banner's copy
   and the plan panel's arrival motion are deferred to the owner pass.
@@ -296,7 +296,7 @@ Nesta palette from `index.css`: navy `#0f294a` structural text, grey `#646363` s
    the Result tab carries a small "See the plan" link under its title (before and after the
    report exists). Both open the plan side panel.
 3. "Esc closes" is removed from the plan view (Escape still closes it).
-4. The sidebar's pane shows no running card: the strip and the sidebar's run line already say
+4. The sidebar's pane shows no running card: the status bar and the sidebar's run line already say
    where the run is.
 5. "Categorising" becomes "Classifying" everywhere (the row label for classify and appraise, the
    activity line "n of M classified", the step verb). The row key `categorise` is unchanged.
@@ -365,7 +365,7 @@ proposal. No title repeat, no card frame.
 
 Owner, 2026-11-05: while the Task Agent is working (the "Drafting the plan" line under a
 streaming reply), the Policy Atlas fold mark turns in place of the yellow dot; it holds still
-after a dropped connection and under reduced motion. The run's dots (card rows, strip, Result
+after a dropped connection and under reduced motion. The run's dots (card rows, status bar, Result
 tab) stay dots.
 
 Owner, 2026-11-05: the scope card's chips are grouped by what they constrain, each group
@@ -395,10 +395,10 @@ filters: c").
    completed section's frame carries prose only, and the numbered markers are assigned when
    the whole report is read, so markers cannot show per section without carrying the section's
    claims on the frame and numbering provisionally (not in this slice).
-4. The minimised card, the dock and the strip say the same words in the same style (accepted;
+4. The minimised card, the dock and the status bar say the same words in the same style (accepted;
    folded into item 5).
 5. Where progress lives: the owner accepts the lead's recommendation of one in-chat trace in
-   place of the running card, the minimised card, the dock and the strip, consistent with
+   place of the running card, the minimised card, the dock and the status bar, consistent with
    task 054's `TocTrace`; the design is proposed to the owner before it is built.
 6. The run block's event-log echoes ("Opened an evidence-search run", "Executed a search query
    × 55", "Recorded a steering decision", "Finished the run") leave the Task Agent thread. They
@@ -413,7 +413,7 @@ filters: c").
 ## The run trace (owner, 2026-11-05): one progress surface, in the chat
 
 Replaces the running card in the thread, its minimised state, the dock above the composer, the
-run strip under the lifecycle tabs and the sidebar's run line. Same shape as task 054's
+run status bar under the lifecycle tabs and the sidebar's run line. Same shape as task 054's
 `TocTrace`, so the two capabilities read alike when 054 merges; fed by this slice's event
 stream, so the counts, the links and the paused state stay. Every label is the server's.
 
@@ -575,7 +575,7 @@ fold mark too; the writing section's action line reads "◆ Writing" for the who
    is waiting on you" (the state word in the label style, the rest in grey) with the time at
    the right. No Minimise; the rows, spine and rules as round 6 built them, inside the frame.
    Ended, it folds to the frameless green line as before. The sidebar shows the same card.
-5. owner, 2026-11-05, round 7: the step note withdrawn (it did not look right); the run strip
+5. owner, 2026-11-05, round 7: the step note withdrawn (it did not look right); the run status bar
    returns under the tabs on every non-Agent tab, status only, because it is now the only
    progress surface outside the Agent tab.
 
@@ -611,10 +611,10 @@ Brief: `research/briefs/round-8-workspace.md` (lead decisions). Built as below.
    over 150 ms while the card eases to its settled height and across to the user's indent over
    300 ms on the strong ease-out; the surface and the green rule ease in with it; the settled
    words rise in; the stepper line folds away. Reduced motion: a cut.
-8. **The strip** starts after the rail from `md` up (full width below), and the whole strip is a
+8. **The status bar** starts after the rail from `md` up (full width below), and the whole status bar is a
    button that opens the Task Agent in the sidebar (the Agent tab below `md`); step label
    semibold navy, activity grey, time grey and right-aligned, 10 px vertical padding, the mark
-   on the first line. The owner reversed contract D8's "status only" for the strip (2026-11-05,
+   on the first line. The owner reversed contract D8's "status only" for the status bar (2026-11-05,
    round 8).
 9. **The rail** shows the static fold mark, named "Task Agent", with no hover status and no
    timer.
@@ -646,27 +646,96 @@ Lead rulings on the round-8 build (2026-11-05):
 - lead, round 8: the Writing row's link keeps "Report →" (to the Result tab), running and done.
 - lead, round 8: "Show steps" under the top line's words, staying put as the rows open; "See
   plan" at the foot of the open rows.
-- lead, round 8: the run strip steps aside while the Task Agent is open in the sidebar (its
+- lead, round 8: the run status bar steps aside while the Task Agent is open in the sidebar (its
   trace shows the same words) and returns when the sidebar shuts or shows another chat; below
   `md`, where the sidebar does not show, it stays.
 - lead, round 8: the agent's rulings above are accepted (the past run's card is not a landmark,
   a finish that is a sentence keeps its case, the top line's time at Meta size, the Line 2
   placeholder bar, no pulse while paused).
 
+## Owner round 9 (2026-11-05, night, live-run notes): the page
+
+Brief: `research/briefs/round-9-page.md` (lead decisions); the animation sweep
+`research/animation-opportunities.md`, entries 1 to 10 with the lead's rulings (a) to (d).
+Built as below.
+
+1. **Search queries, live and at the top.** All sources opens with the queries block. While the
+   search runs it is open under "Search queries": one table at Meta size, hairline rows, the
+   backend once per group as a row-group label, each query as it goes out (a citation pass's or
+   lookup's description in grey), a pulsing bar in Results until the count returns, then the
+   count in tabular figures. The sources table and its count line wait for the first results and
+   rise in together. Once the search ends the block folds to "12 search queries · 312 results ·
+   Show"; the chevron opens the table; the committed coverage replaces the live rows in place.
+   Queries wrap on words.
+2. **The activity line during search** renders what the server sends ("searching · 184 found ·
+   <query>", "following citations · 184 found"); the status bar truncates it on one line.
+3. **The run status bar's link** (the strip is renamed the run status bar everywhere, code
+   included; owner, round 9). A bar of two controls: the words (the Task Agent button,
+   unchanged) and, after the time, the running step's view ("Sources →", "Landscape →",
+   "Themes →", "Report →") while the reader is not on it and the run is not paused. Keyboard
+   order words, then the link.
+4. **The chips during the check** go from the muted chip to the checked marker's look at the
+   peak (Blue Wash, the marker's blue border and text) and back, 1.2 s, 150 ms apart; the judged
+   marker is unchanged.
+5. **Themes while assigning.** From the found themes until the stage ends the Themes subtab lists
+   them in the final layout, name and description, with a pulsing bar where each count will be;
+   the counts fade in place, no reorder and no remount. The three anonymous rows remain only
+   until the themes are found.
+6. **Fluid appearance.** One arrival (`anim-rise`, now on the strong ease-out) for blocks that
+   appear after a view's first paint; the history holds still. The Task Agent thread eases to its
+   new height as it grows (growth only), the pin following, so it glides rather than jumps. Sweep
+   entries applied: 1 the thread makes room; 2 history holds still; 3 the check-in rises, its ring
+   blooms 150 ms after, it settles on the choice and its confirm step eases; 4 the trace eases
+   its steps and folds over 200 ms, the plan card leaves as the trace arrives; 5 a decision card
+   lays out its rows in turn; 6 the reply is paced; 7 values and rows landing on Sources and the
+   found themes fade in (the Landscape chart's fade is the other builder's file); 8 the report's
+   first words keep the placeholder height; 9 the status bar is a cut on a tab switch; 10 one
+   curve, one breathing rhythm for skeletons (`animate-pulse` gone outside the Landscape file),
+   the footer and jump-to-end on the strong ease-out, a sheet's exit along its edge.
+7. **The top nav's hover.** The blue rule grows from the centre on hover and keyboard focus over
+   200 ms and shrinks back; the active rule full and still; the lifecycle tabs the same; under
+   reduced motion it appears without growing.
+
+Lead rulings on the sweep (2026-11-05): (a) DESIGN.md's "a row that lands rises in once" is
+dropped; a landing row keeps its place, its counts and time fade in and its square eases to
+green. (b) A check-in settles the moment the user chooses, as part cards do, and comes back open
+with its notice if the answer fails. (c) The plan document arrives with the sweep's values. (d)
+`JumpToEnd` loses `rounded-full`.
+
+Owner, round 9 (relayed by the lead): "Read in full" overclaims. The Sources status chip reads
+"Full text" ("Abstract only" stays); the source's status line "Full text collected"; the CSV
+column "Full text"; the Abstract-only hover "The full text hasn't been collected…"; the scoping
+longlist's coverage line "no full texts collected".
+
+Rulings on the build (agent, for the lead to confirm):
+- The growing rule grows from the centre (the brief's first option): it says nothing about
+  direction, and items differ in width.
+- The status bar's link hides on the view it opens, judged by the path (the Themes subtab is the
+  Sources index, so it does not hide "Sources →" there) and, for "Report →", by the Result tab.
+- While the search runs with no sources in, the "No sources yet" card is not shown: the queries
+  are the page until results land.
+- The folded line's results total is the sum of the Results column, live or committed, so the
+  line and the table agree.
+- A check-in's "Stop the run" also settles the card at once, like an option.
+- The eased height watches the DOM (a MutationObserver), not its size: a size observer started
+  the animation inside its own delivery and the browser reported a "ResizeObserver loop" on every
+  arrival.
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |
 |---|---|---|---|---|
-| 1 | build, agent pass | 2026-11-05 | Plan side panel lies over the page instead of squeezing the report; task nav keeps a gutter before Plan; the card's step in progress keeps its clock on the label line on phones; the strip's elapsed time never truncates; in-card inputs span the card on phones | lead |
+| 1 | build, agent pass | 2026-11-05 | Plan side panel lies over the page instead of squeezing the report; task nav keeps a gutter before Plan; the card's step in progress keeps its clock on the label line on phones; the status bar's elapsed time never truncates; in-card inputs span the card on phones | lead |
 | 2 | build, owner pass | 2026-11-05 | six notes applied (above); the transcript-read bug fixed; Classifying | owner (round 1 of 3) |
 | 3 | build, owner pass (round 2 of 3) | 2026-11-05 | settled part cards name the plan's outcome at the conversation's text size; stage signposts under the card removed; Mapping links to Themes | owner |
 | 4 | build, owner pass (round 3 of 3) | 2026-11-05 | option order as the planner gives it; no reason line; settled lines show the question and the chips; settled lines rise in | owner |
-| 5 | build, owner questions on a live run | 2026-11-05 | no Result footer; automatic swap to the report; no event-log echoes in the thread; settled scope lines per group; the streaming fix; the run trace with the blue square mark in place of the card, dock and strip | owner |
+| 5 | build, owner questions on a live run | 2026-11-05 | no Result footer; automatic swap to the report; no event-log echoes in the thread; settled scope lines per group; the streaming fix; the run trace with the blue square mark in place of the card, dock and status bar | owner |
 | 6 | build, owner round 6 (live-run notes) | 2026-11-05 | settled part cards take the user bubble's surface, the part's name a grey label; the live trace is the running card's body (rows in plan order on a spine, hairline rules, the fold mark on the step in progress, no step count or last-finished line); the shut rail shows the run's elapsed minutes under its mark and a step note slides out of it as each step finishes; the rail's mark turns on the Result tab too | owner |
-| 7 | build, owner round 7 (live-run notes) | 2026-11-05 | citation marks while streaming are the final marker's muted chip, and checked markers stay; the live page is the final page and the swap updates it in place; streamed prose paced with word snapping, frozen paragraphs and a 150 ms fade per batch; the trace is the running card again; the step note withdrawn and the run strip returns | owner |
-| 8 | build, owner round 8 (live-run notes) | 2026-11-05 | the ended trace is the same card (finish on the top line, rows behind "Show steps"); the card reads as a table with right-aligned counts, times and links; the running step links to its page and its activity line breathes; Searching and Screening as two rows; "Change" on its own line; one container for the decision card's settle; the strip starts after the rail and opens the Task Agent; the rail's mark static with no status or timer; one mark size in the task list; no Sources tab mark; pulsing placeholders on the Sources tab keyed to the live stage, with a 5 s refetch | owner |
-| 9 | review, agent pass | | | lead |
-| 10 | review, owner pass | | | owner |
+| 7 | build, owner round 7 (live-run notes) | 2026-11-05 | citation marks while streaming are the final marker's muted chip, and checked markers stay; the live page is the final page and the swap updates it in place; streamed prose paced with word snapping, frozen paragraphs and a 150 ms fade per batch; the trace is the running card again; the step note withdrawn and the run status bar returns | owner |
+| 8 | build, owner round 8 (live-run notes) | 2026-11-05 | the ended trace is the same card (finish on the top line, rows behind "Show steps"); the card reads as a table with right-aligned counts, times and links; the running step links to its page and its activity line breathes; Searching and Screening as two rows; "Change" on its own line; one container for the decision card's settle; the status bar starts after the rail and opens the Task Agent; the rail's mark static with no status or timer; one mark size in the task list; no Sources tab mark; pulsing placeholders on the Sources tab keyed to the live stage, with a 5 s refetch | owner |
+| 9 | build, owner round 9 (live-run notes) | 2026-11-05 | the search queries at the top of All sources, live as they go out and folded once the search ends, the sources table waiting for the first results; the activity line names the query that is out; the run status bar (renamed from the run strip) links to the running step's view; the checking chips run a blue wave; the found themes show while their documents are assigned; the nav and lifecycle tabs grow their blue rule on hover; arrivals: only what arrives after a view's first paint rises, the thread makes room for it, a decision card lays itself out, the reply comes at a steady pace, values land with a fade, the check-in settles on the choice, the trace eases its steps and its fold, the plan card leaves as the trace arrives, sheets leave the way they came, the plan document arrives from its edge; "Read in full" becomes "Full text" | owner |
+| 10 | review, agent pass | | | lead |
+| 11 | review, owner pass | | | owner |
 
 ## Deferred polish
 

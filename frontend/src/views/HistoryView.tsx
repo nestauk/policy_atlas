@@ -42,7 +42,7 @@ export function HistoryView() {
       {isPending && (
         <div aria-busy="true" aria-label="Loading the history" className="space-y-2">
           {Array.from({ length: 6 }).map((_, index) => (
-            <div key={index} className="h-12 animate-pulse border border-line bg-paper-2" />
+            <div key={index} className="h-12 anim-breathe border border-line bg-paper-2" />
           ))}
         </div>
       )}

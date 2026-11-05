@@ -381,7 +381,7 @@ export function CitationProvenanceBlock({
       <div className="mt-2 flex flex-wrap gap-1.5">{chips}</div>
       <div className="mt-3 space-y-2 text-body leading-relaxed">
         {context.isPending && (
-          <p role="status" className="animate-pulse text-body text-grey">
+          <p role="status" className="anim-breathe text-body text-grey">
             Loading surrounding context…
           </p>
         )}
@@ -1132,7 +1132,7 @@ export function SourceDossier({
          *  resolved, the dossier query is disabled and pending forever —
          *  isPending would render a stuck (and duplicate) loading line. */}
         {((!byId && evidence.isPending) || dossier.isLoading) && (
-          <p role="status" className="animate-pulse text-body text-grey">
+          <p role="status" className="anim-breathe text-body text-grey">
             Loading the dossier…
           </p>
         )}
@@ -1237,12 +1237,23 @@ const PLACEHOLDER_WIDTHS: readonly (readonly number[])[] = [
   [91, 64],
 ];
 
-function PlaceholderLines({ index, still, className = "" }: { index: number; still: boolean; className?: string }) {
+function PlaceholderLines({
+  index,
+  still,
+  className = "",
+  leaving = false,
+}: {
+  index: number;
+  still: boolean;
+  className?: string;
+  /** Fading out over the first words (round 9). */
+  leaving?: boolean;
+}) {
   const widths = PLACEHOLDER_WIDTHS[index % PLACEHOLDER_WIDTHS.length];
   return (
     <div
       aria-hidden="true"
-      data-testid="placeholder-lines"
+      data-testid={leaving ? "placeholder-lines-leaving" : "placeholder-lines"}
       className={`flex max-w-prose-measure flex-col gap-4 py-2 max-md:gap-3.5 ${still ? "" : "anim-breathe"} ${className}`}
     >
       {widths.map((width, line) => (
@@ -1816,7 +1827,7 @@ export function settleStep(
 
 /** The section lines the writer's ticks carry for the two slots that are
  *  not numbered sections (round 8): the key findings and the introduction. */
-const SLOT_LINES: Partial<Record<string, string>> = { key_findings: "Key findings", intro: "Full report" };
+const SLOT_LINES: Partial<Record<string, string>> = { key_findings: "Key findings", intro: "Introduction" };
 
 /** Whether the writer's tick names this section: its section line ends with
  *  the section's title, or is the slot's own line, or the tick has no
@@ -2100,26 +2111,90 @@ function SectionBody({
       </SectionProse>
     );
   }
-  if (draft !== "") {
-    return (
-      <LiveDraft
-        draft={draft}
-        revising={section?.revising}
-        claims={section?.claims}
-        complete={terminal}
-        layout={layoutOf(draft)}
-        checking={checking}
-      />
-    );
-  }
-  if (terminal) {
+  if (terminal && draft === "") {
     return (
       <p className="text-body italic text-grey">
         {section?.focus ? scrub(section.focus) : "Waiting to be written."}
       </p>
     );
   }
-  return <PlaceholderLines index={section?.index ?? 0} still={reduceMotion} />;
+  return (
+    <DraftAfterPlaceholder index={section?.index ?? 0} reduceMotion={reduceMotion}>
+      {draft !== "" ? (
+        <LiveDraft
+          draft={draft}
+          revising={section?.revising}
+          claims={section?.claims}
+          complete={terminal}
+          layout={layoutOf(draft)}
+          checking={checking}
+        />
+      ) : null}
+    </DraftAfterPlaceholder>
+  );
+}
+
+/**
+ * A section's placeholder lines, then its streamed draft in the same box
+ * (task 058, round 9; the animation sweep's entry 8): when the first words
+ * arrive the box keeps the placeholder's height until the text is taller,
+ * so the page below never shrinks and regrows, and the lines fade out over
+ * the first words in 150 ms. Under reduced motion the height still holds
+ * (it is layout, not motion) and the lines go at once.
+ */
+function DraftAfterPlaceholder({
+  index,
+  reduceMotion,
+  children,
+}: {
+  index: number;
+  reduceMotion: boolean;
+  /** The live draft, or null before the first words. */
+  children: ReactNode;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const placeholderHeight = useRef(0);
+  const hasDraft = children !== null;
+  const [shown, setShown] = useState(hasDraft);
+  const [fading, setFading] = useState(false);
+  if (shown !== hasDraft) {
+    setShown(hasDraft);
+    setFading(hasDraft && !reduceMotion);
+  }
+  useEffect(() => {
+    if (!fading) return undefined;
+    const id = window.setTimeout(() => setFading(false), 160);
+    return () => window.clearTimeout(id);
+  }, [fading]);
+  useLayoutEffect(() => {
+    const outer = box.current;
+    const inner = content.current;
+    if (outer === null || inner === null) return undefined;
+    if (!hasDraft) {
+      placeholderHeight.current = inner.offsetHeight;
+      outer.style.minHeight = "";
+      return undefined;
+    }
+    const hold = placeholderHeight.current;
+    if (hold <= 0 || inner.offsetHeight >= hold || typeof ResizeObserver === "undefined") return undefined;
+    outer.style.minHeight = `${hold}px`;
+    const observer = new ResizeObserver(() => {
+      if (inner.offsetHeight < hold) return;
+      outer.style.minHeight = "";
+      observer.disconnect();
+    });
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, [hasDraft]);
+  return (
+    <div ref={box} className="relative">
+      <div ref={content}>{children ?? <PlaceholderLines index={index} still={reduceMotion} />}</div>
+      {fading && (
+        <PlaceholderLines index={index} still leaving className="anim-fade-out pointer-events-none absolute inset-x-0 top-0 bg-paper" />
+      )}
+    </div>
+  );
 }
 
 /** The code-injected last section's title (`synthesise.py`). */
@@ -2834,7 +2909,7 @@ function ScopingResult({ taskId, building }: { taskId: string; building: boolean
       ) : longlist.isPending ? (
         <main aria-busy="true" aria-label="Loading the longlist" className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="mb-4 h-16 animate-pulse border border-line bg-paper-2" />
+            <div key={i} className="mb-4 h-16 anim-breathe border border-line bg-paper-2" />
           ))}
         </main>
       ) : (
@@ -3037,7 +3112,7 @@ function ArtefactReport() {
     return (
       <main aria-busy="true" aria-label="Loading the report" className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="mb-4 h-24 animate-pulse border border-line bg-paper-2" />
+          <div key={i} className="mb-4 h-24 anim-breathe border border-line bg-paper-2" />
         ))}
       </main>
     );

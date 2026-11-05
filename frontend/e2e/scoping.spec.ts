@@ -349,7 +349,7 @@ test.describe("task 058 options scoping: the gate and the longlist build", () =>
     await seen(page, /^Searching for each option · \d+ of 12 searches done · [\d,]+ sources so far/);
   });
 
-  test("the longlist while it builds: rows search, fold, fill, group, and the strip announces it", async ({
+  test("the longlist while it builds: rows search, fold, fill, group, and the status bar announces it", async ({
     page,
   }) => {
     await watchPage(page);

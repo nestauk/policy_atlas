@@ -200,7 +200,7 @@ export function leverDefinitionFor(
 }
 
 export const SCOPING_PASS_SENTENCE =
-  "Screened on titles and abstracts · nothing read in full · document set not confirmed";
+  "Screened on titles and abstracts · no full texts collected · document set not confirmed";
 
 
 type LonglistCountsOut = components["schemas"]["LonglistCountsOut"];

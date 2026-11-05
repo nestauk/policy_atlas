@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 
 import type { components } from "../../api/gen/types";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { LABEL_CLASS } from "../../ui/brand/label";
+import { useArrives } from "../../ui/motion/arrivals";
 import {
   PLAN_PARTS,
   RISK_APPETITE_LABELS,
@@ -731,6 +732,7 @@ export function PartCard({
   steps,
   summary,
   onSend,
+  arrivalId,
 }: {
   part: PartProposal;
   /** The stepper's name for this part ("Scope"); falls back to the title. */
@@ -744,7 +746,11 @@ export function PartCard({
   summary?: SettledLine[] | null;
   /** Send a message as an ordinary task_agent turn. */
   onSend: (message: string) => void;
+  /** The card's id in the thread's arrivals (round 9): a card that arrives
+   *  after the thread's first paint rises in and lays its rows out. */
+  arrivalId?: string;
 }) {
+  const arrives = useArrives(arrivalId ?? `part:${part.id}`);
   const [staged, setStaged] = useState<ChipEdit[]>([]);
   const [adding, setAdding] = useState(false);
   const [addText, setAddText] = useState("");
@@ -759,7 +765,12 @@ export function PartCard({
 
   const settled = confirmedOption !== null || state.answered || !state.live;
   const { shellRef, boxRef, leaving, justSettled, hadOpenForm } = useSettleMotion(settled);
-
+  // An arriving open card lays itself out (the animation sweep's entry 5):
+  // its chip groups and radio rows fade up 4 px in turn, 80 ms after the
+  // card and 40 ms apart (capped at six), so the eye reads it top-down as it
+  // lands. They stay clickable throughout. None under reduced motion.
+  const cascade = (index: number): { className?: string; style?: CSSProperties } =>
+    arrives && !settled ? { className: "anim-cascade", style: { "--i": index } as CSSProperties } : {};
   // The settled form (owner, 2026-11-05, rounds 6 and 8): the part's name
   // and a green line naming the outcome the plan settled on (`summary`), the
   // recorded choice or the user's words. It reads as the user's: the user
@@ -842,8 +853,8 @@ export function PartCard({
 
       {chips.length > 0 && (
         <div className="mt-3 space-y-2">
-          {chipGroups(chips).map((group) => (
-            <div key={group.heading ?? "chips"}>
+          {chipGroups(chips).map((group, index) => (
+            <div key={group.heading ?? "chips"} {...cascade(index)}>
               {group.heading !== null && <p className={cn(LABEL_CLASS, "mb-1 text-grey")}>{group.heading}</p>}
               <div className="flex flex-wrap items-center gap-1.5">
                 {group.chips.map((chip) => (
@@ -934,7 +945,8 @@ export function PartCard({
       {scopeButton ? (
         <Button
           variant="secondary"
-          className="mt-4 border border-line-2"
+          className={cn("mt-4 border border-line-2", cascade(chipGroups(chips).length).className)}
+          style={cascade(chipGroups(chips).length).style}
           disabled={!interactive}
           data-part-option="primary"
           onClick={looksRight}
@@ -943,11 +955,11 @@ export function PartCard({
         </Button>
       ) : (
         <div role="radiogroup" aria-label={part.title} className="mt-3 flex max-w-prose-measure flex-col gap-1">
-          {orderedOptions(part.options).map((option) => {
+          {orderedOptions(part.options).map((option, index) => {
             const selected = pickedId === option.id;
             const words = optionNeedsWords(option);
             return (
-              <div key={option.id}>
+              <div key={option.id} {...cascade(index)}>
                 <ChoiceRow
                   label={option.label}
                   sentences={[option.sub]}
@@ -989,7 +1001,7 @@ export function PartCard({
   // the options and controls fade out over it and the settled words rise in.
   // Under reduced motion it is a cut.
   return (
-    <div ref={shellRef} className={cn("anim-rise", settled ? "ml-8" : "mr-8")}>
+    <div ref={shellRef} className={cn(arrives && "anim-rise", settled ? "ml-8" : "mr-8")}>
       {steps !== undefined && hadOpenForm && (
         // The stepper line folds away with the settle rather than leaving a
         // gap above the card.

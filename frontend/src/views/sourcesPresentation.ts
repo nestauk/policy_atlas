@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { components } from "../api/gen/types";
 import { useRunStream } from "../store";
@@ -75,7 +75,9 @@ export const STRENGTH_FILTER_OPTIONS = [
 export function readDepthLabel(
   item: Pick<EvidenceItem, "read_in_full" | "screen_status" | "status">,
 ): string | null {
-  if (item.read_in_full) return "Read in full";
+  // "Full text", not "Read in full": the text is fetched and made
+  // searchable, not read by a model at that step (owner, round 9).
+  if (item.read_in_full) return "Full text";
   if (item.status === "unavailable" || item.screen_status === "relevant") return "Abstract only";
   return null;
 }
@@ -126,7 +128,7 @@ export function readDepthHint(
       ? `${humanReason(item.status_reason)} — only the abstract was read.`
       : "The full text couldn't be obtained — only the abstract was read.";
   }
-  return "The full text hasn't been read — screening and appraisal used the title and abstract.";
+  return "The full text hasn't been collected — screening and appraisal used the title and abstract.";
 }
 
 /** The strength hover, composed the same way as the citation sidebar's. */
@@ -147,7 +149,7 @@ const STATUS_LABELS: Record<EvidenceItem["status"], string> = {
   relevant: "Included",
   not_selected: "Included — not shortlisted",
   selected: "Shortlisted",
-  read_in_full: "Read in full",
+  read_in_full: "Full text collected",
   findings_extracted: "Findings extracted",
   cited: "Cited in the report",
   unavailable: "Included — abstract only",
@@ -294,4 +296,77 @@ export function useLiveRefetch(active: boolean, refetch: () => void): void {
     const id = window.setInterval(() => latest.current(), LIVE_REFETCH_MS);
     return () => window.clearInterval(id);
   }, [active]);
+}
+
+/** What landed in the table since the page showed it: the rows that were not
+ *  there before, and per row the cells whose placeholder gave way to a value. */
+export type Landed = { rows: ReadonlySet<string>; cells: ReadonlyMap<string, Partial<CellPulses>> };
+
+const NOTHING_LANDED: Landed = { rows: new Set(), cells: new Map() };
+
+/**
+ * The rows and values that landed while a stage that feeds the table runs
+ * (task 058, round 9; the animation sweep's entry 7): a row whose source was
+ * not on the page before, and a cell that pulsed on the last render and now
+ * does not. They fade in once (opacity only: the table must not shift) and
+ * keep their mark after, so a refetch never replays the fade. A change of
+ * view (`viewKey`: filters, sort, page) starts afresh with nothing landed,
+ * and nothing lands while no stage runs.
+ *
+ * Args:
+ *   items: The page's sources: their ids and their cells' pulses now.
+ *   viewKey: The view's identity (the task and its query string).
+ *   active: True while a stage that feeds the table runs.
+ *
+ * Returns:
+ *   The landed rows and cells.
+ */
+export function useLandedSources(
+  items: ReadonlyArray<{ id: string; pulses: CellPulses }>,
+  viewKey: string,
+  active: boolean,
+): Landed {
+  const signature = items
+    .map(({ id, pulses }) => `${id}:${+pulses.relevant}${+pulses.type}${+pulses.strength}${+pulses.status}`)
+    .join("|");
+  const [track, setTrack] = useState<{
+    viewKey: string;
+    signature: string;
+    pulses: ReadonlyMap<string, CellPulses> | null;
+    landed: Landed;
+  }>(() => ({
+    viewKey,
+    signature,
+    pulses: items.length === 0 ? null : new Map(items.map(({ id, pulses }) => [id, pulses])),
+    landed: NOTHING_LANDED,
+  }));
+  if (track.viewKey !== viewKey || track.signature !== signature) {
+    const fresh = track.viewKey !== viewKey;
+    const before = fresh ? null : track.pulses;
+    // A new view's first page is its opening; it lands nothing.
+    // The first page a view shows (no rows before) is its opening: nothing lands.
+    const opening = before === null || before.size === 0;
+    const rows = new Set(fresh ? [] : track.landed.rows);
+    const cells = new Map(fresh ? [] : track.landed.cells);
+    if (active && !opening && before !== null) {
+      for (const { id, pulses } of items) {
+        const was = before.get(id);
+        if (was === undefined) {
+          rows.add(id);
+          continue;
+        }
+        const keys = (Object.keys(pulses) as (keyof CellPulses)[]).filter((key) => was[key] && !pulses[key]);
+        if (keys.length > 0) cells.set(id, { ...cells.get(id), ...Object.fromEntries(keys.map((key) => [key, true])) });
+      }
+    }
+    const landed = { rows, cells };
+    setTrack({
+      viewKey,
+      signature,
+      pulses: items.length === 0 && before === null ? null : new Map(items.map(({ id, pulses }) => [id, pulses])),
+      landed,
+    });
+    return landed;
+  }
+  return track.landed;
 }

@@ -33,7 +33,7 @@ function standardPlan(): PlanDraft {
       step("screen", "Searching and screening", "search_screen"),
       step("classify", "Classifying", "categorise"),
       step("appraise", "Classifying", "categorise"),
-      step("ingest", "Reading the full texts", "ingest"),
+      step("ingest", "Collecting the full texts", "ingest"),
       step("characterise", "Mapping", "characterise"),
       step("select", "Shortlisting", "select"),
       step("synthesise", "Writing", "synthesise"),
@@ -125,7 +125,8 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
     expect(within(header()).getByText("Running")).toHaveClass("uppercase", "font-extrabold", "tracking-label", "text-grey");
     expect(time()).toHaveClass("whitespace-nowrap", "text-grey");
     expect(time()).toHaveTextContent(/^6 min 12 s$/);
-    expect(header()).toHaveClass("border-b", "border-line");
+    // The rule under the top line belongs to the rows, so it folds with them.
+    expect(screen.getByRole("list", { name: "Run steps" }).closest("[id]")).toHaveClass("border-t", "border-line");
     expect(screen.queryByRole("button", { name: "Minimise" })).toBeNull();
     expect(screen.getByRole("region", { name: "Analysis run" })).toHaveClass("border", "border-line-2", "bg-paper");
   });
@@ -145,7 +146,7 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
     expect(within(list).getAllByRole("listitem").map((li) => flat(li.textContent))).toEqual([
       "Searching and screening, done312 found · 118 relevant · 1 min 4 s ·Sources →",
       "Classifying, in progress1 min 15 s ·Landscape →40 of 118 classified",
-      "Reading the full texts, to come",
+      "Collecting the full texts, to come",
       "Mapping, to come",
       "Shortlisting, to come",
       "Writing, to come",
@@ -224,10 +225,36 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
     expect(within(rowOf(label)).getByRole("link", { name })).toHaveAttribute("href", `/tasks/${TASK_ID}${path}`);
   });
 
-  it("gives Reading the full texts and Shortlisting no link while they run", () => {
+  it("gives Collecting the full texts and Shortlisting no link while they run", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
-    render(trace({ stages: [...SEARCHED, entry({ stage: "ingest", label: "Reading the full texts", status: "started" })], liveness: {} }));
-    expect(within(rowOf("Reading the full texts")).queryByRole("link")).toBeNull();
+    render(trace({ stages: [...SEARCHED, entry({ stage: "ingest", label: "Collecting the full texts", status: "started" })], liveness: {} }));
+    expect(within(rowOf("Collecting the full texts")).queryByRole("link")).toBeNull();
+  });
+
+  // Round 9: acquisition carries done/total on its tick; the row shows the
+  // server's line once, with no second count and no stray "of".
+  it("renders the acquisition line as sent, without a second count", () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    render(
+      trace({
+        stages: [entry({ stage: "acquire", label: "Searching", status: "started", startedAt: ago(30) })],
+        liveness: {
+          acquire: {
+            activity: "keeping 312 of 1,234 candidates",
+            done: 312,
+            total: 1234,
+            unit: "candidates",
+            heartbeat: false,
+            dropped: 0,
+            occurredAt: ago(0),
+          },
+        },
+      }),
+    );
+    const row = rowOf("Searching");
+    expect(flat(within(row).getByTestId("row-activity").textContent)).toBe("keeping 312 of 1,234 candidates");
+    expect(flat(row.textContent).match(/312/g)).toHaveLength(1);
+    expect(flat(row.textContent).match(/\bof\b/g)).toHaveLength(1);
   });
 
   // Owner, round 8: the step in progress's activity line breathes with its
@@ -313,18 +340,26 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
     expect(header().querySelector(".anim-rise")).toHaveTextContent("Paused · a check-in is waiting on you");
   });
 
-  it("rises a row in once as it lands, and holds rows that were done before still", () => {
+  // Lead, round 9: a row that lands keeps its place (it shrinks as it lands,
+  // so a rise read as a jump); its counts and time fade in and its square
+  // eases from blue to green.
+  it("fades a landing row's counts in once, in place, and holds rows that were done before still", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     const running = SEARCHED.map((e) => ({ ...e, status: e.stage === "screen" ? ("started" as const) : e.status }));
     const { rerender } = render(trace({ stages: running, liveness: {} }));
-    expect(rowOf("Searching and screening")).not.toHaveClass("anim-rise");
+    const counts = () => rowOf("Searching and screening").querySelector(".text-grey.\\@lg\\:text-right");
+    expect(counts()).not.toHaveClass("anim-swap-in");
     rerender(trace());
-    expect(rowOf("Searching and screening")).toHaveClass("anim-rise");
+    expect(rowOf("Searching and screening")).not.toHaveClass("anim-rise");
+    expect(rowOf("Searching and screening")).toHaveAttribute("data-landed", "true");
+    expect(counts()).toHaveClass("anim-swap-in");
+    expect(rowOf("Searching and screening").querySelector("[data-tone]")).toHaveClass("transition-colors", "duration-150");
     // A trace that mounts with the step already done does not replay it.
     render(trace(), { container: document.body.appendChild(document.createElement("div")) });
     const lists = screen.getAllByRole("list", { name: "Run steps" });
     const fresh = within(lists[1]).getAllByRole("listitem")[0];
-    expect(fresh).not.toHaveClass("anim-rise");
+    expect(fresh).not.toHaveAttribute("data-landed");
+    expect(fresh.querySelector(".anim-swap-in")).toBeNull();
   });
 
   it("keeps the elapsed time at the right of the top line, so it stays in view on a phone and in the sidebar", () => {
@@ -445,7 +480,7 @@ describe("RunTrace — ended", () => {
     await userEvent.click(headerButton());
     expect(headerButton()).toHaveAccessibleName("Hide steps");
     expect(headerButton()).toHaveAttribute("aria-expanded", "true");
-    expect(header()).toHaveClass("border-b", "border-line");
+    expect(screen.getByRole("list", { name: "Run steps" }).closest("[id]")).toHaveClass("border-t", "border-line");
     expect(within(rowOf("Writing")).getByRole("link", { name: "Report →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
     expect(flat(rowOf("Writing").textContent)).toBe("Writing, done7 sections · 5 min ·Report →");
     await userEvent.click(headerButton());

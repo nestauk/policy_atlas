@@ -1,6 +1,11 @@
 import { usePlan } from "../../api/queries";
 import type { components } from "../../api/gen/types";
+import type { ReactNode } from "react";
+
 import { Button } from "../../ui/brand/Button";
+import { cn } from "../../ui/brand/cn";
+import { useArrives } from "../../ui/motion/arrivals";
+import { Collapse } from "../../ui/motion/Collapse";
 import { isScoping } from "../scopingActivity";
 import type { PlanOverlay } from "./planOverlay";
 import { usePlanStart, useScopingPlanStart } from "./planStart";
@@ -75,7 +80,7 @@ export function PlanCard({
   const plan: PlanDraft | null = scoping ? null : (planOut?.plan ?? null);
   const approved = planOut?.status === "approved";
   const scopingReady = scoping && planOut?.scoping?.ready === true;
-  if (started || !approved) return null;
+  if (!approved) return null;
   if (scoping ? !scopingReady : plan === null || !plan.ready) return null;
 
   // Scoping starts from the card only while the plan has never been built;
@@ -89,8 +94,12 @@ export function PlanCard({
   const notice = scoping ? (scopingBuild?.notice ?? null) : search.startNotice;
   const showStart = isOwner && (!scoping || scopingBuild !== null);
 
+  // The card leaves as the run starts (round 9; the animation sweep's entry
+  // 4): it fades and folds its height away over 300 ms while the run's
+  // trace rises in below, so the two overlap rather than swap.
   return (
-    <div className="anim-rise mr-8 border border-line-2 bg-paper px-5 py-4" data-testid="plan-ready-actions">
+    <Collapse show={!started}>
+    <PlanReadyBox arrivalId={`plan-card:${planOut?.version ?? ""}`} leaving={started}>
       {plan !== null && <p className="text-body font-semibold text-navy">{planSummary(plan)}</p>}
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-3">
         {showStart && (
@@ -123,6 +132,22 @@ export function PlanCard({
           )}
         </div>
       )}
+    </PlanReadyBox>
+    </Collapse>
+  );
+}
+
+/** The ready card's box: it rises in when it appears after the thread's
+ *  first paint (a plan made ready in front of the reader), and holds still
+ *  in the history; while it leaves its contents fade out over 150 ms. */
+function PlanReadyBox({ arrivalId, leaving, children }: { arrivalId: string; leaving: boolean; children: ReactNode }) {
+  const arrives = useArrives(arrivalId);
+  return (
+    <div
+      className={cn("mr-8 border border-line-2 bg-paper px-5 py-4", arrives && "anim-rise", leaving && "anim-fade-out")}
+      data-testid="plan-ready-actions"
+    >
+      {children}
     </div>
   );
 }

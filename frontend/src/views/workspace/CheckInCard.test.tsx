@@ -385,3 +385,37 @@ describe("CheckInCard — the baseline gate", () => {
     expect(screen.getByText("The baseline records no key assumption.")).toBeInTheDocument();
   });
 });
+
+// Task 058, round 9 (the animation sweep's entry 3, the lead's ruling on it):
+// the card settles the moment the user chooses, as the part cards do, and
+// comes back open with its notice if the answer fails.
+describe("CheckInCard — settles on the choice (round 9)", () => {
+  it("settles at once when an option is chosen: inert, its contents fading", async () => {
+    mutate.mockReset();
+    renderCard(searchReview());
+    await userEvent.click(screen.getByRole("radio", { name: /Looks right, assess these/ }));
+    const shell = screen.getByTestId("check-in-shell");
+    expect(shell).toHaveAttribute("data-leaving", "true");
+    expect(shell.firstElementChild?.firstElementChild).toHaveClass("anim-fade-out");
+    expect(shell.firstElementChild?.firstElementChild).toHaveAttribute("inert");
+  });
+
+  it("comes back open with the notice when the answer fails", async () => {
+    mutate.mockReset();
+    mutate.mockImplementation((_vars: unknown, options?: { onError?: (error: unknown) => void }) => {
+      options?.onError?.({ code: "already_answered" });
+    });
+    renderCard(searchReview());
+    await userEvent.click(screen.getByRole("radio", { name: /Looks right, assess these/ }));
+    expect(screen.getByTestId("check-in-shell")).not.toHaveAttribute("data-leaving");
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    mutate.mockReset();
+  });
+
+  it("blooms its ring after it lands, the ring only", () => {
+    renderCard(searchReview());
+    expect(screen.getByTestId("check-in-card")).toHaveClass("anim-glow");
+    // Outside a thread there is nothing to arrive into: it holds still.
+    expect(screen.getByTestId("check-in-shell")).not.toHaveClass("anim-rise");
+  });
+});

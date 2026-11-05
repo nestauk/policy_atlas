@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -750,7 +750,8 @@ describe("TaskAgentPane — the streaming planner turn", () => {
     } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(screen.getByText("Here is the scope I would use.")).toBeInTheDocument();
+    // The reply comes at a steady pace (round 9), its words fading in batches.
+    await waitFor(() => expect(document.body.textContent).toContain("Here is the scope I would use."));
     expect(screen.getByText("Drafting the plan")).toHaveAttribute("role", "status");
     // Start is disabled while the turn streams (N9).
     expect(screen.getByRole("button", { name: "Start the search" })).toBeDisabled();

@@ -30,7 +30,7 @@ const LandscapeView = lazy(() =>
 function LandscapeFallback() {
   return (
     <main aria-busy="true" aria-label="Loading landscape" className="mx-auto max-w-5xl px-6 py-10">
-      <div className="h-64 animate-pulse border border-line bg-paper-2" />
+      <div className="h-64 anim-breathe border border-line bg-paper-2" />
     </main>
   );
 }

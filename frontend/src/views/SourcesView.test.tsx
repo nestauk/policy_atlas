@@ -48,7 +48,11 @@ function LocationProbe() {
 }
 
 function renderSources() {
-  return render(
+  return render(sourcesTree());
+}
+
+function sourcesTree() {
+  return (
     <TooltipProvider>
       <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/sources`]}>
         <Routes>
@@ -63,7 +67,7 @@ function renderSources() {
           />
         </Routes>
       </MemoryRouter>
-    </TooltipProvider>,
+    </TooltipProvider>
   );
 }
 
@@ -197,7 +201,7 @@ describe("SourcesView — pulsing cells while a stage runs (owner, round 8)", ()
     expect(pulseIn("Unread source", "Status")).not.toBeNull();
     expect(screen.queryByText("Abstract only")).toBeNull();
     expect(pulseIn("Read source", "Status")).toBeNull();
-    expect(screen.getByText("Read in full")).toBeInTheDocument();
+    expect(screen.getByText("Full text")).toBeInTheDocument();
   });
 
   it("pulses nothing once the stage has ended, or while the run waits on a check-in", () => {
@@ -335,27 +339,110 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     expect(screen.getByText(`${mockEvidence.length} sources`)).toBeInTheDocument();
   });
 
-  it("lists search queries as a results table per backend", () => {
+  it("folds the committed search queries to one line at the top, the chevron opening one table", async () => {
+    const user = userEvent.setup();
     renderSources();
-    expect(screen.getByRole("heading", { name: "Search queries" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "OpenAlex" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Overton" })).toBeInTheDocument();
-    expect(
-      screen.getByText("childhood obesity school intervention UK"),
-    ).toBeInTheDocument();
-    const tables = screen.getAllByRole("table");
-    expect(tables.length).toBeGreaterThanOrEqual(3);
-    const openAlexTable = tables[1];
-    const overtonTable = tables[2];
-    expect(openAlexTable).toBeTruthy();
-    expect(overtonTable).toBeTruthy();
-    expect(within(openAlexTable).getByRole("columnheader", { name: "Query" })).toBeInTheDocument();
-    expect(within(openAlexTable).getByRole("columnheader", { name: "Results" })).toBeInTheDocument();
-    expect(within(openAlexTable).getByText("34")).toBeInTheDocument();
-    expect(within(overtonTable).getByText("19")).toBeInTheDocument();
-    expect(
-      within(openAlexTable).getByText("childhood obesity school intervention UK"),
-    ).toHaveClass("break-all");
+    const block = screen.getByTestId("search-queries");
+    // At the top of All sources, before the filters (owner, round 9).
+    expect(block.compareDocumentPosition(screen.getByRole("group", { name: "Filter sources" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const toggle = within(block).getByRole("button", { name: "5 search queries · 128 results · Show" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(within(block).queryByRole("table")).toBeNull();
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveTextContent(/Hide$/);
+    const table = within(block).getByRole("table");
+    // One table: the backend once per group, as a row-group label.
+    expect(within(table).getByRole("rowheader", { name: "OpenAlex" })).toBeInTheDocument();
+    expect(within(table).getByRole("rowheader", { name: "Overton" })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Query" })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Results" })).toBeInTheDocument();
+    expect(table).toHaveClass("text-meta");
+    const query = within(table).getByText("childhood obesity school intervention UK");
+    // Queries wrap on words.
+    expect(query).toHaveClass("break-words");
+    expect(query).not.toHaveClass("break-all");
+    expect(within(table).getByText("34")).toHaveClass("tabular-nums");
+  });
+});
+
+// Owner, round 9: the queries show as they go out, the table waits for the
+// first results, and what lands while a stage runs fades in.
+describe("SourcesView — the search as it runs (owner, round 9)", () => {
+  const searching = (queriesOut: RunStreamState["liveSearchQueries"], status: StageEntry["status"] = "started") =>
+    ({
+      ...createInitialRunStreamState(),
+      run: { id: "run-1", status: "running", startedAt: "2026-11-05T10:00:00Z" },
+      stages: [{ stage: "acquire", label: "Searching", status, startedAt: "2026-11-05T10:00:00Z", counts: [] }],
+      liveSearchQueries: queriesOut,
+    }) as RunStreamState;
+  const empty = () =>
+    vi.mocked(queries.useEvidence).mockReturnValue({
+      data: evidencePage([]),
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof queries.useEvidence>);
+
+  it("lists the queries as they go out, a pulse until each count returns, and hides the table until results land", () => {
+    vi.mocked(queries.useCoverage).mockReturnValue({ data: null } as unknown as ReturnType<typeof queries.useCoverage>);
+    empty();
+    streamState = searching([
+      { backend: "openalex", query: "primary school food environment obesity", kind: "topic", results: 34 },
+      { backend: "openalex", query: "school meals uptake", kind: "semantic", results: null },
+      { backend: "overton", query: "Following citations from 50 sources", kind: "citations", results: 1184 },
+    ]);
+    renderSources();
+    const block = screen.getByTestId("search-queries");
+    expect(within(block).getByRole("heading", { name: "Search queries" })).toBeInTheDocument();
+    const table = within(block).getByRole("table");
+    expect(within(table).getByRole("rowheader", { name: "OpenAlex" })).toBeInTheDocument();
+    expect(within(table).getAllByTestId("query-results-pulse")).toHaveLength(1);
+    expect(within(table).getByText("1,184")).toBeInTheDocument();
+    // A citation pass reads in grey; a topic query in navy.
+    expect(within(table).getByText("Following citations from 50 sources")).toHaveClass("text-grey");
+    expect(within(table).getByText("primary school food environment obesity")).toHaveClass("text-navy");
+    // No empty card and no count line while the search runs with nothing in.
+    expect(screen.queryByText(/No sources yet/)).toBeNull();
+    expect(screen.queryByText(/^\d+ sources$/)).toBeNull();
+  });
+
+  it("folds the live queries once the search has ended, before the committed coverage lands", () => {
+    vi.mocked(queries.useCoverage).mockReturnValue({ data: null } as unknown as ReturnType<typeof queries.useCoverage>);
+    streamState = searching(
+      [
+        { backend: "openalex", query: "a", kind: "topic", results: 34 },
+        { backend: "openalex", query: "b", kind: "topic", results: 1 },
+      ],
+      "completed",
+    );
+    renderSources();
+    expect(screen.getByRole("button", { name: "2 search queries · 35 results · Show" })).toBeInTheDocument();
+  });
+
+  it("fades in a source that lands while a stage runs, and holds the page it opened on still", () => {
+    vi.mocked(queries.useCoverage).mockReturnValue({ data: null } as unknown as ReturnType<typeof queries.useCoverage>);
+    streamState = searching([{ backend: "openalex", query: "a", kind: "topic", results: 2 }]);
+    const first = { ...mockEvidence[0], source_id: "a", title: "First source" };
+    const second = { ...mockEvidence[0], source_id: "b", title: "Second source" };
+    vi.mocked(queries.useEvidence).mockReturnValue({
+      data: evidencePage([first]),
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof queries.useEvidence>);
+    const view = renderSources();
+    const rowOf = (title: string) => screen.getAllByRole("row").find((r) => r.textContent?.includes(title)) as HTMLElement;
+    expect(rowOf("First source")).not.toHaveClass("anim-swap-in");
+    vi.mocked(queries.useEvidence).mockReturnValue({
+      data: evidencePage([first, second]),
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof queries.useEvidence>);
+    view.rerender(sourcesTree());
+    expect(rowOf("Second source")).toHaveClass("anim-swap-in");
+    expect(rowOf("First source")).not.toHaveClass("anim-swap-in");
   });
 });
 
@@ -452,7 +539,7 @@ describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", 
 
   it("shows read depth in the Status column and drops the cited-redundant ladder label", () => {
     renderSources();
-    expect(screen.getAllByText("Read in full").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Full text").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Abstract only").length).toBeGreaterThan(0);
     expect(screen.queryByText("Cited in the evidence base")).toBeNull();
   });

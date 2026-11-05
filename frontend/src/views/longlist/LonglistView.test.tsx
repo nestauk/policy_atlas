@@ -101,7 +101,7 @@ describe("LonglistView", () => {
     const tag = screen.getByText("scoping pass");
     expect(tag).toHaveAttribute(
       "title",
-      "Screened on titles and abstracts · nothing read in full · document set not confirmed",
+      "Screened on titles and abstracts · no full texts collected · document set not confirmed",
     );
     expect(screen.getByRole("heading", { name: "How can we cut the NEET rate?" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "1 excluded" })).toHaveAttribute("href", "#excluded-options");

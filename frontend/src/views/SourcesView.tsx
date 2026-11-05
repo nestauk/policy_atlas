@@ -16,6 +16,8 @@ import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { Tooltip } from "../ui/radix/Tooltip";
+import { Arrival, ArrivalProvider, useFirstPaintDone } from "../ui/motion/arrivals";
+import { queryGroups, SearchQueries } from "./SearchQueries";
 import {
   abstractSourceLabel,
   cellPulses,
@@ -32,8 +34,10 @@ import {
   SOURCE_SORT_COLUMNS,
   STRENGTH_FILTER_OPTIONS,
   TABLE_HEADER_TEXT_CLASS,
+  type CellPulses,
   type EvidenceSortField,
   type SortOrder,
+  useLandedSources,
   useLiveRefetch,
 } from "./sourcesPresentation";
 import { numberedAuthorships } from "./artefactPresentation";
@@ -116,12 +120,21 @@ export function SourcesView() {
   });
   const dossier = useSourceDossier(taskId, sourceId);
   const findings = useFindings(taskId, sourceId ? { page_size: 200, source_id: sourceId } : undefined);
-  const queryBackends = (coverage.data?.backends_detail ?? []).filter(
-    (backend) => (backend.queries ?? []).length > 0,
-  );
   // While a stage that feeds this table runs, the table refetches every 5 s
   // and the cells it will fill pulse until their values land (owner, round 8).
   const live = liveStages(stream);
+  // The search queries, live as they go out (owner, round 9).
+  const searching = live.has("acquire");
+  const groups = queryGroups(stream.liveSearchQueries, coverage.data?.backends_detail, searching);
+  // Rows and values that land while a stage runs fade in (the animation
+  // sweep's entry 7); a filter, a sort or a page change holds still.
+  const viewKey = searchParams.toString();
+  const landing = useLandedSources(
+    (evidence.data?.data ?? []).map((item) => ({ id: item.source_id, pulses: cellPulses(item, live) })),
+    `${taskId}?${viewKey}`,
+    feedsSources(live),
+  );
+  const firstPaintDone = useFirstPaintDone(evidence.data !== undefined, `${taskId}?${viewKey}`);
   useLiveRefetch(feedsSources(live), () => {
     void evidence.refetch();
     void landscape.refetch();
@@ -154,6 +167,7 @@ export function SourcesView() {
 
   return (
     <main className="py-8">
+      <SearchQueries groups={groups} searching={searching} />
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div role="group" aria-label="Filter sources" className="flex flex-wrap gap-1.5">
           {STATUS_FILTERS.map((filter) => (
@@ -214,7 +228,9 @@ export function SourcesView() {
           <RetryCard copy="Sources couldn't be loaded." onRetry={() => void evidence.refetch()} />
         ))}
 
-      {evidence.data !== undefined && evidence.data.data.length === 0 && (
+      {/* While the search runs and nothing has landed, the queries above are
+          the page: the table waits for the first results (owner, round 9). */}
+      {evidence.data !== undefined && evidence.data.data.length === 0 && !searching && (
         <Card role="status" className="p-8 text-center text-body text-grey">
           {statusFilter === "all" && !citedFilter
             ? "No sources yet — they arrive as the analysis searches."
@@ -223,7 +239,10 @@ export function SourcesView() {
       )}
 
       {evidence.data !== undefined && evidence.data.data.length > 0 && (
-        <>
+        // The count line and the table appear together, rising in, when the
+        // first results land after the page opened.
+        <ArrivalProvider settled={firstPaintDone} scopeKey={`${taskId}?${viewKey}`}>
+        <Arrival arrivalId="sources-table">
           <p className="mb-3 text-meta text-grey" role="status">
             {evidence.data.pagination.total_items} sources
           </p>
@@ -324,8 +343,13 @@ export function SourcesView() {
             <tbody>
               {evidence.data.data.map((item) => {
                 const pulse = cellPulses(item, live);
+                const landed = landing.cells.get(item.source_id);
+                const fade = (cell: keyof CellPulses) => (landed?.[cell] ? "anim-swap-in" : undefined);
                 return (
-                <tr key={item.source_id} className="border-b border-line last:border-b-0">
+                <tr
+                  key={item.source_id}
+                  className={cn("border-b border-line last:border-b-0", landing.rows.has(item.source_id) && "anim-swap-in")}
+                >
                   <td className="max-w-md px-4 py-3 align-top max-md:px-3 max-md:py-2.5">
                     <TitleWithDescription item={item} onOpen={() => updateParams((next) => { next.set("source", item.source_id); next.delete("option"); })} />
                     {item.venue && <p className="mt-0.5 text-body text-grey max-md:text-caption">{scrub(item.venue)}</p>}
@@ -335,6 +359,7 @@ export function SourcesView() {
                   <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {pulse.type && <CellPulse width="w-20" />}
                     {item.evidence_type && (
+                      <span className={fade("type")}>{
                       item.classification_reason ? (
                         <Tooltip content={<p>{scrub(item.classification_reason)}</p>}>
                           <button type="button" aria-label={`${item.evidence_type}: why this type`} className="cursor-help focus-visible:outline-2 focus-visible:outline-blue">
@@ -344,24 +369,28 @@ export function SourcesView() {
                       ) : (
                         <Chip tone="soft">{scrub(item.evidence_type)}</Chip>
                       )
+                      }</span>
                     )}
                   </td>
                   <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {pulse.strength && <CellPulse width="w-14" />}
                     {item.appraisal_tier && (
+                      <span className={fade("strength")}>
                       <Tooltip content={<p>{scrub(strengthHint(item))}</p>}>
                         <button type="button" aria-label={`${item.appraisal_tier}: how strength is appraised`} className="cursor-help focus-visible:outline-2 focus-visible:outline-blue">
                           <Chip tone="soft">{scrub(item.appraisal_tier)}</Chip>
                         </button>
                       </Tooltip>
+                      </span>
                     )}
                   </td>
                   <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
-                    {pulse.relevant ? <CellPulse width="w-10" /> : <RelevantCell item={item} />}
+                    {pulse.relevant ? <CellPulse width="w-10" /> : <span className={fade("relevant")}><RelevantCell item={item} /></span>}
                   </td>
                   <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {pulse.status && <CellPulse width="w-16" />}
                     {!pulse.status && readDepthLabel(item) !== null && (
+                      <span className={fade("status")}>{
                       item.read_in_full ? (
                         <Chip tone="blue">{readDepthLabel(item)}</Chip>
                       ) : (
@@ -371,6 +400,7 @@ export function SourcesView() {
                           </button>
                         </Tooltip>
                       )
+                      }</span>
                     )}
                   </td>
                   <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
@@ -382,7 +412,8 @@ export function SourcesView() {
             </tbody>
           </table>
           </Card>
-        </>
+        </Arrival>
+        </ArrivalProvider>
       )}
 
       {evidence.data !== undefined && totalPages > 1 && (
@@ -405,48 +436,6 @@ export function SourcesView() {
             Next
           </button>
         </nav>
-      )}
-
-      {queryBackends.length > 0 && (
-        <section
-          className="mt-8"
-          aria-labelledby="search-queries-heading"
-        >
-          <h2 id="search-queries-heading" className="text-lead font-semibold text-navy">
-            Search queries
-          </h2>
-          <div className="mt-4 space-y-6">
-            {queryBackends.map((backend) => (
-              <div key={backend.backend}>
-                <h3 className="mb-2 text-body font-semibold text-navy">{backend.backend}</h3>
-                <Card>
-                  <table className="w-full table-fixed text-left">
-                    <thead className={`border-b border-line bg-paper-2 ${TABLE_HEADER_TEXT_CLASS}`}>
-                      <tr>
-                        <th scope="col" className="px-4 py-3">
-                          Query
-                        </th>
-                        <th scope="col" className="w-32 px-4 py-3 text-right tabular-nums">
-                          Results
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(backend.queries ?? []).map((item) => (
-                        <tr key={item.query} className="border-b border-line last:border-b-0">
-                          <td className="break-all px-4 py-3 text-body text-navy max-md:text-meta">{scrub(item.query)}</td>
-                          <td className="px-4 py-3 text-right text-body tabular-nums text-navy max-md:text-meta">
-                            {typeof item.results === "number" ? item.results : "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </Card>
-              </div>
-            ))}
-          </div>
-        </section>
       )}
 
       <SourceDossier
@@ -522,7 +511,7 @@ function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?
         rows.push(...data.data);
         if (page * data.pagination.page_size >= data.pagination.total_items) break;
       }
-      const header = ["Title", "Venue", "Year", "Origin", "Status", "Status reason", "Evidence type", "Evidence type reason", "Strength", "Screening", "Screening confidence", "Screening reason", "Read in full", "Cited", "URL", "Description", "Description source"];
+      const header = ["Title", "Venue", "Year", "Origin", "Status", "Status reason", "Evidence type", "Evidence type reason", "Strength", "Screening", "Screening confidence", "Screening reason", "Full text", "Cited", "URL", "Description", "Description source"];
       const csv = [
         header.map(csvCell).join(","),
         ...rows.map((item) => [
@@ -573,7 +562,7 @@ function SourceLoading() {
   return (
     <div aria-busy="true" aria-label="Loading sources" className="space-y-2">
       {Array.from({ length: 6 }).map((_, index) => (
-        <div key={index} className="h-14 animate-pulse border border-line bg-paper-2" />
+        <div key={index} className="h-14 anim-breathe border border-line bg-paper-2" />
       ))}
     </div>
   );
@@ -954,7 +943,7 @@ function SourceDossier({
   return (
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent title={source ? scrub(source.title) : "Source dossier"}>
-        {isPending && <p role="status" className="animate-pulse text-body text-grey">Loading the dossier…</p>}
+        {isPending && <p role="status" className="anim-breathe text-body text-grey">Loading the dossier…</p>}
         {isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
         {source && (
           <SourceDossierBody

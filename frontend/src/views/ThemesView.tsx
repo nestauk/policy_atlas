@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { useLandscape, useTask } from "../api/queries";
@@ -6,8 +7,53 @@ import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { Card } from "../ui/brand/Card";
 import { orderThemes } from "../ui/charts/EvidenceDistributionChart";
+import { useRunStream, type LiveTheme } from "../store";
+import { cn } from "../ui/brand/cn";
 import { ReauthRedirect } from "../ui/feedback";
-import { feedsSources, useLiveRefetch, useLiveStages } from "./sourcesPresentation";
+import { ArrivalProvider, useArrives, useFirstPaintDone } from "../ui/motion/arrivals";
+import { feedsSources, liveStages, useLiveRefetch } from "./sourcesPresentation";
+
+/** One row of the list: a committed theme, or a discovered one whose count
+ *  is on its way (`size` null). */
+type ThemeItem = { name: string; size: number | null; description: string; themeId?: string | null };
+
+/**
+ * The themes to list (owner, round 9): from the moment the themes are
+ * discovered, in the order they were discovered, each with its name and
+ * description and its count once the committed landscape has it; the
+ * committed themes the discovery did not name follow. Without discovered
+ * themes (a reload after the run), the committed themes in their own order.
+ *
+ * Args:
+ *   discovered: The stream's discovered themes, if any.
+ *   committed: The landscape's themes, ordered.
+ *
+ * Returns:
+ *   The rows, keyed by name so a count fills in place.
+ */
+export function themeItems(
+  discovered: readonly LiveTheme[] | undefined,
+  committed: ReadonlyArray<{ name: string; size: number; description: string; theme_id?: string | null }>,
+): ThemeItem[] {
+  const byName = new Map(committed.map((theme) => [theme.name, theme]));
+  const fromCommitted = (theme: (typeof committed)[number]): ThemeItem => ({
+    name: theme.name,
+    size: theme.size,
+    description: theme.description,
+    themeId: theme.theme_id,
+  });
+  if (discovered === undefined || discovered.length === 0) return committed.map(fromCommitted);
+  const named = new Set(discovered.map((theme) => theme.label));
+  return [
+    ...discovered.map((theme): ThemeItem => {
+      const landed = byName.get(theme.label);
+      return landed !== undefined
+        ? fromCommitted(landed)
+        : { name: theme.label, size: null, description: theme.description ?? "" };
+    }),
+    ...committed.filter((theme) => !named.has(theme.name)).map(fromCommitted),
+  ];
+}
 
 function documentCount(size: number): string {
   return size === 1 ? "1 document" : `${size} documents`;
@@ -18,23 +64,47 @@ function ThemeRow({
   size,
   description,
   to,
+  pending,
+  arrivalIndex,
 }: {
   name: string;
-  size: number;
+  /** Null while its documents are being assigned: a pulsing bar holds the
+   *  count's place, and the count fades in there. */
+  size: number | null;
   description: string;
   to?: string;
+  /** True while the count is on its way and the stage that fills it runs. */
+  pending: boolean;
+  /** Its place among themes arriving together (the fade's turn). */
+  arrivalIndex: number;
 }) {
+  // A row that arrives after the page opened fades in, 40 ms after the one
+  // before (capped at the sixth); a count that was on its way fades in where
+  // its bar was (the animation sweep's entry 7). Opacity only.
+  const arrives = useArrives(`theme:${name}`);
+  const [waited] = useState(size === null);
   const body = (
     <>
       <div className="flex items-baseline justify-between gap-3">
         <p className="min-w-0 text-lead font-bold text-navy">{scrub(name)}</p>
-        <p className="shrink-0 text-body text-grey">{documentCount(size)}</p>
+        {size === null ? (
+          pending && (
+            <span aria-hidden="true" data-testid="theme-count-pulse" className="flex h-[1lh] shrink-0 items-center text-body">
+              <span className="placeholder-bar h-2.5 w-20" />
+            </span>
+          )
+        ) : (
+          <p key="count" className={cn("shrink-0 text-body text-grey", waited && "anim-swap-in")}>{documentCount(size)}</p>
+        )}
       </div>
       {description !== "" && <p className="mt-1 text-body text-grey">{scrub(description)}</p>}
     </>
   );
   return (
-    <li className="border-b border-line last:border-b-0">
+    <li
+      className={cn("border-b border-line last:border-b-0", arrives && "anim-swap-in")}
+      style={arrives ? { animationDelay: `${Math.min(arrivalIndex, 5) * 40}ms` } : undefined}
+    >
       {to !== undefined ? (
         <Link
           to={to}
@@ -99,7 +169,8 @@ export function ThemesView() {
   const landscape = useLandscape(taskId);
   // While Mapping runs the themes refetch every 5 s, and until the first
   // lands their rows pulse in place (owner, round 8).
-  const live = useLiveStages(taskId);
+  const stream = useRunStream(taskId);
+  const live = liveStages(stream);
   const mapping = live.has("characterise");
   useLiveRefetch(feedsSources(live), () => void landscape.refetch());
 
@@ -112,14 +183,19 @@ export function ThemesView() {
   const isPending = landscape.isPending;
 
   const themes = orderThemes(landscape.data?.themes ?? []);
-  const isEmpty = !isPending && !isError && themes.length === 0;
+  // From the moment Mapping has discovered the themes, they show with their
+  // names and descriptions while documents are assigned to them, and their
+  // counts fill in place (owner, round 9).
+  const items = themeItems(stream.liveThemes, themes);
+  const isEmpty = !isPending && !isError && items.length === 0;
+  const firstPaintDone = useFirstPaintDone(!isPending, taskId);
 
   return (
     <main className="py-8">
       {isPending && (
         <div aria-busy="true" aria-label="Loading themes" className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-16 animate-pulse border border-line bg-paper-2" />
+            <div key={i} className="anim-breathe h-16 border border-line bg-paper-2" />
           ))}
         </div>
       )}
@@ -150,24 +226,28 @@ export function ThemesView() {
         </Card>
       )}
 
-      {themes.length > 0 && (
+      {items.length > 0 && (
+        <ArrivalProvider settled={firstPaintDone} scopeKey={taskId}>
         <section>
           <ul role="list">
-            {themes.map((theme) => (
+            {items.map((theme, index) => (
               <ThemeRow
                 key={theme.name}
                 name={theme.name}
                 size={theme.size}
                 description={theme.description}
+                pending={mapping}
+                arrivalIndex={index}
                 to={
-                  theme.theme_id
-                    ? `/tasks/${taskId}/sources/all?theme=${theme.theme_id}`
+                  theme.themeId
+                    ? `/tasks/${taskId}/sources/all?theme=${theme.themeId}`
                     : undefined
                 }
               />
             ))}
           </ul>
         </section>
+        </ArrivalProvider>
       )}
     </main>
   );

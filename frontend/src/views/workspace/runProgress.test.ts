@@ -47,7 +47,7 @@ function standardPlan(): PlanDraft {
       step("screen", "Searching and screening", "search_screen"),
       step("classify", "Classifying", "categorise"),
       step("appraise", "Classifying", "categorise"),
-      step("ingest", "Reading the full texts", "ingest"),
+      step("ingest", "Collecting the full texts", "ingest"),
       step("characterise", "Mapping", "characterise"),
       step("select", "Shortlisting", "select"),
       step("synthesise", "Writing", "synthesise"),
@@ -65,7 +65,7 @@ describe("cardRows — rows from the server's plan steps (task 058, D5)", () => 
     expect(rows.map((row) => row.label)).toEqual([
       "Searching and screening",
       "Classifying",
-      "Reading the full texts",
+      "Collecting the full texts",
       "Mapping",
       "Shortlisting",
       "Writing",
@@ -210,12 +210,12 @@ describe("rowLink — where a done row points", () => {
   it("gives Shortlisting and Reading no link, Writing the report", () => {
     const rows = done([
       ...searchScreen,
-      entry({ stage: "ingest", label: "Reading the full texts", status: "completed" }),
+      entry({ stage: "ingest", label: "Collecting the full texts", status: "completed" }),
       entry({ stage: "select", label: "Shortlisting", status: "completed" }),
       entry({ stage: "synthesise", label: "Writing", status: "completed" }),
     ]);
     const byLabel = (label: string) => rows.find((row) => row.label === label)!;
-    expect(rowLink(byLabel("Reading the full texts"), rows, "t1", "evidence_search", false)).toBeNull();
+    expect(rowLink(byLabel("Collecting the full texts"), rows, "t1", "evidence_search", false)).toBeNull();
     expect(rowLink(byLabel("Shortlisting"), rows, "t1", "evidence_search", false)).toBeNull();
     expect(rowLink(byLabel("Writing"), rows, "t1", "evidence_search", false)).toEqual({ href: "/tasks/t1/result", label: "Report" });
   });
@@ -246,7 +246,7 @@ describe("rowLink — where the step in progress points", () => {
   });
 
   it("gives reading and shortlisting no link while they run, and a scoping walk none", () => {
-    const reading = live("ingest", "Reading the full texts");
+    const reading = live("ingest", "Collecting the full texts");
     expect(rowLink(reading.row, reading.rows, "t1", "evidence_search", false)).toBeNull();
     const shortlisting = live("select", "Shortlisting");
     expect(rowLink(shortlisting.row, shortlisting.rows, "t1", "evidence_search", false)).toBeNull();
@@ -289,7 +289,7 @@ describe("elapsed time in words", () => {
     expect(formatElapsed(3840)).toBe("1 h 4 min");
   });
 
-  it("formats the strip's and the task list's minutes", () => {
+  it("formats the status bar's and the task list's minutes", () => {
     expect(formatMinutes(45)).toBe("45 s");
     expect(formatMinutes(372)).toBe("6 min");
     expect(formatMinutes(14 * 60 + 59)).toBe("14 min");
@@ -316,7 +316,7 @@ describe("the trace's header words (annex § The run trace)", () => {
   });
 
   it("says the step is still working after two quiet minutes, with no counter", () => {
-    expect(traceWords(currentRow(rows), "21 of 38 read", "stalled", true)).toBe(`Searching and screening · ${STALLED_LINE}`);
+    expect(traceWords(currentRow(rows), "collecting 21 of 38", "stalled", true)).toBe(`Searching and screening · ${STALLED_LINE}`);
     expect(STALLED_LINE).toBe("Still working on this step");
   });
 

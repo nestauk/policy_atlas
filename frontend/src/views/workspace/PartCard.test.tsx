@@ -2,6 +2,8 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { ArrivalProvider } from "../../ui/motion/arrivals";
+
 import {
   PartCard,
   type PlanStep,
@@ -624,5 +626,31 @@ describe("a part card settles on the choice (owner, 2026-11-05)", () => {
     expect(settledSummary(scope, { ...OPEN, answered: true, confirmedOptionId: "confirm" }, null, null)).toEqual([
       { label: null, text: "Looks right" },
     ]);
+  });
+});
+
+// Round 9 (the animation sweep's entries 2 and 5): a card that arrives after
+// the thread's first paint rises and lays its rows out in turn; the history
+// holds still.
+describe("PartCard — arrival (round 9)", () => {
+  it("rises and cascades its radio rows when it arrives into the thread", () => {
+    const part = proposal("question");
+    render(
+      <ArrivalProvider settled scopeKey="t1">
+        <PartCard part={part} arrivalId="part:new" state={OPEN} disabled={false} onSend={vi.fn()} />
+      </ArrivalProvider>,
+    );
+    const radios = screen.getAllByRole("radio");
+    expect(radios.length).toBeGreaterThan(0);
+    const rows = radios.map((radio) => radio.closest(".anim-cascade") as HTMLElement | null);
+    expect(rows.every((row) => row !== null)).toBe(true);
+    expect(rows.map((row) => row?.style.getPropertyValue("--i"))).toEqual(rows.map((_, index) => String(index)));
+    expect(screen.getByTestId("part-card").closest(".anim-rise")).not.toBeNull();
+  });
+
+  it("holds still in the history", () => {
+    render(<PartCard part={proposal("question")} state={OPEN} disabled={false} onSend={vi.fn()} />);
+    expect(document.querySelector(".anim-cascade")).toBeNull();
+    expect(document.querySelector(".anim-rise")).toBeNull();
   });
 });

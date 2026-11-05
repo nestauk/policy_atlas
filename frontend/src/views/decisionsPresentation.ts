@@ -14,7 +14,7 @@ const DECISION_DETAIL_LABELS: Record<string, string> = {
   screen_failed: "Could not be screened",
   classified: "Sources labelled by evidence type",
   appraised: "Sources quality-appraised",
-  ingested: "Read in full",
+  ingested: "Full text collected",
   fetch_failed: "Could not be fetched",
   parse_failed: "Fetched but unreadable",
   selected: "Shortlisted for close reading",

@@ -1,4 +1,6 @@
 import { scrub } from "../../lib/scrub";
+import { cn } from "../../ui/brand/cn";
+import { useArrives } from "../../ui/motion/arrivals";
 import type { ResolvedDecision, StageEntry } from "../../store";
 import type { CheckInOut } from "../../store/types";
 import { chosenLine } from "./checkInPresentation";
@@ -20,8 +22,11 @@ export function AnsweredCheckIn({
   stages: StageEntry[];
 }) {
   const line = chosenLine(decision, checkIn, stages);
+  // It rises in when the choice lands in front of the reader; the history
+  // holds still (round 9).
+  const arrives = useArrives(`answered:${decision.checkInId}`);
   return (
-    <p data-testid="answered-check-in" className="anim-rise mr-8 text-body text-grey">
+    <p data-testid="answered-check-in" className={cn("mr-8 text-body text-grey", arrives && "anim-rise")}>
       {line === null ? "The run continued as suggested." : scrub(line)}
     </p>
   );

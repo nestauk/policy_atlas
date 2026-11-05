@@ -233,7 +233,7 @@ function settle() {
   });
 }
 
-describe("AppShell — the live layer without a strip (task 058; owner 2026-11-05, the run trace)", () => {
+describe("AppShell — the live layer without a status bar (task 058; owner 2026-11-05, the run trace)", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     taskState.isOwner = true;
@@ -246,28 +246,33 @@ describe("AppShell — the live layer without a strip (task 058; owner 2026-11-0
     taskState.latestRun = null;
   });
 
-  it("shows the run strip at the top of the page's column on Sources: the step and what it is doing, as the way to the Task Agent", () => {
+  it("shows the run status bar at the top of the page's column on Sources: the step and what it is doing, as the way to the Task Agent", () => {
     renderShell(`/tasks/${TASK_ID}/sources`);
     connect();
     feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching"), tickFrame("acquire", "searching · 184 found so far"));
-    const strip = screen.getByTestId("run-strip");
-    expect(strip).toHaveAttribute("data-open", "true");
-    expect(strip).toHaveTextContent(/Searching.*184 found so far/);
-    expect(within(strip).queryByRole("link")).toBeNull();
-    // Owner, round 8: the strip opens the Task Agent (it starts after the
+    const statusBar = screen.getByTestId("run-status-bar");
+    expect(statusBar).toHaveAttribute("data-open", "true");
+    expect(statusBar).toHaveTextContent(/Searching.*184 found so far/);
+    // Owner, round 9: after the time, the running step's view, while the
+    // reader is elsewhere (here the Themes subtab, Sources' index).
+    expect(within(statusBar).getByRole("link", { name: "Sources →" })).toHaveAttribute(
+      "href",
+      `/tasks/${TASK_ID}/sources/all`,
+    );
+    // Owner, round 8: the status bar opens the Task Agent (it starts after the
     // rail, in the column the routed view scrolls in).
-    expect(within(strip).getByRole("button", { name: /^Open the Task Agent: Searching/ })).toBeInTheDocument();
-    expect(strip.parentElement?.querySelector(":scope > [data-testid='task-scroll-pane']")).not.toBeNull();
+    expect(within(statusBar).getByRole("button", { name: /^Open the Task Agent: Searching/ })).toBeInTheDocument();
+    expect(statusBar.parentElement?.querySelector(":scope > [data-testid='task-scroll-pane']")).not.toBeNull();
   });
 
-  it("shows the paused strip and no paused banner while a check-in waits", () => {
+  it("shows the paused status bar and no paused banner while a check-in waits", () => {
     renderShell(`/tasks/${TASK_ID}/sources`);
     connect();
     feed(runStatus("running"), runStatus("paused"));
-    const strip = screen.getByTestId("run-strip");
-    expect(strip).toHaveAttribute("data-open", "true");
-    expect(strip.querySelector("[data-tone='paused']")).not.toBeNull();
-    expect(strip).toHaveTextContent(/^Paused/);
+    const statusBar = screen.getByTestId("run-status-bar");
+    expect(statusBar).toHaveAttribute("data-open", "true");
+    expect(statusBar.querySelector("[data-tone='paused']")).not.toBeNull();
+    expect(statusBar).toHaveTextContent(/^Paused/);
     expect(screen.queryByText(/Go to the check-in/)).toBeNull();
   });
 
@@ -559,7 +564,7 @@ describe("AppShell — global chrome", () => {
   it("does not pin the site footer under the Plan tab (it scrolls with the chat)", () => {
     renderShell(`/tasks/${TASK_ID}`);
     // AppShell stubs the Plan outlet — the real footer mounts inside
-    // TaskAgentPane's transcript scroll, not as a shell chrome strip.
+    // TaskAgentPane's transcript scroll, not as a shell chrome status bar.
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
   });
 

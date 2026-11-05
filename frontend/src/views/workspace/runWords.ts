@@ -8,7 +8,7 @@ import { cardRows, currentRow, rowDetail, rowLiveness, traceWords, type CardRow 
  * current step and its activity ("Writing · Section 3 of 7 · Costs and
  * funding"), "Still working on this step" after two quiet minutes, and
  * "Paused · a check-in is waiting on you" (to a colleague, "Paused · <step>")
- * while a check-in waits. The rail's Task Agent mark and the run strip read
+ * while a check-in waits. The rail's Task Agent mark and the run status bar read
  * these words; the trace in the thread works them out the same way.
  *
  * Args:
