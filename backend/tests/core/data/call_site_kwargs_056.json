@@ -1054,12 +1054,19 @@
       "parallel_tool_calls": null,
       "reasoning_effort": "none",
       "request_path": "direct_create",
-      "response_format": "json_schema:section",
+      "response_format": null,
       "stream": true,
       "system_shape": "text",
       "timeout": 120.0,
-      "tool_choice": null,
-      "tools": null,
+      "tool_choice": "none",
+      "tools": [
+        "search_chunks",
+        "query_findings",
+        "lookup",
+        "emit_section",
+        "write_section",
+        "emit_repairs"
+      ],
       "trace_name": "synthesise:section_emit"
     },
     "synthesise_section_turn/repair": {
@@ -1087,6 +1094,7 @@
         "query_findings",
         "lookup",
         "emit_section",
+        "write_section",
         "emit_repairs"
       ],
       "trace_name": "synthesise:repair_claims"
@@ -1129,7 +1137,7 @@
             },
             {
               "function": {
-                "name": "emit_section"
+                "name": "write_section"
               },
               "type": "function"
             }
@@ -1142,6 +1150,7 @@
         "query_findings",
         "lookup",
         "emit_section",
+        "write_section",
         "emit_repairs"
       ],
       "trace_name": "synthesise:section_turn"

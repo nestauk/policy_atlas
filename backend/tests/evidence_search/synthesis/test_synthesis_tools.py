@@ -21,7 +21,7 @@ from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.schema import chunk_embedding, source_snapshot, task_source_snapshot
 from policy_atlas.core.tokens import word_tokens
-from policy_atlas.core.usage import UsageResult
+from policy_atlas.core.usage import TokenUsage, UsageResult, add_token_usage
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.evidence_search.synthesis import synthesis_tools
 from policy_atlas.evidence_search.synthesis.section_prompt import SectionProseWire
@@ -2908,6 +2908,124 @@ def test_run_section_loop_publishes_the_writer_activity_with_the_section_line(
         "Writing",
     ]
     assert {section for _activity, section in recorded} == {section_line}
+
+
+# --- The write turn after write_section (task 058, owner 2026-11-05) -----------
+
+
+class _ReadyThenStreamBackend(ScriptedBackend):
+    """Scripted open turns, then the streamed write when a turn says ready."""
+
+    def __init__(
+        self,
+        turns: list[dict[str, Any]],
+        *,
+        write_usage: TokenUsage | None = None,
+    ) -> None:
+        super().__init__(turns)
+        self.write_usage = write_usage
+        self.streamed = 0
+
+    def section_emit_stream(
+        self, seed: dict[str, Any], transcript: list[dict[str, Any]]
+    ) -> UsageResult[dict[str, Any]]:
+        del seed
+        self.streamed += 1
+        self.calls.append({"stream": True, "transcript_len": len(transcript)})
+        return {"tool_calls": [], "claims": _claims("streamed")}, self.write_usage
+
+
+def _ready_turn() -> dict[str, Any]:
+    return {"tool_calls": [], "claims": None, "ready": True}
+
+
+def test_ready_turn_runs_the_streamed_write_in_the_same_loop_turn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from policy_atlas.core import liveness
+
+    recorded: list[tuple[str, str | None]] = []
+
+    def _record(*, activity: str, section: str | None = None, **_counts: Any) -> None:
+        recorded.append((activity, section))
+
+    monkeypatch.setattr(liveness, "publish_progress", _record)
+    backend = _ReadyThenStreamBackend([
+        {"tool_calls": [{"tool": "lookup", "arguments": {}}], "claims": None},
+        _ready_turn(),
+    ])
+
+    result = run_section_loop(
+        backend,
+        seed={},
+        tools={"lookup": lambda _args: {}},
+        turn_cap=6,
+        section_line="Section 1 of 3 · Costs",
+    )
+
+    assert backend.calls == [
+        {"seed": {}, "transcript_len": 0, "force_emit": False},
+        {"seed": {}, "transcript_len": 1, "force_emit": False},
+        {"stream": True, "transcript_len": 1},
+    ]
+    assert result["claims"] == _claims("streamed")
+    assert result["turns_used"] == 2
+    assert result["turn_cap_hit"] is False
+    assert [activity for activity, _section in recorded] == ["Looking up sources", "Writing"]
+    assert {section for _activity, section in recorded} == {"Section 1 of 3 · Costs"}
+
+
+def test_ready_turn_and_write_usages_are_added_together(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ready_usage = TokenUsage(prompt=100, completion=5, total=105, cached=90)
+    write_usage = TokenUsage(prompt=110, completion=400, total=510, cached=100, cache_write=10)
+
+    class _Backend(_ReadyThenStreamBackend):
+        def section_turn(
+            self, seed: dict[str, Any], transcript: list[dict[str, Any]], *, force_emit: bool
+        ) -> UsageResult[dict[str, Any]]:
+            turn, _none = super().section_turn(seed, transcript, force_emit=force_emit)
+            return turn, ready_usage
+
+    backend = _Backend([_ready_turn()], write_usage=write_usage)
+
+    result = run_section_loop(backend, seed={}, tools={})
+
+    assert result["usage_totals"] == {
+        "prompt": 210,
+        "completion": 405,
+        "total": 615,
+        "cached": 190,
+        "cache_write": 10,
+        "reasoning": 0,
+    }
+
+
+def test_ready_turn_without_the_stream_method_uses_the_forced_tool() -> None:
+    backend = ScriptedBackend([
+        _ready_turn(),
+        {"tool_calls": [], "claims": _claims("forced")},
+    ])
+
+    result = run_section_loop(backend, seed={}, tools={})
+
+    assert [call["force_emit"] for call in backend.calls] == [False, True]
+    assert result["claims"] == _claims("forced")
+    assert result["turns_used"] == 1
+    assert result["turn_cap_hit"] is False
+
+
+def test_add_token_usage_sums_fields_and_keeps_unreported_ones_none() -> None:
+    first = TokenUsage(prompt=10, completion=None, total=10, cached=4)
+    second = TokenUsage(prompt=5, completion=3, total=8)
+
+    assert add_token_usage(first, second) == TokenUsage(
+        prompt=15, completion=3, total=18, cached=4, cache_write=None, reasoning=None
+    )
+    assert add_token_usage(None, second) is second
+    assert add_token_usage(first, None) is first
+    assert add_token_usage(None, None) is None
 
 
 def test_search_without_a_usable_query_reads_looking_up_sources(

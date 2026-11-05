@@ -98,6 +98,39 @@ class UsageAccumulator:
         }
 
 
+def add_token_usage(first: TokenUsage | None, second: TokenUsage | None) -> TokenUsage | None:
+    """Add two calls' token counts into one, for a turn that made two calls.
+
+    Each field is the sum of the two; a field neither call reported stays
+    ``None``, and a field only one reported keeps that one's count.
+
+    Args:
+        first: Usage of the first call, or ``None``.
+        second: Usage of the second call, or ``None``.
+
+    Returns:
+        The combined usage, or ``None`` when neither call reported any.
+    """
+    if first is None:
+        return second
+    if second is None:
+        return first
+
+    def _sum(a: int | None, b: int | None) -> int | None:
+        if a is None and b is None:
+            return None
+        return (a or 0) + (b or 0)
+
+    return TokenUsage(
+        prompt=_sum(first.prompt, second.prompt),
+        completion=_sum(first.completion, second.completion),
+        total=_sum(first.total, second.total),
+        cached=_sum(first.cached, second.cached),
+        cache_write=_sum(first.cache_write, second.cache_write),
+        reasoning=_sum(first.reasoning, second.reasoning),
+    )
+
+
 def token_usage_from_provider(usage: Any | None) -> TokenUsage | None:
     """Normalize a provider usage object into ``TokenUsage``.
 

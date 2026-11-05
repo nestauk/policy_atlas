@@ -210,12 +210,18 @@ class SectionTurn(TypedDict):
     056 D10: parallel tool calls stay on for the forced turn so it reads the
     cache). The ``claims`` field name is kept for the wire shape ``SectionProseWire``
     (prose + claims) to bound the diff.
+
+    ``ready`` is True when the writer said it has gathered enough (task 058,
+    owner 2026-11-05): it called ``write_section``, or replied with no tool
+    call at all. Such a turn carries no reads and no claims; the loop then
+    runs the write turn, which streams the section to the user.
     """
 
     tool_calls: list[ToolCallRequest]
     claims: SectionProseWire | None
     malformed_claims: NotRequired[int]
     extra_tool_calls_ignored: NotRequired[int]
+    ready: NotRequired[bool]
 
 
 # --- The backend seam ---
@@ -291,8 +297,8 @@ class SynthesisBackend(Protocol):
         *,
         force_emit: bool,
     ) -> UsageResult[SectionTurn]:
-        """Produce one loop turn: one or more read-tool calls, or the claims
-        emission.
+        """Produce one loop turn: one or more read-tool calls, the claims
+        emission, or the ready signal.
 
         Args:
             seed: Id-keyed section seed.
@@ -301,7 +307,8 @@ class SynthesisBackend(Protocol):
 
         Returns:
             The turn plus token usage: exactly one of ``tool_calls`` (one or
-            more entries) or ``claims``.
+            more entries), ``claims``, or ``ready`` (the writer has gathered
+            enough; the loop runs the write turn next, task 058).
         """
         ...
 
@@ -386,6 +393,32 @@ class SynthesisBackend(Protocol):
             Structurally parsed intro plus token usage.
         """
         ...
+
+
+def _strip_code_fence(text: str) -> str:
+    """Remove a Markdown code fence the model may wrap its JSON reply in.
+
+    The streamed write turn asks for a bare JSON object, but a model sometimes
+    wraps it as ```` ```json … ``` ````. A leading fence line (with or without
+    a language tag) and a trailing ```` ``` ```` are dropped; any other text is
+    returned as it came, stripped of outer whitespace.
+
+    Args:
+        text: The whole streamed reply.
+
+    Returns:
+        The reply without the fence.
+    """
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    first_newline = stripped.find("\n")
+    if first_newline == -1:
+        return stripped
+    body = stripped[first_newline + 1 :]
+    if body.rstrip().endswith("```"):
+        body = body.rstrip()[:-3]
+    return body.strip()
 
 
 def _salvage_section(arguments: str) -> tuple[SectionProseWire, int]:
@@ -970,11 +1003,20 @@ class OpenAISynthesisBackend:
                 forced_turn[0]["extra_tool_calls_ignored"] = len(ignored)
             return forced_turn
 
+        def _ready_turn() -> UsageResult[SectionTurn]:
+            return {
+                "tool_calls": [],
+                "claims": None,
+                "ready": True,
+            }, token_usage_from_provider(response.usage)
+
         if not response.choices:
             raise RuntimeError("OpenAI synthesis section turn response had no choices.")
         message_tool_calls = response.choices[0].message.tool_calls or []
         if not message_tool_calls:
-            raise RuntimeError("OpenAI synthesis section turn response had no tool call.")
+            # A bare reply with no tool call means the writer is ready to write
+            # (owner, 2026-11-05): the loop runs the write turn next.
+            return _ready_turn()
 
         if len(message_tool_calls) == 1:
             only_call = message_tool_calls[0]
@@ -984,12 +1026,15 @@ class OpenAISynthesisBackend:
                 raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
             if not isinstance(arguments, str):
                 arguments = "{}"
+            if name == "write_section":
+                return _ready_turn()
             if name == "emit_section":
                 return _emit_turn(arguments)
             return _read_turn(name, arguments)
 
         read_calls: list[ToolCallRequest] = []
         emit_arguments: str | None = None
+        write_requested = False
         for tool_call in message_tool_calls:
             name = tool_call.function.name
             arguments = tool_call.function.arguments
@@ -997,15 +1042,27 @@ class OpenAISynthesisBackend:
                 raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
             if not isinstance(arguments, str):
                 arguments = "{}"
+            if name == "write_section":
+                write_requested = True
+                continue
             if name == "emit_section":
                 emit_arguments = arguments
                 continue
             read_calls.append({"tool": name, "arguments": _json_object_or_empty(arguments)})
         if emit_arguments is not None and not read_calls:
-            # Every parallel call was emit_section — honour the emission rather
-            # than returning an empty turn the loop would treat as a protocol
-            # violation.
+            # Every parallel call was emit_section (perhaps beside
+            # write_section) — honour the emission rather than returning an
+            # empty turn the loop would treat as a protocol violation.
             return _emit_turn(emit_arguments)
+        if write_requested and not read_calls:
+            # Every parallel call was write_section: the writer is ready.
+            return _ready_turn()
+        if write_requested:
+            # write_section beside reads: run the reads and drop the write;
+            # the model sees the results and calls write_section again.
+            log.warning(
+                "synthesis.write_with_reads_deferred", read_tool_count=len(read_calls)
+            )
         if emit_arguments is not None:
             log.warning(
                 "synthesis.emit_with_reads_deferred", read_tool_count=len(read_calls)
@@ -1027,7 +1084,8 @@ class OpenAISynthesisBackend:
             force_emit: Whether this is the final forced-emission turn.
 
         Returns:
-            One tool call request or a claims emission plus token usage.
+            Read-tool call requests, a claims emission, or (on an open turn) the
+            ready signal, plus token usage.
 
         Raises:
             RuntimeError: If the provider response violates the one-tool-call protocol.
@@ -1069,13 +1127,23 @@ class OpenAISynthesisBackend:
         seed: dict[str, Any],
         transcript: list[ToolExchange],
     ) -> UsageResult[SectionTurn]:
-        """Write the section's final turn as one streamed response (task 058, N6).
+        """Write the section as one streamed reply (task 058, N6; owner 2026-11-05).
 
-        The request asks for the section object itself (prose plus claims,
-        strict ``json_schema``, no tools). Each piece of prose is sent to the
-        user as it arrives through :func:`publish_section_delta`; the whole text
-        is then parsed exactly as the forced ``emit_section`` call is, so the
-        result continues into the claim checks unchanged.
+        This is every section's write turn: the turn after the writer calls
+        ``write_section`` (it has gathered enough), and the forced final turn
+        when the turn budget runs out.
+
+        The request keeps the section turns' tools on it, with no tool allowed
+        (``tool_choice="none"``) and no structured-output schema, and the last
+        message asks for the ``emit_section`` arguments as one JSON object.
+        Keeping the tools means the provider can reuse the part of the prompt
+        it has already stored from the earlier turns (its "prompt cache"); a
+        structured-output schema would change that stored part and lose the
+        reuse (probe, 2026-11-05). Each piece of prose is sent to the user as
+        it arrives through :func:`publish_section_delta`; the whole text, less
+        any Markdown code fence around it, is then parsed exactly as the
+        forced ``emit_section`` call is, so the result continues into the
+        claim checks unchanged.
 
         The call runs once, outside the retry loop, because a retry would
         repeat text the user has already seen; the route step's timeout bounds
@@ -1093,9 +1161,12 @@ class OpenAISynthesisBackend:
             A parsed claims emission plus token usage.
         """
         step = "synthesise_section_emit"
+        # ``streamed=True`` appends the write-turn message whatever
+        # ``force_emit`` says, so the ready and the forced write send the same.
         messages = build_section_messages(
-            seed, transcript, force_emit=True, streamed=True
+            seed, transcript, force_emit=False, streamed=True
         )
+        tools = section_request_tools(seed)
         index = int(seed["section_index"])
         metadata = {
             "step": step,
@@ -1111,14 +1182,8 @@ class OpenAISynthesisBackend:
             stream = completions.create(
                 **_step_kwargs(step),
                 messages=_cache_messages(step, messages),
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "section",
-                        "strict": True,
-                        "schema": SectionProseWire.model_json_schema(),
-                    },
-                },
+                tools=tools,
+                tool_choice="none",
                 stream=True,
                 stream_options={"include_usage": True},
             )
@@ -1139,7 +1204,7 @@ class OpenAISynthesisBackend:
                 if chunk_usage is not None:
                     provider_usage = chunk_usage
             log_usage("synthesis.section_emit_stream.usage", provider_usage)
-            section, malformed = _salvage_section(text)
+            section, malformed = _salvage_section(_strip_code_fence(text))
             turn: SectionTurn = {"tool_calls": [], "claims": section}
             if malformed:
                 turn["malformed_claims"] = malformed

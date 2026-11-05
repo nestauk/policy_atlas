@@ -61,7 +61,7 @@ def _seed() -> dict[str, Any]:
 
 def test_section_prompt_version_is_v11() -> None:
     # v11 (task 056 D8/D10/X3): request-shape bump; the prompt text is unchanged.
-    assert SECTION_PROMPT_VERSION == "synthesise_section_v11"
+    assert SECTION_PROMPT_VERSION == "synthesise_section_v12"
 
 
 def test_block_absent_when_not_active() -> None:

@@ -68,7 +68,7 @@ from policy_atlas.core.schema import (
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.tags import has_control_character
 from policy_atlas.core.tokens import word_tokens as _tokens
-from policy_atlas.core.usage import UsageAccumulator, UsageResult
+from policy_atlas.core.usage import UsageAccumulator, UsageResult, add_token_usage
 from policy_atlas.evidence_search.assess.appraise import appraisal_tier
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 from policy_atlas.evidence_search.extract.extract import record_ids_by_profile
@@ -3630,12 +3630,19 @@ def run_section_loop(
 
     While it runs, the loop publishes what the writer is doing (task 058,
     N3): before each read tool, "Looking for: <query>", "Reading findings" or
-    "Looking up sources"; before the forced final turn, "Writing". Each line
+    "Looking up sources"; before the write turn, "Writing". Each line
     carries ``section_line`` so the user sees which section it belongs to.
+
+    The write turn (task 058, owner 2026-11-05) runs when the writer says it
+    has gathered enough (a ``ready`` turn: it called ``write_section``) or
+    when the turn budget runs out. It is the same loop turn as the ready
+    signal, and its tokens are added to that turn's. A backend that returns
+    claims on an open turn by itself (the offline scripted backend) is still
+    accepted.
 
     Args:
         backend: Synthesis backend implementing ``section_turn``, and
-            optionally ``section_emit_stream`` for a streamed final turn.
+            optionally ``section_emit_stream`` for a streamed write turn.
         seed: Id-keyed section seed.
         tools: Available substrate tools.
         turn_cap: Maximum generation turns; final turn forces emission.
@@ -3658,18 +3665,34 @@ def run_section_loop(
         if line is not None:
             liveness.publish_progress(activity=line, section=section_line)
 
+    stream_emit = getattr(backend, "section_emit_stream", None)
+
+    def write(transcript: list[ToolExchange]) -> UsageResult[Mapping[str, Any]]:
+        # The write turn: "Writing" for the user, then the section streamed
+        # when the backend can, else the forced emit_section call.
+        liveness.publish_progress(
+            activity=activity("synthesise.writing"), section=section_line
+        )
+        if stream_emit is not None:
+            streamed: UsageResult[Mapping[str, Any]] = stream_emit(seed, transcript)
+            return streamed
+        forced: UsageResult[Mapping[str, Any]] = backend.section_turn(
+            seed, transcript, force_emit=True
+        )
+        return forced
+
     def turn_fn(
         transcript: list[ToolExchange], *, force_emit: bool
     ) -> UsageResult[LoopTurn]:
         if force_emit:
-            liveness.publish_progress(
-                activity=activity("synthesise.writing"), section=section_line
-            )
-        stream_emit = getattr(backend, "section_emit_stream", None)
-        if force_emit and stream_emit is not None:
-            result, usage = stream_emit(seed, transcript)
+            result, usage = write(transcript)
         else:
-            result, usage = backend.section_turn(seed, transcript, force_emit=force_emit)
+            result, usage = backend.section_turn(seed, transcript, force_emit=False)
+            if result.get("ready"):
+                # The writer said it has enough (write_section, task 058):
+                # write in this same loop turn and count both calls' tokens.
+                result, write_usage = write(transcript)
+                usage = add_token_usage(usage, write_usage)
         return {
             "emission": result.get("claims"),
             "tool_calls": result.get("tool_calls", []),

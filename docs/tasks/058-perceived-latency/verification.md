@@ -34,6 +34,7 @@ secrets, no raw source text, no unredacted traces.
 | Owner notes after round 3 (2026-11-05): copy, bands, settled card, fold mark, chip grouping | `make frontend-verify && make drift-check && pnpm e2e` | pass | 1072 tests in 93 files, build OK, `drift-check: OK`; Playwright 33 passed. Backend: `tests/runtime/test_task_agent.py` and `make prompt-guard` green on each prompt re-pin. |
 | Owner questions on a live run (2026-11-05): no Result footer, automatic swap | `make frontend-verify && make drift-check && pnpm e2e` | pass | 1071 tests in 93 files, build OK, `drift-check: OK`; Playwright 33 passed (scene 6 now ends on the committed report's title). |
 | Owner notes (2026-11-05): no event-log echoes in the thread, settled scope lines | `make frontend-verify && make drift-check && pnpm e2e` | pass | 1069 tests in 93 files, build OK, `drift-check: OK`; Playwright 33 passed. |
+| The streaming fix (owner go, 2026-11-05) | `make verify-fast` + `make prompt-guard` | pass | backend 4233 passed, 1 skipped (7 min 12 s); mypy "no issues found in 464 source files"; ruff clean; prompt guard green on the v12 pin. Focused first: 227 tests across the prompt-pin, prompts, shape, backend, loop and call-site files. |
 
 (The gate map's step-6 exit is this command; it is re-run after the owner-gated phases.)
 
@@ -136,6 +137,19 @@ tool and the gap measure are built and tested (Phase 0). The "before" captures m
   thread (`presentRunDecisions` and its tests deleted; the History tab is unchanged); the
   settled scope card gives each chip group its own line under a grey label (`settledSummary`
   now returns lines, one per group).
+- **The streaming fix (owner go, 2026-11-05):** built by a deep-reasoner agent from the lead's
+  brief (the lead wrote the prompt words and the probe first): `write_section` ready signal on
+  open turns, the streamed write turn in the same loop turn with the two calls' usage added
+  (`core/usage.add_token_usage`), the cache-keeping request shape (tools kept, `tool_choice`
+  "none", no `response_format`), code fences stripped before the parse, the forced turn at the
+  cap streams the same way, the once-only fallback kept. `call_site_kwargs_056.json` refreshed:
+  the section turn and the repair now list `write_section`, the open turn's `allowed_tools`
+  carries it instead of `emit_section`, the streamed row has no `response_format`. Accepted
+  gap (agent proposal 1): when the streamed write and its forced fallback both fail to parse,
+  the ready turn's tokens are not counted in `usage_totals` (the loop adds usage only when the
+  turn returns); rare and small. Agent proposals 2 to 4 declined: `parallel_tool_calls` stays
+  off the streamed request (the probe's shape B hit the cache without it); the no-stream
+  route's "final turn" wording only reaches the offline test backends.
 
 ## Diff summary
 
@@ -226,6 +240,17 @@ adjudicated at step 7).
   sources in full and extracts their findings. Up to 400 papers and 200 policy documents."),
   and the non-intervention Detailed report example likewise. Labels, ids, bands and the caps
   are unchanged; `PLANNER_PROMPT_VERSION` stays.
+- `evidence_search/synthesis/section_prompt.py`, second re-pin (owner go on the streaming fix,
+  2026-11-05): `b771fd12…` → `197e3a63…` (`SECTION_PROMPT_VERSION` bumped to
+  `synthesise_section_v12`, a behaviour change, so not a like-for-like swap; the prompt-pin test
+  `test_section_prompt_templates.py` now hashes v12). The "How to work" bullet now tells the writer to call
+  `write_section` (a new no-argument tool) when it has gathered enough, and to write the
+  section on the next turn; the forced-turn sentence says "write the section" instead of "call
+  emit_section". `SECTION_FINAL_TURN_MESSAGE_STREAMED` becomes `SECTION_WRITE_TURN_MESSAGE`
+  ("Write the section now: reply with one JSON object, the emit_section arguments … The JSON
+  object only, no code fence."). The `emit_section` schema, the read tools, the repair and the
+  forced-tool final message keep their wording. Reason and probe: annex § Owner questions,
+  item 1; `research/exp-stream-cache-probe.md`.
 
 ### Flagged deviations (minor, resolved within the contract's vocabulary)
 

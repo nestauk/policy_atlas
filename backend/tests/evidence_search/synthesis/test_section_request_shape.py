@@ -38,8 +38,17 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     run_section_loop,
 )
 
-_SECTION_TOOLS = ["search_chunks", "query_findings", "lookup", "emit_section"]
-_REQUEST_TOOLS = [*_SECTION_TOOLS, "emit_repairs"]
+#: The open turns' ``allowed_tools`` (task 058): the three reads and the ready
+#: signal; emit_section stays on the request for the forced fallback only.
+_SECTION_TOOLS = ["search_chunks", "query_findings", "lookup", "write_section"]
+_REQUEST_TOOLS = [
+    "search_chunks",
+    "query_findings",
+    "lookup",
+    "emit_section",
+    "write_section",
+    "emit_repairs",
+]
 _FAILING = [
     {
         "claim_id": "s0c0",
@@ -236,6 +245,48 @@ def test_turns_and_repair_send_identical_tools_and_parallel_tool_calls() -> None
         "type": "function",
         "function": {"name": "emit_repairs"},
     }
+
+
+def test_streamed_write_turn_keeps_the_turns_tools_and_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task 058 (probe 2026-11-05): the streamed write sends the turns' six
+    tools with no tool allowed and no response_format, and its messages
+    extend the open turn's, so the provider reuses the cached prefix."""
+    from policy_atlas.evidence_search.synthesis import synthesis_backend as sb
+
+    monkeypatch.setattr(sb, "publish_section_delta", lambda *_args, **_kwargs: None)
+    seed = _seed()
+    normal, normal_calls = _backend([_ToolCall("write_section", {})])
+    turn, _usage = normal.section_turn(seed, [], force_emit=False)
+    assert turn.get("ready") is True
+
+    reply = json.dumps({"prose": "Prose.", "claims": []})
+    chunk = type("Chunk", (), {})()
+    chunk.choices = [type("C", (), {"delta": type("D", (), {"content": reply})()})()]
+    chunk.usage = None
+    stream_calls: list[dict[str, Any]] = []
+
+    def _create(**kwargs: Any) -> list[Any]:
+        stream_calls.append(kwargs)
+        return [chunk]
+
+    writer, _unused = _backend([])
+    cast("Any", writer)._client.chat.completions.create = _create
+    written, _usage = writer.section_emit_stream(seed, [])
+    claims = written["claims"]
+    assert claims is not None
+    assert claims.prose == "Prose."
+
+    [turn_kwargs] = normal_calls.calls
+    [stream_kwargs] = stream_calls
+    assert [tool["function"]["name"] for tool in stream_kwargs["tools"]] == _REQUEST_TOOLS
+    assert stream_kwargs["tools"] == turn_kwargs["tools"]
+    assert stream_kwargs["tool_choice"] == "none"
+    assert "response_format" not in stream_kwargs
+    assert stream_kwargs["stream"] is True
+    turn_messages = turn_kwargs["messages"]
+    assert stream_kwargs["messages"][: len(turn_messages)] == turn_messages
 
 
 # --- (c) D10: several calls on a forced turn or the repair ---
