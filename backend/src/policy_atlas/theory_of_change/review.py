@@ -10,6 +10,7 @@ Agent says how many there are and where to find them.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -145,6 +146,34 @@ def _report(conn: Connection, task_id: uuid.UUID) -> dict[str, Any] | None:
             f"{item.get('link')}: {item.get('question')}" for item in report.get("tests", [])
         ],
     }
+
+
+#: Events that bracket a review, so the chat and the canvas can say it runs.
+REVIEW_STARTED = "toc.review.started"
+REVIEW_FINISHED = "toc.review.finished"
+REVIEW_GIVE_UP = timedelta(minutes=10)
+
+
+def reviewing(conn: Connection, task_id: uuid.UUID) -> bool:
+    """Whether a review of the theory is running: its start is the newer of the two events.
+
+    A start older than :data:`REVIEW_GIVE_UP` counts as ended: the server
+    stopped during the review and its finish was never written.
+    """
+    latest = conn.execute(
+        select(event_log.c.event_type, event_log.c.occurred_at)
+        .where(
+            event_log.c.task_id == task_id,
+            event_log.c.event_type.in_((REVIEW_STARTED, REVIEW_FINISHED)),
+        )
+        .order_by(event_log.c.sequence.desc())
+        .limit(1)
+    ).one_or_none()
+    return (
+        latest is not None
+        and latest.event_type == REVIEW_STARTED
+        and datetime.now(UTC) - latest.occurred_at < REVIEW_GIVE_UP
+    )
 
 
 def run_review(engine: Engine, *, task_id: uuid.UUID, backend: TocBackend) -> uuid.UUID | None:

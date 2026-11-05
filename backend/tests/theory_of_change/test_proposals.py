@@ -68,12 +68,12 @@ def test_accepted_edits_apply_in_order_and_a_new_box_must_come_first(
         problems = proposals.decide(
             conn, task_id=task_id, actor=ME, proposal_id=proposal, index=1, accept=True
         )
-    assert problems and "n1" in problems[0]
+    assert problems.problems and "n1" in problems.problems[0]
     with engine.begin() as conn:
         assert (
             proposals.decide(
                 conn, task_id=task_id, actor=ME, proposal_id=proposal, index=None, accept=True
-            )
+            ).problems
             == []
         )
         row = conn.execute(select(toc_proposal).where(toc_proposal.c.proposal_id == proposal)).one()
@@ -116,7 +116,7 @@ def test_merge_and_add_pathway_apply(engine: Engine, ids: Any) -> None:
         assert (
             proposals.decide(
                 conn, task_id=task_id, actor=ME, proposal_id=proposal, index=None, accept=True
-            )
+            ).problems
             == []
         )
         assert conn.execute(select(toc_box).where(toc_box.c.text == "Same as S1")).first() is None

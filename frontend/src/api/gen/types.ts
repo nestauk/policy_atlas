@@ -6259,6 +6259,11 @@ export interface components {
             /** Queued Link Ids */
             queued_link_ids?: string[];
             report: components["schemas"]["TocReportOut"] | null;
+            /**
+             * Reviewing
+             * @default false
+             */
+            reviewing: boolean;
             /** Supporting Activities */
             supporting_activities: string[];
             /**
@@ -6620,6 +6625,8 @@ export interface components {
          * @description Suggested edits that could not apply, with why.
          */
         TocProblemsOut: {
+            /** New Link Ids */
+            new_link_ids?: string[];
             /** Problems */
             problems: string[];
         };

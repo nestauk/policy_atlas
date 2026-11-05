@@ -88,7 +88,7 @@ from policy_atlas.api.readmodels.repository import (
 from policy_atlas.api.routers._access import accessible_task, readable_or_public_task
 from policy_atlas.api.routers.runs import start_toc_check
 from policy_atlas.api.settings import Settings
-from policy_atlas.api.toc_start import clear_queue, queued_link_ids
+from policy_atlas.api.toc_start import clear_queue, post_agent_message, queued_link_ids
 from policy_atlas.core import events, tracing, uploads
 from policy_atlas.core.schema import (
     capability_run,
@@ -133,7 +133,13 @@ from policy_atlas.theory_of_change.draft import TOC_CLARIFICATION_EVENT
 from policy_atlas.theory_of_change.edits import EditRefused
 from policy_atlas.theory_of_change.evidence.grade import lowest, quality, rule_text, weight
 from policy_atlas.theory_of_change.graph import assumption_type, item_hash, link_state
-from policy_atlas.theory_of_change.review import edits_since_review, run_review
+from policy_atlas.theory_of_change.review import (
+    REVIEW_FINISHED,
+    REVIEW_STARTED,
+    edits_since_review,
+    reviewing,
+    run_review,
+)
 from policy_atlas.theory_of_change.store import has_graph
 
 router = APIRouter(prefix="/api/v1/tasks/{task_id}/toc", tags=["theory-of-change"])
@@ -626,6 +632,7 @@ def get_toc(
     if out.can_edit:
         out.edits_since_review = len(edits_since_review(conn, task_id))
         out.queued_link_ids = [uuid.UUID(key) for key in queued_link_ids(conn, task_id)]
+        out.reviewing = reviewing(conn, task_id)
     return out
 
 
@@ -1264,6 +1271,7 @@ def start_toc_review(
     """Review the theory after edits, off the request path; the Task Agent reports (C45)."""
     with engine.begin() as conn:
         _editable_toc(conn, task_id, user)
+        events.append(conn, task_id=task_id, run_id=None, event_type=REVIEW_STARTED, payload={})
     backend = backends.toc if backends.toc is not None else StubTocBackend()
 
     def review() -> None:
@@ -1272,6 +1280,14 @@ def start_toc_review(
                 run_review(engine, task_id=task_id, backend=backend)
         except Exception:
             log.exception("toc_review.failed", task_id=str(task_id))
+            post_agent_message(
+                engine, task_id=task_id, text="The review failed. Try Review the theory again."
+            )
+        finally:
+            with engine.begin() as conn:
+                events.append(
+                    conn, task_id=task_id, run_id=None, event_type=REVIEW_FINISHED, payload={}
+                )
 
     executor.submit(review)
     return {"status": "reviewing"}
@@ -1336,7 +1352,7 @@ def decide_toc_proposal(
 ) -> TocProblemsOut:
     """Accept or reject one suggested edit, or all; accepted edits apply as the user's (C45)."""
     _editable_toc(conn, task_id, user)
-    problems = _edit(
+    decided = _edit(
         proposals.decide,
         conn=conn,
         task_id=task_id,
@@ -1346,7 +1362,7 @@ def decide_toc_proposal(
         accept=body.accept,
         group=body.group,
     )
-    return TocProblemsOut(problems=problems)
+    return TocProblemsOut(problems=decided.problems, new_link_ids=decided.new_link_ids)
 
 
 @router.post("/proposals/{proposal_id}/dismiss", status_code=204)

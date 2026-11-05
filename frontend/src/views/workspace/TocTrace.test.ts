@@ -32,6 +32,12 @@ describe("tocTrace", () => {
     expect(tocTrace("walk", draft, false).title).toBe("Drafted the theory");
     expect(tocTrace("walk", draft.slice(0, 1), true).now).toBe("Drafting the theory");
   });
+
+  it("does not call a check that has no steps yet a draft", () => {
+    const started = [event(1, "run.started", {})];
+    expect(tocTrace("walk", started, true).title).toBe("Searching for evidence");
+    expect(tocTrace("walk", started, true, "check").now).toBe("Starting the evidence check");
+  });
 });
 
 describe("a failed walk", () => {

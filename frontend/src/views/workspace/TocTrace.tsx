@@ -111,7 +111,7 @@ export function tocTrace(
   walkId: string,
   decisions: TaskAgentThreadDecision[],
   live: boolean,
-  /** The walk's kind when the caller knows it: the first walk drafts, every later one checks. */
+  /** The walk's kind when the caller knows it (the theory's status says, for the live walk); else read from its steps. */
   kind?: "draft" | "check",
   /** The walk's end status, when it has ended: a failed walk says so in its name. */
   status?: string,
@@ -152,8 +152,7 @@ export function tocTrace(
     return { at, text: head + tail };
   });
   const lines = [...searchLines, ...steps].sort((a, b) => a.at - b.at).map((line) => line.text);
-  const drafting =
-    kind !== undefined ? kind === "draft" : done.has("toc_draft") || running === "toc_draft" || (searches.size === 0 && steps.length === 0 && running === null);
+  const drafting = kind !== undefined ? kind === "draft" : done.has("toc_draft") || running === "toc_draft";
   const finishedSearches = [...searches.values()].filter((entry) => entry.found !== undefined).length;
   return {
     drafting,
@@ -228,7 +227,7 @@ export function TocTrace({
         </p>
       )}
       {open ? (
-        <ul className="mt-1 space-y-0.5 border-l border-line pl-3">
+        <ul className="mt-1 space-y-1.5 border-l border-line pl-3">
           {view.lines.map((line, index) => (
             <li key={index} className="anim-rise text-caption text-grey">
               {scrub(line)}

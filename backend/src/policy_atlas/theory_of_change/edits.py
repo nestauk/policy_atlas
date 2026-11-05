@@ -30,6 +30,7 @@ from policy_atlas.core.schema import (
     toc_figure,
     toc_item_evidence,
     toc_link,
+    toc_pathway,
     toc_pathway_link,
 )
 from policy_atlas.theory_of_change import store
@@ -53,6 +54,7 @@ _TABLES: dict[str, Table] = {
     "toc_pathway_link": toc_pathway_link,
     "toc_item_evidence": toc_item_evidence,
     "toc_figure": toc_figure,
+    "toc_pathway": toc_pathway,
 }
 
 
@@ -704,16 +706,32 @@ def undo(conn: Connection, *, task_id: uuid.UUID, actor: Actor, event_id: uuid.U
         raise EditRefused("toc_already_undone", "this edit was already undone")
     log = store.ChangeLog()
     skipped: list[str] = []
+    # One event may hold several edits (an accepted route, store.one_change):
+    # a row is put back to its state before the first of them, and counts as
+    # untouched since when its revision rose once per edit of it.
+    before: list[dict[str, Any]] = payload.get("before", [])
+    made = {(entry["table"], entry["id"]) for entry in payload.get("created", [])}
+    first: dict[tuple[str, str], dict[str, Any]] = {}
+    edited: dict[tuple[str, str], int] = {}
+    for entry in before:
+        key = _row_key(entry)
+        if key is None:
+            continue
+        first.setdefault(key, entry)
+        if not entry.get("deleted"):
+            edited[key] = edited.get(key, 0) + 1
     for created in payload.get("created", []):
         table = _TABLES.get(created["table"])
         if table is None:
             continue
-        key = table.c[store._PRIMARY_KEY[table.name]]
-        current = conn.execute(select(table).where(key == uuid.UUID(created["id"]))).one_or_none()
+        column = table.c[store._PRIMARY_KEY[table.name]]
+        current = conn.execute(
+            select(table).where(column == uuid.UUID(created["id"]))
+        ).one_or_none()
         if current is None:
             continue
-        if current.revision != 1:
-            skipped.append(current.code or created["id"])
+        if current.revision != 1 + edited.get((created["table"], created["id"]), 0):
+            skipped.append(getattr(current, "code", None) or created["id"])
             continue
         if table is toc_link:
             _delete_links(conn, log, [current.link_id])
@@ -728,10 +746,17 @@ def undo(conn: Connection, *, task_id: uuid.UUID, actor: Actor, event_id: uuid.U
             )
             _delete_links(conn, log, links)
             store.delete(conn, log, toc_box, current.box_id)
-    deleted = [entry for entry in payload.get("before", []) if entry.get("deleted")]
+        elif table is toc_pathway:
+            store.delete(conn, log, toc_pathway, current.pathway_id)
+    # Rows the edits deleted come back as they were first, parents first;
+    # rows the same edits made stay gone.
+    deleted_keys = {_row_key(entry) for entry in before if entry.get("deleted")}
+    restored: list[dict[str, Any]] = [
+        entry for entry in before if entry.get("deleted") and _row_key(entry) is None
+    ] + [first[key] for key in deleted_keys if key is not None and key not in made]
     for name in _RESTORE_ORDER:
         table = _TABLES[name]
-        for entry in deleted:
+        for entry in restored:
             if entry["table"] != name:
                 continue
             values = _typed(table, entry["row"])
@@ -739,30 +764,37 @@ def undo(conn: Connection, *, task_id: uuid.UUID, actor: Actor, event_id: uuid.U
             if name in store._PRIMARY_KEY:
                 log.created.append({"table": name, "id": str(values[store._PRIMARY_KEY[name]])})
     # Rows that lose the critical mark go back first: at most one link is critical (W10).
-    for entry in sorted(payload.get("before", []), key=lambda e: bool(e["row"].get("critical"))):
-        if entry.get("deleted") or entry["table"] not in (
-            "toc_box",
-            "toc_link",
-            "toc_item_evidence",
-        ):
-            continue
+    changed = [
+        entry
+        for key, entry in first.items()
+        if key not in made
+        and key not in deleted_keys
+        and entry["table"] in ("toc_box", "toc_link", "toc_item_evidence")
+    ]
+    for entry in sorted(changed, key=lambda e: bool(e["row"].get("critical"))):
         table = _TABLES[entry["table"]]
-        before = _typed(table, entry["row"])
+        row_before = _typed(table, entry["row"])
         key_name = store._PRIMARY_KEY[table.name]
         current = conn.execute(
-            select(table).where(table.c[key_name] == before[key_name])
+            select(table).where(table.c[key_name] == row_before[key_name])
         ).one_or_none()
-        # The edit raised the revision by one; anything higher means a later change.
-        if current is None or current.revision != before["revision"] + 1:
-            skipped.append(before.get("code") or str(before[key_name]))
+        # Each edit raised the revision by one; anything higher means a later change.
+        expected = row_before["revision"] + edited[_row_key(entry)]  # type: ignore[index]
+        if current is None or current.revision != expected:
+            skipped.append(row_before.get("code") or str(row_before[key_name]))
             continue
         restore = {
             name: value
-            for name, value in before.items()
+            for name, value in row_before.items()
             if name not in (key_name, "task_id", "revision", "created_at", "updated_at")
         }
         store.update(
-            conn, log, table, before[key_name], observed_revision=current.revision, values=restore
+            conn,
+            log,
+            table,
+            row_before[key_name],
+            observed_revision=current.revision,
+            values=restore,
         )
     store.record(
         conn,
@@ -775,6 +807,12 @@ def undo(conn: Connection, *, task_id: uuid.UUID, actor: Actor, event_id: uuid.U
         undoes=str(event_id),
     )
     return skipped
+
+
+def _row_key(entry: dict[str, Any]) -> tuple[str, str] | None:
+    """A logged row's table and id; ``None`` for a table without a one-column key."""
+    name = store._PRIMARY_KEY.get(entry["table"])
+    return None if name is None else (entry["table"], str(entry["row"][name]))
 
 
 def _undone(conn: Connection, task_id: uuid.UUID, event_id: uuid.UUID) -> bool:

@@ -49,20 +49,20 @@ export function TocResult({ taskId }: { taskId: string }) {
   const canEdit = toc.data?.can_edit === true;
   const panel = usePanelWidth({ label: "Resize the details panel", initial: 380, edge: "left" });
   const { editor, toast, dismissToast, undoLast, error } = useTocEditor(taskId, canEdit);
-  // A review runs in the background; poll for its card for a while after asking (C45).
-  const [reviewing, setReviewing] = useState(false);
+  // A review runs in the background; poll for its card while it runs (C45), and once more when it ends.
+  const reviewing = toc.data?.reviewing === true;
   const proposals = useTocProposals(taskId, canEdit, reviewing);
+  const { refetch: refetchProposals } = proposals;
+  useEffect(() => {
+    if (!reviewing) void refetchProposals();
+  }, [reviewing, refetchProposals]);
   // Suggestions sit in the side panel, open while any wait until the user closes it.
   const waiting = canEdit ? pendingCount(proposals.data ?? []) : 0;
   const [suggestionsChoice, setSuggestionsChoice] = useState<boolean | null>(null);
   const suggestionsOpen = waiting > 0 && (suggestionsChoice ?? true);
   // The route a hovered suggestion would add, shown faded on the canvas.
   const [preview, setPreview] = useState<Preview | null>(null);
-  const askReview = () =>
-    editor.run({ kind: "review" }, undefined, () => {
-      setReviewing(true);
-      window.setTimeout(() => setReviewing(false), 180_000);
-    });
+  const askReview = () => editor.run({ kind: "review" });
 
   const graph = toc.data;
   // A code clicked in the chat (?focus=#5) selects that box or connection here (round 6).
@@ -114,7 +114,6 @@ export function TocResult({ taskId }: { taskId: string }) {
     showCanvas();
   };
   const titles = pathwayTitles(graph);
-  const reviewWaiting = reviewing && (proposals.data ?? []).length === 0;
   return (
     <main className="mx-auto my-8 w-full max-w-[1280px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0">
       {/* The report's short title and summary; the task's name until a report is written. */}
@@ -190,7 +189,7 @@ export function TocResult({ taskId }: { taskId: string }) {
           onAddBox={() => setAdding(true)}
           onReview={askReview}
           reviewLabel={`Review the theory${graph.edits_since_review >= 5 ? ` (${graph.edits_since_review} changes)` : ""}`}
-          reviewDisabled={editor.busy || reviewWaiting}
+          reviewDisabled={editor.busy || reviewing}
           onGuide={() => setGuideOpen((open) => !open)}
           guideOpen={guideOpen}
           suggestions={waiting}
@@ -208,7 +207,7 @@ export function TocResult({ taskId }: { taskId: string }) {
                 {error}
               </p>
             )}
-            {reviewWaiting && <p className="my-2 text-body text-grey">Policy Atlas is reviewing the theory. Its suggestions appear here.</p>}
+            {reviewing && <p className="my-2 text-body text-grey">Policy Atlas is reviewing the theory. Its suggestions appear here.</p>}
             {adding && (
               <AddBoxForm
                 editor={editor}
@@ -250,7 +249,7 @@ export function TocResult({ taskId }: { taskId: string }) {
         />
         {selection === null && suggestionsOpen && (
           <SidePanel label="Suggestions" panel={panel} onClose={() => { setSuggestionsChoice(false); setPreview(null); }}>
-            <Suggestions proposals={proposals.data ?? []} editor={editor} onPreview={setPreview} />
+            <Suggestions proposals={proposals.data ?? []} editor={editor} onPreview={setPreview} checkNew={graph.check_status !== "none" && graph.check_status !== "drafted"} />
           </SidePanel>
         )}
         {selection !== null && (

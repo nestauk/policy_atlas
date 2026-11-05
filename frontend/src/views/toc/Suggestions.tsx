@@ -89,14 +89,36 @@ export function pendingCount(proposals: Proposal[]): number {
  * Hovering a route shows it faded on the canvas. Nothing changes until the
  * user accepts.
  */
-export function Suggestions({ proposals, editor, onPreview }: { proposals: Proposal[]; editor: Editor; onPreview: (preview: Preview | null) => void }) {
+export function Suggestions({
+  proposals,
+  editor,
+  onPreview,
+  checkNew,
+}: {
+  proposals: Proposal[];
+  editor: Editor;
+  onPreview: (preview: Preview | null) => void;
+  /** Whether connections an accept adds get their evidence check at once (owner, 2026-11-05): not before the theory's first check. */
+  checkNew: boolean;
+}) {
   const [problems, setProblems] = useState<string[]>([]);
   const decide = (proposalId: string, body: { index: number | null; accept: boolean; group?: string }) => {
     onPreview(null);
-    editor.run({ kind: "proposal", proposalId, body }, body.accept ? "Applied a suggestion" : undefined, (data) =>
-      setProblems((data as { problems?: string[] } | undefined)?.problems ?? []),
-    );
+    editor.run({ kind: "proposal", proposalId, body }, body.accept ? "Applied a suggestion" : undefined, (data) => {
+      const decided = data as { problems?: string[]; new_link_ids?: string[] } | undefined;
+      setProblems(decided?.problems ?? []);
+      const added = decided?.new_link_ids ?? [];
+      if (checkNew && added.length > 0) editor.run({ kind: "check", body: { link_ids: added, mode: "new_items" } });
+    });
   };
+  // A single suggested edit shows on the canvas too, faded, while hovered.
+  const hover = (proposal: Proposal, edit: Edit) =>
+    edit.status === "pending" && ["add_box", "add_link", "add_pathway"].includes(edit.op)
+      ? {
+          onMouseEnter: () => onPreview(previewOf(proposal, { group: "", edits: [edit], label: "", kind: "" })),
+          onMouseLeave: () => onPreview(null),
+        }
+      : {};
   return (
     <section id="toc-suggestions" aria-label="Suggestions" className="grid gap-4">
       <h3 className="text-body font-bold text-navy">Suggestions</h3>
@@ -150,7 +172,7 @@ export function Suggestions({ proposals, editor, onPreview }: { proposals: Propo
             {single.length > 0 && (
               <ul className="mt-2">
                 {single.map((edit) => (
-                  <li key={edit.index} className="border-t border-line py-2">
+                  <li key={edit.index} className="border-t border-line py-2 hover:bg-blue-tint-2" {...hover(proposal, edit)}>
                     <p className="text-body font-semibold text-ink">{scrub(edit.line)}</p>
                     <p className="text-meta text-grey">{scrub(edit.reason)}</p>
                     {edit.status === "pending" ? (

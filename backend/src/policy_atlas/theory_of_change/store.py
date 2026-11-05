@@ -11,6 +11,9 @@ so a row the user changed meanwhile is skipped and reported (C10).
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any
@@ -304,19 +307,68 @@ def record(
             for Policy Atlas's own steps.
         undoes: The event an Undo reverses.
     """
+    payload = {
+        "step": step,
+        "created": log.created,
+        "before": log.before,
+        "skipped": log.skipped,
+        "changes": changes or [],
+        **({"actor": actor} if actor else {}),
+        **({"undoes": undoes} if undoes else {}),
+    }
+    batch = _BATCH.get()
+    if batch is not None and step == "user_edit":
+        batch.append(payload)
+        return
+    events.append(
+        conn, task_id=task_id, run_id=run_id, event_type=TOC_CHANGED_EVENT, payload=payload
+    )
+
+
+#: User edits recorded inside :func:`one_change`, written there as one event.
+_BATCH: ContextVar[list[dict[str, Any]] | None] = ContextVar("toc_change_batch", default=None)
+
+
+@contextmanager
+def one_change(
+    conn: Connection, *, task_id: uuid.UUID, actor: str, change: str | None = None
+) -> Iterator[list[dict[str, Any]]]:
+    """Record every user edit made inside as one ``toc.changed`` event.
+
+    So History shows one line, and one Undo reverses it all: an accepted
+    route's boxes, connections and pathway (owner, 2026-11-05). Nothing is
+    written when the block raises.
+
+    Args:
+        conn: Open connection.
+        task_id: The task.
+        actor: The user who made the edits.
+        change: The History line; ``None`` joins the edits' own lines.
+
+    Yields:
+        The edits recorded so far; a caller that rolls back a savepoint cuts
+        this list back to its length before.
+    """
+    batch: list[dict[str, Any]] = []
+    token = _BATCH.set(batch)
+    try:
+        yield batch
+    finally:
+        _BATCH.reset(token)
+    if not batch:
+        return
     events.append(
         conn,
         task_id=task_id,
-        run_id=run_id,
+        run_id=None,
         event_type=TOC_CHANGED_EVENT,
         payload={
-            "step": step,
-            "created": log.created,
-            "before": log.before,
-            "skipped": log.skipped,
-            "changes": changes or [],
-            **({"actor": actor} if actor else {}),
-            **({"undoes": undoes} if undoes else {}),
+            "step": "user_edit",
+            "created": [row for edit in batch for row in edit["created"]],
+            "before": [row for edit in batch for row in edit["before"]],
+            "skipped": [row for edit in batch for row in edit["skipped"]],
+            "changes": [change] if change else [c for edit in batch for c in edit["changes"]],
+            "actor": actor,
         },
     )
 

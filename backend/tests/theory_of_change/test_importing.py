@@ -207,6 +207,7 @@ def test_an_uploaded_draft_suggests_what_completes_it_and_accepting_builds_it(
 
     from policy_atlas.core.schema import toc_box, toc_link, toc_pathway
     from policy_atlas.theory_of_change import proposals
+    from policy_atlas.theory_of_change import edits
     from policy_atlas.theory_of_change.edits import Actor
 
     upload_id = uuid.uuid4()
@@ -250,7 +251,7 @@ def test_an_uploaded_draft_suggests_what_completes_it_and_accepting_builds_it(
 
     def accept(group: str) -> list[str]:
         with engine.begin() as conn:
-            return proposals.decide(
+            decided = proposals.decide(
                 conn,
                 task_id=task_id,
                 actor=Actor(user_id="test-user"),
@@ -259,12 +260,25 @@ def test_an_uploaded_draft_suggests_what_completes_it_and_accepting_builds_it(
                 accept=True,
                 group=group,
             )
+            return decided.problems
 
     # The way it could go wrong alone: its box, its link and its pathway.
     assert accept("r2") == []
     assert (count(toc_box), count(toc_link), count(toc_pathway)) == (4, 3, 2)
     assert accept("r1") == []
     assert (count(toc_box), count(toc_link), count(toc_pathway)) == (6, 5, 3)
+    # One History line per accepted route; its Undo takes the whole route away.
+    with engine.connect() as conn:
+        newest = edits.history(conn, task_id)[0]
+    assert newest.what.startswith("Added the suggested route")
+    with engine.begin() as conn:
+        assert (
+            edits.undo(
+                conn, task_id=task_id, actor=Actor(user_id="test-user"), event_id=newest.event_id
+            )
+            == []
+        )
+    assert (count(toc_box), count(toc_link), count(toc_pathway)) == (4, 3, 2)
 
 
 def test_a_route_brings_a_shared_box_along_and_rejecting_leaves_it_for_the_other() -> None:

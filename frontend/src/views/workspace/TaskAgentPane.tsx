@@ -763,6 +763,9 @@ export function TaskAgentPane({
     [shownUrl, shown, picked],
   );
   const tocLive = isToc && (tocGraph.data?.check_status === "drafting" || tocGraph.data?.check_status === "checking");
+  // The live walk's kind, from the theory's own status: never guessed from steps not yet loaded.
+  const tocLiveKind = tocGraph.data?.check_status === "drafting" ? "draft" : "check";
+  const tocReviewing = isToc && tocGraph.data?.reviewing === true;
   const tocCodes = useMemo(
     () =>
       tocGraph.data == null
@@ -778,13 +781,15 @@ export function TaskAgentPane({
   const { refetch: refetchRuns } = runsQuery;
   const { refetch: refetchTranscript } = transcript;
   useEffect(() => {
-    if (wasLive.current && !tocLive) {
+    // A review ending posts the Task Agent's message too.
+    const busy = tocLive || tocReviewing;
+    if (wasLive.current && !busy) {
       void refetchDecisions();
       void refetchRuns();
       void refetchTranscript();
     }
-    wasLive.current = tocLive;
-  }, [tocLive, refetchDecisions, refetchRuns, refetchTranscript]);
+    wasLive.current = busy;
+  }, [tocLive, tocReviewing, refetchDecisions, refetchRuns, refetchTranscript]);
   const checkInsQuery = useCheckIns(taskId, "all");
   const funnel = useFunnel(taskId);
   const [message, setMessage] = useState("");
@@ -870,10 +875,15 @@ export function TaskAgentPane({
   // The first walk drafts the theory; every later one checks it.
   const firstTocRunId = isToc ? (thread.find((item) => item.type === "run_block")?.run.capability_run_id ?? null) : null;
   // The walk running now: the newest one still open.
+  // While the list still shows the finished draft as running, its check has not appeared yet.
   const tocLiveRunId = tocLive
     ? (thread
         .filter((item) => item.type === "run_block")
-        .findLast((item) => item.run.status === "running" || item.run.status === "paused")?.run.capability_run_id ?? null)
+        .findLast(
+          (item) =>
+            (item.run.status === "running" || item.run.status === "paused") &&
+            !(tocLiveKind === "check" && item.decisions.some((decision) => (decision.detail as { component?: unknown } | null)?.component === "toc_draft")),
+        )?.run.capability_run_id ?? null)
     : null;
   const liveRunId = stream.run?.id;
   // Task 045 (A7): the live walk's own purpose, once the walk list has it —
@@ -1059,8 +1069,16 @@ export function TaskAgentPane({
                 walkId={item.run.capability_run_id}
                 decisions={item.decisions}
                 live={tocLive && item.run.capability_run_id === tocLiveRunId}
-                // Its own steps say what it was; the order is a guess before they load.
-                kind={item.decisions.length > 0 ? undefined : item.run.capability_run_id === firstTocRunId ? "draft" : "check"}
+                // Live: the theory's status says; ended: its own steps, or its order before they load.
+                kind={
+                  tocLive && item.run.capability_run_id === tocLiveRunId
+                    ? tocLiveKind
+                    : item.decisions.length > 0
+                      ? undefined
+                      : item.run.capability_run_id === firstTocRunId
+                        ? "draft"
+                        : "check"
+                }
                 status={item.run.status}
               />
             ) : item.run.capability_run_id === liveRunId && liveCard !== null ? (
@@ -1181,7 +1199,13 @@ export function TaskAgentPane({
           />
         )}
         {/* The walk started but the run list has not caught up yet. */}
-        {tocLive && tocLiveRunId === null && <TocTrace walkId="" decisions={[]} live kind={firstTocRunId === null ? "draft" : "check"} />}
+        {tocLive && tocLiveRunId === null && <TocTrace walkId="" decisions={[]} live kind={tocLiveKind} />}
+        {tocReviewing && (
+          <p role="status" className="mr-8 flex items-center gap-2 text-caption font-semibold text-grey">
+            <span aria-hidden="true" className="anim-breathe h-1.5 w-1.5 shrink-0 bg-blue" />
+            Reviewing the theory…
+          </p>
+        )}
         {!isToc && liveCard !== null && !threadHasLiveRun && (
           <div key="live-run-fallback" className="space-y-6">
             {liveCard}

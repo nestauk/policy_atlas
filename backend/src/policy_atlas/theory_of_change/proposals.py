@@ -15,6 +15,7 @@ names a new box the user has not accepted yet is refused with a plain reason.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -361,6 +362,14 @@ def _add_pathway(
     )
 
 
+@dataclass(frozen=True)
+class Decided:
+    """What a decision did: edits that could not apply, and the connections it added."""
+
+    problems: list[str]
+    new_link_ids: list[uuid.UUID]
+
+
 def decide(
     conn: Connection,
     *,
@@ -370,7 +379,7 @@ def decide(
     index: int | None,
     accept: bool,
     group: str | None = None,
-) -> list[str]:
+) -> Decided:
     """Accept or reject one edit of a proposal, a route's edits, or every pending one.
 
     ``group`` names a route (``r1``): accepting it applies the route's edits and
@@ -384,7 +393,8 @@ def decide(
     :func:`close`).
 
     Returns:
-        The reasons edits could not apply (empty when all applied).
+        The reasons edits could not apply (empty when all applied), and the
+        connections the accepted edits added, for their evidence check.
     """
     row = conn.execute(
         select(toc_proposal)
@@ -406,21 +416,36 @@ def decide(
         else [index]
     )
     problems: list[str] = []
-    for i in chosen:
-        if not 0 <= i < len(ops) or ops[i].get("status") != "pending":
-            continue
-        if not accept:
-            ops[i]["status"] = "rejected"
-            continue
-        try:
-            with conn.begin_nested():
-                apply_op(conn, task_id=task_id, actor=actor, op=ops[i], created=created)
-        except EditRefused as exc:
-            problems.append(f"{ops[i].get('line')}: {exc.message}")
-            continue
-        ops[i]["status"] = "accepted"
-        if ops[i].get("key") in created:
-            ops[i]["created_id"] = created[ops[i]["key"]]
+    links_before = set(
+        conn.execute(select(toc_link.c.link_id).where(toc_link.c.task_id == task_id)).scalars()
+    )
+    route = next(
+        (op for op in ops if op.get("group") == group and op.get("op") == "add_pathway"), None
+    )
+    change = (
+        f"Added the suggested route “{route.get('label')}”"
+        if accept and route is not None and group is not None
+        else None
+    )
+    # One History line and one Undo for everything this accept adds.
+    with store.one_change(conn, task_id=task_id, actor=actor.user_id, change=change) as batch:
+        for i in chosen:
+            if not 0 <= i < len(ops) or ops[i].get("status") != "pending":
+                continue
+            if not accept:
+                ops[i]["status"] = "rejected"
+                continue
+            mark = len(batch)
+            try:
+                with conn.begin_nested():
+                    apply_op(conn, task_id=task_id, actor=actor, op=ops[i], created=created)
+            except EditRefused as exc:
+                del batch[mark:]  # the savepoint rolled these edits back
+                problems.append(f"{ops[i].get('line')}: {exc.message}")
+                continue
+            ops[i]["status"] = "accepted"
+            if ops[i].get("key") in created:
+                ops[i]["created_id"] = created[ops[i]["key"]]
     # Report findings keep it open until the report is updated or the card dismissed.
     still_open = any(op.get("status") == "pending" for op in ops) or bool(row.report_findings)
     conn.execute(
@@ -433,7 +458,12 @@ def decide(
             revision=toc_proposal.c.revision + 1,
         )
     )
-    return problems
+    links_after = conn.execute(
+        select(toc_link.c.link_id).where(toc_link.c.task_id == task_id)
+    ).scalars()
+    return Decided(
+        problems=problems, new_link_ids=[i for i in links_after if i not in links_before]
+    )
 
 
 def _refs(op: dict[str, Any]) -> list[str]:

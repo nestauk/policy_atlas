@@ -9646,6 +9646,11 @@
               }
             ]
           },
+          "reviewing": {
+            "default": false,
+            "title": "Reviewing",
+            "type": "boolean"
+          },
           "supporting_activities": {
             "items": {
               "type": "string"
@@ -10536,6 +10541,14 @@
         "additionalProperties": false,
         "description": "Suggested edits that could not apply, with why.",
         "properties": {
+          "new_link_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "New Link Ids",
+            "type": "array"
+          },
           "problems": {
             "items": {
               "type": "string"

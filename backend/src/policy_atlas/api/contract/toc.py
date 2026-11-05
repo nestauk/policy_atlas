@@ -330,6 +330,8 @@ class TocGraphOut(BaseModel):
     edits_since_review: int = 0
     #: Links a queued check names: it starts when the running walk ends.
     queued_link_ids: list[uuid.UUID] = Field(default_factory=list)
+    #: Whether a review of the theory is running (C45).
+    reviewing: bool = False
 
 
 class TocDocumentOut(BaseModel):
@@ -736,6 +738,8 @@ class TocProblemsOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     problems: list[str]
+    #: Connections the accepted edits added: the client starts their evidence check.
+    new_link_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class TocClarificationIn(BaseModel):

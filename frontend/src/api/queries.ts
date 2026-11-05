@@ -695,8 +695,8 @@ export function useToc(taskId: string) {
     },
     enabled: Boolean(taskId),
     refetchInterval: (activeQuery) => {
-      const status = activeQuery.state.data?.check_status;
-      return status === "drafting" || status === "checking" ? 5_000 : false;
+      const data = activeQuery.state.data;
+      return data?.check_status === "drafting" || data?.check_status === "checking" || data?.reviewing === true ? 5_000 : false;
     },
   });
 }
