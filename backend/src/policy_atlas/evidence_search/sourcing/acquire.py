@@ -626,9 +626,12 @@ def acquire_sources(
     seen_record_ids: set[str] = set()
     seen_dois: set[str] = set()
     seen_hashes: set[str] = set()
-    # The same keys → the task's document, so a search that finds a document the
-    # task already holds can say so (``source.seen_again``): a theory-of-change
-    # check reads which documents each link's own search found (task 054).
+    # The same keys → the task's document, so a theory-of-change search that
+    # finds a document the task already holds can say so (``source.seen_again``):
+    # the check reads which documents each link's own search found (task 054).
+    # Only that kind writes the row; a longlist's many option searches would
+    # otherwise log every shared paper again, and nothing reads it.
+    says_seen_again = context.context.get("capability") == "theory_of_change"
     held: dict[str, uuid.UUID] = {}
     for meta, chash, held_tss in conn.execute(
         select(
@@ -925,7 +928,7 @@ def acquire_sources(
                     ),
                     None,
                 )
-                if known is not None and known not in seen_again:
+                if says_seen_again and known is not None and known not in seen_again:
                     seen_again.add(known)
                     events.append(
                         conn,

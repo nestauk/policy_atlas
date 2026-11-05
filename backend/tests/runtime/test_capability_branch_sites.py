@@ -27,7 +27,7 @@ SITES: dict[tuple[str, str], tuple[int, str]] = {
     ("runtime/runner.py", "_finish_run"): (
         1, "done 1.2: a toc walk abandons its item-search children, as a longlist walk"
     ),
-    ("api/routers/_common.py", "_latest_run_row"): (
+    ("api/routers/common.py", "_latest_run_row"): (
         1, "done 1.2: a ToC task's latest run leaves out child walks, as OS"
     ),
     ("runtime/agent.py", "persist_approved_plan"): (
@@ -43,9 +43,6 @@ SITES: dict[tuple[str, str], tuple[int, str]] = {
     ("api/routers/task_agent.py", "get_plan"): (1, "done 1.3: a ToC branch before it"),
     ("api/routers/task_agent.py", "patch_plan"): (
         1, "done 1.3: ToC refused 422 before it (the plan is set through the Task Agent)"
-    ),
-    ("runtime/option_search.py", "child_plan"): (
-        1, "done 1.4: an OS child runs unattended_plan; every other via the registry"
     ),
     # Left for later steps.
     ("api/routers/task_agent.py", "_paused_gate"): (
@@ -64,7 +61,7 @@ SITES: dict[tuple[str, str], tuple[int, str]] = {
         1, "right for ToC: a source must be an Evidence search; increment 7 adds options"
     ),
     # Right for a theory of change as they stand.
-    ("api/routers/_common.py", "task_out"): (1, "OS-only: has_longlist"),
+    ("api/routers/common.py", "task_out"): (1, "OS-only: has_longlist"),
     ("api/longlist_actions.py", "admit_longlist_action"): (1, "OS-only route: ToC refused"),
     ("api/longlist_start.py", "admit_and_mint"): (1, "OS-only route: ToC refused"),
     ("api/longlist_start.py", "longlist_walk_exists"): (1, "OS-only: longlist walks"),

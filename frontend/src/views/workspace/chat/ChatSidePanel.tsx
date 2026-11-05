@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
-import { useArtefact, useConversations } from "../../../api/queries";
+import { useArtefact, useConversations, useTask } from "../../../api/queries";
 import { COPY } from "../../../lib/vocabulary";
 import { createInitialRunStreamState } from "../../../store";
 import { cn } from "../../../ui/brand/cn";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
+import { isToc } from "../../scopingActivity";
 import { useChatsEnabled } from "../../taskResult";
 import { TaskAgentPane } from "../TaskAgentPane";
 import { usePanelWidth } from "../usePanelWidth";
@@ -80,18 +81,21 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   const draftOpen = activeConversationId === DRAFT_CHAT_ID;
   const artefact = useArtefact(taskId);
   const chatsEnabled = useChatsEnabled(taskId);
-  // The sidebar stays as the user left it across tabs (round 7): open on the
-  // Task Agent unless they closed it, and closed until they open it again.
+  const task = useTask(taskId);
+  const tocTask = isToc(task.data);
+  // On a theory of change, the sidebar stays as the user left it across tabs
+  // (round 7): open on the Task Agent unless they closed it, and closed until
+  // they open it again. The other kinds keep it closed until opened, as before.
   // ponytail: one flag for every task in this browser; per task if users ask.
   useEffect(() => {
     if (activeConversationId !== null) {
       writeClosed(false);
       return;
     }
-    if (conversations.isSuccess && !readClosed()) {
+    if (tocTask && conversations.isSuccess && !readClosed()) {
       setActiveConversation(taskAgentId, { replace: true });
     }
-  }, [activeConversationId, conversations.isSuccess, taskAgentId, setActiveConversation]);
+  }, [activeConversationId, conversations.isSuccess, taskAgentId, setActiveConversation, tocTask]);
   const openLatestOrTaskAgent = () => {
     // The launcher's decision needs the chats list resolved first — before
     // then "no chats" is read off `undefined` data.

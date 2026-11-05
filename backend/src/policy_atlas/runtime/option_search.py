@@ -60,7 +60,6 @@ from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.runtime.capability_registry import (
     OPTIONS_SCOPING,
     THEORY_OF_CHANGE,
-    capability_of_task,
     validate_plan,
 )
 from policy_atlas.runtime.scoping_plan import (
@@ -181,6 +180,7 @@ def run_option_search(
         request=ChildSearchRequest(
             intent=design.as_intent(),
             context=scope_context,
+            plan=unattended_plan(plan_row["payload"]),
             plan_id=uuid.UUID(str(plan_row["plan_id"])),
         ),
         plan_row=plan_row,
@@ -208,15 +208,16 @@ class ChildSearchRequest:
         intent: The intent record's intent text.
         context: The intent record's context (``acquire_only``, the option or
             link it is for).
+        plan: The plan the child runs, parsed by its dispatcher (an
+            options-scoping child runs :func:`unattended_plan`).
         plan_id: The plan version the child runs.
-        stage: The barrier stage its parent dispatches it under.
         pool: The pool it runs on; ``None`` is the option-search pool.
     """
 
     intent: str
     context: dict[str, Any]
+    plan: Any
     plan_id: uuid.UUID
-    stage: str = OPTION_SEARCHES_STAGE
     pool: Callable[[], ThreadPoolExecutor] | None = None
 
 
@@ -233,8 +234,7 @@ def run_child_search(
     """Start one capability-neutral child search and return its walk id at once.
 
     Inserts the ``targeted`` intent record and mints the child's id in one
-    transaction, then submits the walk to the request's pool. The child
-    resolves its plan through the registry by the task's capability.
+    transaction, then submits the walk to the request's pool.
 
     Args:
         engine: Database engine.
@@ -269,7 +269,7 @@ def run_child_search(
             _run_child,
             engine,
             task_id=task_id,
-            plan_payload=plan_row["payload"],
+            plan=request.plan,
             plan_id=request.plan_id,
             plan_version=int(plan_row["version"]),
             evidence_scope_id=scope_id,
@@ -320,24 +320,11 @@ def _forget(child_id: uuid.UUID) -> None:
         _abandoned.discard(child_id)
 
 
-def child_plan(engine: Engine, *, task_id: uuid.UUID, payload: Mapping[str, Any]) -> Any:
-    """The plan a child walk runs, resolved through the registry by the task's capability.
-
-    An options-scoping child runs :func:`unattended_plan`; a theory-of-change
-    plan is unattended by its model (C12).
-    """
-    with engine.connect() as conn:
-        capability = capability_of_task(conn, task_id)
-    if capability == OPTIONS_SCOPING:
-        return unattended_plan(payload)
-    return validate_plan(capability, payload)
-
-
 def _run_child(
     engine: Engine,
     *,
     task_id: uuid.UUID,
-    plan_payload: Mapping[str, Any],
+    plan: Any,
     plan_id: uuid.UUID,
     plan_version: int,
     evidence_scope_id: uuid.UUID,
@@ -360,7 +347,6 @@ def _run_child(
     from policy_atlas.runtime.runner import run_plan
 
     try:
-        plan = child_plan(engine, task_id=task_id, payload=plan_payload)
         with tracing.trace_scope(user_id=user_id):
             run_plan(
                 engine,
@@ -726,6 +712,7 @@ def dispatch_toc_item_searches(
         intents, left_out = item_search_intents(
             conn, task_id=task_id, payload=plan_row["payload"], links=links
         )
+    plan = validate_plan(THEORY_OF_CHANGE, plan_row["payload"])
     child_ids: list[uuid.UUID] = []
     try:
         for link_id, intent in intents:
@@ -745,8 +732,8 @@ def dispatch_toc_item_searches(
                                 else {}
                             ),
                         },
+                        plan=plan,
                         plan_id=uuid.UUID(str(plan_row["plan_id"])),
-                        stage=stage,
                         pool=toc_item_pool,
                     ),
                     plan_row=plan_row,

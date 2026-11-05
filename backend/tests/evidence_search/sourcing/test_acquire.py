@@ -748,11 +748,35 @@ def test_source_acquired_events(conn: Connection) -> None:
         e for e in events.read(conn, pid) if e["event_type"] == "source.acquired"
     ]
     assert len(acquired_events_after) == 24
-    # ...but say which documents the task already held, once each (task 054).
-    seen_again = [
-        e for e in events.read(conn, pid) if e["event_type"] == "source.seen_again"
-    ]
-    held = {e["payload"]["task_source_snapshot_id"] for e in acquired_events}
+    # ...and an evidence search says nothing about the documents it held already.
+    assert not [e for e in events.read(conn, pid) if e["event_type"] == "source.seen_again"]
+
+
+def test_a_theory_of_change_search_says_which_held_documents_it_found_again(
+    conn: Connection,
+) -> None:
+    """Only a theory-of-change search writes ``source.seen_again``, once per held document."""
+    pid, rid = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    acquire(conn, pid, rid, scope_id)
+    held = {
+        e["payload"]["task_source_snapshot_id"]
+        for e in events.read(conn, pid)
+        if e["event_type"] == "source.acquired"
+    }
+    backends = [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
+    toc_context = AcquireContext(
+        scope_id=scope_id, intent="Test intent", context={"capability": "theory_of_change"}
+    )
+    acquire_sources(
+        conn,
+        task_id=pid,
+        run_id=seed_run(conn, pid),
+        context=toc_context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, toc_context.intent),
+    )
+    seen_again = [e for e in events.read(conn, pid) if e["event_type"] == "source.seen_again"]
     assert {e["payload"]["task_source_snapshot_id"] for e in seen_again} == held
     assert len(seen_again) == len(held)
 
