@@ -33,6 +33,7 @@ secrets, no raw source text, no unredacted traces.
 | Phase 10, owner round 3 of 3 (2026-11-05) | `make frontend-verify && make drift-check && pnpm e2e` | pass | typecheck clean, eslint 0 errors, 1070 tests in 93 files, build OK, `drift-check: OK`; Playwright 33 passed; the backend tree is unchanged since the round-1 gate. |
 | Owner notes after round 3 (2026-11-05): copy, bands, settled card, fold mark, chip grouping | `make frontend-verify && make drift-check && pnpm e2e` | pass | 1072 tests in 93 files, build OK, `drift-check: OK`; Playwright 33 passed. Backend: `tests/runtime/test_task_agent.py` and `make prompt-guard` green on each prompt re-pin. |
 | Owner questions on a live run (2026-11-05): no Result footer, automatic swap | `make frontend-verify && make drift-check && pnpm e2e` | pass | 1071 tests in 93 files, build OK, `drift-check: OK`; Playwright 33 passed (scene 6 now ends on the committed report's title). |
+| Owner notes (2026-11-05): no event-log echoes in the thread, settled scope lines | `make frontend-verify && make drift-check && pnpm e2e` | pass | 1069 tests in 93 files, build OK, `drift-check: OK`; Playwright 33 passed. |
 
 (The gate map's step-6 exit is this command; it is re-run after the owner-gated phases.)
 
@@ -131,6 +132,10 @@ tool and the gap measure are built and tested (Phase 0). The "before" captures m
   recorded for the owner's decision: the streamed section turn only runs at the turn cap
   (Langfuse: no `synthesise:section_emit` generation on the owner's run), so N6 is built but
   does not show on a normal section; fix proposed, not applied.
+- **Owner notes, the same afternoon:** the run block's event-log echoes leave the Task Agent
+  thread (`presentRunDecisions` and its tests deleted; the History tab is unchanged); the
+  settled scope card gives each chip group its own line under a grey label (`settledSummary`
+  now returns lines, one per group).
 
 ## Diff summary
 

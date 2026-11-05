@@ -9,10 +9,10 @@ import type { components } from "../../api/gen/types";
 import * as mutations from "../../api/mutations";
 import * as queries from "../../api/queries";
 import { createInitialRunStreamState } from "../../store";
-import type { StageEntry, TaskAgentThreadDecision, TaskAgentThreadRun, TaskAgentThreadTurn } from "../../store";
+import type { TaskAgentThreadDecision, TaskAgentThreadRun, TaskAgentThreadTurn } from "../../store";
 import { ToastProvider } from "../../ui/radix/Toast";
 import { TooltipProvider } from "../../ui/radix/Tooltip";
-import { Composer, TaskAgentPane, taskAgentComposerPlaceholder, presentRunDecisions, threadInputs } from "./TaskAgentPane";
+import { Composer, TaskAgentPane, taskAgentComposerPlaceholder, threadInputs } from "./TaskAgentPane";
 
 type CheckInOut = components["schemas"]["CheckInOut"];
 
@@ -148,31 +148,6 @@ describe("threadInputs", () => {
     const parentSearch = { ...decision(5, "2026-09-22T10:08:00Z"), kind: "search.executed", capability_run_id: "longlist" };
     const { runDecisions } = threadInputs([], [child, parent], [childSearch, parentSearch]);
     expect(runDecisions).toEqual([{ decision: parentSearch, capabilityRunId: "longlist" }]);
-  });
-});
-
-describe("presentRunDecisions", () => {
-  it("collapses consecutive search echoes with a counter and stage-labels completed components", () => {
-    const entries: TaskAgentThreadDecision[] = [
-      { kind: "search.executed", sequence: 1, occurred_at: "2026-07-28T10:00:00Z", summary: "Executed a search query." },
-      { kind: "search.executed", sequence: 2, occurred_at: "2026-07-28T10:00:01Z", summary: "Executed a search query." },
-      { kind: "component.completed", sequence: 3, occurred_at: "2026-07-28T10:00:02Z", summary: "Completed an evidence-search step.", detail: { component: "screen" } },
-      { kind: "component.completed", sequence: 4, occurred_at: "2026-07-28T10:00:03Z", summary: "Completed an evidence-search step.", detail: { component: "unknown" } },
-    ];
-
-    const stages: StageEntry[] = [{ stage: "screen", label: "Searching and screening", status: "completed", startedAt: "" }];
-    expect(presentRunDecisions(entries, stages)).toEqual([
-      { sequence: 1, summary: "Executed a search query", count: 2 },
-      // The label is the stage frame's, in the server's words (task 058, N17).
-      { sequence: 3, summary: "Completed: Searching and screening", count: 1 },
-    ]);
-  });
-
-  it("gives a component the run never framed no line (no client label fallback)", () => {
-    const entries: TaskAgentThreadDecision[] = [
-      { kind: "component.completed", sequence: 3, occurred_at: "2026-07-28T10:00:02Z", summary: "Completed.", detail: { component: "screen_full" } },
-    ];
-    expect(presentRunDecisions(entries, [])).toEqual([]);
   });
 });
 

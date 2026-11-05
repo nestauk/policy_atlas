@@ -31,7 +31,6 @@ import { FoldMarkAnimated } from "../../ui/brand/FoldMarkAnimated";
 import { cn } from "../../ui/brand/cn";
 import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
 import { ReauthRedirect } from "../../ui/feedback";
-import { groupSearchDecisions } from "../decisionsPresentation";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
 import { hasLonglist, isScoping } from "../scopingActivity";
 import { ChatAnswer } from "./chat/ChatMessages";
@@ -486,70 +485,6 @@ function DurableTurn({
   );
 }
 
-/** A run block in the thread: a quiet divider row naming the run and its
- *  outcome, with any steering decisions echoed inside it. */
-interface PresentedRunDecision {
-  sequence: number;
-  summary: string;
-  count: number;
-}
-
-/** Convert the decision-log feed into quiet, user-facing thread echoes.
- * Search grouping delegates to the shared decision presentation helper; the
- * remaining adjacent duplicate collapse is limited to this compact rail. */
-export function presentRunDecisions(
-  decisions: TaskAgentThreadDecision[],
-  stages: StageEntry[],
-): PresentedRunDecision[] {
-  const labelled = decisions.flatMap((decision) => {
-    if (decision.kind !== "component.completed") return [decision];
-    const detail = decision.detail;
-    const component =
-      detail !== null && typeof detail === "object" && !Array.isArray(detail)
-        ? [detail.component, detail.stage, detail.registry_component].find(
-            (value): value is string => typeof value === "string",
-          )
-        : undefined;
-    // The stage frame carries the server's label (task 058, N17); a
-    // component the run never framed has no line.
-    const stageLabel =
-      component === undefined ? undefined : [...stages].reverse().find((stage) => stage.stage === component)?.label;
-    return stageLabel === undefined ? [] : [{ ...decision, summary: `Completed: ${stageLabel}` }];
-  });
-
-  const searchGrouped: PresentedRunDecision[] = [];
-  for (let index = 0; index < labelled.length; index += 1) {
-    const entry = labelled[index];
-    if (entry.kind !== "search.executed" || labelled[index - 1]?.kind === "search.executed") continue;
-    const consecutive: TaskAgentThreadDecision[] = [];
-    for (let cursor = index; labelled[cursor]?.kind === "search.executed"; cursor += 1) {
-      consecutive.push(labelled[cursor]);
-    }
-    const grouped = groupSearchDecisions(consecutive)[0];
-    if (grouped !== undefined) {
-      searchGrouped.push({
-        sequence: grouped.sequence,
-        summary: entry.summary.replace(/\.$/, ""),
-        count: consecutive.length,
-      });
-    }
-  }
-  const nonSearch = labelled
-    .filter((entry) => entry.kind !== "search.executed")
-    .map((entry) => ({ sequence: entry.sequence, summary: entry.summary, count: 1 }));
-  const ordered = [...searchGrouped, ...nonSearch].sort((left, right) => left.sequence - right.sequence);
-
-  return ordered.reduce<PresentedRunDecision[]>((entries, entry) => {
-    const previous = entries.at(-1);
-    if (previous !== undefined && previous.summary === entry.summary) {
-      previous.count += entry.count;
-      return entries;
-    }
-    entries.push(entry);
-    return entries;
-  }, []);
-}
-
 function AnsweredCheckIns({
   answered,
   checkIns,
@@ -594,10 +529,14 @@ function RunFinishedNotice({
   );
 }
 
+/** A run block in the thread: a quiet divider row naming the run and its
+ *  outcome, the check-ins it answered, and where its result went. The
+ *  event-log echoes ("Executed a search query × 55", "Recorded a steering
+ *  decision") that used to sit here are audit rows for the History tab, not
+ *  conversation (owner, 2026-11-05). */
 function RunBlock({
   taskId,
   run,
-  decisions,
   stages,
   answered,
   checkIns,
@@ -605,7 +544,6 @@ function RunBlock({
 }: {
   taskId: string;
   run: TaskAgentThreadRun;
-  decisions: TaskAgentThreadDecision[];
   stages: StageEntry[];
   capability?: string | null;
   answered: ResolvedDecision[];
@@ -613,12 +551,8 @@ function RunBlock({
 }) {
   const status = RUN_BLOCK_STATUS[run.status] ?? null;
   // Task 045: a parentless option search (the chat verb *add*'s own search)
-  // keeps a block, headed as what it is, with its stage rows only.
+  // keeps a block, headed as what it is.
   const optionSearch = run.purpose === "targeted";
-  const presentedDecisions = presentRunDecisions(
-    optionSearch ? decisions.filter((decision) => decision.kind === "component.completed") : decisions,
-    stages,
-  );
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-caption text-grey">
@@ -629,16 +563,6 @@ function RunBlock({
         </span>
         <span aria-hidden="true" className="h-px flex-1 bg-line" />
       </div>
-      {presentedDecisions.map((decision) => (
-        <div
-          key={decision.sequence}
-          className="mx-4 border-l-2 border-l-yellow bg-yellow-tint/50 px-3 py-2"
-        >
-          <p className="text-body text-ink">
-            {scrub(decision.summary)}{decision.count > 1 ? ` × ${decision.count}` : ""}
-          </p>
-        </div>
-      ))}
       <AnsweredCheckIns answered={answered} checkIns={checkIns} stages={stages} />
       {/* The chat's own destination once the run lands (owner, 2026-08-05):
           a completed run's last word shouldn't be a quiet stage echo. */}
@@ -980,7 +904,6 @@ export function TaskAgentPane({
                 taskId={taskId}
                 run={item.run}
                 capability={planQuery.data?.capability}
-                decisions={item.decisions}
                 stages={stream.stages}
                 answered={
                   item.run.capability_run_id === stream.run?.id ? streamDecisions : []

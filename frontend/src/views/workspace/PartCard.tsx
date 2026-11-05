@@ -113,32 +113,36 @@ const THOROUGHNESS_OPTION_BY_PRESET: Record<string, string> = {
  *   scoping: The task's current scoping plan, if any.
  *
  * Returns:
- *   The line after the part's name, or null when nothing can be named.
+ *   The lines after the part's name (the scope gives one per chip group,
+ *   each under its group's label), or null when nothing can be named.
  */
 export function settledSummary(
   part: PartProposal,
   state: PartState,
   plan: PlanDraft | null | undefined,
   scoping: ScopingPlanDraft | null | undefined,
-): string | null {
+): SettledLine[] | null {
   const confirmed =
     state.confirmedOptionId === null ? null : (part.options.find((option) => option.id === state.confirmedOptionId)?.label ?? null);
   // The outcome first (owner, polish round 3: "what looks right?"); the
   // recorded choice's label, then the user's words, only where the plan
   // names nothing.
-  const fallback = confirmed ?? (state.answer !== null && state.answer !== "" ? state.answer : null);
+  const fallbackText = confirmed ?? (state.answer !== null && state.answer !== "" ? state.answer : null);
+  const fallback = fallbackText === null ? null : [{ label: null, text: fallbackText }];
+  const one = (text: string | null | undefined): SettledLine[] | null =>
+    text == null || text === "" ? fallback : [{ label: null, text }];
   switch (part.id) {
     case "question":
-      return plan?.question ?? scoping?.question ?? fallback;
+      return one(plan?.question ?? scoping?.question);
     case "scope": {
+      // One line per group under its label (owner, 2026-11-05: on one line
+      // the criteria and the filters read as one jumble).
       const groups = chipGroups(part.chips ?? []);
       if (groups.length === 0) return fallback;
-      return groups
-        .map((group) => {
-          const words = group.chips.map((chip) => chipText(chipDisplayLabel(chip)));
-          return group.heading === null ? words.join(" · ") : `${group.heading}: ${words.join(", ")}`;
-        })
-        .join(" · ");
+      return groups.map((group) => ({
+        label: group.heading,
+        text: group.chips.map((chip) => chipText(chipDisplayLabel(chip))).join(" · "),
+      }));
     }
     case "thoroughness": {
       if (plan?.search_effort == null || plan.analysis_depth == null) return fallback;
@@ -146,15 +150,21 @@ export function settledSummary(
       const option = preset === null ? undefined : part.options.find((candidate) => candidate.id === THOROUGHNESS_OPTION_BY_PRESET[preset]);
       const label = option?.label ?? researchApproachLabel(plan.search_effort, plan.analysis_depth);
       if (label === null) return fallback;
-      return plan.time_band ? `${label} · ${plan.time_band}` : label;
+      return one(plan.time_band ? `${label} · ${plan.time_band}` : label);
     }
     case "depth":
-      return scoping?.depth != null ? (SCOPING_DEPTH_LABEL[scoping.depth] ?? fallback) : fallback;
+      return scoping?.depth != null ? one(SCOPING_DEPTH_LABEL[scoping.depth]) : fallback;
     case "appetite":
-      return scoping?.risk_appetite != null ? (RISK_APPETITE_LABELS[scoping.risk_appetite] ?? fallback) : fallback;
+      return scoping?.risk_appetite != null ? one(RISK_APPETITE_LABELS[scoping.risk_appetite]) : fallback;
     default:
       return fallback;
   }
+}
+
+/** One line of a settled part: the words, under an optional group label. */
+export interface SettledLine {
+  label: string | null;
+  text: string;
 }
 
 /** The planner prefixes a scope chip with what it constrains: "Screen: …"
@@ -568,7 +578,7 @@ export function PartCard({
   /** The plan's steps; the stepper line renders above a live, open card. */
   steps?: PlanStep[];
   /** The settled line's words (`settledSummary`); falls back to the user's reply. */
-  summary?: string | null;
+  summary?: SettledLine[] | null;
   /** Send a message as an ordinary task_agent turn. */
   onSend: (message: string) => void;
 }) {
@@ -590,29 +600,40 @@ export function PartCard({
     // a quiet block with a green rule, the part's name and a green tick line
     // naming the outcome the plan settled on (`summary`), the recorded
     // choice or the user's words.
-    const words = (() => {
-      if (summary !== undefined && summary !== null && summary !== "") return summary;
-      if (confirmedOption !== null) return confirmedOption.label;
-      return state.answer !== null && state.answer !== "" ? state.answer : null;
+    const lines: SettledLine[] = (() => {
+      if (summary !== undefined && summary !== null && summary.length > 0) return summary;
+      if (confirmedOption !== null) return [{ label: null, text: confirmedOption.label }];
+      return [{ label: null, text: state.answer !== null && state.answer !== "" ? state.answer : "Answered" }];
     })();
+    const changeControl =
+      state.live && confirmedOption !== null ? (
+        <button
+          type="button"
+          aria-expanded={changing}
+          className="ml-2 cursor-pointer text-body font-semibold text-grey underline underline-offset-[3px] hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-default disabled:no-underline"
+          disabled={disabled}
+          onClick={() => setChanging((open) => !open)}
+        >
+          Change
+        </button>
+      ) : null;
     return (
       <div className="anim-rise mr-8">
         <div data-testid="part-settled" className="border-l-2 border-green bg-paper py-1 pl-4">
           <p className="max-w-prose-measure text-lead font-semibold text-navy">{scrub(name)}</p>
-          <p className="mt-1 max-w-prose-measure text-lead font-bold text-green">
-            ✓ {words !== null ? scrub(words) : "Answered"}
-            {state.live && confirmedOption !== null && (
-              <button
-                type="button"
-                aria-expanded={changing}
-                className="ml-2 cursor-pointer text-body font-semibold text-grey underline underline-offset-[3px] hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-default disabled:no-underline"
-                disabled={disabled}
-                onClick={() => setChanging((open) => !open)}
-              >
-                Change
-              </button>
-            )}
-          </p>
+          {/* The scope's groups each take a line under a grey label, so the
+              criteria and the filters do not read as one list (owner,
+              2026-11-05). */}
+          {lines.map((line, index) => (
+            <div key={index} className={index === 0 ? "mt-1" : "mt-2"}>
+              {line.label !== null && <p className={cn(LABEL_CLASS, "text-grey")}>{line.label}</p>}
+              <p className="max-w-prose-measure text-lead font-bold text-green">
+                {index === 0 ? "✓ " : ""}
+                {scrub(line.text)}
+                {index === lines.length - 1 && changeControl}
+              </p>
+            </div>
+          ))}
           {changing && state.live && (
             <WordsInput
               label={`Change ${name}`}

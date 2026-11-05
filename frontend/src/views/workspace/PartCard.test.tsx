@@ -353,17 +353,23 @@ describe("settledSummary — a settled part names the plan's outcome (owner, pol
       ],
     });
     const plan = { search_effort: "standard", analysis_depth: "standard", time_band: "~10-20 min" } as never;
-    expect(settledSummary(part, answered, plan, null)).toBe("Standard report · ~10-20 min");
+    expect(settledSummary(part, answered, plan, null)).toEqual([{ label: null, text: "Standard report · ~10-20 min" }]);
   });
   it("names the scope's chips and the question's text; a recorded choice names itself", () => {
     const scope = proposal("scope", { chips: [{ label: "Since 2010", kind: "text" }, { label: "UK", kind: "text" }] as never });
     // Plain text chips are screening criteria by kind (`chipDisplayLabel`).
-    expect(settledSummary(scope, answered, null, null)).toBe("Screening criteria: Since 2010, UK");
-    expect(settledSummary(proposal("question"), answered, { question: "What works?" } as never, null)).toBe("What works?");
-    expect(settledSummary(proposal("question"), { ...answered, confirmedOptionId: "confirm" }, null, null)).toBe("Looks right");
+    expect(settledSummary(scope, answered, null, null)).toEqual([{ label: "Screening criteria", text: "Since 2010 · UK" }]);
+    expect(settledSummary(proposal("question"), answered, { question: "What works?" } as never, null)).toEqual([
+      { label: null, text: "What works?" },
+    ]);
+    expect(settledSummary(proposal("question"), { ...answered, confirmedOptionId: "confirm" }, null, null)).toEqual([
+      { label: null, text: "Looks right" },
+    ]);
   });
   it("falls back to the user's words when the plan names nothing", () => {
-    expect(settledSummary(proposal("settings"), answered, null, null)).toBe("Please go ahead with your recommended choices.");
+    expect(settledSummary(proposal("settings"), answered, null, null)).toEqual([
+      { label: null, text: "Please go ahead with your recommended choices." },
+    ]);
   });
 });
 
@@ -382,13 +388,22 @@ describe("scope chips grouped by what they constrain (owner, 2026-11-05)", () =>
     expect(screen.getByText("Zonal electricity pricing")).toBeInTheDocument();
     expect(screen.queryByText(/^Screen: /)).toBeNull();
   });
-  it("names the settled scope by group", () => {
+  it("names the settled scope one group a line, each under its label", () => {
     const part = proposal("scope", {
       chips: [{ label: "Screen: Bills", kind: "text" }, { label: "Search: OECD", kind: "text" }] as never,
     });
-    expect(settledSummary(part, { live: true, answered: true, answer: null, confirmedOptionId: null }, null, null)).toBe(
-      "Screening criteria: Bills · Source filters: OECD",
-    );
+    const state = { live: true, answered: true, answer: null, confirmedOptionId: null };
+    const lines = settledSummary(part, state, null, null);
+    expect(lines).toEqual([
+      { label: "Screening criteria", text: "Bills" },
+      { label: "Source filters", text: "OECD" },
+    ]);
+    render(<PartCard part={part} state={state} summary={lines} disabled={false} onSend={vi.fn()} />);
+    const settled = screen.getByTestId("part-settled");
+    expect(settled).toHaveTextContent(/Screening criteria.*✓ Bills.*Source filters.*OECD/);
+    // The label is grey; the words are green: two colours, two roles.
+    expect(screen.getByText("Source filters").className).toContain("text-grey");
+    expect(screen.getByText("OECD").className).toContain("text-green");
   });
 });
 

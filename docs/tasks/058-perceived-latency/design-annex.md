@@ -397,6 +397,15 @@ filters: c").
 5. Where progress lives: the owner accepts the lead's recommendation of one in-chat trace in
    place of the running card, the minimised card, the dock and the strip, consistent with
    task 054's `TocTrace`; the design is proposed to the owner before it is built.
+6. The run block's event-log echoes ("Opened an evidence-search run", "Executed a search query
+   × 55", "Recorded a steering decision", "Finished the run") leave the Task Agent thread. They
+   are the task's audit events (task 025's decisions read, echoed into the chat by task 029);
+   the sidebar showed them because polish round 2 took the card out of the sidebar and the
+   thread fell back to the echo block. The History tab keeps the audit rows; making them
+   readable there is a separate item for the owner.
+7. The settled scope card gives each chip group its own line under a grey group label
+   ("Screening criteria", "Source filters"), the values in green (owner: on one line the
+   criteria and the filters read as one jumble, all in one colour).
 
 ## Polish log
 
