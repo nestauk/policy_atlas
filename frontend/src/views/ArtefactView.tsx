@@ -38,7 +38,6 @@ import { ShortlistView } from "./longlist/ShortlistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
-import { Button } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
 import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
@@ -1394,16 +1393,13 @@ const SETTLE_MS = 400;
  * Args:
  *   stream: The live run stream.
  *   question: The task's question, the page title.
- *   onReadReport: Opens the committed report once the run has finished.
  */
 export function LiveArtefactBody({
   stream,
   question,
-  onReadReport,
 }: {
   stream: RunStreamState;
   question?: string | null;
-  onReadReport?: () => void;
 }) {
   const sections = Object.values(stream.liveSections).sort((a, b) => a.index - b.index);
   const terminalPartial = hasTerminalPartialLiveArtefact(stream);
@@ -1421,12 +1417,6 @@ export function LiveArtefactBody({
   const breathing = useFreshness(
     active === undefined ? undefined : `${active.index}:${writer?.occurredAt ?? ""}:${(active.draft ?? "").length}`,
   );
-  const ordinary = sections.filter((section) => !isKeyFindingsSlot(section));
-  const ordinaryDone = ordinary.length > 0 && ordinary.every((section) => section.state === "filled");
-  // The footer breathes while the key-findings pass and the citation step
-  // are still sending updates.
-  const footerBreathing = useFreshness(ordinaryDone && !finished ? writer?.occurredAt : undefined);
-
   return (
     <ReportPage>
       {terminalPartial && (
@@ -1457,28 +1447,6 @@ export function LiveArtefactBody({
           reduceMotion={reduceMotion}
         />
       ))}
-      {finished ? (
-        <div className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-line pt-5">
-          <p role="status" className="flex items-center gap-2.5 text-body font-semibold text-[#0c6b5a]">
-            <span aria-hidden="true" className="inline-block size-2 flex-none rounded-full bg-green" />
-            Report ready
-          </p>
-          {onReadReport !== undefined && <Button onClick={onReadReport}>Read the full report</Button>}
-        </div>
-      ) : (
-        ordinaryDone &&
-        !terminalPartial && (
-          <p role="status" className="mt-12 flex items-center gap-2.5 border-t border-line pt-5 text-body text-grey">
-            <span
-              aria-hidden="true"
-              data-testid="footer-dot"
-              data-breathing={footerBreathing ? "true" : "false"}
-              className={`inline-block size-2 flex-none rounded-full bg-yellow ${footerBreathing ? "anim-breathe" : ""}`}
-            />
-            Checking claims and attaching citations
-          </p>
-        )
-      )}
     </ReportPage>
   );
 }
@@ -1807,11 +1775,12 @@ function ArtefactReport() {
   const latestRun = statusRun(task.data);
   const question = task.data?.question ?? stream.task.question ?? task.data?.name ?? null;
   const showLive = showLiveArtefact(stream, latestRun);
-  // A run watched while it wrote keeps its page when it finishes: the footer
-  // says the report is ready and the reader opens it (task 058, N8). A run
-  // that had already finished when the page loaded opens the report at once.
+  // A run watched while it wrote keeps its page when it finishes until the
+  // committed report for that run has loaded; then the report takes its
+  // place, with no click (owner, 2026-11-05; N8's "Read the full report"
+  // button is withdrawn). A run that had already finished when the page
+  // loaded opens the report at once.
   const [watchedRunId, setWatchedRunId] = useState<string | null>(null);
-  const [openedRunId, setOpenedRunId] = useState<string | null>(null);
   const liveRunId = stream.run?.id ?? null;
   if (
     showLive &&
@@ -1822,19 +1791,20 @@ function ArtefactReport() {
   ) {
     setWatchedRunId(liveRunId);
   }
-  const readyHere =
+  const finishedHere =
     liveRunId !== null &&
     liveRunId === watchedRunId &&
-    liveRunId !== openedRunId &&
     (stream.run?.status === "succeeded" || stream.run?.status === "degraded") &&
     Object.keys(stream.liveSections).length > 0;
-  const liveBody = (
-    <LiveArtefactBody
-      stream={stream}
-      question={question}
-      onReadReport={liveRunId === null ? undefined : () => setOpenedRunId(liveRunId)}
-    />
-  );
+  // The read models have caught up with the finished run: the task names
+  // its end and the report read is not still in flight.
+  const committedLanded =
+    latestRun?.capability_run_id === liveRunId &&
+    latestRun?.ended_at != null &&
+    !task.isFetching &&
+    !artefact.isFetching;
+  const readyHere = finishedHere && !committedLanded;
+  const liveBody = <LiveArtefactBody stream={stream} question={question} />;
   // A new run over an existing report: not the replay of the run that made it.
   const rerunLive =
     !isPublicView &&

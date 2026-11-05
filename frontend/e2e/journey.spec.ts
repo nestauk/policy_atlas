@@ -782,10 +782,14 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     const growing = (await seenLines(page)).filter((line) => line.startsWith("Pair school food action with"));
     expect(new Set(growing.map((line) => line.length)).size).toBeGreaterThan(3);
 
-    // Nothing marks a section as revised once it is done.
+    // Nothing marks a section as revised once it is done. When the run ends
+    // the committed report takes the page by itself (owner, 2026-11-05).
     await neverSeen(page, /being revised|^revised$/i);
-    await expect(page.getByText("Report ready")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Read the full report" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Policy options for healthier childhoods" })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByRole("button", { name: "Read the full report" })).toHaveCount(0);
+    await neverSeen(page, /attaching citations/);
   });
 
   test("scene 7: the run strip on Sources runs, then pauses, then reads Report ready", async ({ page }) => {

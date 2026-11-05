@@ -276,7 +276,7 @@ describe("LiveArtefactBody", () => {
     expect(region).toHaveAttribute("aria-live", "polite");
   });
 
-  it("drops the key-findings note when its turn comes, and footers the citation step", () => {
+  it("drops the key-findings note when its turn comes, with no footer under the sections", () => {
     const stream = streamWith(
       [
         { index: 0, title: "Key findings", focus: "", state: "writing" },
@@ -289,20 +289,15 @@ describe("LiveArtefactBody", () => {
     expect(screen.queryByText("Written last, after the sections are checked.")).toBeNull();
     const keyFindings = screen.getByRole("heading", { name: "Key findings" }).closest("section") as HTMLElement;
     expect(within(keyFindings).getByTestId("section-dot")).toBeInTheDocument();
-    expect(screen.getByText("Checking claims and attaching citations")).toBeInTheDocument();
-    expect(screen.queryByText("Report ready")).toBeNull();
-  });
-
-  it("shows no footer while ordinary sections are still to write", () => {
-    render(<LiveArtefactBody stream={writingStream()} />);
-    expect(screen.queryByText("Checking claims and attaching citations")).toBeNull();
+    // Owner, 2026-11-05: no "Checking claims and attaching citations" line;
+    // the key-findings heading's dot is the one signal.
+    expect(screen.queryByText(/attaching citations/)).toBeNull();
     expect(screen.queryByText("Report ready")).toBeNull();
   });
 
   it.each(["succeeded", "degraded"] as const)(
-    "reads Report ready with the button to the full report once the run is %s",
-    async (status) => {
-      const onReadReport = vi.fn();
+    "marks nothing once the run is %s (the committed report takes over)",
+    (status) => {
       const stream = streamWith(
         [
           { index: 0, title: "Key findings", focus: "", state: "filled", prose: "Headline." },
@@ -311,16 +306,11 @@ describe("LiveArtefactBody", () => {
         "running",
       );
       render(
-        <LiveArtefactBody
-          stream={{ ...stream, run: { id: "r1", status, startedAt: "2026-07-21T10:00:00Z" } }}
-          onReadReport={onReadReport}
-        />,
+        <LiveArtefactBody stream={{ ...stream, run: { id: "r1", status, startedAt: "2026-07-21T10:00:00Z" } }} />,
       );
-      expect(screen.getByText("Report ready")).toBeInTheDocument();
-      expect(screen.queryByText("Checking claims and attaching citations")).toBeNull();
+      expect(screen.queryByText("Report ready")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Read the full report" })).toBeNull();
       expect(screen.queryByTestId("section-dot")).toBeNull();
-      await userEvent.click(screen.getByRole("button", { name: "Read the full report" }));
-      expect(onReadReport).toHaveBeenCalledTimes(1);
     },
   );
 
@@ -358,7 +348,6 @@ describe("LiveArtefactBody", () => {
       expect(screen.getByText(/Prose arrived/)).toBeInTheDocument();
       expect(screen.queryByTestId("placeholder-lines")).toBeNull();
       expect(screen.queryByTestId("section-dot")).toBeNull();
-      expect(screen.queryByText("Checking claims and attaching citations")).toBeNull();
     },
   );
 

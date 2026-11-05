@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -191,24 +190,26 @@ describe("ArtefactView around a run", () => {
     expect(screen.queryByTestId("rerun-notice")).toBeNull();
   });
 
-  it("keeps a run watched while writing ready until the reader opens the report", async () => {
+  it("keeps a run watched while writing on its live page until the committed report lands, then swaps", async () => {
     const view = render(page());
     world.stream = streamOf("running", SECTIONS);
     view.rerender(page());
-    // The run ends: the stream says so, then the read models catch up.
+    // The run ends: the stream says so first, while the read models still
+    // show it running. The live page holds; nothing asks for a click.
     world.stream = streamOf("succeeded", [
       { ...SECTIONS[0], state: "filled", prose: "Headline." },
       { ...SECTIONS[1], state: "filled", prose: "Costs prose." },
     ]);
+    view.rerender(page());
+    expect(screen.getByRole("heading", { name: "Costs and funding" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "The old report" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Read the full report" })).toBeNull();
+
+    // The read models catch up: the committed report takes the page.
     world.latestRun = { capability_run_id: "run-2", status: "succeeded", started_at: "2026-11-05T09:58:00Z", ended_at: "2026-11-05T10:00:00Z" };
     world.artefact = committedArtefact;
     view.rerender(page());
-    expect(screen.getByText("Report ready")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "The old report" })).toBeNull();
-
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await user.click(screen.getByRole("button", { name: "Read the full report" }));
-    expect(screen.getByRole("heading", { name: "The old report" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "The old report" })).toBeInTheDocument();
     expect(screen.queryByText("Report ready")).toBeNull();
   });
 

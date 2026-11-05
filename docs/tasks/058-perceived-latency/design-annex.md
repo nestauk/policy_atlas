@@ -374,6 +374,30 @@ filters" ("Search: …"), the prefix dropped from each chip; chips with no prefi
 no label. The settled scope line reads the same way ("Screening criteria: a, b · Source
 filters: c").
 
+## Owner questions on a live run (2026-11-05, afternoon) and the rulings
+
+1. Section token streaming: built as the streamed *forced* final turn, which only runs at
+   the writer's turn cap (6); on a normal section the model emits through its own
+   `emit_section` tool call on turn 2, which Bedrock delivers in one burst, so the page sees
+   nothing until the section is done (Langfuse, the owner's run: no `synthesise:section_emit`
+   generations). Fix proposed to the owner: no emit tool on the open turns, a reply with no
+   tool calls ends the gathering, the streamed turn writes (one short extra turn per section on
+   the cached prefix).
+2. The Result tab's footer "Checking claims and attaching citations" goes (owner: not useful).
+   The claims check is per section and shows under the section's heading; after the last
+   section the key-findings heading's dot is the one signal. Scene 6 and N8 are amended.
+3. When a watched run finishes, the committed report takes the page by itself once the
+   read models have it (owner: the swap is automatic). The "Report ready · Read the full
+   report" footer and button go; N8's last clause is withdrawn. Citations during writing: a
+   completed section's frame carries prose only, and the numbered markers are assigned when
+   the whole report is read, so markers cannot show per section without carrying the section's
+   claims on the frame and numbering provisionally (not in this slice).
+4. The minimised card, the dock and the strip say the same words in the same style (accepted;
+   folded into item 5).
+5. Where progress lives: the owner accepts the lead's recommendation of one in-chat trace in
+   place of the running card, the minimised card, the dock and the strip, consistent with
+   task 054's `TocTrace`; the design is proposed to the owner before it is built.
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |

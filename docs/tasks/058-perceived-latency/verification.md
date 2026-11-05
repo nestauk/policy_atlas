@@ -31,6 +31,8 @@ secrets, no raw source text, no unredacted traces.
 | Phase 10, owner round 2 of 3 (2026-11-05) | `make frontend-verify && make drift-check && pnpm e2e` | pass | typecheck clean, eslint 0 errors, 1070 tests in 93 files, build OK, `drift-check: OK`; Playwright 31 passed after the planning journey learned that a card with a later turn settles; the backend tree is unchanged since the round-1 gate. |
 
 | Phase 10, owner round 3 of 3 (2026-11-05) | `make frontend-verify && make drift-check && pnpm e2e` | pass | typecheck clean, eslint 0 errors, 1070 tests in 93 files, build OK, `drift-check: OK`; Playwright 33 passed; the backend tree is unchanged since the round-1 gate. |
+| Owner notes after round 3 (2026-11-05): copy, bands, settled card, fold mark, chip grouping | `make frontend-verify && make drift-check && pnpm e2e` | pass | 1072 tests in 93 files, build OK, `drift-check: OK`; Playwright 33 passed. Backend: `tests/runtime/test_task_agent.py` and `make prompt-guard` green on each prompt re-pin. |
+| Owner questions on a live run (2026-11-05): no Result footer, automatic swap | `make frontend-verify && make drift-check && pnpm e2e` | pass | 1071 tests in 93 files, build OK, `drift-check: OK`; Playwright 33 passed (scene 6 now ends on the committed report's title). |
 
 (The gate map's step-6 exit is this command; it is re-run after the owner-gated phases.)
 
@@ -121,6 +123,14 @@ tool and the gap measure are built and tested (Phase 0). The "before" captures m
   after a dropped connection and under reduced motion); the run's dots are unchanged.
 - **Owner note, the scope card (2026-11-05):** chips grouped under "Screening criteria" and
   "Source filters" with the planner's prefix dropped; the settled line names the groups.
+- **Owner questions on a live run (2026-11-05, afternoon; annex § Owner questions):** the
+  Result tab's "Checking claims and attaching citations" footer removed; a watched run's page
+  swaps to the committed report by itself once the task and artefact reads have caught up
+  (the "Report ready · Read the full report" footer and button removed; contract N8's last
+  clause is withdrawn by the owner, to be amended in the contract at the review). Finding
+  recorded for the owner's decision: the streamed section turn only runs at the turn cap
+  (Langfuse: no `synthesise:section_emit` generation on the owner's run), so N6 is built but
+  does not show on a normal section; fix proposed, not applied.
 
 ## Diff summary
 
