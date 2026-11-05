@@ -1,0 +1,121 @@
+/* ---------------------------------------------------------------------------
+ * The Landscape subtab (task 058, landscape polish, lead rulings 2026-11-05).
+ *
+ * - Sections sit on the Sources panel without cards: the pane heading, a Line
+ *   hairline under it, the chart; 40 px between sections, with a Line rule
+ *   above each section after the first.
+ * - Ranked bars are a real table laid out on a grid: the label column, then
+ *   the bar with its value 8 px after the bar's end. Bars are Navy; missing
+ *   data and folded tails are Grey; the row under the pointer washes Blue
+ *   Wash and its bar turns Electric Blue (the one thing under the cursor).
+ *   No axis: every bar carries its number.
+ * - In a narrow container (a phone) the label takes its own line and the bar
+ *   and value run the full width beneath it, so nothing is clipped.
+ * ------------------------------------------------------------------------- */
+
+.landscape-section + .landscape-section {
+  margin-top: 40px;
+  border-top: 1px solid var(--color-line);
+}
+
+.ranked-bars {
+  container-type: inline-size;
+}
+
+/* Grid layout on table elements: the explicit ARIA roles in the markup keep
+   the table semantics in every engine whatever the display value. */
+.ranked-bars__table,
+.ranked-bars__body {
+  display: block;
+  width: 100%;
+}
+
+.ranked-bars__row {
+  display: grid;
+  grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
+  column-gap: 16px;
+  align-items: center;
+  min-height: 30px;
+  margin-inline: -8px;
+  padding-inline: 8px;
+  transition: background-color 150ms ease;
+}
+
+.ranked-bars__label {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  font-weight: 400;
+  color: var(--color-navy);
+  text-align: left;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+  padding-block: 3px;
+}
+
+.ranked-bars__row[data-muted] .ranked-bars__label {
+  color: var(--color-grey);
+}
+
+.ranked-bars__cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 14px;
+}
+
+.ranked-bars__bar {
+  flex: none;
+  height: 14px;
+  min-width: 2px;
+  width: calc((100% - 3.5rem) * var(--share, 0));
+  background-color: var(--color-navy);
+  transition: background-color 150ms ease;
+}
+
+.ranked-bars__row[data-tone="grey"] .ranked-bars__bar {
+  background-color: var(--color-grey);
+}
+
+.ranked-bars__value {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  color: var(--color-grey);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ranked-bars__placeholder {
+  height: 14px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ranked-bars__row:hover {
+    background-color: var(--color-blue-tint-2);
+  }
+  .ranked-bars__row:hover .ranked-bars__bar {
+    background-color: var(--color-blue);
+  }
+}
+
+@container (max-width: 30rem) {
+  .ranked-bars__row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 4px;
+    padding-block: 6px;
+  }
+  .ranked-bars__label {
+    padding-block: 0;
+  }
+  /* A stage still to come has no bar line under its label. */
+  .ranked-bars__cell:empty {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ranked-bars__row,
+  .ranked-bars__bar {
+    transition: none;
+  }
+}

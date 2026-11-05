@@ -30,17 +30,27 @@ export function SourcesLayout() {
   return (
     <div className={`${WIDE_PAGE_CLASS} min-h-full py-6`}>
       <div className="bg-paper">
-        <nav aria-label="Sources" className="flex border-b border-line">
-          {tabs.map((tab, index) => (
+        {/* DESIGN.md § Navigation, Radix tabs: Meta Semibold Grey, the
+            active tab Extrabold Navy over a 2px Electric Blue rule, a Line
+            hairline under the row (an inset shadow, so the rule sits on it
+            without overflowing the scroller); one line, scrolling sideways
+            when it does not fit (task 058, landscape polish entry 16). */}
+        <nav
+          aria-label="Sources"
+          className="flex overflow-x-auto shadow-[inset_0_-1px_0_var(--color-line)] [scrollbar-width:none]"
+        >
+          {tabs.map((tab) => (
             <NavLink
               key={tab.label}
               to={tab.to}
               end={tab.end}
               className={({ isActive }) =>
                 cn(
-                  "flex-1 px-4 py-2.5 text-center text-meta font-extrabold uppercase tracking-[0.06em] no-underline max-md:px-2 max-md:text-caption",
-                  index > 0 && "border-l border-line",
-                  isActive ? "bg-navy text-white" : "text-grey hover:text-navy",
+                  "flex-1 shrink-0 whitespace-nowrap border-b-2 px-4 py-2.5 text-center text-meta no-underline max-md:px-2.5",
+                  "transition-colors duration-150 ease-[ease] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue",
+                  isActive
+                    ? "border-blue font-extrabold text-navy"
+                    : "border-transparent font-semibold text-grey hover:text-navy",
                 )
               }
             >
