@@ -517,10 +517,22 @@ class StreamedClaimMarker:
         index: The page's index for the section.
         seed: The section seed (its member findings are citable).
         transcript: The section's tool exchanges.
+        sources: The citable ids' sources, ``(by_chunk_id, by_finding_id)``
+            as :func:`citable_sources` gives them, when the caller already
+            has them (the key findings, which run without a transcript, cite
+            what the sections read; round 8). ``None`` reads them from
+            ``seed`` and ``transcript``.
     """
 
     def __init__(
-        self, index: int, seed: dict[str, Any], transcript: list[ToolExchange]
+        self,
+        index: int,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        sources: (
+            tuple[dict[str, tuple[str, str | None]], dict[str, tuple[str, str | None]]] | None
+        ) = None,
     ) -> None:
         self._index = index
         self._seed = seed
@@ -532,7 +544,7 @@ class StreamedClaimMarker:
         self._seen = 0
         self._sources: (
             tuple[dict[str, tuple[str, str | None]], dict[str, tuple[str, str | None]]] | None
-        ) = None
+        ) = sources
         self._broken = False
 
     def feed(self, fragment: str, decoded_prose: str) -> None:
@@ -1582,6 +1594,120 @@ class OpenAISynthesisBackend:
         )
         return section, usage
 
+    def write_key_findings_stream(
+        self,
+        seed: dict[str, Any],
+        *,
+        index: int,
+        sources: (
+            tuple[dict[str, tuple[str, str | None]], dict[str, tuple[str, str | None]]] | None
+        ) = None,
+    ) -> UsageResult[SectionProseWire]:
+        """Write the key findings as one streamed reply (task 058, round 8).
+
+        The messages are the ones :meth:`write_key_findings` sends, unchanged.
+        That call forces the ``emit_section`` tool, which the provider
+        delivers in one burst at the end (probe, 2026-11-04), so this one asks
+        for the same arguments as a structured reply instead: the
+        ``emit_section`` parameters schema as a strict ``json_schema``
+        response format (the schema the probe's fourth call showed the
+        provider accepts and streams prose-first). As the reply arrives, the
+        prose's pieces go to the page through :func:`publish_section_delta`
+        and each claim is marked as it closes (:class:`StreamedClaimMarker`),
+        on the key-findings slot. The whole text, less any Markdown code
+        fence, is then parsed exactly as the forced call's arguments are, so
+        the result goes on to the claim checks unchanged.
+
+        The call runs once, outside the retry loop, because a retry would
+        repeat text the user has already seen. On any failure (including a
+        reply that is not a section object) the page's draft is reset with
+        an empty ``replace``, :attr:`stream_fallbacks` is counted, and
+        :meth:`write_key_findings` runs once more without streaming (with its
+        own retries and its own absence rule).
+
+        Args:
+            seed: The key-findings seed.
+            index: The page's index for the key-findings slot.
+            sources: The citable ids' sources for the claim marks, or
+                ``None`` to mark none.
+
+        Returns:
+            Raw structurally parsed prose + claims plus token usage.
+        """
+        step = "synthesise_write_key_findings"
+        messages = build_key_findings_messages(seed)
+        metadata = {"step": step, "attempt": 1, "prompt_version": KEY_FINDINGS_PROMPT_VERSION}
+
+        def _stream(span: Any | None = None) -> UsageResult[SectionProseWire]:
+            if span is not None:
+                span.update(input={"messages": messages}, metadata=metadata)
+            completions: Any = self._client.chat.completions
+            stream = completions.create(
+                **_step_kwargs(step),
+                messages=_cache_messages(step, messages),
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "emit_section",
+                        "schema": EMIT_SECTION_TOOL_SCHEMA["function"]["parameters"],
+                        "strict": True,
+                    },
+                },
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+            decoder = JsonStringFieldDecoder("prose")
+            markers = StreamedClaimMarker(
+                index, seed, [], sources=sources if sources is not None else ({}, {})
+            )
+            text = ""
+            provider_usage: Any | None = None
+            for chunk in stream:
+                choices = getattr(chunk, "choices", None)
+                if choices:
+                    delta = getattr(choices[0], "delta", None)
+                    fragment = getattr(delta, "content", None)
+                    if isinstance(fragment, str):
+                        text += fragment
+                        decoded = decoder.feed(fragment)
+                        if decoded:
+                            publish_section_delta(index, decoded)
+                        markers.feed(fragment, decoded)
+                chunk_usage = getattr(chunk, "usage", None)
+                if chunk_usage is not None:
+                    provider_usage = chunk_usage
+            log_usage("synthesis.key_findings.usage", provider_usage)
+            section, _malformed = _salvage_section(_strip_code_fence(text))
+            usage = token_usage_from_provider(provider_usage)
+            if span is not None:
+                span.update(
+                    usage_details=usage_details(usage),
+                    output=section.model_dump(),
+                    model=route().model_for(step),
+                    metadata={**metadata, **usage_metadata(usage)},
+                )
+            return section, usage
+
+        try:
+            if self._langfuse_client is None:
+                return _stream()
+            with tracing._observation(
+                self._langfuse_client,
+                name="synthesise:write_key_findings",
+                as_type="generation",
+            ) as span:
+                return _stream(span)
+        except Exception as exc:
+            log.warning(
+                "synthesis.key_findings_stream.fallback",
+                section_index=index,
+                error=type(exc).__name__,
+            )
+            publish_section_delta(index, "", mode="replace")
+            with self._lock:
+                self.stream_fallbacks += 1
+            return self.write_key_findings(seed)
+
     def _write_case_studies_once(
         self,
         messages: list[dict[str, Any]],
@@ -1836,6 +1962,115 @@ class OpenAISynthesisBackend:
             update=_update,
         )
         return wire, usage
+
+    def write_full_report_intro_stream(
+        self, seed: dict[str, Any], *, index: int
+    ) -> UsageResult[IntroWire]:
+        """Write the full report's introduction as one streamed reply (task 058, round 8).
+
+        The request is the one :meth:`write_full_report_intro` sends (the
+        same messages and the same structured-output schema), streamed. As
+        the reply's ``intro`` text arrives, its pieces go to the page's
+        introduction slot through :func:`publish_section_delta`. The whole
+        reply is then parsed into :class:`IntroWire` exactly as the
+        structured call is.
+
+        The call runs once, outside the retry loop, because a retry would
+        repeat text the user has already seen. On any failure the slot's
+        draft is reset with an empty ``replace``, :attr:`stream_fallbacks` is
+        counted, and :meth:`write_full_report_intro` runs once more without
+        streaming (with its own retries).
+
+        Args:
+            seed: Report intent plus ordered body section titles and briefs.
+            index: The page's index for the introduction slot.
+
+        Returns:
+            Structurally parsed intro plus token usage.
+        """
+        step = "synthesise_write_intro"
+        client = resolve_openai_client(None, backend_name="FullReportIntroWriter")
+        messages = [
+            {"role": "system", "content": FULL_REPORT_INTRO_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": FULL_REPORT_INTRO_USER_TEMPLATE.format(
+                    seed_json=json.dumps(seed, ensure_ascii=False, sort_keys=True)
+                ),
+            },
+        ]
+        metadata = {
+            "step": step,
+            "attempt": 1,
+            "prompt_version": FULL_REPORT_INTRO_PROMPT_VERSION,
+        }
+
+        def _stream(span: Any | None = None) -> UsageResult[IntroWire]:
+            if span is not None:
+                span.update(input={"messages": messages}, metadata=metadata)
+            completions: Any = client.chat.completions
+            stream = completions.create(
+                **_step_kwargs(step),
+                messages=_cache_messages(step, messages),
+                # The schema ``parse`` sends for the same wire.
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "schema": to_strict_json_schema(IntroWire),
+                        "name": IntroWire.__name__,
+                        "strict": True,
+                    },
+                },
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+            decoder = JsonStringFieldDecoder("intro")
+            text = ""
+            provider_usage: Any | None = None
+            for chunk in stream:
+                choices = getattr(chunk, "choices", None)
+                if choices:
+                    delta = getattr(choices[0], "delta", None)
+                    fragment = getattr(delta, "content", None)
+                    if isinstance(fragment, str):
+                        text += fragment
+                        decoded = decoder.feed(fragment)
+                        if decoded:
+                            publish_section_delta(index, decoded)
+                chunk_usage = getattr(chunk, "usage", None)
+                if chunk_usage is not None:
+                    provider_usage = chunk_usage
+            log_usage("synthesis.full_report_intro.usage", provider_usage)
+            wire = IntroWire.model_validate_json(_strip_code_fence(text))
+            usage = token_usage_from_provider(provider_usage)
+            if span is not None:
+                span.update(
+                    usage_details=usage_details(usage),
+                    output=wire.model_dump(),
+                    model=FULL_REPORT_INTRO_MODEL,
+                    metadata={**metadata, **usage_metadata(usage)},
+                )
+            return wire, usage
+
+        try:
+            if self._langfuse_client is None:
+                return _stream()
+            with tracing._observation(
+                self._langfuse_client,
+                name="synthesise:write_intro",
+                as_type="generation",
+            ) as span:
+                return _stream(span)
+        except Exception as exc:
+            log.warning(
+                "synthesis.full_report_intro_stream.fallback",
+                section_index=index,
+                error=type(exc).__name__,
+            )
+            publish_section_delta(index, "", mode="replace")
+            with self._lock:
+                self.stream_fallbacks += 1
+            return self.write_full_report_intro(seed)
 
 
 class StubSynthesisBackend:

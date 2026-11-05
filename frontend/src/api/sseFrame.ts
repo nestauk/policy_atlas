@@ -20,6 +20,7 @@ const SSE_FRAME_TYPES: ReadonlySet<SseFrame["type"]> = new Set([
   "artefact.section_sources",
   "artefact.section_claim",
   "artefact.section_card",
+  "artefact.source_note",
 ] satisfies SseFrame["type"][]);
 
 /**

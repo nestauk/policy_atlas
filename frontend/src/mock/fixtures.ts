@@ -19,8 +19,8 @@ type StageKey = components["schemas"]["StageStartedFrame"]["stage"];
  * boundary, so a change there is made here by hand (task 058, N26).
  */
 export const STAGE_PRESENTATION: Record<StageKey, readonly [label: string, blurb: string]> = {
-  acquire: ["Searching and screening", "Querying academic and policy databases."],
-  screen: ["Searching and screening", "Checking each title and abstract against your question."],
+  acquire: ["Searching", "Querying the databases and collecting candidates."],
+  screen: ["Screening", "Reading each abstract against the question."],
   classify: ["Classifying", "Labelling each source by its evidence type."],
   appraise: ["Classifying", "Scoring how much weight each source can bear."],
   ingest: ["Reading the full texts", "Fetching each selected document and reading it into sections."],
@@ -40,8 +40,6 @@ export const STAGE_PRESENTATION: Record<StageKey, readonly [label: string, blurb
   shortlist: ["Shortlisting", "Proposing options for close reading."],
 };
 
-/** The card row each stage belongs to; search and screen share one row, as do
- *  classify and appraise. */
 /** The server's `STAGE_COUNTS` (task 058, N17): the done row's counts, each
  *  with its noun, copied here so the mock's frames carry what the server's do. */
 export const STAGE_COUNTS: Record<StageKey, ReadonlyArray<readonly [string, string]>> = {
@@ -66,9 +64,11 @@ export const STAGE_COUNTS: Record<StageKey, ReadonlyArray<readonly [string, stri
   shortlist: [["kept", "shortlisted"]],
 };
 
+/** The card row each stage belongs to: classify and appraise share one row;
+ *  search and screen are two rows (owner round 8, 2026-11-05). */
 export const STAGE_ROW: Record<StageKey, string> = {
-  acquire: "search_screen",
-  screen: "search_screen",
+  acquire: "search",
+  screen: "screen",
   classify: "categorise",
   appraise: "categorise",
   ingest: "ingest",
@@ -549,9 +549,37 @@ function mockLiveCitations(claims: MockCitedClaim[]): components["schemas"]["Sec
       source_id: cite.source.source_id,
       title: cite.source.title,
       tier: "tier_2",
+      // Round 8: the committed report's ids (the mock answers the chunk
+      // context for any citation id) and the checked quote.
+      citation_id: cite.citationId,
+      claim_id: claim.claimId,
+      quote: cite.quote,
     })),
   );
 }
+
+/** The full report's introduction as the writer streams it into the `intro`
+ *  slot and as the committed report keeps it (task 058, round 8). */
+export const MOCK_FULL_REPORT_INTRO =
+  "The report first sets out what local action the evidence supports, then turns to the programmes that show it working in practice.";
+
+/** The most-relevant-source notes as `artefact.source_note` carries them, in
+ *  the order written, and as the committed report keeps them (round 8). Each
+ *  `short` is the source's name on the activity line. */
+export const mockSourceNotes: { sourceId: string; title: string; short: string; note: string }[] = [
+  {
+    sourceId: mockEvidence[4].source_id,
+    title: mockEvidence[4].title,
+    short: "Lancet 2021",
+    note: "A systematic review of 42 trials linking school-meal policies to child weight outcomes.",
+  },
+  {
+    sourceId: mockEvidence[3].source_id,
+    title: mockEvidence[3].title,
+    short: "London Assembly 2023",
+    note: "A borough-level review of food-environment levers around schools, including safer routes.",
+  },
+];
 
 export const mockArtefact: components["schemas"]["ArtefactOut"] = {
   artefact_id: "00000000-0000-4000-8000-00000000a001",
@@ -618,20 +646,34 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
     venue: mockEvidence[3].venue,
     url: null,
   }],
+  full_report_intro: MOCK_FULL_REPORT_INTRO,
+  most_relevant_notes: mockSourceNotes.map(({ sourceId, note }) => ({ source_id: sourceId, note })),
 };
 
 /** The live-artefact skeleton (contract strand 13), display-index ordered —
  *  same titles/prose as `mockArtefact` so the streamed and committed pages
  *  read as one continuous document. Each slot names its role; the
- *  case-studies slot comes last, as the server puts it (task 058, round 7). */
+ *  case-studies slot follows the body sections and the introduction's slot
+ *  comes last, as the server numbers them (task 058, rounds 7 and 8). The
+ *  page shows the introduction by its role, before the body sections. */
 export const mockArtefactSkeleton: components["schemas"]["ArtefactSectionSkeleton"][] = [
   { index: 0, title: "What appears to help", focus: "What the evidence shows helps, headline first.", role: "key_findings" },
   { index: 1, title: "Implications for local action", focus: "What this means for local decisions.", role: "body" },
   { index: 2, title: "Case studies", focus: "Relevant examples from the cited evidence.", role: "case_studies" },
+  { index: 3, title: "Full report", focus: "", role: "intro" },
 ];
 
 /** The case-studies slot's display index in the mock skeleton. */
 export const MOCK_CASE_STUDIES_INDEX = 2;
+/** The introduction slot's display index in the mock skeleton (round 8). */
+export const MOCK_INTRO_INDEX = 3;
+/** The key findings' writer's citation as `artefact.section_claim` carries it
+ *  while the block streams (round 8): the span the judge later keeps. */
+export const mockKeyFindingsClaim = {
+  start: 34,
+  end: 79,
+  sources: [{ source_id: mockEvidence[2].source_id, title: "BMJ Open 2022" }],
+};
 /** The display index of the section the mock writer streams (its prose is
  *  `mockArtefactSectionProse[1]`). */
 export const MOCK_STREAMED_SECTION_INDEX = 1;
@@ -649,6 +691,9 @@ export const mockSectionCitations: Record<number, components["schemas"]["Section
       source_id: mockEvidence[2].source_id,
       title: mockEvidence[2].title,
       tier: "tier_2",
+      citation_id: "50000000-0000-4000-8000-000000000001",
+      claim_id: "40000000-0000-4000-8000-000000000001",
+      quote: "Breakfast participation increased when provision was universal.",
     },
   ],
   [MOCK_STREAMED_SECTION_INDEX]: mockLiveCitations(MOCK_BODY_CITED),

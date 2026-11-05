@@ -29,6 +29,7 @@ from policy_atlas.core.liveness import (
     SectionDelta,
     SectionRevising,
     SectionSources,
+    SourceNote,
     Tick,
     TickHub,
 )
@@ -817,5 +818,102 @@ def test_context_helper_publishes_a_card_for_the_bound_task(
             liveness.publish_section_card(1, "Leeds", "Breakfast.")
         [card] = await _drain(queue)
         assert isinstance(card, SectionCard) and (card.index, card.title) == (1, "Leeds")
+
+    _run(body)
+
+
+# --- Source notes as they are written (task 058, round 8) --------------------------
+
+
+def test_source_notes_are_sent_in_order_and_a_snapshot_sends_them_after_the_draft() -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        queue = await hub.subscribe(TASK)
+        hub.publish_source_note(TASK, source_id="s1", title="Breakfast clubs", note="A trial.")
+        hub.publish_source_note(TASK, source_id="s2", title="Walking buses", note="A survey.")
+        sent = await _drain(queue)
+        assert [type(m) for m in sent] == [SourceNote, SourceNote]
+        assert [(m.source_id, m.title, m.note) for m in sent if isinstance(m, SourceNote)] == [
+            ("s1", "Breakfast clubs", "A trial."),
+            ("s2", "Walking buses", "A survey."),
+        ]
+        await hub.unsubscribe(TASK, queue)
+
+        # The notes do not belong to a section: a draft comes first, then the notes.
+        hub.publish_delta(TASK, index=4, text="The report turns to")
+        queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+        await hub.unsubscribe(TASK, queue)
+        assert isinstance(snapshot[0], SectionDelta) and snapshot[0].mode == "replace"
+        assert [m.source_id for m in snapshot[1:] if isinstance(m, SourceNote)] == ["s1", "s2"]
+
+        # Finishing a section, or the writing stage, keeps them: they go with the run.
+        hub.clear_draft(TASK)
+        hub.end_stage(TASK, "synthesise")
+        queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+        await hub.unsubscribe(TASK, queue)
+        assert [type(m) for m in snapshot] == [SourceNote, SourceNote]
+
+    _run(body)
+
+
+def test_source_notes_are_forgotten_with_the_run_and_when_stale() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+
+        async def snapshot() -> list[HubMessage]:
+            queue, messages = await hub.subscribe_with_snapshot(TASK)
+            await hub.unsubscribe(TASK, queue)
+            return messages
+
+        def note() -> None:
+            hub.publish_source_note(TASK, source_id="s1", title="T", note="N.")
+
+        run = uuid.uuid4()
+        hub.begin_run(TASK, run)
+        note()
+        assert len(await snapshot()) == 1
+        hub.end_run(TASK, run)
+        assert await snapshot() == []
+
+        note()
+        hub.begin_run(TASK, uuid.uuid4())
+        assert await snapshot() == []
+
+        note()
+        clock.now = MEMORY_TTL_SECONDS + 1
+        assert await snapshot() == []
+        hub.sweep()
+        memory = hub._tasks.get(TASK)
+        assert memory is None or memory.source_notes == []
+
+    _run(body)
+
+
+def test_source_notes_count_as_dropped_on_a_full_queue() -> None:
+    async def body() -> None:
+        hub, _clock = _hub(queue_size=1)
+        await hub.subscribe(TASK)
+        for n in range(3):
+            hub.publish_source_note(TASK, source_id=f"s{n}", title="T", note="N.")
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert hub.dropped(TASK) == 2
+
+    _run(body)
+
+
+def test_context_helper_publishes_a_source_note_for_the_bound_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        monkeypatch.setattr(liveness, "tick_hub", hub)
+        queue = await hub.subscribe(TASK)
+        liveness.publish_source_note("s1", "T", "N.")
+        assert await _drain(queue) == []
+        with liveness.task_liveness(TASK, stage="synthesise"):
+            liveness.publish_source_note("s1", "T", "N.")
+        [message] = await _drain(queue)
+        assert isinstance(message, SourceNote) and message.source_id == "s1"
 
     _run(body)

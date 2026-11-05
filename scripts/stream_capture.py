@@ -15,7 +15,7 @@ same way the browser does, and writes one JSON object per line to a file for
   ones, which carry an ``id:`` line, and the ephemeral ones (``tick``,
   ``artefact.section_delta``, ``artefact.section_revising``,
   ``artefact.section_sources``, ``artefact.section_claim``,
-  ``artefact.section_card``), which do not;
+  ``artefact.section_card``, ``artefact.source_note``), which do not;
 - every **comment** (a line starting with ``:``; the server sends ``: keep-alive``
   so that proxies do not close an idle connection);
 - every **reconnect** (the connection dropped and the script connected again).

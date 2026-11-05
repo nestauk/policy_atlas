@@ -40,6 +40,7 @@ secrets, no raw source text, no unredacted traces.
 | The streaming fix (owner go, 2026-11-05) | `make verify-fast` + `make prompt-guard` | pass | backend 4233 passed, 1 skipped (7 min 12 s); mypy "no issues found in 464 source files"; ruff clean; prompt guard green on the v12 pin. Focused first: 227 tests across the prompt-pin, prompts, shape, backend, loop and call-site files. |
 | Owner round 6 + evidence shown live (2026-11-05, `b69bf869` and the next commit) | `make frontend-verify && make drift-check && pnpm e2e` on the combined tree (frontend-designer, second pass); `make -C backend verify` on the evidence-live tree (deep-reasoner, own test database); lead: `make prompt-guard && make drift-check && make audit-paths` | pass | frontend 93 files / 1,142 passed, build; Playwright 33 passed; backend 4,302 passed, 1 skipped, mypy 465 files, ruff clean; prompt-guard 41 unchanged; drift-check OK; audit-paths 215. The first frontend run of round 6 had one 5 s timeout in an untouched error-boundary test (passed alone and on the rerun); the evidence-live agent's `pnpm e2e` failed only journey scene 1, the trace header the concurrent polish pass was rewriting, green once both landed. `fe-api-smoke.spec.ts` updated, not run (needs the real API). |
 | Owner round 7 (live-run notes, 2026-11-05): citations on completion, case studies streamed, markers in the final style, live page = report page with an in-place swap, paced streaming with a per-batch fade, the trace as the card again, the run strip back and the step note withdrawn | lead: `make verify` on the combined tree; agents: the same lanes on their own trees, `pnpm e2e` on the combined tree | pass | backend 4,322 passed, 1 skipped (9 min 7 s), mypy 467 files, ruff; okf-validate 200; infra 113; prompt-guard 41 unchanged; drift-check OK; frontend 94 files / 1,174 passed, build; Playwright 33 passed (designer's final run; one earlier full run had three journeys time out under parallel load, all green alone and after). The mock streaming measure before/after (research note § 6 method): 10 → 32 visible updates, longest gap 2,101 → 1,517 ms, median 21 → 7 characters per update, layout-shift total 0.135 → 0.140, no long animation frames. |
+| Owner round 8 (live-run notes, 2026-11-05, evening; three agents: backend + store, Result tab, workspace + shell) | lead: `make verify && pnpm e2e` on the combined tree; the agents: the same lanes on their own trees | pass | backend 4,344 passed, 1 skipped (6 min 48 s), mypy 468 files, ruff; okf-validate 200; infra 113; prompt-guard 41 unchanged; drift-check OK; frontend 94 files / 1,233 passed, build; Playwright 33 passed. Items: citation ids and quotes on completion (live tooltips and sheets), key findings and the introduction streamed, source notes published and named, searching and screening two rows again; the trace one card from start to end with right-aligned counts, times and links, links while a step runs, the activity line breathing; "Change" on its own line and the decision card settling in place; the strip inset after the rail, a button that opens the Task Agent, hidden while the sidebar shows it; the rail static with no timer; the task list's running mark at 6 px; the Sources tab mark removed; staggered repairs with eased height; the chips breathing in turn during the check; pulsing placeholders in empty cells keyed to the live stage with a 5 s refetch; the tooltip no longer closes on scroll the page caused. Unverified live: the key-findings and intro streams on Bedrock (fallback counted in `stream_fallbacks`). |
 
 (The gate map's step-6 exit is this command; it is re-run after the owner-gated phases.)
 
@@ -274,6 +275,73 @@ text changed; nothing new is judged.
   exempt stream; frontend `store/reducer.test.ts`, `mock/api.test.ts` (citations equal the
   committed report's, section by section).
 
+## Round 8 backend: key findings, introduction and source notes live; search and screen split
+
+Built by a deep-reasoner agent from `research/briefs/round-8-backend.md` (owner notes from a
+live run, 2026-11-05, evening). No prompt text changed; nothing new is judged or persisted
+beyond the frames below.
+
+- **B1. Citation ids on completion.** Each `artefact.section_completed.citations` entry gains
+  `citation_id`, `claim_id` and `quote` (`SectionCitation`; defaults `null`, `null`, `""`, so
+  round-7 frames still replay). `ReferenceNumbering.citations(claims, block_id=...)` reads back
+  the rows `_write_section` has just saved for the block (citation joined to its annotation and
+  addressable unit) and matches each entry on (claim span, chunk id, quote); `claim_id` is the
+  addressable-unit id, which is what the committed `ClaimOut.claim_id` carries (not the
+  annotation id). Store: `LiveCitation.citationId`, `claimId` (`string | null`), `quote`.
+- **B2. The key findings stream.** `OpenAISynthesisBackend.write_key_findings_stream(seed, *,
+  index, sources)`: the same messages; the forced `emit_section` tool cannot stream on bedrock
+  (probe 1, one burst at the end), so the request asks for the same arguments as a strict
+  `json_schema` reply (`emit_section`'s parameters schema, the shape probe 4 showed streams
+  prose first). `JsonStringFieldDecoder("prose")` deltas and `StreamedClaimMarker` marks go to
+  the key-findings slot (index 0); the "- " list is carried as it is; the whole text is parsed
+  by `_salvage_section` as the forced call's arguments are; any failure (including a reply that
+  is not a section object) resets the slot, counts a fallback and runs `write_key_findings`
+  once. The marks need the cited ids' sources: the run collects `citable_sources(seed,
+  transcript)` from every section and passes them in, and the labeller is bound around the
+  pass so the marks carry "Smith 2023" names. Activity line "Writing the key findings" with
+  section line "Key findings"; the pass's "Checking claims" and "Revising" lines carry it too.
+  An absent key findings block clears the draft before the empty completion.
+- **B3. The introduction streams into its own slot.** Skeleton slot `{index: n+2, title: "Full
+  report", focus: "", role: "intro"}` (after the case studies, so no other index moves; listed
+  last); `ProgressEmitter.intro_started` / `intro_completed(prose)` (no citations; empty prose
+  when there is no intro). `write_full_report_intro_stream(seed, *, index)`: the structured
+  call's request and schema, streamed, `JsonStringFieldDecoder("intro")` deltas, `IntroWire`
+  parse, the same fallback rule. Activity "Writing the introduction" with section line "Full
+  report". `LiveSectionRole` gains `intro`.
+- **B4. Source notes as they are written.** The activity line names the source ("Writing a
+  source note · Smith 2023", `ACTIVITY["synthesise.source_note_named"]`, short name from
+  `source_short_name`); each kept note is sent as hub `SourceNote` and ephemeral SSE frame
+  `artefact.source_note {source_id, title, note, occurred_at}` (`title` as the references title
+  the source, `live_citations.source_names`). The hub keeps the run's notes (snapshot: after the
+  draft; kept through `clear_draft` and `end_stage`, forgotten by `begin_run`, `end_run` and the
+  sweep after the memory TTL; counted in `dropped`). Store: `RunStreamState.liveSourceNotes`,
+  one per source in order (a reconnect's repeat replaces), cleared by a new run.
+- **B5. Two rows.** `STAGE_ROW`: `acquire` → `search` ("Searching", "Querying the databases and
+  collecting candidates."), `screen` → `screen` ("Screening", "Reading each abstract against the
+  question."). Plan steps, stage frames and `stage_label` carry the new words through the same
+  table.
+- **Deviation: the key findings and the introduction now stream.** Contract N6 kept the key
+  findings in "today's shape" (one forced call, not streamed), and the introduction had no live
+  surface. Superseded by the owner's notes from the live run on 2026-11-05: "How come streaming
+  isn't working for the key findings section?" and "There's a bit of a lag at the end of the
+  synthesis where the status says 'writing introduction' but I don't see what's happening on the
+  page."
+- **Mock.** Skeleton gains the intro slot (index 3); the walk streams the key findings (deltas
+  and one claim mark), then after the case studies sends two source notes and streams the
+  introduction; `mockArtefact` gains `full_report_intro` and `most_relevant_notes` matching them;
+  completed citations carry the committed ids and quotes; stage copy and rows as B5.
+- **Tests.** `tests/evidence_search/synthesis/test_round8_live.py` (a whole stub run: key
+  findings streamed into slot 0 with the sections' sources, the intro slot started and completed
+  with the saved intro, notes sent in the saved order with the references' titles, the named
+  lines; the key-findings stream at four chunk sizes with marks and the request shape, without
+  sources, and its fallback; the intro stream at three sizes and its fallback);
+  `test_live_citations_and_cards.py` (live entries equal the saved report's including ids and
+  quote); `tests/runtime/test_progress.py` (intro slot and replay; round-7-shaped citations
+  replay with null ids); `tests/core/test_liveness.py` (4 note tests); `tests/api/test_sse.py`
+  (note frames live and on reconnect, the encoder); `tests/api/test_contract_models.py`;
+  `tests/api/test_stage_vocabulary.py` (two rows, the named line); `test_task_agent_router.py`;
+  frontend `store/reducer.test.ts` (ids, notes, intro slot), `mock/api.test.ts`.
+
 ## Diff summary
 
 Filled per phase as it lands; the flagged deviations are in § Review handoff.
@@ -338,6 +406,7 @@ writer's publisher never logs it).
 | L | task-list stage, options read | codex | deep-reasoner (cap) | done; the `LatestRun.model_rebuild` workaround for the `StageKey` import cycle was replaced by the lead: `StageKey`/`STAGE_KEYS` now live in `contract/common.py` and are re-exported |
 | evidence-live | sources read and citations as they close (two ephemeral frames, hub, Result tab) | deep-reasoner | deep-reasoner (Opus) | done 2026-11-05: `make -C backend verify` "4302 passed, 1 skipped", mypy "Success: no issues found in 465 source files", ruff "All checks passed!"; `make frontend-verify` "Test Files 93 passed (93)", "Tests 1141 passed (1141)", build ok; `make drift-check` "drift-check: OK" (after `make openapi-sync`); `make prompt-guard` "41 prompt file(s) unchanged"; `pnpm e2e` "32 passed", 1 failed: journey scene 1 (the run trace header, `RunTrace.tsx`, being rewritten by the concurrent polish pass); scene 6 passed. A first `pnpm e2e` run beside the backend suite had 5 `page.goto` timeouts (load). |
 | round-7-backend | citations on `section_completed`; case studies streamed card by card (slot last with roles, frame, hub, store, mock); a fixed reference order in `artefact_out` | deep-reasoner | deep-reasoner (Opus) | done 2026-11-05 after two lead decisions: `make -C backend verify` "4322 passed, 1 skipped", mypy "Success: no issues found in 467 source files", ruff "All checks passed!", build ok; `make drift-check` "drift-check: OK" (after `make openapi-sync`); `make prompt-guard` "41 prompt file(s) unchanged"; `pnpm vitest run src/store src/api src/mock` "Tests 165 passed (165)"; `pnpm exec tsc -b` clean on the combined tree. An earlier full run had `test_option_searches_run_at_the_configured_width` fail once under load (passes alone and on every rerun). |
+| round-8-backend | citation ids and quote on `section_completed`; key findings and the introduction streamed into their slots (intro slot, role `intro`); source notes live (`artefact.source_note`, hub, store); search and screen as two rows; mock | deep-reasoner | deep-reasoner (Opus) | done 2026-11-05: `make -C backend verify` "4344 passed, 1 skipped", mypy "Success: no issues found in 468 source files", ruff "All checks passed!", build ok; `make drift-check` "drift-check: OK" (after `make openapi-sync`); `make prompt-guard` "41 prompt file(s) unchanged"; `pnpm vitest run src/store src/api src/mock` "Tests 170 passed (170)"; `pnpm exec tsc -b`: one error, in `views/workspace/runProgress.ts` (a concurrent designer edit), none in the store, api or mock. |
 
 **Executor substitution (memory rule, owner 2026-07-09):** the Codex workspace spend cap was
 hit at about 09:30 on 2026-11-05 during Phase 1. Every Codex-marked seam from that point

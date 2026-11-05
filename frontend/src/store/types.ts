@@ -93,9 +93,11 @@ export interface LiveSection {
   title: string;
   focus: string;
   state: "planned" | "writing" | "filled";
-  /** What the section is (`key_findings`, `case_studies` or `body`), from the
-   *  skeleton, so the page orders live sections by the same rule as the
-   *  saved report (task 058, round 7). */
+  /** What the section is (`key_findings`, `case_studies`, `body` or
+   *  `intro`), from the skeleton, so the page orders live sections by the
+   *  same rule as the saved report (task 058, round 7). `intro` (round 8) is
+   *  the paragraph the saved report shows under "Full report": after the
+   *  executive summary, before the body sections, whatever its index. */
   role?: string;
   prose?: string;
   /** The prose streamed so far for a section being written, from the
@@ -127,7 +129,11 @@ export interface LiveSection {
 
 /** One checked citation on a completed live section (task 058, round 7).
  *  `[start, end)` counts code points of the section's `prose`; `n` is the
- *  report-wide reference number; `tier` is the judge's verdict, or null. */
+ *  report-wide reference number; `tier` is the judge's verdict, or null.
+ *  `citationId` and `claimId` are the ids the committed report's citation and
+ *  claim carry (the chunk context is asked for by `citationId`), and `quote`
+ *  the checked quote (round 8); the ids are null and the quote empty on a
+ *  frame recorded before round 8. */
 export interface LiveCitation {
   start: number;
   end: number;
@@ -135,6 +141,18 @@ export interface LiveCitation {
   sourceId: string | null;
   title: string;
   tier: string | null;
+  citationId: string | null;
+  claimId: string | null;
+  quote: string;
+}
+
+/** One most-relevant-source note as it is written (`artefact.source_note`,
+ *  task 058, round 8). Display-only: the committed report brings the notes
+ *  it keeps. */
+export interface LiveSourceNote {
+  sourceId: string;
+  title: string;
+  note: string;
 }
 
 /** One case-study card as it closes in the streamed reply (task 058, round 7). */
@@ -189,6 +207,11 @@ export interface RunStreamState {
    *  skeleton for yet. The next `artefact.skeleton` folds them into its
    *  sections, so no streamed prose is lost (task 058, N7). */
   pendingDrafts: Record<number, string>;
+  /** The run's source notes as each is written, in order, one per source
+   *  (`artefact.source_note`; a reconnect's repeat replaces, never doubles).
+   *  Absent until the first note; cleared when a new run starts (task 058,
+   *  round 8). */
+  liveSourceNotes?: LiveSourceNote[];
   /** Transient: latest tick per stage. Never sequence-gated, never replayed
    *  (a fresh mount/reconnect starts this slice empty regardless of
    *  cursor). */

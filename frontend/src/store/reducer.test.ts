@@ -627,9 +627,10 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
     } as SseFrame;
     const live = fold(createInitialRunStreamState(), [...writingFrames(), delta(3, "The evidence")]);
     const state = reduceRunStreamFrame(live, withCitations);
+    // Recorded in the round-7 shape: the round-8 ids are null, the quote empty.
     const expected = [
-      { start: 0, end: 12, n: 2, sourceId: "tss-a", title: "Breakfast clubs", tier: "tier_2" },
-      { start: 0, end: 12, n: 5, sourceId: null, title: "Unknown source", tier: null },
+      { start: 0, end: 12, n: 2, sourceId: "tss-a", title: "Breakfast clubs", tier: "tier_2", citationId: null, claimId: null, quote: "" },
+      { start: 0, end: 12, n: 5, sourceId: null, title: "Unknown source", tier: null, citationId: null, claimId: null, quote: "" },
     ];
     expect(state.liveSections[3].citations).toEqual(expected);
     // Kept: a late ephemeral frame or the next section's frames leave them.
@@ -649,6 +650,116 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
     // existed, carries none.
     const older = reduceRunStreamFrame(live, completed);
     expect(older.liveSections[3].citations).toBeUndefined();
+  });
+
+  it("completion carries each citation's saved ids and quote (round 8)", () => {
+    const withIds: SseFrame = {
+      ...completed,
+      citations: [
+        {
+          start: 0,
+          end: 12,
+          n: 2,
+          source_id: "tss-a",
+          title: "Breakfast clubs",
+          tier: "tier_2",
+          citation_id: "c-1",
+          claim_id: "u-1",
+          quote: "Participation rose.",
+        },
+      ],
+    };
+    const state = fold(createInitialRunStreamState(), [...writingFrames(), withIds]);
+    expect(state.liveSections[3].citations).toEqual([
+      {
+        start: 0,
+        end: 12,
+        n: 2,
+        sourceId: "tss-a",
+        title: "Breakfast clubs",
+        tier: "tier_2",
+        citationId: "c-1",
+        claimId: "u-1",
+        quote: "Participation rose.",
+      },
+    ]);
+  });
+
+  it("source notes arrive one per source, in order, never move the cursor, and go with the run (round 8)", () => {
+    const note = (sourceId: string, text: string): SseFrame => ({
+      type: "artefact.source_note",
+      source_id: sourceId,
+      title: `Title ${sourceId}`,
+      note: text,
+      occurred_at: "2026-07-28T10:01:40Z",
+      ephemeral: true,
+    });
+    const base = fold(createInitialRunStreamState(), writingFrames());
+    expect(base.liveSourceNotes).toBeUndefined();
+    let state = fold(base, [note("s1", "One."), note("s2", "Two.")]);
+    expect(state.liveSourceNotes).toEqual([
+      { sourceId: "s1", title: "Title s1", note: "One." },
+      { sourceId: "s2", title: "Title s2", note: "Two." },
+    ]);
+    expect(state.lastSequence).toBe(base.lastSequence);
+    expect(state.appliedTypesAtLastSequence).toEqual(base.appliedTypesAtLastSequence);
+    // A reconnect's snapshot sends them again: replaced in place, never doubled.
+    state = fold(state, [note("s1", "One."), note("s2", "Two, again.")]);
+    expect(state.liveSourceNotes?.map((entry) => entry.note)).toEqual(["One.", "Two, again."]);
+    // The same run's later frames keep them; a new run starts without them.
+    state = reduceRunStreamFrame(state, completed);
+    expect(state.liveSourceNotes).toHaveLength(2);
+    state = fold(state, [
+      {
+        type: "run.status",
+        capability_run_id: TASK_RUN_ID,
+        status: "succeeded",
+        occurred_at: "2026-07-28T10:02:00Z",
+        sequence: 8,
+      },
+    ]);
+    expect(state.liveSourceNotes).toHaveLength(2);
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: OTHER_RUN_ID,
+      status: "running",
+      occurred_at: "2026-07-28T10:05:00Z",
+      sequence: 9,
+    });
+    expect(state.liveSourceNotes).toBeUndefined();
+  });
+
+  it("an intro slot keeps its role and completes with its prose (round 8)", () => {
+    const state = fold(createInitialRunStreamState(), [
+      writingFrames()[0],
+      {
+        type: "artefact.skeleton",
+        sections: [
+          { index: 0, title: "Key findings", focus: "", role: "key_findings" },
+          { index: 1, title: "Costs", focus: "", role: "body" },
+          { index: 2, title: "Case studies", focus: "", role: "case_studies" },
+          { index: 3, title: "Full report", focus: "", role: "intro" },
+        ],
+        occurred_at: "2026-07-28T10:01:00Z",
+        sequence: 2,
+      },
+      { type: "artefact.section_started", index: 3, occurred_at: "2026-07-28T10:03:00Z", sequence: 3 },
+      delta(3, "The report first"),
+      delta(3, " weighs the evidence."),
+    ]);
+    expect(state.liveSections[3]).toMatchObject({ role: "intro", state: "writing", draft: "The report first weighs the evidence." });
+    const done = reduceRunStreamFrame(state, {
+      type: "artefact.section_completed",
+      index: 3,
+      title: "Full report",
+      prose: "The report first weighs the evidence.",
+      citations: [],
+      occurred_at: "2026-07-28T10:03:05Z",
+      sequence: 4,
+    });
+    expect(done.liveSections[3]).toMatchObject({ role: "intro", state: "filled", prose: "The report first weighs the evidence." });
+    expect(done.liveSections[3].draft).toBeUndefined();
+    expect(done.liveSections[3].citations).toBeUndefined();
   });
 
   it("cards append in order, a replace clears them, completion clears them (round 7)", () => {

@@ -13,6 +13,8 @@ import {
   MOCK_THEME_ID_ACTIVE_TRAVEL,
   MOCK_THEME_ID_SCHOOL_FOOD,
   MOCK_CASE_STUDIES_INDEX,
+  MOCK_FULL_REPORT_INTRO,
+  MOCK_INTRO_INDEX,
   MOCK_STREAMED_SECTION_INDEX,
   mockArtefact,
   mockArtefactSectionProse,
@@ -20,7 +22,9 @@ import {
   mockCaseStudiesProse,
   mockCaseStudyCards,
   mockCheckIn,
+  mockKeyFindingsClaim,
   mockSectionOneRevisingSpan,
+  mockSourceNotes,
   mockEvidenceThemeIds,
   mockMeEnrolled,
   foldMockOptionRows,
@@ -125,7 +129,7 @@ describe("mock API", () => {
     await consumed;
     // Live artefact sections streamed in before the run's terminal status.
     expect(frames.some((frame) => frame.type === "artefact.skeleton")).toBe(true);
-    expect(frames.filter((frame) => frame.type === "artefact.section_completed")).toHaveLength(3);
+    expect(frames.filter((frame) => frame.type === "artefact.section_completed")).toHaveLength(4); // key findings, body, case studies, introduction
     expect(frames.at(-1)).toMatchObject({ type: "run.status", status: "succeeded" });
   });
 
@@ -618,14 +622,16 @@ describe("mock API", () => {
     it("uses the server's stage labels and blurbs, rows on the plan steps and the live stage on the task", async () => {
       const frames = await playEvidenceWalk();
       const started = new Map(ofType(frames, "stage.started").map((frame) => [frame.stage, frame]));
-      expect(started.get("acquire")).toMatchObject({ label: "Searching and screening", blurb: "Querying academic and policy databases." });
+      // Search and screen are two rows again (owner round 8).
+      expect(started.get("acquire")).toMatchObject({ label: "Searching", blurb: "Querying the databases and collecting candidates." });
+      expect(started.get("screen")).toMatchObject({ label: "Screening", blurb: "Reading each abstract against the question." });
       expect(started.get("classify")).toMatchObject({ label: "Classifying", blurb: "Labelling each source by its evidence type." });
       expect(started.get("synthesise")).toMatchObject({ label: "Writing", blurb: "A cited report, checked claim by claim." });
       expect(started.get("appraise")?.label).toBe("Classifying");
 
       const plan = (await (await mockFetch(`${base}/plan`)).json()) as { plan: { steps: { stage: string; row: string }[] } };
       const rows = Object.fromEntries(plan.plan.steps.map((step) => [step.stage, step.row]));
-      expect(rows).toMatchObject({ acquire: "search_screen", screen: "search_screen", classify: "categorise", appraise: "categorise", characterise: "characterise", synthesise: "synthesise" });
+      expect(rows).toMatchObject({ acquire: "search", screen: "screen", classify: "categorise", appraise: "categorise", characterise: "characterise", synthesise: "synthesise" });
       await freshTask("options_scoping");
       const scoping = (await (await mockFetch(`${base}/plan`)).json()) as { scoping: { steps: { row: string }[] } };
       expect(scoping.scoping.steps.map((step) => step.row)).toEqual(["baseline", "longlist", "shortlist"]);
@@ -642,8 +648,8 @@ describe("mock API", () => {
         latest_run: { stage: string; stage_label: string };
         active_run: { stage: string; stage_label: string };
       };
-      expect(task.latest_run).toMatchObject({ stage: "screen", stage_label: "Searching and screening" });
-      expect(task.active_run).toMatchObject({ stage: "screen", stage_label: "Searching and screening" });
+      expect(task.latest_run).toMatchObject({ stage: "screen", stage_label: "Screening" });
+      expect(task.active_run).toMatchObject({ stage: "screen", stage_label: "Screening" });
     });
 
     it("sends ticks in the new shape and none of the old ones", async () => {
@@ -679,9 +685,9 @@ describe("mock API", () => {
     it("streams section 1 as deltas, then the revising span, then the repaired section", async () => {
       const frames = await playEvidenceWalk();
       const draft = mockArtefactSectionProse[1];
-      const deltas = ofType(frames, "artefact.section_delta");
+      const deltas = ofType(frames, "artefact.section_delta").filter((entry) => entry.index === MOCK_STREAMED_SECTION_INDEX);
       expect(deltas.length).toBeGreaterThan(3);
-      expect(deltas.every((entry) => entry.index === MOCK_STREAMED_SECTION_INDEX && entry.mode === "append")).toBe(true);
+      expect(deltas.every((entry) => entry.mode === "append")).toBe(true);
       expect(deltas.map((entry) => entry.text).join("")).toBe(draft);
       for (const entry of deltas) {
         const words = entry.text.trim().split(/\s+/).length;
@@ -698,9 +704,8 @@ describe("mock API", () => {
       const completed = ofType(frames, "artefact.section_completed").find((entry) => entry.index === MOCK_STREAMED_SECTION_INDEX)!;
       expect(completed.prose).toBe(mockArtefactSectionRepairedProse[1]);
       expect(completed.prose.slice(0, revising.spans[0].start)).toBe(draft.slice(0, revising.spans[0].start));
-      const order = frames.map((frame) => frame.type);
-      expect(order.lastIndexOf("artefact.section_delta")).toBeLessThan(order.indexOf("artefact.section_revising"));
-      expect(order.indexOf("artefact.section_revising")).toBeLessThan(order.lastIndexOf("artefact.section_completed"));
+      expect(frames.indexOf(deltas.at(-1)!)).toBeLessThan(frames.indexOf(revising));
+      expect(frames.indexOf(revising)).toBeLessThan(frames.indexOf(completed));
     });
 
     it("names the sources read before the prose and the writer's citations after it (evidence shown live)", async () => {
@@ -709,26 +714,29 @@ describe("mock API", () => {
       const sources = ofType(frames, "artefact.section_sources");
       expect(sources.map((entry) => entry.sources.length)).toEqual([2, 5]);
       expect(sources.every((entry) => entry.index === MOCK_STREAMED_SECTION_INDEX)).toBe(true);
-      const claims = ofType(frames, "artefact.section_claim");
+      const claims = ofType(frames, "artefact.section_claim").filter((claim) => claim.index === MOCK_STREAMED_SECTION_INDEX);
       expect(claims).toHaveLength(2);
       for (const claim of claims) {
-        expect(claim.index).toBe(MOCK_STREAMED_SECTION_INDEX);
         expect(claim.end).toBeLessThanOrEqual(Array.from(draft).length);
         expect(claim.sources.length).toBeGreaterThan(0);
       }
       expect(draft.slice(claims[1].start, claims[1].end)).toBe(
         "Schools that added a walking bus saw 8 more children arrive on foot in every 100.",
       );
-      const order = frames.map((frame) => frame.type);
-      expect(order.indexOf("artefact.section_sources")).toBeLessThan(order.indexOf("artefact.section_delta"));
-      expect(order.lastIndexOf("artefact.section_delta")).toBeLessThan(order.indexOf("artefact.section_claim"));
-      expect(order.lastIndexOf("artefact.section_claim")).toBeLessThan(order.indexOf("artefact.section_revising"));
+      const deltas = ofType(frames, "artefact.section_delta").filter((entry) => entry.index === MOCK_STREAMED_SECTION_INDEX);
+      const [revising] = ofType(frames, "artefact.section_revising");
+      expect(frames.indexOf(sources[0])).toBeLessThan(frames.indexOf(deltas[0]));
+      expect(frames.indexOf(deltas.at(-1)!)).toBeLessThan(frames.indexOf(claims[0]));
+      expect(frames.indexOf(claims.at(-1)!)).toBeLessThan(frames.indexOf(revising));
     });
 
     it("completes each section with citations numbered as the final report numbers them (round 7)", async () => {
       const frames = await playEvidenceWalk();
-      const completed = ofType(frames, "artefact.section_completed");
-      expect(completed.map((entry) => entry.index)).toEqual([0, MOCK_STREAMED_SECTION_INDEX, MOCK_CASE_STUDIES_INDEX]);
+      const all = ofType(frames, "artefact.section_completed");
+      expect(all.map((entry) => entry.index)).toEqual([0, MOCK_STREAMED_SECTION_INDEX, MOCK_CASE_STUDIES_INDEX, MOCK_INTRO_INDEX]);
+      // The introduction has no citations and no section of its own in the report.
+      expect(all.at(-1)?.citations).toEqual([]);
+      const completed = all.filter((entry) => entry.index !== MOCK_INTRO_INDEX);
       const [keyFindings] = completed;
       const finalClaim = mockArtefact.sections![0].blocks![0].claims![0];
       expect(keyFindings.citations).toHaveLength(1);
@@ -752,11 +760,24 @@ describe("mock API", () => {
                 n: cited.n,
                 title: cited.source_title,
                 tier: cited.grounding_tier,
+                // Round 8: the committed ids and quote ride on the live citation.
+                citation_id: cited.citation_id,
+                claim_id: claim.claim_id,
+                quote: cited.quote,
               })),
             ),
         );
         expect(
-          (entry.citations ?? []).map(({ start, end, n, title, tier }) => ({ start, end, n, title, tier })),
+          (entry.citations ?? []).map(({ start, end, n, title, tier, citation_id, claim_id, quote }) => ({
+            start,
+            end,
+            n,
+            title,
+            tier,
+            citation_id,
+            claim_id,
+            quote,
+          })),
         ).toEqual(expected);
         for (const each of entry.citations ?? []) {
           expect(entry.prose.slice(each.start, each.end).length).toBeGreaterThan(0);
@@ -789,14 +810,58 @@ describe("mock API", () => {
       expect(started).toBeGreaterThan(0);
       expect(started).toBeLessThan(order.indexOf("artefact.section_card"));
       expect(order.lastIndexOf("artefact.section_card")).toBeLessThan(frames.indexOf(completed));
-      // The slot is last and names its role, so body indexes keep their places.
+      // The slot follows the body sections and names its role, so body
+      // indexes keep their places; the introduction's slot comes after it.
       const [skeleton] = ofType(frames, "artefact.skeleton");
-      expect(skeleton.sections.map((slot) => slot.role)).toEqual(["key_findings", "body", "case_studies"]);
-      expect(skeleton.sections.at(-1)?.index).toBe(MOCK_CASE_STUDIES_INDEX);
+      expect(skeleton.sections.map((slot) => slot.role)).toEqual(["key_findings", "body", "case_studies", "intro"]);
+      expect(skeleton.sections.at(-2)?.index).toBe(MOCK_CASE_STUDIES_INDEX);
       const line = ofType(frames, "tick").find((entry) => entry.activity === "Writing the case studies");
       expect(line?.section).toBe("Case studies");
       const finalSection = mockArtefact.sections!.find((section) => section.role === "case_studies");
       expect(finalSection?.cards?.map((card) => card.title)).toEqual(mockCaseStudyCards.map((card) => card.title));
+    });
+
+    it("streams the key findings as deltas with a claim mark before they complete (round 8)", async () => {
+      const frames = await playEvidenceWalk();
+      const deltas = ofType(frames, "artefact.section_delta").filter((entry) => entry.index === 0);
+      expect(deltas.length).toBeGreaterThan(3);
+      expect(deltas.map((entry) => entry.text).join("")).toBe(mockArtefactSectionProse[0]);
+      const [claim] = ofType(frames, "artefact.section_claim").filter((entry) => entry.index === 0);
+      expect(claim).toMatchObject(mockKeyFindingsClaim);
+      const completed = ofType(frames, "artefact.section_completed").find((entry) => entry.index === 0)!;
+      expect(frames.indexOf(deltas.at(-1)!)).toBeLessThan(frames.indexOf(claim));
+      expect(frames.indexOf(claim)).toBeLessThan(frames.indexOf(completed));
+      expect(completed.prose.slice(claim.start, claim.end)).toBe(completed.prose.slice(completed.citations![0].start, completed.citations![0].end));
+      const line = ofType(frames, "tick").find((entry) => entry.activity === "Writing the key findings");
+      expect(line?.section).toBe("Key findings");
+    });
+
+    it("sends two source notes after the sections, then streams the introduction into its slot (round 8)", async () => {
+      const frames = await playEvidenceWalk();
+      const notes = ofType(frames, "artefact.source_note");
+      expect(notes.map(({ source_id, title, note }) => ({ source_id, title, note }))).toEqual(
+        mockSourceNotes.map(({ sourceId, title, note }) => ({ source_id: sourceId, title, note })),
+      );
+      expect(notes.every((note) => note.ephemeral && !("sequence" in note))).toBe(true);
+      // The committed report keeps the same notes and the same introduction.
+      expect(mockArtefact.most_relevant_notes).toEqual(notes.map(({ source_id, note }) => ({ source_id, note })));
+      expect(mockArtefact.full_report_intro).toBe(MOCK_FULL_REPORT_INTRO);
+      const lines = ofType(frames, "tick").map((entry) => entry.activity);
+      expect(lines).toEqual(expect.arrayContaining(mockSourceNotes.map((note) => `Writing a source note · ${note.short}`)));
+
+      const casesDone = ofType(frames, "artefact.section_completed").find((entry) => entry.index === MOCK_CASE_STUDIES_INDEX)!;
+      expect(frames.indexOf(casesDone)).toBeLessThan(frames.indexOf(notes[0]));
+      const started = frames.find((frame) => frame.type === "artefact.section_started" && frame.index === MOCK_INTRO_INDEX)!;
+      const deltas = ofType(frames, "artefact.section_delta").filter((entry) => entry.index === MOCK_INTRO_INDEX);
+      const completed = ofType(frames, "artefact.section_completed").find((entry) => entry.index === MOCK_INTRO_INDEX)!;
+      expect(frames.indexOf(notes.at(-1)!)).toBeLessThan(frames.indexOf(started));
+      expect(deltas.map((entry) => entry.text).join("")).toBe(MOCK_FULL_REPORT_INTRO);
+      expect(completed).toMatchObject({ title: "Full report", prose: MOCK_FULL_REPORT_INTRO, citations: [] });
+      expect(frames.indexOf(deltas.at(-1)!)).toBeLessThan(frames.indexOf(completed));
+      const [skeleton] = ofType(frames, "artefact.skeleton");
+      expect(skeleton.sections.at(-1)).toEqual({ index: MOCK_INTRO_INDEX, title: "Full report", focus: "", role: "intro" });
+      const line = ofType(frames, "tick").find((entry) => entry.activity === "Writing the introduction");
+      expect(line?.section).toBe("Full report");
     });
 
     it("serves the planner turn as a stream: progress, deltas, one completed last", async () => {
@@ -1003,7 +1068,7 @@ describe("mock API", () => {
       expect(started).toBeGreaterThan(0);
       // The replay is durable frames only; ticks are never replayed.
       expect(frames.slice(0, started).some((frame) => frame.type === "tick" || frame.type === "artefact.section_delta")).toBe(false);
-      const deltas = ofType(frames, "artefact.section_delta");
+      const deltas = ofType(frames, "artefact.section_delta").filter((entry) => entry.index === MOCK_STREAMED_SECTION_INDEX);
       expect(frames[started + 1]).toBe(deltas[0]);
       expect(deltas[0].mode).toBe("replace");
       expect(deltas.slice(1).every((entry) => entry.mode === "append")).toBe(true);

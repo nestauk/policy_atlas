@@ -3,9 +3,10 @@
 Frame `type` names and the nineteen pinned `stage` keys are contract (spec §
 SSE) — Hyrum hygiene means nothing else internal (module names, model ids,
 raw payload keys) is ever observable through a frame. Every frame except the
-six ephemeral ones (`tick`, `artefact.section_delta`,
+seven ephemeral ones (`tick`, `artefact.section_delta`,
 `artefact.section_revising`, `artefact.section_sources`,
-`artefact.section_claim`, `artefact.section_card`) carries a `sequence` (the `event_log` sequence,
+`artefact.section_claim`, `artefact.section_card`, `artefact.source_note`)
+carries a `sequence` (the `event_log` sequence,
 doubling as the client's reconnect cursor); the ephemeral frames carry
 neither `sequence` nor an `id:` line and are never replayed.
 """
@@ -104,8 +105,10 @@ class StageFailedFrame(_StageFrameBase):
 
 
 #: What a live-artefact section is, so the page orders live sections by the
-#: same rule as the saved report (task 058, round 7).
-LiveSectionRole = Literal["key_findings", "case_studies", "body"]
+#: same rule as the saved report (task 058, round 7). ``intro`` is the short
+#: paragraph the saved report shows under "Full report", before the body
+#: sections (round 8).
+LiveSectionRole = Literal["key_findings", "case_studies", "body", "intro"]
 
 
 class ArtefactSectionSkeleton(BaseModel):
@@ -113,11 +116,13 @@ class ArtefactSectionSkeleton(BaseModel):
 
     Args:
         index: The section's display identity (the key findings at 0 when the
-            report has them, the body sections next, the case studies last).
+            report has them, the body sections next, then the case studies,
+            then the introduction). The index is identity, not reading
+            order: the page orders by `role`.
         title: The section's title.
         focus: What the section covers.
-        role: `key_findings`, `case_studies` or `body`; skeletons recorded
-            before the field existed read as `body`.
+        role: `key_findings`, `case_studies`, `body` or `intro`; skeletons
+            recorded before the field existed read as `body`.
     """
 
     index: int
@@ -157,6 +162,13 @@ class SectionCitation(BaseModel):
         title: The source's title as the committed report's references name it.
         tier: The checker's verdict on the claim (`tier_1` ... `tier_4`,
             `unsupported_mis_cited`), or `null` when it was not checked.
+        citation_id: The saved citation's id, the one the committed report's
+            citation carries, so the page can ask for its chunk context while
+            the run is live (round 8); `null` on frames recorded before the
+            field existed.
+        claim_id: The saved claim's id, the one the committed report's claim
+            carries; `null` on older frames.
+        quote: The checked quote the citation rests on; empty on older frames.
     """
 
     start: int
@@ -165,6 +177,9 @@ class SectionCitation(BaseModel):
     source_id: uuid.UUID | None
     title: str
     tier: str | None
+    citation_id: uuid.UUID | None = None
+    claim_id: uuid.UUID | None = None
+    quote: str = ""
 
 
 class ArtefactSectionCompletedFrame(_PersistedFrameBase):
@@ -362,6 +377,27 @@ class ArtefactSectionCardFrame(BaseModel):
     occurred_at: datetime
 
 
+class ArtefactSourceNoteFrame(BaseModel):
+    """Ephemeral: one most-relevant-source note as it is written (task 058, round 8).
+
+    The notes arrive one at a time, in the order the saved report lists
+    them; each adds to the ones before. A reconnect gets the run's notes so
+    far. Display-only: never persisted, no `id:` line, no `sequence`.
+
+    Args:
+        source_id: The source's id in this task.
+        title: The source's title as the committed report's references name it.
+        note: The note's text.
+    """
+
+    type: Literal["artefact.source_note"]
+    ephemeral: Literal[True] = True
+    source_id: str
+    title: str
+    note: str
+    occurred_at: datetime
+
+
 #: Discriminated union of every SSE frame type, keyed on `type`.
 SseFrame = Annotated[
     RunStatusFrame
@@ -380,6 +416,7 @@ SseFrame = Annotated[
     | ArtefactSectionRevisingFrame
     | ArtefactSectionSourcesFrame
     | ArtefactSectionClaimFrame
-    | ArtefactSectionCardFrame,
+    | ArtefactSectionCardFrame
+    | ArtefactSourceNoteFrame,
     Field(discriminator="type"),
 ]

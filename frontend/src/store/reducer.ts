@@ -3,6 +3,7 @@ import {
   GLOBAL_LIVENESS_KEY,
   type LiveSection,
   type LiveSource,
+  type LiveSourceNote,
   type ResolvedDecision,
   type RunStreamState,
   type StageEntry,
@@ -22,16 +23,17 @@ import {
  * That set resets whenever the sequence actually advances. Together this
  * makes folding the same frame stream twice, or resuming the fold from
  * any mid-stream cursor (however the redelivery is sliced), produce the
- * same final state. The six ephemeral frame types are the deliberate
+ * same final state. The seven ephemeral frame types are the deliberate
  * exception: they carry no `sequence` at all and never advance
  * `lastSequence`. `tick` updates only the transient `liveness` slice;
  * `artefact.section_delta` and `artefact.section_revising` update only a
  * section's `draft` and `revising` (task 058, N7);
  * `artefact.section_sources` and `artefact.section_claim` update only its
  * `sources` and `claims` (task 058, evidence shown live);
- * `artefact.section_card` appends to its `cards` (task 058, round 7). A
- * replay carries none of them, so folding a replay rebuilds `prose` and
- * `citations` alone.
+ * `artefact.section_card` appends to its `cards` (task 058, round 7);
+ * `artefact.source_note` adds to the run's `liveSourceNotes`, one per source
+ * (round 8). A replay carries none of them, so folding a replay rebuilds
+ * `prose` and `citations` alone.
  */
 /** Task 045 (A3): a stage frame names its walk; one from a different walk
  *  than the tracked run (a longlist walk's option search) is not this
@@ -125,6 +127,16 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
     };
   }
 
+  if (frame.type === "artefact.source_note") {
+    // One note per source, in the order written: a reconnect's snapshot
+    // sends the notes again, and a repeat replaces rather than doubles.
+    const note: LiveSourceNote = { sourceId: frame.source_id, title: frame.title, note: frame.note };
+    const notes = state.liveSourceNotes ?? [];
+    const at = notes.findIndex((existing) => existing.sourceId === note.sourceId);
+    const next = at === -1 ? [...notes, note] : notes.map((existing, i) => (i === at ? note : existing));
+    return { ...state, liveSourceNotes: next };
+  }
+
   if (frame.type === "artefact.section_revising") {
     const section = state.liveSections[frame.index];
     if (section === undefined || section.state === "filled") return state;
@@ -187,7 +199,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         frame.status === "aborted" ||
         frame.status === "interrupted" ||
         frame.status === "degraded";
-      return {
+      const next: RunStreamState = {
         ...base,
         run: {
           id: frame.capability_run_id,
@@ -205,6 +217,9 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         liveSections: isNewRun ? {} : base.liveSections,
         pendingDrafts: isNewRun ? {} : base.pendingDrafts,
       };
+      // A new run's notes start empty (task 058, round 8).
+      if (isNewRun) delete next.liveSourceNotes;
+      return next;
     }
 
     case "stage.started":
@@ -325,6 +340,10 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
           sourceId: citation.source_id,
           title: citation.title,
           tier: citation.tier,
+          // Round 8: absent on a frame recorded before the fields existed.
+          citationId: citation.citation_id ?? null,
+          claimId: citation.claim_id ?? null,
+          quote: citation.quote ?? "",
         }));
       }
       return {

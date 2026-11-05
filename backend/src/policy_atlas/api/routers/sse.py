@@ -28,6 +28,7 @@ from policy_atlas.api.contract import (
     ArtefactSectionSourcesFrame,
     ArtefactSectionStartedFrame,
     ArtefactSkeletonFrame,
+    ArtefactSourceNoteFrame,
     CheckinPendingFrame,
     CheckinResolvedFrame,
     PlanUpdatedFrame,
@@ -75,6 +76,7 @@ from policy_atlas.core.liveness import (
     SectionDelta,
     SectionRevising,
     SectionSources,
+    SourceNote,
     SourceRef,
     Tick,
     tick_hub,
@@ -651,6 +653,7 @@ def _encode_ephemeral(message: HubMessage) -> str:
             | ArtefactSectionSourcesFrame
             | ArtefactSectionClaimFrame
             | ArtefactSectionCardFrame
+            | ArtefactSourceNoteFrame
         ) = (
             TickFrame(
                 type="tick",
@@ -693,6 +696,14 @@ def _encode_ephemeral(message: HubMessage) -> str:
             index=message.index,
             title=message.title,
             prose=message.prose,
+            occurred_at=message.occurred_at,
+        )
+    elif isinstance(message, SourceNote):
+        frame = ArtefactSourceNoteFrame(
+            type="artefact.source_note",
+            source_id=message.source_id,
+            title=message.title,
+            note=message.note,
             occurred_at=message.occurred_at,
         )
     else:

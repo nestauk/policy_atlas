@@ -411,7 +411,7 @@
         "type": "object"
       },
       "ArtefactSectionSkeleton": {
-        "description": "One planned live-artefact section.\n\nArgs:\n    index: The section's display identity (the key findings at 0 when the\n        report has them, the body sections next, the case studies last).\n    title: The section's title.\n    focus: What the section covers.\n    role: `key_findings`, `case_studies` or `body`; skeletons recorded\n        before the field existed read as `body`.",
+        "description": "One planned live-artefact section.\n\nArgs:\n    index: The section's display identity (the key findings at 0 when the\n        report has them, the body sections next, then the case studies,\n        then the introduction). The index is identity, not reading\n        order: the page orders by `role`.\n    title: The section's title.\n    focus: What the section covers.\n    role: `key_findings`, `case_studies`, `body` or `intro`; skeletons\n        recorded before the field existed read as `body`.",
         "properties": {
           "focus": {
             "title": "Focus",
@@ -426,7 +426,8 @@
             "enum": [
               "key_findings",
               "case_studies",
-              "body"
+              "body",
+              "intro"
             ],
             "title": "Role",
             "type": "string"
@@ -547,6 +548,48 @@
           "sections"
         ],
         "title": "ArtefactSkeletonFrame",
+        "type": "object"
+      },
+      "ArtefactSourceNoteFrame": {
+        "description": "Ephemeral: one most-relevant-source note as it is written (task 058, round 8).\n\nThe notes arrive one at a time, in the order the saved report lists\nthem; each adds to the ones before. A reconnect gets the run's notes so\nfar. Display-only: never persisted, no `id:` line, no `sequence`.\n\nArgs:\n    source_id: The source's id in this task.\n    title: The source's title as the committed report's references name it.\n    note: The note's text.",
+        "properties": {
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "artefact.source_note",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "source_id",
+          "title",
+          "note",
+          "occurred_at"
+        ],
+        "title": "ArtefactSourceNoteFrame",
         "type": "object"
       },
       "AuthorityOut": {
@@ -7148,8 +7191,34 @@
         "type": "object"
       },
       "SectionCitation": {
-        "description": "One checked citation on a completed live section (task 058, round 7).\n\nOne entry per citation row of the section's judged claims, so a claim\nciting two sources gives two entries over the same span.\n\nArgs:\n    start: First code point of the cited claim's text in `prose`.\n    end: One past its last code point.\n    n: The report-wide reference number, numbered as the committed\n        report numbers its references (by source, in order of first\n        citation).\n    source_id: The source's id in this task, or `null` when the cited\n        text is not one of the task's sources.\n    title: The source's title as the committed report's references name it.\n    tier: The checker's verdict on the claim (`tier_1` ... `tier_4`,\n        `unsupported_mis_cited`), or `null` when it was not checked.",
+        "description": "One checked citation on a completed live section (task 058, round 7).\n\nOne entry per citation row of the section's judged claims, so a claim\nciting two sources gives two entries over the same span.\n\nArgs:\n    start: First code point of the cited claim's text in `prose`.\n    end: One past its last code point.\n    n: The report-wide reference number, numbered as the committed\n        report numbers its references (by source, in order of first\n        citation).\n    source_id: The source's id in this task, or `null` when the cited\n        text is not one of the task's sources.\n    title: The source's title as the committed report's references name it.\n    tier: The checker's verdict on the claim (`tier_1` ... `tier_4`,\n        `unsupported_mis_cited`), or `null` when it was not checked.\n    citation_id: The saved citation's id, the one the committed report's\n        citation carries, so the page can ask for its chunk context while\n        the run is live (round 8); `null` on frames recorded before the\n        field existed.\n    claim_id: The saved claim's id, the one the committed report's claim\n        carries; `null` on older frames.\n    quote: The checked quote the citation rests on; empty on older frames.",
         "properties": {
+          "citation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Citation Id"
+          },
+          "claim_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Claim Id"
+          },
           "end": {
             "title": "End",
             "type": "integer"
@@ -7157,6 +7226,11 @@
           "n": {
             "title": "N",
             "type": "integer"
+          },
+          "quote": {
+            "default": "",
+            "title": "Quote",
+            "type": "string"
           },
           "source_id": {
             "anyOf": [
@@ -7755,6 +7829,7 @@
             "artefact.section_sources": "#/components/schemas/ArtefactSectionSourcesFrame",
             "artefact.section_started": "#/components/schemas/ArtefactSectionStartedFrame",
             "artefact.skeleton": "#/components/schemas/ArtefactSkeletonFrame",
+            "artefact.source_note": "#/components/schemas/ArtefactSourceNoteFrame",
             "checkin.pending": "#/components/schemas/CheckinPendingFrame",
             "checkin.resolved": "#/components/schemas/CheckinResolvedFrame",
             "plan.updated": "#/components/schemas/PlanUpdatedFrame",
@@ -7818,6 +7893,9 @@
           },
           {
             "$ref": "#/components/schemas/ArtefactSectionCardFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSourceNoteFrame"
           }
         ]
       },

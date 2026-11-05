@@ -49,6 +49,22 @@ NOT_WRAPPED: dict[tuple[str, str], str] = {
         "round 7); its timeout bounds the gap between chunks; one non-streamed run of "
         "write_case_studies (with its own retries) on failure"
     ),
+    (
+        "evidence_search/synthesis/synthesis_backend.py",
+        "OpenAISynthesisBackend.write_key_findings_stream",
+    ): (
+        "exempt-stream: the key findings reach the user as they are written (task 058, "
+        "round 8); its timeout bounds the gap between chunks; one non-streamed run of "
+        "write_key_findings (with its own retries) on failure"
+    ),
+    (
+        "evidence_search/synthesis/synthesis_backend.py",
+        "OpenAISynthesisBackend.write_full_report_intro_stream",
+    ): (
+        "exempt-stream: the introduction reaches the user as it is written (task 058, "
+        "round 8); its timeout bounds the gap between chunks; one non-streamed run of "
+        "write_full_report_intro (with its own retries) on failure"
+    ),
     ("runtime/task_agent.py", "OpenAITaskAgentBackend._stream_attempt"): (
         "exempt-stream: the planner reply reaches the user as it arrives; one traced "
         "pre-token retry; the timeout bounds the gap between chunks"
@@ -131,7 +147,7 @@ def _where(call: _Call) -> str:
 def test_the_scan_sees_the_sites() -> None:
     """Guard against a scan that silently finds nothing."""
     builders = [c for c in CALLS if c.callee == "resolve_openai_client"]
-    assert len(builders) == 21
+    assert len(builders) == 22  # + the streamed intro (task 058, round 8)
     assert any(c.callee == "parse_structured" for c in CALLS)
     assert any(c.callee == "traced_parse" for c in CALLS)
 

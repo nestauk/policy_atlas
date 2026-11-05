@@ -210,11 +210,13 @@ def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> 
     assert [step.stage for step in projected.steps].count("acquire") == 1
     assert [step.stage for step in projected.steps].count("screen") == 1
     # Task 058 (N17): the server table is the one source of stage copy; search
-    # and screen share one card row and so one label.
-    assert projected.steps[0].label == "Searching and screening"
-    assert projected.steps[0].row == "search_screen"
-    assert projected.steps[1].row == "search_screen"
-    assert projected.steps[1].blurb == "Checking each title and abstract against your question."
+    # and screen are two card rows with their own labels (owner round 8).
+    assert projected.steps[0].label == "Searching"
+    assert projected.steps[0].row == "search"
+    assert projected.steps[0].blurb == "Querying the databases and collecting candidates."
+    assert projected.steps[1].label == "Screening"
+    assert projected.steps[1].row == "screen"
+    assert projected.steps[1].blurb == "Reading each abstract against the question."
     assert projected.steps[2].row == "categorise"
     # The screen_full collapse is a plan-steps presentation rule only: live
     # stage frames keep the pre-027 behaviour (no second "screen" stage row).
@@ -1407,8 +1409,8 @@ def test_a_turn_stored_before_the_row_key_reads_back_with_todays_steps() -> None
         },
     }
     out = _with_current_steps(stored)
-    assert [s["row"] for s in out["plan"]["steps"]] == ["search_screen", "categorise"]
-    assert [s["label"] for s in out["plan"]["steps"]] == ["Searching and screening", "Classifying"]
+    assert [s["row"] for s in out["plan"]["steps"]] == ["search", "categorise"]
+    assert [s["label"] for s in out["plan"]["steps"]] == ["Searching", "Classifying"]
     assert out["plan"]["ready"] is True
     assert _with_current_steps({"reply": "no plan"}) == {"reply": "no plan"}
 

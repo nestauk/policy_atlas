@@ -16,7 +16,9 @@ from policy_atlas.api.contract.task_agent import PlanStageKey
 from policy_atlas.api.stage_vocabulary import (
     STAGE_BY_REGISTRY,
     STAGE_PRESENTATION,
+    STAGE_ROW,
     STEP_VERBS,
+    activity,
     stage_for_payload,
 )
 
@@ -64,3 +66,32 @@ def test_every_route_step_has_a_verb() -> None:
     # Phase 2 adds this streamed writer step to the routes file, then removes
     # this temporary allowance.
     assert set(STEP_VERBS) - route_steps <= {"synthesise_section_emit"}
+
+
+def test_searching_and_screening_are_two_rows() -> None:
+    """Task 058, round 8 (owner): search and screen each have their own row,
+    label and blurb; classify and appraise still share one."""
+    assert STAGE_ROW["acquire"] == "search"
+    assert STAGE_ROW["screen"] == "screen"
+    assert STAGE_PRESENTATION["acquire"] == (
+        "Searching",
+        "Querying the databases and collecting candidates.",
+    )
+    assert STAGE_PRESENTATION["screen"] == (
+        "Screening",
+        "Reading each abstract against the question.",
+    )
+    assert STAGE_ROW["classify"] == STAGE_ROW["appraise"] == "categorise"
+    # A shared row still shares its label: the row is what the user sees.
+    for stage, row in STAGE_ROW.items():
+        sharing = {other for other, other_row in STAGE_ROW.items() if other_row == row}
+        assert {STAGE_PRESENTATION[other][0] for other in sharing} == {
+            STAGE_PRESENTATION[stage][0]
+        }
+
+
+def test_the_source_note_line_names_the_source() -> None:
+    """Task 058, round 8: the note's line names its source by short name."""
+    assert activity("synthesise.source_note_named", name="Smith 2023") == (
+        "Writing a source note · Smith 2023"
+    )

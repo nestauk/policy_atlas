@@ -11,7 +11,9 @@ just read and, as each of the writer's citations closes, the stretch of text it
 marks; it remembers both beside the section text, so a newly connected browser
 sees them too (task 058, "evidence shown live", owner 2026-11-05). The
 case-study cards are passed on the same way, each as it closes (task 058,
-round 7).
+round 7). After the sections, each most-relevant-source note is passed on as
+it is written; the hub keeps the run's notes for a newly connected browser
+until the run ends (task 058, round 8).
 
 Nothing here is saved to the database. The durable record stays in
 ``event_log``; these messages may be lost (a full queue drops its oldest
@@ -186,8 +188,33 @@ class SectionCard:
     occurred_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class SourceNote:
+    """One most-relevant-source note, as soon as it is written (task 058, round 8).
+
+    Display-only: the saved report brings the notes it keeps.
+
+    Attributes:
+        source_id: The source's id in this task.
+        title: The source's title as the saved report's references name it.
+        note: The note's text.
+        occurred_at: When the message was sent.
+    """
+
+    source_id: str
+    title: str
+    note: str
+    occurred_at: datetime
+
+
 type HubMessage = (
-    Tick | SectionDelta | SectionRevising | SectionSources | SectionClaim | SectionCard
+    Tick
+    | SectionDelta
+    | SectionRevising
+    | SectionSources
+    | SectionClaim
+    | SectionCard
+    | SourceNote
 )
 
 
@@ -244,6 +271,9 @@ class _TaskMemory:
     stages: dict[str | None, _StageMemory] = field(default_factory=dict)
     draft: _Draft | None = None
     pending_delta: _PendingDelta | None = None
+    #: The run's source notes so far, in the order written (round 8).
+    source_notes: list[SourceNote] = field(default_factory=list)
+    source_notes_at: float = 0.0
 
 
 def _now_utc() -> datetime:
@@ -320,7 +350,7 @@ class TickHub:
             being written, one ``replace`` delta carrying its text so far
             (when there is any), the sources read so far (when there are
             any), each citation bound so far and each case-study card closed
-            so far.
+            so far; then the run's source notes so far, in order.
         """
         queue: asyncio.Queue[HubMessage] = asyncio.Queue(maxsize=self._queue_size)
         subscriber = _Subscriber(asyncio.get_running_loop(), queue)
@@ -360,6 +390,11 @@ class TickHub:
                         )
                     snapshot.extend(draft.claims)
                     snapshot.extend(draft.cards)
+                if (
+                    memory.source_notes
+                    and now - memory.source_notes_at < MEMORY_TTL_SECONDS
+                ):
+                    snapshot.extend(memory.source_notes)
         return queue, snapshot
 
     async def unsubscribe(self, task_id: uuid.UUID, queue: asyncio.Queue[HubMessage]) -> None:
@@ -670,6 +705,26 @@ class TickHub:
             draft.updated_at = now
             self._fan_out(task_id, card)
 
+    def publish_source_note(
+        self, task_id: uuid.UUID, *, source_id: str, title: str, note: str
+    ) -> None:
+        """Send one source note, and remember it for a reconnect until the run ends.
+
+        Args:
+            task_id: The task.
+            source_id: The source's id in this task.
+            title: The source's title.
+            note: The note's text.
+        """
+        message = SourceNote(
+            source_id=source_id, title=title, note=note, occurred_at=_now_utc()
+        )
+        with self._lock:
+            memory = self._tasks.setdefault(task_id, _TaskMemory())
+            memory.source_notes.append(message)
+            memory.source_notes_at = self._clock()
+            self._fan_out(task_id, message)
+
     def clear_draft(self, task_id: uuid.UUID) -> None:
         """Forget the section draft, its sources, citations and cards, and any held append.
 
@@ -702,7 +757,8 @@ class TickHub:
         """Start a fresh memory for a task's new top-level run.
 
         A top-level run forgets everything the task's earlier run left
-        (ticks, held ticks, open calls, draft, held text, dropped count). A
+        (ticks, held ticks, open calls, draft, held text, source notes,
+        dropped count). A
         child run (one with a parent) changes nothing, so a parent's and its
         children's activity never wipe each other out.
 
@@ -785,7 +841,7 @@ class TickHub:
 
         A stage with an open model call whose last tick went out at least
         :data:`HEARTBEAT_SECONDS` ago gets that tick again with
-        ``heartbeat=True``. Ticks and drafts not updated for
+        ``heartbeat=True``. Ticks, drafts and source notes not updated for
         :data:`MEMORY_TTL_SECONDS` are forgotten. While any call is open,
         another sweep is arranged.
         """
@@ -816,7 +872,17 @@ class TickHub:
                 draft = memory.draft
                 if draft is not None and now - draft.updated_at >= MEMORY_TTL_SECONDS:
                     memory.draft = None
-                if not memory.stages and memory.draft is None and memory.pending_delta is None:
+                if (
+                    memory.source_notes
+                    and now - memory.source_notes_at >= MEMORY_TTL_SECONDS
+                ):
+                    memory.source_notes = []
+                if (
+                    not memory.stages
+                    and memory.draft is None
+                    and memory.pending_delta is None
+                    and not memory.source_notes
+                ):
                     # Nothing left to remember: drop the task (and its run id) for good.
                     del self._tasks[task_id]
             self._schedule_sweep()
@@ -898,6 +964,7 @@ class TickHub:
             not memory.stages
             and memory.draft is None
             and memory.pending_delta is None
+            and not memory.source_notes
             and memory.run_id is None
         ):
             self._tasks.pop(task_id, None)
@@ -1097,6 +1164,19 @@ def publish_section_card(index: int, title: str, prose: str) -> None:
     task_id = _task_id.get()
     if task_id is not None:
         tick_hub.publish_card(task_id, index=index, title=title, prose=prose)
+
+
+def publish_source_note(source_id: str, title: str, note: str) -> None:
+    """Publish one most-relevant-source note for the bound task (no-op when unbound).
+
+    Args:
+        source_id: The source's id in this task.
+        title: The source's title.
+        note: The note's text.
+    """
+    task_id = _task_id.get()
+    if task_id is not None:
+        tick_hub.publish_source_note(task_id, source_id=source_id, title=title, note=note)
 
 
 def clear_section_draft() -> None:

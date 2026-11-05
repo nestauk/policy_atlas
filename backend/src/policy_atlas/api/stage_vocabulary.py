@@ -22,11 +22,8 @@ from policy_atlas.api.contract import StageKey
 #: ``(label, blurb)`` per public stage. Stages that share a card row (see
 #: :data:`STAGE_ROW`) share the label: the row is what the user sees.
 STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
-    "acquire": ("Searching and screening", "Querying academic and policy databases."),
-    "screen": (
-        "Searching and screening",
-        "Checking each title and abstract against your question.",
-    ),
+    "acquire": ("Searching", "Querying the databases and collecting candidates."),
+    "screen": ("Screening", "Reading each abstract against the question."),
     "classify": ("Classifying", "Labelling each source by its evidence type."),
     "appraise": ("Classifying", "Scoring how much weight each source can bear."),
     "ingest": (
@@ -58,12 +55,13 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
 }
 
 #: The card row each stage belongs to (D5, direction C). Stages with the same
-#: row key render as one row: search and screen as "Searching and screening",
-#: classify and appraise as "Classifying". The client groups by this key and
-#: decides nothing about rows itself.
+#: row key render as one row: classify and appraise as "Classifying". Search
+#: and screen are two rows again, "Searching" and "Screening" (owner round 8,
+#: 2026-11-05). The client groups by this key and decides nothing about rows
+#: itself.
 STAGE_ROW: dict[StageKey, str] = {
-    "acquire": "search_screen",
-    "screen": "search_screen",
+    "acquire": "search",
+    "screen": "screen",
     "classify": "categorise",
     "appraise": "categorise",
     "ingest": "ingest",
@@ -212,6 +210,8 @@ ACTIVITY: dict[str, str] = {
     "synthesise.sources": "Listing the sources",
     "synthesise.case_studies": "Writing the case studies",
     "synthesise.source_note": "Writing a source note",
+    # round 8: the note's source, by its short name ("Smith 2023")
+    "synthesise.source_note_named": "Writing a source note · {name}",
     "synthesise.intro": "Writing the introduction",
     "synthesise.summaries": "Summarising the sections",
 }
@@ -258,8 +258,8 @@ def stage_for_payload(payload: dict[str, Any]) -> StageKey | None:
     """Map a composed or registry component name onto a public stage key.
 
     The full-text screen (composed component ``screen_full``) emits no live
-    stage frame: its progress shows as a line on the one merged "Searching and
-    screening" row (task 058, N2). The guard tests the composed ``component``,
+    stage frame: its progress shows as a line on the "Screening" row (task
+    058, N2; its own row since owner round 8). The guard tests the composed ``component``,
     because the full-text screen's ``run.started`` payload carries
     ``registry_component = "screen"`` (the duplicate Screening row seen on
     staging and production, owner 2026-11-04).

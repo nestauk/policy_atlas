@@ -1558,11 +1558,13 @@ export interface components {
          *
          *     Args:
          *         index: The section's display identity (the key findings at 0 when the
-         *             report has them, the body sections next, the case studies last).
+         *             report has them, the body sections next, then the case studies,
+         *             then the introduction). The index is identity, not reading
+         *             order: the page orders by `role`.
          *         title: The section's title.
          *         focus: What the section covers.
-         *         role: `key_findings`, `case_studies` or `body`; skeletons recorded
-         *             before the field existed read as `body`.
+         *         role: `key_findings`, `case_studies`, `body` or `intro`; skeletons
+         *             recorded before the field existed read as `body`.
          */
         ArtefactSectionSkeleton: {
             /** Focus */
@@ -1574,7 +1576,7 @@ export interface components {
              * @default body
              * @enum {string}
              */
-            role: "key_findings" | "case_studies" | "body";
+            role: "key_findings" | "case_studies" | "body" | "intro";
             /** Title */
             title: string;
         };
@@ -1647,6 +1649,43 @@ export interface components {
              * @enum {string}
              */
             type: "artefact.skeleton";
+        };
+        /**
+         * ArtefactSourceNoteFrame
+         * @description Ephemeral: one most-relevant-source note as it is written (task 058, round 8).
+         *
+         *     The notes arrive one at a time, in the order the saved report lists
+         *     them; each adds to the ones before. A reconnect gets the run's notes so
+         *     far. Display-only: never persisted, no `id:` line, no `sequence`.
+         *
+         *     Args:
+         *         source_id: The source's id in this task.
+         *         title: The source's title as the committed report's references name it.
+         *         note: The note's text.
+         */
+        ArtefactSourceNoteFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Note */
+            note: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Source Id */
+            source_id: string;
+            /** Title */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.source_note";
         };
         /**
          * AuthorityOut
@@ -4956,12 +4995,34 @@ export interface components {
          *         title: The source's title as the committed report's references name it.
          *         tier: The checker's verdict on the claim (`tier_1` ... `tier_4`,
          *             `unsupported_mis_cited`), or `null` when it was not checked.
+         *         citation_id: The saved citation's id, the one the committed report's
+         *             citation carries, so the page can ask for its chunk context while
+         *             the run is live (round 8); `null` on frames recorded before the
+         *             field existed.
+         *         claim_id: The saved claim's id, the one the committed report's claim
+         *             carries; `null` on older frames.
+         *         quote: The checked quote the citation rests on; empty on older frames.
          */
         SectionCitation: {
+            /**
+             * Citation Id
+             * @default null
+             */
+            citation_id: string | null;
+            /**
+             * Claim Id
+             * @default null
+             */
+            claim_id: string | null;
             /** End */
             end: number;
             /** N */
             n: number;
+            /**
+             * Quote
+             * @default
+             */
+            quote: string;
             /** Source Id */
             source_id: string | null;
             /** Start */
@@ -5188,7 +5249,7 @@ export interface components {
             /** Tag Type */
             tag_type: string;
         };
-        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"] | components["schemas"]["ArtefactSectionDeltaFrame"] | components["schemas"]["ArtefactSectionRevisingFrame"] | components["schemas"]["ArtefactSectionSourcesFrame"] | components["schemas"]["ArtefactSectionClaimFrame"] | components["schemas"]["ArtefactSectionCardFrame"];
+        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"] | components["schemas"]["ArtefactSectionDeltaFrame"] | components["schemas"]["ArtefactSectionRevisingFrame"] | components["schemas"]["ArtefactSectionSourcesFrame"] | components["schemas"]["ArtefactSectionClaimFrame"] | components["schemas"]["ArtefactSectionCardFrame"] | components["schemas"]["ArtefactSourceNoteFrame"];
         /**
          * StageCompletedFrame
          * @description A component reached its terminal (successful) outcome.

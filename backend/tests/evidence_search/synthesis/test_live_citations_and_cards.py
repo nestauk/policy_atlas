@@ -158,18 +158,20 @@ def test_completed_sections_carry_citations_numbered_as_the_saved_report(
     backend = _CaseStudiesBackend()
     task_id, emitter = _run(conn, backend)
 
-    # The case studies have the last slot and stream into it; every slot
-    # names its role.
+    # The case studies have the slot after the body sections and stream into
+    # it; the introduction's slot comes after (round 8); every slot names
+    # its role.
     skeleton = next(p for t, p in emitter.events if t == "artefact.skeleton")
     slots = [(s["index"], s["title"], s["role"]) for s in skeleton["sections"]]
-    last = len(slots) - 1
+    last = len(slots) - 2
     assert slots[0] == (0, "Key findings", "key_findings")
-    assert slots[-1] == (last, "Case studies", "case_studies")
-    assert all(role == "body" for _i, _t, role in slots[1:-1])
+    assert slots[-2] == (last, "Case studies", "case_studies")
+    assert slots[-1] == (last + 1, "Full report", "intro")
+    assert all(role == "body" for _i, _t, role in slots[1:-2])
     assert backend.stream_calls == [last]
     assert [index for index, _t, _p in backend.published] == [last, last]
     lifecycle = [(t, p["index"]) for t, p in emitter.events if t != "artefact.skeleton"]
-    assert lifecycle[-2:] == [
+    assert lifecycle[-4:-2] == [
         ("artefact.section_started", last),
         ("artefact.section_completed", last),
     ]
@@ -195,6 +197,11 @@ def test_completed_sections_carry_citations_numbered_as_the_saved_report(
                 "source_id": str(citation.source_id) if citation.source_id else None,
                 "title": citation.source_title,
                 "tier": citation.grounding_tier,
+                # Round 8: the saved ids and quote, so the live page can ask
+                # for the citation's context before the commit.
+                "citation_id": str(citation.citation_id),
+                "claim_id": str(claim.claim_id),
+                "quote": citation.quote,
             }
             for block in section.blocks
             for claim in block.claims
@@ -228,7 +235,7 @@ def test_absent_case_studies_close_their_slot_empty(conn: Connection) -> None:
     case_studies = _completed(emitter)["Case studies"]
     assert case_studies["prose"] == "" and case_studies["citations"] == []
     skeleton = next(p for t, p in emitter.events if t == "artefact.skeleton")
-    assert case_studies["index"] == skeleton["sections"][-1]["index"]
+    assert case_studies["index"] == skeleton["sections"][-2]["index"]
 
 
 def test_reference_numbering_skips_unknown_chunks(conn: Connection) -> None:

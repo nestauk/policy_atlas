@@ -41,6 +41,7 @@ from policy_atlas.api.contract.sse import (
     ArtefactSectionSourcesFrame,
     ArtefactSectionStartedFrame,
     ArtefactSkeletonFrame,
+    ArtefactSourceNoteFrame,
     CheckinPendingFrame,
     CheckinResolvedFrame,
     PlanUpdatedFrame,
@@ -263,7 +264,7 @@ def test_stage_started_frame_discriminates() -> None:
             "sequence": 2,
             "occurred_at": _now().isoformat(),
             "stage": "acquire",
-            "label": "Searching and screening",
+            "label": "Searching",
             "blurb": "…",
         }
     )
@@ -278,7 +279,7 @@ def test_stage_completed_frame_discriminates() -> None:
             "sequence": 3,
             "occurred_at": _now().isoformat(),
             "stage": "acquire",
-            "label": "Searching and screening",
+            "label": "Searching",
             "summary": {"found": 58},
             "seconds": 12.4,
         }
@@ -296,7 +297,7 @@ def test_stage_completed_frame_carries_its_counts_in_the_servers_words() -> None
             "sequence": 3,
             "occurred_at": _now().isoformat(),
             "stage": "acquire",
-            "label": "Searching and screening",
+            "label": "Searching",
             "summary": {"acquired": 312},
             "seconds": 64.0,
             "counts": [{"value": 312, "noun": "found"}],
@@ -638,6 +639,66 @@ def test_section_completed_carries_citations_and_the_card_frame_is_ephemeral() -
     assert not hasattr(card, "sequence")
     assert card.ephemeral is True
     assert (card.index, card.title) == (1, "Leeds")
+
+
+def test_round8_citation_ids_the_intro_role_and_the_source_note_frame() -> None:
+    """Task 058, round 8: a citation carries its saved ids and quote, a skeleton
+    slot can be the introduction, and a source note is an ephemeral frame."""
+    citation_id, claim_id = uuid.uuid4(), uuid.uuid4()
+    completed = _adapter().validate_python(
+        {
+            "type": "artefact.section_completed",
+            "sequence": 9,
+            "occurred_at": _now().isoformat(),
+            "index": 0,
+            "title": "Key findings",
+            "prose": "- Costs fall: in two trials.",
+            "citations": [
+                {
+                    "start": 2,
+                    "end": 12,
+                    "n": 1,
+                    "source_id": None,
+                    "title": "Breakfast clubs",
+                    "tier": "tier_1",
+                    "citation_id": str(citation_id),
+                    "claim_id": str(claim_id),
+                    "quote": "Costs fell in both trials.",
+                }
+            ],
+        }
+    )
+    assert isinstance(completed, ArtefactSectionCompletedFrame)
+    [citation] = completed.citations
+    assert (citation.citation_id, citation.claim_id) == (citation_id, claim_id)
+    assert citation.quote == "Costs fell in both trials."
+    dumped = completed.model_dump(mode="json")["citations"][0]
+    assert dumped["citation_id"] == str(citation_id) and dumped["claim_id"] == str(claim_id)
+
+    skeleton = _adapter().validate_python(
+        {
+            "type": "artefact.skeleton",
+            "sequence": 2,
+            "occurred_at": _now().isoformat(),
+            "sections": [{"index": 3, "title": "Full report", "focus": "", "role": "intro"}],
+        }
+    )
+    assert isinstance(skeleton, ArtefactSkeletonFrame)
+    assert skeleton.sections[0].role == "intro"
+
+    note = _adapter().validate_python(
+        {
+            "type": "artefact.source_note",
+            "occurred_at": _now().isoformat(),
+            "source_id": "tss-1",
+            "title": "Breakfast clubs",
+            "note": "A large trial in English primaries.",
+        }
+    )
+    assert isinstance(note, ArtefactSourceNoteFrame)
+    assert not hasattr(note, "sequence")
+    assert note.ephemeral is True
+    assert (note.source_id, note.title) == ("tss-1", "Breakfast clubs")
 
 
 def test_sse_frame_unknown_type_rejected() -> None:

@@ -32,6 +32,7 @@ from policy_atlas.api.contract.sse import (
     ArtefactSectionDeltaFrame,
     ArtefactSectionRevisingFrame,
     ArtefactSectionSourcesFrame,
+    ArtefactSourceNoteFrame,
 )
 from policy_atlas.api.dev_issuer import init, mint_token
 from policy_atlas.api.routers import access, sse
@@ -1977,3 +1978,74 @@ def test_stage_completed_seconds_is_set_from_the_completed_payload_before_timing
     finally:
         with engine.begin() as conn:
             delete_task_data(conn, task_id)
+
+
+def test_encode_ephemeral_names_the_source_note_frame() -> None:
+    """Task 058, round 8: a source note becomes a cursor-free frame."""
+    from datetime import UTC, datetime
+
+    from policy_atlas.core.liveness import SourceNote
+
+    encoded = _encode_ephemeral(
+        SourceNote(
+            source_id="tss-1",
+            title="Breakfast clubs",
+            note="A large trial.",
+            occurred_at=datetime.now(UTC),
+        )
+    )
+    assert encoded.startswith("event: artefact.source_note\ndata: ")
+    assert "id:" not in encoded
+    data = json.loads(encoded.split("data: ", 1)[1])
+    adapter: TypeAdapter[SseFrame] = TypeAdapter(SseFrame)
+    frame = adapter.validate_python(data)
+    assert isinstance(frame, ArtefactSourceNoteFrame)
+    assert (frame.source_id, frame.title, frame.note) == (
+        "tss-1",
+        "Breakfast clubs",
+        "A large trial.",
+    )
+
+
+def test_sse_source_notes_stream_and_a_reconnect_gets_them(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Task 058, round 8: each note arrives as it is written, and a reconnect
+    gets the run's notes so far."""
+
+    async def exercise() -> None:
+        task_id: uuid.UUID | None = None
+        try:
+            async with _api_session(tmp_path) as api:
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                stream = await api.open_stream(task_id)
+                await _subscribed(task_id)
+                tick_hub.publish_source_note(task_id, source_id="s1", title="A", note="One.")
+                tick_hub.publish_source_note(task_id, source_id="s2", title="B", note="Two.")
+                items = await stream.collect_until(
+                    lambda item: item.event == "artefact.source_note"
+                    and item.data is not None
+                    and item.data.get("source_id") == "s2"
+                )
+                await stream.aclose()
+                frames = _frames(items)
+                assert [item.event for item in frames] == ["artefact.source_note"] * 2
+                assert all(item.sequence is None for item in frames)
+
+                stream = await api.open_stream(task_id)
+                items = await stream.collect_until(
+                    lambda item: item.event == "artefact.source_note"
+                    and item.data is not None
+                    and item.data.get("source_id") == "s2"
+                )
+                await stream.aclose()
+                assert [item.data["note"] for item in _frames(items) if item.data] == [
+                    "One.",
+                    "Two.",
+                ]
+        finally:
+            if task_id is not None:
+                tick_hub._tasks.pop(task_id, None)
+            _cleanup(engine, task_id)
+
+    asyncio.run(exercise())

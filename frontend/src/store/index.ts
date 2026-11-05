@@ -10,6 +10,7 @@ export type {
   LiveClaim,
   LiveSection,
   LiveSource,
+  LiveSourceNote,
   PlanDraft,
   ResolvedDecision,
   RunStatus,

@@ -16,6 +16,10 @@ import {
   mockCaseStudyCards,
   mockSectionCitations,
   MOCK_CASE_STUDIES_INDEX,
+  MOCK_FULL_REPORT_INTRO,
+  MOCK_INTRO_INDEX,
+  mockKeyFindingsClaim,
+  mockSourceNotes,
   MOCK_STREAMED_SECTION_INDEX,
   mockSectionOneRevisingSpan,
   mockSectionOneClaims,
@@ -175,9 +179,12 @@ function compareMockEvidenceSort(
  * is what a reconnect sees mid-write (task 058, N26): the durable replay up to
  * `artefact.section_started` for the streamed section (display index 1), one
  * `replace` delta carrying the first half of the prose, then appends for the
- * rest. The default walk ends in the case-studies slot (index 2, last): its two
- * cards stream as `artefact.section_card` frames, then the checked cards
- * land (task 058, round 7). `"paused-strip"` runs
+ * rest. The key findings (index 0) stream as deltas with one claim mark before
+ * they complete (round 8). The case-studies slot (index 2): its two cards
+ * stream as `artefact.section_card` frames, then the checked cards land
+ * (task 058, round 7). Then two source notes arrive as `artefact.source_note`
+ * frames, and the introduction streams into its slot (index 3, role `intro`)
+ * and completes (round 8). `"paused-strip"` runs
  * to the check-in after searching and screening and holds there for good,
  * for the run strip's paused state. Selected via a
  * `?mockScenario=` query param on the `/events` request itself — a direct
@@ -1344,7 +1351,17 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       // the second.
       emit({ type: "artefact.skeleton", sections: mockArtefactSkeleton, occurred_at: FRAME_TIME, sequence: nextSequence() });
       emit({ type: "artefact.section_started", index: 0, occurred_at: FRAME_TIME, sequence: nextSequence() });
-      emitTick(tick("synthesise", "Reading findings", { section: sectionLine(0) }));
+      if (!replay) {
+        // The key findings stream as a body section does: deltas, then the
+        // writer's citation as it closes (round 8).
+        emitTick(tick("synthesise", "Writing the key findings", { section: "Key findings" }));
+        for (const chunk of chunkWords(mockArtefactSectionProse[0])) {
+          await pace(100);
+          emit({ type: "artefact.section_delta", ephemeral: true, index: 0, mode: "append", text: chunk, occurred_at: frameTime() });
+        }
+        emit({ type: "artefact.section_claim", ephemeral: true, index: 0, ...mockKeyFindingsClaim, occurred_at: frameTime() });
+        emitTick(tick("synthesise", "Checking claims", { section: "Key findings" }));
+      }
       await wait(MOCK_TICK_MS);
       emit({
         type: "artefact.section_completed",
@@ -1477,6 +1494,36 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         occurred_at: FRAME_TIME,
         sequence: nextSequence(),
       });
+      // The source notes, each named on the line and sent as it is written
+      // (round 8).
+      for (const note of mockSourceNotes) {
+        emitTick(tick("synthesise", `Writing a source note · ${note.short}`));
+        await pace(400);
+        emit({
+          type: "artefact.source_note",
+          ephemeral: true,
+          source_id: note.sourceId,
+          title: note.title,
+          note: note.note,
+          occurred_at: frameTime(),
+        });
+      }
+      // The introduction streams into its own slot (round 8).
+      emit({ type: "artefact.section_started", index: MOCK_INTRO_INDEX, occurred_at: FRAME_TIME, sequence: nextSequence() });
+      emitTick(tick("synthesise", "Writing the introduction", { section: "Full report" }));
+      for (const chunk of chunkWords(MOCK_FULL_REPORT_INTRO)) {
+        await pace(100);
+        emit({ type: "artefact.section_delta", ephemeral: true, index: MOCK_INTRO_INDEX, mode: "append", text: chunk, occurred_at: frameTime() });
+      }
+      emit({
+        type: "artefact.section_completed",
+        index: MOCK_INTRO_INDEX,
+        title: mockArtefactSkeleton[MOCK_INTRO_INDEX].title,
+        prose: MOCK_FULL_REPORT_INTRO,
+        citations: [],
+        occurred_at: FRAME_TIME,
+        sequence: nextSequence(),
+      });
       emit(stageCompleted("synthesise", { section_count: 2 }, nextSequence()));
       setRunArtefact(mockArtefact.artefact_id);
       finishRun("succeeded");
@@ -1487,9 +1534,12 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
 }
 
 /** The writer's section line, as `tick.section` carries it: sections count
- *  without the case-studies slot, which has its own line. */
+ *  without the case-studies and introduction slots, which have their own
+ *  lines. */
 function sectionLine(index: number): string {
-  const written = mockArtefactSkeleton.filter((slot) => slot.index !== MOCK_CASE_STUDIES_INDEX);
+  const written = mockArtefactSkeleton.filter(
+    (slot) => slot.index !== MOCK_CASE_STUDIES_INDEX && slot.index !== MOCK_INTRO_INDEX,
+  );
   const position = written.findIndex((slot) => slot.index === index);
   return `Section ${position + 1} of ${written.length} · ${mockArtefactSkeleton[index].title}`;
 }

@@ -16,6 +16,11 @@ studies); within a section, claims by their span (start, then end); within a
 claim, citations by chunk id, then quote. One :class:`ReferenceNumbering`
 lives for one synthesis run and numbers the sections in the order they are
 saved, so a number once given never changes during the run.
+
+Each entry also carries the ids the saved report gives the citation and its
+claim, and the checked quote, read back from the rows the run has just saved
+for the section (round 8), so the page can show a citation's context and its
+provenance sheet before the whole report is committed.
 """
 
 from __future__ import annotations
@@ -28,7 +33,15 @@ from typing import Any, Protocol, cast
 from sqlalchemy import or_, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core.schema import chunk, source_snapshot, task_source_snapshot
+from policy_atlas.core.schema import (
+    addressable_unit,
+    annotation,
+    chunk,
+    citation,
+    source_snapshot,
+    task_source_snapshot,
+)
+from policy_atlas.evidence_search.synthesis.synthesis_tools import source_short_name
 
 #: The title the read model gives a source whose record is missing.
 UNKNOWN_SOURCE = "Unknown source"
@@ -74,7 +87,9 @@ class ReferenceNumbering:
         self._task_id = task_id
         self._numbers: dict[uuid.UUID, int] = {}
 
-    def citations(self, claims: Sequence[_Claim]) -> list[dict[str, Any]]:
+    def citations(
+        self, claims: Sequence[_Claim], *, block_id: str | uuid.UUID | None = None
+    ) -> list[dict[str, Any]]:
         """Give one section's checked claims their citation entries, numbering new sources.
 
         Call once per section, in the order the sections are saved (body
@@ -84,6 +99,10 @@ class ReferenceNumbering:
             claims: The section's claims as persisted (each with its bound
                 ``span`` into the section prose, its ``citation_rows`` and
                 its ``verdict``).
+            block_id: The block the section's claims were just saved in. When
+                given, each entry carries the saved ``citation_id`` and
+                ``claim_id`` (the claim's addressable-unit id, the id the
+                committed report's claim carries); otherwise both are ``None``.
 
         Returns:
             One entry per citation row, claims by span and each claim's
@@ -91,8 +110,10 @@ class ReferenceNumbering:
             ``start``, ``end`` (the
             claim's span), ``n``, ``source_id`` (the task source id as a
             string, or ``None``), ``title`` and ``tier`` (the verdict, or
-            ``None``). A citation whose chunk is unknown is left out, as the
-            read model leaves it out.
+            ``None``), ``citation_id`` and ``claim_id`` (strings, or
+            ``None`` without a saved row to match) and ``quote``. A citation
+            whose chunk is unknown is left out, as the read model leaves it
+            out.
         """
         chunk_ids: set[uuid.UUID] = set()
         for claim in claims:
@@ -150,6 +171,7 @@ class ReferenceNumbering:
                 ).where(source_snapshot.c.source_snapshot_id.in_(envelopes))
             )
         }
+        saved = self._saved_ids(block_id) if block_id is not None else {}
         entries: list[dict[str, Any]] = []
         spanned = sorted(
             (claim for claim in claims if claim.span is not None),
@@ -170,6 +192,8 @@ class ReferenceNumbering:
                 doc_key = tss_id if tss_id is not None else snapshot_id
                 if doc_key not in self._numbers:
                     self._numbers[doc_key] = len(self._numbers) + 1
+                ids = saved.get((start, end, uuid.UUID(str(row.chunk_id)), row.quote))
+                citation_id, claim_id = ids.pop(0) if ids else (None, None)
                 entries.append(
                     {
                         "start": start,
@@ -178,6 +202,98 @@ class ReferenceNumbering:
                         "source_id": str(tss_id) if tss_id is not None else None,
                         "title": titles.get(envelope_of(snapshot_id), UNKNOWN_SOURCE),
                         "tier": claim.verdict if isinstance(claim.verdict, str) else None,
+                        "citation_id": citation_id,
+                        "claim_id": claim_id,
+                        "quote": row.quote,
                     }
                 )
         return entries
+
+    def _saved_ids(
+        self, block_id: str | uuid.UUID
+    ) -> dict[tuple[int, int, uuid.UUID, str], list[tuple[str, str]]]:
+        """Read the ids saved for a block's citations, keyed by claim span, chunk and quote.
+
+        A claim's span is unique in its block (claims never overlap), so the
+        key finds the claim's row; two citations of one claim with the same
+        chunk and quote take their ids in id order, the read model's order.
+        """
+        rows = self._conn.execute(
+            select(
+                addressable_unit.c.unit_id,
+                addressable_unit.c.locator,
+                citation.c.citation_id,
+                citation.c.chunk_id,
+                citation.c.quote,
+            )
+            .select_from(
+                citation.join(
+                    annotation, citation.c.annotation_id == annotation.c.annotation_id
+                ).join(
+                    addressable_unit,
+                    (annotation.c.block_id == addressable_unit.c.block_id)
+                    & (annotation.c.unit_id == addressable_unit.c.unit_id),
+                )
+            )
+            .where(annotation.c.block_id == uuid.UUID(str(block_id)))
+            .order_by(citation.c.citation_id)
+        )
+        saved: dict[tuple[int, int, uuid.UUID, str], list[tuple[str, str]]] = {}
+        for row in rows:
+            locator = row.locator if isinstance(row.locator, Mapping) else {}
+            start, end = locator.get("start"), locator.get("end")
+            if not isinstance(start, int) or not isinstance(end, int):
+                continue
+            saved.setdefault((start, end, row.chunk_id, row.quote), []).append(
+                (str(row.citation_id), str(row.unit_id))
+            )
+        return saved
+
+
+def source_names(
+    conn: Connection, *, task_id: uuid.UUID, source_ids: Sequence[str]
+) -> dict[str, tuple[str, str]]:
+    """Name a task's sources for the live page: short name and reference title (round 8).
+
+    Args:
+        conn: Open database connection.
+        task_id: The task whose sources are named.
+        source_ids: Task source ids (strings); ids that are not this task's
+            sources, or not ids at all, are left out.
+
+    Returns:
+        ``{source_id: (short_name, title)}``: the short name as the page's
+        "Drawing on" line gives it ("Smith 2023") and the title as the saved
+        report's references give it.
+    """
+    wanted: list[uuid.UUID] = []
+    for source_id in source_ids:
+        try:
+            wanted.append(uuid.UUID(str(source_id)))
+        except ValueError:
+            continue
+    if not wanted:
+        return {}
+    rows = conn.execute(
+        select(
+            task_source_snapshot.c.task_source_snapshot_id,
+            source_snapshot.c.metadata,
+            source_snapshot.c.source_locator,
+        )
+        .join(
+            source_snapshot,
+            source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
+        )
+        .where(
+            task_source_snapshot.c.task_id == task_id,
+            task_source_snapshot.c.task_source_snapshot_id.in_(wanted),
+        )
+    )
+    names: dict[str, tuple[str, str]] = {}
+    for row in rows:
+        metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
+        names[str(row.task_source_snapshot_id)] = (
+            source_short_name(metadata, row.source_locator),
+            _title(metadata, row.source_locator),
+        )
+    return names
