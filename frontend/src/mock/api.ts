@@ -11,7 +11,16 @@ import {
   mockScopingDecisionTurn,
   MOCK_BASELINE_CHECK_IN_ID,
   mockArtefactSkeleton,
+  mockArtefactSectionRepairedProse,
+  mockSectionOneRevisingSpan,
   mockCheckIn,
+  mockPlannerTurn,
+  STAGE_PRESENTATION,
+  MOCK_OPTION_COUNT,
+  foldMockOptionRows,
+  mockChildRunId,
+  mockOptionFound,
+  seedMockOptionRows,
   mockCoverage,
   mockDecisions,
   mockEvidence,
@@ -61,6 +70,11 @@ type EvidenceItemOut = components["schemas"]["EvidenceItemOut"];
 type ConversationOut = components["schemas"]["ConversationOut"];
 type ConversationListItemOut = components["schemas"]["ConversationListItemOut"];
 type ChatTurnOut = components["schemas"]["ChatTurnOut"];
+type StageKey = components["schemas"]["StageStartedFrame"]["stage"];
+type TaskAgentTurnOut = components["schemas"]["TaskAgentTurnOut"];
+
+/** The planner's progress line, the server's `STEP_VERBS["task_agent_turn"]`. */
+const STEP_DRAFTING_THE_PLAN = "Drafting the plan";
 
 const EVIDENCE_STATUS_SORT_RANK: Record<EvidenceItemOut["status"], number> = {
   found: 0,
@@ -147,12 +161,19 @@ function compareMockEvidenceSort(
  * main journey drives; `"paused"` holds indefinitely at a mid-synthesis
  * "writing" state (a demo/screenshot fixture — the run never resolves);
  * `"failed-partial"` streams both sections then ends the run `failed`, the
- * terminal-partial banner fixture the contract names. Selected via a
+ * terminal-partial banner fixture the contract names. `"reload-mid-section"`
+ * is what a reconnect sees mid-write (task 058, N26): the durable replay up to
+ * `artefact.section_started` for section 1, one `replace` delta carrying the
+ * first half of the prose, then appends for the rest. `"paused-strip"` runs
+ * to the check-in after searching and screening and holds there for good,
+ * for the run strip's paused state. Selected via a
  * `?mockScenario=` query param on the `/events` request itself — a direct
  * mock-layer fixture switch (see `mock/api.test.ts`), not something the real
  * SSE client currently forwards from the page URL.
  */
-type MockScenario = "default" | "paused" | "failed-partial";
+type MockScenario = "default" | "paused" | "failed-partial" | "reload-mid-section" | "paused-strip";
+
+const MOCK_SCENARIOS: readonly MockScenario[] = ["paused", "failed-partial", "reload-mid-section", "paused-strip"];
 
 /** All frames in the scripted stream share this display timestamp — a mock
  *  fixture's `occurred_at` is presentation metadata only, never load-bearing. */
@@ -162,6 +183,25 @@ interface Deferred {
   promise: Promise<void>;
   resolve: () => void;
 }
+
+/** How often the scripted walks emit an activity tick. */
+export const MOCK_TICK_MS = 400;
+/** Scales every scripted wait of the walks and streams below; tests set it near
+ *  zero so a whole walk plays in milliseconds. */
+let mockPace = 1;
+
+/** Test helper: scale the scripted waits (1 is real time, 0.01 is fast). */
+export function setMockPace(scale: number) {
+  mockPace = scale;
+}
+
+function pace(ms: number): Promise<void> {
+  return sleep(Math.round(ms * mockPace));
+}
+
+/** True once a fresh task has started the planner's scripted conversation
+ *  (question, scope, thoroughness); the seeded transcript stays as it is. */
+let plannerScripted = false;
 
 let checkInAnswer = createDeferred();
 let checkInAnswered = false;
@@ -235,6 +275,8 @@ export function resetMockScenario() {
   mockTask.latest_run = null;
   taskAgentTurns = seedTaskAgentTurns();
   nextTurnIndex = 4;
+  plannerScripted = false;
+  mockTask.active_run = null;
   chatConversations = seedConversations();
   chatTurnsByConversation = new Map();
   chatTurnEnrichmentReads = new Map();
@@ -248,7 +290,7 @@ export function resetMockScenario() {
 
 function currentMockScenario(requestUrl: URL): MockScenario {
   const value = requestUrl.searchParams.get("mockScenario");
-  return value === "paused" || value === "failed-partial" ? value : "default";
+  return MOCK_SCENARIOS.find((scenario) => scenario === value) ?? "default";
 }
 
 /** Fetch implementation for the generated openapi-fetch client in mock mode. */
@@ -386,6 +428,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     // every intermediate turn.
     taskAgentTurns = [];
     nextTurnIndex = 1;
+    plannerScripted = true;
     currentRun = null;
     resetMockLonglistWalks();
     chatConversations = seedConversations();
@@ -442,8 +485,9 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const body = await requestBody(request, init);
     const clientTurnId = isRecord(body) && typeof body.client_turn_id === "string" ? body.client_turn_id : crypto.randomUUID();
     const message = isRecord(body) && typeof body.message === "string" ? body.message : "";
-    const now = new Date().toISOString();
-    const reply = "Noted — I'll keep that in mind for the analysis.";
+    // The route streams (task 058, N9): a `progress` line, the reply in
+    // `delta` pieces, then one `completed` carrying the stored turn. The
+    // transcript changes when the stream finishes, never before.
     // Task 044 Phase 5.5: while the scoping walk is parked on the baseline
     // gate the turn route answers FROM the baseline — an `answer` turn with
     // citations, not a planning reply.
@@ -456,46 +500,66 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       currentRun.status === "running" &&
       baselineGateDecision === null;
     if (atGate && taskAgentTurns.every((turn) => turn.client_turn_id !== clientTurnId)) {
-      const answerTurn = mockScopingAnswerTurn(clientTurnId, message, nextTurnIndex, now);
-      taskAgentTurns.push(answerTurn);
-      nextTurnIndex += 1;
-      return json({
-        reply: answerTurn.reply,
-        suggestions: [],
-        capability: "options_scoping",
-        kind: "answer",
-        answer: answerTurn.answer,
-        scoping_plan: currentScopingPlan,
-      });
+      const answerReply = mockScopingAnswerTurn(clientTurnId, message, nextTurnIndex, new Date().toISOString()).reply ?? "";
+      return ndjsonResponse(createMockTaskAgentStream(answerReply, () => {
+        const answerTurn = mockScopingAnswerTurn(clientTurnId, message, nextTurnIndex, new Date().toISOString());
+        taskAgentTurns.push(answerTurn);
+        nextTurnIndex += 1;
+        return {
+          reply: answerTurn.reply ?? "",
+          suggestions: [],
+          capability: "options_scoping",
+          kind: "answer",
+          answer: answerTurn.answer,
+          scoping_plan: currentScopingPlan,
+        };
+      }));
     }
     const existing = taskAgentTurns.find((turn) => turn.client_turn_id === clientTurnId);
-    if (existing !== undefined) {
-      // Retry-in-place (finding 6): the same client_turn_id re-runs, never a
-      // fresh turn_index.
-      existing.status = "completed";
-      existing.reply = reply;
-      existing.suggestions = [];
-      existing.completed_at = now;
-    } else {
-      taskAgentTurns.push({
-        client_turn_id: clientTurnId,
-        turn_index: nextTurnIndex,
-        user_message: message,
-        reply,
-        suggestions: [],
-        part: null,
-        status: "completed",
-        created_at: now,
-        completed_at: now,
-      });
-      nextTurnIndex += 1;
-    }
-    // Task 044: a scoping task's turn carries `scoping_plan`, never `plan`
-    // (`PlanOut`'s own capability-keyed shape, mirrored here).
-    if (mockTask.capability === "options_scoping") {
-      return json({ scoping_plan: currentScopingPlan, reply, suggestions: [], capability: "options_scoping" });
-    }
-    return json({ plan: currentPlan, reply, suggestions: [], capability: "evidence_search" });
+    const scripted =
+      plannerScripted && mockTask.capability !== "options_scoping"
+        ? mockPlannerTurn(existing?.turn_index ?? nextTurnIndex)
+        : { reply: "Noted — I'll keep that in mind for the analysis.", question: null, suggestions: [], part: null };
+    return ndjsonResponse(createMockTaskAgentStream(scripted.reply, () => {
+      const now = new Date().toISOString();
+      if (existing !== undefined) {
+        // Retry-in-place (finding 6): the same client_turn_id re-runs, never a
+        // fresh turn_index.
+        existing.status = "completed";
+        existing.reply = scripted.reply;
+        existing.question = scripted.question;
+        existing.suggestions = scripted.suggestions;
+        existing.part = scripted.part;
+        existing.completed_at = now;
+      } else {
+        taskAgentTurns.push({
+          client_turn_id: clientTurnId,
+          turn_index: nextTurnIndex,
+          user_message: message,
+          reply: scripted.reply,
+          question: scripted.question,
+          suggestions: scripted.suggestions,
+          part: scripted.part,
+          status: "completed",
+          created_at: now,
+          completed_at: now,
+        });
+        nextTurnIndex += 1;
+      }
+      // Task 044: a scoping task's turn carries `scoping_plan`, never `plan`
+      // (`PlanOut`'s own capability-keyed shape, mirrored here).
+      if (mockTask.capability === "options_scoping") {
+        return { scoping_plan: currentScopingPlan, reply: scripted.reply, suggestions: [], capability: "options_scoping" };
+      }
+      return {
+        plan: currentPlan,
+        reply: scripted.reply,
+        question: scripted.question,
+        suggestions: scripted.suggestions,
+        part: scripted.part,
+        capability: "evidence_search",
+      };
+    }));
   }
 
   // --- Plan (a resumed session: the transcript above already reached
@@ -606,12 +670,8 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       ended_at: null,
       artefact_id: null,
     };
-    mockTask.latest_run = {
-      capability_run_id: currentRun.capability_run_id,
-      status: currentRun.status,
-      started_at: currentRun.started_at,
-      ended_at: currentRun.ended_at,
-    };
+    mockTask.latest_run = latestRunOf(currentRun);
+    mockTask.active_run = latestRunOf(currentRun);
     runStarted.resolve();
     return json(currentRun, 201);
   }
@@ -890,7 +950,13 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   // place (the same fixture `GET /longlist`'s summaries project from) so a
   // refetch after a mutation shows the flipped state.
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/longlist`)) {
+    // The longlist does not exist until the walk's longlist stage completes.
+    if (mockLonglistBuilding) return json({ detail: "resource not found" }, 404);
     return json(mockLonglist());
+  }
+  // Task 058, N22: the options read, served from the end of the suggest stage.
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/options`)) {
+    return json({ options: mockOptionRows });
   }
   // task 055 — the shortlist: the two option verbs and Suggest more, over
   // the same in-memory cards. The 409s are the API's: `run_active` while a
@@ -1045,6 +1111,48 @@ function readChatTurns(conversationId: string): ChatTurnOut[] {
   return turns;
 }
 
+/** Split text into word groups of 2 to 6 words, keeping every space, so the
+ *  groups joined are exactly the text. */
+function chunkWords(text: string): string[] {
+  const words = text.match(/\S+\s*/g) ?? [];
+  const sizes = [3, 2, 5, 4, 6, 2];
+  const chunks: string[] = [];
+  let at = 0;
+  for (let step = 0; at < words.length; step += 1) {
+    const size = sizes[step % sizes.length];
+    chunks.push(words.slice(at, at + size).join(""));
+    at += size;
+  }
+  return chunks;
+}
+
+function ndjsonResponse(stream: ReadableStream<Uint8Array>): Response {
+  return new Response(stream, { headers: { "Content-Type": "application/x-ndjson" } });
+}
+
+/**
+ * One planner turn as NDJSON (task 058, N9): one `progress` line ("Drafting
+ * the plan"), the reply as `delta` pieces of 2 to 6 words every 80 ms, then
+ * one `completed` with the whole turn. `finish` runs once the reply has
+ * streamed: it stores the turn and returns the `TaskAgentTurnOut` to send.
+ */
+function createMockTaskAgentStream(reply: string, finish: () => TaskAgentTurnOut): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const emit = (event: unknown) => controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+      emit({ type: "progress", label: STEP_DRAFTING_THE_PLAN });
+      await pace(200);
+      for (const text of chunkWords(reply)) {
+        emit({ type: "delta", text });
+        await pace(80);
+      }
+      emit({ type: "completed", turn: finish() });
+      controller.close();
+    },
+  });
+}
+
 /** Reserve and stream one chat turn's scripted NDJSON lifecycle: one
  *  `progress` label, two `delta` chunks that concatenate into the answer,
  *  then a `completed` terminal event carrying one citation with its
@@ -1155,40 +1263,72 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         return;
       }
 
+      const replay = scenario === "reload-mid-section";
+      // A reconnect replays the durable frames at once; a live walk paces them.
+      const wait = (ms: number) => (replay ? Promise.resolve() : pace(ms));
+      // Ticks are ephemeral, so a replay carries none.
+      const emitTick = (frame: SseFrame) => {
+        if (!replay) emit(frame);
+      };
+
       emit(runStatus("running", nextSequence()));
-      emit(stageStarted("acquire", "Finding relevant sources", "Searching policy and research evidence", nextSequence()));
-      emit(stageCompleted("acquire", "Finding relevant sources", { found: 128 }, nextSequence()));
-      emit(stageStarted("screen", "Screening sources", "Checking relevance to primary-school children", nextSequence()));
-      emit(stageCompleted("screen", "Screening sources", { relevant: 46, screened_out: 82 }, nextSequence()));
-      emit(stageStarted("classify", "Classifying evidence", "Labelling evidence types and settings", nextSequence()));
-      emit(stageCompleted("classify", "Classifying evidence", { classified: 46 }, nextSequence()));
-      emit(stageStarted("appraise", "Appraising quality", "Reviewing the strength of selected evidence", nextSequence()));
-      emit(stageCompleted("appraise", "Appraising quality", { quality_checked: 31 }, nextSequence()));
-      emit(stageStarted("characterise", "Characterising findings", "Extracting implementation conditions", nextSequence()));
-      emit(stageCompleted("characterise", "Characterising findings", { findings: 34 }, nextSequence()));
-      emit(stageStarted("synthesise", "Writing the report", "Preparing a decision-ready evidence base", nextSequence()));
+      await walkStage(emit, emitTick, nextSequence, "acquire", wait, [
+        { activity: "searching · 62 found so far" },
+        { activity: "searching · 184 found so far" },
+        { activity: "searching · 267 found so far" },
+        { activity: "searching · 312 found so far" },
+      ], { acquired: 312 });
+      await walkStage(emit, emitTick, nextSequence, "screen", wait, [
+        { activity: "screening 87 new abstracts · 104 relevant so far" },
+        { activity: "screening 61 new abstracts · 107 relevant so far" },
+        { activity: "screening 23 new abstracts · 112 relevant so far" },
+      ], { relevant: 118, screened_out: 317 });
       // The run genuinely parks at this boundary (028 pause salience: paused
       // must read distinct from executing on every tab) — an explicit
       // `run.status` frame, not just the pending check-in itself.
       emit(runStatus("paused", nextSequence()));
       emit({ type: "checkin.pending", check_in: mockCheckIn, occurred_at: FRAME_TIME, sequence: nextSequence() });
 
-      await checkInAnswer.promise;
+      if (scenario === "paused-strip") {
+        // Holds at the check-in for good: the run strip's paused state.
+        await new Promise<void>(() => {});
+        return;
+      }
+      if (!replay) await checkInAnswer.promise;
 
       emit(runStatus("running", nextSequence()));
       emit({
         type: "checkin.resolved",
         check_in_id: MOCK_CHECK_IN_ID,
-        response: { kind: "option", option_id: "suggested-balanced", params: null },
+        response: { kind: "option", option_id: "continue", params: null },
         decided_by: "user",
         occurred_at: FRAME_TIME,
         sequence: nextSequence(),
       });
 
+      await walkStage(emit, emitTick, nextSequence, "classify", wait, [
+        { activity: "40 of 118 categorised", done: 40, total: 118, unit: "documents" },
+        { activity: "80 of 118 categorised", done: 80, total: 118, unit: "documents" },
+        { activity: "118 of 118 categorised", done: 118, total: 118, unit: "documents" },
+      ], { classified: 118 });
+      await walkStage(emit, emitTick, nextSequence, "appraise", wait, [
+        { activity: "Categorising" },
+      ], { quality_checked: 118 });
+      await walkStage(emit, emitTick, nextSequence, "characterise", wait, [
+        { activity: "Assigning themes · batch 1 of 3", done: 1, total: 3, unit: "batches" },
+        { activity: "Assigning themes · batch 2 of 3", done: 2, total: 3, unit: "batches" },
+        { activity: "Assigning themes · batch 3 of 3", done: 3, total: 3, unit: "batches" },
+      ], { theme_count: 7 });
+      emit(stageStarted("synthesise", nextSequence()));
+      setLiveStage("synthesise");
+
       // Live artefact streaming (strand 13): skeleton, then each section
-      // started -> completed, whole-section grain.
+      // started -> completed, whole-section grain for the first, streamed for
+      // the second.
       emit({ type: "artefact.skeleton", sections: mockArtefactSkeleton, occurred_at: FRAME_TIME, sequence: nextSequence() });
       emit({ type: "artefact.section_started", index: 0, occurred_at: FRAME_TIME, sequence: nextSequence() });
+      emitTick(tick("synthesise", "Reading findings", { section: sectionLine(0) }));
+      await wait(MOCK_TICK_MS);
       emit({
         type: "artefact.section_completed",
         index: 0,
@@ -1198,6 +1338,8 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         sequence: nextSequence(),
       });
       emit({ type: "artefact.section_started", index: 1, occurred_at: FRAME_TIME, sequence: nextSequence() });
+      const sectionOne = sectionLine(1);
+      emitTick(tick("synthesise", "Looking for: evidence on subsidy uptake among low-income households", { section: sectionOne }));
 
       if (scenario === "paused") {
         // A demo/screenshot fixture: holds "writing" indefinitely rather
@@ -1209,39 +1351,132 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       // Held briefly so the "writing" state is reliably observable before
       // the section fills — the demo journey's skeleton -> writing -> filled
       // check.
-      await sleep(500);
+      await pace(500);
 
       if (scenario === "failed-partial") {
         emit({
           type: "artefact.section_completed",
           index: 1,
           title: mockArtefactSkeleton[1].title,
-          prose: mockArtefactSectionProse[1],
+          prose: mockArtefactSectionRepairedProse[1],
           occurred_at: FRAME_TIME,
           sequence: nextSequence(),
         });
-        emit(stageFailed("synthesise", "Writing the report", "The write-up run hit an unrecoverable error.", nextSequence()));
+        emit(stageFailed("synthesise", "The write-up run hit an unrecoverable error.", nextSequence()));
         finishRun("failed");
         emit(runStatus("failed", nextSequence()));
         controller.close();
         return;
       }
 
+      // The writer's second section: its drafted prose streams in 2 to 6 word
+      // appends; a reconnect starts with the first half in one `replace`.
+      const draft = mockArtefactSectionProse[1];
+      const delta = (text: string, mode: "append" | "replace"): SseFrame => ({
+        type: "artefact.section_delta",
+        ephemeral: true,
+        index: 1,
+        mode,
+        text,
+        occurred_at: frameTime(),
+      });
+      let rest = draft;
+      if (replay) {
+        const firstHalf = draft.slice(0, draft.lastIndexOf(" ", Math.floor(draft.length / 2)) + 1);
+        emit(delta(firstHalf, "replace"));
+        rest = draft.slice(firstHalf.length);
+      } else {
+        emitTick(tick("synthesise", "Reading findings", { section: sectionOne }));
+        await pace(MOCK_TICK_MS);
+        emitTick(tick("synthesise", "Writing", { section: sectionOne }));
+      }
+      for (const chunk of chunkWords(rest)) {
+        await pace(100);
+        emit(delta(chunk, "append"));
+      }
+      emitTick(tick("synthesise", "Checking claims", { section: sectionOne }));
+      await pace(MOCK_TICK_MS);
+      emit({
+        type: "artefact.section_revising",
+        ephemeral: true,
+        index: 1,
+        spans: [mockSectionOneRevisingSpan],
+        occurred_at: frameTime(),
+      });
+      emitTick(tick("synthesise", "Revising 1 claim", { section: sectionOne }));
+      await pace(1500);
       emit({
         type: "artefact.section_completed",
         index: 1,
         title: mockArtefactSkeleton[1].title,
-        prose: mockArtefactSectionProse[1],
+        prose: mockArtefactSectionRepairedProse[1],
         occurred_at: FRAME_TIME,
         sequence: nextSequence(),
       });
-      emit(stageCompleted("synthesise", "Writing the report", { cited: 12, sections: 2 }, nextSequence()));
+      emit(stageCompleted("synthesise", { section_count: 2 }, nextSequence()));
       setRunArtefact(mockArtefact.artefact_id);
       finishRun("succeeded");
       emit(runStatus("succeeded", nextSequence()));
       controller.close();
     },
   });
+}
+
+/** The writer's section line, as `tick.section` carries it. */
+function sectionLine(index: number): string {
+  return `Section ${index + 1} of ${mockArtefactSkeleton.length} · ${mockArtefactSkeleton[index].title}`;
+}
+
+/** One activity tick (task 058, D2): never persisted, so no `sequence`. */
+function tick(
+  stage: StageKey,
+  activity: string,
+  extra: { done?: number; total?: number; unit?: string; section?: string; heartbeat?: boolean } = {},
+): SseFrame {
+  return {
+    type: "tick",
+    ephemeral: true,
+    stage,
+    activity,
+    done: extra.done ?? null,
+    total: extra.total ?? null,
+    unit: extra.unit ?? null,
+    section: extra.section ?? null,
+    heartbeat: extra.heartbeat ?? false,
+    dropped: 0,
+    occurred_at: frameTime(),
+  };
+}
+
+interface StageTick {
+  activity: string;
+  done?: number;
+  total?: number;
+  unit?: string;
+}
+
+/**
+ * Walk one stage of the Evidence search: started, a tick every 400 ms with the
+ * stage's activity line, one heartbeat (the hub repeating the current line
+ * while a model call is in flight), completed with its summary.
+ */
+async function walkStage(
+  emit: (frame: SseFrame) => void,
+  emitTick: (frame: SseFrame) => void,
+  nextSequence: () => number,
+  stage: StageKey,
+  wait: (ms: number) => Promise<void>,
+  ticks: StageTick[],
+  summary: Record<string, number>,
+) {
+  emit(stageStarted(stage, nextSequence()));
+  setLiveStage(stage);
+  for (const [index, entry] of ticks.entries()) {
+    emitTick(tick(stage, entry.activity, entry));
+    if (index === 0) emitTick(tick(stage, entry.activity, { ...entry, heartbeat: true }));
+    await wait(MOCK_TICK_MS);
+  }
+  emit(stageCompleted(stage, summary, nextSequence()));
 }
 
 /**
@@ -1257,12 +1492,16 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
  */
 async function scopingBaselineWalk(emit: (frame: SseFrame) => void, nextSequence: () => number) {
   emit(runStatus("running", nextSequence()));
-  emit(stageStarted("acquire", "Searching sources", "Queries out to academic and policy databases", nextSequence()));
-  emit(stageCompleted("acquire", "Searching sources", { found: 74 }, nextSequence()));
-  emit(stageStarted("screen", "Screening sources", "Checking relevance to the plan's scope", nextSequence()));
-  emit(stageCompleted("screen", "Screening sources", { relevant: 28, screened_out: 46 }, nextSequence()));
-  emit(stageStarted("synthesise", "Writing the baseline", "Setting out what happens if nothing changes", nextSequence()));
-  emit(stageCompleted("synthesise", "Writing the baseline", { sections: 4 }, nextSequence()));
+  const steps: Array<[StageKey, Record<string, number>]> = [
+    ["acquire", { acquired: 74 }],
+    ["screen", { relevant: 28, screened_out: 46 }],
+    ["synthesise", { section_count: 4 }],
+  ];
+  for (const [stage, summary] of steps) {
+    emit(stageStarted(stage, nextSequence()));
+    setLiveStage(stage);
+    emit(stageCompleted(stage, summary, nextSequence()));
+  }
   setRunArtefact(mockBaselineArtefact.artefact_id);
   emit(runStatus("paused", nextSequence()));
   emit({ type: "checkin.pending", check_in: mockBaselineGateCheckIn, occurred_at: frameTime(), sequence: nextSequence() });
@@ -1295,36 +1534,47 @@ function finishRun(status: "succeeded" | "failed" | "aborted") {
   if (currentRun === null) return;
   const endedAt = new Date().toISOString();
   currentRun = { ...currentRun, status, ended_at: endedAt };
-  mockTask.latest_run = {
-    capability_run_id: currentRun.capability_run_id,
-    status: currentRun.status,
-    started_at: currentRun.started_at,
-    ended_at: currentRun.ended_at,
-  };
+  mockTask.latest_run = latestRunOf(currentRun);
+  mockTask.active_run = null;
+}
+
+/** Stamp the live run with the stage it last started and the server's label
+ *  for it, as `TaskOut.active_run` and `latest_run` carry them while a walk
+ *  runs (task 058, N15). */
+function setLiveStage(stage: StageKey) {
+  const label = STAGE_PRESENTATION[stage][0];
+  for (const run of [mockTask.latest_run, mockTask.active_run]) {
+    if (run != null) {
+      run.stage = stage;
+      run.stage_label = label;
+    }
+  }
 }
 
 function frameTime(): string {
   return new Date().toISOString();
 }
 
-function runStatus(status: "running" | "paused" | "succeeded" | "failed" | "aborted", sequence: number): SseFrame {
-  return { type: "run.status", capability_run_id: MOCK_RUN_ID, status, occurred_at: frameTime(), sequence };
+function runStatus(status: "running" | "paused" | "succeeded" | "failed" | "aborted", sequence: number, runId: string = MOCK_RUN_ID): SseFrame {
+  return { type: "run.status", capability_run_id: runId, status, occurred_at: frameTime(), sequence };
 }
 
-function stageStarted(stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "synthesise", label: string, blurb: string, sequence: number): SseFrame {
-  return { type: "stage.started", capability_run_id: MOCK_RUN_ID, stage, label, blurb, occurred_at: frameTime(), sequence };
+function stageStarted(stage: StageKey, sequence: number, runId: string = MOCK_RUN_ID): SseFrame {
+  const [label, blurb] = STAGE_PRESENTATION[stage];
+  return { type: "stage.started", capability_run_id: runId, stage, label, blurb, occurred_at: frameTime(), sequence };
 }
 
-function stageCompleted(stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "synthesise", label: string, summary: Record<string, number>, sequence: number): SseFrame {
-  return { type: "stage.completed", capability_run_id: MOCK_RUN_ID, stage, label, summary, seconds: 4, occurred_at: frameTime(), sequence };
+function stageCompleted(stage: StageKey, summary: Record<string, number>, sequence: number, runId: string = MOCK_RUN_ID): SseFrame {
+  return { type: "stage.completed", capability_run_id: runId, stage, label: STAGE_PRESENTATION[stage][0], summary, seconds: 4, occurred_at: frameTime(), sequence };
 }
 
-function stageFailed(stage: "synthesise", label: string, reason: string, sequence: number): SseFrame {
-  return { type: "stage.failed", capability_run_id: MOCK_RUN_ID, stage, label, reason, skipped: false, occurred_at: frameTime(), sequence };
+function stageFailed(stage: StageKey, reason: string, sequence: number): SseFrame {
+  return { type: "stage.failed", capability_run_id: MOCK_RUN_ID, stage, label: STAGE_PRESENTATION[stage][0], reason, skipped: false, occurred_at: frameTime(), sequence };
 }
 
 function toSse(frame: SseFrame): string {
-  const id = frame.type === "tick" ? "" : `id:${frame.sequence}\n`;
+  // Ephemeral frames (ticks, section deltas) are never persisted: no `id:`.
+  const id = "sequence" in frame ? `id:${frame.sequence}\n` : "";
   return `${id}event:${frame.type}\ndata:${JSON.stringify(frame)}\n\n`;
 }
 
@@ -1366,6 +1616,12 @@ function sleep(ms: number): Promise<void> {
 
 // --- task 045 (6.3): the longlist walk, what exists and what is active ---
 
+/** True from the moment a longlist walk opens until its longlist stage
+ *  completes: `GET /longlist` answers 404 meanwhile. */
+let mockLonglistBuilding = false;
+/** The options read while the walk builds: empty until suggest completes. */
+let mockOptionRows: components["schemas"]["OptionProgressOut"][] = [];
+
 /** The scoping plan's current version; edits and confirms move it. */
 let mockScopingPlanVersion = 1;
 /** The longlist walks opened so far, newest first. */
@@ -1379,6 +1635,8 @@ function resetMockLonglistWalks() {
   mockLonglistWalks = [];
   mockLonglistPending = [];
   mockLonglistWake = createDeferred();
+  mockLonglistBuilding = false;
+  mockOptionRows = [];
   mockTask.active_run = null;
   mockTask.has_longlist = false;
 }
@@ -1420,6 +1678,8 @@ function requestMockLonglistWalk(planVersion: number): components["schemas"]["La
   };
   mockLonglistWalks = [walk, ...mockLonglistWalks];
   mockShortlistState.inputsChanged = false;
+  mockLonglistBuilding = true;
+  mockOptionRows = [];
   mockTask.active_run = latestRunOf(walk);
   mockTask.latest_run = latestRunOf(walk);
   mockLonglistPending.push(walk.capability_run_id);
@@ -1440,70 +1700,141 @@ async function mockLonglistWalkLoop(emit: (frame: SseFrame) => void, nextSequenc
   }
 }
 
+/** `1180` as `1,180`, the way the server's activity lines write counts. */
+function withCommas(value: number): string {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 /**
- * One longlist walk's frames: the six stage keys with the counts their beat
- * sentences read, then the longlist exists and nothing is active. Held
- * briefly at the start so "Building the longlist" is observable.
+ * One longlist walk's frames (task 058, N21, N22): the stages in the order the
+ * walk runs them, each with the server's label and an activity tick. The
+ * options read follows the walk: rows from the end of `suggest`, a child
+ * search per row (ten at once, then two) while `option_searches` runs, and
+ * one fold plus two new rows when `longlist` completes, which is also when
+ * `GET /longlist` stops answering 404. Held briefly at the start so "Building
+ * the longlist" is observable.
  */
 async function mockLonglistWalk(
   walkId: string,
   emit: (frame: SseFrame) => void,
   nextSequence: () => number,
 ) {
-  const status = (value: "running" | "succeeded"): SseFrame => ({
-    type: "run.status",
-    capability_run_id: walkId,
-    status: value,
-    occurred_at: frameTime(),
-    sequence: nextSequence(),
-  });
   const counts = mockLonglist().counts;
-  const stages: Array<{
-    stage: "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "constrain";
-    label: string;
-    blurb: string;
-    summary: Record<string, number>;
-  }> = [
-    { stage: "inherit", label: "Reading the linked search", blurb: "Its documents and report join this task.", summary: { documents: 42, links: 1 } },
-    { stage: "suggest", label: "Suggesting options", blurb: "From the plan, the baseline and any linked report.", summary: { suggested: 6, from_report: 2 } },
-    { stage: "option_searches", label: "Searching for each option", blurb: "One search per suggestion and per option of yours.", summary: { total: 7, finished: 7, failed: 0 } },
-    { stage: "extract_interventions", label: "Reading the abstracts", blurb: "Which interventions each one covers, and how.", summary: { documents: 118, records: 64 } },
-    { stage: "longlist", label: "Clustering into options", blurb: "Records grouped into options, options into themes.", summary: { options: counts.options, themes: counts.themes, unclustered: 5, not_an_option: 2 } },
-    { stage: "constrain", label: "Applying your constraints", blurb: "Every option checked against the plan's requirements.", summary: { excluded: counts.excluded, no_in_scope: counts.no_in_scope } },
-  ];
+  const planVersion = mockLonglistWalks.find((walk) => walk.capability_run_id === walkId)?.plan_version ?? 1;
+  const begin = (stage: StageKey) => {
+    emit(stageStarted(stage, nextSequence(), walkId));
+    setLiveStage(stage);
+  };
+  const finish = (stage: StageKey, summary: Record<string, number>) =>
+    emit(stageCompleted(stage, summary, nextSequence(), walkId));
+  /** A stage that only ticks: one tick per line, then the stage completes. */
+  const runStage = async (stage: StageKey, lines: StageTick[], summary: Record<string, number>, onDone?: () => void) => {
+    begin(stage);
+    for (const line of lines) {
+      emit(tick(stage, line.activity, line));
+      await pace(MOCK_TICK_MS);
+    }
+    onDone?.();
+    finish(stage, summary);
+  };
 
-  emit(status("running"));
-  await sleep(1200);
-  // One option search, a child walk (S12): listed by `/runs` with its
-  // parent, never a block of its own in the thread.
-  const childStarted = new Date().toISOString();
-  mockLonglistWalks = [
-    {
-      capability_run_id: crypto.randomUUID(),
-      task_id: MOCK_TASK_ID,
-      plan_id: MOCK_PLAN_ID,
-      plan_version: mockLonglistWalks.find((walk) => walk.capability_run_id === walkId)?.plan_version ?? 1,
-      status: "succeeded",
-      started_at: childStarted,
-      ended_at: childStarted,
-      artefact_id: null,
-      parent_capability_run_id: walkId,
-      purpose: "targeted",
-    },
-    ...mockLonglistWalks,
-  ];
-  for (const entry of stages) {
-    emit({ type: "stage.started", capability_run_id: walkId, stage: entry.stage, label: entry.label, blurb: entry.blurb, occurred_at: frameTime(), sequence: nextSequence() });
-    await sleep(150);
-    emit({ type: "stage.completed", capability_run_id: walkId, stage: entry.stage, label: entry.label, summary: entry.summary, seconds: 3, occurred_at: frameTime(), sequence: nextSequence() });
-  }
+  emit(runStatus("running", nextSequence(), walkId));
+  await pace(1200);
+  await runStage("inherit", [{ activity: "Reading the linked search" }], { documents: 42, links: 1 });
+  await runStage("suggest", [{ activity: "Suggesting options" }], { suggested: MOCK_OPTION_COUNT, from_report: 2 }, () => {
+    mockOptionRows = seedMockOptionRows();
+  });
+
+  // The option searches: one child walk per option, run through a pool of ten.
+  begin("option_searches");
+  const patchRow = (index: number, patch: Partial<components["schemas"]["OptionProgressOut"]>) => {
+    mockOptionRows = mockOptionRows.map((row, at) => (at === index ? { ...row, ...patch } : row));
+  };
+  let nextOption = 0;
+  let finished = 0;
+  let sources = 0;
+  const searchOption = async (index: number) => {
+    const childId = mockChildRunId(index);
+    const startedAt = new Date().toISOString();
+    mockLonglistWalks = [
+      {
+        capability_run_id: childId,
+        task_id: MOCK_TASK_ID,
+        plan_id: MOCK_PLAN_ID,
+        plan_version: planVersion,
+        status: "running",
+        started_at: startedAt,
+        ended_at: null,
+        artefact_id: null,
+        parent_capability_run_id: walkId,
+        purpose: "targeted",
+      },
+      ...mockLonglistWalks,
+    ];
+    emit(runStatus("running", nextSequence(), childId));
+    patchRow(index, { search_status: "searching" });
+    emit(stageStarted("acquire", nextSequence(), childId));
+    await pace(500 + ((index * 7) % 5) * 220);
+    const found = mockOptionFound(index);
+    emit(stageCompleted("acquire", { acquired: found }, nextSequence(), childId));
+    patchRow(index, { search_status: "searched", found });
+    emit(runStatus("succeeded", nextSequence(), childId));
+    const endedAt = new Date().toISOString();
+    mockLonglistWalks = mockLonglistWalks.map((walk) =>
+      walk.capability_run_id === childId ? { ...walk, status: "succeeded", ended_at: endedAt } : walk,
+    );
+    finished += 1;
+    sources += found;
+    emit(tick("option_searches", `${finished} of ${MOCK_OPTION_COUNT} searches done · ${withCommas(sources)} sources so far`, {
+      done: finished,
+      total: MOCK_OPTION_COUNT,
+      unit: "searches",
+    }));
+  };
+  const worker = async () => {
+    while (nextOption < MOCK_OPTION_COUNT) {
+      const index = nextOption;
+      nextOption += 1;
+      await searchOption(index);
+    }
+  };
+  await Promise.all(Array.from({ length: 10 }, worker));
+  finish("option_searches", { total: MOCK_OPTION_COUNT, finished, sources });
+
+  await runStage("extract_interventions", [
+    { activity: "900 of 2,410 abstracts read", done: 900, total: 2410, unit: "documents" },
+    { activity: "1,800 of 2,410 abstracts read", done: 1800, total: 2410, unit: "documents" },
+    { activity: "2,410 of 2,410 abstracts read", done: 2410, total: 2410, unit: "documents" },
+  ], { documents: 2410, records: 64 });
+  await runStage("longlist", [
+    { activity: "Assigning sources to options · batch 1 of 2", done: 1, total: 2, unit: "batches" },
+    { activity: "Assigning sources to options · batch 2 of 2", done: 2, total: 2, unit: "batches" },
+  ], { options: counts.options, themes: counts.themes, unclustered: 5, not_an_option: 2 }, () => {
+    mockOptionRows = foldMockOptionRows(mockOptionRows);
+    mockLonglistBuilding = false;
+  });
+  await runStage("option_profile", [
+    { activity: "Typing options · batch 1 of 1", done: 1, total: 1, unit: "batches" },
+    { activity: `Writing place sentences · ${counts.options} of ${counts.options} options`, done: counts.options, total: counts.options, unit: "options" },
+  ], { profiled: counts.options });
+  await runStage("constrain", [
+    { activity: "Checking constraints · batch 1 of 1", done: 1, total: 1, unit: "batches" },
+  ], { excluded: counts.excluded, no_in_scope: counts.no_in_scope });
+  await runStage("theme", [
+    { activity: "Assigning options to themes · batch 1 of 1", done: 1, total: 1, unit: "batches" },
+  ], { themes: counts.themes });
+  const placed = Object.values(mockLonglistOptionCards).filter(
+    (option) => option.shortlist?.state === "proposed" || option.shortlist?.state === "added_by_you",
+  ).length;
+  await runStage("shortlist", [{ activity: "Choosing the shortlist" }], { kept: placed });
+
   const endedAt = new Date().toISOString();
   mockLonglistWalks = mockLonglistWalks.map((walk) =>
     walk.capability_run_id === walkId ? { ...walk, status: "succeeded", ended_at: endedAt } : walk,
   );
-  const finished = mockLonglistWalks.find((walk) => walk.capability_run_id === walkId);
-  if (finished !== undefined) mockTask.latest_run = latestRunOf(finished);
+  const finishedWalk = mockLonglistWalks.find((walk) => walk.capability_run_id === walkId);
+  if (finishedWalk !== undefined) mockTask.latest_run = latestRunOf(finishedWalk);
   mockTask.active_run = null;
   mockTask.has_longlist = true;
-  emit(status("succeeded"));
+  emit(runStatus("succeeded", nextSequence(), walkId));
 }

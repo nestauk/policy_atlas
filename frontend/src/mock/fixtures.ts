@@ -11,6 +11,65 @@ const MOCK_ORGANISATION_ID = "90000000-0000-4000-8000-000000000001";
 
 const now = "2026-07-21T09:30:00Z";
 
+type StageKey = components["schemas"]["StageStartedFrame"]["stage"];
+
+/**
+ * The server's stage copy, copied from `api/stage_vocabulary.py`
+ * (`STAGE_PRESENTATION`, `STAGE_ROW`). There is no runtime import across the
+ * boundary, so a change there is made here by hand (task 058, N26).
+ */
+export const STAGE_PRESENTATION: Record<StageKey, readonly [label: string, blurb: string]> = {
+  acquire: ["Searching and screening", "Querying academic and policy databases."],
+  screen: ["Searching and screening", "Checking each title and abstract against your question."],
+  classify: ["Categorising", "Labelling each source by its evidence type."],
+  appraise: ["Categorising", "Scoring how much weight each source can bear."],
+  ingest: ["Reading the full texts", "Fetching each selected document and reading it into sections."],
+  characterise: ["Mapping", "What the evidence covers, and where it is thin."],
+  select: ["Shortlisting", "The strongest, most varied set for close reading."],
+  extract: ["Extracting findings", "Each finding is pulled out with its exact quote."],
+  group: ["Grouping findings", "Findings that answer the same question, together."],
+  synthesise: ["Writing", "A cited report, checked claim by claim."],
+  inherit: ["Reading the linked search", "Its documents and report join this task."],
+  suggest: ["Suggesting options", "From your plan, the baseline and any linked report."],
+  option_searches: ["Searching for each option", "One search per option."],
+  extract_interventions: ["Reading the abstracts", "Which interventions each source covers."],
+  longlist: ["Clustering into options", "Sources grouped into options. Options may be folded together or added."],
+  option_profile: ["Writing what each option would take", "Cost, time, workforce and who decides, for each option."],
+  constrain: ["Applying your constraints", "Each option checked against the plan's limits."],
+  theme: ["Grouping into themes", "Included options grouped into themes."],
+  shortlist: ["Shortlisting", "Proposing options for close reading."],
+};
+
+/** The card row each stage belongs to; search and screen share one row, as do
+ *  classify and appraise. */
+export const STAGE_ROW: Record<StageKey, string> = {
+  acquire: "search_screen",
+  screen: "search_screen",
+  classify: "categorise",
+  appraise: "categorise",
+  ingest: "ingest",
+  characterise: "characterise",
+  select: "select",
+  extract: "extract",
+  group: "group",
+  synthesise: "synthesise",
+  inherit: "inherit",
+  suggest: "suggest",
+  option_searches: "option_searches",
+  extract_interventions: "extract_interventions",
+  longlist: "longlist",
+  option_profile: "option_profile",
+  constrain: "constrain",
+  theme: "theme",
+  shortlist: "shortlist",
+};
+
+/** One plan step in the server's words: its label, blurb and row. */
+function planStep(stage: StageKey): components["schemas"]["PlanStep"] {
+  const [label, blurb] = STAGE_PRESENTATION[stage];
+  return { stage, label, blurb, row: STAGE_ROW[stage] };
+}
+
 // The mock task starts with NO run (`latest_run: null`): the 027 journey
 // begins at the plan pane, not mid-analysis. `mock/api.ts` mutates
 // `latest_run` in place once a run actually starts, so every read of this
@@ -275,25 +334,67 @@ export const mockDecisions: components["schemas"]["DecisionOut"][] = [
   { sequence: 31, occurred_at: "2026-07-21T09:41:00Z", kind: "steering", summary: "Accepted the suggested evidence balance for the synthesis.", decided_by: "user", detail: { option_id: "suggested-balanced" } },
 ];
 
+/**
+ * The Evidence search check-in after searching and screening: the real
+ * `search_review` steer point (the runner pauses after `acquire` and writes
+ * kind `steer_point`). Its options are the server's five, in the server's ids,
+ * with the suggested one first and its reason in `why`. No floor trigger
+ * fired, so `triggers` is empty, as it is on a pause the mode always takes
+ * (task 058, N26; annex scene 12).
+ */
 export const mockCheckIn: components["schemas"]["CheckInOut"] = {
   check_in_id: MOCK_CHECK_IN_ID,
-  kind: "evidence_balance",
-  boundary: "before_component",
-  component: "synthesise",
-  stage: "synthesise",
-  render: "The screened-in set has strong school-food coverage but fewer local active-travel evaluations. Choose how the synthesis should handle that balance, or add your own free-text steer.",
+  kind: "steer_point",
+  boundary: "after_component",
+  component: "acquire",
+  stage: "acquire",
+  render: "Does this look right before I assess the sources?\n312 sources · 118 relevant · 2 rounds",
   options: [
-    { id: "add-local-context", label: "Add local context", description: "Tell us which local programme or neighbourhood context to prioritise.", requires_user_input: true, suggested: false, why: null, endorsement: null },
-    { id: "suggested-balanced", label: "Use the balanced synthesis", description: "Lead with the strongest evidence and name the local evidence gap.", requires_user_input: false, suggested: true, why: null, endorsement: null },
+    { id: "continue", label: "Looks right, assess these", description: "Screening starts on what came back.", requires_user_input: false, suggested: true, why: "Coverage matches the plan and the second round added little.", endorsement: null },
+    { id: "deepen_search", label: "Search deeper", description: "One more round on the thin themes.", requires_user_input: false, suggested: false, why: null, endorsement: null },
+    { id: "rescope_filters", label: "Change the search scope", description: "Opens a line to say what to change.", requires_user_input: true, suggested: false, why: null, endorsement: null },
+    { id: "guide_queries", label: "Guide the queries", description: "Tell me what to search for.", requires_user_input: true, suggested: false, why: null, endorsement: null },
+    { id: "abort", label: "Stop the run", description: "Abort the remaining walk; prior component work is preserved.", requires_user_input: false, suggested: false, why: null, endorsement: null },
   ],
-  triggers: [{ trigger: "thin_local_evidence", detail: { local_sources: 5, screened_in: 46 } }],
-  bundle: null,
+  triggers: [],
+  bundle: {
+    backends: ["openalex", "overton"],
+    queries: ["free childcare take-up low-income families", "childcare entitlement outreach evaluation"],
+    sample_titles: [mockEvidence[0].title, mockEvidence[1].title],
+  },
   segment_reentry_allowed: true,
   rerun_component: "acquire",
   status: "pending",
   created_at: "2026-07-21T09:42:00Z",
   sequence: 42,
 };
+
+/** The sentence the judge fails in section 1, and its repaired wording: one
+ *  number differs (task 058, N26). */
+const MOCK_SECTION_ONE_LEAD =
+  "Pair school food action with safer active-travel routes and practical family support, while monitoring local reach.";
+const MOCK_SECTION_ONE_FAILED = "Schools that added a walking bus saw 8 more children arrive on foot in every 100.";
+const MOCK_SECTION_ONE_REPAIRED = "Schools that added a walking bus saw 6 more children arrive on foot in every 100.";
+
+/** What the writer streams: section 1 as drafted, before the check. */
+export const mockArtefactSectionProse: Record<number, string> = {
+  0: "Universal breakfast provision can support more consistent breakfast consumption when access is non-stigmatising.",
+  1: `${MOCK_SECTION_ONE_LEAD} ${MOCK_SECTION_ONE_FAILED}`,
+};
+
+/** Section 1 as stored once the repair lands: the same text with the failed
+ *  sentence's number changed. */
+export const mockArtefactSectionRepairedProse: Record<number, string> = {
+  ...mockArtefactSectionProse,
+  1: `${MOCK_SECTION_ONE_LEAD} ${MOCK_SECTION_ONE_REPAIRED}`,
+};
+
+/** The code-point span `[start, end)` of the failed sentence in the drafted
+ *  section 1, as `artefact.section_revising` carries it. */
+export const mockSectionOneRevisingSpan: { start: number; end: number } = (() => {
+  const start = mockArtefactSectionProse[1].indexOf(MOCK_SECTION_ONE_FAILED);
+  return { start, end: start + MOCK_SECTION_ONE_FAILED.length };
+})();
 
 export const mockArtefact: components["schemas"]["ArtefactOut"] = {
   artefact_id: "00000000-0000-4000-8000-00000000a001",
@@ -316,7 +417,7 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
       role: "conclusions",
       blocks: [{
         block_id: "30000000-0000-4000-8000-000000000002",
-        prose: "Pair school food action with safer active-travel routes and practical family support, while monitoring local reach.",
+        prose: mockArtefactSectionRepairedProse[1],
         claims: [{ claim_id: "40000000-0000-4000-8000-000000000002", claim_type: "pattern", text: "Pair school food action with safer active-travel routes", span: [0, 56], theme: { source: "grouping", base: "Co-occurrence across the screened-in corpus", items: [{ name: "Active-travel offers", description: "Route-safety and arrival-routine measures that families adopt alongside food provision.", size: 5, facet: "Intervention type", sources: [{ source_id: mockEvidence[0].source_id, title: mockEvidence[0].title }, { source_id: mockEvidence[1].source_id, title: mockEvidence[1].title }] }] } }],
       }],
     },
@@ -339,10 +440,6 @@ export const mockArtefactSkeleton: Array<{ index: number; title: string; focus: 
   { index: 1, title: "Implications for local action", focus: "What this means for local decisions." },
 ];
 
-export const mockArtefactSectionProse: Record<number, string> = {
-  0: "Universal breakfast provision can support more consistent breakfast consumption when access is non-stigmatising.",
-  1: "Pair school food action with safer active-travel routes and practical family support, while monitoring local reach.",
-};
 
 /**
  * The options-scoping baseline (task 044, deliverable 9) the mock serves as
@@ -568,14 +665,7 @@ export const mockPlanReady: components["schemas"]["PlanDraft"] = {
   expected_artefact_shape: "standard",
   time_band: "10-15 minutes",
   section_budget: null,
-  steps: [
-    { stage: "acquire", label: "Searching sources", blurb: "Queries out to academic and policy databases." },
-    { stage: "screen", label: "Screening sources", blurb: "Checking relevance to primary-school children." },
-    { stage: "classify", label: "Classifying evidence", blurb: "Labelling evidence types and settings." },
-    { stage: "appraise", label: "Appraising quality", blurb: "Reviewing the strength of selected evidence." },
-    { stage: "characterise", label: "Characterising findings", blurb: "Extracting implementation conditions." },
-    { stage: "synthesise", label: "Writing the report", blurb: "Preparing a decision-ready evidence base." },
-  ],
+  steps: (["acquire", "screen", "classify", "appraise", "characterise", "synthesise"] as const).map(planStep),
   ready: true,
 };
 
@@ -702,18 +792,21 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
   steps: [
     {
       stage: "synthesise",
+      row: "baseline",
       label: "Baseline",
       blurb:
         "What is in place, the trend, who is affected and what is contested, from Overton and OpenAlex. The run pauses for you to question it and confirm the plan.",
     },
     {
       stage: "acquire",
+      row: "longlist",
       label: "Longlist",
       blurb:
         "Suggest options, search widely, read every abstract for the interventions it covers, cluster them into options, apply your constraints.",
     },
     {
       stage: "shortlist",
+      row: "shortlist",
       label: "Shortlist",
       blurb:
         "Policy Atlas proposes about five places for close reading, one reason each, mixed to your risk appetite. Add, remove, ask for more. Assessment of the shortlisted options is not in this release.",
@@ -745,7 +838,8 @@ export function seedTaskAgentTurns(): components["schemas"]["TaskAgentTranscript
       turn_index: 1,
       user_message: "Which local policy approaches reduce childhood obesity for primary-school children?",
       reply: "Here's how I've read your question.",
-      suggestions: [],
+      question: "Is the question as you want it, or do you want to narrow it?",
+      suggestions: ["That's my question", "Narrow it"],
       part: {
         id: "question",
         step_label: "Plan · 1 of 3 · the question",
@@ -766,6 +860,7 @@ export function seedTaskAgentTurns(): components["schemas"]["TaskAgentTranscript
       turn_index: 2,
       user_message: "That's my question\n\n[confirm part=question option=confirm]",
       reply: "What counts as in-scope? Edit any chip directly. I'll search from 2016 onward. UK as the primary setting is judged from each document.",
+      question: null,
       suggestions: [],
       part: {
         id: "scope",
@@ -790,6 +885,7 @@ export function seedTaskAgentTurns(): components["schemas"]["TaskAgentTranscript
       turn_index: 3,
       user_message: "Also fold in whether family-support programmes should be a separate lever.",
       reply: null,
+      question: null,
       suggestions: [],
       part: null,
       status: "failed",
@@ -797,6 +893,170 @@ export function seedTaskAgentTurns(): components["schemas"]["TaskAgentTranscript
       completed_at: "2026-07-21T08:58:03Z",
     },
   ];
+}
+
+// --- The planner's scripted conversation (task 058, N10; annex scene 11) ---
+
+/** One scripted planner turn: the reply the stream types out, plus the
+ *  structured part, question and quick replies the finished turn carries. */
+export interface MockPlannerTurn {
+  reply: string;
+  question: string | null;
+  suggestions: string[];
+  part: components["schemas"]["PartProposalOut"] | null;
+}
+
+/**
+ * The planner's reply for the nth turn of a fresh Evidence search task:
+ * the question, then the scope, then the thoroughness. Any later turn is a
+ * plain reply with no part. The time bands are the plan document's own.
+ */
+export function mockPlannerTurn(turnIndex: number): MockPlannerTurn {
+  if (turnIndex <= 1) {
+    const reply = "I can search for this. First, is the question as you want it, or do you want to narrow it?";
+    return {
+      reply,
+      question: "Is the question as you want it, or do you want to narrow it?",
+      suggestions: ["That's my question", "Narrow it"],
+      part: {
+        id: "question",
+        step_label: "Plan · step 1 of 3 · Question",
+        title: "Your question",
+        body: mockTask.question ?? null,
+        chips: null,
+        options: [
+          { id: "confirm", label: "That's my question", sub: null, primary: true, reason: "It names the outcome, the group and the setting." },
+          { id: "refine", label: "Narrow it", sub: "Tell me what to add or leave out.", primary: false, reason: null },
+        ],
+      },
+    };
+  }
+  if (turnIndex === 2) {
+    return {
+      reply: "Here is the scope I would use. Change any chip, or add one.",
+      question: null,
+      suggestions: [],
+      part: {
+        id: "scope",
+        step_label: "Plan · step 2 of 3 · Scope",
+        title: "Scope",
+        body: null,
+        chips: [
+          { label: "Since 2016", kind: "date_range", value: '{"after": "2016-01-01", "before": null}' },
+          { label: "UK", kind: "country_list", value: '["GB"]' },
+          { label: "Low-income families", kind: "text", value: "Low-income families" },
+        ],
+        options: [
+          { id: "confirm", label: "Looks right", sub: null, primary: true, reason: "These match your question and the usual evidence base." },
+          { id: "change", label: "Add or change a constraint", sub: "Opens a line to type the change.", primary: false, reason: null },
+        ],
+      },
+    };
+  }
+  if (turnIndex === 3) {
+    return {
+      reply: "How thorough should the search be?",
+      question: null,
+      suggestions: [],
+      part: {
+        id: "thoroughness",
+        step_label: "Plan · step 3 of 3 · Thoroughness",
+        title: "Thoroughness",
+        body: null,
+        chips: null,
+        options: [
+          { id: "standard", label: "Standard report", sub: "Reads the strongest sources in full. · ~20 to 40 min", primary: true, reason: null },
+          { id: "rapid", label: "Rapid overview", sub: "Abstracts only. Good for a first look. · ~10 to 15 min", primary: false, reason: null },
+          { id: "detailed", label: "Detailed report", sub: "Reads widely and extracts findings. · ~90 to 100 min", primary: false, reason: null },
+        ],
+      },
+    };
+  }
+  return { reply: "Noted — I'll keep that in mind for the analysis.", question: null, suggestions: [], part: null };
+}
+
+// --- The options read while the longlist builds (task 058, N22; scene 15) ---
+
+type OptionProgress = components["schemas"]["OptionProgressOut"];
+
+/** The twelve suggested options, in scene 15's order. `foldedInto` names the
+ *  option (by index) the clustering stage folds this one into. */
+const MOCK_OPTION_SEEDS: ReadonlyArray<{
+  name: string;
+  description: string;
+  origin: OptionProgress["origin"];
+  foldedInto?: number;
+}> = [
+  { name: "Youth guarantee with a job or training offer within four months", description: "Every young person out of work for four months is offered a job, training or education.", origin: "from_evidence_search" },
+  { name: "Wage subsidies for employers hiring under-25s", description: "Employers are paid towards the wages of a young person they take on.", origin: "from_evidence_search" },
+  { name: "Expanded apprenticeship incentives", description: "Payments that make it cheaper for employers to offer apprenticeships.", origin: "suggested" },
+  { name: "Careers advice in every secondary school", description: "A named careers adviser in each school, from year 9.", origin: "suggested" },
+  { name: "Sector-based work academies", description: "Short training tied to a guaranteed interview in one sector.", origin: "suggested" },
+  { name: "Mental health support in job centres", description: "A trained worker on site for young people who are out of work.", origin: "suggested" },
+  { name: "Transport subsidies for young job seekers", description: "Free or cheaper travel to interviews and the first weeks of work.", origin: "suggested", foldedInto: 9 },
+  { name: "Intermediate labour market programmes", description: "Paid, time-limited jobs with support, run by the local authority.", origin: "suggested" },
+  { name: "Digital skills bootcamps", description: "Short, intensive courses in the digital skills employers ask for.", origin: "suggested" },
+  { name: "Youth hubs co-located with Jobcentre Plus", description: "One local place for advice, training and work coaching.", origin: "suggested" },
+  { name: "Enterprise allowance for young founders", description: "A weekly allowance while a young person starts a business.", origin: "added_by_you" },
+  { name: "Conditionality reform for under-25s", description: "Changes to what young people on benefits must do to keep them.", origin: "added_by_you" },
+];
+
+/** The two options the clustering stage adds, found in the evidence. */
+const MOCK_OPTION_ADDED: ReadonlyArray<{ name: string; description: string }> = [
+  { name: "Employer-led pre-apprenticeship traineeships", description: "Employers run short placements that lead to an apprenticeship offer." },
+  { name: "Benefit run-ons when a young person starts work", description: "Benefits keep being paid for a few weeks after a job starts." },
+];
+
+/** How many sources each option's search finds (140 to 410). */
+const MOCK_OPTION_FOUND = [312, 240, 186, 405, 148, 270, 332, 160, 215, 380, 140, 296];
+
+export function mockOptionId(index: number): string {
+  return `b0000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+}
+
+/** Child search run ids, distinct from the parent walk and from each other. */
+export function mockChildRunId(index: number): string {
+  return `b1000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+}
+
+export const MOCK_OPTION_COUNT = MOCK_OPTION_SEEDS.length;
+
+export function mockOptionFound(index: number): number {
+  return MOCK_OPTION_FOUND[index];
+}
+
+/** Fresh rows as suggest writes them: all queued, none folded. */
+export function seedMockOptionRows(): OptionProgress[] {
+  return MOCK_OPTION_SEEDS.map((seed, index) => ({
+    option_id: mockOptionId(index),
+    name: seed.name,
+    description: seed.description,
+    origin: seed.origin,
+    state: "included",
+    merged_into_option_id: null,
+    search_status: "queued",
+    found: null,
+  }));
+}
+
+/** The clustering stage's one change: a suggestion folds into a wider option,
+ *  and two options found in the evidence join the end of the list. */
+export function foldMockOptionRows(rows: OptionProgress[]): OptionProgress[] {
+  const folded = rows.map((row, index) => {
+    const into = MOCK_OPTION_SEEDS[index]?.foldedInto;
+    return into === undefined ? row : { ...row, merged_into_option_id: mockOptionId(into) };
+  });
+  const added = MOCK_OPTION_ADDED.map((entry, offset): OptionProgress => ({
+    option_id: mockOptionId(MOCK_OPTION_SEEDS.length + offset),
+    name: entry.name,
+    description: entry.description,
+    origin: "clustered",
+    state: "included",
+    merged_into_option_id: null,
+    search_status: "searched",
+    found: null,
+  }));
+  return [...folded, ...added];
 }
 
 // --- The options-scoping baseline gate (task 044, Phase 5.5) -------------

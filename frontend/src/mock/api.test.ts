@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { consumeEventStream } from "../api/sse";
 import type { SseFrame } from "../api/sseFrame";
-import { mockFetch, resetMockScenario, setMockMe } from "./api";
+import { mockFetch, resetMockScenario, setMockMe, setMockPace } from "./api";
 import {
   MOCK_CHAT_CITATION_CHUNK_ID,
   MOCK_CHAT_CITATION_QUOTE,
@@ -12,6 +12,10 @@ import {
   MOCK_TASK_ID,
   MOCK_THEME_ID_ACTIVE_TRAVEL,
   MOCK_THEME_ID_SCHOOL_FOOD,
+  mockArtefactSectionProse,
+  mockArtefactSectionRepairedProse,
+  mockCheckIn,
+  mockSectionOneRevisingSpan,
   mockEvidenceThemeIds,
   mockMeEnrolled,
 } from "./fixtures";
@@ -28,6 +32,9 @@ async function readNdjson(response: Response): Promise<Record<string, unknown>[]
   const text = await response.text();
   return text.trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
 }
+
+// The scripted walks wait 400 ms between ticks; the tests play them at 2%.
+beforeAll(() => setMockPace(0.02));
 
 describe("mock API", () => {
   it("serves deterministic, screened-in landscape fixtures", async () => {
@@ -179,7 +186,7 @@ describe("mock API", () => {
     await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
     await mockFetch(
       `http://localhost/api/v1/tasks/${MOCK_TASK_ID}/check-ins/${MOCK_CHECK_IN_ID}/response`,
-      { method: "POST", body: JSON.stringify({ kind: "option", option_id: "suggested-balanced" }) },
+      { method: "POST", body: JSON.stringify({ kind: "option", option_id: "continue" }) },
     );
     await consumed;
     expect(frames.filter((frame) => frame.type === "artefact.section_completed")).toHaveLength(2);
@@ -531,12 +538,12 @@ describe("mock API", () => {
 
     it("refuses every shortlist route with run_active while a walk is running", async () => {
       resetMockScenario();
+      const any = (await longlist()).options[0].option_id;
       const confirm = await mockFetch(`${base}/plan/confirm-baseline`, {
         method: "POST",
         body: JSON.stringify({ artefact_id: "artefact-1", plan_version: 1 }),
       });
       expect(confirm.status).toBe(200);
-      const any = (await longlist()).options[0].option_id;
       for (const path of [`/options/${any}/shortlist`, `/options/${any}/unshortlist`, "/shortlist/suggest"]) {
         const response = await post(path);
         expect(response.status).toBe(409);
@@ -562,6 +569,293 @@ describe("mock API", () => {
       expect(stale.shortlist.stale).toBe(true);
       const longlistBody = (await (await mockFetch(`${base}/longlist`)).json()) as { plan_inputs_changed: boolean };
       expect(longlistBody.plan_inputs_changed).toBe(false);
+    });
+  });
+
+  // Task 058, N26: the mock plays the new frames, fields and routes.
+  describe("task 058 contract (N26)", () => {
+    const base = `http://localhost/api/v1/tasks/${MOCK_TASK_ID}`;
+    type Tick = Extract<SseFrame, { type: "tick" }>;
+    type Frame<T extends SseFrame["type"]> = Extract<SseFrame, { type: T }>;
+    const ofType = <T extends SseFrame["type"]>(frames: SseFrame[], type: T) =>
+      frames.filter((frame): frame is Frame<T> => frame.type === type);
+
+    async function freshTask(capability: "evidence_search" | "options_scoping") {
+      resetMockScenario();
+      await mockFetch("http://localhost/api/v1/tasks", {
+        method: "POST",
+        body: JSON.stringify({ name: "Task 058", capability, question: "What works to raise take-up of free childcare places?" }),
+      });
+    }
+
+    /** Start an Evidence search run, answer its check-in and read every frame. */
+    async function playEvidenceWalk(scenario?: string): Promise<SseFrame[]> {
+      await freshTask("evidence_search");
+      await mockFetch(`${base}/runs`, { method: "POST" });
+      const query = scenario === undefined ? "" : `?mockScenario=${scenario}`;
+      const response = await mockFetch(`${base}/events${query}`);
+      const frames: SseFrame[] = [];
+      const consumed = consumeEventStream(response.body!, 0, (frame) => frames.push(frame));
+      if (scenario !== "reload-mid-section") {
+        await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
+        await mockFetch(`${base}/check-ins/${MOCK_CHECK_IN_ID}/response`, {
+          method: "POST",
+          body: JSON.stringify({ kind: "option", option_id: "continue" }),
+        });
+      }
+      await consumed;
+      return frames;
+    }
+
+    it("uses the server's stage labels and blurbs, rows on the plan steps and the live stage on the task", async () => {
+      const frames = await playEvidenceWalk();
+      const started = new Map(ofType(frames, "stage.started").map((frame) => [frame.stage, frame]));
+      expect(started.get("acquire")).toMatchObject({ label: "Searching and screening", blurb: "Querying academic and policy databases." });
+      expect(started.get("classify")).toMatchObject({ label: "Categorising", blurb: "Labelling each source by its evidence type." });
+      expect(started.get("synthesise")).toMatchObject({ label: "Writing", blurb: "A cited report, checked claim by claim." });
+      expect(started.get("appraise")?.label).toBe("Categorising");
+
+      const plan = (await (await mockFetch(`${base}/plan`)).json()) as { plan: { steps: { stage: string; row: string }[] } };
+      const rows = Object.fromEntries(plan.plan.steps.map((step) => [step.stage, step.row]));
+      expect(rows).toMatchObject({ acquire: "search_screen", screen: "search_screen", classify: "categorise", appraise: "categorise", characterise: "characterise", synthesise: "synthesise" });
+      await freshTask("options_scoping");
+      const scoping = (await (await mockFetch(`${base}/plan`)).json()) as { scoping: { steps: { row: string }[] } };
+      expect(scoping.scoping.steps.map((step) => step.row)).toEqual(["baseline", "longlist", "shortlist"]);
+    });
+
+    it("stamps the live run with its stage and the server's label while the walk is paused", async () => {
+      await freshTask("evidence_search");
+      await mockFetch(`${base}/runs`, { method: "POST" });
+      const response = await mockFetch(`${base}/events?mockScenario=paused-strip`);
+      const frames: SseFrame[] = [];
+      void consumeEventStream(response.body!, 0, (frame) => frames.push(frame));
+      await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
+      const task = (await (await mockFetch(base)).json()) as {
+        latest_run: { stage: string; stage_label: string };
+        active_run: { stage: string; stage_label: string };
+      };
+      expect(task.latest_run).toMatchObject({ stage: "screen", stage_label: "Searching and screening" });
+      expect(task.active_run).toMatchObject({ stage: "screen", stage_label: "Searching and screening" });
+    });
+
+    it("sends ticks in the new shape and none of the old ones", async () => {
+      const frames = await playEvidenceWalk();
+      const ticks = ofType(frames, "tick");
+      expect(ticks.length).toBeGreaterThan(10);
+      for (const entry of ticks) {
+        expect(Object.keys(entry).sort()).toEqual(
+          ["activity", "done", "dropped", "ephemeral", "heartbeat", "occurred_at", "section", "stage", "total", "type", "unit"],
+        );
+        expect(entry.dropped).toBe(0);
+        expect(entry).not.toHaveProperty("sequence");
+      }
+      const lines = ticks.map((entry) => entry.activity);
+      expect(lines).toEqual(expect.arrayContaining([
+        "searching · 184 found so far",
+        "screening 61 new abstracts · 107 relevant so far",
+        "40 of 118 categorised",
+        "Assigning themes · batch 1 of 3",
+        "Looking for: evidence on subsidy uptake among low-income households",
+        "Reading findings",
+        "Writing",
+        "Checking claims",
+        "Revising 1 claim",
+      ]));
+      expect(ticks.find((entry) => entry.activity === "40 of 118 categorised")).toMatchObject({ done: 40, total: 118, unit: "documents" });
+      expect(ticks.find((entry) => entry.activity === "Writing")?.section).toBe("Section 2 of 2 · Implications for local action");
+      // One heartbeat per stage with ticks.
+      const heartbeats = ticks.filter((entry): entry is Tick => entry.heartbeat);
+      expect(heartbeats.map((entry) => entry.stage)).toEqual(["acquire", "screen", "classify", "appraise", "characterise"]);
+    });
+
+    it("streams section 1 as deltas, then the revising span, then the repaired section", async () => {
+      const frames = await playEvidenceWalk();
+      const draft = mockArtefactSectionProse[1];
+      const deltas = ofType(frames, "artefact.section_delta");
+      expect(deltas.length).toBeGreaterThan(3);
+      expect(deltas.every((entry) => entry.index === 1 && entry.mode === "append")).toBe(true);
+      expect(deltas.map((entry) => entry.text).join("")).toBe(draft);
+      for (const entry of deltas) {
+        const words = entry.text.trim().split(/\s+/).length;
+        expect(words).toBeGreaterThanOrEqual(1);
+        expect(words).toBeLessThanOrEqual(6);
+      }
+      const [revising] = ofType(frames, "artefact.section_revising");
+      expect(revising.spans).toEqual([mockSectionOneRevisingSpan]);
+      expect(revising.spans[0].start).toBeGreaterThan(0);
+      expect(revising.spans[0].end).toBeLessThanOrEqual(draft.length);
+      expect(draft.slice(revising.spans[0].start, revising.spans[0].end)).toBe(
+        "Schools that added a walking bus saw 8 more children arrive on foot in every 100.",
+      );
+      const completed = ofType(frames, "artefact.section_completed").find((entry) => entry.index === 1)!;
+      expect(completed.prose).toBe(mockArtefactSectionRepairedProse[1]);
+      expect(completed.prose.slice(0, revising.spans[0].start)).toBe(draft.slice(0, revising.spans[0].start));
+      const order = frames.map((frame) => frame.type);
+      expect(order.lastIndexOf("artefact.section_delta")).toBeLessThan(order.indexOf("artefact.section_revising"));
+      expect(order.indexOf("artefact.section_revising")).toBeLessThan(order.lastIndexOf("artefact.section_completed"));
+    });
+
+    it("serves the planner turn as a stream: progress, deltas, one completed last", async () => {
+      await freshTask("evidence_search");
+      const post = async (message: string) => {
+        const response = await mockFetch(`${base}/task-agent-turns`, {
+          method: "POST",
+          body: JSON.stringify({ client_turn_id: crypto.randomUUID(), message }),
+        });
+        expect(response.headers.get("Content-Type")).toBe("application/x-ndjson");
+        return readNdjson(response);
+      };
+      const first = await post("What works to raise take-up of free childcare places?");
+      expect(first[0]).toEqual({ type: "progress", label: "Drafting the plan" });
+      expect(first.filter((event) => event.type === "completed")).toHaveLength(1);
+      expect(first.at(-1)?.type).toBe("completed");
+      const deltas = first.filter((event) => event.type === "delta");
+      expect(deltas.length).toBeGreaterThan(2);
+      const turn = (first.at(-1) as { turn: { reply: string; question: string; suggestions: string[]; part: { id: string; options: { id: string; primary: boolean; reason: string | null }[] } } }).turn;
+      expect(deltas.map((event) => event.text).join("")).toBe(turn.reply);
+      expect(turn.question).toBe("Is the question as you want it, or do you want to narrow it?");
+      expect(turn.suggestions).toEqual(["That's my question", "Narrow it"]);
+      expect(turn.part.id).toBe("question");
+      expect(turn.part.options.map((option) => option.primary)).toEqual([true, false]);
+      expect(turn.part.options[0].reason).toBe("It names the outcome, the group and the setting.");
+
+      const second = (await post("That's my question")).at(-1) as { turn: { part: { id: string; chips: unknown[] } } };
+      expect(second.turn.part.id).toBe("scope");
+      expect(second.turn.part.chips).toHaveLength(3);
+      const third = (await post("Looks right")).at(-1) as { turn: { part: { id: string; options: { label: string; primary: boolean; sub: string }[] } } };
+      expect(third.turn.part.id).toBe("thoroughness");
+      expect(third.turn.part.options.map((option) => option.label)).toEqual(["Standard report", "Rapid overview", "Detailed report"]);
+      expect(third.turn.part.options[0].primary).toBe(true);
+      expect(third.turn.part.options[0].sub).toContain("~20 to 40 min");
+
+      const transcript = (await (await mockFetch(`${base}/task-agent-turns`)).json()) as { data: { question: string | null }[] };
+      expect(transcript.data.map((row) => row.question)).toEqual([turn.question, null, null]);
+    });
+
+    it("pauses at a real check-in kind after searching and screening", async () => {
+      expect(mockCheckIn).toMatchObject({ kind: "steer_point", boundary: "after_component", component: "acquire", stage: "acquire" });
+      expect(mockCheckIn.options?.map((option) => option.id)).toEqual(["continue", "deepen_search", "rescope_filters", "guide_queries", "abort"]);
+      expect(mockCheckIn.options?.[0]).toMatchObject({ suggested: true, why: "Coverage matches the plan and the second round added little." });
+      const frames = await playEvidenceWalk();
+      const order = frames.map((frame) => (frame.type === "stage.started" ? `start:${frame.stage}` : frame.type));
+      expect(order.indexOf("checkin.pending")).toBeGreaterThan(order.indexOf("start:screen"));
+      expect(order.indexOf("checkin.pending")).toBeLessThan(order.indexOf("start:classify"));
+      const read = (await (await mockFetch(`${base}/check-ins`)).json()) as { data: { kind: string }[] };
+      expect(read.data[0].kind).toBe("steer_point");
+    });
+
+    describe("the scoping walk", () => {
+      /** Open the scoping run, confirm the baseline gate and read frames until
+       *  the longlist walk's parent run succeeds. */
+      async function playScopingWalk() {
+        await freshTask("options_scoping");
+        await mockFetch(`${base}/runs`, { method: "POST" });
+        const response = await mockFetch(`${base}/events`);
+        const frames: SseFrame[] = [];
+        void consumeEventStream(response.body!, 0, (frame) => frames.push(frame));
+        await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
+        await mockFetch(`${base}/check-ins/4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef635/response`, {
+          method: "POST",
+          body: JSON.stringify({ kind: "option", option_id: "confirm_plan" }),
+        });
+        return frames;
+      }
+      const walkDone = (frames: SseFrame[]) =>
+        ofType(frames, "run.status").some(
+          (frame) => frame.status === "succeeded" && ofType(frames, "stage.completed").some((done) => done.stage === "shortlist"),
+        );
+
+      it("walks every stage with server labels and child searches, ten at once then two", async () => {
+        const frames = await playScopingWalk();
+        const optionsBefore = (await (await mockFetch(`${base}/options`)).json()) as { options: unknown[] };
+        expect(optionsBefore.options).toEqual([]);
+        expect((await mockFetch(`${base}/longlist`)).status).toBe(404);
+        await vi.waitFor(() => expect(walkDone(frames)).toBe(true), { timeout: 8000 });
+
+        const parent = ofType(frames, "stage.started").find((frame) => frame.stage === "inherit")!.capability_run_id!;
+        const parentStages = ofType(frames, "stage.started").filter((frame) => frame.capability_run_id === parent);
+        expect(parentStages.map((frame) => frame.stage)).toEqual([
+          "inherit", "suggest", "option_searches", "extract_interventions", "longlist", "option_profile", "constrain", "theme", "shortlist",
+        ]);
+        expect(parentStages.find((frame) => frame.stage === "option_searches")?.label).toBe("Searching for each option");
+
+        const childIds = ofType(frames, "run.status")
+          .filter((frame) => frame.status === "running" && frame.capability_run_id.startsWith("b1000000"))
+          .map((frame) => frame.capability_run_id);
+        expect(childIds).toHaveLength(12);
+        expect(new Set(childIds).size).toBe(12);
+        expect(childIds).not.toContain(parent);
+        for (const childId of childIds) {
+          const acquire = frames.filter((frame) => "capability_run_id" in frame && frame.capability_run_id === childId);
+          expect(acquire.map((frame) => (frame.type === "run.status" ? `${frame.type}:${frame.status}` : `${frame.type}:${"stage" in frame ? frame.stage : ""}`))).toEqual([
+            "run.status:running", "stage.started:acquire", "stage.completed:acquire", "run.status:succeeded",
+          ]);
+        }
+        // Ten start before the first one ends; the last two wait for a slot.
+        const order = frames.map((frame) =>
+          frame.type === "run.status" && childIds.includes(frame.capability_run_id) ? frame.status : frame.type === "stage.completed" && childIds.includes(frame.capability_run_id ?? "") ? "done" : "",
+        ).filter(Boolean);
+        expect(order.slice(0, 10)).toEqual(Array(10).fill("running"));
+
+        const searchLines = ofType(frames, "tick").filter((entry) => entry.stage === "option_searches").map((entry) => entry.activity);
+        expect(searchLines).toHaveLength(12);
+        expect(searchLines[3]).toMatch(/^4 of 12 searches done · [\d,]+ sources so far$/);
+        const done = ofType(frames, "stage.completed").find((frame) => frame.stage === "option_searches")!;
+        expect(done.summary).toMatchObject({ total: 12, finished: 12, sources: expect.any(Number) });
+
+        // The options read follows the child walks and the clustering.
+        const options = (await (await mockFetch(`${base}/options`)).json()) as {
+          options: { name: string; origin: string; merged_into_option_id: string | null; search_status: string; found: number | null }[];
+        };
+        expect(options.options).toHaveLength(14);
+        const searched = options.options.slice(0, 12);
+        expect(searched.every((row) => row.search_status === "searched" && row.found !== null)).toBe(true);
+        expect(searched.reduce((total, row) => total + (row.found ?? 0), 0)).toBe(done.summary?.sources);
+        expect(options.options.filter((row) => row.merged_into_option_id !== null).map((row) => row.name)).toEqual(["Transport subsidies for young job seekers"]);
+        expect(options.options.slice(12).map((row) => row.origin)).toEqual(["clustered", "clustered"]);
+        expect((await mockFetch(`${base}/longlist`)).status).toBe(200);
+      });
+
+      it("shows rows from the end of suggest, queued then searching then searched", async () => {
+        const frames = await playScopingWalk();
+        await vi.waitFor(() => expect(ofType(frames, "run.status").filter((frame) => frame.status === "running").length).toBeGreaterThan(2));
+        const mid = (await (await mockFetch(`${base}/options`)).json()) as { options: { search_status: string; found: number | null }[] };
+        expect(mid.options).toHaveLength(12);
+        expect(mid.options.filter((row) => row.search_status === "searching").length).toBeLessThanOrEqual(10);
+        expect(mid.options.every((row) => (row.search_status === "searched") === (row.found !== null))).toBe(true);
+        await vi.waitFor(() => expect(walkDone(frames)).toBe(true), { timeout: 8000 });
+      });
+    });
+
+    it("selects paused-strip, which holds at the check-in even once it is answered", async () => {
+      await freshTask("evidence_search");
+      await mockFetch(`${base}/runs`, { method: "POST" });
+      const response = await mockFetch(`${base}/events?mockScenario=paused-strip`);
+      const frames: SseFrame[] = [];
+      void consumeEventStream(response.body!, 0, (frame) => frames.push(frame));
+      await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
+      await mockFetch(`${base}/check-ins/${MOCK_CHECK_IN_ID}/response`, { method: "POST", body: JSON.stringify({ kind: "option", option_id: "continue" }) });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(frames.at(-1)?.type).toBe("checkin.pending");
+      expect(ofType(frames, "run.status").at(-1)?.status).toBe("paused");
+    });
+
+    it("selects reload-mid-section: replay to section 1, one replace of the first half, then appends", async () => {
+      const frames = await playEvidenceWalk("reload-mid-section");
+      const draft = mockArtefactSectionProse[1];
+      const started = frames.findIndex((frame) => frame.type === "artefact.section_started" && frame.index === 1);
+      expect(started).toBeGreaterThan(0);
+      // The replay is durable frames only; ticks are never replayed.
+      expect(frames.slice(0, started).some((frame) => frame.type === "tick" || frame.type === "artefact.section_delta")).toBe(false);
+      const deltas = ofType(frames, "artefact.section_delta");
+      expect(frames[started + 1]).toBe(deltas[0]);
+      expect(deltas[0].mode).toBe("replace");
+      expect(deltas.slice(1).every((entry) => entry.mode === "append")).toBe(true);
+      expect(deltas[0].text.length).toBeGreaterThan(0);
+      expect(deltas[0].text.length).toBeLessThan(draft.length);
+      expect(draft.startsWith(deltas[0].text)).toBe(true);
+      expect(deltas.map((entry) => entry.text).join("")).toBe(draft);
+      expect(frames.at(-1)).toMatchObject({ type: "run.status", status: "succeeded" });
     });
   });
 });
