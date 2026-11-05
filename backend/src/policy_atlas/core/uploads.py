@@ -62,10 +62,6 @@ class UploadStore(Protocol):
         """The bytes under ``key``."""
         ...
 
-    def delete(self, key: str) -> None:
-        """Remove ``key`` (a missing key is not an error)."""
-        ...
-
 
 class LocalUploadStore:
     """A folder on disk, for development and tests."""
@@ -86,9 +82,6 @@ class LocalUploadStore:
 
     def get(self, key: str) -> bytes:
         return self._path(key).read_bytes()
-
-    def delete(self, key: str) -> None:
-        self._path(key).unlink(missing_ok=True)
 
 
 class S3UploadStore:
@@ -112,9 +105,6 @@ class S3UploadStore:
     def get(self, key: str) -> bytes:
         response = self.client.get_object(Bucket=self.bucket, Key=key)
         return bytes(response["Body"].read())
-
-    def delete(self, key: str) -> None:
-        self.client.delete_object(Bucket=self.bucket, Key=key)
 
 
 def store_from_env() -> UploadStore:
@@ -144,12 +134,9 @@ class Upload:
     """One stored upload, as the table holds it."""
 
     upload_id: uuid.UUID
-    task_id: uuid.UUID
-    purpose: str
     object_key: str
     file_name: str
     content_type: str
-    size_bytes: int
 
 
 def save(
@@ -203,24 +190,17 @@ def save(
             "by": user_id,
         },
     )
-    return Upload(upload_id, task_id, purpose, key, name, content_type, len(data))
+    return Upload(upload_id, key, name, content_type)
 
 
 def find(conn: Connection, *, task_id: uuid.UUID, upload_id: uuid.UUID) -> Upload | None:
     """The task's upload, or ``None`` (an upload of another task is never found)."""
     row = conn.execute(
-        select(task_upload).where(
-            task_upload.c.task_id == task_id, task_upload.c.upload_id == upload_id
-        )
+        select(
+            task_upload.c.upload_id,
+            task_upload.c.object_key,
+            task_upload.c.file_name,
+            task_upload.c.content_type,
+        ).where(task_upload.c.task_id == task_id, task_upload.c.upload_id == upload_id)
     ).one_or_none()
-    if row is None:
-        return None
-    return Upload(
-        row.upload_id,
-        row.task_id,
-        row.purpose,
-        row.object_key,
-        row.file_name,
-        row.content_type,
-        row.size_bytes,
-    )
+    return None if row is None else Upload(*row)

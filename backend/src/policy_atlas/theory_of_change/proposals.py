@@ -26,7 +26,8 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import toc_box, toc_link, toc_proposal
 from policy_atlas.theory_of_change import edits, store
-from policy_atlas.theory_of_change.edits import Actor, EditRefused
+from policy_atlas.theory_of_change.edits import EditRefused
+from policy_atlas.theory_of_change.graph import Layer
 
 Op = Literal[
     "add_box",
@@ -57,10 +58,9 @@ class EditOpWire(BaseModel):
     key: str | None = Field(
         description="add_box: a key for the new box (n1, n2) that later edits may name. Else null."
     )
-    layer: (
-        Literal["input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"]
-        | None
-    ) = Field(description="add_box: the new box's layer; edit_box: a new layer, or null.")
+    layer: Layer | None = Field(
+        description="add_box: the new box's layer; edit_box: a new layer, or null."
+    )
     text: str | None = Field(description="add_box, edit_box: the box text, at most 20 words.")
     source: str | None = Field(
         description="add_link: the box it starts from (a code, or a new box's key). Else null."
@@ -89,6 +89,11 @@ class EditOpWire(BaseModel):
     #: The route this edit belongs to (``r1``), when edits are offered a route at a
     #: time: its new boxes, its new connections and the pathway. Set by code only.
     group: SkipJsonSchema[str | None] = None
+
+    @classmethod
+    def of(cls, **values: Any) -> EditOpWire:
+        """An edit built by code: every field it does not name is null."""
+        return cls.model_validate({**dict.fromkeys(cls.model_fields, None), **values})
 
 
 def describe(op: dict[str, Any]) -> str:
@@ -192,7 +197,7 @@ def apply_op(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    actor: Actor,
+    actor: str,
     op: dict[str, Any],
     created: dict[str, str],
 ) -> None:
@@ -210,6 +215,15 @@ def apply_op(
         EditRefused: When it names something not on the canvas, or the edit refuses.
     """
     kind = op["op"]
+    link_fields = {
+        name: op[name] for name in ("if_text", "then_text", "because_text") if op.get(name)
+    }
+
+    def box_revision(box: uuid.UUID) -> int:
+        return int(
+            conn.execute(select(toc_box.c.revision).where(toc_box.c.box_id == box)).scalar_one()
+        )
+
     if kind == "add_box":
         box_id = edits.create_box(
             conn, task_id=task_id, actor=actor, layer=op["layer"], text=op["text"] or ""
@@ -218,24 +232,19 @@ def apply_op(
             created[op["key"]] = str(box_id)
     elif kind == "edit_box":
         box = _box_id(conn, task_id, op.get("target"), created)
-        revision = int(
-            conn.execute(select(toc_box.c.revision).where(toc_box.c.box_id == box)).scalar_one()
-        )
-        fields = {name: op[name] for name in ("text", "layer") if op.get(name)}
         edits.edit_box(
             conn,
             task_id=task_id,
             actor=actor,
             box_id=box,
-            expected_revision=revision,
-            fields=fields,
+            expected_revision=box_revision(box),
+            fields={name: op[name] for name in ("text", "layer") if op.get(name)},
         )
     elif kind == "delete_box":
         box = _box_id(conn, task_id, op.get("target"), created)
-        revision = int(
-            conn.execute(select(toc_box.c.revision).where(toc_box.c.box_id == box)).scalar_one()
+        edits.delete_box(
+            conn, task_id=task_id, actor=actor, box_id=box, expected_revision=box_revision(box)
         )
-        edits.delete_box(conn, task_id=task_id, actor=actor, box_id=box, expected_revision=revision)
     elif kind == "add_link":
         link_id = edits.create_link(
             conn,
@@ -247,30 +256,24 @@ def apply_op(
         if op.get("key"):
             # A pathway the same proposal adds names this connection by its key.
             created[op["key"]] = str(link_id)
-        fields = {
-            name: op[name] for name in ("if_text", "then_text", "because_text") if op.get(name)
-        }
-        if fields:
+        if link_fields:
             edits.edit_link(
                 conn,
                 task_id=task_id,
                 actor=actor,
                 link_id=link_id,
                 expected_revision=1,
-                fields=fields,
+                fields=link_fields,
             )
     elif kind == "edit_link":
         row = _link_row(conn, task_id, op.get("target"))
-        fields = {
-            name: op[name] for name in ("if_text", "then_text", "because_text") if op.get(name)
-        }
         edits.edit_link(
             conn,
             task_id=task_id,
             actor=actor,
             link_id=row.link_id,
             expected_revision=row.revision,
-            fields=fields,
+            fields=link_fields,
         )
     elif kind == "delete_link":
         row = _link_row(conn, task_id, op.get("target"))
@@ -294,7 +297,7 @@ def _merge(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    actor: Actor,
+    actor: str,
     op: dict[str, Any],
     created: dict[str, str],
 ) -> None:
@@ -314,14 +317,12 @@ def _merge(
             f"{fold_ref} cannot be merged into {keep_ref}: {problem or 'it changed meanwhile'}",
             status=422,
         )
-    store.record(
+    edits._record(
         conn,
         task_id=task_id,
-        run_id=None,
-        step=edits.USER_EDIT,
+        actor=actor,
         log=log,
-        changes=[f"Merged {fold_ref} into {keep_ref} (suggested by Policy Atlas)"],
-        actor=actor.user_id,
+        change=f"Merged {fold_ref} into {keep_ref} (suggested by Policy Atlas)",
     )
 
 
@@ -329,7 +330,7 @@ def _add_pathway(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    actor: Actor,
+    actor: str,
     op: dict[str, Any],
     created: dict[str, str],
 ) -> None:
@@ -351,14 +352,12 @@ def _add_pathway(
         link_ids=link_ids,
         origin="user",
     )
-    store.record(
+    edits._record(
         conn,
         task_id=task_id,
-        run_id=None,
-        step=edits.USER_EDIT,
+        actor=actor,
         log=log,
-        changes=[f"Added pathway “{op.get('label')}” (suggested by Policy Atlas)"],
-        actor=actor.user_id,
+        change=f"Added pathway “{op.get('label')}” (suggested by Policy Atlas)",
     )
 
 
@@ -374,7 +373,7 @@ def decide(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    actor: Actor,
+    actor: str,
     proposal_id: uuid.UUID,
     index: int | None,
     accept: bool,
@@ -428,7 +427,7 @@ def decide(
         else None
     )
     # One History line and one Undo for everything this accept adds.
-    with store.one_change(conn, task_id=task_id, actor=actor.user_id, change=change) as batch:
+    with store.one_change(conn, task_id=task_id, actor=actor, change=change) as batch:
         for i in chosen:
             if not 0 <= i < len(ops) or ops[i].get("status") != "pending":
                 continue

@@ -11,7 +11,7 @@ so a row the user changed meanwhile is skipped and reported (C10).
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -24,6 +24,8 @@ from sqlalchemy.engine import Connection, Row
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
     event_log,
+    source_snapshot,
+    task_source_snapshot,
     toc_band_item,
     toc_box,
     toc_link,
@@ -307,15 +309,7 @@ def record(
             for Policy Atlas's own steps.
         undoes: The event an Undo reverses.
     """
-    payload = {
-        "step": step,
-        "created": log.created,
-        "before": log.before,
-        "skipped": log.skipped,
-        "changes": changes or [],
-        **({"actor": actor} if actor else {}),
-        **({"undoes": undoes} if undoes else {}),
-    }
+    payload = _payload(step, log, changes or [], actor, undoes)
     batch = _BATCH.get()
     if batch is not None and step == "user_edit":
         batch.append(payload)
@@ -323,6 +317,25 @@ def record(
     events.append(
         conn, task_id=task_id, run_id=run_id, event_type=TOC_CHANGED_EVENT, payload=payload
     )
+
+
+def _payload(
+    step: str,
+    log: ChangeLog,
+    changes: list[Change],
+    actor: str | None = None,
+    undoes: str | None = None,
+) -> dict[str, Any]:
+    """One ``toc.changed`` event's payload."""
+    return {
+        "step": step,
+        "created": log.created,
+        "before": log.before,
+        "skipped": log.skipped,
+        "changes": changes,
+        **({"actor": actor} if actor else {}),
+        **({"undoes": undoes} if undoes else {}),
+    }
 
 
 #: User edits recorded inside :func:`one_change`, written there as one event.
@@ -357,20 +370,52 @@ def one_change(
         _BATCH.reset(token)
     if not batch:
         return
+    merged = ChangeLog(
+        *([row for edit in batch for row in edit[key]] for key in ("created", "before", "skipped"))
+    )
+    changes = [change] if change else [c for edit in batch for c in edit["changes"]]
     events.append(
         conn,
         task_id=task_id,
         run_id=None,
         event_type=TOC_CHANGED_EVENT,
-        payload={
-            "step": "user_edit",
-            "created": [row for edit in batch for row in edit["created"]],
-            "before": [row for edit in batch for row in edit["before"]],
-            "skipped": [row for edit in batch for row in edit["skipped"]],
-            "changes": [change] if change else [c for edit in batch for c in edit["changes"]],
-            "actor": actor,
-        },
+        payload=_payload("user_edit", merged, changes, actor),
     )
+
+
+def snapshot_meta(
+    conn: Connection, task_id: uuid.UUID, ids: Iterable[uuid.UUID] | None = None
+) -> dict[uuid.UUID, Row[Any]]:
+    """Each document's stored record: ``source_snapshot_id``, ``metadata``, ``source_locator``.
+
+    Args:
+        conn: Open connection.
+        task_id: The task; another task's documents are never read.
+        ids: The documents (``task_source_snapshot_id``), or ``None`` for every
+            document the task holds.
+
+    Returns:
+        Document id → its row; ``metadata`` may be ``None``.
+    """
+    query = (
+        select(
+            task_source_snapshot.c.task_source_snapshot_id,
+            source_snapshot.c.source_snapshot_id,
+            source_snapshot.c.metadata,
+            source_snapshot.c.source_locator,
+        )
+        .join(
+            source_snapshot,
+            source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
+        )
+        .where(task_source_snapshot.c.task_id == task_id)
+    )
+    if ids is not None:
+        wanted = list(ids)
+        if not wanted:
+            return {}
+        query = query.where(task_source_snapshot.c.task_source_snapshot_id.in_(wanted))
+    return {row.task_source_snapshot_id: row for row in conn.execute(query)}
 
 
 def has_graph(conn: Connection, task_id: uuid.UUID) -> bool:

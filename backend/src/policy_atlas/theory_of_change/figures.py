@@ -23,8 +23,6 @@ from sqlalchemy import select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import (
-    source_snapshot,
-    task_source_snapshot,
     toc_figure,
     toc_item_evidence,
 )
@@ -170,27 +168,15 @@ def _documents(
     conn: Connection, task_id: uuid.UUID, ids: set[uuid.UUID]
 ) -> dict[uuid.UUID, Document]:
     """The judged text (title and abstract) of each document, by id."""
-    if not ids:
-        return {}
-    rows = conn.execute(
-        select(task_source_snapshot.c.task_source_snapshot_id, source_snapshot.c.metadata)
-        .join(
-            source_snapshot,
-            source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
-        )
-        .where(task_source_snapshot.c.task_id == task_id)
-        .where(task_source_snapshot.c.task_source_snapshot_id.in_(ids))
-    )
     out: dict[uuid.UUID, Document] = {}
-    for tss, metadata in rows:
-        meta = metadata or {}
+    for tss, row in store.snapshot_meta(conn, task_id, ids).items():
+        meta = row.metadata or {}
         out[tss] = Document(
             tss_id=tss,
             title=str(meta.get("title") or ""),
             year=_year(meta),
             abstract=str(meta.get("abstract") or ""),
             evidence_type=None,
-            score=None,
         )
     return out
 
@@ -292,7 +278,6 @@ def toc_figures_scope(
                 year=job.document.year,
                 text=job.document.text,
             ),
-            "toc_figures",
         )
 
     usage = UsageAccumulator()

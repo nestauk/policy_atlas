@@ -122,7 +122,8 @@ def _theory(conn: Connection, task_id: uuid.UUID) -> dict[str, Any]:
     }
 
 
-def _report(conn: Connection, task_id: uuid.UUID) -> dict[str, Any] | None:
+def latest_report(conn: Connection, task_id: uuid.UUID) -> dict[str, Any] | None:
+    """The latest check's narrative report (C38), from its step payload, or ``None``."""
     payload = conn.execute(
         select(event_log.c.payload)
         .where(event_log.c.task_id == task_id)
@@ -131,8 +132,13 @@ def _report(conn: Connection, task_id: uuid.UUID) -> dict[str, Any] | None:
         .order_by(event_log.c.sequence.desc())
         .limit(1)
     ).scalar_one_or_none()
-    report = (payload or {}).get("report")
-    if not isinstance(report, dict):
+    report = payload.get("report") if isinstance(payload, dict) else None
+    return report if isinstance(report, dict) else None
+
+
+def _report(conn: Connection, task_id: uuid.UUID) -> dict[str, Any] | None:
+    report = latest_report(conn, task_id)
+    if report is None:
         return None
     return {
         "title": report.get("title"),

@@ -14,6 +14,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from policy_atlas.theory_of_change.graph import Layer
+
 #: One evidence verdict per link (C36, simplified BEAM).
 Verdict = Literal[
     "confident",
@@ -55,7 +57,7 @@ class TocBoxOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     box_id: uuid.UUID
-    layer: Literal["input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"]
+    layer: Layer
     #: Short stable label, e.g. ``S3`` (C35); null only on rows written before codes.
     code: str | None
     text: str
@@ -480,19 +482,13 @@ class TocBoxCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    layer: Literal["input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"]
+    layer: Layer
     text: str = Field(min_length=1, max_length=500)
     position: TocPositionOut | None = None
 
 
-class TocCriteriaIn(BaseModel):
+class TocCriteriaIn(TocResultCriteriaOut):
     """How we'd know a box's change happened."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    definition: str | None = None
-    indicator: str | None = None
-    timing: str | None = None
 
 
 class TocBoxPatch(BaseModel):
@@ -502,10 +498,7 @@ class TocBoxPatch(BaseModel):
 
     expected_revision: int
     text: str | None = Field(default=None, min_length=1, max_length=500)
-    layer: (
-        Literal["input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"]
-        | None
-    ) = None
+    layer: Layer | None = None
     description: str | None = Field(default=None, max_length=2000)
     criteria: TocCriteriaIn | None = None
 
@@ -532,14 +525,6 @@ class TocLinkPatch(BaseModel):
     because_text: str | None = Field(default=None, max_length=1000)
     conditions: list[str] | None = None
     critical: Literal[True] | None = None
-
-
-class TocRevisionIn(BaseModel):
-    """The revision the client saw, for a delete (C10)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    expected_revision: int
 
 
 class TocMoveIn(BaseModel):
@@ -594,7 +579,7 @@ class TocCheckIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     link_ids: list[uuid.UUID] = Field(min_length=1, max_length=80)
-    mode: Literal["new_items", "check_again", "find_more", "rest"] = "new_items"
+    mode: Literal["new_items", "check_again", "find_more"] = "new_items"
 
 
 class TocUploadIn(BaseModel):
@@ -626,7 +611,6 @@ class TocUploadOut(BaseModel):
 
     upload_id: uuid.UUID
     file_name: str
-    content_type: str
     #: ``boxes``, ``drawn`` and ``inferred`` connections, ``groups``, ``unconnected`` boxes.
     counts: dict[str, int]
     #: Whether the chat already has the message and its reply (an upload after the draft).
@@ -753,11 +737,3 @@ class TocProblemsOut(BaseModel):
     problems: list[str]
     #: Connections the accepted edits added: the client starts their evidence check.
     new_link_ids: list[uuid.UUID] = Field(default_factory=list)
-
-
-class TocClarificationIn(BaseModel):
-    """A clarification to the plan the next check reads (C49)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    text: str = Field(min_length=3, max_length=1000)

@@ -17,7 +17,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NoReturn, get_args
 
 from sqlalchemy import DateTime, Table, select
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -34,17 +34,12 @@ from policy_atlas.core.schema import (
     toc_pathway_link,
 )
 from policy_atlas.theory_of_change import store
+from policy_atlas.theory_of_change.graph import Layer
 
 #: The step name of every user edit's ``toc.changed`` event.
 USER_EDIT = "user_edit"
 
-#: Box fields a user may edit. ``result_criteria`` holds definition and timing.
-BOX_FIELDS = frozenset({"text", "layer", "description", "indicator", "result_criteria"})
-#: Link fields a user may edit.
-LINK_FIELDS = frozenset(
-    {"title", "if_text", "for_text", "then_text", "because_text", "conditions", "sentence"}
-)
-LAYERS = frozenset(store.CODE_PREFIX)
+LAYERS = frozenset(get_args(Layer))
 
 #: Tables in the order Undo re-inserts deleted rows (parents first).
 _RESTORE_ORDER = ("toc_box", "toc_link", "toc_pathway_link", "toc_item_evidence", "toc_figure")
@@ -68,13 +63,6 @@ class EditRefused(Exception):
         self.status = status
 
 
-@dataclass(frozen=True)
-class Actor:
-    """Who made an edit: the user's token subject."""
-
-    user_id: str
-
-
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -87,16 +75,20 @@ def _row(conn: Connection, table: Table, row_id: uuid.UUID, task_id: uuid.UUID) 
     return row
 
 
+def _raise_stale() -> NoReturn:
+    raise EditRefused(
+        "toc_stale_revision",
+        "someone changed this since you opened it; reload to see their change",
+    )
+
+
 def _stale(row: Any, expected_revision: int) -> None:
     if row.revision != expected_revision:
-        raise EditRefused(
-            "toc_stale_revision",
-            "someone changed this since you opened it; reload to see their change",
-        )
+        _raise_stale()
 
 
 def _record(
-    conn: Connection, *, task_id: uuid.UUID, actor: Actor, log: store.ChangeLog, change: str
+    conn: Connection, *, task_id: uuid.UUID, actor: str, log: store.ChangeLog, change: str
 ) -> None:
     store.record(
         conn,
@@ -105,7 +97,7 @@ def _record(
         step=USER_EDIT,
         log=log,
         changes=[change],
-        actor=actor.user_id,
+        actor=actor,
     )
 
 
@@ -115,18 +107,15 @@ def _update(
     table: Table,
     row: Any,
     *,
-    actor: Actor,
+    actor: str,
     values: dict[str, Any],
 ) -> None:
     key = getattr(row, store._PRIMARY_KEY[table.name])
-    stamp = {"edited_by": actor.user_id, "edited_at": _now()} if "edited_by" in table.c else {}
+    stamp = {"edited_by": actor, "edited_at": _now()} if "edited_by" in table.c else {}
     if not store.update(
         conn, log, table, key, observed_revision=row.revision, values={**values, **stamp}
     ):
-        raise EditRefused(
-            "toc_stale_revision",
-            "someone changed this since you opened it; reload to see their change",
-        )
+        _raise_stale()
 
 
 def _label(row: Any) -> str:
@@ -137,7 +126,7 @@ def edit_box(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    actor: Actor,
+    actor: str,
     box_id: uuid.UUID,
     expected_revision: int,
     fields: dict[str, Any],
@@ -145,11 +134,8 @@ def edit_box(
     """Change a box's text, layer, description, indicator or result criteria.
 
     Raises:
-        EditRefused: On a stale revision, an unknown field or layer.
+        EditRefused: On a stale revision or an unknown layer.
     """
-    unknown = set(fields) - BOX_FIELDS
-    if unknown:
-        raise EditRefused("toc_invalid", f"cannot edit {sorted(unknown)}", status=422)
     if "layer" in fields and fields["layer"] not in LAYERS:
         raise EditRefused("toc_invalid", f"no layer {fields['layer']!r}", status=422)
     if "text" in fields and not str(fields["text"]).strip():
@@ -171,21 +157,18 @@ def edit_link(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    actor: Actor,
+    actor: str,
     link_id: uuid.UUID,
     expected_revision: int,
     fields: dict[str, Any],
 ) -> None:
     """Change a link's title, its if, for, then and because, or its conditions.
 
-    The sentence is rebuilt from the four parts unless it is given.
+    The sentence is rebuilt from the four parts.
 
     Raises:
-        EditRefused: On a stale revision or an unknown field.
+        EditRefused: On a stale revision.
     """
-    unknown = set(fields) - LINK_FIELDS
-    if unknown:
-        raise EditRefused("toc_invalid", f"cannot edit {sorted(unknown)}", status=422)
     row = _row(conn, toc_link, link_id, task_id)
     _stale(row, expected_revision)
     parts = {
@@ -193,7 +176,7 @@ def edit_link(
         for name in ("if_text", "for_text", "then_text", "because_text")
     }
     values = dict(fields)
-    if "sentence" not in fields and set(parts) & set(fields):
+    if set(parts) & set(fields):
         values["sentence"] = sentence_of(
             **parts, boxes=_box_texts(conn, row.source_box_id, row.target_box_id)
         )
@@ -257,7 +240,7 @@ def create_box(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    actor: Actor,
+    actor: str,
     layer: str,
     text: str,
     position: dict[str, float] | None = None,
@@ -286,7 +269,7 @@ def create_box(
             "origin": "user",
             "user_edited": True,
             "position": position,
-            "edited_by": actor.user_id,
+            "edited_by": actor,
             "edited_at": _now(),
         },
     )
@@ -299,10 +282,9 @@ def create_link(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    actor: Actor,
+    actor: str,
     source_box_id: uuid.UUID,
     target_box_id: uuid.UUID,
-    for_text: str = "",
 ) -> uuid.UUID:
     """Connect two boxes. The sentence starts from the two box texts; the user edits it.
 
@@ -325,7 +307,7 @@ def create_link(
         raise EditRefused("toc_duplicate", "these two boxes are already connected", status=409)
     parts = {
         "if_text": source.text,
-        "for_text": for_text,
+        "for_text": "",
         "then_text": target.text,
         "because_text": "",
     }
@@ -345,7 +327,7 @@ def create_link(
             "conditions": [],
             "origin": "user",
             "user_edited": True,
-            "edited_by": actor.user_id,
+            "edited_by": actor,
             "edited_at": _now(),
         },
     )
@@ -382,7 +364,7 @@ def delete_link(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    actor: Actor,
+    actor: str,
     link_id: uuid.UUID,
     expected_revision: int,
 ) -> None:
@@ -398,7 +380,7 @@ def delete_box(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    actor: Actor,
+    actor: str,
     box_id: uuid.UUID,
     expected_revision: int,
 ) -> None:
@@ -423,7 +405,7 @@ def set_critical(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    actor: Actor,
+    actor: str,
     link_id: uuid.UUID,
     expected_revision: int,
 ) -> None:
@@ -448,14 +430,12 @@ def move_box(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    actor: Actor,
+    actor: str,
     box_id: uuid.UUID,
     expected_revision: int,
     position: dict[str, float],
 ) -> int:
     """Save where the user dropped a box (C47); returns the new revision."""
-    if not {"x", "y"} <= set(position):
-        raise EditRefused("toc_invalid", "a position needs x and y", status=422)
     row = _row(conn, toc_box, box_id, task_id)
     _stale(row, expected_revision)
     log = store.ChangeLog()
@@ -468,12 +448,12 @@ def move_box(
         observed_revision=row.revision,
         values={"position": {"x": float(position["x"]), "y": float(position["y"])}},
     ):
-        _stale(row, -1)
+        _raise_stale()
     _record(conn, task_id=task_id, actor=actor, log=log, change=f"Moved {row.code}")
     return int(row.revision) + 1
 
 
-def reset_layout(conn: Connection, *, task_id: uuid.UUID, actor: Actor) -> int:
+def reset_layout(conn: Connection, *, task_id: uuid.UUID, actor: str) -> int:
     """Return every moved box to the computed layout; returns how many moved."""
     log = store.ChangeLog()
     rows = list(
@@ -502,7 +482,7 @@ def edit_evidence(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    actor: Actor,
+    actor: str,
     evidence_id: uuid.UUID,
     expected_revision: int,
     action: str,
@@ -522,7 +502,7 @@ def edit_evidence(
     _stale(row, expected_revision)
     now = _now()
     if action == "remove":
-        values: dict[str, Any] = {"excluded_by": actor.user_id, "excluded_at": now}
+        values: dict[str, Any] = {"excluded_by": actor, "excluded_at": now}
         verb = "Removed"
     elif action == "restore":
         values = {"excluded_by": None, "excluded_at": None}
@@ -535,7 +515,7 @@ def edit_evidence(
         values = {
             "support_override": support,
             "relevance_override": relevance,
-            "override_by": actor.user_id,
+            "override_by": actor,
             "override_at": now,
         }
         verb = "Changed the scores of"
@@ -548,12 +528,7 @@ def edit_evidence(
         }
         verb = "Returned to the judge's scores for"
     elif action in ("accept", "reject"):
-        values = {
-            "status": "counted" if action == "accept" else "rejected",
-            "decided_by": actor.user_id,
-            "decided_at": now,
-        }
-        verb = "Accepted" if action == "accept" else "Rejected"
+        values, verb = _decision(action == "accept", actor, now)
     else:
         raise EditRefused("toc_invalid", f"no evidence action {action!r}", status=422)
     log = store.ChangeLog()
@@ -561,6 +536,16 @@ def edit_evidence(
     title = _document_title(conn, row.task_source_snapshot_id)
     code = conn.execute(select(toc_link.c.code).where(toc_link.c.link_id == row.link_id)).scalar()
     _record(conn, task_id=task_id, actor=actor, log=log, change=f"{verb} “{title}” on {code}")
+
+
+def _decision(accept: bool, actor: str, now: datetime) -> tuple[dict[str, Any], str]:
+    """Accepting or rejecting a pending document (C44): its values and History's verb."""
+    values = {
+        "status": "counted" if accept else "rejected",
+        "decided_by": actor,
+        "decided_at": now,
+    }
+    return values, "Accepted" if accept else "Rejected"
 
 
 def _document_title(conn: Connection, tss_id: uuid.UUID) -> str:
@@ -579,7 +564,7 @@ def _document_title(conn: Connection, tss_id: uuid.UUID) -> str:
 
 
 def decide_pending(
-    conn: Connection, *, task_id: uuid.UUID, actor: Actor, link_id: uuid.UUID, accept: bool
+    conn: Connection, *, task_id: uuid.UUID, actor: str, link_id: uuid.UUID, accept: bool
 ) -> int:
     """Accept or reject every pending document on one link (C44); returns how many."""
     rows = list(
@@ -594,22 +579,10 @@ def decide_pending(
     if not rows:
         return 0
     log = store.ChangeLog()
-    now = _now()
+    values, verb = _decision(accept, actor, _now())
     for row in rows:
-        _update(
-            conn,
-            log,
-            toc_item_evidence,
-            row,
-            actor=actor,
-            values={
-                "status": "counted" if accept else "rejected",
-                "decided_by": actor.user_id,
-                "decided_at": now,
-            },
-        )
+        _update(conn, log, toc_item_evidence, row, actor=actor, values=values)
     code = conn.execute(select(toc_link.c.code).where(toc_link.c.link_id == link_id)).scalar()
-    verb = "Accepted" if accept else "Rejected"
     _record(
         conn,
         task_id=task_id,
@@ -621,7 +594,7 @@ def decide_pending(
 
 
 def keep_evidence(
-    conn: Connection, *, task_id: uuid.UUID, actor: Actor, link_ids: list[uuid.UUID]
+    conn: Connection, *, task_id: uuid.UUID, actor: str, link_ids: list[uuid.UUID]
 ) -> int:
     """Keep the evidence of edited links for their new wording (C43); returns how many.
 
@@ -677,7 +650,7 @@ def _typed(table: Table, state: dict[str, Any]) -> dict[str, Any]:
     return values
 
 
-def undo(conn: Connection, *, task_id: uuid.UUID, actor: Actor, event_id: uuid.UUID) -> list[str]:
+def undo(conn: Connection, *, task_id: uuid.UUID, actor: str, event_id: uuid.UUID) -> list[str]:
     """Put back the state before one user edit (C9, C10).
 
     Rows the edit created are deleted; rows it changed get their before-state
@@ -803,7 +776,7 @@ def undo(conn: Connection, *, task_id: uuid.UUID, actor: Actor, event_id: uuid.U
         step="user_undo",
         log=log,
         changes=[f"Undid: {', '.join(payload.get('changes') or ['an edit'])}"],
-        actor=actor.user_id,
+        actor=actor,
         undoes=str(event_id),
     )
     return skipped
@@ -843,7 +816,7 @@ class HistoryEntry:
 _STEP_WHO = "Policy Atlas"
 
 
-def history(conn: Connection, task_id: uuid.UUID, *, limit: int = 200) -> list[HistoryEntry]:
+def history(conn: Connection, task_id: uuid.UUID) -> list[HistoryEntry]:
     """The task's changes, newest first: user edits (undoable once) and Policy Atlas's steps."""
     rows = list(
         conn.execute(
@@ -853,7 +826,7 @@ def history(conn: Connection, task_id: uuid.UUID, *, limit: int = 200) -> list[H
                 event_log.c.event_type == store.TOC_CHANGED_EVENT,
             )
             .order_by(event_log.c.sequence.desc())
-            .limit(limit)
+            .limit(200)
         )
     )
     undone = {str(row.payload.get("undoes")) for row in rows if row.payload.get("undoes")}
@@ -887,7 +860,6 @@ _STEP_TEXT = {
     "toc_discover": "Added pathways found in the evidence",
     "toc_summarise": "Wrote titles and evidence sentences",
     "toc_judge": "Judged the evidence",
-    "toc_search_new": "Searched for the new connections",
 }
 
 

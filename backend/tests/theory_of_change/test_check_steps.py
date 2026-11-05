@@ -796,7 +796,6 @@ def test_judge_candidates_are_reranked_by_select_s_rerank_backend() -> None:
             year=None,
             abstract="a",
             evidence_type=None,
-            score=None,
         )
         for i in range(12)
     ]
@@ -821,7 +820,6 @@ def _doc(i: int) -> Any:
         year=None,
         abstract="a",
         evidence_type=None,
-        score=None,
     )
 
 
@@ -931,7 +929,6 @@ def test_an_as_drawn_diagram_gets_found_routes_as_one_suggestion(
     engine: Engine, cleanup: list[uuid.UUID], monkeypatch: Any
 ) -> None:
     from policy_atlas.theory_of_change import check, proposals
-    from policy_atlas.theory_of_change.edits import Actor
 
     # The theory is the user's diagram, kept as drawn (owner, 2026-11-04).
     monkeypatch.setattr(check, "as_drawn", lambda plan: True)
@@ -964,7 +961,7 @@ def test_an_as_drawn_diagram_gets_found_routes_as_one_suggestion(
         problems = proposals.decide(
             conn,
             task_id=task_id,
-            actor=Actor(user_id="test-user"),
+            actor="test-user",
             proposal_id=suggestion.proposal_id,
             index=None,
             accept=True,

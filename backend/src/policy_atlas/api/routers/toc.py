@@ -16,6 +16,7 @@ import binascii
 import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Annotated, Any, Literal, cast
 
 import structlog
@@ -28,6 +29,7 @@ from policy_atlas.api.app import ApiConflict, ApiNotFound, ApiUnprocessable
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract.read_models import ChunkContextOut
 from policy_atlas.api.contract.toc import (
+    CheckStatus,
     TocBoxCreate,
     TocBoxEvidenceOut,
     TocBoxOut,
@@ -35,7 +37,6 @@ from policy_atlas.api.contract.toc import (
     TocCaseStudyOut,
     TocCheckIn,
     TocCheckOut,
-    TocClarificationIn,
     TocCountOut,
     TocCreatedOut,
     TocDecideIn,
@@ -119,7 +120,7 @@ from policy_atlas.runtime.toc_plan import (
     TOC_WALK_KEY,
 )
 from policy_atlas.theory_of_change import edits, importing, proposals, store
-from policy_atlas.theory_of_change.backend import StubTocBackend
+from policy_atlas.theory_of_change.backend import StubTocBackend, TocBackend
 from policy_atlas.theory_of_change.check import (
     Document,
     appraisals_for,
@@ -130,14 +131,13 @@ from policy_atlas.theory_of_change.check import (
     row_judgement,
     top_case_studies,
 )
-from policy_atlas.theory_of_change.draft import TOC_CLARIFICATION_EVENT
-from policy_atlas.theory_of_change.edits import EditRefused
 from policy_atlas.theory_of_change.evidence.grade import lowest, quality, rule_text, weight
 from policy_atlas.theory_of_change.graph import assumption_type, item_hash, link_state
 from policy_atlas.theory_of_change.review import (
     REVIEW_FINISHED,
     REVIEW_STARTED,
     edits_since_review,
+    latest_report,
     reviewing,
     run_review,
 )
@@ -145,8 +145,6 @@ from policy_atlas.theory_of_change.store import has_graph
 
 router = APIRouter(prefix="/api/v1/tasks/{task_id}/toc", tags=["theory-of-change"])
 log = structlog.get_logger()
-
-CheckStatus = Literal["none", "drafting", "drafted", "checking", "checked", "stopped", "failed"]
 
 
 def _readable_toc(conn: Connection, task_id: uuid.UUID, user: AuthenticatedUser | None) -> None:
@@ -197,17 +195,8 @@ def check_status(walk: Row[Any] | None) -> CheckStatus:
 
 def _report(conn: Connection, task_id: uuid.UUID) -> TocReportOut | None:
     """The latest check walk's narrative report (C38), from its step payload."""
-    payload = conn.execute(
-        select(event_log.c.payload)
-        .where(event_log.c.task_id == task_id)
-        .where(event_log.c.event_type == "component.completed")
-        .where(event_log.c.payload["component"].astext == "toc_report")
-        .order_by(event_log.c.sequence.desc())
-        .limit(1)
-    ).scalar_one_or_none()
-    if not isinstance(payload, dict) or not isinstance(payload.get("report"), dict):
-        return None
-    return report_out(payload["report"])
+    report = latest_report(conn, task_id)
+    return None if report is None else report_out(report)
 
 
 def report_out(report: dict[str, Any]) -> TocReportOut:
@@ -384,11 +373,11 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
     )
 
 
+_SOURCE_TYPE: dict[str, Literal["policy", "web"]] = {"overton": "policy", "web": "web"}
+
+
 def _source_type(metadata: dict[str, Any]) -> Literal["academic", "policy", "web"]:
-    backend = metadata.get("backend")
-    if backend == "web":
-        return "web"
-    return "policy" if backend == "overton" else "academic"
+    return _SOURCE_TYPE.get(str(metadata.get("backend")), "academic")
 
 
 #: Least relevance of a document whose levels a box shows (fit review, 2026-10-30).
@@ -712,7 +701,6 @@ def toc_evidence_context_out(
         year=None,
         abstract=str(metadata.get("abstract") or ""),
         evidence_type=None,
-        score=None,
     ).text
     return _clamped_quote_window(conn, task_id, text, quote, None, row.source_snapshot_id)
 
@@ -743,16 +731,61 @@ def _editable_toc(conn: Connection, task_id: uuid.UUID, user: AuthenticatedUser)
         raise ApiNotFound("toc_not_found", "this task is not a theory of change")
 
 
-def _edit(fn: Any, **kwargs: Any) -> Any:
-    """Run one edit, turning a refusal into the API's 409, 404 or 422."""
-    try:
-        return fn(**kwargs)
-    except EditRefused as exc:
-        if exc.status == 404:
-            raise ApiNotFound("toc_not_found", exc.message) from exc
-        if exc.status == 422:
-            raise ApiUnprocessable("toc_invalid", exc.message) from exc
-        raise ApiConflict(exc.code, exc.message) from exc
+def _known_links(conn: Connection, task_id: uuid.UUID, link_ids: list[uuid.UUID]) -> bool:
+    """Whether every named connection is in this theory."""
+    found = conn.execute(
+        select(toc_link.c.link_id).where(
+            toc_link.c.task_id == task_id, toc_link.c.link_id.in_(link_ids)
+        )
+    ).scalars()
+    return set(found) == set(link_ids)
+
+
+@dataclass(frozen=True)
+class _CheckRunner:
+    """What starting a check walk needs besides the engine."""
+
+    settings: Settings
+    executor: ThreadPoolExecutor
+    backends: RunnerBackends
+
+
+def _check_runner(
+    settings: Annotated[Settings, Depends(get_settings)],
+    executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
+    backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+) -> _CheckRunner:
+    return _CheckRunner(settings, executor, backends)
+
+
+def _start_check(
+    engine: Engine,
+    runner: _CheckRunner,
+    task_id: uuid.UUID,
+    user_id: str,
+    link_ids: list[uuid.UUID],
+    *,
+    mode: str,
+    studies: dict[str, list[str]] | None = None,
+) -> TocCheckOut:
+    """Start a check walk (C40), or queue it behind the running walk."""
+    walk_id = start_toc_check(
+        engine,
+        task_id=task_id,
+        link_ids=link_ids,
+        user_id=user_id,
+        settings=runner.settings,
+        executor=runner.executor,
+        backends=runner.backends,
+        mode=mode,
+        studies=studies,
+    )
+    return TocCheckOut(capability_run_id=walk_id, queued=walk_id is None)
+
+
+def _toc_backend(backends: RunnerBackends) -> TocBackend:
+    """The configured theory-of-change model seam, or the stub."""
+    return backends.toc if backends.toc is not None else StubTocBackend()
 
 
 @router.post("/boxes", response_model=TocCreatedOut, status_code=201)
@@ -764,11 +797,10 @@ def create_toc_box(
 ) -> TocCreatedOut:
     """Add a box the user wrote (C41)."""
     _editable_toc(conn, task_id, user)
-    box_id = _edit(
-        edits.create_box,
-        conn=conn,
+    box_id = edits.create_box(
+        conn,
         task_id=task_id,
-        actor=edits.Actor(user.user_id),
+        actor=user.user_id,
         layer=body.layer,
         text=body.text,
         position=body.position.model_dump() if body.position else None,
@@ -800,11 +832,10 @@ def patch_toc_box(
                 )
             ).scalar_one_or_none()
             fields["result_criteria"] = {**(current or {}), **given}
-    _edit(
-        edits.edit_box,
-        conn=conn,
+    edits.edit_box(
+        conn,
         task_id=task_id,
-        actor=edits.Actor(user.user_id),
+        actor=user.user_id,
         box_id=box_id,
         expected_revision=body.expected_revision,
         fields=fields,
@@ -822,11 +853,10 @@ def delete_toc_box(
 ) -> None:
     """Delete a box and its links; Undo restores them with their evidence (C41)."""
     _editable_toc(conn, task_id, user)
-    _edit(
-        edits.delete_box,
-        conn=conn,
+    edits.delete_box(
+        conn,
         task_id=task_id,
-        actor=edits.Actor(user.user_id),
+        actor=user.user_id,
         box_id=box_id,
         expected_revision=expected_revision,
     )
@@ -842,11 +872,10 @@ def move_toc_box(
 ) -> TocRevisionOut:
     """Save where the user dropped a box (C47)."""
     _editable_toc(conn, task_id, user)
-    revision = _edit(
-        edits.move_box,
-        conn=conn,
+    revision = edits.move_box(
+        conn,
         task_id=task_id,
-        actor=edits.Actor(user.user_id),
+        actor=user.user_id,
         box_id=box_id,
         expected_revision=body.expected_revision,
         position={"x": body.x, "y": body.y},
@@ -862,7 +891,7 @@ def reset_toc_layout(
 ) -> None:
     """Return every moved box to the computed layout (C47)."""
     _editable_toc(conn, task_id, user)
-    edits.reset_layout(conn, task_id=task_id, actor=edits.Actor(user.user_id))
+    edits.reset_layout(conn, task_id=task_id, actor=user.user_id)
 
 
 @router.post("/links", response_model=TocCreatedOut, status_code=201)
@@ -874,11 +903,10 @@ def create_toc_link(
 ) -> TocCreatedOut:
     """Connect two boxes (C41). The sentence starts from the box texts."""
     _editable_toc(conn, task_id, user)
-    link_id = _edit(
-        edits.create_link,
-        conn=conn,
+    link_id = edits.create_link(
+        conn,
         task_id=task_id,
-        actor=edits.Actor(user.user_id),
+        actor=user.user_id,
         source_box_id=body.source_box_id,
         target_box_id=body.target_box_id,
     )
@@ -895,20 +923,18 @@ def patch_toc_link(
 ) -> TocRevisionOut:
     """Edit a link's title, parts or conditions, or mark it critical (C41)."""
     _editable_toc(conn, task_id, user)
-    actor = edits.Actor(user.user_id)
+    actor = user.user_id
     if body.critical:
-        _edit(
-            edits.set_critical,
-            conn=conn,
+        edits.set_critical(
+            conn,
             task_id=task_id,
             actor=actor,
             link_id=link_id,
             expected_revision=body.expected_revision,
         )
         return TocRevisionOut(revision=body.expected_revision + 1)
-    _edit(
-        edits.edit_link,
-        conn=conn,
+    edits.edit_link(
+        conn,
         task_id=task_id,
         actor=actor,
         link_id=link_id,
@@ -928,11 +954,10 @@ def delete_toc_link(
 ) -> None:
     """Delete a link; Undo restores it with its evidence (C41)."""
     _editable_toc(conn, task_id, user)
-    _edit(
-        edits.delete_link,
-        conn=conn,
+    edits.delete_link(
+        conn,
         task_id=task_id,
-        actor=edits.Actor(user.user_id),
+        actor=user.user_id,
         link_id=link_id,
         expected_revision=expected_revision,
     )
@@ -967,11 +992,10 @@ def undo_toc_edit(
 ) -> TocUndoOut:
     """Put back the state before one edit; rows changed since are skipped and named (C10)."""
     _editable_toc(conn, task_id, user)
-    skipped = _edit(
-        edits.undo,
-        conn=conn,
+    skipped = edits.undo(
+        conn,
         task_id=task_id,
-        actor=edits.Actor(user.user_id),
+        actor=user.user_id,
         event_id=event_id,
     )
     return TocUndoOut(skipped=skipped)
@@ -983,33 +1007,15 @@ def start_toc_link_check(
     body: TocCheckIn,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
-    settings: Annotated[Settings, Depends(get_settings)],
-    executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
-    backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+    runner: Annotated[_CheckRunner, Depends(_check_runner)],
 ) -> TocCheckOut:
     """Check named links only (C40): search, pick, judge, figures, summarise."""
     with engine.begin() as conn:
         _editable_toc(conn, task_id, user)
-        known = set(
-            conn.execute(
-                select(toc_link.c.link_id).where(
-                    toc_link.c.task_id == task_id, toc_link.c.link_id.in_(body.link_ids)
-                )
-            ).scalars()
-        )
-    if known != set(body.link_ids):
+        known = _known_links(conn, task_id, body.link_ids)
+    if not known:
         raise ApiNotFound("toc_not_found", "a named connection is not in this theory")
-    walk_id = start_toc_check(
-        engine,
-        task_id=task_id,
-        link_ids=body.link_ids,
-        user_id=user.user_id,
-        settings=settings,
-        executor=executor,
-        backends=backends,
-        mode=body.mode,
-    )
-    return TocCheckOut(capability_run_id=walk_id, queued=walk_id is None)
+    return _start_check(engine, runner, task_id, user.user_id, body.link_ids, mode=body.mode)
 
 
 @router.patch("/evidence/{evidence_id}", response_model=TocRevisionOut)
@@ -1022,11 +1028,10 @@ def patch_toc_evidence(
 ) -> TocRevisionOut:
     """Remove a document from its link, restore it, or set or clear the user's scores (C42)."""
     _editable_toc(conn, task_id, user)
-    _edit(
-        edits.edit_evidence,
-        conn=conn,
+    edits.edit_evidence(
+        conn,
         task_id=task_id,
-        actor=edits.Actor(user.user_id),
+        actor=user.user_id,
         evidence_id=evidence_id,
         expected_revision=body.expected_revision,
         action=body.action,
@@ -1046,9 +1051,7 @@ def keep_toc_evidence(
     """Keep the evidence of edited links for their new wording (C43)."""
     _editable_toc(conn, task_id, user)
     return TocCountOut(
-        count=edits.keep_evidence(
-            conn, task_id=task_id, actor=edits.Actor(user.user_id), link_ids=body.link_ids
-        )
+        count=edits.keep_evidence(conn, task_id=task_id, actor=user.user_id, link_ids=body.link_ids)
     )
 
 
@@ -1063,9 +1066,7 @@ def add_toc_study(
     body: TocStudyIn,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
-    settings: Annotated[Settings, Depends(get_settings)],
-    executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
-    backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+    runner: Annotated[_CheckRunner, Depends(_check_runner)],
 ) -> TocCheckOut:
     """Add a study to a link by its DOI (C42): Policy Atlas fetches, judges and adds it.
 
@@ -1075,12 +1076,8 @@ def add_toc_study(
     """
     with engine.begin() as conn:
         _editable_toc(conn, task_id, user)
-        known = conn.execute(
-            select(toc_link.c.link_id).where(
-                toc_link.c.task_id == task_id, toc_link.c.link_id == link_id
-            )
-        ).first()
-    if known is None:
+        known = _known_links(conn, task_id, [link_id])
+    if not known:
         raise ApiNotFound("toc_not_found", "that connection is not in this theory")
     found = _DOI.search(body.identifier)
     if found is None:
@@ -1090,18 +1087,15 @@ def add_toc_study(
             "address. Other web addresses will work once web search is built.",
         )
     doi = found.group(0).rstrip(".,;)").lower()
-    walk_id = start_toc_check(
+    return _start_check(
         engine,
-        task_id=task_id,
-        link_ids=[link_id],
-        user_id=user.user_id,
-        settings=settings,
-        executor=executor,
-        backends=backends,
+        runner,
+        task_id,
+        user.user_id,
+        [link_id],
         mode="add_study",
         studies={str(link_id): [doi]},
     )
-    return TocCheckOut(capability_run_id=walk_id, queued=walk_id is None)
 
 
 @router.post("/links/{link_id}/decide", response_model=TocCountOut)
@@ -1118,7 +1112,7 @@ def decide_toc_pending(
         count=edits.decide_pending(
             conn,
             task_id=task_id,
-            actor=edits.Actor(user.user_id),
+            actor=user.user_id,
             link_id=link_id,
             accept=body.accept,
         )
@@ -1161,10 +1155,9 @@ def upload_toc_theory(
             )
         except uploads.UploadRefused as exc:
             raise ApiUnprocessable(exc.code, str(exc)) from exc
-    backend = backends.toc if backends.toc is not None else StubTocBackend()
     try:
         with tracing.trace_scope(user_id=user.user_id):
-            response = importing.transcribe(data, body.content_type, backend)
+            response = importing.transcribe(data, body.content_type, _toc_backend(backends))
     except importing.NotATheory as exc:
         raise ApiUnprocessable("upload_not_theory", str(exc)) from exc
     reply = None
@@ -1186,7 +1179,6 @@ def upload_toc_theory(
         answered=reply is not None,
         upload_id=saved.upload_id,
         file_name=saved.file_name,
-        content_type=saved.content_type,
         counts=stored["counts"],
     )
 
@@ -1239,26 +1231,14 @@ def start_full_toc_check(
     task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
-    settings: Annotated[Settings, Depends(get_settings)],
-    executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
-    backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+    runner: Annotated[_CheckRunner, Depends(_check_runner)],
 ) -> TocCheckOut:
     """Check the whole theory: after the user reviewed an uploaded theory's draft (increment 5)."""
     with engine.begin() as conn:
         _editable_toc(conn, task_id, user)
         if not has_graph(conn, task_id):
             raise ApiConflict("toc_not_running", "there is no theory to check yet")
-    walk_id = start_toc_check(
-        engine,
-        task_id=task_id,
-        link_ids=[],
-        user_id=user.user_id,
-        settings=settings,
-        executor=executor,
-        backends=backends,
-        mode="full",
-    )
-    return TocCheckOut(capability_run_id=walk_id, queued=walk_id is None)
+    return _start_check(engine, runner, task_id, user.user_id, [], mode="full")
 
 
 @router.post("/check/stop", status_code=202)
@@ -1283,7 +1263,7 @@ def stop_toc_check(
     return {"status": "stopping"}
 
 
-# --- Review, suggestions, the report and clarifications (C45, C46, C49) ----------------
+# --- Review, suggestions and the report (C45, C46) -------------------------------------
 
 
 @router.post("/review", status_code=202)
@@ -1298,7 +1278,7 @@ def start_toc_review(
     with engine.begin() as conn:
         _editable_toc(conn, task_id, user)
         events.append(conn, task_id=task_id, run_id=None, event_type=REVIEW_STARTED, payload={})
-    backend = backends.toc if backends.toc is not None else StubTocBackend()
+    backend = _toc_backend(backends)
 
     def review() -> None:
         try:
@@ -1378,11 +1358,10 @@ def decide_toc_proposal(
 ) -> TocProblemsOut:
     """Accept or reject one suggested edit, or all; accepted edits apply as the user's (C45)."""
     _editable_toc(conn, task_id, user)
-    decided = _edit(
-        proposals.decide,
-        conn=conn,
+    decided = proposals.decide(
+        conn,
         task_id=task_id,
-        actor=edits.Actor(user.user_id),
+        actor=user.user_id,
         proposal_id=proposal_id,
         index=body.index,
         accept=body.accept,
@@ -1408,9 +1387,7 @@ def update_toc_report(
     task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
-    settings: Annotated[Settings, Depends(get_settings)],
-    executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
-    backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+    runner: Annotated[_CheckRunner, Depends(_check_runner)],
     proposal_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> TocCheckOut:
     """Rewrite the titles, sentences and the report for the theory as it is now (C45)."""
@@ -1418,32 +1395,4 @@ def update_toc_report(
         _editable_toc(conn, task_id, user)
         if proposal_id is not None:
             proposals.close(conn, task_id=task_id, proposal_id=proposal_id)
-    walk_id = start_toc_check(
-        engine,
-        task_id=task_id,
-        link_ids=[],
-        user_id=user.user_id,
-        settings=settings,
-        executor=executor,
-        backends=backends,
-        mode="report",
-    )
-    return TocCheckOut(capability_run_id=walk_id, queued=walk_id is None)
-
-
-@router.post("/clarifications", status_code=204)
-def add_toc_clarification(
-    task_id: uuid.UUID,
-    body: TocClarificationIn,
-    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    conn: Annotated[Connection, Depends(get_conn)],
-) -> None:
-    """Add a clarification to the plan; the next check, search and review read it (C49)."""
-    _editable_toc(conn, task_id, user)
-    events.append(
-        conn,
-        task_id=task_id,
-        run_id=None,
-        event_type=TOC_CLARIFICATION_EVENT,
-        payload={"text": body.text.strip(), "by": user.user_id},
-    )
+    return _start_check(engine, runner, task_id, user.user_id, [], mode="report")

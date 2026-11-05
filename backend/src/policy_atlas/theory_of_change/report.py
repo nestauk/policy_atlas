@@ -28,6 +28,7 @@ import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 import structlog
@@ -36,14 +37,15 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.api.read_models.repository import _authorships, _url, _venue
 from policy_atlas.core.model_routes import route
-from policy_atlas.core.schema import source_snapshot, task_source_snapshot
+from policy_atlas.core.schema import event_log
 from policy_atlas.core.usage import UsageAccumulator
+from policy_atlas.evidence_search.sourcing.acquire import normalize_doi
 from policy_atlas.options_scoping.context import ScopeContext
-from policy_atlas.theory_of_change import store
+from policy_atlas.theory_of_change import sense_check, store
 from policy_atlas.theory_of_change.backend import TocBackend
 from policy_atlas.theory_of_change.check import (
-    _call,
-    _outcome_value,
+    PROGRAMME_EVENT,
+    _ask,
     _year,
     appraisals_for,
     counted_judgements,
@@ -55,10 +57,13 @@ from policy_atlas.theory_of_change.draft import walk_toc_plan
 from policy_atlas.theory_of_change.evidence.grade import (
     VERDICT_LABELS,
     VERDICT_ORDER,
+    Judgement,
     Verdict,
+    link_verdict,
     lowest,
     weight,
 )
+from policy_atlas.theory_of_change.proposals import open_proposals
 from policy_atlas.theory_of_change.report_prompt import TOC_REPORT_PROMPT_VERSION, ReportResponse
 
 log = structlog.get_logger()
@@ -111,7 +116,6 @@ class LinkFacts:
     code: str
     source_code: str
     target_code: str
-    target_layer: str
     sentence: str
     verdict: Verdict
     evidence_sentence: str | None
@@ -368,23 +372,9 @@ def _short(
 
 
 def _metadata(conn: Connection, task_id: uuid.UUID, ids: set[uuid.UUID]) -> dict[uuid.UUID, Any]:
-    if not ids:
-        return {}
     return {
-        tss: (metadata or {}, locator)
-        for tss, metadata, locator in conn.execute(
-            select(
-                task_source_snapshot.c.task_source_snapshot_id,
-                source_snapshot.c.metadata,
-                source_snapshot.c.source_locator,
-            )
-            .join(
-                source_snapshot,
-                source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
-            )
-            .where(task_source_snapshot.c.task_id == task_id)
-            .where(task_source_snapshot.c.task_source_snapshot_id.in_(ids))
-        )
+        tss: (row.metadata or {}, row.source_locator)
+        for tss, row in store.snapshot_meta(conn, task_id, ids).items()
     }
 
 
@@ -418,8 +408,6 @@ def theory_verdict(
     pathways it is on, the whole programme's verdict and findings, and the
     plan-stage sense check.
     """
-    from policy_atlas.theory_of_change import sense_check
-
     payload: dict[str, object] = {
         "plan": {k: v for k, v in plan.items() if v},
         "connections": [
@@ -437,12 +425,9 @@ def theory_verdict(
         "whole_programme": whole or "not searched in this check",
     }
     found = sense_check.for_verdict(sense_check.latest(conn, task_id))
-    response = _outcome_value(
-        _call(
-            "toc_verdict",
-            lambda: backend.theory_verdict(theory=payload, sense_check=found),
-            "toc_verdict",
-        ),
+    response = _ask(
+        "toc_verdict",
+        lambda: backend.theory_verdict(theory=payload, sense_check=found),
         usage,
     )
     if response is None:
@@ -469,7 +454,7 @@ def mend_title(title: str) -> str:
 
 def same_work(meta: dict[str, Any]) -> str | None:
     """A key that two copies of one paper share: its DOI, else its title and year."""
-    doi = str(meta.get("doi") or "").lower().removeprefix("https://doi.org/")
+    doi = normalize_doi(meta.get("doi"))
     if doi:
         return doi
     words = re.sub(r"[^a-z0-9]+", " ", str(meta.get("title") or "").lower()).strip()
@@ -519,8 +504,6 @@ def found_routes(conn: Connection, task_id: uuid.UUID) -> list[dict[str, Any]]:
     Each: a key (``r1``), its label and kind, the new boxes' texts, the codes of
     the existing boxes it joins, and its documents (``tss`` and ``quote``).
     """
-    from policy_atlas.theory_of_change.proposals import open_proposals
-
     routes: list[dict[str, Any]] = []
     for proposal in open_proposals(conn, task_id):
         if proposal.source != "discover":
@@ -562,12 +545,6 @@ def programme_judgements(
     Weighed like a connection's evidence: the same quality (from classify and
     appraise) and relevance, the same rule.
     """
-    from types import SimpleNamespace
-
-    from policy_atlas.core.schema import event_log
-    from policy_atlas.theory_of_change.check import PROGRAMME_EVENT
-    from policy_atlas.theory_of_change.evidence.grade import Judgement, link_verdict
-
     payload = conn.execute(
         select(event_log.c.payload)
         .where(event_log.c.task_id == task_id, event_log.c.event_type == PROGRAMME_EVENT)
@@ -644,7 +621,6 @@ def toc_report_scope(
             code=rows.links[key].code or key,
             source_code=box_code[link.source],
             target_code=box_code[link.target],
-            target_layer=graph.boxes[link.target].layer,
             sentence=link.sentence,
             verdict=link_verdict_of(counted.get(key, []), appraisals).verdict,
             evidence_sentence=rows.links[key].evidence_sentence,
@@ -677,6 +653,31 @@ def toc_report_scope(
     bears: dict[int, set[str]] = {}
     sources_of: dict[str, list[int]] = {}
     sources: list[dict[str, Any]] = []
+
+    def number(
+        tss: uuid.UUID, code: str, *, evidence_id: str | None, quote: str | None, works: bool = True
+    ) -> int:
+        """Number a source once and note what it bears on; ``works``: one number per work."""
+        work = same_work(metadata.get(tss, ({}, None))[0]) if works else None
+        if tss not in numbers and work is not None and work in by_work:
+            # The same paper found twice (two copies, or a preprint): one number.
+            numbers[tss] = by_work[work]
+        if tss not in numbers:
+            numbers[tss] = len(sources) + 1
+            if work is not None:
+                by_work[work] = numbers[tss]
+            sources.append(
+                _source_entry(
+                    numbers[tss],
+                    metadata.get(tss, ({}, None)),
+                    types.get(tss),
+                    evidence_id=evidence_id,
+                    quote=quote,
+                )
+            )
+        bears.setdefault(numbers[tss], set()).add(code)
+        return numbers[tss]
+
     for code in link_order:
         group = [
             r for r in counted.get(by_code[code].key, []) if row_judgement(r).support != "not_about"
@@ -685,28 +686,12 @@ def toc_report_scope(
             key=lambda r: -weight(appraisals.get(str(r.task_source_snapshot_id)), row_judgement(r))
         )
         for r in group:
-            tss = r.task_source_snapshot_id
-            work = same_work(metadata.get(tss, ({}, None))[0])
-            if tss not in numbers and work is not None and work in by_work:
-                # The same paper found twice (two copies, or a preprint): one number.
-                numbers[tss] = by_work[work]
-            if tss not in numbers:
-                numbers[tss] = len(sources) + 1
-                if work is not None:
-                    by_work[work] = numbers[tss]
-                sources.append(
-                    _source_entry(
-                        numbers[tss],
-                        metadata.get(tss, ({}, None)),
-                        types.get(tss),
-                        evidence_id=str(r.evidence_id),
-                        quote=r.quote,
-                    )
-                )
-            bears.setdefault(numbers[tss], set()).add(code)
+            n = number(
+                r.task_source_snapshot_id, code, evidence_id=str(r.evidence_id), quote=r.quote
+            )
             # Each connection's sources, heaviest first.
-            if numbers[tss] not in sources_of.setdefault(code, []):
-                sources_of[code].append(numbers[tss])
+            if n not in sources_of.setdefault(code, []):
+                sources_of[code].append(n)
     table = assumption_rows(facts, sources_of, len(success))
     # The whole programme's evaluations (red team): numbered after the connections' sources.
     programme = programme_judgements(conn, task_id)
@@ -717,26 +702,9 @@ def toc_report_scope(
         metadata.update(_metadata(conn, task_id, set(found) - set(metadata)))
         listed = []
         for j, tss in zip(programme_rows, found, strict=True):
-            work = same_work(metadata.get(tss, ({}, None))[0])
-            if tss not in numbers and work is not None and work in by_work:
-                numbers[tss] = by_work[work]
-            if tss not in numbers:
-                numbers[tss] = len(sources) + 1
-                if work is not None:
-                    by_work[work] = numbers[tss]
-                sources.append(
-                    _source_entry(
-                        numbers[tss],
-                        metadata.get(tss, ({}, None)),
-                        types.get(tss),
-                        evidence_id=None,
-                        quote=j["quote"],
-                    )
-                )
-            bears.setdefault(numbers[tss], set()).add(PROGRAMME_CODE)
             listed.append(
                 {
-                    "n": numbers[tss],
+                    "n": number(tss, PROGRAMME_CODE, evidence_id=None, quote=j["quote"]),
                     "support": j["support"],
                     "finding": " ".join((j["quote"] or "").split()[:FINDING_WORDS]),
                 }
@@ -750,20 +718,9 @@ def toc_report_scope(
     metadata.update(_metadata(conn, task_id, documents - set(metadata)))
     for way in expandable:
         for item in way["documents"]:
-            tss = item["tss"]
-            if tss not in numbers:
-                numbers[tss] = len(sources) + 1
-                sources.append(
-                    _source_entry(
-                        numbers[tss],
-                        metadata.get(tss, ({}, None)),
-                        types.get(tss),
-                        evidence_id=None,
-                        quote=item["quote"],
-                    )
-                )
-            bears.setdefault(numbers[tss], set()).add(EXPAND_CODE)
-            item["n"] = numbers[tss]
+            item["n"] = number(
+                item["tss"], EXPAND_CODE, evidence_id=None, quote=item["quote"], works=False
+            )
 
     pkey = {p.key: f"p{i}" for i, p in enumerate(kept, start=1)}
     theory = {
@@ -843,37 +800,34 @@ def toc_report_scope(
     supporting = [row.text for row in rows.band_items if row.band == "supporting"]
     if supporting:
         theory["supporting_activities"] = supporting
-    response: ReportResponse | None = _outcome_value(
-        _call(
-            "toc_report",
-            lambda: backend.report(
-                plan={k: v for k, v in plan_fields.items() if v},
-                theory=theory,
-                rows=[
-                    {
-                        k: row[k]
-                        for k in (
-                            "code",
-                            "statement",
-                            "conditions",
-                            "importance",
-                            "verdict",
-                            "sources",
-                        )
-                    }
-                    for row in table
-                ],
-                sources=[
-                    {
-                        "n": s["n"],
-                        "citation": s["short"],
-                        "connections": sorted(bears[s["n"]]),
-                        "finding": s["finding"],
-                    }
-                    for s in sources
-                ],
-            ),
-            "toc_report",
+    response: ReportResponse | None = _ask(
+        "toc_report",
+        lambda: backend.report(
+            plan={k: v for k, v in plan_fields.items() if v},
+            theory=theory,
+            rows=[
+                {
+                    k: row[k]
+                    for k in (
+                        "code",
+                        "statement",
+                        "conditions",
+                        "importance",
+                        "verdict",
+                        "sources",
+                    )
+                }
+                for row in table
+            ],
+            sources=[
+                {
+                    "n": s["n"],
+                    "citation": s["short"],
+                    "connections": sorted(bears[s["n"]]),
+                    "finding": s["finding"],
+                }
+                for s in sources
+            ],
         ),
         usage,
     )

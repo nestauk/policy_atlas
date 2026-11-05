@@ -27,8 +27,7 @@ from policy_atlas.theory_of_change.importing import (
     store_import,
     theory_text,
 )
-from tests.theory_of_change.test_check_steps import Records
-from tests.theory_of_change.test_walks import _replies, _start, _walks, seed_toc, toc_plan
+from tests.theory_of_change.test_walks import Records, _replies, _start, _walks, seed_toc, toc_plan
 
 BRACKETS = ImportResponse(
     is_theory_of_change=True,
@@ -78,7 +77,7 @@ def test_a_pdf_is_read_page_by_page() -> None:
     doc = pymupdf.open()  # type: ignore[no-untyped-call]
     for _ in range(2):
         doc.new_page()
-    pages = pages_of(doc.tobytes(), "application/pdf")
+    pages = pages_of(doc.tobytes(), "application/pdf")  # type: ignore[no-untyped-call]
     assert len(pages) == 2 and all(p.startswith("data:image/png;base64,") for p in pages)
     assert pages_of(b"\x89PNG", "image/png")[0].startswith("data:image/png;base64,")
 
@@ -93,7 +92,7 @@ def test_the_review_message_names_what_policy_atlas_suggested() -> None:
 
 
 def test_a_draft_waits_for_review_only_when_it_is_an_uploaded_theory() -> None:
-    def walk(context: dict[str, object]) -> SimpleNamespace:
+    def walk(context: dict[str, object]) -> Any:
         return SimpleNamespace(status="succeeded", context={"toc_walk": "draft", **context})
 
     assert check_status(walk({"review_first": True})) == "drafted"
@@ -207,7 +206,6 @@ def test_an_uploaded_draft_suggests_what_completes_it_and_accepting_builds_it(
 
     from policy_atlas.core.schema import toc_box, toc_link, toc_pathway
     from policy_atlas.theory_of_change import edits, proposals
-    from policy_atlas.theory_of_change.edits import Actor
 
     upload_id = uuid.uuid4()
     plan = toc_plan(
@@ -253,7 +251,7 @@ def test_an_uploaded_draft_suggests_what_completes_it_and_accepting_builds_it(
             decided = proposals.decide(
                 conn,
                 task_id=task_id,
-                actor=Actor(user_id="test-user"),
+                actor="test-user",
                 proposal_id=complete.proposal_id,
                 index=None,
                 accept=True,
@@ -271,19 +269,14 @@ def test_an_uploaded_draft_suggests_what_completes_it_and_accepting_builds_it(
         newest = edits.history(conn, task_id)[0]
     assert newest.what.startswith("Added the suggested route")
     with engine.begin() as conn:
-        assert (
-            edits.undo(
-                conn, task_id=task_id, actor=Actor(user_id="test-user"), event_id=newest.event_id
-            )
-            == []
-        )
+        assert edits.undo(conn, task_id=task_id, actor="test-user", event_id=newest.event_id) == []
     assert (count(toc_box), count(toc_link), count(toc_pathway)) == (4, 3, 2)
 
 
 def test_a_route_brings_a_shared_box_along_and_rejecting_leaves_it_for_the_other() -> None:
     from policy_atlas.theory_of_change.proposals import _route_edits
 
-    ops = [
+    ops: list[dict[str, Any]] = [
         {"op": "add_box", "key": "n1", "group": "r1", "status": "pending"},
         {
             "op": "add_link",
@@ -318,10 +311,9 @@ def test_a_theory_drawn_on_the_canvas_is_kept_and_the_draft_suggests_the_rest(
     from policy_atlas.core.schema import toc_box, toc_link, toc_pathway, toc_proposal
     from policy_atlas.runtime.task_agent_toc import load_toc_inputs
     from policy_atlas.theory_of_change import edits
-    from policy_atlas.theory_of_change.edits import Actor
     from policy_atlas.theory_of_change.store import has_graph
 
-    me = Actor(user_id="test-user")
+    me = "test-user"
     plan = toc_plan(entry_point="existing_theory", existing_theory_text="x", drawn_on_canvas=True)
     task_id, plan_row = seed_toc(engine, plan)
     cleanup.append(task_id)
@@ -384,11 +376,12 @@ def test_a_diagram_uploaded_after_the_draft_offers_only_what_the_canvas_lacks(
 
     with engine.connect() as conn:
         link = conn.execute(select(toc_link).where(toc_link.c.task_id == task_id).limit(1)).one()
-        text = dict(
-            conn.execute(
+        text = {
+            box_id: box_text
+            for box_id, box_text in conn.execute(
                 select(toc_box.c.box_id, toc_box.c.text).where(toc_box.c.task_id == task_id)
-            ).all()
-        )
+            )
+        }
     diagram = ImportResponse(
         is_theory_of_change=True,
         title=None,

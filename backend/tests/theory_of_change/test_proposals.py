@@ -13,19 +13,18 @@ from sqlalchemy.engine import Engine
 from policy_atlas.core.schema import toc_box, toc_link, toc_pathway, toc_proposal
 from policy_atlas.theory_of_change import proposals
 from policy_atlas.theory_of_change.backend import StubTocBackend
-from policy_atlas.theory_of_change.edits import Actor, history
+from policy_atlas.theory_of_change.edits import history
 from policy_atlas.theory_of_change.proposals import EditOpWire
 from policy_atlas.theory_of_change.review import run_review
 from policy_atlas.theory_of_change.review_prompt import ReportFindingWire, ReviewResponse
 from tests.helpers import seed_toc_task
 
-ME = Actor("user-ada")
+ME = "user-ada"
 
 
 def op(name: str, /, **fields: Any) -> EditOpWire:
     """A suggested edit with every unused field null."""
-    empty = {field: None for field in EditOpWire.model_fields if field not in ("op", "reason")}
-    return EditOpWire(**{**empty, "op": name, "reason": "Because.", **fields})
+    return EditOpWire.of(**{"op": name, "reason": "Because.", **fields})
 
 
 @pytest.fixture

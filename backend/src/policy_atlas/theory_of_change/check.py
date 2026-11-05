@@ -27,7 +27,7 @@ import math
 import uuid
 from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import zip_longest
 from typing import Any, Protocol
 
@@ -68,6 +68,7 @@ from policy_atlas.evidence_search.corpus.ranking import (
     validate_ranked,
 )
 from policy_atlas.evidence_search.extract.quote_verify import QuoteMatcher, build_basis
+from policy_atlas.evidence_search.sourcing.acquire import normalize_doi
 from policy_atlas.evidence_search.sourcing.search_live import crossref_abstracts
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.model_calls import CallOutcome, call_with_retry
@@ -84,7 +85,7 @@ from policy_atlas.runtime.toc_plan import (
     TOC_STUDIES_KEY,
     as_drawn,
 )
-from policy_atlas.theory_of_change import store
+from policy_atlas.theory_of_change import proposals, store
 from policy_atlas.theory_of_change.backend import TocBackend
 from policy_atlas.theory_of_change.discover_prompt import (
     CONSOLIDATE_MAX_NEW_FAILURE,
@@ -94,7 +95,7 @@ from policy_atlas.theory_of_change.discover_prompt import (
     NewLinkWire,
     ProposalWire,
 )
-from policy_atlas.theory_of_change.draft import plan_data, walk_toc_plan
+from policy_atlas.theory_of_change.draft import _norm, plan_data, walk_toc_plan
 from policy_atlas.theory_of_change.evidence.grade import (
     VERDICT_LABELS,
     VERDICT_ORDER,
@@ -117,6 +118,7 @@ from policy_atlas.theory_of_change.graph import (
     link_problem,
     trim_conditions,
 )
+from policy_atlas.theory_of_change.proposals import EditOpWire
 from policy_atlas.theory_of_change.seminal import SEMINAL_ORIGIN, fetch_seminal_works
 
 log = structlog.get_logger()
@@ -178,7 +180,6 @@ class Document:
     year: int | None
     abstract: str
     evidence_type: str | None
-    score: int | None
 
     @property
     def text(self) -> str:
@@ -205,7 +206,6 @@ def screened_documents(
             year=_year(source.metadata),
             abstract=str(source.metadata.get("abstract") or ""),
             evidence_type=source.primary_evidence_type,
-            score=source.quality_score,
         )
         for source in screened_sources(conn, task_id=task_id, scope_id=scope_id)
     ]
@@ -309,50 +309,39 @@ def appraisals_for(
     return out
 
 
+def _judgements(conn: Connection, task_id: uuid.UUID, status: str) -> dict[str, list[Row[Any]]]:
+    """Each link's judgements of its counted hash (C19) with this status, not removed."""
+    rows = conn.execute(
+        select(toc_item_evidence)
+        .join(
+            toc_link,
+            (toc_link.c.link_id == toc_item_evidence.c.link_id)
+            & (toc_link.c.task_id == toc_item_evidence.c.task_id)
+            & (toc_link.c.counted_hash == toc_item_evidence.c.item_hash),
+        )
+        .where(toc_item_evidence.c.task_id == task_id)
+        .where(toc_item_evidence.c.status == status)
+        .where(toc_item_evidence.c.excluded_at.is_(None))
+        .order_by(toc_item_evidence.c.created_at, toc_item_evidence.c.evidence_id)
+    )
+    out: dict[str, list[Row[Any]]] = {}
+    for row in rows:
+        out.setdefault(str(row.link_id), []).append(row)
+    return out
+
+
 def counted_judgements(conn: Connection, *, task_id: uuid.UUID) -> dict[str, list[Row[Any]]]:
     """Each link's judgements that count: its counted hash (C19), accepted and not removed.
 
     A judgement the user removed from the link (C42), or one still pending or
     rejected (C44), does not count; the evidence list still shows it.
     """
-    rows = conn.execute(
-        select(toc_item_evidence)
-        .join(
-            toc_link,
-            (toc_link.c.link_id == toc_item_evidence.c.link_id)
-            & (toc_link.c.task_id == toc_item_evidence.c.task_id)
-            & (toc_link.c.counted_hash == toc_item_evidence.c.item_hash),
-        )
-        .where(toc_item_evidence.c.task_id == task_id)
-        .where(toc_item_evidence.c.status == "counted")
-        .where(toc_item_evidence.c.excluded_at.is_(None))
-        .order_by(toc_item_evidence.c.created_at, toc_item_evidence.c.evidence_id)
-    )
-    out: dict[str, list[Row[Any]]] = {}
-    for row in rows:
-        out.setdefault(str(row.link_id), []).append(row)
-    return out
+    return _judgements(conn, task_id, "counted")
 
 
 def pending_judgements(conn: Connection, *, task_id: uuid.UUID) -> dict[str, list[Row[Any]]]:
     """Each link's new evidence waiting for the user's Accept (C44), for its current count."""
-    rows = conn.execute(
-        select(toc_item_evidence)
-        .join(
-            toc_link,
-            (toc_link.c.link_id == toc_item_evidence.c.link_id)
-            & (toc_link.c.task_id == toc_item_evidence.c.task_id)
-            & (toc_link.c.counted_hash == toc_item_evidence.c.item_hash),
-        )
-        .where(toc_item_evidence.c.task_id == task_id)
-        .where(toc_item_evidence.c.status == "pending")
-        .where(toc_item_evidence.c.excluded_at.is_(None))
-        .order_by(toc_item_evidence.c.created_at, toc_item_evidence.c.evidence_id)
-    )
-    out: dict[str, list[Row[Any]]] = {}
-    for row in rows:
-        out.setdefault(str(row.link_id), []).append(row)
-    return out
+    return _judgements(conn, task_id, "pending")
 
 
 def row_judgement(row: Row[Any]) -> Judgement:
@@ -370,11 +359,6 @@ def row_judgement(row: Row[Any]) -> Judgement:
 def link_verdict_of(rows: list[Row[Any]], appraisals: dict[str, DocAppraisal]) -> LinkVerdict:
     """One link's verdict from its counted judgements (C36)."""
     return link_verdict([row_judgement(row) for row in rows], appraisals)
-
-
-def _current_hash(graph: Graph, key: str) -> str:
-    link = graph.links[key]
-    return item_hash(link, graph.boxes[link.source].text, graph.boxes[link.target].text)
 
 
 def _kept_links_first(graph: Graph) -> list[str]:
@@ -464,24 +448,22 @@ def item_search_intents(
     plan = expect_toc_plan(validate_plan(THEORY_OF_CHANGE, payload))
     graph, _ = store.load_graph(conn, task_id)
     keys, left_out = links_to_check(graph, links)
-    intents = []
-    for key in keys:
-        link = graph.links[key]
-        intents.append(
-            (
-                key,
-                item_text(
-                    link,
-                    source_text=graph.boxes[link.source].text,
-                    target_text=graph.boxes[link.target].text,
-                    population=plan.target_population,
-                    place=plan.where,
-                ),
-            )
-        )
+    intents = [(key, _link_item_text(graph, key, plan)) for key in keys]
     if links is None and plan.intervention:
         intents.append((PROGRAMME_KEY, programme_item_text(plan)))
     return intents, left_out
+
+
+def _link_item_text(graph: Graph, key: str, plan: Any) -> str:
+    """The text one link is searched, picked and judged on."""
+    link = graph.links[key]
+    return item_text(
+        link,
+        source_text=graph.boxes[link.source].text,
+        target_text=graph.boxes[link.target].text,
+        population=plan.target_population,
+        place=plan.where,
+    )
 
 
 def _flag_values(row: Row[Any], reason: str) -> dict[str, Any]:
@@ -512,8 +494,13 @@ def _map_traced[A, R](fn: Callable[[A], R], items: list[A], workers: int) -> lis
         return [future.result() for future in futures]
 
 
-def _call[T](name: str, call: Callable[[], Any], event: str) -> CallOutcome[T]:
-    return call_with_retry(name, call, lambda response: response, event=event)
+def _call[T](name: str, call: Callable[[], Any]) -> CallOutcome[T]:
+    return call_with_retry(name, call, lambda response: response, event=name)
+
+
+def _ask[T](name: str, call: Callable[[], Any], usage: UsageAccumulator) -> T | None:
+    """One model call with one retry: its answer, or ``None``; its usage is added."""
+    return _outcome_value(_call(name, call), usage)
 
 
 # --- discover -------------------------------------------------------------------
@@ -677,11 +664,9 @@ def _route_suggestion(
     Existing boxes and connections are named by their codes; new ones by keys
     (``n1`` for a box, ``l1`` for a connection) that the later edits use.
     """
-    from policy_atlas.theory_of_change.proposals import EditOpWire
 
     def op(**values: Any) -> EditOpWire:
-        fields = dict.fromkeys(EditOpWire.model_fields, None)
-        return EditOpWire.model_validate({**fields, "group": group, **values})
+        return EditOpWire.of(**{"group": group, **values})
 
     reason = f"Found in the evidence: {path.label}."
     ops = [
@@ -778,7 +763,6 @@ def toc_discover_scope(
         return _call(
             "toc_discover",
             lambda: backend.discover(plan=data, theory=theory, documents=payload),
-            "toc_discover",
         )
 
     outcomes = _map_traced(run_batch, batches, DISCOVER_WORKERS)
@@ -828,17 +812,14 @@ def toc_discover_scope(
     }
     consolidated: ConsolidateResponse | None = None
     if candidates and any(limit.values()):
-        consolidated = _outcome_value(
-            _call(
-                "toc_consolidate",
-                lambda: backend.consolidate(
-                    plan=data,
-                    theory=theory,
-                    proposals=candidates,
-                    max_success=limit["success"],
-                    max_failure=limit["failure"],
-                ),
-                "toc_consolidate",
+        consolidated = _ask(
+            "toc_consolidate",
+            lambda: backend.consolidate(
+                plan=data,
+                theory=theory,
+                proposals=candidates,
+                max_success=limit["success"],
+                max_failure=limit["failure"],
             ),
             usage,
         )
@@ -963,8 +944,6 @@ def toc_discover_scope(
             }
         )
     if suggested:
-        from policy_atlas.theory_of_change import proposals
-
         routes = sum(1 for op in suggested if op.op == "add_pathway")
         proposals.create_proposal(
             conn,
@@ -1212,12 +1191,9 @@ def toc_merge_scope(
         if key in on_kept
     ]
     usage = UsageAccumulator()
-    response = _outcome_value(
-        _call(
-            "toc_merge",
-            lambda: backend.merge(plan=plan_data(plan), boxes=boxes, pathways=payload),
-            "toc_merge",
-        ),
+    response = _ask(
+        "toc_merge",
+        lambda: backend.merge(plan=plan_data(plan), boxes=boxes, pathways=payload),
         usage,
     )
     if response is None:
@@ -1421,20 +1397,8 @@ def _link_candidates(
     if not found:
         return {}
     meta = {
-        row.task_source_snapshot_id: (row.source_snapshot_id, row.metadata or {})
-        for row in conn.execute(
-            select(
-                task_source_snapshot.c.task_source_snapshot_id,
-                source_snapshot.c.source_snapshot_id,
-                source_snapshot.c.metadata,
-            )
-            .join(
-                source_snapshot,
-                source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
-            )
-            .where(task_source_snapshot.c.task_id == task_id)
-            .where(task_source_snapshot.c.task_source_snapshot_id.in_({tss for tss, _ in found}))
-        )
+        tss: (row.source_snapshot_id, row.metadata or {})
+        for tss, row in store.snapshot_meta(conn, task_id, {tss for tss, _ in found}).items()
     }
     out: dict[str, list[LinkCandidate]] = {}
     for (tss, link_id), (source_list, rank) in found.items():
@@ -1493,7 +1457,7 @@ def _fill_abstracts(
                         )
                     )
                     stored.add(c.snapshot_id)
-                c = LinkCandidate(**{**c.__dict__, "abstract": text})
+                c = replace(c, abstract=text)
             filled.append(c)
         out[link_id] = filled
     return out
@@ -1508,8 +1472,9 @@ def toc_select_scope(
     backend: TocBackend,
     embedder: EmbeddingBackend | None = None,
     searchers: list[Any] | None = None,
+    only: set[str] | None = None,
 ) -> dict[str, Any]:
-    """Pick each link's documents and write the screen's rows (C27, C28, C31).
+    """Pick each link's documents and write the screen's rows (C27, C28, C31, C32).
 
     No screen model call: each link search already searched its own sentence
     by meaning. One small pick call per link (in parallel) chooses the
@@ -1529,6 +1494,12 @@ def toc_select_scope(
     the walk's documents cite most and are not among them; every link's pick
     is offered them too, after its own and its nearest documents.
 
+    With ``only`` (:func:`toc_search_new_scope`), only those links are picked:
+    the other links' picks are kept and merged into the new picks event, a
+    picked document already screened out is screened in again at the next
+    screen generation, and the seminal works the first select looked up are
+    offered again, not looked up again.
+
     Args:
         conn: Open connection inside the component transaction.
         task_id: The task.
@@ -1537,40 +1508,11 @@ def toc_select_scope(
         backend: The ToC model seam.
         embedder: The embedding backend for the shared pool, or ``None``.
         searchers: The walk's search backends, for the seminal works lookup.
+        only: The links to pick for, or ``None`` for every link with a search.
 
     Returns:
         Screen counts, pick call counts, the pick usage and the seminal works
         counts (``seminal_*``).
-    """
-    return _select_links(
-        conn,
-        task_id=task_id,
-        run_id=run_id,
-        context=context,
-        backend=backend,
-        embedder=embedder,
-        only=None,
-        searchers=searchers or [],
-    )
-
-
-def _select_links(
-    conn: Connection,
-    *,
-    task_id: uuid.UUID,
-    run_id: uuid.UUID,
-    context: ScopeContext,
-    backend: TocBackend,
-    embedder: EmbeddingBackend | None,
-    only: set[str] | None,
-    searchers: list[Any] | None = None,
-) -> dict[str, Any]:
-    """Pick documents for the walk's links, or for the ``only`` links (C28, C31, C32).
-
-    With ``only``, the other links' picks are kept and merged into the new
-    picks event, and a picked document already screened out is screened in
-    again at the next screen generation; the seminal works the first select
-    looked up are offered again, not looked up again.
     """
     walk_id = walk_of_run(conn, task_id=task_id, run_id=run_id)
     candidates = _link_candidates(conn, task_id=task_id, walk_id=walk_id)
@@ -1617,17 +1559,7 @@ def _select_links(
         candidates.update(_fill_abstracts(conn, {k: candidates[k] for k in targets}))
         seminal = _fill_abstracts(conn, {SEMINAL_ORIGIN: seminal})[SEMINAL_ORIGIN]
     graph, _ = store.load_graph(conn, task_id)
-    texts: dict[str, str] = {}
-    for key in targets:
-        link = graph.links.get(key)
-        if link is not None:
-            texts[key] = item_text(
-                link,
-                source_text=graph.boxes[link.source].text,
-                target_text=graph.boxes[link.target].text,
-                population=plan.target_population,
-                place=plan.where,
-            )
+    texts = {key: _link_item_text(graph, key, plan) for key in targets if key in graph.links}
     already: dict[str, set[uuid.UUID]] = (
         {k: set(v) for k, v in _judged_documents(conn, task_id, sorted(texts)).items()}
         if only is None and context.context.get(TOC_CHECK_MODE_KEY) == "find_more"
@@ -1663,7 +1595,6 @@ def _select_links(
         return _call(
             "toc_pick",
             lambda: backend.pick(item_text=texts[key], candidates=shown),
-            "toc_pick",
         )
 
     outcomes = dict(zip(called, _map_traced(run_pick, called, PICK_WORKERS), strict=True))
@@ -1684,9 +1615,7 @@ def _select_links(
             per_link[key] = list(dict.fromkeys([*again[key], *per_link[key]]))
     picked = {tss for chosen in per_link.values() for tss in chosen}
     if only is None or per_link:
-        earlier = (
-            _walk_picks(conn, task_id=task_id, walk_id=walk_id) if only is not None else None
-        ) or {}
+        earlier = _walk_picks(conn, task_id=task_id, walk_id=walk_id) if only is not None else {}
         events.append(
             conn,
             task_id=task_id,
@@ -1750,29 +1679,14 @@ def _studies_by_link(
     """
     if not dois_by_link:
         return {}
-    wanted = {
-        doi.lower().removeprefix("https://doi.org/")
-        for dois in dois_by_link.values()
-        for doi in dois
-    }
+    wanted = {normalize_doi(doi) for dois in dois_by_link.values() for doi in dois}
     found: dict[str, uuid.UUID] = {}
-    for tss_id, metadata in conn.execute(
-        select(task_source_snapshot.c.task_source_snapshot_id, source_snapshot.c.metadata)
-        .join(
-            source_snapshot,
-            source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
-        )
-        .where(task_source_snapshot.c.task_id == task_id)
-    ):
-        doi = str((metadata or {}).get("doi") or "").lower().removeprefix("https://doi.org/")
-        if doi in wanted:
+    for tss_id, row in store.snapshot_meta(conn, task_id).items():
+        doi = normalize_doi((row.metadata or {}).get("doi"))
+        if doi is not None and doi in wanted:
             found.setdefault(doi, tss_id)
     return {
-        key: [
-            found[d]
-            for d in (doi.lower().removeprefix("https://doi.org/") for doi in dois)
-            if d in found
-        ]
+        key: [found[d] for d in map(normalize_doi, dois) if d is not None and d in found]
         for key, dois in dois_by_link.items()
     }
 
@@ -1879,9 +1793,9 @@ def toc_search_new_scope(
         The same counts as :func:`toc_select_scope`.
     """
     walk_id = walk_of_run(conn, task_id=task_id, run_id=run_id)
-    picks = _walk_picks(conn, task_id=task_id, walk_id=walk_id) or {}
+    picks = _walk_picks(conn, task_id=task_id, walk_id=walk_id)
     new = set(_child_links(conn, task_id=task_id, walk_id=walk_id).values()) - set(picks)
-    return _select_links(
+    return toc_select_scope(
         conn,
         task_id=task_id,
         run_id=run_id,
@@ -1923,44 +1837,10 @@ def _child_links(
     }
 
 
-def _own_search_documents(
-    conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID
-) -> dict[str, set[uuid.UUID]]:
-    """Link id → documents its own item search acquired in this walk.
-
-    A link absent from the map had no search of its own.
-    """
-    child_link = _child_links(conn, task_id=task_id, walk_id=walk_id)
-    out: dict[str, set[uuid.UUID]] = {link_id: set() for link_id in child_link.values()}
-    if not child_link:
-        return out
-    # ponytail: a document two searches both found is filed under the first
-    # one's run only (acquire dedupes in the task); read search results per run
-    # if links start missing shared documents.
-    for row in conn.execute(
-        select(task_source_snapshot.c.task_source_snapshot_id, runs.c.capability_run_id)
-        .select_from(
-            task_source_snapshot.join(
-                runs,
-                (runs.c.run_id == task_source_snapshot.c.run_id)
-                & (runs.c.task_id == task_source_snapshot.c.task_id),
-            )
-        )
-        .where(task_source_snapshot.c.task_id == task_id)
-        .where(runs.c.capability_run_id.in_(list(child_link)))
-    ):
-        out[child_link[row.capability_run_id]].add(row.task_source_snapshot_id)
-    return out
-
-
 def _walk_picks(
     conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID
-) -> dict[str, set[uuid.UUID]] | None:
-    """Link id → the documents ``toc_select`` picked for it in this walk, or ``None``.
-
-    ``None`` for a walk from before C31, whose judge reads each link's own
-    search's documents instead.
-    """
+) -> dict[str, set[uuid.UUID]]:
+    """Link id → the documents ``toc_select`` picked for it in this walk."""
     payload = conn.execute(
         select(event_log.c.payload)
         .select_from(
@@ -1975,9 +1855,7 @@ def _walk_picks(
         .order_by(event_log.c.sequence.desc())
         .limit(1)
     ).scalar_one_or_none()
-    if payload is None:
-        return None
-    return {key: {uuid.UUID(tss) for tss in ids} for key, ids in payload.items()}
+    return {key: {uuid.UUID(tss) for tss in ids} for key, ids in (payload or {}).items()}
 
 
 def rerank(
@@ -2173,25 +2051,21 @@ def toc_judge_scope(
     link_keys, left_out = links_to_check(graph, list(named) if named else None)
     pool = screened_documents(conn, task_id=task_id, scope_id=context.scope_id)
     pool_by_id = {doc.tss_id: doc for doc in pool}
-    # Each link reads what toc_select picked for it (C31); older walks, its own search's.
-    own = _walk_picks(conn, task_id=task_id, walk_id=walk_id) or _own_search_documents(
-        conn, task_id=task_id, walk_id=walk_id
-    )
+    # Each link reads what toc_select picked for it (C31). When no link's search
+    # found anything, a link with a search of its own judges nothing.
+    own = _walk_picks(conn, task_id=task_id, walk_id=walk_id) or {
+        key: set() for key in _child_links(conn, task_id=task_id, walk_id=walk_id).values()
+    }
     vectors: dict[uuid.UUID, list[list[float]]] | None = None  # read once, when needed
     usage = UsageAccumulator()
     place = plan.where
     jobs: list[_JudgeJob] = []
+    hashes: dict[str, str] = {}
     for key in link_keys:
         link = graph.links[key]
         source, target = graph.boxes[link.source], graph.boxes[link.target]
-        current = item_hash(link, source.text, target.text)
-        text = item_text(
-            link,
-            source_text=source.text,
-            target_text=target.text,
-            population=plan.target_population,
-            place=place,
-        )
+        current = hashes[key] = item_hash(link, source.text, target.text)
+        text = _link_item_text(graph, key, plan)
         judged = set(
             conn.execute(
                 select(toc_item_evidence.c.task_source_snapshot_id)
@@ -2250,7 +2124,6 @@ def toc_judge_scope(
                 text=job.document.text,
                 neighbours=job.neighbours,
             ),
-            "toc_judge",
         )
 
     outcomes = _map_traced(run_job, jobs, JUDGE_WORKERS)
@@ -2355,7 +2228,7 @@ def toc_judge_scope(
             toc_link,
             row.link_id,
             observed_revision=row.revision,
-            values={"counted_hash": _current_hash(graph, key), "kept_hash": None, "kept_by": None},
+            values={"counted_hash": hashes[key], "kept_hash": None, "kept_by": None},
         )
     store.record(conn, task_id=task_id, run_id=run_id, step="toc_judge", log=log_)
     # Classify and appraise run after the judge, on what it found on topic (C31):
@@ -2409,10 +2282,6 @@ def toc_judge_scope(
 
 
 # --- choose ---------------------------------------------------------------------
-
-
-def _norm(text: str) -> str:
-    return " ".join(text.split()).casefold()
 
 
 def critical_link(graph: Graph, verdicts: Mapping[str, LinkVerdict]) -> str | None:
@@ -2486,17 +2355,6 @@ def toc_choose_scope(
         conn, task_id=task_id, evidence_rows=[row for group in counted.values() for row in group]
     )
     verdicts = {key: link_verdict_of(counted.get(key, []), appraisals) for key in graph.links}
-    not_models = {
-        str(row.task_source_snapshot_id)
-        for group in counted.values()
-        for row in group
-        if row.robust_model
-        and not getattr(appraisals.get(str(row.task_source_snapshot_id)), "modelling", False)
-    }
-    if not_models:
-        # The judge called these robust models, but classify did not call them
-        # modelling studies: they count by their score, not as a model (C31).
-        log.info("toc_choose.robust_not_modelling", documents=len(not_models))
     short, back = _short_keys(graph)
     kept_paths = [p for p in graph.pathways if p.status == "kept"]
     pkey = {p.key: f"p{i}" for i, p in enumerate(kept_paths, start=1)}
@@ -2542,17 +2400,14 @@ def toc_choose_scope(
             }
             for p in kept_paths
         ]
-        response = _outcome_value(
-            _call(
-                "toc_choose",
-                lambda: backend.choose(
-                    plan=plan_data(plan),
-                    pathways=payload,
-                    recorded_conditions=recorded,
-                    max_success=MAX_SUCCESS_PATHWAYS,
-                    max_failure=MAX_FAILURE_PATHWAYS,
-                ),
-                "toc_choose",
+        response = _ask(
+            "toc_choose",
+            lambda: backend.choose(
+                plan=plan_data(plan),
+                pathways=payload,
+                recorded_conditions=recorded,
+                max_success=MAX_SUCCESS_PATHWAYS,
+                max_failure=MAX_FAILURE_PATHWAYS,
             ),
             usage,
         )
@@ -2613,7 +2468,7 @@ def toc_choose_scope(
             continue
         row = rows.links[key]
         new_conditions = [*link.conditions, condition]
-        new_link = Link(**{**link.__dict__, "conditions": new_conditions})
+        new_link = replace(link, conditions=new_conditions)
         new_hash = item_hash(new_link, graph.boxes[link.source].text, graph.boxes[link.target].text)
         reason = f"Added a condition the evidence recorded: {condition}"
         # kept_by = choose: the condition came from evidence already judged, so
@@ -2671,20 +2526,6 @@ def _pick_critical(
     if any(row.user_edited for row in marked):
         return False
     choice = critical_link(graph, verdicts)
-    if choice is None:
-        # Every step on the routes to the goal is supported: no connection is critical.
-        for row in marked:
-            store.update(
-                conn,
-                log_,
-                toc_link,
-                row.link_id,
-                observed_revision=row.revision,
-                values={"critical": False},
-            )
-        if marked:
-            changes.append("No connection is critical: every step to the goal is supported.")
-        return bool(marked)
     if marked and str(marked[0].link_id) == choice:
         return False
     # Unmark first: at most one critical link per task (W10).
@@ -2697,6 +2538,11 @@ def _pick_critical(
             observed_revision=row.revision,
             values={"critical": False},
         )
+    if choice is None:
+        # Every step on the routes to the goal is supported: no connection is critical.
+        if marked:
+            changes.append("No connection is critical: every step to the goal is supported.")
+        return bool(marked)
     row = current[choice]
     if store.update(
         conn, log_, toc_link, row.link_id, observed_revision=row.revision, values={"critical": True}
@@ -2707,11 +2553,6 @@ def _pick_critical(
 
 
 # --- summarise ------------------------------------------------------------------
-
-
-def check_citations(cites: Iterable[str], allowed: set[str]) -> bool:
-    """Whether every cited document is one the item may cite (C20)."""
-    return set(cites) <= allowed
 
 
 def toc_summarise_scope(
@@ -2751,12 +2592,9 @@ def toc_summarise_scope(
     short, back = _short_keys(graph)
     theory = _theory_for_summary(graph, rows, counted, appraisals, titles, short)
     usage = UsageAccumulator()
-    response = _outcome_value(
-        _call(
-            "toc_summarise",
-            lambda: backend.summarise(plan=plan_data(plan), theory=theory),
-            "toc_summarise",
-        ),
+    response = _ask(
+        "toc_summarise",
+        lambda: backend.summarise(plan=plan_data(plan), theory=theory),
         usage,
     )
     if response is None:
@@ -2782,7 +2620,8 @@ def toc_summarise_scope(
             item is not None
             and item.sentence
             and item.sentence.strip()
-            and check_citations(item.cites, allowed[key])
+            # Every cited document is one the item may cite (C20).
+            and set(item.cites) <= allowed[key]
         ):
             sentence = item.sentence.strip()
             cites = list(dict.fromkeys(item.cites))
@@ -2815,7 +2654,7 @@ def toc_summarise_scope(
         seen_cites: list[str] = []
         if item is not None and item.seen_in and item.seen_in.strip():
             docs = case_docs.get(key, set())
-            if docs and check_citations(item.cites, docs):
+            if docs and set(item.cites) <= docs:
                 seen_in, seen_cites = item.seen_in.strip(), list(dict.fromkeys(item.cites))
             else:
                 replaced += 1
@@ -2879,22 +2718,9 @@ def row_case_score(row: Row[Any], appraisal: DocAppraisal | None) -> tuple[int, 
 def _titles(
     conn: Connection, *, task_id: uuid.UUID, tss_ids: set[uuid.UUID]
 ) -> dict[str, tuple[str, int | None]]:
-    if not tss_ids:
-        return {}
     return {
-        str(row.task_source_snapshot_id): (
-            str((row.metadata or {}).get("title") or ""),
-            _year(row.metadata or {}),
-        )
-        for row in conn.execute(
-            select(task_source_snapshot.c.task_source_snapshot_id, source_snapshot.c.metadata)
-            .join(
-                source_snapshot,
-                source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
-            )
-            .where(task_source_snapshot.c.task_id == task_id)
-            .where(task_source_snapshot.c.task_source_snapshot_id.in_(tss_ids))
-        )
+        str(tss): (str((row.metadata or {}).get("title") or ""), _year(row.metadata or {}))
+        for tss, row in store.snapshot_meta(conn, task_id, tss_ids).items()
     }
 
 

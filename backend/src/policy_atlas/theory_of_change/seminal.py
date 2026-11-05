@@ -21,11 +21,9 @@ import uuid
 from typing import Any, Final
 
 import structlog
-from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.embeddings import EmbeddingBackend
-from policy_atlas.core.schema import source_snapshot, task_source_snapshot
 from policy_atlas.evidence_search.sourcing.acquire import (
     AcquireContext,
     SearchBackendBase,
@@ -39,6 +37,7 @@ from policy_atlas.evidence_search.sourcing.pool import (
 from policy_atlas.evidence_search.sourcing.search_loop import ExecutedCall, openalex_wire_params
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.runtime.toc_plan import TocPlan, toc_scope_constraints
+from policy_atlas.theory_of_change import store
 
 log = structlog.get_logger()
 
@@ -89,18 +88,7 @@ def fetch_seminal_works(
     if not pool_ids:
         return counts
     # Each stored OpenAlex record keeps its id and (up to 60 of) the works it cites.
-    metas = [
-        meta or {}
-        for meta in conn.execute(
-            select(source_snapshot.c.metadata)
-            .join(
-                task_source_snapshot,
-                task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
-            )
-            .where(task_source_snapshot.c.task_id == task_id)
-            .where(task_source_snapshot.c.task_source_snapshot_id.in_(pool_ids))
-        ).scalars()
-    ]
+    metas = [row.metadata or {} for row in store.snapshot_meta(conn, task_id, pool_ids).values()]
     records = [
         {
             "id": meta.get("backend_record_id"),

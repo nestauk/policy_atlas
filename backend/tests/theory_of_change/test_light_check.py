@@ -11,8 +11,12 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core.schema import (
+    capability_run,
     event_log,
+    evidence_scope,
+    runs,
     source_snapshot,
+    task_source_snapshot,
     toc_box,
     toc_link,
     toc_pathway_link,
@@ -373,7 +377,26 @@ def test_a_link_can_pick_and_judge_a_study_another_link_found(
                 toc_item_evidence.c.task_id == task_id
             )
         ).first()[0]  # type: ignore[index]
-        own = check._own_search_documents(conn, task_id=task_id, walk_id=walk_id)
+        # Link id → the documents its own item search acquired in this walk.
+        child_link = {
+            row.capability_run_id: row.context["link_id"]
+            for row in conn.execute(
+                select(capability_run.c.capability_run_id, evidence_scope.c.context)
+                .join(
+                    evidence_scope,
+                    evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id,
+                )
+                .where(capability_run.c.parent_capability_run_id == walk_id)
+            )
+        }
+        own: dict[str, set[uuid.UUID]] = {}
+        for tss, child in conn.execute(
+            select(task_source_snapshot.c.task_source_snapshot_id, runs.c.capability_run_id)
+            .join(runs, runs.c.run_id == task_source_snapshot.c.run_id)
+            .where(task_source_snapshot.c.task_id == task_id)
+            .where(runs.c.capability_run_id.in_(list(child_link)))
+        ):
+            own.setdefault(child_link[child], set()).add(tss)
         judged = conn.execute(
             select(toc_item_evidence.c.link_id, toc_item_evidence.c.task_source_snapshot_id).where(
                 toc_item_evidence.c.task_id == task_id
@@ -381,7 +404,7 @@ def test_a_link_can_pick_and_judge_a_study_another_link_found(
         ).all()
     for link_id, ids in picks.items():
         # Every pick came from other links' searches, and the judge read exactly those.
-        assert not {uuid.UUID(i) for i in ids} & own[link_id]
+        assert not {uuid.UUID(i) for i in ids} & own.get(link_id, set())
         assert {tss for lid, tss in judged if str(lid) == link_id} == {uuid.UUID(i) for i in ids}
 
 

@@ -60,6 +60,7 @@ from policy_atlas.evidence_search.sourcing.search_live import (
     OvertonLiveBackend,
 )
 from policy_atlas.theory_of_change import check, store
+from policy_atlas.theory_of_change.cost import usd as model_usd
 from policy_atlas.theory_of_change.draft import walk_toc_plan
 from policy_atlas.theory_of_change.evidence.grade import (
     DocAppraisal,
@@ -72,16 +73,7 @@ DEFAULT_TASK = "07e278fe-6c68-42bc-b8dc-d5ee7b4d7b37"
 
 # --- money ----------------------------------------------------------------------
 
-#: US dollars per million tokens: (input, cached input, output). Luna: list price checked
-#: 2026-10-08 (docs/knowledge/eval-cost-figures-name-their-unit.md). Terra: a third-party
-#: price page (anotherwrapper.com, 2026-08-25); its cached price is assumed at 10%.
-PRICES: dict[str, tuple[float, float, float]] = {
-    "gpt-5.6-luna": (0.20, 0.02, 1.20),
-    "gpt-5.6-terra": (2.00, 0.20, 12.00),
-    # developers.openai.com/api/docs/pricing, checked by the owner on 2026-10-27.
-    "gpt-6-luna": (0.10, 0.01, 0.50),
-    "gpt-6.1-terra": (1.00, 0.05, 5.00),
-}
+# Model prices per million tokens: :data:`policy_atlas.theory_of_change.cost.PRICES`.
 #: OpenAI's hosted web search tool fee per call (assumed $10 per 1,000 calls).
 WEB_SEARCH_USD_PER_CALL = 0.01
 #: OpenAlex with a key: $0.0001 per request (meta.cost_usd). Overton and System: no per-call price.
@@ -183,13 +175,11 @@ def llm_cost(
     p = (usage.prompt or 0) if usage else 0
     c = (usage.completion or 0) if usage else 0
     k = (usage.cached or 0) if usage else 0
-    price = PRICES.get(
-        model.rsplit(".", 1)[-1] if model.startswith("global.") else model
+    priced = model_usd(
+        model.rsplit(".", 1)[-1] if model.startswith("global.") else model,
+        {"prompt": p, "cached": k, "completion": c},
     )
-    usd = extra_usd
-    if price:
-        usd += ((p - k) * price[0] + k * price[1] + c * price[2]) / 1e6
-    return Cost(step, 1, p, c, k, usd)
+    return Cost(step, 1, p, c, k, extra_usd + (priced or 0.0))
 
 
 class Meter:

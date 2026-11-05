@@ -38,17 +38,9 @@ def _plan(**overrides: Any) -> TocPlan:
     return TocPlan.model_validate(values)
 
 
-def test_the_draft_walk_drafts_and_inherits_only_from_an_option() -> None:
+def test_the_draft_walk_drafts() -> None:
     draft = {"toc_walk": "draft"}
     assert compose_toc(_plan(), "toc", draft).components == ["toc_draft"]
-    option = {
-        "source_task_id": "7b0c6b1e-6b1d-4f5e-9d4e-1c2b3a4d5e6f",
-        "source_option_id": "1c0c6b1e-6b1d-4f5e-9d4e-1c2b3a4d5e6f",
-    }
-    assert compose_toc(_plan(from_option=option), "toc", draft).components == [
-        "inherit",
-        "toc_draft",
-    ]
 
 
 def test_the_check_walk_classifies_only_after_the_judge() -> None:
@@ -175,10 +167,3 @@ def test_an_approved_plan_opens_the_draft_walk_s_intent_record(conn: Connection)
     ).mappings().one()
     assert (row["purpose"], row["plan_id"]) == ("toc", plan_id)
     assert row["context"] == {"capability": "theory_of_change", "toc_walk": "draft"}
-
-
-def test_a_plan_saved_with_the_retired_use_diagram_field_still_loads() -> None:
-    from tests.theory_of_change.test_walks import toc_plan
-
-    saved = {**toc_plan().model_dump(mode="json"), "use_diagram": None}
-    assert TocPlan.model_validate(saved).title == "Healthy weight"

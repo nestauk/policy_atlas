@@ -50,9 +50,12 @@ from policy_atlas.runtime.capability_registry import (
 from policy_atlas.runtime.conversation_lifecycle import ensure_active_task_agent_conversation
 from policy_atlas.runtime.runner import RunnerBackends, RunPlanOutcome, run_plan
 from policy_atlas.runtime.toc_plan import (
+    TOC_CHECK_MODE_KEY,
     TOC_LINKS_KEY,
     TOC_PURPOSE,
     TOC_REVIEW_FIRST_KEY,
+    TOC_STARTED_BY_KEY,
+    TOC_STUDIES_KEY,
     TOC_WALK_CHECK,
     TOC_WALK_DRAFT,
     TOC_WALK_KEY,
@@ -84,7 +87,7 @@ class TocRefused(Exception):
     """A theory-of-change walk could not be opened.
 
     Args:
-        reason: ``not_toc`` · ``run_active`` · ``no_plan``.
+        reason: ``run_active`` · ``no_plan``.
         message: A sentence for the log or an error body.
     """
 
@@ -126,7 +129,9 @@ def mint_scope(
     toc_walk: str,
     links: list[str] | None = None,
     draft_run_id: uuid.UUID | None = None,
-    extra: dict[str, Any] | None = None,
+    mode: str | None = None,
+    started_by: str | None = None,
+    studies: dict[str, list[str]] | None = None,
 ) -> uuid.UUID:
     """Insert one main theory-of-change intent record and return its id.
 
@@ -137,8 +142,9 @@ def mint_scope(
         toc_walk: ``draft`` or ``check``.
         links: The link ids a named-link check covers, or ``None``.
         draft_run_id: The draft walk a check follows, or ``None``.
-        extra: More context for a named check (C40): its mode, the studies the
-            user added, who started it.
+        mode: Why a named check runs (C40), or ``None`` for a full check.
+        started_by: The user who started a named check.
+        studies: Link id → the DOIs the user added to it (C42).
 
     Returns:
         The new intent record's id.
@@ -149,7 +155,10 @@ def mint_scope(
         context[TOC_LINKS_KEY] = links
     if draft_run_id is not None:
         context[DRAFT_WALK_KEY] = str(draft_run_id)
-    context.update(extra or {})
+    if mode is not None:
+        context |= {TOC_CHECK_MODE_KEY: mode, TOC_STARTED_BY_KEY: started_by}
+    if studies:
+        context[TOC_STUDIES_KEY] = studies
     scope_id = uuid.uuid4()
     conn.execute(
         evidence_scope.insert().values(
@@ -170,7 +179,6 @@ def admit_and_mint(
     *,
     task_id: uuid.UUID,
     toc_walk: str,
-    links: list[str] | None = None,
     draft_run_id: uuid.UUID | None = None,
 ) -> AdmittedToc:
     """Admit a theory-of-change walk and mint its intent record, under the dispatch lock.
@@ -184,20 +192,16 @@ def admit_and_mint(
         engine: Database engine.
         task_id: The theory-of-change task.
         toc_walk: ``draft`` or ``check``.
-        links: The link ids a named-link check covers.
         draft_run_id: The draft walk a check follows.
 
     Returns:
         The admitted walk.
 
     Raises:
-        TocRefused: If the task is not a theory of change, has an active walk
-            or has no approved plan.
+        TocRefused: If the task has an active walk or no approved plan.
     """
     with _dispatch_lock, engine.begin() as conn:
-        task_row = task_lock(conn, task_id)
-        if task_row["capability"] != THEORY_OF_CHANGE:
-            raise TocRefused("not_toc", "this is not a theory-of-change task")
+        task_lock(conn, task_id)
         if active_parentless_walk(conn, task_id) is not None:
             raise TocRefused("run_active", "the task already has an active run")
         plan_row = latest_approved_plan_row(conn, task_id)
@@ -208,7 +212,6 @@ def admit_and_mint(
             task_id=task_id,
             plan_row=plan_row,
             toc_walk=toc_walk,
-            links=links,
             draft_run_id=draft_run_id,
         )
     admitted = AdmittedToc(
@@ -313,14 +316,13 @@ def run_toc_sequence(
     if walk_id is None or first_outcome.status not in _ENDED_WELL:
         return None
     with engine.connect() as conn:
-        kind = walk_kind(conn, task_id=task_id, capability_run_id=walk_id)
+        context = walk_context(conn, task_id=task_id, capability_run_id=walk_id) or {}
+    kind = context.get(TOC_WALK_KEY)
     if kind == TOC_WALK_CHECK:
         post_check_message(engine, task_id=task_id, walk_id=walk_id)
         return None
     if kind != TOC_WALK_DRAFT:
         return None
-    with engine.connect() as conn:
-        context = walk_context(conn, task_id=task_id, capability_run_id=walk_id) or {}
     if context.get(TOC_REVIEW_FIRST_KEY):
         # An uploaded theory (increment 5): the user checks the reading first.
         post_agent_message(engine, task_id=task_id, text=_review_text(engine, task_id))
@@ -505,11 +507,6 @@ def take_queued_check(
         ``(scope_id, plan_row, user_id)``, or ``None`` when nothing waits.
     """
     from policy_atlas.core import events
-    from policy_atlas.runtime.toc_plan import (
-        TOC_CHECK_MODE_KEY,
-        TOC_STARTED_BY_KEY,
-        TOC_STUDIES_KEY,
-    )
 
     pending = _queued(conn, task_id)
     if not pending:
@@ -540,11 +537,9 @@ def take_queued_check(
         plan_row=plan_row,
         toc_walk=TOC_WALK_CHECK,
         links=links,
-        extra={
-            TOC_CHECK_MODE_KEY: mode,
-            TOC_STARTED_BY_KEY: user_id,
-            **({TOC_STUDIES_KEY: studies} if studies else {}),
-        },
+        mode=mode,
+        started_by=user_id,
+        studies=studies,
     )
     return scope_id, dict(plan_row), user_id
 
@@ -571,20 +566,9 @@ def _pending_found(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) 
     connection: how many documents test the step and the verdict now.
     """
     from policy_atlas.core.schema import toc_item_evidence, toc_link
-    from policy_atlas.runtime.toc_plan import TOC_CHECK_MODE_KEY
     from policy_atlas.theory_of_change.review import _theory
 
-    context = conn.execute(
-        select(evidence_scope.c.context)
-        .select_from(
-            capability_run.join(
-                evidence_scope,
-                (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
-                & (evidence_scope.c.task_id == capability_run.c.task_id),
-            )
-        )
-        .where(capability_run.c.capability_run_id == walk_id)
-    ).scalar_one_or_none()
+    context = walk_context(conn, task_id=task_id, capability_run_id=walk_id)
     mode = (context or {}).get(TOC_CHECK_MODE_KEY)
     if mode == "report":
         return "The report is updated for the theory as it is now."

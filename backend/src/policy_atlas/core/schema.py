@@ -242,9 +242,7 @@ conversation = Table(
         name="fk_conversation_entry_artefact_task",
         match="SIMPLE",
     ),
-    CheckConstraint(
-        "kind IN ('task_agent', 'chat', 'stress_test')", name="ck_conversation_kind"
-    ),
+    CheckConstraint("kind IN ('task_agent', 'chat')", name="ck_conversation_kind"),
     CheckConstraint(
         "status IN ('active', 'closed', 'archived')", name="ck_conversation_status"
     ),

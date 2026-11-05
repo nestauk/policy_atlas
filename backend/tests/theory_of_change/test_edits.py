@@ -12,10 +12,10 @@ from sqlalchemy.engine import Engine
 from policy_atlas.api.routers.toc import toc_graph_out
 from policy_atlas.core.schema import toc_box, toc_item_evidence, toc_link, toc_pathway_link
 from policy_atlas.theory_of_change import edits
-from policy_atlas.theory_of_change.edits import Actor, EditRefused
+from policy_atlas.theory_of_change.edits import EditRefused
 from tests.helpers import seed_toc_task
 
-ME = Actor("user-ada")
+ME = "user-ada"
 
 
 @pytest.fixture
@@ -57,7 +57,7 @@ def test_an_edit_stamps_who_and_refuses_a_stale_revision(engine: Engine, ids: An
             fields={"text": "Restrict adverts before 9pm"},
         )
     row = _one(engine, toc_box, "box_id", box)
-    assert (row.text, row.revision, row.edited_by) == ("Restrict adverts before 9pm", 2, ME.user_id)
+    assert (row.text, row.revision, row.edited_by) == ("Restrict adverts before 9pm", 2, ME)
     with pytest.raises(EditRefused) as refused, engine.begin() as conn:
         edits.edit_box(
             conn, task_id=task_id, actor=ME, box_id=box, expected_revision=1, fields={"text": "x"}
@@ -347,7 +347,7 @@ def test_an_added_doi_resolves_to_the_tasks_document_and_decisions_carry_over(
             action="remove",
         )
         carried = _user_decisions(conn, task_id, {str(ids["link"])})
-    assert carried[(str(ids["link"]), ids["tss"])]["excluded_by"] == ME.user_id
+    assert carried[(str(ids["link"]), ids["tss"])]["excluded_by"] == ME
 
 
 # --- Pending evidence and Stop (C44, C48) ---------------------------------------------------

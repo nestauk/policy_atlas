@@ -122,12 +122,7 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
     },
 }
 
-#: The link depth's three calls: results each keeps, and the place suffix of
-#: the second OpenAlex call (C27).
-LINK_SEMANTIC_RESULTS = 20
-LINK_PLACE_RESULTS = 10
-LINK_OVERTON_RESULTS = 10
-LINK_KEYWORD_RESULTS = 10
+#: The place suffix of the link depth's second OpenAlex call (C27).
 LINK_PLACE_SUFFIX = " in the United Kingdom"
 
 
@@ -1473,9 +1468,10 @@ def _link_pools(
         if backend.name == "openalex":
             extended = cast(acquire.ExtendedSearchBackend, backend)
             wire, local_filters, keep, _ = _semantic_scope(variants["openalex"])
+            # The results each call keeps (C27): 20 by meaning, 10 by meaning and place.
             semantic_calls: list[tuple[str, int, QueryOrigin]] = [
-                (text, LINK_SEMANTIC_RESULTS, "semantic"),
-                (text + LINK_PLACE_SUFFIX, LINK_PLACE_RESULTS, "semantic_place"),
+                (text, 20, "semantic"),
+                (text + LINK_PLACE_SUFFIX, 10, "semantic_place"),
             ]
             keyword_calls: list[tuple[str, QueryOrigin, dict[str, str]]] = [
                 (_compose_variant(keyword, clause), origin, keyword_wire)
@@ -1504,7 +1500,7 @@ def _link_pools(
                             query=query,
                             origin=origin,
                             wire_params=keyword_wire,
-                            max_records=LINK_KEYWORD_RESULTS,
+                            max_records=10,
                             fetch=_search_fetch(backend, query, keyword_wire),
                         )
                         for query, origin, keyword_wire in keyword_calls
@@ -1521,7 +1517,7 @@ def _link_pools(
                         query=text,
                         origin="verbatim",
                         wire_params=wire,
-                        max_records=LINK_OVERTON_RESULTS,
+                        max_records=10,
                         fetch=_overton_fetch(backend, validated["overton"], wire)(text),
                     ),
                 )
@@ -1643,30 +1639,23 @@ def _acquire_user_dois(
     """Look up the user's DOIs in OpenAlex and acquire them: no generation, no ranking."""
     openalex = [backend for backend in backends if backend.name == "openalex"]
     started = time.monotonic()
+    records: list[dict[str, Any]] = []
+    error = None
     try:
         records = openalex[0].lookup_dois(dois) if openalex else []
-        call = ExecutedCall(
-            backend_name="openalex",
-            verb="lookup_dois",
-            query=" ".join(dois),
-            query_origin="suggestion_doi",
-            wire_params={},
-            records=records,
-            status="ok",
-            error=None,
-        )
     except Exception as exc:  # a provider failure leaves the link with nothing new
         log.warning("search.user_doi_lookup_failed", error=type(exc).__name__)
-        call = ExecutedCall(
-            backend_name="openalex",
-            verb="lookup_dois",
-            query=" ".join(dois),
-            query_origin="suggestion_doi",
-            wire_params={},
-            records=[],
-            status="error",
-            error=type(exc).__name__,
-        )
+        error = type(exc).__name__
+    call = ExecutedCall(
+        backend_name="openalex",
+        verb="lookup_dois",
+        query=" ".join(dois),
+        query_origin="suggestion_doi",
+        wire_params={},
+        records=records,
+        status="ok" if error is None else "error",
+        error=error,
+    )
     counts = acquire.acquire_sources(
         conn,
         task_id=task_id,
@@ -1748,7 +1737,6 @@ def run_search(
     queries: list[str] = []
     paraphrases: list[str] = []
     queries_dropped = 0
-    generation_calls = 1
     try:
         wire, usage = generation_backend.generate_queries(
             QueriesPayload(intent=context.intent, guidance=guidance)
@@ -1852,7 +1840,7 @@ def run_search(
         "queries_dropped": queries_dropped,
         "fallback_to_verbatim": {name: legs[name].fallback_to_verbatim for name in names},
         "wall_clock_s": time.monotonic() - started,
-        "generation_calls": generation_calls,
+        "generation_calls": 1,
         "semantic_local_filters": local_filters,
         "seeds": legs["openalex"].seeds if "openalex" in legs else 0,
         "backward_targets": legs["openalex"].backward_targets if "openalex" in legs else 0,

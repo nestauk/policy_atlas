@@ -40,7 +40,6 @@ _WIDENED = {
     "ck_task_capability": "'theory_of_change'",
     "ck_capr_capability": "'theory_of_change'",
     "ck_scope_purpose": "'toc'",
-    "ck_conversation_kind": "'stress_test'",
 }
 
 

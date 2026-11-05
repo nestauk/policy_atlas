@@ -1,4 +1,4 @@
-"""task 054 theory of change, revision 1 — the graph tables and four widened checks
+"""task 054 theory of change, revision 1 — the graph tables and three widened checks
 
 Increment 1's one revision (contract § Schema, "Revision 1"). Additive: no
 existing row changes value.
@@ -20,17 +20,15 @@ Upgrade
                            to NULL (``SET NULL (case_box_id)``, PostgreSQL 15+),
                            never ``task_id``.
     ``ck_task_capability``, ``ck_capr_capability`` gain ``theory_of_change``;
-    ``ck_scope_purpose`` gains ``toc``; ``ck_conversation_kind`` gains
-    ``stress_test`` (used from increment 4).
+    ``ck_scope_purpose`` gains ``toc``.
 
 Downgrade — the refusal (the 044 A5 pattern)
     Refuses while any ``task`` or ``capability_run`` row carries
     ``theory_of_change``: narrowing the checks under them would fail, and
     dropping the tables would strand their walks. The remedy is
-    ``scripts/ops_remove_toc_tasks.py --apply``. ``toc`` intent records and
-    ``stress_test`` conversations exist only on theory-of-change tasks, so the
-    one check covers them. Then the six tables are dropped child first and the
-    four checks narrowed.
+    ``scripts/ops_remove_toc_tasks.py --apply``. ``toc`` intent records exist
+    only on theory-of-change tasks, so the one check covers them. Then the six
+    tables are dropped child first and the three checks narrowed.
 
 Revision ID: 9127f849697f
 Revises: 0914321f8de4
@@ -83,13 +81,6 @@ _WIDENED: tuple[tuple[str, str, str, str, str], ...] = (
         # As task 055's b33ffb8c3a16 left it.
         "('baseline', 'longlist', 'variant', 'targeted', 'shortlist')",
         "('baseline', 'longlist', 'variant', 'targeted', 'shortlist', 'toc')",
-    ),
-    (
-        "ck_conversation_kind",
-        "conversation",
-        "kind",
-        "('task_agent', 'chat')",
-        "('task_agent', 'chat', 'stress_test')",
     ),
 )
 

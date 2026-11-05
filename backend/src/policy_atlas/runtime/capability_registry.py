@@ -26,11 +26,10 @@ A test (``tests/runtime/test_capability_registry.py``) asserts by AST scan that
 
 from __future__ import annotations
 
-import importlib
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -191,10 +190,9 @@ def _options_scoping_task_agent() -> TaskAgentProfile:
 
 
 def _toc_task_agent() -> TaskAgentProfile:
-    # By name: the profile module lands in task 054 step 1.3, and nothing may
-    # import it before a turn asks for it.
-    module = importlib.import_module("policy_atlas.runtime.task_agent_toc")
-    return cast(TaskAgentProfile, module.TOC_TASK_AGENT)
+    from policy_atlas.runtime.task_agent_toc import TOC_TASK_AGENT
+
+    return TOC_TASK_AGENT
 
 
 #: The registry: Evidence search, options scoping (task 044), theory of change (task 054).

@@ -1330,26 +1330,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/tasks/{task_id}/toc/clarifications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Add Toc Clarification
-         * @description Add a clarification to the plan; the next check, search and review read it (C49).
-         */
-        post: operations["add_toc_clarification_api_v1_tasks__task_id__toc_clarifications_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/tasks/{task_id}/toc/events/{event_id}/undo": {
         parameters: {
             query?: never;
@@ -6189,7 +6169,7 @@ export interface components {
              * @default new_items
              * @enum {string}
              */
-            mode: "new_items" | "check_again" | "find_more" | "rest";
+            mode: "new_items" | "check_again" | "find_more";
         };
         /**
          * TocCheckOut
@@ -6203,14 +6183,6 @@ export interface components {
              * @default false
              */
             queued: boolean;
-        };
-        /**
-         * TocClarificationIn
-         * @description A clarification to the plan the next check reads (C49).
-         */
-        TocClarificationIn: {
-            /** Text */
-            text: string;
         };
         /**
          * TocCountOut
@@ -7205,8 +7177,6 @@ export interface components {
              * @default false
              */
             answered: boolean;
-            /** Content Type */
-            content_type: string;
             /** Counts */
             counts: {
                 [key: string]: number;
@@ -9347,39 +9317,6 @@ export interface operations {
                         [key: string]: string;
                     };
                 };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    add_toc_clarification_api_v1_tasks__task_id__toc_clarifications_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TocClarificationIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Validation Error */
             422: {

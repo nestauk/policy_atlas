@@ -480,12 +480,7 @@ def start_toc_check(
     """
     # Imported here: the opener imports this module.
     from policy_atlas.api.toc_start import mint_scope, queue_check
-    from policy_atlas.runtime.toc_plan import (
-        TOC_CHECK_MODE_KEY,
-        TOC_STARTED_BY_KEY,
-        TOC_STUDIES_KEY,
-        TOC_WALK_CHECK,
-    )
+    from policy_atlas.runtime.toc_plan import TOC_WALK_CHECK
 
     walk_id = uuid.uuid4()
     with _dispatch_lock:
@@ -512,11 +507,9 @@ def start_toc_check(
                 plan_row=plan_row,
                 toc_walk=TOC_WALK_CHECK,
                 links=[str(link_id) for link_id in link_ids],
-                extra={
-                    TOC_CHECK_MODE_KEY: mode,
-                    TOC_STARTED_BY_KEY: user_id,
-                    **({TOC_STUDIES_KEY: studies} if studies else {}),
-                },
+                mode=mode,
+                started_by=user_id,
+                studies=studies,
             )
             _dispatching_tasks.add(task_id)
         executor.submit(

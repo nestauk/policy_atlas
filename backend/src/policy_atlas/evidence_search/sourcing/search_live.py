@@ -897,7 +897,7 @@ def _chunks(values: list[str], size: int) -> Iterable[list[str]]:
 
 
 def _normalize_doi_for_filter(doi: str) -> str | None:
-    # Behavioral twin of acquire._normalize_doi (the cross-backend identity
+    # Behavioral twin of acquire.normalize_doi (the cross-backend identity
     # key). Kept local so the transport module never imports the DB layer;
     # any prefix-handling change must land in both.
     candidate = doi.strip().lower()

@@ -615,21 +615,67 @@ def dispatch_option_searches(
         if already is not None:
             return already
         entrants = entrants_for_search(conn, task_id=task_id, suggest_run_id=suggest_run_id)
+
+    def start(entrant: tuple[uuid.UUID, OptionDesign]) -> uuid.UUID:
+        option_id, design = entrant
+        return run_option_search(
+            engine,
+            task_id=task_id,
+            plan_row=plan_row,
+            design=design,
+            option_id=option_id,
+            parent_capability_run_id=parent_id,
+            backends=backends,
+            user_id=None,
+        )
+
+    return _fan_out(
+        engine,
+        task_id=task_id,
+        parent_id=parent_id,
+        plan_row=plan_row,
+        session_id=session_id,
+        stage=OPTION_SEARCHES_STAGE,
+        items=entrants,
+        start=start,
+        log_event="option_search.fan_out",
+    )
+
+
+def _fan_out[T](
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    parent_id: uuid.UUID,
+    plan_row: Mapping[str, Any],
+    session_id: uuid.UUID | None,
+    stage: str,
+    items: list[T],
+    start: Callable[[T], uuid.UUID],
+    log_event: str,
+    extra: Mapping[str, Any] | None = None,
+) -> list[uuid.UUID]:
+    """Start one child walk per item, then record the stage's start and log the fan-out.
+
+    Args:
+        engine: Database engine.
+        task_id: The task.
+        parent_id: The walk that fans out.
+        plan_row: The walk's plan version (``plan_id``, ``version``).
+        session_id: The walk's tracing session, recorded on the stage event.
+        stage: The fan-out's stage.
+        items: What each child searches.
+        start: Starts one child walk and returns its id.
+        log_event: The fan-out's log line.
+        extra: More fields for the stage event and the log line.
+
+    Returns:
+        The child walks' ids, in dispatch order.
+    """
     child_ids: list[uuid.UUID] = []
     try:
-        for option_id, design in entrants:
-            child_ids.append(
-                run_option_search(
-                    engine,
-                    task_id=task_id,
-                    plan_row=plan_row,
-                    design=design,
-                    option_id=option_id,
-                    parent_capability_run_id=parent_id,
-                    backends=backends,
-                    user_id=None,
-                )
-            )
+        for item in items:
+            child_ids.append(start(item))
         with engine.begin() as conn:
             events.append(
                 conn,
@@ -637,14 +683,15 @@ def dispatch_option_searches(
                 run_id=None,
                 event_type="run.started",
                 payload={
-                    "component": OPTION_SEARCHES_STAGE,
-                    "registry_component": OPTION_SEARCHES_STAGE,
+                    "component": stage,
+                    "registry_component": stage,
                     "plan_id": str(plan_row["plan_id"]),
                     "plan_version": int(plan_row["version"]),
                     "session_id": str(session_id) if session_id is not None else None,
                     "capability_run_id": str(parent_id),
                     "child_capability_run_ids": [str(child) for child in child_ids],
                     "total": len(child_ids),
+                    **(extra or {}),
                 },
             )
     except Exception:
@@ -653,10 +700,11 @@ def dispatch_option_searches(
         _interrupt_children(engine, task_id=task_id, child_ids=child_ids)
         raise
     log.info(
-        "option_search.fan_out",
+        log_event,
         task_id=str(task_id),
         capability_run_id=str(parent_id),
         total=len(child_ids),
+        **(extra or {}),
     )
     return child_ids
 
@@ -713,81 +761,45 @@ def dispatch_toc_item_searches(
             conn, task_id=task_id, payload=plan_row["payload"], links=links
         )
     plan = validate_plan(THEORY_OF_CHANGE, plan_row["payload"])
-    child_ids: list[uuid.UUID] = []
-    try:
-        for link_id, intent in intents:
-            child_ids.append(
-                run_child_search(
-                    engine,
-                    task_id=task_id,
-                    request=ChildSearchRequest(
-                        intent=intent,
-                        context={
-                            "capability": THEORY_OF_CHANGE,
-                            "link_id": link_id,
-                            ACQUIRE_ONLY_KEY: True,
-                            **(
-                                {"lookup_dois": list(dois[link_id])}
-                                if dois and link_id in dois
-                                else {}
-                            ),
-                        },
-                        plan=plan,
-                        plan_id=uuid.UUID(str(plan_row["plan_id"])),
-                        pool=toc_item_pool,
-                    ),
-                    plan_row=plan_row,
-                    parent_capability_run_id=parent_id,
-                    backends=backends,
-                    user_id=None,
-                )
-            )
-        with engine.begin() as conn:
-            events.append(
-                conn,
-                task_id=task_id,
-                run_id=None,
-                event_type="run.started",
-                payload={
-                    "component": stage,
-                    "registry_component": stage,
-                    "plan_id": str(plan_row["plan_id"]),
-                    "plan_version": int(plan_row["version"]),
-                    "session_id": str(session_id) if session_id is not None else None,
-                    "capability_run_id": str(parent_id),
-                    "child_capability_run_ids": [str(child) for child in child_ids],
-                    "total": len(child_ids),
-                    "links_left_out": left_out,
+
+    def start(item: tuple[str, str]) -> uuid.UUID:
+        link_id, intent = item
+        return run_child_search(
+            engine,
+            task_id=task_id,
+            request=ChildSearchRequest(
+                intent=intent,
+                context={
+                    "capability": THEORY_OF_CHANGE,
+                    "link_id": link_id,
+                    ACQUIRE_ONLY_KEY: True,
+                    **({"lookup_dois": list(dois[link_id])} if dois and link_id in dois else {}),
                 },
-            )
-    except Exception:
-        _interrupt_children(engine, task_id=task_id, child_ids=child_ids)
-        raise
-    log.info(
-        "toc_item_search.fan_out",
-        task_id=str(task_id),
-        capability_run_id=str(parent_id),
-        total=len(child_ids),
-        links_left_out=left_out,
+                plan=plan,
+                plan_id=uuid.UUID(str(plan_row["plan_id"])),
+                pool=toc_item_pool,
+            ),
+            plan_row=plan_row,
+            parent_capability_run_id=parent_id,
+            backends=backends,
+            user_id=None,
+        )
+
+    return _fan_out(
+        engine,
+        task_id=task_id,
+        parent_id=parent_id,
+        plan_row=plan_row,
+        session_id=session_id,
+        stage=stage,
+        items=intents,
+        start=start,
+        log_event="toc_item_search.fan_out",
+        extra={"links_left_out": left_out},
     )
-    return child_ids
 
 
 def join_option_searches(
-    engine: Engine,
-    *,
-    task_id: uuid.UUID,
-    parent_id: uuid.UUID,
-    child_ids: list[uuid.UUID],
-    timeout: float | None = None,
-) -> JoinOutcome:
-    """The longlist walk's join: :func:`join_children` on the option-search stage."""
-    return join_children(
-        engine, task_id=task_id, parent_id=parent_id, child_ids=child_ids, timeout=timeout
-    )
-
-
-def join_children(
     engine: Engine,
     *,
     task_id: uuid.UUID,
@@ -808,7 +820,7 @@ def join_children(
     Args:
         engine: Database engine.
         task_id: The task.
-        parent_id: The longlist walk.
+        parent_id: The walk that fanned out.
         child_ids: The children the fan-out dispatched.
         stage: The barrier stage the completion is emitted under.
         timeout: Seconds to wait; ``None`` uses :data:`OPTION_SEARCH_JOIN_TIMEOUT`.

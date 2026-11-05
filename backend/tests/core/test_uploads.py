@@ -43,13 +43,11 @@ def test_the_local_store_keeps_files_under_its_folder(tmp_path: Path) -> None:
     store = LocalUploadStore(tmp_path)
     store.put("tasks/t/u", PNG, "image/png")
     assert store.get("tasks/t/u") == PNG
-    store.delete("tasks/t/u")
-    store.delete("tasks/t/u")  # a missing file is not an error
     with pytest.raises(ValueError, match="outside the store"):
         store.put("../escape", PNG, "image/png")
 
 
-def test_the_s3_store_puts_encrypted_gets_and_deletes() -> None:
+def test_the_s3_store_puts_encrypted_and_gets() -> None:
     client = boto3.client(
         "s3", region_name="eu-west-2", aws_access_key_id="x", aws_secret_access_key="x"
     )
@@ -70,11 +68,9 @@ def test_the_s3_store_puts_encrypted_gets_and_deletes() -> None:
             {"Body": StreamingBody(io.BytesIO(PNG), len(PNG))},
             {"Bucket": "uploads", "Key": "tasks/t/u"},
         )
-        stub.add_response("delete_object", {}, {"Bucket": "uploads", "Key": "tasks/t/u"})
         store = S3UploadStore("uploads", client=client)
         store.put("tasks/t/u", PNG, "image/png")
         assert store.get("tasks/t/u") == PNG
-        store.delete("tasks/t/u")
         stub.assert_no_pending_responses()
 
 

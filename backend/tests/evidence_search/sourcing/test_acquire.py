@@ -32,9 +32,9 @@ from policy_atlas.evidence_search.sourcing.acquire import (
     SearchBackend,
     _map_openalex_work,
     _map_overton_document,
-    _normalize_doi,
     _reconstruct_abstract,
     acquire_sources,
+    normalize_doi,
 )
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
@@ -290,7 +290,7 @@ def test_reconstruct_abstract_from_committed_fixture() -> None:
     ],
 )
 def test_normalize_doi(raw: str | None, expected: str | None) -> None:
-    assert _normalize_doi(raw) == expected
+    assert normalize_doi(raw) == expected
 
 
 def test_map_openalex_envelope() -> None:

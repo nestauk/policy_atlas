@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from policy_atlas.evidence_search.sourcing.acquire import BackendCaps, _normalize_doi
+from policy_atlas.evidence_search.sourcing.acquire import BackendCaps, normalize_doi
 
 _DATA_DIR = Path(__file__).resolve().parent / "data" / "provider_records"
 
@@ -153,12 +153,12 @@ class OpenAlexFixtureBackend:
             dois: DOI identifiers to match, normalized before comparison.
             max_results: Optional result cap applied to the matched records.
         """
-        wanted = {_normalize_doi(doi) for doi in dois}
+        wanted = {normalize_doi(doi) for doi in dois}
         wanted.discard(None)
         records = [
             record
             for record in _load_fixture("openalex_works.json")
-            if _normalize_doi(record.get("doi")) in wanted
+            if normalize_doi(record.get("doi")) in wanted
         ]
         return _limit_fixture_records(records, max_results)
 

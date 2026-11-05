@@ -9016,8 +9016,7 @@
             "enum": [
               "new_items",
               "check_again",
-              "find_more",
-              "rest"
+              "find_more"
             ],
             "title": "Mode",
             "type": "string"
@@ -9055,23 +9054,6 @@
           "capability_run_id"
         ],
         "title": "TocCheckOut",
-        "type": "object"
-      },
-      "TocClarificationIn": {
-        "additionalProperties": false,
-        "description": "A clarification to the plan the next check reads (C49).",
-        "properties": {
-          "text": {
-            "maxLength": 1000,
-            "minLength": 3,
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "text"
-        ],
-        "title": "TocClarificationIn",
         "type": "object"
       },
       "TocCountOut": {
@@ -11789,10 +11771,6 @@
             "title": "Answered",
             "type": "boolean"
           },
-          "content_type": {
-            "title": "Content Type",
-            "type": "string"
-          },
           "counts": {
             "additionalProperties": {
               "type": "integer"
@@ -11813,7 +11791,6 @@
         "required": [
           "upload_id",
           "file_name",
-          "content_type",
           "counts"
         ],
         "title": "TocUploadOut",
@@ -16033,58 +16010,6 @@
           }
         ],
         "summary": "Stop Toc Check",
-        "tags": [
-          "theory-of-change"
-        ]
-      }
-    },
-    "/api/v1/tasks/{task_id}/toc/clarifications": {
-      "post": {
-        "description": "Add a clarification to the plan; the next check, search and review read it (C49).",
-        "operationId": "add_toc_clarification_api_v1_tasks__task_id__toc_clarifications_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Task Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TocClarificationIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Add Toc Clarification",
         "tags": [
           "theory-of-change"
         ]

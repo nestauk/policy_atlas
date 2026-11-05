@@ -26,6 +26,7 @@ from policy_atlas.api.contract import ErrorBody, ErrorEnvelope
 from policy_atlas.api.settings import IngestMode, Settings, load_settings
 from policy_atlas.core import tracing
 from policy_atlas.core.logging import configure_logging
+from policy_atlas.theory_of_change.edits import EditRefused
 
 log = structlog.get_logger()
 
@@ -476,6 +477,15 @@ def _install_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiCapacity)
     async def api_capacity_handler(_: Request, exc: ApiCapacity) -> JSONResponse:
         return _error_response(429, exc.code, exc.message)
+
+    @app.exception_handler(EditRefused)
+    async def edit_refused_handler(_: Request, exc: EditRefused) -> JSONResponse:
+        # A theory-of-change edit that cannot apply (task 054, C10).
+        if exc.status == 404:
+            return _error_response(404, "toc_not_found", exc.message)
+        if exc.status == 422:
+            return _error_response(422, "toc_invalid", exc.message)
+        return _error_response(409, exc.code, exc.message)
 
     @app.exception_handler(RequestValidationError)
     async def validation_handler(_: Request, exc: RequestValidationError) -> JSONResponse:

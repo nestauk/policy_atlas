@@ -31,6 +31,7 @@ from sqlalchemy.engine import Connection
 from policy_atlas.core import events
 from policy_atlas.core.schema import event_log, toc_box, toc_link
 from policy_atlas.theory_of_change.backend import TocBackend
+from policy_atlas.theory_of_change.draft import _norm
 from policy_atlas.theory_of_change.import_prompt import ImportResponse
 
 log = structlog.get_logger()
@@ -96,10 +97,15 @@ def store_import(
     return payload
 
 
+def _joined(response: ImportResponse) -> set[str]:
+    """The boxes an arrow or a group connects."""
+    joined = {ref for a in response.arrows for ref in (a.source, a.target)}
+    return joined | {ref for g in response.groups for ref in (*g.sources, *g.targets)}
+
+
 def counts(response: ImportResponse) -> dict[str, int]:
     """Boxes; drawn and inferred connections; groups; boxes with no connection."""
-    joined = {ref for a in response.arrows for ref in (a.source, a.target)}
-    joined |= {ref for g in response.groups for ref in (*g.sources, *g.targets)}
+    joined = _joined(response)
     return {
         "boxes": len(response.boxes),
         "drawn": sum(a.how == "drawn" for a in response.arrows),
@@ -157,8 +163,7 @@ def theory_text(response: ImportResponse, file_name: str) -> str:
                 for g in response.groups
             ),
         ]
-    joined = {ref for a in response.arrows for ref in (a.source, a.target)}
-    joined |= {ref for g in response.groups for ref in (*g.sources, *g.targets)}
+    joined = _joined(response)
     loose = [b for b in response.boxes if b.ref not in joined]
     if loose:
         lines += [
@@ -248,9 +253,6 @@ def suggest_from_diagram(
     """
     from policy_atlas.theory_of_change.proposals import EditOpWire, create_proposal
 
-    def norm(text: str) -> str:
-        return " ".join(text.split()).casefold()
-
     rows = list(
         conn.execute(
             select(toc_box.c.box_id, toc_box.c.code, toc_box.c.text).where(
@@ -258,7 +260,7 @@ def suggest_from_diagram(
             )
         )
     )
-    code_of_text = {norm(row.text): row.code for row in rows}
+    code_of_text = {_norm(row.text): row.code for row in rows}
     code_of_id = {row.box_id: row.code for row in rows}
     joined = {
         (code_of_id.get(link.source_box_id), code_of_id.get(link.target_box_id))
@@ -270,18 +272,12 @@ def suggest_from_diagram(
     }
 
     def op(**values: object) -> EditOpWire:
-        return EditOpWire.model_validate(
-            {
-                **dict.fromkeys(EditOpWire.model_fields, None),
-                "reason": f"In your diagram ({file_name}).",
-                **values,
-            }
-        )
+        return EditOpWire.of(**{"reason": f"In your diagram ({file_name}).", **values})
 
     ref: dict[str, str] = {}
     ops: list[EditOpWire] = []
     for box in response.boxes:
-        code = code_of_text.get(norm(box.text))
+        code = code_of_text.get(_norm(box.text))
         ref[box.ref] = code if code is not None else f"d{box.ref}"
         if code is None:
             ops.append(op(op="add_box", key=ref[box.ref], layer=box.layer, text=box.text))

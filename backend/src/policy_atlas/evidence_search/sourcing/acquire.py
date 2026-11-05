@@ -237,7 +237,7 @@ def _reconstruct_abstract(index: dict[str, list[int]] | None) -> str | None:
     return " ".join(positions[p] for p in sorted(positions)) or None
 
 
-def _normalize_doi(doi: Any) -> str | None:
+def normalize_doi(doi: Any) -> str | None:
     """Normalize a DOI to lowercase bare form (cross-backend identity key)."""
     if not isinstance(doi, str) or not doi:
         return None
@@ -331,7 +331,7 @@ def _map_openalex_work(record: dict[str, Any]) -> dict[str, Any] | None:
         "title": title,
         "abstract": abstract,
         "year": record.get("publication_year"),
-        "doi": _normalize_doi(record.get("doi")),
+        "doi": normalize_doi(record.get("doi")),
         "language": record.get("language"),
         "backend": "openalex",
         "backend_record_id": record.get("id"),
@@ -400,7 +400,7 @@ def _map_overton_document(record: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     koi = record.get("keyed_other_identifiers")
-    doi = _normalize_doi(_first_or_none(koi.get("doi")) if isinstance(koi, dict) else None)
+    doi = normalize_doi(_first_or_none(koi.get("doi")) if isinstance(koi, dict) else None)
 
     source = record.get("source") or {}
     envelope = {
@@ -655,7 +655,7 @@ def acquire_sources(
         # normalize on read: uploaded snapshots may carry a prefixed/mixed-case
         # DOI in their free-form metadata; acquire-written envelopes are already
         # normalized, but the guard must hold across origins
-        doi = _normalize_doi(meta.get("doi"))
+        doi = normalize_doi(meta.get("doi"))
         if doi:
             seen_dois.add(doi)
             held[f"d:{doi}"] = held_tss

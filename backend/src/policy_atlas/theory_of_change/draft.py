@@ -14,7 +14,15 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core.schema import capability_run, evidence_scope, runs, task_plan
+from policy_atlas.core.schema import (
+    capability_run,
+    event_log,
+    evidence_scope,
+    runs,
+    task_plan,
+    toc_box,
+    toc_link,
+)
 from policy_atlas.core.usage import UsageAccumulator
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.runtime.capability_registry import (
@@ -38,6 +46,7 @@ from policy_atlas.theory_of_change.graph import (
     check_graph,
     trim_conditions,
 )
+from policy_atlas.theory_of_change.proposals import EditOpWire, create_proposal
 
 log = structlog.get_logger()
 
@@ -121,8 +130,6 @@ TOC_CLARIFICATION_EVENT = "toc.clarification"
 
 def clarifications(conn: Connection, task_id: uuid.UUID) -> list[str]:
     """The user's clarifications to the plan, oldest first (C49)."""
-    from policy_atlas.core.schema import event_log
-
     return [
         str(payload.get("text"))
         for payload in conn.execute(
@@ -311,8 +318,6 @@ def user_sketch(conn: Connection, task_id: uuid.UUID) -> tuple[list[Any], list[A
     Empty once a draft is on the canvas (:func:`store.has_graph`): then the
     user's boxes are edits to the draft, not their own theory.
     """
-    from policy_atlas.core.schema import toc_box, toc_link
-
     if store.has_graph(conn, task_id):
         return [], []
     boxes = list(conn.execute(select(toc_box).where(toc_box.c.task_id == task_id)))
@@ -364,8 +369,6 @@ def adopt_sketch(
         The draft's part already on the canvas, and draft key → row id, for
         :func:`suggest_the_rest`.
     """
-    from policy_atlas.core.schema import toc_box, toc_link
-
     log = store.ChangeLog()
     row_of = {_norm(box.text): box for box in boxes}
     ids: dict[str, uuid.UUID] = {}
@@ -450,9 +453,6 @@ def suggest_the_rest(
     so Accept all builds them in order. The user's boxes and links are named
     by their codes, new ones by their draft keys.
     """
-    from policy_atlas.core.schema import toc_box, toc_link
-    from policy_atlas.theory_of_change.proposals import EditOpWire, create_proposal
-
     on_canvas = {box.key for box in drawn.boxes} | {link.key for link in drawn.links}
     code: dict[uuid.UUID, str | None] = {
         row.box_id: row.code
@@ -471,9 +471,7 @@ def suggest_the_rest(
         return str(code.get(ids[key]) or key) if key in on_canvas and key in ids else key
 
     def op(**values: object) -> EditOpWire:
-        return EditOpWire.model_validate(
-            {**dict.fromkeys(EditOpWire.model_fields, None), "reason": COMPLETES, **values}
-        )
+        return EditOpWire.of(**{"reason": COMPLETES, **values})
 
     # One route at a time (owner, 2026-11-04): each route's new boxes, its new
     # links, then the pathway, tagged r1, r2 ... A box or link two routes share
@@ -609,8 +607,6 @@ def toc_draft_scope(
         return _draft_summary(draft, attempts, backend, usage)
     if sketched:
         # Boxes without connections: the draft's reading of them replaces them.
-        from policy_atlas.core.schema import toc_box
-
         log_ = store.ChangeLog()
         for row in sketched:
             store.delete(conn, log_, toc_box, row.box_id)

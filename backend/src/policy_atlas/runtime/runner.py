@@ -1027,8 +1027,7 @@ def _run_plan_impl(
     # two barriers, dispatched before the first step and joined before
     # ``toc_select``. A ToC walk never pauses, so never resumes.
     toc_check = (
-        resume_from is None
-        and purpose == TOC_PURPOSE
+        purpose == TOC_PURPOSE
         and scope_context.get(TOC_WALK_KEY) == TOC_WALK_CHECK
         # Updating the report searches nothing (C45).
         and scope_context.get(TOC_CHECK_MODE_KEY) != "report"
@@ -1036,6 +1035,28 @@ def _run_plan_impl(
     toc_children: list[uuid.UUID] | None = None
     toc_joined = False
     toc_new_joined = False
+
+    def toc_plan_row() -> dict[str, Any]:
+        return {
+            "plan_id": steering_state.plan_id,
+            "version": steering_state.plan_version,
+            "payload": steering_state.plan.model_dump(mode="json"),
+        }
+
+    def toc_searches_failed(stage: str, reason: str) -> None:
+        """A ToC barrier whose searches did not all finish: a skipped stage and a flag."""
+        step_outcomes.append(
+            RunStepOutcome(
+                component=stage,
+                run_id=None,
+                status="skipped",
+                wall_clock_s=None,
+                skipped=True,
+                reason=reason,
+            )
+        )
+        flagged_events.append({"component": stage, "status": "skipped", "reason": reason})
+
     # The most-recent ATTEMPTED run id per registry component, INCLUDING failed
     # attempts (FIX 1): un-blinds class 9 (downstream_capability_reduced), which
     # scans the walk's attempted run ids for component.failed/skipped events — a
@@ -1179,11 +1200,7 @@ def _run_plan_impl(
                     engine,
                     task_id=task_id,
                     parent_id=capability_run_id,
-                    plan_row={
-                        "plan_id": steering_state.plan_id,
-                        "version": steering_state.plan_version,
-                        "payload": steering_state.plan.model_dump(mode="json"),
-                    },
+                    plan_row=toc_plan_row(),
                     backends=backend_bundle,
                     session_id=session_id,
                     links=scope_context.get(TOC_LINKS_KEY),
@@ -1191,7 +1208,7 @@ def _run_plan_impl(
                 )
             if step.component == "toc_select" and not toc_joined:
                 toc_joined = True
-                joined = option_search.join_children(
+                joined = option_search.join_option_searches(
                     engine,
                     task_id=task_id,
                     parent_id=capability_run_id,
@@ -1201,23 +1218,9 @@ def _run_plan_impl(
                 )
                 # A failed item search degrades the walk, never fails it.
                 if joined.failed:
-                    reason = f"{joined.failed} of {joined.total} item searches did not finish"
-                    step_outcomes.append(
-                        RunStepOutcome(
-                            component=option_search.TOC_ITEM_SEARCHES_STAGE,
-                            run_id=None,
-                            status="skipped",
-                            wall_clock_s=None,
-                            skipped=True,
-                            reason=reason,
-                        )
-                    )
-                    flagged_events.append(
-                        {
-                            "component": option_search.TOC_ITEM_SEARCHES_STAGE,
-                            "status": "skipped",
-                            "reason": reason,
-                        }
+                    toc_searches_failed(
+                        option_search.TOC_ITEM_SEARCHES_STAGE,
+                        f"{joined.failed} of {joined.total} item searches did not finish",
                     )
             # The second fan-out (C32): after merge, the kept links discovery
             # added get their own item search, dispatched and joined before
@@ -1236,17 +1239,13 @@ def _run_plan_impl(
                         engine,
                         task_id=task_id,
                         parent_id=capability_run_id,
-                        plan_row={
-                            "plan_id": steering_state.plan_id,
-                            "version": steering_state.plan_version,
-                            "payload": steering_state.plan.model_dump(mode="json"),
-                        },
+                        plan_row=toc_plan_row(),
                         backends=backend_bundle,
                         session_id=session_id,
                         links=new_links,
                         stage=stage,
                     )
-                    joined = option_search.join_children(
+                    joined = option_search.join_option_searches(
                         engine,
                         task_id=task_id,
                         parent_id=capability_run_id,
@@ -1256,21 +1255,9 @@ def _run_plan_impl(
                     )
                     # A failed search leaves its link to the pool fallback.
                     if joined.failed:
-                        reason = (
-                            f"{joined.failed} of {joined.total} new-link searches did not finish"
-                        )
-                        step_outcomes.append(
-                            RunStepOutcome(
-                                component=stage,
-                                run_id=None,
-                                status="skipped",
-                                wall_clock_s=None,
-                                skipped=True,
-                                reason=reason,
-                            )
-                        )
-                        flagged_events.append(
-                            {"component": stage, "status": "skipped", "reason": reason}
+                        toc_searches_failed(
+                            stage,
+                            f"{joined.failed} of {joined.total} new-link searches did not finish",
                         )
         if purpose == LONGLIST_PURPOSE:
             # The fan-out: the first step after ``suggest`` (whether it
