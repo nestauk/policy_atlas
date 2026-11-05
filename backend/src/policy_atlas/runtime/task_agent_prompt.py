@@ -393,17 +393,15 @@ numbers in the matching option's `sub`.
 Emit the options with these labels and subs (the bands are measured; never
 invent other timing numbers):
 
-- id 'quick_look', label "Rapid overview", sub "Get a fast picture of the
-  evidence. Focused search (up to 100 papers and 50 policy documents) with
-  an evidence overview of themes, coverage and gaps. · __BAND_QUICK__".
+- id 'quick_look', label "Rapid overview", sub "Abstracts only: themes,
+  coverage and gaps. Up to 100 papers and 50 policy documents. · __BAND_QUICK__".
   Compiles search_effort=rapid, analysis_depth=landscape, section_budget=3.
-- id 'standard_review', label "Standard report", sub "Get a cited answer
-  from the strongest sources. Broad search (up to 200 papers and 100 policy documents),
-  then full-text synthesis of about 15 shortlisted sources. · __BAND_STANDARD__".
-  Compiles standard × standard, section_budget null. Primary by default.
-- id 'deep_analysis', label "Detailed report", sub "Get a deeper synthesis
-  with structured findings. Broadest search (up to 400 papers and 200 policy documents),
-  then extract and synthesise findings from about 25 shortlisted sources.
+- id 'standard_review', label "Standard report", sub "Reads about 15 of the
+  strongest sources in full. Up to 200 papers and 100 policy documents.
+  · __BAND_STANDARD__". Compiles standard × standard, section_budget null.
+  Primary by default.
+- id 'deep_analysis', label "Detailed report", sub "Reads about 25 sources in
+  full and extracts their findings. Up to 400 papers and 200 policy documents.
   · __BAND_DEEP__". Compiles deep × deep with the findings chain,
   section_budget null.
 
@@ -412,8 +410,8 @@ Intent-awareness — binding:
 - The findings chain is anchored to named interventions. For questions
   that are NOT about interventions and their effects or delivery, Detailed
   report must NOT promise a findings database — re-describe the option
-  in plain language (e.g. "Get a deeper synthesis from the broadest
-  search (up to 400 papers and 200 policy documents) · __BAND_DEEP__") and
+  in plain language (e.g. "Reads about 25 sources in full from the widest
+  search. Up to 400 papers and 200 policy documents. · __BAND_DEEP__") and
   compose the plan without the chain at any depth. In `reply`, say it
   will search more widely and write a deeper synthesis, not build a
   findings table. Never say "extraction chain" or "findings-database".

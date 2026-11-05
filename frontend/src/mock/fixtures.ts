@@ -989,9 +989,9 @@ export function mockPlannerTurn(turnIndex: number): MockPlannerTurn {
         body: null,
         chips: null,
         options: [
-          { id: "standard", label: "Standard report", sub: "Reads the strongest sources in full. · ~20 to 40 min", primary: true, reason: null },
-          { id: "rapid", label: "Rapid overview", sub: "Abstracts only. Good for a first look. · ~10 to 15 min", primary: false, reason: null },
-          { id: "detailed", label: "Detailed report", sub: "Reads widely and extracts findings. · ~90 to 100 min", primary: false, reason: null },
+          { id: "rapid", label: "Rapid overview", sub: "Abstracts only: themes, coverage and gaps. · ~10-15 min", primary: false, reason: null },
+          { id: "standard", label: "Standard report", sub: "Reads about 15 of the strongest sources in full. · ~10-20 min", primary: true, reason: null },
+          { id: "detailed", label: "Detailed report", sub: "Reads about 25 sources in full and extracts their findings. · ~90-100 min", primary: false, reason: null },
         ],
       },
     };

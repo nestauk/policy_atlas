@@ -341,6 +341,14 @@ Themes view (the Sources tab's first view), not the Landscape.
 4. The cards take a moment to arrive, so settled lines rise in like the open card and the plan
    card (the existing 300 ms rise; off under reduced motion).
 
+## Owner note after round 4 (2026-11-05): the thoroughness copy
+
+The three thoroughness sentences the planner writes are cut to the plain voice (one source, the
+planner prompt; hash re-pinned): "Abstracts only: themes, coverage and gaps. Up to 100 papers and
+50 policy documents."; "Reads about 15 of the strongest sources in full. Up to 200 papers and
+100 policy documents."; "Reads about 25 sources in full and extracts their findings. Up to 400
+papers and 200 policy documents." Each then its measured band. The mock says the same, shorter.
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |

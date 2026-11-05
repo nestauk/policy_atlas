@@ -103,6 +103,9 @@ tool and the gap measure are built and tested (Phase 0). The "before" captures m
   line shows the question's text and a settled scope line its chips ("That's my question" and
   "Looks right" only as fallbacks); settled lines rise in like the open card. The owner's three
   rounds at build end are used; the next two rounds belong to the review phase (D11).
+- **Owner note after round 3 (2026-11-05):** the thoroughness copy cut to the plain voice (the
+  planner prompt, re-pinned; the mock follows). Gate: `tests/runtime/test_task_agent.py` 43
+  passed, mock tests 45 passed, the planning journey passed, `make prompt-guard` green.
 
 ## Diff summary
 
@@ -186,6 +189,13 @@ adjudicated at step 7).
   now read from `task_plan.TIME_BANDS` (one table, N20). Two bands were already equal; the
   Rapid overview band changes from "~5-10 min" to "~10-15 min" (the plan document's value).
   No other prompt text changes; `PLANNER_PROMPT_VERSION` stays (like-for-like swap ruling).
+- `runtime/task_agent_prompt.py`, second re-pin (owner note after polish round 3, 2026-11-05):
+  the three thoroughness `sub` sentences are cut to the plain voice ("Abstracts only: themes,
+  coverage and gaps. Up to 100 papers and 50 policy documents."; "Reads about 15 of the
+  strongest sources in full. Up to 200 papers and 100 policy documents."; "Reads about 25
+  sources in full and extracts their findings. Up to 400 papers and 200 policy documents."),
+  and the non-intervention Detailed report example likewise. Labels, ids, bands and the caps
+  are unchanged; `PLANNER_PROMPT_VERSION` stays.
 
 ### Flagged deviations (minor, resolved within the contract's vocabulary)
 

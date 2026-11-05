@@ -86,9 +86,9 @@ def test_task_agent_prompt_plain_language_and_ready_update() -> None:
 def test_task_agent_prompt_thoroughness_screen_words_and_caps() -> None:
     assert 'label "Standard report"' in PLANNER_SYSTEM_PROMPT
     assert 'label "Detailed report"' in PLANNER_SYSTEM_PROMPT
-    assert "up to 100 papers and 50 policy documents" in PLANNER_SYSTEM_PROMPT
-    assert "up to 200 papers and 100 policy documents" in PLANNER_SYSTEM_PROMPT
-    assert "up to 400 papers and 200 policy documents" in PLANNER_SYSTEM_PROMPT
+    assert "up to 100 papers and 50 policy documents" in PLANNER_SYSTEM_PROMPT.lower()
+    assert "up to 200 papers and 100 policy documents" in PLANNER_SYSTEM_PROMPT.lower()
+    assert "up to 400 papers and 200 policy documents" in PLANNER_SYSTEM_PROMPT.lower()
     assert "relevant results per database" not in PLANNER_SYSTEM_PROMPT
     assert "Evidence overview / Full-text synthesis / Findings synthesis" in PLANNER_SYSTEM_PROMPT
     assert "Standard review" not in PLANNER_SYSTEM_PROMPT

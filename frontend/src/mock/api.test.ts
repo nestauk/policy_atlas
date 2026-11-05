@@ -727,9 +727,10 @@ describe("mock API", () => {
       expect(second.turn.part.chips).toHaveLength(3);
       const third = (await post("Looks right")).at(-1) as { turn: { part: { id: string; options: { label: string; primary: boolean; sub: string }[] } } };
       expect(third.turn.part.id).toBe("thoroughness");
-      expect(third.turn.part.options.map((option) => option.label)).toEqual(["Standard report", "Rapid overview", "Detailed report"]);
-      expect(third.turn.part.options[0].primary).toBe(true);
-      expect(third.turn.part.options[0].sub).toContain("~20 to 40 min");
+      // Fastest to slowest, in the planner's order (owner, polish round 3).
+      expect(third.turn.part.options.map((option) => option.label)).toEqual(["Rapid overview", "Standard report", "Detailed report"]);
+      expect(third.turn.part.options[1].primary).toBe(true);
+      expect(third.turn.part.options[1].sub).toContain("~10-20 min");
 
       const transcript = (await (await mockFetch(`${base}/task-agent-turns`)).json()) as { data: { question: string | null }[] };
       expect(transcript.data.map((row) => row.question)).toEqual([turn.question, null, null]);
