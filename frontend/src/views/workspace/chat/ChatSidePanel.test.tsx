@@ -55,11 +55,6 @@ vi.mock("../../../store", async (importOriginal) => {
     }),
   };
 });
-vi.mock("./SidebarRun", () => ({
-  SidebarRun: ({ stream }: { stream: { run: { status: string } | null } }) => (
-    <div data-testid="sidebar-run" data-status={stream.run?.status} />
-  ),
-}));
 vi.mock("./conversationState", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./conversationState")>();
   return {
@@ -274,13 +269,15 @@ describe("ChatSidePanel", () => {
       expect(pane).toHaveAttribute("data-run-id", "run-1");
     });
 
-    it.each(["running", "paused"])("folds to the compact run view while the run is %s", (status) => {
+    // Owner, 2026-11-05: the run trace in the thread is the sidebar's run
+    // view; there is no separate run line or compact run view.
+    it.each(["running", "paused"])("keeps the same Task Agent thread while the run is %s", (status) => {
       state.activeConversationId = "plan-1";
       state.rows = [PLAN_ROW, CHAT_ROW];
       state.runStatus = status;
       render(<ChatSidePanel taskId="p1" isOwner />);
-      expect(screen.getByTestId("sidebar-run")).toHaveAttribute("data-status", status);
-      expect(screen.queryByTestId("task_agent-pane")).toBeNull();
+      expect(screen.getByTestId("task_agent-pane")).toHaveAttribute("data-run-status", status);
+      expect(screen.queryByText(/a check-in is waiting on you/)).toBeNull();
     });
 
     it("keeps the full pane at the scoping gate, whose composer takes a question", () => {

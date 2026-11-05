@@ -5,7 +5,7 @@ import { capabilityLabel } from "../lib/capabilities";
 import { Figures } from "../lib/figures";
 import { useFreshness, useNow } from "../lib/freshness";
 import { scrub } from "../lib/scrub";
-import { StatusDot } from "../ui/brand/Card";
+import { StatusMark } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { taskStatus } from "./landingPresentation";
 import { taskListRowGridClass, taskListRowGridClassWithOwner } from "./listPageChrome";
@@ -52,7 +52,7 @@ export function TaskListRow({
   const status = taskStatus(latestRun);
   const running = activeRun?.status === "running" && Boolean(activeRun.stage_label);
   const nowMs = useNow(running);
-  // The dot breathes for a moment when the polled stage changes, then rests.
+  // The mark breathes for a moment when the polled stage changes, then rests.
   const fresh = useFreshness(running ? (activeRun?.stage_label ?? null) : null);
   const statusLabel = running
     ? `${activeRun?.stage_label} · ${formatMinutes(elapsedSeconds(activeRun?.started_at, undefined, nowMs))}`
@@ -86,7 +86,7 @@ export function TaskListRow({
         {capabilityLabel(capabilityKey)}
       </Chip>
       <span className="inline-flex min-w-0 items-center gap-1.5 text-meta text-grey">
-        <StatusDot tone={running ? "running" : status.dot} className={running && fresh ? "anim-breathe" : undefined} />
+        <StatusMark tone={running ? "running" : status.dot} breathing={running && fresh} />
         <span className="truncate" title={statusLabel}>
           <Figures text={scrub(statusLabel)} />
         </span>

@@ -66,3 +66,28 @@ describe("TaskListRow — the running stage", () => {
     expect(screen.getByText("Paused — waiting on your input")).toBeInTheDocument();
   });
 });
+
+// Task 058 (owner, 2026-11-05): the row's status is the 6 px square mark,
+// blue while the run is live, orange while paused, green once done.
+describe("TaskListRow — the status mark", () => {
+  const startedAt = new Date(Date.now() - 60_000).toISOString();
+  const markOf = (container: HTMLElement) => container.querySelector("[data-tone]") as HTMLElement;
+
+  it("is blue while the run is live", () => {
+    const { container } = renderRow({
+      latestRun: { capability_run_id: "r1", status: "running", started_at: startedAt },
+      activeRun: { capability_run_id: "r1", status: "running", started_at: startedAt, stage: "acquire", stage_label: "Searching and screening" },
+    });
+    expect(markOf(container)).toHaveClass("bg-blue", "size-1.5");
+    expect(markOf(container).className).not.toMatch(/rounded|bg-yellow/);
+  });
+
+  it.each([
+    ["paused", "bg-orange"],
+    ["succeeded", "bg-green"],
+    ["failed", "bg-red"],
+  ] as const)("is %s → %s", (status, colour) => {
+    const { container } = renderRow({ latestRun: { capability_run_id: "r1", status, started_at: startedAt } });
+    expect(markOf(container)).toHaveClass(colour);
+  });
+});

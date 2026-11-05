@@ -7,10 +7,8 @@ import { describe, expect, it } from "vitest";
 import type { PlanDraft, StageEntry, StageLiveness } from "../../store";
 import {
   cardRows,
-  collapsedStatusLine,
   currentRow,
-  FINISHED_NOTICE,
-  finishedNotice,
+  endedLine,
   formatElapsed,
   formatMinutes,
   isFinished,
@@ -20,8 +18,9 @@ import {
   rowLink,
   rowLiveness,
   rowSeconds,
-  runFinishedSignpost,
-  runningCardCopy,
+  STALLED_LINE,
+  stepCount,
+  traceWords,
   walkKind,
 } from "./runProgress";
 
@@ -235,7 +234,7 @@ describe("the activity line", () => {
     expect(rowLiveness(row, liveness)?.activity).toBe("screening 61 new abstracts · 107 relevant so far");
   });
 
-  it("puts the writer's section before the activity on the strip", () => {
+  it("puts the writer's section before the activity in the trace's header", () => {
     expect(rowDetail(tick({ section: "Section 3 of 7 · Costs and funding", activity: "Writing" }))).toBe(
       "Section 3 of 7 · Costs and funding",
     );
@@ -260,15 +259,38 @@ describe("elapsed time in words", () => {
   });
 });
 
-describe("the collapsed line and the current row", () => {
+describe("the trace's header words (annex § The run trace)", () => {
+  const rows = cardRows(
+    [entry({ stage: "acquire", status: "completed" }), entry({ stage: "screen", status: "started" })],
+    standardPlan(),
+    "running",
+  );
+
   it("names the row in progress, else the last that ran", () => {
-    const rows = cardRows(
-      [entry({ stage: "acquire", status: "completed" }), entry({ stage: "screen", status: "completed" })],
-      standardPlan(),
-      "paused",
-    );
     expect(currentRow(rows)?.label).toBe("Searching and screening");
-    expect(collapsedStatusLine("paused", rows, "6 min 12 s")).toBe("PAUSED · Searching and screening · 6 min 12 s");
+    const done = cardRows([entry({ stage: "acquire", status: "completed" }), entry({ stage: "screen", status: "completed" })], standardPlan(), "paused");
+    expect(currentRow(done)?.label).toBe("Searching and screening");
+  });
+
+  it("reads the row's label, then what it is doing, in the server's words", () => {
+    expect(traceWords(currentRow(rows), "184 found so far", "live", true)).toBe("Searching and screening · 184 found so far");
+    expect(traceWords(currentRow(rows), null, "live", true)).toBe("Searching and screening");
+    expect(traceWords(null, null, "live", true)).toBe("");
+  });
+
+  it("says the step is still working after two quiet minutes, with no counter", () => {
+    expect(traceWords(currentRow(rows), "21 of 38 read", "stalled", true)).toBe(`Searching and screening · ${STALLED_LINE}`);
+    expect(STALLED_LINE).toBe("Still working on this step");
+  });
+
+  it("tells the owner a check-in waits, and a colleague only where the run stopped", () => {
+    expect(traceWords(currentRow(rows), "184 found so far", "paused", true)).toBe("Paused · a check-in is waiting on you");
+    expect(traceWords(currentRow(rows), "184 found so far", "paused", false)).toBe("Paused · Searching and screening");
+  });
+
+  it("counts the steps", () => {
+    expect(stepCount(1)).toBe("1 step");
+    expect(stepCount(6)).toBe("6 steps");
   });
 });
 
@@ -283,26 +305,30 @@ describe("walk kinds and finished words (tasks 045, 055, 058)", () => {
     expect(walkKind("options_scoping", [{ stage: "shortlist" } as never], null)).toBe("shortlist");
   });
 
-  it("words the top line by status; a degraded shortlist walk stopped, a degraded finish done", () => {
-    expect(runningCardCopy("running")).toEqual({ tone: "running", eyebrow: "RUNNING" });
-    expect(runningCardCopy("paused")).toEqual({ tone: "paused", eyebrow: "PAUSED" });
-    expect(runningCardCopy("degraded")).toEqual({ tone: "done", eyebrow: "DONE" });
-    expect(runningCardCopy("degraded", "shortlist")).toEqual({ tone: "stopped", eyebrow: "STOPPED" });
+  it("folds an ended run to its finish words, with the Result tab as its one link", () => {
     expect(isFinished("degraded")).toBe(true);
     expect(isFinished("failed")).toBe(false);
-  });
-
-  it("keeps the finished notices and the strip's ready words per walk", () => {
     expect(READY_WORDS.evidence_search).toBe("Report ready");
     expect(READY_WORDS.longlist).toBe("The longlist is ready");
-    expect(FINISHED_NOTICE.shortlist.before).toContain("proposed a shortlist");
-    expect(finishedNotice("shortlist", "degraded").before).toBe(
-      "Policy Atlas could not propose a shortlist. Your places are unchanged. Open the",
-    );
-    expect(runFinishedSignpost("t1", "degraded", "shortlist")?.href).toBe("/tasks/t1/result?view=shortlist");
-    expect(runFinishedSignpost("t1", "succeeded")?.message).toBe(
-      "Evidence search is finished. You can read the report in the Result tab.",
-    );
+    expect(endedLine("succeeded", "evidence_search")).toEqual({ words: "Report ready", tone: "complete", link: true });
+    expect(endedLine("degraded", "longlist")).toEqual({ words: "The longlist is ready", tone: "complete", link: true });
+  });
+
+  it("reads a bad ending as Stopped or Failed with no link; a degraded shortlist walk says it proposed none", () => {
+    expect(endedLine("failed", "evidence_search")).toEqual({ words: "Failed", tone: "failed", link: false });
+    expect(endedLine("aborted", "evidence_search")).toEqual({ words: "Stopped", tone: "failed", link: false });
+    expect(endedLine("interrupted", "baseline")).toEqual({ words: "Stopped", tone: "failed", link: false });
+    expect(endedLine("degraded", "shortlist")).toEqual({
+      words: "Policy Atlas could not propose a shortlist. Your places are unchanged.",
+      tone: "failed",
+      link: false,
+    });
+  });
+
+  it("has no ended line while the run is live", () => {
+    expect(endedLine("running", "evidence_search")).toBeNull();
+    expect(endedLine("paused", "evidence_search")).toBeNull();
+    expect(endedLine(undefined, "evidence_search")).toBeNull();
   });
 });
 

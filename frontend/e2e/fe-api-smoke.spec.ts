@@ -60,16 +60,12 @@ test.describe.serial("@fe-api-smoke built frontend against real API", () => {
     // starts with. Labels come from the plan-panel vocabulary, not SSE copy.
     // (Never assert discretionary stages such as "Mapping"/characterise: the
     // agent may omit them.)
-    // The timeline entry persists after the component completes, so this
-    // assertion has no race against the stub's near-instant execution.
-    // `.first()` because depth-graded search reruns acquire once per round and
-    // the timeline renders a row per stage event — stub mode acquires nothing,
-    // so it always runs to the round cap and emits 2+ identical rows. Asserting
-    // without `.first()` is a strict-mode violation whose element count tracks
-    // the round count (build finding, 2026-08-10). Presence is all this smoke
-    // claims; how repeated stages should read is a UX question, not a test one.
-    await expect(
-      page.getByRole("list", { name: "Stage timeline" }).getByText("Searching").first(),
-    ).toBeVisible({ timeout: 30_000 });
+    // The run trace (task 058) lists every step once its header is opened,
+    // live or ended, so this assertion has no race against the stub's
+    // near-instant execution.
+    await page.getByRole("region", { name: "Analysis run" }).getByRole("button").first().click({ timeout: 30_000 });
+    await expect(page.getByRole("list", { name: "Run steps" }).getByText("Searching").first()).toBeVisible({
+      timeout: 30_000,
+    });
   });
 });

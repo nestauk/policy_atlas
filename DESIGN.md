@@ -241,7 +241,7 @@ no KPI tiles, no badge clutter, no icon soup.
 - Zero border radius everywhere; the 45° cut corner is the single form flourish
 - One Electric Blue primary action per view; blue is otherwise a pointer, not a fill
 - Averta at seven named sizes, 16px floor, 44em measure; Zosia Display for the wordmark, splash and system-state headings
-- Status is always colour plus a word; colour alone never carries meaning
+- Status is always colour plus a word; colour alone never carries meaning; the status mark is a 6px square
 - Motion is evidence of data: rise on arrival, glow on a new check-in, breathe while running
 
 ## Product design principles
@@ -256,7 +256,7 @@ copy is judged against them; the visual system below exists to serve them.
 Nesta's core palette at tool density: one hero, a structural navy, warm-neutral greys, and status colours that appear as pale tints with dark text.
 
 ### Primary
-- **Electric Blue** (#0000ff): the hero. The one primary button per view, the active nav underline, the active tab rule, citation markers, the "Atlas" half of the wordmark, focus outlines. Pressed state deepens to **Electric Blue Pressed** (#0000d6).
+- **Electric Blue** (#0000ff): the hero. The one primary button per view, the active nav underline, the active tab rule, citation markers, the "Atlas" half of the wordmark, focus outlines, and the 6 px square mark of a live run (task 058; owner 2026-11-05). Pressed state deepens to **Electric Blue Pressed** (#0000d6).
 - **Electric Blue Tint** (#ececff): chip fill for blue-toned chips (capability tags, BETA) and the border of the same chips at `#c7c7ff`.
 - **Electric Blue Wash** (#f5f5ff): the palest blue. User message bubbles, citation marker fill, menu-item hover. Reads as "touched by the reader".
 
@@ -265,9 +265,9 @@ Nesta's core palette at tool density: one hero, a structural navy, warm-neutral 
 
 ### Tertiary (status and category)
 - **Green** (#18a48c): complete. As a solid fill only on the "go" action that starts a run; otherwise as **Green Tint** (#e7f5f2) with deep green text (#0c6b5a).
-- **Yellow** (#fdb633): running or pending. Status dot, the glow ring on a new check-in, **Yellow Tint** (#fff6e3) chips with brown text (#8a5a00).
-- **Orange** (#ff6e47): paused or interrupted. Status dot and the interrupted-run banner border.
-- **Red** (#eb003b): failed, error, and the sensitive-information banner (solid red, white text). Error text and **Red Tint** (#fde8ed) surfaces.
+- **Yellow** (#fdb633): pending. **Yellow Tint** (#fff6e3) chips with brown text (#8a5a00). (Until task 058 the running dot and the check-in glow were yellow; a live run is now the blue square mark and the glow is orange.)
+- **Orange** (#ff6e47): paused or interrupted. Status mark, the check-in's rule and glow, and the interrupted-run banner border.
+- **Red** (#eb003b): failed, error, and the sensitive-information banner (solid red, white text). Status mark, error text and **Red Tint** (#fde8ed) surfaces.
 - **Purple** (#9a1bbe), **Violet** (#a59bee), **Pink** (#f6a4b7), **Sand** (#d2c9c0): Nesta secondaries defined as tokens but unused in the built UI. The evidence-distribution charts use Electric Blue bars on Line grid lines with Navy and Grey text only. The animated fold mark uses its own pastels (sand #ECC77F, teal #6FBFA7, salmon #F09B80, pink #E8B9C8), which are not theme tokens.
 
 ### Neutral
@@ -281,7 +281,7 @@ Nesta's core palette at tool density: one hero, a structural navy, warm-neutral 
 ### Named Rules
 **The One Pen Rule.** Electric Blue appears as a solid fill on at most one control per view. Everywhere else it is a rule, a marker or a word.
 
-**The Word Beside the Colour Rule.** A status dot, chip tone or coloured border never stands alone. The label sits next to it in text.
+**The Word Beside the Colour Rule.** A status mark, chip tone or coloured border never stands alone. The label sits next to it in text.
 
 **The Tint-Not-Fill Rule.** Status and category colours appear as pale tints with dark text on chips and surfaces. Solid status fills are reserved for the run-start action (green) and the safety banner (red).
 
@@ -333,7 +333,7 @@ Flat paper with ambient lift only. Surfaces sit on the grey ground and are separ
 - **Sheet edge** (`--shadow-paper`: `0 1px 3px rgba(15, 41, 74, 0.05), 0 8px 24px rgba(15, 41, 74, 0.04)`, the Card's navy ambient shadow, plus a 1px Line ring): the report page. It disappears below `md` and in print. (Task 058 moved it off Tailwind's grey `shadow-sm`; four other surfaces still carry the grey one and are a later sweep.)
 - **Tooltip lift** (`box-shadow: 0 4px 16px rgba(15,41,74,0.12)`): tooltips only.
 - **Overlay lift** (`box-shadow: 0 10px 30px rgba(15,41,74,0.14)`): popovers, sheets, toasts.
-- **Check-in glow** (`0 0 0 6px rgb(255 110 71 / 0.25)` at the animation midpoint): a one-shot Orange ring marking a newly arrived check-in; it fades to nothing. Orange is the one "waiting on you" colour (task 058, D15): the paused dot, the run strip's paused state, the check-in's rule and this glow.
+- **Check-in glow** (`0 0 0 6px rgb(255 110 71 / 0.25)` at the animation midpoint): a one-shot Orange ring marking a newly arrived check-in; it fades to nothing. Orange is the one "waiting on you" colour (task 058, D15): the paused mark on the trace and the Agent tab, the check-in's rule and this glow.
 
 ### Named Rules
 **The Hairline First Rule.** Regions are separated by a 1px Line border. A shadow is added only when the surface is temporary and sits above the page.
@@ -342,7 +342,7 @@ Flat paper with ambient lift only. Surfaces sit on the grey ground and are separ
 
 ## Shapes
 
-Zero radius everywhere. Buttons, cards, chips, inputs, popovers, sheets, toasts and tooltips all have square corners. The single exception is the 8px status dot, which is a circle so it reads as a dot and not a chip.
+Zero radius everywhere. Buttons, cards, chips, inputs, popovers, sheets, toasts and tooltips all have square corners, and so does the status mark: a 6px square (task 058; owner 2026-11-05, replacing the 8px circle), small enough to read as a mark and not a chip.
 
 The signature form is the Nesta cut corner: a 45° clip removing 10px from the top-right of the primary button (8px on the small size). The composer's send button doubles it, cutting both top-right and bottom-left. The green run-start button shares the cut. No other element carries it, which is why the eye can find the way forward on any screen.
 
@@ -377,7 +377,7 @@ Precise and unadorned. Hard edges, hairline borders, no decoration. The cut corn
 - **Internal Padding:** 16px; pane heading is 14px top, 10px bottom, 16px sides.
 - **Pane heading:** Label style (uppercase, Extrabold, tracked, Grey) with an optional right-aligned control.
 - **Divider:** 1px Line.
-- **Status dot:** 8px circle, always followed by a word. Yellow running, Green complete, Orange paused, Line 2 idle, Red failed.
+- **Status mark:** 6px square, always followed by a word. Electric Blue while a run is live (it breathes while updates arrive and holds still 1.5 s after the last, and under reduced motion), Green complete, Orange paused, Line 2 idle, Red failed.
 
 ### Inputs / Fields
 - **Style:** Paper fill, 1px Line 2 border, 12px by 10px padding, Lead size, square. The composer textarea grows with content (`field-sizing: content`) between 56px and 240px.
@@ -401,6 +401,9 @@ Precise and unadorned. Hard edges, hairline borders, no decoration. The cut corn
 ### Report and citations (signature)
 The report is a paper sheet in the 780px reading column. Body prose is Lead size on desktop, Body on mobile, within a 44em measure. Cited spans wash to Blue Wash on hover. Numbered citation markers are small square tags: Caption Semibold, 80% Electric Blue text on Blue Wash with a 25% blue border, deepening on hover. In print the sheet loses all chrome and colour; markers become plain black text.
 
+### The run trace (signature)
+A run shows in the Task Agent conversation as one borderless block at its place in the thread (task 058; owner 2026-11-05, matching task 054's theory-of-change trace). Its header is a button: the blue square mark, the current step and what the model is doing now ("Writing · Section 3 of 7 · Costs and funding"), the elapsed time in tabular figures, and "· 6 steps"; under it the last finished step's one-liner in grey. Opening it lists every plan step under a hairline left rule, done steps with their counts, wall time and link to their output, with "See plan" at the foot. Paused, the mark turns orange and the header says a check-in is waiting. Ended, the block folds to one green line, "Report ready · 14 min · Read it →", the run's one destination. The sidebar shows the same block; no strip, card or dock shows the run anywhere else. The lifecycle tabs carry a small navy dot when new content landed and the browser title carries "● Report ready" when the run finished unseen.
+
 ### Plan card and check-ins (signature)
 A plan step is a Paper card under one small stepper line the client computes ("Plan · step 2 of 3 · Scope"), with the part's title, a radio list (label, then one plain sentence; the planner's primary option first with its reason under it; no "Recommended" word, no pre-selection), an input inside the card for an option that needs words, and the plan card's one green Start button. A settled part collapses to one line ("Scope · Looks right · Change"). A pending check-in is a Card with a 2px Orange left rule, the question as its title (no eyebrow, no chip), one facts line, the same radio list with the suggested option first, a closed "Or steer in your own words" disclosure and one "Stop the run" link; it glows once in Orange when it arrives (task 058). A failed turn renders as a 40% Red Tint surface with a Red Tint border and a secondary Retry button. User messages are indented 32px from the left in a Blue Wash bubble with a 1px Blue Tint border, square corners; agent messages are plain Lead prose at the 44em measure.
 
@@ -417,7 +420,7 @@ A plan step is a Paper card under one small stepper line the client computes ("P
 - **Do** write labels in sentence case as actions, with just enough text.
 
 ### Don't:
-- **Don't** round any corner except the 8px status dot.
+- **Don't** round any corner; the status mark and the tab's new-content mark are 6px squares.
 - **Don't** stack shadows, add hover shadows, or use neutral black shadows; every shadow is navy-tinted.
 - **Don't** build dashboard SaaS chrome: KPI tiles, rounded cards, badge clutter, icon-only sidebars without labels.
 - **Don't** use Electric Blue as a second fill on the same view, or as a background wash for whole regions.

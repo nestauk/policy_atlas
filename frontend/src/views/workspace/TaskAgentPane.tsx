@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 
 import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns, useTask } from "../../api/queries";
 import { useComposerSeed } from "../../lib/composerSeed";
@@ -44,16 +44,7 @@ import type { components } from "../../api/gen/types";
 import { PartCard, type PartState, type PlanStep, confirmTarget, derivePartStates, planSteps, settledSummary } from "./PartCard";
 import { PlanCard } from "./PlanCard";
 import type { PlanOverlay } from "./planOverlay";
-import { RUN_BLOCK_STATUS } from "./planVocabulary";
-import { RunningCard, RunningCardDock } from "./RunningCard";
-import {
-  elapsedSeconds,
-  formatElapsed,
-  runFinishedSignpost,
-  finishedNotice,
-  walkKind,
-  type WalkKind,
-} from "./runProgress";
+import { PastRunLine, RunTrace } from "./RunTrace";
 
 /** The server page-size cap; one task_agent conversation fits comfortably. */
 const TRANSCRIPT_PAGE_SIZE = 200;
@@ -504,72 +495,28 @@ function AnsweredCheckIns({
   ));
 }
 
-function RunFinishedNotice({
-  taskId,
-  status,
-  kind = "evidence_search",
-}: {
-  taskId: string;
-  status: RunStatus | undefined;
-  kind?: WalkKind;
-}) {
-  const notice = runFinishedSignpost(taskId, status, kind);
-  if (notice === null) return null;
-  const words = finishedNotice(kind, status);
-  return (
-    <div className="anim-rise mr-8 border-2 border-[#17A88D] bg-[#DDF2EE] px-4 py-3">
-      <p className="max-w-prose-measure text-lead text-navy">
-        {words.before}{" "}
-        <Link to={notice.href} className="font-semibold text-blue underline">
-          {notice.label}
-        </Link>{" "}
-        {words.after}
-      </p>
-    </div>
-  );
-}
-
-/** A run block in the thread: a quiet divider row naming the run and its
- *  outcome, the check-ins it answered, and where its result went. The
- *  event-log echoes ("Executed a search query × 55", "Recorded a steering
- *  decision") that used to sit here are audit rows for the History tab, not
- *  conversation (owner, 2026-11-05). */
+/** A past run in the thread: its folded line (status word and wall time)
+ *  and the check-ins it answered. The event-log echoes ("Executed a search
+ *  query × 55", "Recorded a steering decision") that used to sit here are
+ *  audit rows for the History tab, not conversation (owner, 2026-11-05). */
 function RunBlock({
-  taskId,
   run,
   stages,
   answered,
   checkIns,
   capability,
 }: {
-  taskId: string;
   run: TaskAgentThreadRun;
   stages: StageEntry[];
   capability?: string | null;
   answered: ResolvedDecision[];
   checkIns: ReturnType<typeof useCheckIns>["data"];
 }) {
-  const status = RUN_BLOCK_STATUS[run.status] ?? null;
-  // Task 045: a parentless option search (the chat verb *add*'s own search)
-  // keeps a block, headed as what it is.
-  const optionSearch = run.purpose === "targeted";
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2 text-caption text-grey">
-        <span aria-hidden="true" className="h-px flex-1 bg-line" />
-        <span>
-          {optionSearch ? "Option search" : "Analysis run"}
-          {status !== null ? ` — ${status}` : ""}
-        </span>
-        <span aria-hidden="true" className="h-px flex-1 bg-line" />
-      </div>
+    <div className="space-y-6">
+      {/* Its words follow its own run's kind (task 045, A8), never the live stream's. */}
+      <PastRunLine run={run} capability={capability} />
       <AnsweredCheckIns answered={answered} checkIns={checkIns} stages={stages} />
-      {/* The chat's own destination once the run lands (owner, 2026-08-05):
-          a completed run's last word shouldn't be a quiet stage echo. */}
-      {/* Its kind is its own run's (task 045, A8) — never the live stream's. */}
-      {!optionSearch && (
-        <RunFinishedNotice taskId={taskId} status={run.status} kind={walkKind(capability, [], run.purpose)} />
-      )}
     </div>
   );
 }
@@ -603,7 +550,8 @@ export function TaskAgentPane({
    *  every colleague the owner's mutation surface. */
   isOwner: boolean;
   onReviewPlan?: () => void;
-  /** The sidebar's pane: no running card (the run line is above it). */
+  /** The sidebar's pane: the same thread and run trace, with the check-in
+   *  card at the sidebar's reduced width. */
   compact?: boolean;
   planOverlay?: PlanOverlay;
   onOverlayApplied?: () => void;
@@ -629,9 +577,6 @@ export function TaskAgentPane({
   const checkInsQuery = useCheckIns(taskId, "all");
   const funnel = useFunnel(taskId);
   const [message, setMessage] = useState("");
-  const [runMinimised, setRunMinimised] = useState(false);
-  const [cardOffscreen, setCardOffscreen] = useState(false);
-  const [nowMs, setNowMs] = useState(() => Date.now());
   useComposerSeed(setMessage);
 
   // A turn still streaming (or re-read after a dropped connection) shows as
@@ -694,7 +639,6 @@ export function TaskAgentPane({
   // toggles, font loads).
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
   // The site footer lives in `WorkspaceView`, under both columns (038 V8),
   // and opens only on a deliberate nudge past the transcript's end.
   const footer = useFooterReveal(onAtBottomChange);
@@ -713,58 +657,30 @@ export function TaskAgentPane({
   // an added option's search is not the baseline.
   const liveRunPurpose =
     (runsQuery.data?.data ?? []).find((run) => run.capability_run_id === liveRunId)?.purpose ?? null;
-  const liveKind = walkKind(planQuery.data?.capability, stream.stages, liveRunPurpose);
   const threadHasLiveRun = thread.some(
     (item) => item.type === "run_block" && item.run.capability_run_id === liveRunId,
   );
   const hasFindings = typeof funnel.data?.findings === "number" && funnel.data.findings > 0;
-  const runTicking = runStatus === "running" || runStatus === "paused";
-  const liveElapsed = formatElapsed(
-    elapsedSeconds(stream.run?.startedAt, stream.run?.endedAt, nowMs),
-  );
 
-  useEffect(() => {
-    if (!runTicking || !cardOffscreen) return undefined;
-    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [runTicking, cardOffscreen]);
-
-  useEffect(() => {
-    const card = cardRef.current;
-    const root = scrollRef.current;
-    if (card === null || root === null || typeof IntersectionObserver === "undefined") {
-      setCardOffscreen(false);
-      return undefined;
-    }
-    const observer = new IntersectionObserver(
-      ([entry]) => setCardOffscreen(entry !== undefined && !entry.isIntersecting),
-      { root, threshold: 0 },
-    );
-    observer.observe(card);
-    return () => observer.disconnect();
-  }, [liveRunId, threadHasLiveRun]);
-
-  // The sidebar's compact pane shows no card: the strip and the sidebar's
-  // run line already say where the run is (owner, polish round 2).
-  const liveCard =
-    stream.run === null || compact ? null : (
-      <div key="live-run" ref={cardRef}>
-        <RunningCard
-          taskId={taskId}
-          status={stream.run.status}
-          stages={stream.stages}
-          liveness={stream.liveness}
-          plan={stream.plan?.plan}
-          startedAt={stream.run.startedAt}
-          endedAt={stream.run.endedAt}
-          hasFindings={hasFindings}
-          minimised={runMinimised}
-          onMinimisedChange={setRunMinimised}
-          capability={planQuery.data?.capability}
-          purpose={liveRunPurpose}
-          onSeePlan={onReviewPlan}
-        />
-      </div>
+  // The run trace (task 058, owner 2026-11-05): the one place the live run
+  // shows, in the Agent tab and the sidebar alike.
+  const liveTrace =
+    stream.run === null ? null : (
+      <RunTrace
+        taskId={taskId}
+        status={stream.run.status}
+        stages={stream.stages}
+        liveness={stream.liveness}
+        plan={stream.plan?.plan}
+        startedAt={stream.run.startedAt}
+        endedAt={stream.run.endedAt}
+        hasFindings={hasFindings}
+        capability={planQuery.data?.capability}
+        purpose={liveRunPurpose}
+        isOwner={isOwner}
+        checkInWaiting={stream.pendingCheckIn !== null}
+        onSeePlan={onReviewPlan}
+      />
     );
 
   const send = (input: { message: string; clientTurnId: string }) => {
@@ -892,16 +808,14 @@ export function TaskAgentPane({
                 scopingPlan={planQuery.data?.scoping}
                 onSend={(text) => send({ message: text, clientTurnId: crypto.randomUUID() })}
               />
-            ) : item.run.capability_run_id === liveRunId && liveCard !== null ? (
+            ) : item.run.capability_run_id === liveRunId && liveTrace !== null ? (
               <div key="live-run-block" className="space-y-6">
-                {liveCard}
+                {liveTrace}
                 <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} stages={stream.stages} />
-                <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={liveKind} />
               </div>
             ) : (
               <RunBlock
                 key={`run-${item.run.capability_run_id}`}
-                taskId={taskId}
                 run={item.run}
                 capability={planQuery.data?.capability}
                 stages={stream.stages}
@@ -986,6 +900,13 @@ export function TaskAgentPane({
           </div>
         )}
 
+        {liveTrace !== null && !threadHasLiveRun && (
+          <div key="live-run-fallback" className="space-y-6">
+            {liveTrace}
+            <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} stages={stream.stages} />
+          </div>
+        )}
+        {/* A waiting check-in sits under the run's trace. */}
         {stream.pendingCheckIn !== null && stream.pendingCheckIn.kind !== BASELINE_GATE_KIND && (
           <CheckInCard
             key={stream.pendingCheckIn.check_in_id}
@@ -993,14 +914,8 @@ export function TaskAgentPane({
             checkIn={stream.pendingCheckIn}
             stages={stream.stages}
             isOwner={isOwner}
+            compact={compact}
           />
-        )}
-        {liveCard !== null && !threadHasLiveRun && (
-          <div key="live-run-fallback" className="space-y-6">
-            {liveCard}
-            <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} stages={stream.stages} />
-            <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={liveKind} />
-          </div>
         )}
         </div>
         {landing && <div aria-hidden="true" className="flex-[2]" />}
@@ -1009,19 +924,6 @@ export function TaskAgentPane({
       </div>
 
       <div className="shrink-0 border-t border-line">
-        {stream.run !== null && cardOffscreen && (
-          <RunningCardDock
-            status={stream.run.status}
-            stages={stream.stages}
-            liveness={stream.liveness}
-            plan={stream.plan?.plan}
-            elapsedLabel={liveElapsed}
-            onOpen={() => {
-              setRunMinimised(false);
-              cardRef.current?.scrollIntoView({ block: "nearest" });
-            }}
-          />
-        )}
         <div className={cn("py-3", LIFECYCLE_PAGE_CLASS)}>
         <Composer
           value={message}

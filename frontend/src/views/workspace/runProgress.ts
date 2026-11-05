@@ -1,20 +1,17 @@
-import { LIFECYCLE_LABELS } from "../../lib/vocabulary";
 import type { PlanDraft, RunStatus, StageEntry, StageLiveness } from "../../store";
 import { isScoping } from "../scopingActivity";
 
-type RunningCardTone = "running" | "paused" | "done" | "stopped";
-
-/** How a card row reads: done, in progress, still to come, or ended badly. */
+/** How a step row reads: done, in progress, still to come, or ended badly. */
 export type RowState = "done" | "progress" | "upcoming" | "failed" | "skipped";
 
 /**
- * One row of the running card (task 058, D5, direction C): one plan step, or
+ * One row of the run trace's step list (task 058, D5): one plan step, or
  * several stages the server says share a row ("Searching and screening" is
  * search plus screen; "Classifying" is classify plus appraise).
  */
 export type CardRow = {
   /** The server's row key from `PlanStep.row`, or the frame label for a row
-   *  built from stage frames alone. Unique on the card. */
+   *  built from stage frames alone. Unique in the trace. */
   key: string;
   /** The server's label for the row. */
   label: string;
@@ -25,16 +22,10 @@ export type CardRow = {
   state: RowState;
 };
 
-type StageSignpost = { href: string; label: string; message: string };
-
-/** Chat-thread primary CTA — same size as Review the plan / Start search. */
-export const CHAT_PRIMARY_CTA_CLASS =
-  "cutout inline-block bg-blue px-6 py-3.5 text-body font-bold text-white";
-
-/** What kind of walk a run card describes (task 045): an Evidence search, a
+/** What kind of walk a run trace describes (task 045): an Evidence search, a
  *  scoping task's baseline walk, its longlist walk, or an added option's own
- *  search. The words on the card and the finished notice follow it — "the
- *  evidence base is ready" is wrong for a longlist. */
+ *  search. The trace's finished words follow it — "the evidence base is
+ *  ready" is wrong for a longlist. */
 export type WalkKind = "evidence_search" | "baseline" | "longlist" | "option_search" | "shortlist";
 
 const LONGLIST_STAGES = new Set([
@@ -65,8 +56,8 @@ export function walkKind(
   return stages.some((entry) => entry.stage === "shortlist") ? "shortlist" : "baseline";
 }
 
-/** The run strip's finished words, before its one link (annex § scene 7;
- *  "the capability's wording" for the scoping walks). */
+/** The finished words per walk, on the trace's folded line and in the
+ *  browser title ("the capability's wording" for the scoping walks). */
 export const READY_WORDS: Record<WalkKind, string> = {
   evidence_search: "Report ready",
   baseline: "The baseline is ready",
@@ -74,35 +65,6 @@ export const READY_WORDS: Record<WalkKind, string> = {
   option_search: "The option's search is done",
   shortlist: "The shortlist is proposed",
 };
-
-const RESULTS_LABEL: Record<WalkKind, string> = {
-  evidence_search: "Read the report",
-  baseline: "Read the baseline",
-  longlist: "Read the longlist",
-  option_search: "Read the longlist",
-  shortlist: "Read the shortlist",
-};
-
-/** The finished notice, split around the Result-tab link it carries. */
-export const FINISHED_NOTICE: Record<WalkKind, { before: string; after: string }> = {
-  evidence_search: { before: "Evidence search is finished. You can read the report in the", after: "tab." },
-  baseline: { before: "The baseline is written. Read it in the", after: "tab." },
-  longlist: { before: "The longlist is built. Open it in the", after: "tab." },
-  option_search: { before: "The option's search is done. See it in the", after: "tab." },
-  shortlist: { before: "Policy Atlas has proposed a shortlist. Open it in the", after: "tab." },
-};
-
-/** The finished notice for this walk and status: a degraded shortlist walk
- *  means the proposal failed (its one step is non-spine), so it says so. */
-export function finishedNotice(kind: WalkKind, status: RunStatus | undefined): { before: string; after: string } {
-  if (kind === "shortlist" && status === "degraded") {
-    return {
-      before: "Policy Atlas could not propose a shortlist. Your places are unchanged. Open the",
-      after: "tab.",
-    };
-  }
-  return FINISHED_NOTICE[kind];
-}
 
 /** The Result tab, opened on the view this walk produced. */
 export function resultHref(taskId: string, kind: WalkKind): string {
@@ -118,22 +80,8 @@ export function isFinished(status: RunStatus | undefined): boolean {
   return status === "succeeded" || status === "degraded";
 }
 
-/** The card's top-line word and tone for a run status. */
-export function runningCardCopy(
-  status: RunStatus | undefined,
-  kind: WalkKind = "evidence_search",
-): { tone: RunningCardTone; eyebrow: string } {
-  if (status === "paused") return { tone: "paused", eyebrow: "PAUSED" };
-  if (kind === "shortlist" && status === "degraded") return { tone: "stopped", eyebrow: "STOPPED" };
-  if (isFinished(status)) return { tone: "done", eyebrow: "DONE" };
-  if (status === "failed" || status === "aborted" || status === "interrupted") {
-    return { tone: "stopped", eyebrow: "STOPPED" };
-  }
-  return { tone: "running", eyebrow: "RUNNING" };
-}
-
 /**
- * A duration in the card's words: `45 s`, `6 min 12 s`, `1 h 4 min`. Elapsed
+ * A duration in the trace's words: `45 s`, `6 min 12 s`, `1 h 4 min`. Elapsed
  * time only, never a countdown (annex § Voice rules).
  */
 export function formatElapsed(seconds: number): string {
@@ -146,7 +94,7 @@ export function formatElapsed(seconds: number): string {
   return rest === 0 ? `${minutes} min` : `${minutes} min ${rest} s`;
 }
 
-/** A duration to the minute, for the run strip and the task list (`14 min`). */
+/** A duration to the minute, for the folded trace line and the task list (`14 min`). */
 export function formatMinutes(seconds: number): string {
   const total = Math.max(0, Math.round(seconds));
   if (total < 60) return `${total} s`;
@@ -176,7 +124,7 @@ export function elapsedSeconds(
 }
 
 /**
- * The card's rows: the plan's steps grouped by the server's `row` key, with
+ * The trace's rows: the plan's steps grouped by the server's `row` key, with
  * the stage frames laid over them (task 058, D5, N17). Labels are the
  * server's. Upcoming rows come from the plan only, so a walk with no plan
  * steps on the stream (the scoping walks) builds its rows from the frames as
@@ -303,8 +251,8 @@ export function rowLiveness(
 }
 
 /**
- * Where a done row points (annex § The running card): the Sources table after
- * searching and screening, the landscape after mapping (and after
+ * Where a done row points (annex § The running card, kept by the trace):
+ * the Sources table after searching and screening, the landscape after mapping (and after
  * categorising once mapping is done), the findings once there are any, the
  * report after writing. Shortlisting and reading have nowhere to point. Only
  * an Evidence search's rows link.
@@ -330,55 +278,69 @@ export function rowLink(
   return null;
 }
 
-/** The run strip's middle part: the writer's section while writing, else the
+/** What the trace's header says the step in progress is doing: the writer's
+ *  section while writing ("Section 3 of 7 · Costs and funding"), else the
  *  activity line, in the server's words. */
-export function rowDetail(tick: StageLiveness | undefined, options: { short?: boolean } = {}): string | null {
+export function rowDetail(tick: StageLiveness | undefined): string | null {
   if (tick === undefined) return null;
   const section = tick.section?.trim();
-  // The strip's short form keeps "Section 3 of 7" and drops the title (annex scene 7).
-  if (section) return options.short ? section.split(" · ")[0] : section;
+  if (section) return section;
   const activity = tick.activity.trim();
   return activity === "" ? null : activity;
 }
 
-/** Chat-thread destination once the write-up exists — last word, not a stage echo. */
-export function runFinishedSignpost(
-  taskId: string,
-  status: RunStatus | undefined,
-  kind: WalkKind = "evidence_search",
-): StageSignpost | null {
-  if (!isFinished(status)) return null;
-  const notice = finishedNotice(kind, status);
-  return {
-    href: resultHref(taskId, kind),
-    label: LIFECYCLE_LABELS.result,
-    message: `${notice.before} ${LIFECYCLE_LABELS.result} ${notice.after}`,
-  };
-}
+/** The words a step in progress reads after two minutes of silence (N5). */
+export const STALLED_LINE = "Still working on this step";
 
-
-/** Results link once the write-up exists. */
-export function resultsSignpost(
-  taskId: string,
-  status: RunStatus | undefined,
-  kind: WalkKind = "evidence_search",
-): StageSignpost | null {
-  if (!isFinished(status)) return null;
-  const notice = finishedNotice(kind, status);
-  return {
-    href: resultHref(taskId, kind),
-    label: RESULTS_LABEL[kind],
-    message: `${notice.before} ${LIFECYCLE_LABELS.result} ${notice.after}`,
-  };
-}
-
-/** One-line collapsed status (`RUNNING · Searching and screening · 13 s`). */
-export function collapsedStatusLine(
-  status: RunStatus | undefined,
-  rows: CardRow[],
-  elapsedLabel: string,
+/** The trace's header words while the run is live or paused (annex § The run
+ *  trace): the current row's label and what it is doing now; paused, that a
+ *  check-in waits (to the owner) or where the run stopped (to a colleague).
+ *  Every label is the server's; the client adds only the separators.
+ *
+ * Args:
+ *   row: The row in progress, else the last that ran; null before any frame.
+ *   detail: The row's activity (`rowDetail`), or null.
+ *   state: `stalled` once two minutes pass with no tick.
+ *   isOwner: Only the owner is told the check-in waits on them.
+ *
+ * Returns:
+ *   The words, without the elapsed time.
+ */
+export function traceWords(
+  row: CardRow | null,
+  detail: string | null,
+  state: "live" | "stalled" | "paused",
+  isOwner: boolean,
 ): string {
-  const { eyebrow } = runningCardCopy(status);
-  const row = currentRow(rows);
-  return row === null ? `${eyebrow} · ${elapsedLabel}` : `${eyebrow} · ${row.label} · ${elapsedLabel}`;
+  if (state === "paused") {
+    return isOwner ? "Paused · a check-in is waiting on you" : ["Paused", row?.label].filter(Boolean).join(" · ");
+  }
+  const doing = state === "stalled" ? STALLED_LINE : detail;
+  return [row?.label, doing].filter((part): part is string => Boolean(part)).join(" · ");
+}
+
+/** A degraded shortlist walk's ended words: it proposed nothing. */
+export const NO_SHORTLIST = "Policy Atlas could not propose a shortlist. Your places are unchanged.";
+
+/** "1 step", "6 steps". */
+export function stepCount(count: number): string {
+  return count === 1 ? "1 step" : `${count} steps`;
+}
+
+/**
+ * How a run that has ended reads, folded to one line (annex § The run trace):
+ * the finish words per walk kind with the Result tab as its one link, or
+ * "Stopped" / "Failed" with no link. A degraded shortlist walk ended with
+ * no shortlist, so it says so in the existing sentence (lead ruling,
+ * 2026-11-05). Null while the run has not ended.
+ */
+export function endedLine(
+  status: RunStatus | undefined,
+  kind: WalkKind,
+): { words: string; tone: "complete" | "failed"; link: boolean } | null {
+  if (kind === "shortlist" && status === "degraded") return { words: NO_SHORTLIST, tone: "failed", link: false };
+  if (isFinished(status)) return { words: READY_WORDS[kind], tone: "complete", link: true };
+  if (status === "failed") return { words: "Failed", tone: "failed", link: false };
+  if (status === "aborted" || status === "interrupted") return { words: "Stopped", tone: "failed", link: false };
+  return null;
 }

@@ -8,7 +8,6 @@ import { cn } from "../../../ui/brand/cn";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { usePlanPanel } from "../../planPanel";
 import { useChatsEnabled } from "../../taskResult";
-import { BASELINE_GATE_KIND } from "../checkInPresentation";
 import { TaskAgentPane } from "../TaskAgentPane";
 import { ChatPane } from "./ChatPane";
 import { ChatsIcon } from "./ChatsIcon";
@@ -24,7 +23,6 @@ import {
 } from "./conversationState";
 import { DraftChatPane } from "./DraftChatPane";
 import { ExpandIcon, PanelCloseIcon, PlusIcon } from "./icons";
-import { SidebarRun } from "./SidebarRun";
 
 /** Resize bounds (px) — the workspace rail's own clamp. */
 const PANEL_MIN = 280;
@@ -97,9 +95,10 @@ const HEADER_BUTTON =
  * chat, or the Task Agent when there is none.
  *
  * The Task Agent here is the same agent as the Agent tab (task 058, N13): it
- * reads the task's one run stream, and while a run is live it folds to the
- * compact run view (`SidebarRun`). While a check-in waits, the rail's toggle
- * opens the Task Agent, so the panel lands on the check-in.
+ * reads the task's one run stream and shows the same thread, with the run's
+ * trace at its place (owner, 2026-11-05: the trace is the sidebar's run
+ * view; no separate run line). While a check-in waits, the rail's toggle
+ * opens the Task Agent, whose thread opens at its end, on the check-in.
  *
  * Args:
  *   props: The owning task id, and `isOwner` for the task_agent duplicate's
@@ -135,11 +134,6 @@ export function ChatSidePanel({
   const stream = useRunStream(taskId);
   const runStatus = stream.run?.status;
   const checkInWaiting = stream.pendingCheckIn != null;
-  // The scoping gate keeps the thread open (its composer takes a question),
-  // so it stays in the full pane rather than the compact run view.
-  const compactRun =
-    (runStatus === "running" || runStatus === "paused") &&
-    stream.pendingCheckIn?.kind !== BASELINE_GATE_KIND;
   const openLatestOrTaskAgent = () => {
     // The launcher's decision needs the chats list resolved first — before
     // then "no chats" is read off `undefined` data.
@@ -265,18 +259,14 @@ export function ChatSidePanel({
       ) : (
         <div className="min-h-0 flex-1">
           {taskAgentOpen ? (
-            compactRun ? (
-              <SidebarRun taskId={taskId} stream={stream} isOwner={isOwner} />
-            ) : (
-              <TaskAgentPane
-                taskId={taskId}
-                runStatus={runStatus}
-                stream={stream}
-                isOwner={isOwner}
-                onReviewPlan={openPlan}
-                compact
-              />
-            )
+            <TaskAgentPane
+              taskId={taskId}
+              runStatus={runStatus}
+              stream={stream}
+              isOwner={isOwner}
+              onReviewPlan={openPlan}
+              compact
+            />
           ) : draftOpen ? (
             <DraftChatPane
               taskId={taskId}

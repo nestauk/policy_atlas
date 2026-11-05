@@ -380,9 +380,12 @@ filters: c").
    the writer's turn cap (6); on a normal section the model emits through its own
    `emit_section` tool call on turn 2, which Bedrock delivers in one burst, so the page sees
    nothing until the section is done (Langfuse, the owner's run: no `synthesise:section_emit`
-   generations). Fix proposed to the owner: no emit tool on the open turns, a reply with no
-   tool calls ends the gathering, the streamed turn writes (one short extra turn per section on
-   the cached prefix).
+   generations). Owner go (2026-11-05, after the cost figures): the open turns offer a
+   no-argument `write_section` tool instead of `emit_section`; that call (or a reply with no
+   tool call) ends the gathering, and the streamed turn writes the section. The streamed
+   request keeps the tools with none allowed and sends no structured-output schema, so the
+   provider reuses the cached prefix (`research/exp-stream-cache-probe.md`); cost about a
+   cached read per section. The section prompt's words changed; hash re-pinned.
 2. The Result tab's footer "Checking claims and attaching citations" goes (owner: not useful).
    The claims check is per section and shows under the section's heading; after the last
    section the key-findings heading's dot is the one signal. Scene 6 and N8 are amended.
@@ -407,6 +410,62 @@ filters: c").
    ("Screening criteria", "Source filters"), the values in green (owner: on one line the
    criteria and the filters read as one jumble, all in one colour).
 
+## The run trace (owner, 2026-11-05): one progress surface, in the chat
+
+Replaces the running card in the thread, its minimised state, the dock above the composer, the
+run strip under the lifecycle tabs and the sidebar's run line. Same shape as task 054's
+`TocTrace`, so the two capabilities read alike when 054 merges; fed by this slice's event
+stream, so the counts, the links and the paused state stay. Every label is the server's.
+
+- **Place.** One block per run in the Task Agent thread, at the run's place, no card frame,
+  the same right margin as the part cards. The sidebar renders the same block.
+- **The status mark.** A 6 px square, no radius: Electric Blue while the run is live (it
+  breathes while updates arrive and holds still 1.5 s after the last, and under reduced
+  motion), Green when it ended well, Orange while paused, Red when it failed, Line 2 when
+  idle. The owner chose the square and the blue over the yellow circle (2026-11-05); the same
+  mark replaces the circle everywhere a run's state shows (the Result tab's section mark, the
+  task list row, the sidebar). DESIGN.md records it.
+- **Live, closed.** A header line that is a button (`aria-expanded`): the mark, then the
+  current row's label and its activity line ("Writing · Section 3 of 7 · Costs and funding";
+  "Searching and screening · 184 found so far"; "Still working on this step" after two quiet
+  minutes), the run's elapsed time right after in tabular figures, then "· 6 steps". Meta
+  size, semibold, navy; the counts and the time in the Figures style. Under it, in grey, the
+  last finished row's one-liner rising in as it lands ("Searching and screening · 312 found ·
+  118 relevant · 1 min 4 s · Sources →"). A long line truncates its words; the time stays.
+- **Open.** "· hide steps" in the header; under it the step list: one row per plan step in
+  order (today's spine rows: done rows with their counts, wall time and link; the row in
+  progress with its activity and its own elapsed time; upcoming rows as names in grey), set
+  under a hairline left rule, and "See plan" at the foot. The list stays open until closed.
+- **Paused.** Orange mark; the header reads "Paused · a check-in is waiting on you" for the
+  owner and "Paused · <row label> · <elapsed>" for a colleague; the check-in card sits under
+  the block as today and glows once on arrival.
+- **Ended.** The block folds to one line: Green mark, "Report ready · 14 min · Read it →" (the
+  finish words per walk kind, the link to the result); a bad ending reads "Stopped · 14 min"
+  or "Failed · 14 min" with no link. A chevron before the words opens the steps. The folded
+  line is the run's one destination, so the separate run-finished notice goes.
+- **A past run** (not in the stream) folds to its status word and its wall time, with no step
+  list; the chevron is absent.
+- **Elsewhere.** Nothing else shows the run: the lifecycle tab dots, the browser title marker
+  and the reconnecting banner stay. "See the plan" under the Result tab's title stays.
+- **Motion.** The header's words re-mount with the 300 ms rise when the row changes; the last
+  finished line rises in; the mark breathes; all still under reduced motion.
+- **Phones.** The header wraps after the words; the elapsed time stays in view.
+
+Rulings on the build (lead, 2026-11-05, from the agent's proposals): the sidebar shows the
+Task Agent thread with the trace at the run's place and the check-in under it, and opens at the
+thread's end (the earlier "after <row label>" sidebar line is gone with the sidebar's run
+view); a past run reads the words its walk ended with ("Report ready", "The longlist is
+ready", "Stopped", "Failed"); the live header ticks in seconds, ended and past lines use
+minutes; before the first stage frame the header shows the mark, the time and the step count
+only (the client invents no label); the chevron appears only on the ended line; the header's
+words are Meta semibold navy with the time and the step count in grey, a good ending in the
+deep green; step rows carry no marks (weight and colour carry state, plus a screen-reader
+word); below 576 px the header's words may take two lines before the time wraps; the open
+list's in-progress row repeats the header's activity (a polish item for the owner pass); the
+degraded shortlist walk's ended line keeps its sentence ("Policy Atlas could not propose a
+shortlist. Your places are unchanged.") with the red mark and no link; the lifecycle tab's
+new-content mark is the same 6 px square, in navy.
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |
@@ -415,8 +474,9 @@ filters: c").
 | 2 | build, owner pass | 2026-11-05 | six notes applied (above); the transcript-read bug fixed; Classifying | owner (round 1 of 3) |
 | 3 | build, owner pass (round 2 of 3) | 2026-11-05 | settled part cards name the plan's outcome at the conversation's text size; stage signposts under the card removed; Mapping links to Themes | owner |
 | 4 | build, owner pass (round 3 of 3) | 2026-11-05 | option order as the planner gives it; no reason line; settled lines show the question and the chips; settled lines rise in | owner |
-| 5 | review, agent pass | | | lead |
-| 6 | review, owner pass | | | owner |
+| 5 | build, owner questions on a live run | 2026-11-05 | no Result footer; automatic swap to the report; no event-log echoes in the thread; settled scope lines per group; the streaming fix; the run trace with the blue square mark in place of the card, dock and strip | owner |
+| 6 | review, agent pass | | | lead |
+| 7 | review, owner pass | | | owner |
 
 ## Deferred polish
 

@@ -18,7 +18,7 @@ function expiredAtMount(stamp: string | null | undefined, windowMs: number): str
 
 /**
  * The wall clock, re-read every `intervalMs` while `ticking` (elapsed times
- * on the running card, the run strip and the task row).
+ * in the run trace and the task row).
  *
  * Args:
  *   ticking: Whether the clock advances; a finished run freezes it.
@@ -43,8 +43,8 @@ export function useNow(ticking: boolean, intervalMs = 1_000): number {
  * The stamp is anything that changes when new data arrives: a tick's
  * `occurredAt`, or a polled row's label. Each new stamp starts the window
  * again on the client's own clock, so a skewed server clock cannot keep a
- * dot breathing or stop it early. One rule for every live dot: the running
- * card, the run strip, the Result tab and the task row (task 058, N5).
+ * mark breathing or stop it early. One rule for every live mark: the run
+ * trace, the Result tab and the task row (task 058, N5).
  *
  * Args:
  *   stamp: The latest update's marker; `null` or `undefined` is never fresh.

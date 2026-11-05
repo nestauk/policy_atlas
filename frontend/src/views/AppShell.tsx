@@ -8,7 +8,7 @@ import { capabilityLabel } from "../lib/capabilities";
 import { TitleMarkerProvider } from "../lib/title";
 import { scrub } from "../lib/scrub";
 import { Button } from "../ui/brand/Button";
-import { StatusDot } from "../ui/brand/Card";
+import { StatusMark } from "../ui/brand/Card";
 import { cn } from "../ui/brand/cn";
 import { LifecycleBar, LifecycleBottomBar } from "../ui/brand/LifecycleBar";
 import { ReconnectingBanner } from "../ui/feedback/ReconnectingBanner";
@@ -18,7 +18,7 @@ import { lifecycleTabs, publicLifecycleTabs, withChat } from "./lifecycle";
 import { PlanPanelProvider, usePlanPanel } from "./planPanel";
 import { PublicViewProvider } from "./publicView";
 import { activeRun, tabRunStatus } from "./scopingActivity";
-import { RunStrip, TaskLiveProvider, useTaskLive, withTabMarks } from "./taskLive";
+import { TaskLiveProvider, useTaskLive, withTabMarks } from "./taskLive";
 import { useTabOptions } from "./taskResult";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { RunStreamProvider } from "../store";
@@ -401,9 +401,9 @@ export function AppShell() {
   });
   const hasPendingCheckIn =
     base !== null && !inWorkspace && isOwner && (pendingCheckIns.data?.data.length ?? 0) > 0;
-  // The live layer (run strip, tab dots, the Plan control, the title's
-  // finish) belongs to the signed-in shell only; the public task shell has no
-  // stream (task 058, N12).
+  // The live layer (tab dots, the title's finish, the reconnecting banner)
+  // belongs to the signed-in shell only; the public task shell has no stream
+  // (task 058, N12).
   const liveShell = base !== null && taskResolved && !publicAccess;
 
   // Task views lock to the viewport so the app/lifecycle chrome stays put
@@ -430,7 +430,7 @@ export function AppShell() {
                 ...item,
                 marker: (
                   <>
-                    <StatusDot tone="paused" />
+                    <StatusMark tone="paused" />
                     <span className="sr-only">Check-in pending</span>
                   </>
                 ),
@@ -507,9 +507,6 @@ export function AppShell() {
           </div>
         </NavBar>
       )}
-      {/* The run strip replaces the old cross-tab paused banner: it carries
-          the paused state itself (task 058, N12, D8). */}
-      {liveShell && <RunStrip />}
       {liveShell && <LiveReconnectingBanner />}
       <SensitiveInfoBanner />
       {/* The Agent overlay beside every task view outside the Agent tab

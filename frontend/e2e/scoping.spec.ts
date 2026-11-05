@@ -165,8 +165,23 @@ test.describe("mock options-scoping longlist states (task 045)", () => {
     await thread.getByRole("radio", { name: /^Confirm plan and build longlist/ }).click();
   }
 
-  /** The plan opens from the running card's "See plan" (owner, polish round 2). */
+  /** The live run's trace in the thread (task 058; owner 2026-11-05). */
+  function runTrace(page: Page) {
+    return page.getByRole("region", { name: "Task Agent conversation" }).getByRole("region", { name: "Analysis run" });
+  }
+
+  /** Open the trace's step list (it stays open until closed). */
+  async function openSteps(page: Page) {
+    const header = runTrace(page).getByRole("button").first();
+    await expect(header).toBeVisible({ timeout: 15_000 });
+    if ((await header.getAttribute("aria-expanded")) !== "true") await header.click();
+    await expect(page.getByRole("list", { name: "Run steps" })).toBeVisible();
+  }
+
+  /** The plan opens from "See plan" at the foot of the trace's open step
+   *  list (owner, polish round 2). */
   async function openPlan(page: Page) {
+    await openSteps(page);
     await page.getByRole("button", { name: "See plan" }).click();
   }
 
@@ -192,10 +207,10 @@ test.describe("mock options-scoping longlist states (task 045)", () => {
     ).toBeVisible();
   });
 
-  test("the longlist walk's rows show on the run card, with the server's counts", async ({ page }) => {
+  test("the longlist walk's rows show in the run trace, with the server's counts", async ({ page }) => {
     await buildLonglist(page);
-    const thread = page.getByRole("region", { name: "Task Agent conversation" });
-    const card = thread.getByRole("list", { name: "Stage timeline" });
+    await openSteps(page);
+    const card = page.getByRole("list", { name: "Run steps" });
     await expect(card.getByRole("listitem").filter({ hasText: /^Suggesting options/ })).toContainText(
       "12 suggested",
       { timeout: 15_000 },
@@ -214,10 +229,11 @@ test.describe("mock options-scoping longlist states (task 045)", () => {
     const plan = page.getByRole("dialog", { name: "Scoping plan" });
     await expect(plan.getByText(/^Longlist built · \d+ options$/)).toBeVisible({ timeout: 10_000 });
     await plan.getByRole("button", { name: "Close the scoping plan" }).click();
-    await expect(thread.getByText(/^Option search/)).toHaveCount(0);
-    // The baseline's block only: the longlist walk is the stream's live run
-    // (its run card), and the child adds nothing.
-    await expect(thread.getByText(/^Analysis run —/)).toHaveCount(1);
+    await expect(thread.getByText(/^Option search|^The option's search is done/)).toHaveCount(0);
+    // The baseline's folded line and the longlist walk's trace (the stream's
+    // live run) only: the child adds nothing. Each carries one status mark.
+    await expect(thread.getByRole("region", { name: "Analysis run" })).toHaveCount(1);
+    await expect(thread.locator("[data-tone]")).toHaveCount(2);
   });
 
   test("a plan edit after the longlist offers Rebuild longlist, which starts the walk again", async ({
@@ -315,18 +331,19 @@ test.describe("task 058 options scoping: the gate and the longlist build", () =>
 
     // The answer continues the walk: suggestions first, then rows.
     await thread.getByRole("radio", { name: /^Confirm plan and build longlist/ }).click();
-    await seen(page, "Suggesting options");
+    // The run trace's header names the step in progress (task 058).
+    await seen(page, /^Suggesting options/);
     await expect.poll(() => optionRowCount(page), { timeout: 30_000 }).toBeGreaterThanOrEqual(12);
   });
 
-  test("the scoping card counts the option searches", async ({ page }) => {
+  test("the run trace counts the option searches", async ({ page }) => {
     await watchPage(page);
     await startScopingWalk(page);
     await page
       .getByRole("region", { name: "Task Agent conversation" })
       .getByRole("radio", { name: /^Confirm plan and build longlist/ })
       .click();
-    await seen(page, /^\d+ of 12 searches done · [\d,]+ sources so far$/);
+    await seen(page, /^Searching for each option · \d+ of 12 searches done · [\d,]+ sources so far/);
   });
 
   test("the longlist while it builds: rows search, fold, fill, group, and the strip announces it", async ({
@@ -364,12 +381,17 @@ test.describe("task 058 options scoping: the gate and the longlist build", () =>
     await expect(page.getByText("Shortlist", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
   });
 
-  test("the strip reads The longlist is ready once the build ends", async ({ page }) => {
+  test("the trace folds to The longlist is ready once the build ends, and nothing else shows the run", async ({
+    page,
+  }) => {
     await startScopingWalk(page);
     const thread = page.getByRole("region", { name: "Task Agent conversation" });
     await expect(thread.getByRole("radio", { name: /^Confirm plan and build longlist/ })).toBeVisible();
     await thread.getByRole("radio", { name: /^Confirm plan and build longlist/ }).click();
+    const trace = thread.getByRole("region", { name: "Analysis run" });
+    await expect(trace.getByRole("button").first()).toContainText("The longlist is ready", { timeout: 40_000 });
+    await expect(trace.getByRole("link", { name: "Read it →" })).toHaveAttribute("href", /\/result\?view=longlist$/);
     await taskNav(page).getByRole("link", { name: /^Sources/ }).click();
-    await expect(page.getByText("The longlist is ready · Read it →")).toBeVisible({ timeout: 40_000 });
+    await expect(page.getByText(/The longlist is ready/)).toHaveCount(0);
   });
 });

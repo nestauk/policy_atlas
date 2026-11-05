@@ -235,7 +235,7 @@ function settle() {
   });
 }
 
-describe("AppShell — the run strip (task 058, N12, D8)", () => {
+describe("AppShell — the live layer without a strip (task 058; owner 2026-11-05, the run trace)", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     taskState.isOwner = true;
@@ -248,27 +248,19 @@ describe("AppShell — the run strip (task 058, N12, D8)", () => {
     taskState.latestRun = null;
   });
 
-  it("shows the current row and its activity under the tabs, status only", () => {
+  it("shows no run line under the tabs: the trace in the chat is the one progress surface", () => {
     renderShell(`/tasks/${TASK_ID}/sources`);
     connect();
     feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching and screening"), tickFrame("acquire", "searching · 184 found so far"));
-    const strip = screen.getByText((_, el) => el?.tagName === "P" && /^Searching and screening · searching · 184 found so far · /.test(el.textContent ?? ""));
-    expect(strip.querySelector("a")).toBeNull();
+    expect(screen.queryByText(/Searching and screening/)).toBeNull();
+    expect(screen.queryByText(/184 found so far/)).toBeNull();
   });
 
-  it("is not on the Agent tab", () => {
-    renderShell(`/tasks/${TASK_ID}`);
-    connect();
-    feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching and screening"));
-    expect(screen.queryByText(/^Searching and screening · /)).toBeNull();
-  });
-
-  it("turns orange while a check-in waits, and replaces the old paused banner", () => {
+  it("shows no paused line and no paused banner while a check-in waits", () => {
     renderShell(`/tasks/${TASK_ID}/sources`);
     connect();
     feed(runStatus("running"), runStatus("paused"));
-    const strip = screen.getByText("Paused · a check-in is waiting on you");
-    expect(strip.closest("p")?.querySelector(".bg-orange")).not.toBeNull();
+    expect(screen.queryByText(/a check-in is waiting on you/)).toBeNull();
     expect(screen.queryByText(/Go to the check-in/)).toBeNull();
   });
 
@@ -279,18 +271,15 @@ describe("AppShell — the run strip (task 058, N12, D8)", () => {
     feed(runStatus("running"), stageFrame("stage.completed", "acquire", "Searching and screening"), runStatus("paused"));
     expect(screen.queryByText("Check-in pending")).not.toBeInTheDocument();
     expect(screen.queryByText(/a check-in is waiting on you/)).not.toBeInTheDocument();
-    expect(screen.getByText(/^Paused · Searching and screening · /)).toBeInTheDocument();
   });
 
-  it("carries its one link when the run finishes, and the title says so", () => {
+  it("says the run finished in the title, with no link under the tabs", () => {
     renderShell(`/tasks/${TASK_ID}/sources`);
     connect();
     feed(runStatus("running"));
     settle();
     feed(runStatus("succeeded"));
-    const link = screen.getByRole("link", { name: "Read it →" });
-    expect(link).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
-    expect(link.closest("p")).toHaveTextContent("Report ready · Read it →");
+    expect(screen.queryByRole("link", { name: "Read it →" })).toBeNull();
     expect(document.title).toBe("● Report ready · Acme task · Policy Atlas");
   });
 
@@ -346,6 +335,10 @@ describe("AppShell — new content marks its tab (task 058, N14)", () => {
     const taskNav = screen.getByRole("navigation", { name: TASK.one });
     expect(within(taskNav).getByRole("link", { name: /Result/ })).toHaveTextContent("New content");
     expect(within(taskNav).getByRole("link", { name: /Sources/ })).not.toHaveTextContent("New content");
+    // One mark shape in the app: a 6 px navy square, no radius.
+    const mark = within(within(taskNav).getByRole("link", { name: /Result/ })).getByTestId("new-content-mark");
+    expect(mark).toHaveClass("size-1.5", "bg-navy");
+    expect(mark.className).not.toMatch(/rounded/);
   });
 
   it("dots Sources when sources land while the user is elsewhere", () => {

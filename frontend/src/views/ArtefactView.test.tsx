@@ -178,7 +178,10 @@ describe("LiveArtefactBody", () => {
     const action = within(costs as HTMLElement).getByTestId("action-line");
     expect(action).toHaveTextContent("Looking for: evidence on subsidy uptake");
     expect(action).not.toHaveAttribute("aria-hidden");
-    expect(within(costs as HTMLElement).getByTestId("section-dot")).toBeInTheDocument();
+    // The section's mark is the run's blue 6 px square (task 058, owner 2026-11-05).
+    const mark = within(costs as HTMLElement).getByTestId("section-dot");
+    expect(mark).toHaveClass("bg-blue", "size-1.5");
+    expect(mark.className).not.toMatch(/rounded|bg-yellow/);
 
     rerender(<LiveArtefactBody stream={writingStream({ draft: "Cost is the" }, "Writing")} />);
     const after = screen.getByRole("heading", { name: "Costs" }).closest("section") as HTMLElement;

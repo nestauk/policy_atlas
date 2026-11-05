@@ -36,26 +36,43 @@ export function Divider({ className, ...props }: HTMLAttributes<HTMLDivElement>)
   return <div className={cn("h-px bg-line", className)} {...props} />;
 }
 
-const STATUS_DOT_TONES = {
-  running: "bg-yellow",
+const STATUS_MARK_TONES = {
+  running: "bg-blue",
   complete: "bg-green",
   paused: "bg-orange",
   idle: "bg-line-2",
   failed: "bg-red",
 } as const;
 
-/** Status dot — always pair with a text label (never colour alone). */
-export function StatusDot({
+/** The colour a status mark takes: live, done, waiting, not started, failed. */
+export type StatusTone = keyof typeof STATUS_MARK_TONES;
+
+/**
+ * The status mark (task 058; DESIGN.md § Status mark): a 6 px square with
+ * square corners, always followed by its word, never colour alone. Electric
+ * Blue while a run is live, Green when it ended well, Orange while it waits
+ * on a person, Red when it failed, Line 2 when nothing has started.
+ *
+ * Args:
+ *   tone: Which state the mark shows.
+ *   breathing: True while updates are arriving (the caller's freshness
+ *     rule); only a live mark breathes, and it holds still under reduced
+ *     motion.
+ */
+export function StatusMark({
   tone,
+  breathing = false,
   className,
   ...props
-}: HTMLAttributes<HTMLSpanElement> & { tone: keyof typeof STATUS_DOT_TONES }) {
+}: HTMLAttributes<HTMLSpanElement> & { tone: StatusTone; breathing?: boolean }) {
   return (
     <span
       aria-hidden="true"
+      data-tone={tone}
       className={cn(
-        "inline-block size-2 flex-none rounded-full",
-        STATUS_DOT_TONES[tone],
+        "inline-block size-1.5 flex-none",
+        STATUS_MARK_TONES[tone],
+        breathing && tone === "running" && "anim-breathe",
         className,
       )}
       {...props}

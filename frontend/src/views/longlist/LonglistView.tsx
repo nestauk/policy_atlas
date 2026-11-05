@@ -11,7 +11,7 @@ import { scrub } from "../../lib/scrub";
 import { countOf } from "../../lib/vocabulary";
 import { useRunStream } from "../../store";
 import { Button } from "../../ui/brand/Button";
-import { StatusDot } from "../../ui/brand/Card";
+import { StatusMark } from "../../ui/brand/Card";
 import { Chip } from "../../ui/brand/Chip";
 import { cn } from "../../ui/brand/cn";
 import { cardRows, currentRow, rowDetail, rowLiveness } from "../workspace/runProgress";
@@ -479,7 +479,7 @@ export function LonglistBuilding({ taskId }: { taskId: string }) {
   const [initialKeys] = useState(() => arrivalKeys(layout));
   const arrives = (key: string) => !initialKeys.has(key);
 
-  // The stage line: the run strip's words for the walk's current stage.
+  // The stage line: the server's words for the walk's current stage.
   const runStatus = stream.run?.status;
   const row = currentRow(cardRows(stream.stages, null, runStatus));
   const progress = row !== null && row.state === "progress" ? row : null;
@@ -514,9 +514,9 @@ export function LonglistBuilding({ taskId }: { taskId: string }) {
             </span>
           )}
           {item.status.kind === "searching" && (
-            <StatusDot tone="running" className={searchesFresh ? "anim-breathe" : undefined} />
+            <StatusMark tone="running" breathing={searchesFresh} />
           )}
-          {item.status.kind === "failed" && <StatusDot tone="failed" />}
+          {item.status.kind === "failed" && <StatusMark tone="failed" />}
           <span>
             <Figures text={item.status.text} />
           </span>
@@ -546,7 +546,7 @@ export function LonglistBuilding({ taskId }: { taskId: string }) {
         <h1 className={REPORT_TITLE_CLASS}>Longlist</h1>
         {line !== null && (
           <p className="mt-3 flex items-center gap-2 text-meta text-grey">
-            <StatusDot tone={paused ? "paused" : "running"} className={!paused && lineFresh ? "anim-breathe" : undefined} />
+            <StatusMark tone={paused ? "paused" : "running"} breathing={!paused && lineFresh} />
             <span className="min-w-0">
               <Figures text={scrub(line)} />
             </span>

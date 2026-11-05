@@ -1,26 +1,10 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Link, useLocation } from "react-router";
+import { useLocation } from "react-router";
 
-import { Figures } from "../lib/figures";
-import { useFreshness, useNow } from "../lib/freshness";
-import { scrub } from "../lib/scrub";
 import { TitleMarkerProvider } from "../lib/title";
 import { useRunStream, type RunStreamState } from "../store";
-import { StatusDot } from "../ui/brand/Card";
-import { cn } from "../ui/brand/cn";
 import { tabOfPath, type LifecycleTab } from "./lifecycle";
-import {
-  READY_WORDS,
-  cardRows,
-  currentRow,
-  elapsedSeconds,
-  formatMinutes,
-  isFinished,
-  resultHref,
-  rowDetail,
-  rowLiveness,
-  walkKind,
-} from "./workspace/runProgress";
+import { READY_WORDS, isFinished, walkKind } from "./workspace/runProgress";
 
 /** The stage frames whose landing gives the Sources tab something new:
  *  sources, the landscape, findings (task 058, N14). */
@@ -132,7 +116,7 @@ export function useTaskLive(): TaskLive | null {
 /**
  * The live layer of the signed-in task shell (task 058, N12, N14): reads the
  * one run stream and works out the tab dots and the unseen finish, which the
- * run strip, the lifecycle tabs and the browser title read. Mounted inside
+ * lifecycle tabs and the browser title read. Mounted inside
  * `RunStreamProvider`; the public task shell has no stream and no live layer.
  */
 export function TaskLiveProvider({
@@ -184,11 +168,12 @@ export function TaskLiveProvider({
   );
 }
 
-/** The small navy dot a lifecycle tab carries when it has something new. */
+/** The small navy mark a lifecycle tab carries when it has something new:
+ *  the same 6 px square as the status mark, so the app has one mark shape. */
 export function NewContentDot() {
   return (
     <>
-      <span aria-hidden="true" className="inline-block size-1.5 flex-none rounded-full bg-navy" />
+      <span aria-hidden="true" data-testid="new-content-mark" className="inline-block size-1.5 flex-none bg-navy" />
       <span className="sr-only">New content</span>
     </>
   );
@@ -201,81 +186,5 @@ export function withTabMarks<T extends { tab: string; marker?: ReactNode }>(item
     item.marker === undefined && ((item.tab === "result" && marks.result) || (item.tab === "sources" && marks.sources))
       ? { ...item, marker: <NewContentDot /> }
       : item,
-  );
-}
-
-const STRIP_CLASS = "flex min-h-9 shrink-0 items-center gap-2 border-b border-line bg-paper px-6 py-2 text-meta max-md:px-4";
-
-/**
- * The run strip (task 058, N12, D8): under the lifecycle tabs on every tab
- * but Agent, the run's status in one line — the current row, what it is
- * doing, the elapsed time. Status only: no link and no mark, except the
- * finish ("Report ready · Read it →"), the one link it ever carries. While a
- * check-in waits it turns orange.
- */
-export function RunStrip() {
-  const live = useTaskLive();
-  const stream = live?.stream;
-  const run = stream?.run ?? null;
-  const status = run?.status;
-  const ticking = status === "running" || status === "paused";
-  const nowMs = useNow(ticking);
-  const rows = cardRows(stream?.stages ?? [], stream?.plan?.plan, status);
-  const row = currentRow(rows);
-  const tick = row !== null && row.state === "progress" ? rowLiveness(row, stream?.liveness) : undefined;
-  const fresh = useFreshness(tick?.occurredAt);
-
-  if (live === null || stream === undefined || run === null || live.tab === "agent" || live.tab === null) return null;
-  const kind = walkKind(live.capability, stream.stages);
-  const elapsed = formatMinutes(elapsedSeconds(run.startedAt, ticking ? undefined : run.endedAt, nowMs));
-
-  if (isFinished(status)) {
-    if (!live.marks.ready) return null;
-    return (
-      <p className={cn(STRIP_CLASS, "text-[#0c6b5a]")}>
-        <StatusDot tone="complete" />
-        <span className="min-w-0 truncate">
-          {READY_WORDS[kind]} ·{" "}
-          <Link to={resultHref(live.taskId, kind)} className="font-semibold text-[#0c6b5a] underline-offset-[3px] hover:underline">
-            Read it →
-          </Link>
-        </span>
-      </p>
-    );
-  }
-  if (!ticking) return null;
-
-  if (status === "paused" || stream.pendingCheckIn !== null) {
-    const words =
-      live.isOwner
-        ? "Paused · a check-in is waiting on you"
-        : ["Paused", row?.label, elapsed].filter((part): part is string => Boolean(part)).join(" · ");
-    return (
-      <p className={cn(STRIP_CLASS, "text-navy")}>
-        <StatusDot tone="paused" />
-        <span className="min-w-0 truncate">
-          <Figures text={scrub(words)} />
-        </span>
-      </p>
-    );
-  }
-
-  const parts = [row?.label, rowDetail(tick, { short: true })].filter((part): part is string => Boolean(part));
-  return (
-    <p className={cn(STRIP_CLASS, "text-navy")}>
-      <StatusDot tone="running" className={cn(fresh && "anim-breathe")} />
-      {/* A long line truncates its words; the elapsed time stays in view. */}
-      <span className="flex min-w-0 whitespace-pre">
-        <span className="min-w-0 truncate">
-          <Figures text={scrub(parts.join(" · "))} />
-        </span>
-        {elapsed !== "" && (
-          <span className="shrink-0">
-            {parts.length > 0 ? " · " : ""}
-            <Figures text={elapsed} />
-          </span>
-        )}
-      </span>
-    </p>
   );
 }

@@ -38,7 +38,7 @@ import { ShortlistView } from "./longlist/ShortlistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
-import { Card } from "../ui/brand/Card";
+import { Card, StatusMark } from "../ui/brand/Card";
 import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
@@ -1327,12 +1327,7 @@ function LiveSectionBlock({
       <h2 className={`flex items-center gap-2.5 ${REPORT_SECTION_HEADING_CLASS}`}>
         <span>{scrub(section.title)}</span>
         {active && !terminal && (
-          <span
-            aria-hidden="true"
-            data-testid="section-dot"
-            data-breathing={breathing ? "true" : "false"}
-            className={`inline-block size-2 flex-none rounded-full bg-yellow ${breathing ? "anim-breathe" : ""}`}
-          />
+          <StatusMark tone="running" breathing={breathing} data-testid="section-dot" data-breathing={breathing ? "true" : "false"} />
         )}
       </h2>
       {keyFindings && !filled && !active && !terminal && (
@@ -1453,8 +1448,8 @@ export function LiveArtefactBody({
 
 /**
  * The Result tab before writing (task 058, N11; annex scene 5): the report
- * to be, titled with the question, and one sentence. The run strip above it
- * says where the run is.
+ * to be, titled with the question, and one sentence. The run trace in the
+ * Task Agent says where the run is.
  */
 export function ReportToBe({
   question,
@@ -1504,8 +1499,8 @@ export function minutesSince(iso: string, nowMs: number): number {
 
 /**
  * The one plain line above an existing report while a new run is under way
- * (task 058, N11; annex scene 8). No button: the strip above carries the
- * stage, and the sidebar rail and the Agent tab are the routes to the run.
+ * (task 058, N11; annex scene 8). No button: the sidebar rail and the Agent
+ * tab are the routes to the run, whose trace carries the stage.
  */
 export function RerunNotice({
   taskId,

@@ -9,7 +9,7 @@ import type { components } from "../../api/gen/types";
 import * as mutations from "../../api/mutations";
 import * as queries from "../../api/queries";
 import { createInitialRunStreamState } from "../../store";
-import type { TaskAgentThreadDecision, TaskAgentThreadRun, TaskAgentThreadTurn } from "../../store";
+import type { RunStreamState, StageEntry, TaskAgentThreadDecision, TaskAgentThreadRun, TaskAgentThreadTurn } from "../../store";
 import { ToastProvider } from "../../ui/radix/Toast";
 import { TooltipProvider } from "../../ui/radix/Tooltip";
 import { Composer, TaskAgentPane, taskAgentComposerPlaceholder, threadInputs } from "./TaskAgentPane";
@@ -586,8 +586,10 @@ describe("TaskAgentPane — the options-scoping baseline gate", () => {
       data: { data: [longlistWalk] },
     } as unknown as ReturnType<typeof queries.useRuns>);
     renderPane({ runStatus: "succeeded", stream: createInitialRunStreamState() });
-    expect(screen.getByText(/The longlist is built/)).toBeInTheDocument();
-    expect(screen.queryByText(/The baseline is written/)).not.toBeInTheDocument();
+    // A past run folds to its own walk's finish words and its wall time.
+    expect(screen.getByText("The longlist is ready")).toBeInTheDocument();
+    expect(screen.getByText("The longlist is ready").parentElement).toHaveTextContent(/^The longlist is ready · 30 min$/);
+    expect(screen.queryByText(/The baseline is ready/)).not.toBeInTheDocument();
   });
 
   it("keeps the composer open at the gate, with the baseline question placeholder", () => {
@@ -819,5 +821,130 @@ describe("TaskAgentPane — the streaming planner turn", () => {
     expect(screen.getByText("Is the question as you want it?")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "That's my question" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Narrow it" })).toBeInTheDocument();
+  });
+});
+
+/**
+ * Task 058 (owner, 2026-11-05): the run trace is the one progress surface.
+ * It sits at the run's place in the thread, in the Agent tab and the
+ * sidebar alike; the card, its minimised state, the dock and the separate
+ * run-finished notice are gone.
+ */
+describe("TaskAgentPane — the run trace", () => {
+  const TASK_ID = "11111111-1111-1111-1111-111111111111";
+  const LIVE = "live-walk";
+
+  function pendingCheckIn(): CheckInOut {
+    return {
+      boundary: "after_component",
+      check_in_id: "55555555-5555-5555-5555-555555555555",
+      component: "screen",
+      created_at: "2026-11-05T10:05:00Z",
+      kind: "pause",
+      options: [{ id: "continue", label: "Continue", description: "", requires_user_input: false, suggested: false, why: null, endorsement: null }],
+      render: "Does this look right before I assess the sources?",
+      rerun_component: null,
+      segment_reentry_allowed: false,
+      sequence: 3,
+      stage: "screen",
+      status: "pending",
+      triggers: [],
+      bundle: null,
+    };
+  }
+
+  beforeEach(() => {
+    vi.mocked(queries.useTaskAgentTurns).mockReturnValue({
+      data: { data: [turn(0, "2026-11-05T09:00:00Z")] },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof queries.useTaskAgentTurns>);
+    vi.mocked(queries.usePlan).mockReturnValue({
+      data: { capability: "evidence_search", plan: { question: "Q", ready: true }, status: "approved", version: 1 },
+    } as unknown as ReturnType<typeof queries.usePlan>);
+    vi.mocked(queries.useRuns).mockReturnValue({
+      data: {
+        data: [
+          { ...run("old-walk", "2026-11-05T09:01:00Z", "2026-11-05T09:15:30Z"), status: "succeeded" },
+          run(LIVE, "2026-11-05T09:30:00Z", null),
+        ],
+      },
+    } as unknown as ReturnType<typeof queries.useRuns>);
+    vi.mocked(queries.useDecisions).mockReturnValue({ data: { data: [] } } as unknown as ReturnType<typeof queries.useDecisions>);
+    vi.mocked(queries.useCheckIns).mockReturnValue({ data: { data: [] } } as unknown as ReturnType<typeof queries.useCheckIns>);
+    vi.mocked(queries.useFunnel).mockReturnValue({ data: undefined } as unknown as ReturnType<typeof queries.useFunnel>);
+    vi.mocked(queries.useTask).mockReturnValue({ data: undefined } as unknown as ReturnType<typeof queries.useTask>);
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({ mutateAsync: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    vi.mocked(mutations.useStartRun).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useStartRun>);
+    vi.mocked(mutations.usePatchPlan).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.usePatchPlan>);
+    vi.mocked(mutations.useAnswerCheckIn).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useAnswerCheckIn>);
+  });
+
+  function liveStream(overrides: Partial<RunStreamState> = {}): RunStreamState {
+    const searching: StageEntry = { stage: "acquire", label: "Searching and screening", status: "started", startedAt: "2026-11-05T09:30:01Z" };
+    return {
+      ...createInitialRunStreamState(),
+      run: { id: LIVE, status: "running", startedAt: "2026-11-05T09:30:00Z" },
+      stages: [searching],
+      ...overrides,
+    };
+  }
+
+  function renderPane(overrides: Partial<ComponentProps<typeof TaskAgentPane>> = {}) {
+    return render(
+      <MemoryRouter>
+        <ToastProvider>
+          <TaskAgentPane taskId={TASK_ID} runStatus="running" stream={liveStream()} isOwner {...overrides} />
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it("shows the live run as the trace at its place, with no card, no Minimise and no dock", () => {
+    renderPane();
+    const trace = screen.getByRole("region", { name: "Analysis run" });
+    expect(trace).toHaveTextContent("Searching and screening");
+    expect(trace.querySelector("[data-tone]")).toHaveClass("bg-blue");
+    expect(screen.queryByRole("button", { name: "Minimise" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show the analysis run" })).toBeNull();
+    expect(screen.queryByText("RUNNING")).toBeNull();
+  });
+
+  it("folds a past run to its status word and wall time, with no link", () => {
+    renderPane();
+    const past = screen.getByText("Report ready");
+    expect(past.parentElement).toHaveTextContent(/^Report ready · 14 min$/);
+    expect(past.closest("p")?.querySelector("a")).toBeNull();
+    expect(screen.queryByText(/Analysis run —/)).toBeNull();
+  });
+
+  it("shows the same trace in the sidebar's compact pane", () => {
+    renderPane({ compact: true });
+    expect(screen.getByRole("region", { name: "Analysis run" })).toHaveTextContent("Searching and screening");
+  });
+
+  it("sits the waiting check-in under the trace, which reads paused", () => {
+    renderPane({ runStatus: "paused", stream: liveStream({ pendingCheckIn: pendingCheckIn() }) });
+    const trace = screen.getByRole("region", { name: "Analysis run" });
+    const card = screen.getByTestId("check-in-card");
+    expect(trace.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(trace).toHaveTextContent("Paused · a check-in is waiting on you");
+    expect(trace.querySelector("[data-tone]")).toHaveClass("bg-orange");
+  });
+
+  it("folds the ended run to its one destination, with no separate finished notice", () => {
+    renderPane({
+      runStatus: "succeeded",
+      stream: liveStream({
+        run: { id: LIVE, status: "succeeded", startedAt: "2026-11-05T09:30:00Z", endedAt: "2026-11-05T09:44:10Z" },
+        stages: [{ stage: "synthesise", label: "Writing", status: "completed", startedAt: "2026-11-05T09:40:00Z", seconds: 250 } as StageEntry],
+      }),
+    });
+    const trace = screen.getByRole("region", { name: "Analysis run" });
+    expect(trace).toHaveTextContent("Report ready· 14 min· Read it →");
+    expect(screen.getByRole("link", { name: "Read it →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
+    expect(screen.queryByText(/Evidence search is finished/)).toBeNull();
   });
 });
