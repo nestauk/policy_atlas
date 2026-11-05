@@ -367,7 +367,8 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
       </div>
       <div className="mt-2 flex items-start justify-between gap-3">
         <p className="text-meta font-normal leading-5 text-grey">Enter to send · Shift+Enter for a new line</p>
-        {capability === "theory_of_change" && (
+        {/* Hidden while a file is attached: drawing your own would drop the file. */}
+        {capability === "theory_of_change" && file === null && (
           <button
             type="button"
             onClick={() => start(true)}

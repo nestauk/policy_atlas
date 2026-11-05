@@ -229,7 +229,7 @@ def review_message(
     if completes:
         parts.append(
             f"The canvas shows your diagram as you drew it. {completes.rstrip('.')}: these "
-            "wait under Suggestions above the canvas, for you to add or leave out."
+            "wait under Suggestions beside the canvas, for you to add or leave out."
         )
     parts.append(
         "Compare it with your original in the plan, then press Check the evidence on the "
@@ -316,6 +316,6 @@ def suggest_from_diagram(
     )
     return (
         f"I read your diagram ({file_name}). It has {found} the canvas does not have. They "
-        "wait under Suggestions above the canvas: hover over one to see it there, then accept "
+        "wait under Suggestions beside the canvas: hover over one to see it there, then accept "
         "or reject it. Accepted connections get their evidence check."
     )

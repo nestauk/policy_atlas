@@ -12,6 +12,7 @@ import uuid
 from pathlib import Path
 from types import ModuleType
 
+import pytest
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
@@ -38,9 +39,12 @@ def test_a_dry_run_changes_nothing_and_apply_removes_every_row(engine: Engine) -
     try:
         assert ops.run(engine, apply=False, task_ids=[task_id]) == 0
         with engine.connect() as conn:
-            assert conn.execute(
-                text("SELECT count(*) FROM toc_box WHERE task_id = :t"), {"t": task_id}
-            ).scalar_one() == 3
+            assert (
+                conn.execute(
+                    text("SELECT count(*) FROM toc_box WHERE task_id = :t"), {"t": task_id}
+                ).scalar_one()
+                == 3
+            )
 
         assert ops.run(engine, apply=True, task_ids=[task_id]) == 0
         with engine.connect() as conn:
@@ -64,3 +68,30 @@ def test_a_dry_run_changes_nothing_and_apply_removes_every_row(engine: Engine) -
 
 def test_a_named_task_that_is_not_a_theory_of_change_is_refused(engine: Engine) -> None:
     assert ops.run(engine, apply=True, task_ids=[uuid.uuid4()]) == 2
+
+
+def test_apply_removes_the_uploaded_files_too(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The rollback plan (ADR 0042) empties the bucket through this script."""
+    monkeypatch.delenv("POLICY_ATLAS_UPLOAD_BUCKET", raising=False)
+    monkeypatch.setenv("POLICY_ATLAS_UPLOAD_DIR", str(tmp_path))
+    with engine.begin() as conn:
+        task_id = seed_toc_task(conn)["task_id"]
+        key = f"tasks/{task_id}/{uuid.uuid4()}"
+        (tmp_path / key).parent.mkdir(parents=True)
+        (tmp_path / key).write_bytes(b"%PDF-")
+        conn.execute(
+            text(
+                "INSERT INTO task_upload (upload_id, task_id, purpose, object_key, file_name, "
+                "content_type, size_bytes, sha256, uploaded_by, uploaded_at) VALUES "
+                "(:u, :t, 'toc_theory', :k, 'theory.pdf', 'application/pdf', 5, 'x', 'dev', now())"
+            ),
+            {"u": uuid.uuid4(), "t": task_id, "k": key},
+        )
+    try:
+        assert ops.run(engine, apply=True, task_ids=[task_id]) == 0
+        assert not (tmp_path / key).exists()
+    finally:
+        with engine.begin() as conn:
+            delete_task_data(conn, task_id)

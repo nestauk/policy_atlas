@@ -33,6 +33,15 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+_OWN_DATA = "SELECT count(*) FROM toc_proposal"
+_WHAT = "proposal row(s) exist"
+
+REMEDY = (
+    "; remove the theory-of-change tasks first with 'python scrip"
+    "ts/ops_remove_toc_tasks.py --apply', then downgrade again"
+)
+
+
 def upgrade() -> None:
     """Create ``toc_proposal``."""
     op.create_table(
@@ -64,5 +73,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Drop it."""
+    # Refuse while this revision's own data exists (contract § Schema): the
+    # downgrade would lose it. Earlier revisions in the chain have already run.
+    count = op.get_bind().execute(sa.text(_OWN_DATA)).scalar_one()
+    if count:
+        raise RuntimeError(f"refusing to downgrade {revision}: {count} {_WHAT}" + REMEDY)
     op.drop_index("ix_toc_proposal_task", table_name="toc_proposal")
     op.drop_table("toc_proposal")

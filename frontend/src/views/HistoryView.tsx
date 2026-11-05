@@ -77,7 +77,7 @@ export function HistoryView() {
       )}
 
       {editError !== null && (
-        <p role="alert" className="mb-2 text-body text-[var(--color-verdict-against-text)]">
+        <p role="alert" className="mb-2 text-body text-red">
           {editError}
         </p>
       )}

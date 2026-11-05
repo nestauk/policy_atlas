@@ -192,11 +192,156 @@ What changed:
 
 ## Review findings
 
-(After the review stack.)
+The review stack ran on 2026-11-05 in a fresh conversation (task-cycle step 7), on the branch at
+`d35ca7b4` against `origin/dev` `3d276c21`, after the owner's green `make verify`. All of the code
+is Claude-written, so Codex anchored the adversarial pass.
+
+### Lanes
+
+| Lane | Reviewer | What it covered |
+|---|---|---|
+| Contract verifier | `contract-verifier` agent (pinned Opus, read-only) | every rubric item, the claims in this file and ADR 0042 against the code, deviations 1 to 23 |
+| `/code-review medium` | the Claude half of the heterogeneous pair | product and test code |
+| Security | `/security-review` (a finder and a false-positive filter; the Tier-3 `security-auditor` agent is not installed here) | the upload routes and store, the bucket, colleague access, the vision call, untrusted text in prompts |
+| Adversarial | Codex through `codex-rescue`, read-only (job `task-mw3r25xr-wp8yyn`, 5 min) | concurrency, access, injection, migrations, cost, shared-code regressions, the simplification review's § 4 list |
+| Design | `frontend-designer` agent, read-only, against the wireframes and the contract's rulings (no `design-annex.md` exists for this slice) | every changed frontend surface; then the fix pass below |
+| Trace | the lead, from the persisted outputs | run `6322f259` (the owner's last feedback-round task) and the review's own live run (below) |
+| `/simplify` | not run again | the simplification review and its five batches (`8f1ac86f` to `d35ca7b4`) were the reuse, simplification, efficiency and altitude pass; a second same-family pass would duplicate it |
+
+Subagent tokens: contract verifier 226K, `/code-review` 246K, security 196K + 68K, design lane
+272K + the fix pass 166K. That is above the 250K reasoning-class guideline, because the product
+diff is 27K lines and the owner's 2026-11-04 rule adds the design lane for frontend-heavy slices.
+
+### Findings and rulings
+
+Convergent across lanes (high confidence): the owner's name on the public leg (security and
+`/code-review`); the removal script's missing file delete (contract verifier and `/code-review`);
+imported rows not flagged (Codex and contract verifier); stale rows counted as changed (Codex and
+contract verifier). Unique to one lane: the lossy downgrades (contract verifier), the delete
+race and the Bedrock prices (Codex), the queued-check order, the Stop-during-draft and the
+critical-mark collision on Undo (`/code-review`), and every design item.
+
+| # | Lane | Finding | Ruling |
+|---|---|---|---|
+| 1 | security, code-review | `GET /toc` and `/toc/evidence` returned real display names (`edited_by`, `scored_by`, `removed_by`, `added_by`) to anonymous readers of a public task, against task 037 D5 | **Fixed.** `_readable_toc` returns whether the caller came through the public leg; the two builders skip `names_of` then. Test: `test_the_public_leg_carries_no_editor_names`. |
+| 2 | verifier H1, code-review | `scripts/ops_remove_toc_tasks.py` called `UploadStore.delete`, which the simplification batch had removed; the error was swallowed, so a rollback never emptied the bucket | **Fixed.** `delete` restored on the protocol and both stores. Test: `test_apply_removes_the_uploaded_files_too`. |
+| 3 | verifier H2 | Six of the ten revisions dropped or folded data on downgrade without refusing; with `transaction_per_migration` a rollback with theories present would commit those drops before the core revision refused | **Fixed** for the four that drop data (`72c3`, `3c27`, `9d1e`, `b4e8`): each refuses while its own data exists. `7fbb` and `80f4` fold values with a designed mapping that keeps every row and has its own round-trip test (`test_migration_054_beam`, `test_migration_054_layers`), so they step down; a first version of the guards covered them too and those tests caught it. The refusal test now asserts no row is lost on the way to the core revision's refusal. |
+| 4 | Codex 1 | `store.delete` had no revision check: a delete based on an older revision could remove a row someone had just edited (C10) | **Fixed.** `store.delete(observed_revision=…)` locks the row and compares; `delete_link` and `delete_box` raise `toc_stale_revision` on a mismatch. |
+| 5 | Codex 2, verifier M2 | `_flag_values` flagged only origin `user`, `_user_written` counted `imported` too, so a merge or choose change to an adopted sketch was not flagged | **Fixed.** One predicate. |
+| 6 | Codex 3 | `cost.PRICES` keys are OpenAI ids; the Bedrock route names them `global.openai.…`, so every step read as unpriced | **Fixed.** The prefix is stripped at the lookup; test added. Folded into the Bedrock knowledge concept. |
+| 7 | Codex 4, verifier L3 | Reset layout and Keep the evidence counted rows whose update was skipped as stale | **Fixed.** Only truthy updates count. |
+| 8 | Codex 6 | The consolidate call routes as `toc_merge` (frontier) but its tokens land in `toc_discover` (standard price) | **Deferred** (`docs/deferred.md`): one call per walk; needs a component per model call. |
+| 9 | Codex 5 | A run that starts and ends between two 15 s polls never alerts (every task kind) | **Deferred**: alert on the latest run's identity. |
+| 10 | code-review | `check_status` reads "checking" for a succeeded draft whose follow-on check was refused | **Deferred**: persist the refusal as an event. |
+| 11 | code-review | Stop during the draft walk aborted it and posted "The check stopped…" | **Fixed.** Stop refuses (409 `toc_not_running`) unless the running walk is a check. |
+| 12 | code-review | `take_queued_check` wrote the dequeue event before learning there was no plan, losing the queue | **Fixed.** Plan first. |
+| 13 | code-review | The chat's decision list showed every child item search's `component.started` ("Started an evidence-search step.") | **Fixed.** Only the task's own walks; the text says "Started a step." |
+| 14 | code-review | Undo re-inserted a deleted critical link while another was critical: `uq_toc_link_one_critical` raised a 500 | **Fixed.** The restored link comes back without the mark when another holds it. |
+| 15 | code-review | An upload that the vision call refused (`upload_not_theory`) left its row and object behind, unlisted | **Fixed.** Row and file are removed before the 422. |
+| 16 | code-review | `_patch_toc_plan` turns an empty required field into `None` and the 422 carries pydantic's text | **Declined**: an empty required field is a client error and 422 is right; the message shape is cosmetic. |
+| 17 | code-review | `ApiUnprocessable`, `ApiNotFound` and `ApiConflict` are copy-paste twins | **Declined for this PR**: shared error plumbing on `dev`; a cleanup of its own. |
+| 18 | verifier M1 | Ten revisions against a contract of three (C51 asked one per slice; the contract contradicts itself) | **Escalated to the owner**, recorded in ADR 0042 § Amendment 2026-11-05. The review did not squash them: the owner's and the test databases have run the chain. |
+| 19 | verifier M3 | The theory-level evidence label is the verdict call's, not `grade.py`'s | **Escalated**, ADR amended: per-link grades and the whole-programme judgement still come only from `grade.py`; the theory label is the verdict's reading of them. |
+| 20 | verifier M4 | The Download menu rendered on the public view (C17: exports are authenticated only) | **Fixed** (frontend item 18): hidden on the public view. |
+| 21 | verifier M2 | C9 and C11 in part: flags stored, never surfaced; no Undo of merge or choose changes, no Keep mine, no Restore, no Redraft-or-keep choice | **Deferred** (`docs/deferred.md`) and recorded in the ADR amendment. |
+| 22 | verifier M6, rubric 13 | No same-organisation route tests on the write and upload routes; no race tests with barriers; no DELETE preflight test | **Deferred** (`docs/deferred.md`): the public reads have the full matrix; the writers are tested through 409s and skipped rows. |
+| 23 | verifier 1, 16 | E1, E2 and E6 as the contract specifies did not run; no dataset licence was recorded | **Deferred** (evals); **fixed** (licence note in the ground-truth README). |
+| 24 | verifier 18 | `docs/specs/log.md` had no entry after 2026-10-30; `components.md` still listed `python-pptx` and server export routes | **Fixed.** Log entry, components and capability rulings updated. |
+| 25 | verifier L1 | ADR 0042 stale: three revisions, four widened constraints, the same-meaning call, "imported theory files" | **Fixed** by the amendment. |
+| 26 | verifier L2, L5, L6 | The upload docstring said "edit rights"; a test comment's counts; the end message offered a stress test that does not exist | **Fixed.** The end message now says "ask in the chat what would make the critical connection fail here". |
+| 27 | verifier L4 | `toc_proposal`, `task_upload`, `toc_figure` lack `UNIQUE(id, task_id)` | **Deferred**: nothing points at them by foreign key. |
+| 28 | verifier L7 | One branch and one draft PR instead of `feat/theory-of-change` with a PR per increment (C15) | **Recorded**; the owner steered the build this way. |
+| 29 | design 1 | An unchecked connection drew as "Not enough evidence" and said "Checking the evidence…" | **Fixed**: its own solid line, "Needs evidence" tip and legend line. |
+| 30 | design 2 | Find evidence was offered before any plan existed (the canvas bar withheld it) | **Fixed**: gated on `check_status`. The backend already refused (`no_plan`). |
+| 31 | design 3 | The canvas could not be used from the keyboard | **Fixed**: Enter or Space selects a box or connection; edges focusable; focus ring per DESIGN. |
+| 32 | design 4 to 12, 14 to 16 | Contrast on navy, the live-region timer, the 16px floor, errors in the verdict colour, blue section labels, the Undo toast, rounded controls, the narrow-screen panel, the Suggestions copy, the More menu, report codes, reduced motion | **Fixed** (frontend items 4 to 16). |
+| 33 | design 13, 14, 17 | Restore for set-aside pathways; "Your original" from the Result page; Stop on the chat's progress line; the History list on the Result page | **For the owner** (`docs/deferred.md`): annex and build disagree. |
+| 34 | design 17 | "Start drafting yourself" dropped an attached file | **Fixed**: the link hides while a file is attached. |
+| 35 | design 15 | The "question" alert opened the Result tab | **Fixed**: a paused walk opens the Agent tab. |
+| 36 | design, fix-pass proposals | Chat and code copy said "Suggestions above the canvas"; "Your original couldn't be loaded." failed contrast; a box's Find more hint said "this connection" | **Fixed** in code strings and the frontend. The Task Agent prompt still says "above the canvas" (a re-pin; deferred). |
+
+Codex's approach-level challenges (one revision-aware write primitive including deletes; a graph
+snapshot per check or proposal; imported rows as a first-class provenance category everywhere; a
+canonical billable model id at the provider boundary; an explicit queue row) were read and not
+adopted now: the delete guard and the one user-written predicate answer the first and third in
+part; the rest are recorded with the seams.
+
+### Deviations 1 to 23, re-examined
+
+| Ruling | Deviations |
+|---|---|
+| Adopt as is | 5, 6, 9, 11, 12, 14, 17, 18, 22, 23 |
+| Text overtaken by later increments (the code is right; the text stands as history) | 1 (dev was merged in, not rebased); 2 (three public reads now, with `/evidence/{id}/context`); 3 (the header comes from the `toc_report` payload); 7 (`POST /toc/check` with `check_again` exists); 10 (`patch_plan` edits a ToC plan until the draft exists); 13 (documents come from `source.acquired` and `source.seen_again` events); 16 (the dispatcher shares `_fan_out`) |
+| Escalated | 19 (it leaves out increment 4 and C9's Undo all and Keep mine; see findings 18 to 21); 20 (the verdict step; ADR amended); 21 (matches the code; its flag gap is finding 5, fixed) |
+| Not verified by the stack | 4, 8, 15 |
+
+### Trace lane
+
+- **Run `6322f259` (the owner's, 2026-11-05).** The plan-stage sense check found 12 documents
+  from two OpenAlex queries and said "too little"; the programme judge called 9 of 10 documents
+  "not about". Two of those abstracts were read: an Australian RCT protocol (no results) and a
+  review of digital delivery of obesity care, so the calls are defensible. The verdict read
+  "plausible, mixed" with the one weak support named, consistent with the links.
+- **The review's own live run** (task `091c3d13`, "Review run: universal free school meals",
+  `openai-direct`, 16:23 to 16:29). The opening turn produced a ready plan and the sense check's
+  note ("Before you start: a secondary-school pilot found no measurable effect on hunger or food
+  insecurity…", one source named), which did not block. Draft walk 25 s; check walk 4 min 2 s
+  with 17 item searches (16 links and the programme). Result: 15 boxes (1 input, 1 output,
+  4 short and 4 long outcomes, 2 impacts, 3 failure outcomes), 16 connections, 7 pathways;
+  verdicts: 4 confident, 4 leaning supports, 1 leaning against (the critical connection, #16
+  "School meals and attendance"), 7 not sure. Report verdict: mechanism plausible, evidence
+  mixed; headline "Evaluations suggest universal free school meals can improve primary
+  attainment in England, but do not establish a reduction in family food insecurity." Tokens:
+  judge 474K prompt (327K cached) and 14K output; select 94K; figures 76K (48K cached);
+  classify 75K; discover 56K; the rest under 20K each. About $0.60 by the price table.
+  Observations: the critical connection (#16, from the draft) and the verdict's carrying step
+  (#2) are different notions on one page; the end message still offered a stress test (the
+  wording was changed after this run, finding 26).
+
+### Fake-done check
+
+No test was relaxed, skipped or deleted. The refusal test's assertion was corrected once during
+the stack: its first version assumed every revision refuses, the contract says each refuses only
+while its own data exists, and the seeded judgement stops the chain at `7fbb`. The upload
+cleanup re-raises the 422 after removing the row and the file; no error is swallowed.
+
+### Gates after the fixes
+
+- Backend: the touched files, 146 passed (`test_cost`, `test_edits`, `test_check_steps`,
+  `test_check_queue`, `test_proposals`, `test_uploads`, `test_toc_uploads`, `test_toc_routes`,
+  `test_ops_remove_toc_tasks`, `test_migration_054_core`, `test_embeddings`,
+  `test_task_agent_toc`); `mypy` clean (244 files); `ruff` clean.
+- Frontend (the fix pass): 1,032 tests passed, typecheck clean, lint 0 errors and one pre-existing
+  warning. Screenshots from the running `make dev` after the fixes: `screenshots/review-*.png`
+  (1280 and 400 px, a connection selected from the keyboard, the legend, the panel scrolled into
+  view on a phone width).
+- `make okf-validate`: 211 concepts, 0 violations.
+- Full `make verify`: see § Final gate below.
 
 ## Rubric status
 
-(After the review stack.)
+| # | Status | Note |
+|---|---|---|
+| 1 Core | Built; evals partial | E1, E2, E6 as specified did not run (deferred); the plausibility and ground-truth evals did. The owner built increments 2 to 6 on it, which is the "good enough to build on" word in practice. |
+| 2 Editing | Built in part | Flags stored, not surfaced; no Undo of automatic changes, Keep mine, Restore or the plan-change choice; no barrier race tests (deferred, findings 21 and 22). |
+| 3 Web search | Not built | Owner-steered; its own slice. |
+| 4 Stress test | Not built | The Task Agent chat discusses the theory. |
+| 5 Upload | Built | Type and size checks, the page cap, the audit event, task-scoped reads; the bucket is not yet deployed. |
+| 6 Export | Built in part | Browser exports; PowerPoint parked; no export opened in its target tool (deferred). |
+| 7 From option | Not built | No W12 ruling recorded; owner-steered. |
+| 8 Gates | Holds | Owner's green `make verify` before the stack; the stack's own below. |
+| 9 Schema | Holds as amended | Ten reversible revisions, each refusing on its own data; round trips tested for the core chain; the rest step down losslessly when empty. |
+| 10 OpenAPI | Holds | Additive only; generated files through `make openapi-sync`; drift check OK. |
+| 11 Prompt hashes | Holds | 14 ToC entries added; nothing else changed; 55 files unchanged. |
+| 12 Dependencies | Holds | `@xyflow/react`, `html-to-image@1.11.11`; no `python-pptx`. |
+| 13 Access | Holds in part | Full matrix on the three public reads; write and upload routes tested for owner, outsider and anonymous (deferred: same-org on every writer). |
+| 14 Infra | Holds | Private, encrypted, TLS-only, retained; the backend task role only; the setting off in both environments. |
+| 15 Tests | Holds | No test deleted, skipped or weakened. |
+| 16 Evidence | Holds | This file; the licence note; the evals that ran; exports by tool deferred. |
+| 17 Seams | Holds | `docs/deferred.md` § Theory of change. |
+| 18 Spec changes | Holds | Five changes present; the build rulings logged 2026-11-05; frozen sources untouched. |
+| 19 ADR | Holds | Accepted 2026-10-26, amended 2026-11-05 with the as-built rollback. |
+| 20 Review stack | Holds | This section. |
 
 ## Intent & assumptions
 
@@ -315,7 +460,7 @@ review should check them against the rulings below, which the owner gave in the 
 | Later uploads | After a draft, an upload becomes one suggestion. The suggestion has the boxes and connections that the canvas does not have yet. You can upload more than once, and the chat shows each file at its own message. | 2026-11-05 (items 10 and 11 in part) |
 | Draw your own | The Result tab opens from the start. Boxes that you draw before any draft are your own sketch. The draft keeps a sketch that has connections and suggests the rest. "Start drafting yourself" on the new-task page opens the empty canvas. | 2026-11-05 (item 9) |
 | Report v7 | The report has these sections: summary, pathways, how it could fail, what to test first, supporting activities, how it could be expanded, and an assumptions table. | 2026-11-04 |
-| Exports (increment 6, in part) | The Download menu exports PDF, PNG, SVG, draw.io, CSV and JSON. All exports are made in the browser. | 2026-11-04: PowerPoint is parked, so there is no `python-pptx` (C12 and plan S14 changed). |
+| Exports (increment 6, in part) | The Download menu exports PDF, PNG, SVG, draw.io, CSV and JSON. All exports are made in the browser. | 2026-11-04: PowerPoint is parked, so there is no `python-pptx` (C16 and plan S14 are overtaken; the contract text is not amended, see ADR 0042 § Amendment 2026-11-05). |
 | Evidence years, seminal works | Each plan has a year range, from 2000 onwards by default. The most-cited works of the pool are offered to every connection. | 2026-11-04 |
 | Editing polish | You can undo an accepted route in one step. Review progress shows in the chat, and you can run Review again. Evidence checks start at once for connections you accept. Suggestions show faded on the canvas. The progress line names the right walk. | 2026-11-05 (items 1 to 8) |
 
@@ -400,3 +545,19 @@ design was kept and the ToC code was moved onto it:
   `policy_atlas_test`, the dev migration round trips refuse: 2 ToC tasks from 2026-11-04 remain
   there, and the ToC downgrade refuses while ToC tasks exist. `make test` resets that database
   first. The full suite has not run.
+
+## Final gate (2026-11-05, after the review stack's fixes)
+
+Full `make verify`, three runs on the same tree:
+
+1. **Fail, 2 of 4,405.** `test_migration_054_beam` and `test_migration_054_layers`: the first
+   version of the downgrade guards also covered `7fbb` and `80f4`, whose downgrades are
+   designed, round-trip-tested value mappings. The guards were kept on the four revisions that
+   drop data (finding 3).
+2. **Fail, 1 of 4,405.** `test_each_link_reads_at_most_k_documents_of_its_own_search`: one of six
+   child item searches failed under `-n auto` load, with no reason in the output. It passed alone
+   three times and in runs 1 and 3. The assertion now prints the failed children's events, so the
+   next flake carries its reason.
+3. **Pass.** Backend 4,405 passed, 1 skipped (6 min 43 s); mypy clean (525 files); ruff clean;
+   prompt-hash guard 55 files unchanged; drift check OK; okf-validate 211 concepts, 0 violations;
+   frontend 1,032 tests in 94 files; `vite build` passed.

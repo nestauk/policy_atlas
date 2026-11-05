@@ -1036,15 +1036,15 @@ function YourOriginal({ taskId, uploadId }: { taskId: string; uploadId: string }
   const file = useTocUploadFile(taskId, uploadId);
   return (
     <div>
-      <dt className="text-meta font-bold uppercase tracking-[0.06em] text-grey">Your original</dt>
+      <dt className={panelHintClass}>Your original</dt>
       <dd className="mt-1">
-        {file.isError && <span className="text-body text-grey">Your original couldn't be loaded.</span>}
+        {file.isError && <span className={panelHintClass}>Your original couldn't be loaded.</span>}
         {file.data !== undefined && (
           <UploadPreview
             blob={file.data}
             imageClassName="max-h-80 w-full border border-line object-contain"
             pdf={(url) => (
-              <a href={url} target="_blank" rel="noreferrer" className="text-body font-bold text-blue hover:underline">
+              <a href={url} target="_blank" rel="noreferrer" className="text-body font-bold text-aqua hover:underline">
                 Open your original (PDF)
               </a>
             )}

@@ -468,7 +468,7 @@ def _link_item_text(graph: Graph, key: str, plan: Any) -> str:
 
 def _flag_values(row: Row[Any], reason: str) -> dict[str, Any]:
     """The T1 flag columns for a change to user work, or nothing."""
-    if row.user_edited or row.origin == "user":
+    if _user_written(row):
         return {
             "pa_changed": True,
             "pa_change_reason": reason,

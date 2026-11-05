@@ -1,5 +1,15 @@
 # Spec update log
 
+## 2026-11-05 (task 054, review before the merge to `dev`)
+Owner rulings of 2026-11-03 to 2026-11-05, given in chat during the live feedback rounds, flowed
+back at the review stack. ADR 0042 § Amendment 2026-11-05 records the as-built state.
+* **Update**: [ToC capability § Rulings](capabilities/theory-of-change/capability.md) — the
+  build rulings: the plan-stage sense check and the two-axis verdict; PowerPoint parked;
+  uploads as one general `task_upload` table and bucket; draw your own; later uploads as one
+  suggestion; web search, the stress-test chat and the option link not built at the merge.
+* **Update**: [ToC components](capabilities/theory-of-change/components.md) — exports are made
+  in the browser (no server export routes, no `python-pptx`); PowerPoint is parked.
+
 ## 2026-11-04
 Task 057 review, owner rulings.
 * **Update** (S5 wording): [prompting § Timeouts](system/prompting.md) — as built: three attempts,

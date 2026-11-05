@@ -226,7 +226,7 @@ def run_review(engine: Engine, *, task_id: uuid.UUID, backend: TocBackend) -> uu
             parts.append(f"{findings} report section{'s' if findings != 1 else ''} to update")
         text = (
             f"I reviewed the theory after your edits. {response.summary} "
-            f"I have {' and '.join(parts)}: see Suggestions above the canvas. "
+            f"I have {' and '.join(parts)}: see Suggestions beside the canvas. "
             "Nothing changes until you accept."
         )
     post_agent_message(engine, task_id=task_id, text=text)

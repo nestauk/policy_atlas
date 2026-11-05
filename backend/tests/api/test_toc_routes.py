@@ -10,7 +10,7 @@ from sqlalchemy import update
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.app import create_app
-from policy_atlas.core.schema import task
+from policy_atlas.core.schema import task, toc_box
 from tests.api.org_support import make_org, ops_enrol, seeded, tenancy_client
 from tests.api.resource_support import (
     api_client,
@@ -150,3 +150,27 @@ def test_the_context_read_highlights_the_quote_in_its_passage(
         # Another task's judgement is not found under this task.
         foreign = CONTEXT.format(task_id=ids["task_id"], evidence_id=other["evidence"])
         assert client.get(foreign).status_code == 404
+
+
+def test_the_public_leg_carries_no_editor_names(engine: Engine, tmp_path: Path) -> None:
+    """D5: an anonymous reader of a public theory sees what changed, never who (task 037)."""
+    with tenancy_client(tmp_path, count=1) as (client, (owner,)):
+        with seeded(engine) as conn:
+            org = make_org(conn, name="ToC Org")
+            ops_enrol(conn, user_id=owner.user_id, org_id=org, display_name="Owner")
+            ids = seed_toc_task(conn)
+            conn.execute(
+                update(task)
+                .where(task.c.task_id == ids["task_id"])
+                .values(owner_user_id=owner.user_id, org_id=org, visibility="org", is_public=True)
+            )
+            conn.execute(
+                update(toc_box)
+                .where(toc_box.c.task_id == ids["task_id"])
+                .values(edited_by=owner.user_id)
+            )
+        url = ROUTES[0].format(task_id=ids["task_id"])
+        anonymous = client.get(url).json()["boxes"]
+        assert anonymous and all(box["edited_by"] is None for box in anonymous)
+        as_owner = client.get(url, headers=owner.headers).json()["boxes"]
+        assert {box["edited_by"] for box in as_owner} == {"Owner"}

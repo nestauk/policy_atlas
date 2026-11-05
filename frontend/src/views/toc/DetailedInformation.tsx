@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 
+import { prefersReducedMotion } from "../../lib/motion";
 import { scrub } from "../../lib/scrub";
 import { referenceAuthorsLine, REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 import type { Selection } from "./DetailPanel";
@@ -68,7 +69,7 @@ function RichSentence({ taskId, sentence, codes, sources, onSelect }: { taskId: 
         const target = codes.get(part);
         if (target === undefined) return part;
         return (
-          <button key={index} type="button" onClick={() => onSelect(target)} className="cursor-pointer hover:underline" aria-label={`Show ${part} on the canvas`}>
+          <button key={index} type="button" onClick={() => onSelect(target)} className="cursor-pointer font-semibold text-blue hover:underline" aria-label={`Show ${part} on the canvas`}>
             {part}
           </button>
         );
@@ -373,7 +374,7 @@ function ReportBody({ taskId, report, graph, onSelect, onPathway }: { taskId: st
           <h3 id="toc-expand" className={H3}>How it could be expanded</h3>
           <p className={P}>
             The evidence describes {expansions.length === 1 ? "a route" : `${expansions.length} routes`} your diagram does not show. You can add{" "}
-            {expansions.length === 1 ? "it" : "any of them"} from Suggestions above the canvas.
+            {expansions.length === 1 ? "it" : "any of them"} from Suggestions, beside the canvas.
           </p>
           <ul className={`mt-2 max-w-[44em] list-disc space-y-1.5 pl-5 ${REPORT_BODY_CLASS}`}>
             {expansions.map((route, index) => {
@@ -406,7 +407,7 @@ function ReportBody({ taskId, report, graph, onSelect, onPathway }: { taskId: st
         <ul className={`mt-2 space-y-1.5 border-l border-line pl-3 ${REPORT_BODY_CLASS}`}>
           {sections.map(([id, label]) => (
             <li key={id}>
-              <button type="button" className="cursor-pointer text-left text-navy hover:text-blue hover:underline" onClick={() => document.getElementById(id as string)?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+              <button type="button" className="cursor-pointer text-left text-navy hover:text-blue hover:underline" onClick={() => document.getElementById(id as string)?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" })}>
                 {label}
               </button>
             </li>

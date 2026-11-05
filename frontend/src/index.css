@@ -333,8 +333,8 @@
    dashes; Mixed solid amber (owner, 2026-11-04); Not enough
    evidence grey dashed; Leaning against long red dashes; Not
    confident dotted red. The critical link carries a warning triangle
-   (CriticalMark), not a thicker line. An unchecked or checking
-   edge is grey and pulses. Scoped under .react-flow so the library's own edge
+   (CriticalMark), not a thicker line. A checking edge is grey and
+   pulses; an unchecked one is a still grey line. Scoped under .react-flow so the library's own edge
    styles, loaded later, do not win. */
 .react-flow .toc-edge {
   fill: none;
@@ -348,6 +348,10 @@
 .react-flow .toc-edge--leaning_supports { stroke: var(--color-verdict-confident); stroke-dasharray: 12 5; }
 .react-flow .toc-edge--leaning_against { stroke: var(--color-verdict-against); stroke-dasharray: 12 5; }
 .react-flow .toc-edge--pending { stroke: var(--color-line-2); animation: toc-pulse 1.6s ease-in-out infinite; }
+.react-flow .toc-edge--unchecked { stroke: var(--color-line-2); }
+/* Keyboard focus on a box or a connection: DESIGN's 2px blue outline, offset 2px. */
+.react-flow .react-flow__node-box:focus-visible,
+.react-flow .react-flow__edge:focus-visible { outline: 2px solid var(--color-blue); outline-offset: 2px; }
 /* An uploaded theory waiting for review: a connection Policy Atlas suggested (task 054, increment 5). */
 .react-flow .toc-edge--suggested { stroke: var(--color-blue); stroke-dasharray: 4 4; }
 .react-flow .toc-edge--drawn { stroke: var(--color-navy); }

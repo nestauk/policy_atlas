@@ -352,12 +352,19 @@ def _snapshot(
         log.before.append({"table": table.name, "row": store.row_state(row), "deleted": True})
 
 
-def _delete_links(conn: Connection, log: store.ChangeLog, link_ids: list[uuid.UUID]) -> None:
+def _delete_links(
+    conn: Connection,
+    log: store.ChangeLog,
+    link_ids: list[uuid.UUID],
+    *,
+    expected_revision: int | None = None,
+) -> None:
     # Children first in the log: Undo restores in _RESTORE_ORDER whatever the log order.
     for table in (toc_pathway_link, toc_item_evidence, toc_figure):
         _snapshot(conn, log, table, "link_id", link_ids)
     for link_id in link_ids:
-        store.delete(conn, log, toc_link, link_id)
+        if not store.delete(conn, log, toc_link, link_id, observed_revision=expected_revision):
+            _raise_stale()
 
 
 def delete_link(
@@ -372,7 +379,7 @@ def delete_link(
     row = _row(conn, toc_link, link_id, task_id)
     _stale(row, expected_revision)
     log = store.ChangeLog()
-    _delete_links(conn, log, [link_id])
+    _delete_links(conn, log, [link_id], expected_revision=expected_revision)
     _record(conn, task_id=task_id, actor=actor, log=log, change=f"Deleted connection {row.code}")
 
 
@@ -397,7 +404,8 @@ def delete_box(
         ).scalars()
     )
     _delete_links(conn, log, link_ids)
-    store.delete(conn, log, toc_box, box_id)
+    if not store.delete(conn, log, toc_box, box_id, observed_revision=expected_revision):
+        _raise_stale()
     _record(conn, task_id=task_id, actor=actor, log=log, change=f"Deleted box {row.code}")
 
 
@@ -461,8 +469,9 @@ def reset_layout(conn: Connection, *, task_id: uuid.UUID, actor: str) -> int:
             select(toc_box).where(toc_box.c.task_id == task_id, toc_box.c.position.isnot(None))
         )
     )
+    moved = 0
     for row in rows:
-        store.update(
+        moved += store.update(
             conn,
             log,
             toc_box,
@@ -470,9 +479,9 @@ def reset_layout(conn: Connection, *, task_id: uuid.UUID, actor: str) -> int:
             observed_revision=row.revision,
             values={"position": None},
         )
-    if rows:
+    if moved:
         _record(conn, task_id=task_id, actor=actor, log=log, change="Reset the layout")
-    return len(rows)
+    return moved
 
 
 SUPPORTS = frozenset({"strong", "weak", "mixed", "refutes", "not_about"})
@@ -615,15 +624,15 @@ def keep_evidence(
         row = rows.links[key]
         if current in (row.counted_hash, row.kept_hash):
             continue
-        store.update(
+        if store.update(
             conn,
             log,
             toc_link,
             row.link_id,
             observed_revision=row.revision,
             values={"kept_hash": current, "kept_by": "user"},
-        )
-        codes.append(row.code or key)
+        ):
+            codes.append(row.code or key)
     if codes:
         _record(
             conn,
@@ -733,6 +742,8 @@ def undo(conn: Connection, *, task_id: uuid.UUID, actor: str, event_id: uuid.UUI
             if entry["table"] != name:
                 continue
             values = _typed(table, entry["row"])
+            if table is toc_link and values.get("critical") and _has_critical(conn, task_id):
+                values["critical"] = False  # at most one critical link (W10): the newer mark stays
             conn.execute(table.insert().values(**values))
             if name in store._PRIMARY_KEY:
                 log.created.append({"table": name, "id": str(values[store._PRIMARY_KEY[name]])})
@@ -780,6 +791,15 @@ def undo(conn: Connection, *, task_id: uuid.UUID, actor: str, event_id: uuid.UUI
         undoes=str(event_id),
     )
     return skipped
+
+
+def _has_critical(conn: Connection, task_id: uuid.UUID) -> bool:
+    return (
+        conn.execute(
+            select(toc_link.c.link_id).where(toc_link.c.task_id == task_id, toc_link.c.critical)
+        ).first()
+        is not None
+    )
 
 
 def _row_key(entry: dict[str, Any]) -> tuple[str, str] | None:

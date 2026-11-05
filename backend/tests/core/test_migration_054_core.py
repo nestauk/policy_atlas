@@ -76,9 +76,23 @@ def test_the_downgrade_refuses_while_a_theory_of_change_task_exists(engine: Engi
     try:
         with pytest.raises(RuntimeError, match="ops_remove_toc_tasks"):
             command.downgrade(cfg, PRE_REVISION)
-        # Refused before any DDL.
+        # Each revision refuses while its own data exists, and the two with a designed
+        # mapping (7fbb, 80f4) fold values rather than drop rows, so no row is lost on
+        # the way down to the core revision's refusal.
         with engine.connect() as conn:
             assert set(inspect(conn).get_table_names()) >= _NEW_TABLES
+            for table, expected in (("toc_box", 3), ("toc_item_evidence", 1)):
+                count = conn.execute(
+                    text(f"SELECT count(*) FROM {table} WHERE task_id = :t"),  # noqa: S608
+                    {"t": task_id},
+                ).scalar_one()
+                assert count >= expected, (table, count)
+            assert (
+                conn.execute(
+                    text("SELECT count(*) FROM toc_box WHERE task_id = :t"), {"t": task_id}
+                ).scalar_one()
+                == 3
+            )
     finally:
         command.upgrade(cfg, "head")
         with engine.begin() as conn:
@@ -117,12 +131,10 @@ def test_kept_by_takes_only_user_check_or_choose(conn: Connection) -> None:
 
 def test_a_task_has_at_most_one_critical_connection(conn: Connection) -> None:
     ids = seed_toc_task(conn)
-    conn.execute(
-        update(toc_link).where(toc_link.c.link_id == ids["link"]).values(critical=True)
+    conn.execute(update(toc_link).where(toc_link.c.link_id == ids["link"]).values(critical=True))
+    second = (
+        conn.execute(select(toc_link).where(toc_link.c.link_id == ids["link"])).mappings().one()
     )
-    second = conn.execute(
-        select(toc_link).where(toc_link.c.link_id == ids["link"])
-    ).mappings().one()
     _refused(
         conn,
         "uq_toc_link_one_critical",

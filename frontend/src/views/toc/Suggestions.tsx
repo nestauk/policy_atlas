@@ -137,7 +137,7 @@ export function Suggestions({
       <h3 className="text-body font-bold text-navy">Suggestions</h3>
       {proposals.length === 0 && <p className="text-body text-grey">No suggestions are waiting.</p>}
       {problems.length > 0 && (
-        <ul role="alert" className="text-body text-[var(--color-verdict-against-text)]">
+        <ul role="alert" className="text-body text-red">
           {problems.map((problem) => (
             <li key={problem}>{scrub(problem)}</li>
           ))}

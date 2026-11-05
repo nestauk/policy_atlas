@@ -10,7 +10,7 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.core.schema import event_log, runs
 from policy_atlas.theory_of_change.backend import StubTocBackend
-from policy_atlas.theory_of_change.cost import walk_cost
+from policy_atlas.theory_of_change.cost import usd, walk_cost
 from tests.theory_of_change.test_check_steps import _run
 
 STEPS = ("toc_select", "toc_search_new", "toc_figures")
@@ -47,3 +47,9 @@ def test_the_pick_and_figures_steps_have_a_known_model(
     assert set(cost["steps"]) == set(STEPS)
     assert all(step["model"] != "unknown" for step in cost["steps"].values())
     assert cost["unpriced"] == [] and cost["usd"] > 0
+
+
+def test_the_bedrock_route_names_the_same_models_with_a_prefix() -> None:
+    usage = {"prompt": 1_000_000, "cached": 0, "completion": 0}
+    assert usd("global.openai.gpt-6-luna", usage) == usd("gpt-6-luna", usage) == 0.10
+    assert usd("unknown-model", usage) is None

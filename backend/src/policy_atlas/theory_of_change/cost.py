@@ -44,7 +44,7 @@ def usd(model: str, usage: dict[str, int]) -> float | None:
     Returns:
         The estimate in US dollars, or ``None``.
     """
-    price = PRICES.get(model)
+    price = PRICES.get(model.removeprefix("global.openai."))  # Bedrock's name for the same model
     if price is None:
         return None
     prompt, cached = usage.get("prompt", 0), usage.get("cached", 0)

@@ -11,7 +11,8 @@ says what a file is for (``toc_theory``: a user's own theory of change).
 - **What is accepted.** PNG, JPEG or PDF, at most 10 MB, checked by the declared
   type *and* the file's first bytes, so a renamed file is refused.
 - **Who sees them.** Only the backend reads the store; a route checks the
-  caller may edit the task before sending a file back.
+  caller may read the task (owner or colleague, never the public leg) before
+  sending a file back. The removal script deletes a task's files with its rows.
 """
 
 from __future__ import annotations
@@ -62,6 +63,10 @@ class UploadStore(Protocol):
         """The bytes under ``key``."""
         ...
 
+    def delete(self, key: str) -> None:
+        """Remove ``key``; a missing key is not an error."""
+        ...
+
 
 class LocalUploadStore:
     """A folder on disk, for development and tests."""
@@ -82,6 +87,9 @@ class LocalUploadStore:
 
     def get(self, key: str) -> bytes:
         return self._path(key).read_bytes()
+
+    def delete(self, key: str) -> None:
+        self._path(key).unlink(missing_ok=True)
 
 
 class S3UploadStore:
@@ -105,6 +113,9 @@ class S3UploadStore:
     def get(self, key: str) -> bytes:
         response = self.client.get_object(Bucket=self.bucket, Key=key)
         return bytes(response["Body"].read())
+
+    def delete(self, key: str) -> None:
+        self.client.delete_object(Bucket=self.bucket, Key=key)
 
 
 def store_from_env() -> UploadStore:

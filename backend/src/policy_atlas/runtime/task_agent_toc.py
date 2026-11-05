@@ -203,7 +203,7 @@ def toc_after_turn(engine: Engine, task_id: uuid.UUID, turn: Any, user_id: str) 
                 + ("s" if len(edits) != 1 else ""),
                 ops=edits[:6],
             )
-            notes.append("The changes are under Suggestions, above the canvas.")
+            notes.append("The changes are under Suggestions, beside the canvas.")
         if clarification:
             events.append(
                 conn,

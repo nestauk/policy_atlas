@@ -1150,7 +1150,7 @@ export function TaskAgentPane({
           </>
         )}
         {upload.isError && (
-          <p role="alert" className="mr-8 text-lead text-[var(--color-verdict-against-text)]">
+          <p role="alert" className="mr-8 text-lead text-red">
             {(upload.error as Error | null)?.message ?? "The file couldn't be read. Try again."}
           </p>
         )}
@@ -1192,7 +1192,7 @@ export function TaskAgentPane({
         {/* The walk started but the run list has not caught up yet. */}
         {tocLive && tocLiveRunId === null && <TocTrace walkId="" decisions={[]} live kind={tocLiveKind} />}
         {tocReviewing && (
-          <p role="status" className="mr-8 flex items-center gap-2 text-caption font-semibold text-grey">
+          <p role="status" className="mr-8 flex items-center gap-2 text-body font-semibold text-grey">
             <span aria-hidden="true" className="anim-breathe h-1.5 w-1.5 shrink-0 bg-blue" />
             Reviewing the theory…
           </p>

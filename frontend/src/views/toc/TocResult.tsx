@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { askForFinishAlerts } from "../../lib/askForAlerts";
+import { prefersReducedMotion } from "../../lib/motion";
 import { useSearchParams } from "react-router";
 
 import { useTask, useToc, useTocEvidence, useTocProposals } from "../../api/queries";
@@ -105,7 +106,7 @@ export function TocResult({ taskId }: { taskId: string }) {
   // A code in the report selects its box or link, brings the canvas into view and centres it there.
   const showCanvas = () => {
     const canvas = document.querySelector('[aria-label="Theory of change canvas"]');
-    if (canvas instanceof HTMLElement && typeof canvas.scrollIntoView === "function") canvas.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (canvas instanceof HTMLElement && typeof canvas.scrollIntoView === "function") canvas.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
   };
   const select = (target: Selection) => {
     focusOn(target);
@@ -171,7 +172,7 @@ export function TocResult({ taskId }: { taskId: string }) {
       )}
       {graph.check_status === "failed" && (
         // A check that ended with an error: say so and offer the retry the chat names (owner, 2026-11-04).
-        <div role="alert" className="mt-4 flex max-w-[1100px] flex-wrap items-center gap-4 border-l-4 border-[var(--color-verdict-against)] bg-paper-2 px-4 py-3">
+        <div role="alert" className="mt-4 flex max-w-[1100px] flex-wrap items-center gap-4 border-l-4 border-red bg-paper-2 px-4 py-3">
           <p className={`min-w-0 flex-1 ${REPORT_BODY_CLASS}`}>The evidence check stopped with an error. What it finished stays on the canvas.</p>
           {checkEvidence}
         </div>
@@ -200,7 +201,7 @@ export function TocResult({ taskId }: { taskId: string }) {
           <div className="shrink-0 px-3 empty:hidden">
             {guideOpen && <ReadingGuide graph={graph} />}
             {error !== null && (
-              <p role="alert" className="my-2 text-body text-[var(--color-verdict-against-text)]">
+              <p role="alert" className="my-2 text-body text-red">
                 {error}
               </p>
             )}
@@ -223,7 +224,14 @@ export function TocResult({ taskId }: { taskId: string }) {
           pathway={pathway}
           selection={selection}
           focus={focus}
-          onSelect={setSelection}
+          onSelect={(target) => {
+            setSelection(target);
+            // Below lg the panel sits under the canvas: bring it into view once it has rendered.
+            if (target === null || typeof window.matchMedia !== "function" || window.matchMedia("(min-width: 64rem)").matches) return;
+            window.requestAnimationFrame(() =>
+              document.querySelector("#toc-canvas aside")?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" }),
+            );
+          }}
           editing={
             canEdit
               ? {

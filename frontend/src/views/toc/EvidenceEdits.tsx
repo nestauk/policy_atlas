@@ -9,7 +9,8 @@ import { SUPPORT_LABEL } from "./tocModel";
 import type { Support, TocDocument, TocGraph, TocLink } from "./types";
 
 const SUPPORTS: Support[] = ["strong", "weak", "mixed", "refutes", "not_about"];
-const PILL = "cursor-pointer rounded-full border px-2.5 py-0.5 text-meta";
+/** One segment of a square segmented control: neighbours share a border; the pressed one sits on top. */
+const PILL = "-ml-px cursor-pointer border px-2.5 py-0.5 text-meta first:ml-0 aria-pressed:relative";
 
 /** A document's Change menu: the user's support and relevance, back to the judge's, or remove (C42). */
 export function DocumentActions({ doc, editor }: { doc: TocDocument; editor: Editor }) {
@@ -26,9 +27,9 @@ export function DocumentActions({ doc, editor }: { doc: TocDocument; editor: Edi
     );
   }
   return (
-    <div role="group" aria-label="Change this document" className="mt-2 rounded-lg border border-line-2 bg-paper px-3 py-2.5 shadow-sm">
+    <div role="group" aria-label="Change this document" className="mt-2 border border-line-2 bg-paper px-3 py-2.5">
       <p className="text-meta font-bold text-ink">Your scores</p>
-      <div className="mt-1.5 flex flex-wrap gap-1">
+      <div className="mt-1.5 flex flex-wrap">
         {SUPPORTS.map((item) => (
           <button
             key={item}
@@ -41,8 +42,8 @@ export function DocumentActions({ doc, editor }: { doc: TocDocument; editor: Edi
           </button>
         ))}
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-1">
-        <span className="mr-1 text-meta text-ink">Relevance</span>
+      <div className="mt-2 flex flex-wrap items-center">
+        <span className="mr-2 text-meta text-ink">Relevance</span>
         {[0, 1, 2, 3].map((item) => (
           <button
             key={item}
@@ -78,7 +79,7 @@ export function DocumentActions({ doc, editor }: { doc: TocDocument; editor: Edi
           type="button"
           disabled={editor.busy}
           onClick={() => patch({ expected_revision: doc.revision, action: "remove" }, "Removed a study")}
-          className="cursor-pointer text-meta font-bold text-[var(--color-verdict-against-text)] hover:underline"
+          className="cursor-pointer text-meta font-bold text-red hover:underline"
         >
           Remove from this connection
         </button>
@@ -154,7 +155,7 @@ export function AddStudy({ link, editor }: { link: TocLink; editor: Editor }) {
 /** After an edit: the evidence is from the earlier wording. Keep it or check again (C43). */
 export function EditedEvidenceBlock({ link, graph, editor }: { link: TocLink; graph: TocGraph; editor: Editor | null }) {
   if (link.state === "kept") {
-    return <p className="mt-2 text-meta text-grey">Evidence kept for the new wording{link.edited_by != null ? ` by ${scrub(link.edited_by)}` : ""}.</p>;
+    return <p className="mt-2 text-body text-grey">Evidence kept for the new wording{link.edited_by != null ? ` by ${scrub(link.edited_by)}` : ""}.</p>;
   }
   if (link.state !== "pending") return null;
   return (
@@ -229,10 +230,12 @@ export function FindMore({ links, graph, editor }: { links: TocLink[]; graph: To
   return (
     <div className="mt-5 border-t border-line pt-3">
       <CheckButton graph={graph} editor={editor} ids={ids} mode="find_more" label="Find more evidence" variant="secondary" className="border border-navy" disabled={ready.length === 0} />
-      <p className="mt-1 text-meta text-grey">
+      <p className="mt-1 text-body text-grey">
         {ready.length === 0
           ? "Check this connection first: its evidence is from an earlier wording or not found yet."
-          : "Performs a more extensive search of evidence for this connection."}
+          : links.length === 1
+            ? "Performs a more extensive search of evidence for this connection."
+            : "Performs a more extensive search of evidence for its connections."}
       </p>
     </div>
   );

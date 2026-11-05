@@ -551,6 +551,16 @@ PowerPoint both matter · J9 how an older theory signals it may be out of date i
 Later the same day: assumptions are not separate objects; every link answers *worked elsewhere*
 and *holds here*, and its conditions hold the Magenta Book's assumptions.
 
+**Build rounds (2026-11-03 to 2026-11-05, in chat; ADR 0042 § Amendment 2026-11-05):** a
+plan-stage **sense check** warns when the route from intervention to goal is implausible and
+never blocks · a **verdict** leads the report on two axes, mechanism (plausible, implausible) and
+evidence (supports, mixed, too little, against); no "doubtful" level · uploads are one general
+`task_upload` table and bucket; colleagues may see the original, the public leg may not · **draw
+your own**: the Result tab opens from the start and boxes drawn before any draft are the user's
+sketch · a later upload becomes one suggestion and never changes the canvas · PowerPoint is
+parked; exports are made in the browser · at the merge to `dev`, web search (R7), the stress-test
+chat (R11) and the option link (S10) are not built; the Task Agent chat discusses the theory.
+
 ## Open questions
 
 No open questions remain from the owner rounds. Checks for the contract: the Bedrock key and

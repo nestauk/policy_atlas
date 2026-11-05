@@ -52,6 +52,12 @@ export function VerdictLegend() {
         </li>
       ))}
       <li className="inline-flex items-center gap-1.5">
+        <svg width="34" height="8" aria-hidden="true">
+          <line x1="0" y1="4" x2="34" y2="4" stroke="var(--color-line-2)" strokeWidth={3} />
+        </svg>
+        Needs evidence
+      </li>
+      <li className="inline-flex items-center gap-1.5">
         <CriticalIcon />
         Critical connection
       </li>
@@ -62,7 +68,7 @@ export function VerdictLegend() {
 /** "How to read this": opens above the canvas. */
 export function ReadingGuide({ graph }: { graph: Pick<TocGraph, "grade_rules"> }) {
   return (
-    <section aria-label="How to read this" className="mb-3 border border-line bg-paper-2 px-5 py-4 text-meta">
+    <section aria-label="How to read this" className="mb-3 border border-line bg-paper-2 px-5 py-4 text-body">
       <h3 className="text-body font-bold text-navy">How to read this</h3>
       <p className="mt-2 max-w-[64em]">
         Read from left to right: Inputs and activities (what the programme does), Outputs (what it delivers), Short-term outcomes (the first changes it

@@ -21,6 +21,7 @@ import {
   ViewportPortal,
 } from "@xyflow/react";
 
+import { prefersReducedMotion } from "../../lib/motion";
 import { scrub } from "../../lib/scrub";
 import type { Selection } from "./DetailPanel";
 import { imageBounds } from "./exports";
@@ -116,6 +117,8 @@ interface EdgeData extends Record<string, unknown> {
   attention: boolean;
   verdict: Verdict;
   pending: boolean;
+  /** No check has looked at it yet: a still grey line (C41, C48). */
+  unchecked: boolean;
   /** An uploaded theory waiting for review: a connection Policy Atlas suggested (increment 5). */
   suggested: boolean;
   /** An uploaded theory waiting for review: a connection from the user's own diagram, not yet checked. */
@@ -230,7 +233,7 @@ function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
     : data.span > 0
       ? (({ path: p, labelX, labelY }) => [p, labelX, labelY] as const)(routeEdge(sourceX, sourceY, targetX, targetY, data.span))
       : getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 10 });
-  const kind = data.ghost ? "preview" : data.pending ? "pending" : data.suggested ? "suggested" : data.drawn ? "drawn" : data.verdict;
+  const kind = data.ghost ? "preview" : data.pending ? "pending" : data.suggested ? "suggested" : data.drawn ? "drawn" : data.unchecked ? "unchecked" : data.verdict;
   return (
     <g>
       <title>{data.tip}</title>
@@ -290,7 +293,7 @@ function ViewFitter({ boxes, bounds, refit }: { boxes: number; bounds: Bounds; r
     const key = `${boxes}:${refit}`;
     if (fittedFor.current === key) {
       const zoom = transform[2];
-      void setViewport({ x: viewW / 2 - (x + width / 2) * zoom, y: viewH / 2 - (y + height / 2) * zoom, zoom }, { duration: 300 });
+      void setViewport({ x: viewW / 2 - (x + width / 2) * zoom, y: viewH / 2 - (y + height / 2) * zoom, zoom }, { duration: prefersReducedMotion() ? 0 : 300 });
       return;
     }
     fittedFor.current = key;
@@ -320,7 +323,7 @@ function FitTo({ count, rect, minZoom, maxZoom, padding, duration }: { count: nu
   useEffect(() => {
     if (count === 0 || !has) return;
     const view = store.getState();
-    void setViewport(getViewportForBounds({ x, y, width, height }, view.width, view.height, minZoom, maxZoom, padding), { duration });
+    void setViewport(getViewportForBounds({ x, y, width, height }, view.width, view.height, minZoom, maxZoom, padding), { duration: prefersReducedMotion() ? 0 : duration });
   }, [count, has, x, y, width, height, minZoom, maxZoom, padding, duration, setViewport, store]);
   return null;
 }
@@ -385,9 +388,9 @@ export function TocCanvas({
     }),
   };
   const movedIds = new Set(layout.boxes.filter((placed) => placed.moved).map((placed) => placed.id));
-  // A box the user added whose connections no check has judged yet.
+  // A box the user added whose connections no check has judged yet; nothing to say before the first check.
   const needsEvidence = (box: TocBox) =>
-    box.origin === "user" && graph.links.filter((link) => link.source_box_id === box.box_id || link.target_box_id === box.box_id).every((link) => link.state === "unchecked");
+    graph.check_status !== "none" && box.origin === "user" && graph.links.filter((link) => link.source_box_id === box.box_id || link.target_box_id === box.box_id).every((link) => link.state === "unchecked");
   // The ceiling's two labels sit below the lowest box.
   const ceilingLabelY = layout.height + 12;
   const shown = visibleLinkIds(graph, pathway);
@@ -486,6 +489,7 @@ export function TocCanvas({
       const upward = sameColumn && (yOf.get(link.target_box_id) ?? 0) < (yOf.get(link.source_box_id) ?? 0);
       // A link is "pending" while a check is working on it.
       const pending = link.state === "checking";
+      const unchecked = link.state === "unchecked";
       const reviewing = graph.check_status === "drafted";
       return {
         id: link.link_id,
@@ -498,7 +502,7 @@ export function TocCanvas({
           type: MarkerType.ArrowClosed,
           width: 14,
           height: 14,
-          color: pending ? "var(--color-line-2)" : reviewing ? (link.origin === "imported" ? "var(--color-navy)" : "var(--color-blue)") : VERDICT_VAR[link.verdict],
+          color: pending || (unchecked && !reviewing) ? "var(--color-line-2)" : reviewing ? (link.origin === "imported" ? "var(--color-navy)" : "var(--color-blue)") : VERDICT_VAR[link.verdict],
         },
         data: {
           span: sameColumn ? 0 : (columnOf.get(link.target_box_id) ?? 0) - (columnOf.get(link.source_box_id) ?? 0),
@@ -506,6 +510,7 @@ export function TocCanvas({
           attention: link.pending_count > 0 || link.state === "pending",
           verdict: link.verdict,
           pending,
+          unchecked,
           suggested: reviewing && link.origin !== "imported",
           drawn: reviewing && link.origin === "imported",
           ghost: link.link_id.startsWith(PREVIEW),
@@ -514,9 +519,22 @@ export function TocCanvas({
           tip: linkTip(link),
         },
         selectable: false,
-        focusable: false,
+        focusable: !link.link_id.startsWith(PREVIEW),
+        ariaLabel: linkTip(link),
       };
     });
+
+  const clickBox = (id: string) => {
+    if (connecting) {
+      if (connectFrom === null) setConnectFrom(id);
+      else if (connectFrom !== id) {
+        editing?.onConnect(connectFrom, id);
+        setConnectFrom(null);
+      }
+      return;
+    }
+    onSelect({ kind: "box", id });
+  };
 
   return (
     <div ref={boxRef} className="toc-canvas h-[640px] min-w-0 flex-1 bg-paper-2 lg:h-full" role="group" aria-label="Theory of change canvas">
@@ -547,24 +565,26 @@ export function TocCanvas({
           if (editing !== null && revision !== undefined) editing.onMove(node.id, revision, Math.round(node.position.x), Math.round(node.position.y));
         }}
         onNodeClick={(_, node) => {
-          if (node.type !== "box") return;
-          if (connecting) {
-            if (connectFrom === null) setConnectFrom(node.id);
-            else if (connectFrom !== node.id) {
-              editing?.onConnect(connectFrom, node.id);
-              setConnectFrom(null);
-            }
-            return;
-          }
-          onSelect({ kind: "box", id: node.id });
+          if (node.type === "box") clickBox(node.id);
         }}
         onEdgeClick={(_, edge) => onSelect({ kind: "link", id: edge.id })}
+        // Keyboard: Enter or Space on a focused box or connection acts as a click.
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          const target = event.target as Element;
+          const id = target.getAttribute("data-id");
+          if (id === null) return;
+          if (target.classList.contains("react-flow__node-box")) clickBox(id);
+          else if (target.classList.contains("react-flow__edge")) onSelect({ kind: "link", id });
+          else return;
+          event.preventDefault();
+        }}
         onPaneClick={() => onSelect(null)}
       >
         <Dividers lineY={layout.lineY} ceilingX={layout.ceilingX} />
         <ExportDividers graph={graph} lineY={layout.lineY} ceilingX={layout.ceilingX} />
         {connecting && (
-          <p className="pointer-events-none absolute left-3 top-3 z-10 rounded bg-paper px-2.5 py-1 text-meta font-semibold text-blue shadow-sm">
+          <p className="pointer-events-none absolute left-3 top-3 z-10 bg-paper px-2.5 py-1 text-meta font-semibold text-blue">
             {connectFrom === null ? "Click the box the connection starts from" : "Click the box it leads to"} · Esc to cancel
           </p>
         )}

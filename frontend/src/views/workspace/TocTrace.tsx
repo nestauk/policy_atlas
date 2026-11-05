@@ -218,7 +218,7 @@ export function TocTrace({
   const elapsed = useElapsed(view.since);
   const last = view.lines.at(-1);
   return (
-    <div className="mr-8" role={live ? "status" : undefined} aria-live={live ? "polite" : undefined}>
+    <div className="mr-8">
       <button
         type="button"
         aria-expanded={open}
@@ -233,22 +233,29 @@ export function TocTrace({
             ›
           </span>
         )}
-        <span key={view.now ?? view.title} className={live ? "anim-rise" : undefined}>
-          {live ? `${view.now}…` : view.title}
+        {/* Only the "now" line is announced; the ticking timer is not. */}
+        <span role={live ? "status" : undefined} aria-live={live ? "polite" : undefined}>
+          <span key={view.now ?? view.title} className={live ? "anim-rise" : undefined}>
+            {live ? `${view.now}…` : view.title}
+          </span>
         </span>
-        {elapsed !== null && <span className="font-normal tabular-nums">{elapsed}</span>}
+        {elapsed !== null && (
+          <span aria-hidden="true" className="font-normal tabular-nums">
+            {elapsed}
+          </span>
+        )}
         {view.lines.length > 0 && <span className="font-normal">· {open ? "hide steps" : plural(view.lines.length, "step")}</span>}
       </button>
       {live && view.drafting && (
         // The draft is one model call: say what it does and how long it takes, as there are no steps to show.
-        <p className="mt-0.5 border-l border-line pl-3 text-caption text-grey">
+        <p className="mt-0.5 border-l border-line pl-3 text-body text-grey">
           Writing the boxes, connections and pathways from your plan in one pass. This usually takes 1 to 2 minutes; then the evidence check starts.
         </p>
       )}
       {open ? (
         <ul className="mt-1 space-y-1.5 border-l border-line pl-3">
           {view.lines.map((line, index) => (
-            <li key={index} className="anim-rise text-caption text-grey">
+            <li key={index} className="anim-rise text-body text-grey">
               {scrub(line)}
             </li>
           ))}
@@ -257,7 +264,7 @@ export function TocTrace({
         live &&
         last !== undefined && (
           // The last finished step, fading in as each new one lands.
-          <p key={last} className="anim-rise mt-0.5 border-l border-line pl-3 text-caption text-grey">
+          <p key={last} className="anim-rise mt-0.5 border-l border-line pl-3 text-body text-grey">
             {scrub(last)}
           </p>
         )

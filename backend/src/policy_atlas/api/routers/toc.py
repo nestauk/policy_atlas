@@ -100,6 +100,7 @@ from policy_atlas.core.schema import (
     source_classification_result,
     source_snapshot,
     task_source_snapshot,
+    task_upload,
     toc_box,
     toc_figure,
     toc_item_evidence,
@@ -147,12 +148,14 @@ router = APIRouter(prefix="/api/v1/tasks/{task_id}/toc", tags=["theory-of-change
 log = structlog.get_logger()
 
 
-def _readable_toc(conn: Connection, task_id: uuid.UUID, user: AuthenticatedUser | None) -> None:
+def _readable_toc(conn: Connection, task_id: uuid.UUID, user: AuthenticatedUser | None) -> bool:
+    """Admit a reader; returns whether they came through the public leg (D5: no names then)."""
     access = readable_or_public_task(
         conn, task_id=task_id, user_id=None if user is None else user.user_id
     )
     if access.row["capability"] != THEORY_OF_CHANGE:
         raise ApiNotFound("toc_not_found", "this task is not a theory of change")
+    return bool(access.via_public)
 
 
 def _latest_walk(conn: Connection, task_id: uuid.UUID) -> Row[Any] | None:
@@ -233,8 +236,8 @@ def _steps(conn: Connection, task_id: uuid.UUID) -> dict[str, list[tuple[int, uu
     return out
 
 
-def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
-    """Build the graph read for one theory-of-change task."""
+def toc_graph_out(conn: Connection, task_id: uuid.UUID, *, public: bool = False) -> TocGraphOut:
+    """Build the graph read for one theory-of-change task (``public``: no editor names)."""
     graph, rows = store.load_graph(conn, task_id)
     walk = _latest_walk(conn, task_id)
     status = check_status(walk)
@@ -253,8 +256,12 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID) -> TocGraphOut:
             .distinct()
         )
     }
-    names = edits.names_of(
-        conn, {row.edited_by for row in [*rows.boxes.values(), *rows.links.values()]}
+    names = (
+        {}
+        if public
+        else edits.names_of(
+            conn, {row.edited_by for row in [*rows.boxes.values(), *rows.links.values()]}
+        )
     )
     # A check named on links (C40) is "checking" only those links; updating the
     # report checks none.
@@ -384,8 +391,13 @@ def _source_type(metadata: dict[str, Any]) -> Literal["academic", "policy", "web
 BOX_FIGURE_RELEVANCE = 2
 
 
-def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
-    """Build the evidence read: every judged document per link, case studies per box."""
+def toc_evidence_out(
+    conn: Connection, task_id: uuid.UUID, *, public: bool = False
+) -> TocEvidenceOut:
+    """Build the evidence read: every judged document per link, case studies per box.
+
+    ``public``: the anonymous leg, which carries no person's name (D5).
+    """
     _, rows = store.load_graph(conn, task_id)
     evidence = list(
         conn.execute(
@@ -447,7 +459,9 @@ def toc_evidence_out(conn: Connection, task_id: uuid.UUID) -> TocEvidenceOut:
     appraisals = appraisals_for(conn, task_id=task_id, evidence_rows=evidence)
     names = edits.names_of(
         conn,
-        {
+        set()
+        if public
+        else {
             uid
             for row in evidence
             for uid in (row.override_by, row.excluded_by, row.added_by)
@@ -616,8 +630,8 @@ def get_toc(
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> TocGraphOut:
     """Return the theory: boxes, links with their verdicts and states, pathways, summary."""
-    _readable_toc(conn, task_id, user)
-    out = toc_graph_out(conn, task_id)
+    public = _readable_toc(conn, task_id, user)
+    out = toc_graph_out(conn, task_id, public=public)
     out.can_edit = user is not None and _can_edit(conn, task_id, user.user_id)
     if out.can_edit:
         out.edits_since_review = len(edits_since_review(conn, task_id))
@@ -642,8 +656,8 @@ def get_toc_evidence(
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> TocEvidenceOut:
     """Return every judged document per link and every case study per box."""
-    _readable_toc(conn, task_id, user)
-    return toc_evidence_out(conn, task_id)
+    public = _readable_toc(conn, task_id, user)
+    return toc_evidence_out(conn, task_id, public=public)
 
 
 def toc_evidence_context_out(
@@ -1159,6 +1173,10 @@ def upload_toc_theory(
         with tracing.trace_scope(user_id=user.user_id):
             response = importing.transcribe(data, body.content_type, _toc_backend(backends))
     except importing.NotATheory as exc:
+        # Nothing lists an unread upload: drop its row and file rather than orphan them.
+        with engine.begin() as conn:
+            conn.execute(task_upload.delete().where(task_upload.c.upload_id == saved.upload_id))
+        upload_store.delete(saved.object_key)
         raise ApiUnprocessable("upload_not_theory", str(exc)) from exc
     reply = None
     with engine.begin() as conn:
@@ -1250,7 +1268,11 @@ def stop_toc_check(
     """Stop the running check before its next step; what it finished stays (C48)."""
     _editable_toc(conn, task_id, user)
     walk = _latest_walk(conn, task_id)
-    if walk is None or walk.status != "running":
+    if (
+        walk is None
+        or walk.status != "running"
+        or (walk.context or {}).get(TOC_WALK_KEY) != TOC_WALK_CHECK
+    ):
         raise ApiConflict("toc_not_running", "no check is running")
     clear_queue(conn, task_id)
     events.append(

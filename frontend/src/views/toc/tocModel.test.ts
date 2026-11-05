@@ -131,6 +131,12 @@ describe("wording and grouping", () => {
     expect(link && linkTip(link)).toBe("Supported");
   });
 
+  it("says an unchecked link needs evidence, not that it is being checked", () => {
+    const link = tocGraphFixture().links.find((l) => l.link_id === linkId(4));
+    expect(link && linkTip({ ...link, state: "unchecked" })).toBe("Needs evidence");
+    expect(link && linkTip({ ...link, state: "checking" })).toBe("Checking the evidence…");
+  });
+
   it("titles the page from the first input and the impact", () => {
     expect(tocTitle(tocGraphFixture())).toBe("Ban on less healthy food ads → Fewer children living with obesity at age 10 to 11");
   });

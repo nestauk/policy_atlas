@@ -40,6 +40,15 @@ _COLUMNS: tuple[tuple[str, str, sa.types.TypeEngine[object]], ...] = (
 )
 
 
+_OWN_DATA = "SELECT count(*) FROM toc_link WHERE title IS NOT NULL OR evidence_cites IS NOT NULL"
+_WHAT = "link row(s) carry its titles"
+
+REMEDY = (
+    "; remove the theory-of-change tasks first with 'python scrip"
+    "ts/ops_remove_toc_tasks.py --apply', then downgrade again"
+)
+
+
 def upgrade() -> None:
     """Add the five nullable columns."""
     for table, column, type_ in _COLUMNS:
@@ -48,5 +57,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Drop them."""
+    # Refuse while this revision's own data exists (contract § Schema): the
+    # downgrade would lose it. Earlier revisions in the chain have already run.
+    count = op.get_bind().execute(sa.text(_OWN_DATA)).scalar_one()
+    if count:
+        raise RuntimeError(f"refusing to downgrade {revision}: {count} {_WHAT}" + REMEDY)
     for table, column, _type in reversed(_COLUMNS):
         op.drop_column(table, column)

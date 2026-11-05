@@ -44,16 +44,17 @@ export function useFinishAlerts(): void {
       if (before === undefined || before === now || before === null) continue;
       const inView = document.visibilityState === "visible" && window.location.pathname.startsWith(`/tasks/${task.task_id}`);
       if (inView || typeof Notification === "undefined" || Notification.permission !== "granted") continue;
-      const show = (body: string) => {
+      // A question opens the Agent tab, where it is asked; anything else opens the Result.
+      const show = (body: string, path = `/tasks/${task.task_id}/result`) => {
         const alert = new Notification(task.name, { body, tag: `pa-${task.task_id}` });
         alert.onclick = () => {
           window.focus();
-          void navigate(`/tasks/${task.task_id}/result`);
+          void navigate(path);
           alert.close();
         };
       };
       if (now === "paused") {
-        show("Policy Atlas has a question for you.");
+        show("Policy Atlas has a question for you.", `/tasks/${task.task_id}`);
         continue;
       }
       if (now !== null) continue;

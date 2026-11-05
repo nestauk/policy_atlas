@@ -59,7 +59,7 @@ build-level word on the chains and their step names.
 | 10b | report | **new**: `toc_report` (C38, 2026-10-28) | Detailed information as a short narrative report, rebuilt on every check walk after summarise: one frontier call (`toc_report_v1`) writes the prose of five sections (Summary; How change happens; Assumptions and evidence; What to test and measure; Sources and method; shown as "Sources", without the method note, since 2026-10-29). Code builds the inputs (the plan; the theory with box and link codes, verdicts and evidence sentences; the weakest critical links; 5 to 12 assumption rows, critical first then worst verdict, one per condition of the critical and not-Confident links plus one risk per failure-pathway link; the numbered sources), removes and counts unknown codes and any [n] that does not bear on a link the text names, renumbers sources by first citation and writes the source list and the method note (date, judge model). Stored as the step's `component.completed` payload, like the summary's; the read API serves the latest. It takes over the summary's header paragraphs and evaluation questions; the per-link sentences and box descriptions stay. | one call + code checks |
 | — | stress test | **new**: a chat kind with its own prompt | Four questions, one at a time, each tied to a box or link. Conversation only. | chat turns |
 | — | discuss | **reused**: the existing chat and grounded-answer path | The graph and its evidence enter the chat context. | chat turns |
-| — | export | **new**, small | PNG and SVG from the canvas in the browser (`html-to-image`). CSV references, JSON graph, draw.io XML (standard library) and PowerPoint (`python-pptx`) from backend read endpoints. | code |
+| — | export | **new**, small | All in the browser: PNG and SVG from the canvas (`html-to-image`), the PDF report through print, CSV references, JSON graph and draw.io XML built client-side. No server export routes. PowerPoint is parked (owner, 2026-11-04). | code |
 
 **Not reused, on purpose:** the ES deep chain (ingest, select, extract, group, full synthesise),
 because this task reads abstracts only; the OS longlist, constrain, theme and shortlist, which
@@ -174,7 +174,7 @@ source type is needed.
 | `tests/runtime/test_capability_registry.py` | The "unknown capability" assertion for `theory_of_change` is reversed. |
 | Infrastructure | The uploads bucket and the backend's access to it. |
 | Frontend | `lib/capabilities.ts` flag; `views/toc/` (canvas, reading guide, detail panel, Detailed information, original-file view, stress-test pane); a ToC branch in `views/taskResult.ts`; "Design a theory of change" at the end of the option page. |
-| New dependencies (R12) | `@xyflow/react` (canvas; MIT licence), `html-to-image` pinned to 1.11.11 (PNG and SVG), `python-pptx` (PowerPoint). Each goes through the dependency gate. |
+| New dependencies (R12) | `@xyflow/react` (canvas; MIT licence), `html-to-image` pinned to 1.11.11 (PNG and SVG). `python-pptx` was withdrawn with PowerPoint (owner, 2026-11-04). Each goes through the dependency gate. |
 
 ## Build order
 
@@ -189,7 +189,7 @@ review stack (contract C18) and ADR 0042.
 | 3. Web search | Responses call, web pages, Mantle on the Bedrock route | spot checks |
 | 4. Stress test and discuss | `stress_test` chat kind; discuss with ToC context | spot checks |
 | 5. Bring your own theory | Revision 2, uploads bucket, text, image and PDF import | E3, E4 later |
-| 6. Export | PDF report, PNG, SVG, CSV, JSON, draw.io, PowerPoint | manual import checks |
+| 6. Export | PDF report, PNG, SVG, CSV, JSON, draw.io (PowerPoint parked) | manual import checks |
 | 7. Design from an option | Revision 3, the option-page button and back-list, shared documents, the newer-run flag | spot checks |
 
 E7 (back-test against reviews) and E8 (expert panel) run once steps 1 to 5 are stable, before the

@@ -4,8 +4,11 @@ import { type TocEdit, useTocEdit } from "../../api/mutations";
 import { useTocHistory } from "../../api/queries";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
+import { cn } from "../../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/radix/Popover";
-import { DownloadMenu } from "../DownloadMenu";
+import { TOAST_CLASS } from "../../ui/radix/Toast";
+import { DownloadMenu, MENU_ITEM_CLASS } from "../DownloadMenu";
+import { usePublicView } from "../publicView";
 import { canvasImage, downloadDrawio, downloadJson, downloadReferences, printReport } from "./exports";
 import { keptPathways, LAYER_LABEL, pathwayTitles } from "./tocModel";
 import type { BoxLayer, TocGraph } from "./types";
@@ -126,7 +129,7 @@ function MoreMenu({ items }: { items: { label: string; disabled?: boolean; onCli
       <PopoverTrigger aria-label="More actions" className="flex cursor-pointer items-center border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-bold leading-none text-navy hover:border-navy">
         …
       </PopoverTrigger>
-      <PopoverContent role="menu" align="end" sideOffset={4} className="grid w-auto min-w-[16rem] border-line p-0 py-1 shadow-lg">
+      <PopoverContent role="menu" align="end" sideOffset={4} className="grid w-auto min-w-[16rem] border-line p-0 py-1">
         {items.map((item) => (
           <button
             key={item.label}
@@ -137,7 +140,7 @@ function MoreMenu({ items }: { items: { label: string; disabled?: boolean; onCli
               setOpen(false);
               item.onClick();
             }}
-            className="cursor-pointer px-3 py-2 text-left text-meta font-semibold text-navy hover:bg-paper-2 disabled:cursor-default disabled:text-line-2 disabled:hover:bg-transparent"
+            className={cn(MENU_ITEM_CLASS, "disabled:cursor-default disabled:text-line-2 disabled:hover:bg-transparent disabled:hover:text-line-2")}
           >
             {item.label}
           </button>
@@ -184,6 +187,8 @@ export function CanvasBar({
   onSuggestions: () => void;
 }) {
   const titles = pathwayTitles(graph);
+  // Downloads are for signed-in readers only, never the public link (C17).
+  const isPublicView = usePublicView();
   const reviewLabel = `Review the theory${graph.edits_since_review >= 5 ? ` (${graph.edits_since_review} changes)` : ""}`;
   const running = graph.check_status === "drafting" || graph.check_status === "checking";
   // Before the draft there is no plan to check or review against.
@@ -250,7 +255,7 @@ export function CanvasBar({
         </button>
       )}
       <MoreMenu items={menu} />
-      <DownloadMenu small items={downloads(graph)} />
+      {!isPublicView && <DownloadMenu small items={downloads(graph)} />}
     </div>
   );
 }
@@ -304,13 +309,13 @@ export function AddBoxForm({ editor, onDone }: { editor: Editor; onDone: (boxId:
 /** The toast after an edit: what changed, and Undo (C41). */
 export function UndoToast({ text, onUndo, onClose }: { text: string; onUndo: () => void; onClose: () => void }) {
   return (
-    <div role="status" className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-md bg-navy px-4 py-2.5 text-body text-paper shadow-lg">
-      <span>{text}</span>
-      <button type="button" onClick={onUndo} className="cursor-pointer font-bold text-blue-tint hover:underline">
+    <div role="status" className={cn(TOAST_CLASS, "fixed bottom-4 right-4 z-50 w-96 max-w-[92vw] items-center border-line-2 text-body")}>
+      <span className="flex-1 text-navy">{text}</span>
+      <button type="button" onClick={onUndo} className="cursor-pointer font-bold text-blue hover:underline">
         Undo
       </button>
-      <button type="button" aria-label="Dismiss" onClick={onClose} className="cursor-pointer text-paper/70 hover:text-paper">
-        ×
+      <button type="button" aria-label="Dismiss" onClick={onClose} className="cursor-pointer text-grey hover:text-navy">
+        ✕
       </button>
     </div>
   );

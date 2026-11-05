@@ -12,6 +12,9 @@ interface DownloadItem {
   onSelect: () => void;
 }
 
+/** A menu item: navy text, Blue Wash with blue text on hover. Shared with the canvas's "…" menu. */
+export const MENU_ITEM_CLASS = "block w-full cursor-pointer px-3 py-2.5 text-left text-body text-navy hover:bg-blue-tint-2 hover:text-blue";
+
 /** The "Download" button and its menu: the ES report's and the theory canvas's. */
 export function DownloadMenu({ items, small = false }: { items: DownloadItem[]; small?: boolean }) {
   const [open, setOpen] = useState(false);
@@ -61,7 +64,7 @@ export function DownloadMenu({ items, small = false }: { items: DownloadItem[]; 
                     setOpen(false);
                     item.onSelect();
                   }}
-                  className="block w-full cursor-pointer px-3 py-2.5 text-left text-body text-navy hover:bg-blue-tint-2 hover:text-blue"
+                  className={MENU_ITEM_CLASS}
                 >
                   <span className={cn("block", item.hint !== undefined && "font-semibold")}>{item.label}</span>
                   {item.hint !== undefined && <span className="block text-meta text-grey">{item.hint}</span>}

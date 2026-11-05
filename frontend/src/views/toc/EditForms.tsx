@@ -27,7 +27,7 @@ function DeleteButton({ label, confirm, onDelete, busy }: { label: string; confi
   return asked ? (
     <span className="flex items-center gap-2 text-meta">
       <span className="text-ink">{confirm}</span>
-      <button type="button" disabled={busy} onClick={onDelete} className="cursor-pointer font-bold text-[var(--color-verdict-against-text)] hover:underline">
+      <button type="button" disabled={busy} onClick={onDelete} className="cursor-pointer font-bold text-red hover:underline">
         Delete
       </button>
       <button type="button" onClick={() => setAsked(false)} className="cursor-pointer text-grey hover:underline">
@@ -35,7 +35,7 @@ function DeleteButton({ label, confirm, onDelete, busy }: { label: string; confi
       </button>
     </span>
   ) : (
-    <button type="button" onClick={() => setAsked(true)} className="cursor-pointer text-meta font-bold text-[var(--color-verdict-against-text)] hover:underline">
+    <button type="button" onClick={() => setAsked(true)} className="cursor-pointer text-meta font-bold text-red hover:underline">
       {label}
     </button>
   );
@@ -89,7 +89,7 @@ export function BoxEditForm({ box, graph, editor, onDone }: { box: TocBox; graph
         <input name="timing" defaultValue={box.result_criteria.timing ?? ""} className={INPUT} />
       </Field>
       {text.trim() !== box.text && links > 0 && (
-        <p className="mt-2 text-meta text-grey">Changing the text marks its {links === 1 ? "connection" : `${links} connections`} "evidence from the earlier wording".</p>
+        <p className="mt-2 text-body text-grey">Changing the text marks its {links === 1 ? "connection" : `${links} connections`} "evidence from the earlier wording".</p>
       )}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button type="submit" size="sm" disabled={editor.busy || text.trim() === ""}>
@@ -182,7 +182,8 @@ export function LinkEditForm({ link, editor, onDone }: { link: TocLink; editor: 
 export function NeedsEvidence({ links, graph, editor }: { links: TocLink[]; graph: TocGraph; editor: Editor | null }) {
   const unchecked = links.filter((link) => link.state === "unchecked");
   const ids = unchecked.map((link) => link.link_id);
-  if (unchecked.length === 0) return null;
+  // Before the first check there is nothing to find evidence against (same gate as the canvas bar).
+  if (unchecked.length === 0 || graph.check_status === "none") return null;
   return (
     <div className="mt-3 border-l-[3px] border-blue bg-blue-tint-2 px-3 py-2.5">
       <p className="text-body font-bold text-ink">Needs evidence</p>

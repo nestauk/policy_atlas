@@ -54,6 +54,19 @@ _COLUMNS: tuple[tuple[str, str, sa.types.TypeEngine[object]], ...] = (
 )
 
 
+_OWN_DATA = (
+    "SELECT count(*) FROM toc_item_evidence WHERE status <> 'counted' OR "
+    "support_override IS NOT NULL OR relevance_override IS NOT NULL OR excluded_by "
+    "IS NOT NULL"
+)
+_WHAT = "judgement row(s) carry a user decision"
+
+REMEDY = (
+    "; remove the theory-of-change tasks first with 'python scrip"
+    "ts/ops_remove_toc_tasks.py --apply', then downgrade again"
+)
+
+
 def upgrade() -> None:
     """Add the nullable columns and the evidence status."""
     for table, column, type_ in _COLUMNS:
@@ -82,6 +95,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Drop them."""
+    # Refuse while this revision's own data exists (contract § Schema): the
+    # downgrade would lose it. Earlier revisions in the chain have already run.
+    count = op.get_bind().execute(sa.text(_OWN_DATA)).scalar_one()
+    if count:
+        raise RuntimeError(f"refusing to downgrade {revision}: {count} {_WHAT}" + REMEDY)
     for name in (
         "ck_toc_item_evidence_relevance_override",
         "ck_toc_item_evidence_support_override",

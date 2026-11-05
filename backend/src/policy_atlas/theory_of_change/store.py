@@ -266,7 +266,14 @@ def update(
     return True
 
 
-def delete(conn: Connection, log: ChangeLog, table: Table, row_id: uuid.UUID) -> None:
+def delete(
+    conn: Connection,
+    log: ChangeLog,
+    table: Table,
+    row_id: uuid.UUID,
+    *,
+    observed_revision: int | None = None,
+) -> bool:
     """Delete one graph row and keep its before-state, marked deleted (C9).
 
     Args:
@@ -274,13 +281,22 @@ def delete(conn: Connection, log: ChangeLog, table: Table, row_id: uuid.UUID) ->
         log: The step's change log.
         table: A ``toc_*`` table with a single-column key.
         row_id: The row.
+        observed_revision: When given, the delete is compare-and-apply (C10): a row
+            someone changed since is left alone and logged as skipped.
+
+    Returns:
+        Whether the row was deleted.
     """
     key = table.c[_PRIMARY_KEY[table.name]]
-    current = conn.execute(select(table).where(key == row_id)).one_or_none()
+    current = conn.execute(select(table).where(key == row_id).with_for_update()).one_or_none()
     if current is None:
-        return
+        return False
+    if observed_revision is not None and current.revision != observed_revision:
+        log.skipped.append({"table": table.name, "id": str(row_id)})
+        return False
     conn.execute(table.delete().where(key == row_id))
     log.before.append({"table": table.name, "row": row_state(current), "deleted": True})
+    return True
 
 
 def record(

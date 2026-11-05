@@ -42,7 +42,8 @@ export const SUPPORT_LABEL: Record<Support, string> = {
 
 /** The hover text of an edge: its verdict. */
 export function linkTip(link: TocLink): string {
-  if (link.state === "checking" || link.state === "unchecked") return "Checking the evidence…";
+  if (link.state === "checking") return "Checking the evidence…";
+  if (link.state === "unchecked") return "Needs evidence";
   const critical = link.critical ? "Critical connection. " : "";
   return `${critical}${VERDICT_LABEL[link.verdict]}`;
 }

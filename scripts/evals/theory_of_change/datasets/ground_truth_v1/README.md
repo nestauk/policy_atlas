@@ -17,6 +17,16 @@ Reference material for iterating on Policy Atlas's Theory of Change capability, 
 
 Each dataset contains: task briefs (outcome-first and intervention-first), a shape summary, containers, nodes, links (with evidence status, assumptions and transcription confidence), assumptions and risks, context factors, known gaps, and a JSON block for machine use.
 
+## Sources and licences
+
+The four theories are transcribed from published documents, cited by URL in `tools/gt_data.py`:
+the Changing Futures theory of change (GOV.UK, DLUHC), the Child Poverty Strategy monitoring and
+evaluation framework (GOV.UK), the Climate Action Wales public engagement strategy theory of change
+(gov.wales) and the OEP's evaluation of the Environmental Principles Policy Statement
+(theoep.org.uk). GOV.UK and gov.wales publications are under the Open Government Licence v3.0
+unless the page says otherwise. The OEP page states no licence; its figure is transcribed as a
+short factual record of nodes and links, cited, not reproduced. No PDF is stored in the repo.
+
 ## Open items
 - Wales: transcribe behaviour outcomes B1–B3 from the full report.
 - Child Poverty: transcribe the July 2026 revised ToC (Figure 2 of the baseline report).

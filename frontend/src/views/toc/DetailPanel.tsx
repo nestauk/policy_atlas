@@ -8,12 +8,13 @@ import { BoxEditForm, LinkEditForm, NeedsEvidence } from "./EditForms";
 import { AddStudy, DocumentActions, EditedEvidenceBlock, FindMore, NewEvidenceBlock, RemovedDocuments } from "./EvidenceEdits";
 import { CriticalIcon } from "./ReadingGuide";
 import { CRITICAL_DEFINITION, LAYER_LABEL, ORIGIN_LABEL } from "./tocModel";
+import { REPORT_LABEL_CLASS } from "../artefactPresentation";
 import type { PanelWidth } from "../workspace/usePanelWidth";
 import type { TocBox, TocDocument, TocEvidence, TocGraph, TocLink } from "./types";
 
 export type Selection = { kind: "box" | "link"; id: string };
 
-const HEAD = "mt-5 text-meta font-bold uppercase tracking-[0.06em] text-blue";
+const HEAD = `mt-5 ${REPORT_LABEL_CLASS}`;
 /** A part inside a section ("Conditions", "Size of change"): body size, bold, body ink. */
 const SUB = "mt-3 text-body font-bold text-ink";
 
@@ -112,7 +113,7 @@ function BoxDetail({
       <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(box.text)}</h3>
       <EditedLine by={box.edited_by} at={box.edited_at} />
       {box.description !== null && <p className="mt-2 text-body">{scrub(box.description)}</p>}
-      {box.origin === "user" && ownLinks.length === 0 && (
+      {box.origin === "user" && ownLinks.length === 0 && graph.check_status !== "none" && (
         <p className="mt-3 border-l-[3px] border-blue bg-blue-tint-2 px-3 py-2.5 text-body">Connect it to another box (Connect, in the toolbar) to find evidence for it.</p>
       )}
       {box.origin === "user" && <NeedsEvidence links={ownLinks} graph={graph} editor={editor} />}

@@ -77,7 +77,7 @@ DRAFT_LANDED_MESSAGE = (
 
 #: J7: the line that ends the check's message.
 STRESS_TEST_MESSAGE = (
-    "When you are ready, try a stress test: ask what would make the critical connection fail here."
+    "When you are ready, ask in the chat what would make the critical connection fail here."
 )
 
 _ENDED_WELL = ("succeeded", "degraded")
@@ -520,6 +520,9 @@ def take_queued_check(
         for key, dois in (row.payload.get("studies") or {}).items():
             kept = studies.setdefault(key, [])
             kept += [doi for doi in dois if doi not in kept]
+    plan_row = latest_approved_plan_row(conn, task_id)
+    if plan_row is None:
+        return None
     events.append(
         conn,
         task_id=task_id,
@@ -527,9 +530,6 @@ def take_queued_check(
         event_type=TOC_CHECK_DEQUEUED_EVENT,
         payload={"sequences": [int(row.sequence) for row in batch]},
     )
-    plan_row = latest_approved_plan_row(conn, task_id)
-    if plan_row is None:
-        return None
     user_id = str(batch[0].payload.get("by") or "")
     scope_id = mint_scope(
         conn,

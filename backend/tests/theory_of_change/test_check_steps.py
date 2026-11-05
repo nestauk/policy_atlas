@@ -59,6 +59,19 @@ from tests.theory_of_change.test_walks import (
 )
 
 
+def _child_failures(engine: Engine, task_id: uuid.UUID) -> list[dict[str, Any]]:
+    """Why a child search failed, for the assertion message (flaked once under -n auto)."""
+    with engine.connect() as conn:
+        return [
+            dict(payload)
+            for payload in conn.execute(
+                select(event_log.c.payload)
+                .where(event_log.c.task_id == task_id)
+                .where(event_log.c.event_type.in_(("component.failed", "run.failed")))
+            ).scalars()
+        ]
+
+
 def _summary(engine: Engine, task_id: uuid.UUID, component: str) -> dict[str, Any]:
     with engine.connect() as conn:
         payload = conn.execute(
@@ -293,7 +306,7 @@ def test_each_link_reads_at_most_k_documents_of_its_own_search(
     assert len({tss for _, tss in per_link}) == len(per_link)
     stage = _summary(engine, task_id, "toc_item_searches")
     # One search per link, and one for the whole programme.
-    assert stage["total"] == 6 and stage["failed"] == 0
+    assert stage["total"] == 6 and stage["failed"] == 0, _child_failures(engine, task_id)
     # toc_select (C27): 10 picked per link (and for the programme) screened in, the
     # rest screened out, no model.
     picked = _summary(engine, task_id, "toc_select")

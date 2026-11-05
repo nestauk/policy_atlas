@@ -37,8 +37,15 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 _UUID = postgresql.UUID(as_uuid=True)
-_EFFECT_TYPES = (
-    "('absolute_change', 'relative_change', 'standardised', 'ratio', 'level')"
+_EFFECT_TYPES = "('absolute_change', 'relative_change', 'standardised', 'ratio', 'level')"
+
+
+_OWN_DATA = "SELECT count(*) FROM toc_figure"
+_WHAT = "figure row(s) exist"
+
+REMEDY = (
+    "; remove the theory-of-change tasks first with 'python scrip"
+    "ts/ops_remove_toc_tasks.py --apply', then downgrade again"
 )
 
 
@@ -93,6 +100,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Drop the stamp and the table."""
+    # Refuse while this revision's own data exists (contract § Schema): the
+    # downgrade would lose it. Earlier revisions in the chain have already run.
+    count = op.get_bind().execute(sa.text(_OWN_DATA)).scalar_one()
+    if count:
+        raise RuntimeError(f"refusing to downgrade {revision}: {count} {_WHAT}" + REMEDY)
     op.drop_column("toc_item_evidence", "figures_checked_at")
     op.drop_index("ix_toc_figure_task_link", table_name="toc_figure")
     op.drop_table("toc_figure")

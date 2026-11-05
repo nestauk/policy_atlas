@@ -57,7 +57,7 @@ export function EvidenceBalance({ documents, detail, onOpen }: { documents: TocD
                   data-testid="balance-block"
                   aria-label={`Open document ${index + 1} in ${SUPPORT_LABEL[col.support]}`}
                   onClick={() => onOpen(doc)}
-                  className="block w-full cursor-pointer rounded-[3px] outline-offset-2 hover:brightness-90"
+                  className="block w-full cursor-pointer outline-offset-2 hover:brightness-90"
                   style={{ height: Math.max(4, Math.round(doc.weight * PX_PER_WEIGHT)), ...BLOCK[col.support] }}
                 />
               </Tooltip>

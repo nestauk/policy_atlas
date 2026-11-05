@@ -127,6 +127,46 @@ challenges → refutes; relevance 3 where *holds here* supported, else 1); the o
 no longer written. A systematic review replacing its own included studies (deduplication) is
 deferred.
 
+## Amendment, 2026-11-05: as built at the merge to `dev`
+
+Recorded by the review stack (task-cycle step 7) against `task/054-1-core`, before PR #114.
+
+- **Schema: ten revisions, not three.** `9127f849697f` (core) → `80f4e6c430b0` (six layers,
+  codes) → `7fbb8bf487f2` (one verdict per link) → `72c3174734ea` (figures) → `3c2752811cce`
+  (titles, cited sentences) → `9d1e4c7a2b10` (editing) → `b4e8a1f63c25` (proposals) →
+  `c7f2a9d41e08` (`task_upload`) → `e3b9d27c5a14` → `f5a1c8e93b27` (proposal sources), after
+  dev's `0914321f8de4`. The owner's iterative build (decision 10) produced one revision per
+  presentation or editing round; contract C51 asked for one per slice. **Every downgrade that drops data refuses
+  while its own data exists** (`72c3`, `3c27`, `9d1e` and `b4e8` were guarded at the review: with
+  `transaction_per_migration` each step commits, so an unguarded step would have dropped columns
+  before the core revision refused; `7fbb` and `80f4` fold values with a tested round-trip mapping
+  and keep every row). The widened constraints are three, not four: the
+  `stress_test` conversation kind was never added.
+- **Two steps the contract did not name**, owner rulings of 2026-11-03 after red-team runs:
+  `toc_sense_check` at the plan stage (two OpenAlex queries and one call; warns, never blocks)
+  and `toc_verdict`, which leads the report with two axes, mechanism (plausible or implausible)
+  and evidence (supports, mixed, too little, against). The theory-level label is the verdict
+  call's reading of the per-link grades; each link's grade and the whole-programme judgement
+  still come only from `evidence/grade.py` and `report.link_verdict` (decision 3 holds per link).
+- **Not built at this merge**, by the owner's steering: web search (decision 5; no
+  `WebSearchRoute` exists, the report's method line names OpenAlex and Overton only); the
+  stress-test conversation kind (the Task Agent chat discusses the theory instead); the option
+  link (decision 8; `from_option` was removed from the code); PowerPoint (owner, 2026-11-04:
+  parked; exports are made in the browser: PDF print, PNG, SVG, CSV, JSON, draw.io). Decision 7
+  in part: changes to user work are flagged and keep the prior version (`pa_changed`,
+  `prior_version`), but Undo per automatic change, Undo all and Keep mine are not surfaced yet;
+  Undo covers user edits and accepted suggestions. The same-meaning call was dropped (C43):
+  Check again re-judges the documents already found.
+- **Uploads** (decision 6): the `task_upload` table and the bucket serve every capability
+  (a `purpose` column), not only imported theories. Reads are for the owner and colleagues,
+  never the public leg. The public reads of the theory carry no person's name (task 037 D5;
+  fixed at the review).
+- **Rollback as built:** `python scripts/ops_remove_toc_tasks.py --apply` deletes the named
+  tasks' rows and their uploaded files (the store's `delete` was restored at the review), then
+  `alembic downgrade 0914321f8de4` steps down the ten revisions. ADR § Rollback above reads
+  "each revision refuses only while its own data exists": as built, the two value-mapping
+  revisions keep every row instead of refusing.
+
 ## Consequences
 
 - Positive: a policy team gets a Magenta Book theory of change whose every step shows, in
