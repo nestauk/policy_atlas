@@ -93,7 +93,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 </style>
 
 <header class="masthead wrap">
-  <div class="eyebrow">Policy Atlas · task 054 · how it works, 5 November 2026</div>
+  <div class="eyebrow">Policy Atlas · task 054 · how it works, 6 November 2026</div>
   <h1>How the theory of change capability works</h1>
   <p class="lede">A user describes an intervention and the change they want from it, or brings a theory they already have. Policy Atlas drafts the causal chain on a canvas in the Magenta Book's layout, then checks every step against research and policy documents while the user edits. Each connection shows how strong the evidence is that this step works, for this population and place, and the report opens with a verdict on the theory as a whole.</p>
   <div class="tiles">
@@ -281,6 +281,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
         <rect x="820" y="144" width="140" height="70" rx="6" fill-opacity=".14" stroke-width="1.5" style="fill: var(--c-new); stroke: var(--c-new)"/>
         <text x="890" y="174" text-anchor="middle" font-weight="600">Judge</text>
         <text x="890" y="192" text-anchor="middle" font-size="10.5">support, relevance, quote</text>
+        <text x="890" y="206" text-anchor="middle" font-size="10.5">thin links: second search</text>
 
         <path d="M890 214 V240 H90 V262" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
 
@@ -321,7 +322,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
       <span class="sq" style="--dot: var(--c-reused)">reused from Evidence search or Options scoping</span>
       <span class="sq" style="--dot: var(--c-new)">new for theory of change</span>
     </div>
-    <figcaption><b>Reading abstracts only, for now.</b> The check reads titles and abstracts, like the Options scoping longlist, so a full check takes minutes. Each step asks the route file for a model tier, not a model: <b>fast</b> (GPT-6 Luna) for picking, figures and classifying; <b>standard</b> (GPT-6.1 Terra) for the Task Agent, the sense check, drafting, discovery, judging and summarising; <b>frontier</b> (GPT-6.1 Sol) for merging, choosing, the report, the verdict, reviews and reading diagrams. The same models run through OpenAI directly or through Amazon Bedrock.</figcaption>
+    <figcaption><b>Reading abstracts only, for now.</b> The check reads titles and abstracts, like the Options scoping longlist, so a full check takes minutes. Each step asks the route file for a model tier, not a model: <b>fast</b> (GPT-6 Luna) for picking, figures and classifying; <b>standard</b> (GPT-6.1 Terra) for the Task Agent, the sense check, discovery, judging and summarising; <b>frontier</b> (GPT-6.1 Sol) for drafting, merging, choosing, the report, the verdict, reviews and reading diagrams. The draft moved to Sol on 6 November: 87 seconds against Terra's 54 on the same theory, at the same cost, with three more mechanisms drafted. The same models run through OpenAI directly or through Amazon Bedrock.</figcaption>
   </figure>
 </section>
 <section class="wrap" id="check">
@@ -335,7 +336,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
     <li><b>Add the field's most-cited works.</b><span class="tag reused">reused</span>
       <span class="sub">The Evidence search's citation chase counts which works the pool's papers cite most, and looks up to 25 of them up in one OpenAlex call, so an older study that shaped the field is not missed.</span></li>
     <li><b>Pick up to ten documents per connection.</b><span class="tag new">new</span>
-      <span class="sub">The candidates are the connection's own results, the nearest documents the other connections found, and the most-cited works. Missing abstracts are fetched from Crossref. A fast model picks the ten that best test the step.</span></li>
+      <span class="sub">The candidates are the connection's own results, the nearest documents the other connections found, and the most-cited works. Missing abstracts are fetched from Crossref. A fast model picks the ten that best test the step; Find more evidence asks for forty, from a search with twice the results.</span></li>
     <li><b>Discover what the draft missed.</b><span class="tag new">new</span>
       <span class="sub">A pass over the screened documents, in batches, looks for mechanisms and failure modes the draft does not have. Each becomes a candidate pathway, labelled "found in the evidence". On a theory the user uploaded or drew, the routes found wait as one suggestion instead of changing the canvas.</span></li>
     <li><b>Merge.</b><span class="tag new">new</span>
@@ -344,6 +345,8 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
       <span class="sub">Connections that discovery added get their own search and pick, like the drafted ones.</span></li>
     <li><b>Judge every pair.</b><span class="tag new">new</span>
       <span class="sub">One call per connection and document gives its support, one quote and its relevance. The same call notes any condition the support holds under, any case study and indicator for the boxes at either end, and for a model whether it is robust. The existing quote checker confirms each quote; a judgement without a verified quote is dropped.</span></li>
+    <li><b>Search again for thin connections.</b><span class="tag new">new</span>
+      <span class="sub">A connection the judge leaves with <i>Not enough evidence</i> gets one more search, once. The query writer is shown the earlier queries and asked to write in the vocabulary of the research that would test the step (the constructs, outcomes and mechanisms a researcher would name), and the searches by meaning use its research-style paraphrase instead of the step's own sentence. Ten new documents are picked and judged, and they count. On the advertising theory the first such run brought 96 documents new to the task from 472 results, where a repeat of the same queries had brought 1 from 83, and six of eleven thin connections moved up. Find more evidence runs the same reformulated search by hand.</span></li>
     <li><b>Read the size of change.</b><span class="tag new">new</span>
       <span class="sub">For each document judged on topic, a fast model lifts the effect it reports: the measure, value, confidence interval, unit, population, place and year, each with its quote.</span></li>
     <li><b>Classify and appraise.</b><span class="tag reused">reused</span>
@@ -357,7 +360,7 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
     <li><b>Tell the user.</b><span class="tag reused">reused</span>
       <span class="sub">The usual run notification, and a short message from the Task Agent with the verdict.</span></li>
   </ol>
-  <p>A check on named connections only, such as Find evidence for a new connection, runs the search, pick, judge and write steps, and leaves out discovery, merging, choosing and the report.</p>
+  <p>Check again and Find more evidence skip the second search: there the user is steering. A check on named connections only, such as Find evidence for a new connection, runs the search, pick, judge and write steps, and leaves out discovery, merging, choosing and the report.</p>
   <figure>
     <div class="ex">
       <div class="q">One connection, two documents</div>
@@ -454,4 +457,4 @@ footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line
 </section>
 </main>
 
-<footer class="wrap">Task 054 · how it works · 5 November 2026.</footer>
+<footer class="wrap">Task 054 · how it works · 6 November 2026.</footer>
