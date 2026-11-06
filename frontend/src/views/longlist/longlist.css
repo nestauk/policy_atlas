@@ -1,0 +1,58 @@
+/* ---------------------------------------------------------------------------
+ * The longlist's regrouping (task 058, round 10, finding 2; lead ruling).
+ *
+ * When the rows change groups (the theme wave of a build, an exclusion, an
+ * option included again) the page moves them rather than blanking the list:
+ * `useRegroupTransition` wraps the change in a View Transition and sets
+ * `longlist-regrouping` on the document while it runs. Each row is named by
+ * its option (`--longlist-row`), so a row already on screen keeps its full
+ * opacity and travels to its new place over 300 ms on the strong ease-out;
+ * the paper eases to its new size and place with it. A row that arrives fades
+ * in over 300 ms, one that leaves fades out over 150 ms; the rest of the page
+ * (new theme headings, the contents) cross-fades on the same curve. The names
+ * exist only during the transition. Without View Transitions, or under
+ * reduced motion, the list cuts to its new order (the hook never starts one).
+ * ------------------------------------------------------------------------- */
+
+html.longlist-regrouping .longlist-row {
+  view-transition-name: var(--longlist-row);
+  view-transition-class: longlist-row;
+}
+
+html.longlist-regrouping .longlist-paper {
+  view-transition-name: longlist-paper;
+}
+
+html.longlist-regrouping::view-transition-group(*) {
+  animation-duration: 300ms;
+  animation-timing-function: var(--ease-out-strong);
+}
+
+/* A row on screen before and after: it moves at full opacity, no cross-fade. */
+html.longlist-regrouping::view-transition-old(*.longlist-row) {
+  animation: none;
+  opacity: 0;
+}
+html.longlist-regrouping::view-transition-new(*.longlist-row) {
+  animation: none;
+}
+
+/* A row that only arrives, or only leaves. */
+html.longlist-regrouping::view-transition-new(*.longlist-row):only-child {
+  animation: longlist-row-in 300ms var(--ease-out-strong) both;
+}
+html.longlist-regrouping::view-transition-old(*.longlist-row):only-child {
+  opacity: 1;
+  animation: longlist-row-out 150ms var(--ease-out-strong) both;
+}
+
+@keyframes longlist-row-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes longlist-row-out {
+  to {
+    opacity: 0;
+  }
+}

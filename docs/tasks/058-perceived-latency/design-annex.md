@@ -766,6 +766,263 @@ carried items, and the owner's additions during the pass. DESIGN.md carries each
 - **Carried:** `LandscapeFallback` renders `LandscapeSkeleton`; the dead chart exports removed; the
   mock landscape uses the classifier's labels; "run status bar" in the mock comments.
 
+## Round 10, the report page (owner, 2026-11-06)
+
+Brief: `research/briefs/round-10-report.md`; the review `research/report-polish.md`, findings 1 to
+11, with the lead's rulings on C1 to C7 and D1 to D5. Built as below; DESIGN.md § Report and
+citations carries each rule.
+
+1. **References** read as citations: "Sampleton A, Mockford C (2022). Title. Venue.
+   doi.org/…", the number in a Grey tabular column, Body at every width, the title a link to its
+   dossier (a real `?source=` address), the address a Grey link without its scheme on screen and
+   in full in print; no authors, the entry starts at its title. Live: titles only (C5).
+2. **Facts line**: "Sources 12 cited out of 118 included · Published 2019–2024 · Last updated 5
+   November 2026" as one Meta line of label and value pairs; Study types dropped; the date
+   always with its year (C4).
+3. **Print**: the banner and the action line hidden, markers plain numbers, bullets as black
+   squares, headings kept with what follows, entries not split.
+4. **Markers**: the marker is the claim's one control and tab stop, with the preview on hover
+   and focus, numbers ascending, named "Source 2: <title>" or "Sources 7 and 12" (C1); the
+   words keep their hover and click but are not a button. The live inert marker's name is
+   unchanged.
+5. **Headings**: parts `h2`, sections in them `h3`, case-study titles `h4`; a baseline and the
+   longlist keep `h2`; collapsible headings hold their button.
+6. **Contents**: titles in full; the current section from a line a quarter down the pane; the
+   method entry "How the evidence was gathered" (C2), only when it renders; below `md` a closed
+   "Contents" disclosure under the title block that closes on a choice (D3).
+7. **Case studies and most relevant sources** are ruled entries, not boxes; most relevant
+   sources sit just before the references (D2).
+8. **Key findings**: a Navy square bullet, 12 px between items.
+9. **Title block**: the question is the `h1` on the live and the committed page (D1); "See the
+   plan" and "Ask about this analysis" on one line, then the facts.
+10. **Provenance sheet**: "Claim provenance" is the dialog's hidden description (C3); each
+    citation reads "[2] Title", year and venue, the passage, then authors, institutions, chips
+    (D5, chat included).
+11. **Method**: theme counts at Body in the link style; evidence types in sentence case from one
+    formatter (`evidenceTypeLabel`, exported from `artefactPresentation.ts`; C6).
+
+One disclosure vocabulary across the report (C7): the chevron with "Show" / "Hide" in Grey
+Semibold Meta, "Show all" / "Hide all" beside Full report. The appraisal chip is the soft tone
+(D4). The scoping pages that share `ReportPage` and `SectionDisclosure` gain the phone contents,
+the full titles and the spy line, the heading-holds-button pattern and the disclosure words; the
+longlist's "Expand all" reads "Show all".
+
+Rulings on the build (agent, for the lead to confirm):
+- D4 is applied to the appraisal chip at every strength, not only "Very strong": the chip's tone
+  never depended on its label.
+- D1 is applied to the report; the baseline keeps its own title ("Do nothing: …"), which says
+  what the profile is. Say if the baseline should take the question too.
+- The facts line separates its pairs by space (24 px), not by "·" characters, so a wrapped line
+  never starts or ends with a dot.
+- A single publication year reads "2022", not "2022–2022".
+- The Markdown download follows the page (lead, accepted): the question as its title (the
+  generated title names the file), the most relevant sources before the references, and the
+  references in the citation form with the full address, from the same `referenceParts`.
+
+## Round 10, the list rows (owner and lead, 2026-11-06)
+
+From `research/lists-rows-polish.md` (findings 1 to 8 and the "lower" list) with the lead's rulings
+and one owner addition. DESIGN.md § Layout, "The list row", carries each rule.
+
+- **Accessible name:** the row's content in order, joined by " · ": title, status word (with the
+  live step on a running row), projects, owner (where the column shows), date. The project row
+  reads name, owner, task count, date. The status square keeps its visible word.
+- **Room for the name:** the capability column is 7.5rem, the status column 11.5rem ("Paused ·
+  waiting on you" and most first names), the date column 5.5rem ("30 Sep 2025"); the prefix cap stays at 45%; the desktop
+  row stays one line (P5 declined).
+- **Phones:** line 1 the name alone; line 2 the status word and its live step, then " · " and the
+  project in Grey, which gives way first, the date at the right; no capability below `md` (P3, and
+  contract N15's short form).
+- **Status words:** "Paused · waiting on you" on the reader's own task, "Paused · waiting on <first
+  name>" on a colleague's (just "Paused" with no owner); " · " is the column's one separator
+  ("Complete · with gaps"); "Archived" in the Archived view (P2); the words live in `runPresentation`, the one status
+  vocabulary. A failed row shows "—" for its source count, not "0 sources".
+- **Capability:** plain Meta Grey text on every row from `md` up, not a chip (P4).
+- **Press:** Blue Tint at once (`active:bg-blue-tint active:duration-0`), easing back over 150 ms.
+- **Dates:** "5 Nov" this year, "12 Oct 2025" before it, Meta, one formatter (P7).
+- **Owner column:** off on Mine and Archived; on Organisation and a Project, the reader's own rows
+  "You" (P6).
+- **Show more:** the Tasks page (50 rows) and a Project (200 rows) stop at the server's page; an outline "Show more" at 40 px under the frame
+  asks for the next page of the same filters (`useTasksPaged`, driven by the server's
+  `pagination.has_more`), drops a task already listed, moves focus to the first new row, and offers Retry
+  if the page fails.
+- **Archived:** an "Archived" entry in the filters row, shown while the reader has archived tasks,
+  lists their own archived tasks without the owner column. A reader with no organisation sees Mine
+  and Archived.
+- **The switcher** (owner addition): the nav's growing rule at 2 px, from the left edge to the
+  centre on hover and focus over 200 ms on the strong ease-out, full under the active item, a click
+  carrying it to the right edge; under reduced motion it appears without growing.
+- **New page:** the question step has no capability line ("Evidence search" / "Options scoping");
+  the heading names the work and starts at the 44 px top padding.
+
+## Round 10, Share and History (owner and lead, 2026-11-06)
+
+From `research/share-history-polish.md` with the lead's rulings. DESIGN.md § Components, "Share"
+and "History", carries each rule. Screenshots: `research/screenshots/round10-share-history/`.
+
+- **Share order and shape (S2, S6, S9, S10):** Public link, Organisation, Projects, each a settings
+  row: the heading and the state left, the control right, a Line rule between rows; below `md` the
+  control drops under the words and the card becomes the screen (no border or shadow, 16 px). The
+  state is Navy Semibold Body, an explanation Grey. The page has a hidden `h1`, "Share".
+- **No blue fill (S1, P1):** every Share control is the 40 px outline button ("Make public", "Stop
+  sharing publicly", "Copy link", "Make private", "Share with organisation"); "Keep private" and
+  "Remove" are the 40 px ghost; the "Add to a project" select is 40 px.
+- **Making it public (S3):** "Make public" opens a second step inline: "Anyone with the link can
+  read the report, the source list and the quoted excerpts, without signing in." with "Make public" and "Keep private"; focus moves to the sentence, Escape or
+  "Keep private" closes it and returns focus. No modal, no motion. Public: "Public. Anyone with the
+  link can read it.", the link in a read-only field (selected on focus) with "Copy link" beside
+  it and "Copied" beside that for 2 s in a slot of its own; a failed copy selects the field and
+  says "Couldn't copy. The link is selected." on the line under it. No toast for the public
+  toggle (P4); the organisation change keeps its binding outcome toast (rubric 41).
+- **In a project (S4, P3):** no "Make private" or "Share with organisation"; the line "Follows its
+  project: <name>." (projects, plural, with each name a link).
+- **A colleague (S5, S8):** the three states without controls: the public state line, the
+  organisation state, the projects as links; no Remove, no select. A refused change shows the
+  server's message under its section ("Only the task's owner can change its projects."), else the
+  section's own "… couldn't be changed. Try again."
+- **No projects (P5):** "Not in a project." and, for the owner with no project to add it to,
+  "Create one in Projects." with Projects a link.
+- **History by day (H4):** rows grouped by local day under a Meta Semibold Navy heading ("Today",
+  "Yesterday", else "Tuesday 3 November 2026", en-GB), sticky at the top of the pane from `md` up;
+  each row shows "09:02" (en-GB, local) in a 3.5 rem Meta Grey tabular column, the whole timestamp
+  in `dateTime` and the hover title.
+- **History rows (H1, H5, H9, H10):** below `md` the time sits over the sentence. No chips; only a
+  failure keeps the 6 px Red square before its sentence, which says what failed. A row with
+  details is a disclosure (`aria-expanded`, the 12 px chevron, the Blue Wash hover, the ring inset
+  2 px); a row without is plain text. Details open under the sentence column over 200 ms, Paper,
+  no rule, Label then Body Ink within 44em. The frame no longer clips.
+- **Turns (H3, H6, P7):** a part card's press reads as the choice ("You chose “Standard depth”."),
+  a scope edit as "You changed the scope:" with one line per change, the opening turn "You asked:
+  “…”", later free text "You wrote: “…”", a failed turn adds "This didn't send."; the owner's
+  name for a colleague, "Someone" when the server sends none. The decision log's sentences are the
+  server's, which already name who acted for this reader (H2, H6).
+- **Runs (H7, P10):** each run is one row at its start, "Ran the evidence search · 36 min" (else
+  "The evidence search stopped · 12 min" or "… didn't complete · 5 min" with the Red square, "… is
+  waiting at a check-in", "… is running"), with "Show steps" / "Hide steps" and the chevron under
+  it, the trace's quiet control. The steps open over 200 ms on a Line 2 spine in the sentence
+  column, 1.5 rem tighter than a row; the search row opens to every query. The check-in answer,
+  the plan approval and the lifecycle changes stay rows of their own.
+- **Loading and failure (H8):** nothing but the skeleton until both reads land (a day-heading bar
+  over five 48 px rows of a time bar and a sentence bar); a failure is the list's frame with "The
+  history couldn't be loaded." and a 40 px ghost "Try again"; empty is the frame with "Nothing
+  yet." and "Your question and what follows will be listed here." (P11).
+- **Account menu:** the "Administrator" line is Grey, not Electric Blue (blue is the one pen).
+
+## Round 10, the Sources table and the Landscape years (owner and lead, 2026-11-06)
+
+Brief: `research/briefs/round-10-sources.md`; the review `research/sources-table-polish.md`
+(findings 1 to 16, built as proposed) with the lead's rulings; screenshots in
+`research/screenshots/round10-sources/`. Built as below (DESIGN.md § The sources table and
+§ Charts carry each rule).
+
+1. **One filter row.** The screening toggles as their own group ("Screening"), Cited, then
+   visible bordered selects for Key theme, Origin, Evidence type, Strength, Country and Year
+   (the invisible native selects in the headers are gone); every control at least 24 px tall;
+   "Clear filters" at the row's end once a filter besides the screening choice is set. The
+   Year control's name carries the range ("Filter by year: 2015 to any"). Below `lg` a "Sort"
+   select joins the row. The headers sort only.
+2. **Columns.** Origin and Cited fold into the source's second line ("Venue · Origin", the green
+   "Cited" chip at its end). **The provider labels stay "OpenAlex" and "Overton"** (owner ruling
+   2026-11-06; the review's "Research" / "Policy document" is not taken). Six fixed columns;
+   values plain Meta text that never wraps (an ellipsis when too long), the evidence type in
+   sentence case from the report builder's formatter (`evidenceTypeLabel` in
+   `artefactPresentation.ts`); "Cited" the one chip.
+3. **The read-depth header stays "Status"** for now: the owner is choosing its name (the lead
+   has proposed "Depth"); it is one constant, `STATUS_COLUMN_HEADER` in `sourcesPresentation.ts`.
+4. **Headers on one line** at the Caption label size, each a 24 px sort button with a reserved
+   12 px arrow, so labels and arrows share one baseline (owner, round 10: no two-line header).
+5. **The Relevant figure** right-aligned in tabular figures after a 12 px tick or cross; its
+   name carries the figure ("Relevant, 99% confidence: screening details").
+6. **Hover reasons leave the tab order** (lead): the cells' reasons stay on hover; the title is
+   the row's one tab stop, the dossier the keyboard's way to the same words. A row washes Paper 2
+   under the pointer and while focus is in it.
+7. **Download CSV** is the 40 px outline button on the count line's row. The view has no
+   primary: the table has no single forward action (lead, round 10; this reverses the
+   consistency sweep's count of Download CSV as this view's one primary).
+8. **States in the table's frame**, copy as written in the review: loading (the real header and
+   six placeholder rows at 88 px), "No sources yet" / "They appear here as the search finds
+   them.", "No sources match" / "Clear the filters to see all 52." with "Clear filters", and
+   "Sources couldn't be loaded." with a 40 px ghost "Try again". The count line reads
+   "1–50 of 52 sources" on a paged list. Pagination is shared with Findings (`Pagination`): 40 px
+   outline buttons, "Page 1 of 2" at Meta, and a page change starts at the new page's top.
+9. **The frame**: hairlines above and below, no card, no shadow, no header band; the queries
+   block keeps 32 px of air above the filter row.
+10. **The stacked row** holds below `lg`, not only below `md` (agent, for the lead to confirm:
+    from 768 to 1023 the six columns leave the title under 100 px). Title, "Venue · Year ·
+    Origin" and the chip, then the values in column order, each carrying the dot to the next
+    so a wrapped line never starts with one, placeholders in their slots.
+11. **The automatic switch from All to Included** when screening completes stays as N16 rules;
+    flagged for the review (it moves the table without the reader acting).
+12. **The Landscape years** (owner): press and drag across the columns chooses a range, the
+    covered columns Electric Blue as the pointer moves, a Meta label above them "2015 to 2020",
+    release opens All sources for the range; one click opens one year; from the keyboard the
+    chart is a listbox (arrows move, Shift extends, Enter opens, Escape drops); touch drags the
+    same way with the label in a band above the columns; colour is the state, so reduced motion
+    changes nothing. The chart is HTML now (Recharts left this file).
+13. **Countries link** to All sources (`?country=`, the backend's round-10 filter); "Not
+    reported" and the folded tail stay unlinked.
+14. **The Sources tab remembers the subtab** the reader last chose on a task (owner, round 10):
+    the stage-driven landing applies until they choose; from then their choice wins, live or
+    done, until they choose another. Kept per task in `localStorage`; a storage failure falls
+    back to the landing rule (`sourcesSubtab.ts`, `withSourcesLanding`).
+
+## Round 10, Options scoping (owner and lead, 2026-11-06)
+
+Brief: `research/briefs/round-10-scoping.md`; the review `research/options-scoping-polish.md`,
+findings 1 to 15, with the lead's rulings. DESIGN.md § The longlist (Options scoping) carries
+each rule. Screenshots: `research/screenshots/round10-scoping/`.
+
+1. **Themes open by default** (D1) behind one switch, `THEMES_OPEN_BY_DEFAULT` in
+   `LonglistView.tsx`, for the owner to decide (it reverses the 2026-09-23 ruling); the excluded
+   options stay collapsed.
+2. **One page, one row, one title.** `LonglistBuilding` and `LonglistView` are one component, so
+   the walk's end gains controls without remounting the page; the title is "Longlist" with the
+   question under it (D2); the row's anatomy holds from the first row (name, origin words, its
+   search at the right, description, one meta line, the exclusion, the folds). Rows move into
+   their themes in a 300 ms View Transition; the list never blanks; reduced motion cuts.
+3. **Switches**: Group by and List / Grid are the outline switch; no grid below `md`. The Result
+   tabs take the growing rule and stay on one line, the Report tab locked without its note.
+4. **Shortlist page**: Assess is the one primary with its reason under it; Suggest more is an
+   outline secondary with its reason as words; the risk appetite is a full-width field to 32rem.
+5. **Marks** (D3): a searching row breathes the 6 px blue square; the longlist's stage line goes,
+   the status bar says the words; one turning mark per screen.
+6. **The shortlist toggle** in words ("Shortlisted", pressed / "Add to shortlist"); the meta line
+   is fixed fields, wrapping whole; "No in-scope evidence" and "Excluded:" as words, red only on
+   the failure word.
+7. **The option card** says each thing once; the notices are a flat block; "Documents" uses the
+   chevron with Show / Hide; the profile says "Middle on N of M" once; one Navy look for marked
+   values with the direction word.
+8. **The baseline gate** takes this week's check-in form (question title, facts line with
+   "Baseline →", the key assumption as a sentence); its settled form is built
+   (`SettledGateCard`) for `TaskAgentPane` to use in place of the user bubble and the recorded
+   line.
+9. **Links** (D4): `rowLink` covers the longlist walk ("Longlist →" on the step in progress, from
+   Suggesting options on) and the baseline walk (as an Evidence search, Writing → "Baseline →").
+10. **The plan card** shows "Scoping plan · <time band>" as the annex has said since the build
+    (the annex winning over the build).
+11. **Copy accepted from the review**: C1 (one origin vocabulary), C4 (no kind labels, "Read
+    from titles and abstracts", "Why:", "Not covered:"), C5's "No line stands out", C7, C9, C10
+    ("The plan has changed. Suggest more to update the picks."), C11 ("Excluded" with its count).
+    Not taken: C2 (the toggle's words rule), C5's "Typical" (the lead kept "Middle"), C6 (Assess
+    stays as the primary).
+
+Applied after the other builders finished (lead, 2026-11-06): the settled gate renders
+`SettledGateCard` for a gate decision in the thread (no user bubble, no recorded line); the Result
+tabs take the growing rule and the Report tab is locked with no note (C3); the status bar's
+"Baseline →" hides while the Result tab shows the baseline; the "where" place loses its aqua tint
+for the Navy square; the shortlist's title is "Shortlist" with the question under it. The New
+page's eyebrow had already gone with the lists round. D1 stays open for the owner; the agent's
+rulings below are confirmed by the lead.
+
+Rulings on the build (agent, confirmed by the lead):
+- The count is said once (R85): a row's right-hand line is its own search until the longlist read
+  has the option, then the meta line's evidence signal says the documents; the annex's
+  "Shortlist · 38 documents" becomes "Shortlisted" with the count on the meta line.
+- The building rows show the option's description, as the finished rows do (one anatomy).
+- Under a lever heading the row leaves the lever out, as a theme heading leaves the theme out.
+- "Show all" / "Hide all" on the longlist is the page's own control (it starts as the D1 switch
+  says), since the report's shared control always starts on "Show all".
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |

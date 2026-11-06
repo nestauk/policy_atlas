@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 
 import type { components } from "../../api/gen/types";
 import { usePatchPlan, useSuggestMore } from "../../api/mutations";
@@ -6,9 +6,10 @@ import { usePlan, useRuns, useTask } from "../../api/queries";
 import { actionFailedNotice, suggestConflictSentences } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
-import { Chip } from "../../ui/brand/Chip";
+import { cn } from "../../ui/brand/cn";
+import { LINK_CLASS } from "../../ui/brand/inlineActions";
 import { REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
-import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage } from "../reportPage";
+import { REPORT_TITLE_CLASS, ReportPage } from "../reportPage";
 import { isRunActive } from "../scopingActivity";
 import { SCOPING_RUNS_PAGE_SIZE } from "../workspace/planStart";
 import { RISK_APPETITE_LABELS, type RiskAppetite } from "../workspace/planVocabulary";
@@ -19,8 +20,8 @@ import {
   longlistTitle,
   maturityPhrase,
 } from "./longlistPresentation";
-import { ShortlistActionButton, useOptionActions } from "./optionActions";
-import { CAPTION_LABEL_CLASS } from "../../ui/brand/label";
+import { FieldSelect } from "./FieldSelect";
+import { ShortlistToggle, useOptionActions } from "./optionActions";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
@@ -30,38 +31,50 @@ const SELECT_CLASS =
 
 /** The risk appetite as a `<select>` over the three approved answers. It
  *  patches the plan directly (no chat seeding); the server re-proposes when
- *  a longlist exists. Shared by the shortlist page and the plan document. */
+ *  a longlist exists. Shared by the shortlist page (in the field's skin, full
+ *  width up to 32rem, the longest answer whole on a desktop, so it fits a phone: round 10, finding 4) and the plan
+ *  document (compact, in its panel). */
 export function RiskAppetiteSelect({
   value,
   disabled,
   onChange,
   id,
+  field = false,
 }: {
   value: RiskAppetite;
   disabled: boolean;
   onChange: (value: RiskAppetite) => void;
   id?: string;
+  field?: boolean;
 }) {
-  return (
-    <select
-      id={id}
-      aria-label="Risk appetite"
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value as RiskAppetite)}
-      className={SELECT_CLASS}
-    >
-      {(Object.keys(RISK_APPETITE_LABELS) as RiskAppetite[]).map((key) => (
-        <option key={key} value={key}>
-          {RISK_APPETITE_LABELS[key]}
-        </option>
-      ))}
+  const choices = (Object.keys(RISK_APPETITE_LABELS) as RiskAppetite[]).map((key) => (
+    <option key={key} value={key}>
+      {RISK_APPETITE_LABELS[key]}
+    </option>
+  ));
+  const props = {
+    id,
+    "aria-label": "Risk appetite",
+    value,
+    disabled,
+    onChange: (event: { target: { value: string } }) => onChange(event.target.value as RiskAppetite),
+  };
+  return field ? (
+    <FieldSelect {...props} className="w-full max-w-[32rem]">
+      {choices}
+    </FieldSelect>
+  ) : (
+    <select {...props} className={SELECT_CLASS}>
+      {choices}
     </select>
   );
 }
 
-/** The small label over a line Policy Atlas wrote (its reason, its note). */
-const VOICE_LABEL_CLASS = CAPTION_LABEL_CLASS;
+/** A bold lead-in on a line Policy Atlas wrote ("Why:", "Not covered:"),
+ *  in place of an uppercase label over it (round 10, C4). */
+function LeadIn({ children }: { children: string }) {
+  return <strong className="font-bold text-navy">{children}</strong>;
+}
 
 function byName(a: OptionSummaryOut, b: OptionSummaryOut): number {
   return a.name.localeCompare(b.name);
@@ -77,15 +90,15 @@ function numberOf(value: unknown): number | null {
  * item 8, as amended by the owner after the build). The question as the
  * title; the places in two groups, each with the option's description and,
  * for a pick, Policy Atlas's reason; the not-covered note at the foot of
- * the picks; the risk appetite beside Suggest more, the two controls that
- * re-propose; a way back to the longlist; the disabled
- * Assess as the page's end. Adding places happens on the longlist, where
+ * the picks; the risk appetite over Suggest more, the two controls that
+ * re-propose, with a way back to the longlist beside it; Assess as the
+ * page's one primary at its end, its reason in words under it while it is
+ * off (round 10, finding 4). Adding places happens on the longlist, where
  * every row and card carries Add to shortlist.
  */
 export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: LonglistOut }) {
   const task = useTask(taskId);
   const plan = usePlan(taskId);
-  const navigate = useNavigate();
   const patchPlan = usePatchPlan(taskId);
   const suggest = useSuggestMore(taskId);
   const walkActive = isRunActive(task.data);
@@ -120,9 +133,10 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
   }
   if (baselineCut !== null && baselineCut > 0) footerLines.push("The baseline was cut");
 
-  // A stale shortlist re-proposes, so it needs no open option.
+  // A stale shortlist re-proposes, so it needs no open option. Why Suggest
+  // more is off is said in words under it, never only in a tooltip.
   const canSuggest = hasOpenOption || shortlist.stale;
-  const suggestTitle = walkActive ? "A walk is running" : !canSuggest ? "Nothing left to propose" : undefined;
+  const suggestOff = walkActive ? "A walk is running." : !canSuggest ? "Nothing left to propose." : null;
   const hasNote = shortlist.note != null && shortlist.note !== "";
 
   const renderPlaceRow = (option: OptionSummaryOut) => {
@@ -132,7 +146,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
     const reason = state === "proposed" ? (option.shortlist?.reason ?? "") : "";
     return (
       <li key={option.option_id} className="py-5">
-        <div className="flex items-start justify-between gap-6">
+        <div className="flex items-start justify-between gap-6 max-sm:flex-col max-sm:gap-2">
           <div className="min-w-0 flex-1">
             <Link
               to={`/tasks/${taskId}/options/${option.option_id}`}
@@ -144,24 +158,24 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
               <p className="mt-1.5 max-w-[62ch] text-body text-ink">{scrub(option.description)}</p>
             )}
             <p className="mt-1.5 text-meta text-grey">
-              {scrub(leverLabel(option))}
+              <span className="font-semibold text-navy">{scrub(leverLabel(option))}</span>
               {footing !== null && (
                 <>
                   <span aria-hidden="true"> · </span>
+                  <span className="sr-only">, </span>
                   {footing}
                 </>
               )}
             </p>
             {reason !== "" && (
-              <div className="mt-3 border-l border-line pl-3">
-                <p className={VOICE_LABEL_CLASS}>Policy Atlas's reason</p>
-                <p className="mt-1 max-w-[62ch] text-body text-ink">{scrub(reason)}</p>
-              </div>
+              <p className="mt-3 max-w-[62ch] border-l border-line pl-3 text-body text-ink">
+                <LeadIn>Why:</LeadIn> {scrub(reason)}
+              </p>
             )}
             {breach && option.exclusion != null && (
               <p className="mt-2 text-body text-ink">
-                <Chip tone="red" className="mr-2 align-middle">excluded</Chip>
-                Breaks "{constraintLabel(scrub(option.exclusion.constraint))}". {scrub(option.exclusion.reason)}
+                <span className="font-semibold text-red">Excluded:</span> breaks "
+                {constraintLabel(scrub(option.exclusion.constraint))}". {scrub(option.exclusion.reason)}
               </p>
             )}
             {actions.notice !== null && actions.notice.optionId === option.option_id && (
@@ -170,7 +184,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
               </p>
             )}
           </div>
-          <ShortlistActionButton
+          <ShortlistToggle
             actions={actions}
             optionId={option.option_id}
             shortlistState={state}
@@ -183,18 +197,22 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
   };
 
   const noPlaces = placed.length === 0;
+  const question = scrub(longlistTitle(plan.data?.scoping, task.data?.name));
 
   return (
     <ReportPage>
+      {/* One header with the longlist's (round 10, lead): "Shortlist" as the
+          title, the plan's question under it in Lead Grey, no label over it. */}
       <header>
-        <ReportKindRow kind="Shortlist">
-          {walkActive && (
-            <span role="status" className="text-meta text-grey">
-              Shortlisting…
-            </span>
-          )}
-        </ReportKindRow>
-        <h1 className={REPORT_TITLE_CLASS}>{scrub(longlistTitle(plan.data?.scoping, task.data?.name))}</h1>
+        <h1 className={REPORT_TITLE_CLASS}>Shortlist</h1>
+        {question !== "Longlist" && (
+          <p className="mt-2 max-w-prose-measure text-lead text-grey max-md:text-body">{question}</p>
+        )}
+        {walkActive && (
+          <p role="status" className="mt-2 text-meta text-grey">
+            Shortlisting…
+          </p>
+        )}
       </header>
 
       {proposalFailed && (
@@ -229,8 +247,9 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
         )}
         {hasNote && (
           <div className="mt-4">
-            <p className={VOICE_LABEL_CLASS}>What this shortlist leaves out</p>
-            <p className="mt-1 max-w-[62ch] text-body text-ink">{scrub(shortlist.note ?? "")}</p>
+            <p className="max-w-[62ch] text-body text-ink">
+              <LeadIn>Not covered:</LeadIn> {scrub(shortlist.note ?? "")}
+            </p>
             {footerLines.map((line) => (
               <p key={line} className="mt-1 text-meta text-grey">
                 {line}
@@ -240,29 +259,44 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
         )}
       </section>
 
-      <div className="print-hide mt-6 flex flex-wrap items-center gap-x-4 gap-y-3">
-        <label className="flex items-center gap-2 text-meta text-grey">
-          <span>Risk appetite</span>
+      {/* The two controls that re-propose, one block on the left edge: the
+          risk appetite over Suggest more (a secondary: the page's one primary
+          is Assess), the way back to the longlist beside it (round 10,
+          finding 4). Stacked, it fits a 400 px screen. */}
+      <div className="print-hide mt-8">
+        <label htmlFor="shortlist-risk-appetite" className="block text-meta font-semibold text-grey">
+          Risk appetite
+        </label>
+        <div className="mt-1.5">
           <RiskAppetiteSelect
+            id="shortlist-risk-appetite"
+            field
             value={appetite}
             disabled={walkActive || patchPlan.isPending}
             onChange={(value) => patchPlan.mutate({ scoping: { risk_appetite: value } })}
           />
-        </label>
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={walkActive || !canSuggest || suggest.isPending}
-          title={suggestTitle}
-          onClick={() => suggest.mutate()}
-        >
-          Suggest more
-        </Button>
-        <Button variant="secondary" size="sm" onClick={() => void navigate(`/tasks/${taskId}/result`)}>
-          Add more from the longlist
-        </Button>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Button
+            variant="outline"
+            className="h-10"
+            disabled={walkActive || !canSuggest || suggest.isPending}
+            aria-describedby={suggestOff !== null ? "shortlist-suggest-off" : undefined}
+            onClick={() => suggest.mutate()}
+          >
+            Suggest more
+          </Button>
+          <Link to={`/tasks/${taskId}/result`} className={cn(LINK_CLASS, "text-meta")}>
+            Add more from the longlist
+          </Link>
+        </div>
+        {suggestOff !== null && (
+          <p id="shortlist-suggest-off" className="mt-2 text-meta text-grey">
+            {suggestOff}
+          </p>
+        )}
         {shortlist.stale && !walkActive && (
-          <span className="text-meta text-grey">Press Suggest more to re-propose</span>
+          <p className="mt-2 text-meta text-grey">The plan has changed. Suggest more to update the picks.</p>
         )}
       </div>
       {patchPlan.isError && (
@@ -276,11 +310,15 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
         </p>
       )}
 
+      {/* The page's one primary; while it is off its reason is a line of
+          words under it, not a tooltip (round 10, finding 4). */}
       <div className="mt-10 border-t border-line pt-6">
-        <Button variant="primary" disabled>
+        <Button variant="primary" disabled aria-describedby="shortlist-assess-off">
           Assess these {placed.length}
         </Button>
-        <p className="mt-2 text-meta text-grey">Assessment is not yet available.</p>
+        <p id="shortlist-assess-off" className="mt-2 text-meta text-grey">
+          Assessment is not yet available.
+        </p>
       </div>
     </ReportPage>
   );

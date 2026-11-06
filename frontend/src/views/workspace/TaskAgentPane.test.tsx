@@ -406,7 +406,7 @@ describe("TaskAgentPane — the options-scoping baseline gate", () => {
         { id: "confirm_plan", label: "Confirm plan and build longlist", description: "", requires_user_input: false, suggested: false, why: null, endorsement: null },
         { id: "change_plan", label: "Change the plan", description: "", requires_user_input: false, suggested: false, why: null, endorsement: null },
       ],
-      render: "Confirm the plan against the baseline",
+      render: "Does the plan still look right now you have the baseline?",
       rerun_component: null,
       segment_reentry_allowed: false,
       sequence: 40,
@@ -526,21 +526,26 @@ describe("TaskAgentPane — the options-scoping baseline gate", () => {
     mockPane({ turns: [answerTurn(), decisionTurn()] });
     const { container } = renderPane();
 
-    expect(screen.getByRole("heading", { name: "Confirm the plan against the baseline" })).toBeInTheDocument();
+    // The gate's question is its title (round 10, C9).
+    expect(
+      screen.getByRole("heading", { name: "Does the plan still look right now you have the baseline?" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Confirm plan and build longlist/ })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Change the plan/ })).toBeInTheDocument();
     // The chat's own citation renderer, reused: the References footer and the
     // `[n]` marker button come from `ChatAnswer`, not from a second copy.
     expect(screen.getByText("References (1)")).toBeInTheDocument();
-    // Once as the card's choice, once as the recorded decision line.
-    expect(screen.getAllByText("Change the plan", { selector: "span" })).toHaveLength(2);
-    expect(screen.getByText(/plan version 2/)).toBeInTheDocument();
+    // The decision is said once, in the settled part card's language
+    // (round 10, finding 8): no "recorded · plan version" line.
+    const settled = screen.getByTestId("settled-gate");
+    expect(settled).toHaveTextContent(/^BaselineChange the plan$/);
+    expect(screen.queryByText(/plan version 2/)).not.toBeInTheDocument();
 
     const text = container.textContent ?? "";
-    expect(text.indexOf("Confirm the plan against the baseline")).toBeLessThan(
+    expect(text.indexOf("Does the plan still look right now you have the baseline?")).toBeLessThan(
       text.indexOf("Does the baseline cover young people"),
     );
-    expect(text.indexOf("Does the baseline cover young people")).toBeLessThan(text.indexOf("recorded"));
+    expect(text.indexOf("Does the baseline cover young people")).toBeLessThan(text.indexOf("BaselineChange the plan"));
   });
 
   // Task 045 (deliverable 10): a confirmed longlist verb is an `action` turn,

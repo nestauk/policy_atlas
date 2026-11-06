@@ -3,19 +3,20 @@ import { Link } from "react-router";
 
 import type { components } from "../../api/gen/types";
 import { cn } from "../../ui/brand/cn";
-import { Chip } from "../../ui/brand/Chip";
 import { scrub } from "../../lib/scrub";
 import { useTask } from "../../api/queries";
 import { SECTION_EXPAND_LINK_CLASS } from "../ArtefactOutline";
 import { isRunActive } from "../scopingActivity";
-import { ShortlistActionButton, useOptionActions } from "./optionActions";
+import { FieldSelect } from "./FieldSelect";
+import { ShortlistToggle, useOptionActions } from "./optionActions";
 import {
   GRID_COLUMN_LINES,
   LEVEL_WORDS,
   LINE_NAMES,
   MIDDLE_WORD,
+  NO_IN_SCOPE_WORDS,
   capitalise,
-  placeWord,
+  joinAnd,
 } from "./longlistPresentation";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
@@ -37,8 +38,12 @@ const CELL_LIMIT = 4;
  * The reduced grid (D12, contract deliverable 9): rows the lever types in
  * taxonomy order plus "None fits", columns the chosen line's `less` word,
  * "Middle", `more` word and "Untagged" (R41) — tiles that open the option and carry its excluded/
- * no-in-scope-evidence states. An empty row stays empty (owner, 2026-09-23:
- * the absence is the message). The shortlist word and its action ride each tile (task 055).
+ * no-in-scope-evidence states in words. The lever types with no option are
+ * one Grey line under the table, "No options: Subsidise, Tax or charge and
+ * Inform" (round 10, finding 13: the owner's 2026-09-23 "the absence is the
+ * message" in one line, not ten empty bands). The shortlist toggle rides
+ * each tile on the name's line (task 055; round 10, finding 6). Offered from
+ * `md` up only: the list view hides the switch on a phone.
  */
 export function LonglistGrid({
   taskId,
@@ -71,7 +76,12 @@ export function LonglistGrid({
   );
   const hasUntagged = options.some((option) => option.profile == null);
 
-  const rows = [...leverTypes, ...(hasNoneFits ? [NONE_FITS_KEY] : [])];
+  const leverHas = (leverKey: string) =>
+    options.some((option) =>
+      leverKey === NONE_FITS_KEY ? option.primary_lever_type == null : option.primary_lever_type === leverKey,
+    );
+  const rows = [...leverTypes, ...(hasNoneFits ? [NONE_FITS_KEY] : [])].filter(leverHas);
+  const emptyLevers = leverTypes.filter((lever) => !leverHas(lever)).map(capitalise);
   const columns: { key: string; label: string }[] = [
     { key: "less", label: LEVEL_WORDS[line].less ?? "" },
     { key: MIDDLE_KEY, label: MIDDLE_WORD },
@@ -104,25 +114,25 @@ export function LonglistGrid({
 
   return (
     <div>
-      <div className="print-hide mb-4 flex items-center gap-2">
+      <div className="print-hide mb-4 flex items-center gap-3">
         <label
           htmlFor="longlist-grid-columns"
           className="text-meta font-semibold text-grey"
         >
           Columns
         </label>
-        <select
+        <FieldSelect
           id="longlist-grid-columns"
           value={line}
           onChange={(event) => setLine(event.target.value as GridLine)}
-          className="border border-line-2 bg-paper px-2 py-1 text-body text-ink"
+          className="w-64"
         >
           {GRID_COLUMN_LINES.map((key) => (
             <option key={key} value={key}>
               {LINE_NAMES[key]}
             </option>
           ))}
-        </select>
+        </FieldSelect>
       </div>
       <div className="-mx-6 overflow-x-auto px-6">
         <table className="w-full min-w-[640px] table-fixed border-collapse text-left">
@@ -168,39 +178,26 @@ export function LonglistGrid({
                                 to={`/tasks/${taskId}/options/${option.option_id}`}
                                 className={cn(
                                   "font-semibold text-navy underline-offset-4 hover:underline",
-                                  option.state === "excluded" &&
-                                    "text-grey line-through",
+                                  option.state === "excluded" && "text-grey",
                                 )}
                               >
                                 {scrub(option.name)}
                               </Link>
-                              {option.state === "excluded" && (
-                                <Chip
-                                  tone="red"
-                                  className="ml-1.5 align-middle"
-                                >
-                                  excluded
-                                </Chip>
-                              )}
-                              {option.no_in_scope_evidence && (
-                                <Chip
-                                  tone="yellow"
-                                  className="ml-1.5 align-middle"
-                                >
-                                  no in-scope evidence
-                                </Chip>
-                              )}
-                              {placeWord(option.shortlist?.state) !== null && (
-                                <span className="mt-0.5 block text-meta text-grey">
-                                  {placeWord(option.shortlist?.state)}
+                              {(option.state === "excluded" || option.no_in_scope_evidence) && (
+                                <span className="mt-0.5 block text-meta">
+                                  {option.state === "excluded" ? (
+                                    <span className="font-semibold text-red">Excluded</span>
+                                  ) : (
+                                    <span className="text-grey">{NO_IN_SCOPE_WORDS}</span>
+                                  )}
                                 </span>
                               )}
-                              <ShortlistActionButton
+                              <ShortlistToggle
                                 actions={actions}
                                 optionId={option.option_id}
                                 shortlistState={option.shortlist?.state}
                                 excluded={option.state === "excluded"}
-                                className="mt-1 block"
+                                className="mt-0.5 flex w-fit"
                               />
                               {actions.notice !== null &&
                                 actions.notice.optionId === option.option_id && (
@@ -230,6 +227,9 @@ export function LonglistGrid({
           </tbody>
         </table>
       </div>
+      {emptyLevers.length > 0 && (
+        <p className="mt-3 text-meta text-grey">No options: {joinAnd(emptyLevers)}</p>
+      )}
     </div>
   );
 }

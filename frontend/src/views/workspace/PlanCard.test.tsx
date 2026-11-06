@@ -195,7 +195,7 @@ describe("PlanCard — options scoping (task 044)", () => {
     return {
       capability: "options_scoping",
       plan: null,
-      scoping: { ready: overrides.ready ?? true, steps: [] },
+      scoping: { ready: overrides.ready ?? true, steps: [], time_band: "~20 to 40 min" },
       status: overrides.status ?? "approved",
       version: 1,
     } as unknown as PlanOut;
@@ -206,6 +206,8 @@ describe("PlanCard — options scoping (task 044)", () => {
     const onReviewPlan = vi.fn();
     const user = userEvent.setup();
     renderCard({ onReviewPlan });
+    // The annex's scoping summary line (round 10: the annex wins over the build).
+    expect(screen.getByText("Scoping plan · ~20 to 40 min")).toBeInTheDocument();
     const start = screen.getByRole("button", { name: "Confirm and build the baseline" });
     expect(start.className).toContain("bg-green");
     await user.click(start);

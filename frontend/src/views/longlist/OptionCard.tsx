@@ -9,32 +9,31 @@ import { isRunActive } from "../scopingActivity";
 import { useDocumentTitle } from "../../lib/title";
 import { Button } from "../../ui/brand/Button";
 import { Card } from "../../ui/brand/Card";
-import { Chip } from "../../ui/brand/Chip";
 import { cn } from "../../ui/brand/cn";
 import { ReauthRedirect } from "../../ui/feedback";
 import { REPORT_BODY_CLASS } from "../artefactPresentation";
-import { SectionDisclosure, type SidebarEntry } from "../ArtefactOutline";
+import { DisclosureWord, SectionDisclosure, type SidebarEntry } from "../ArtefactOutline";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
-import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage } from "../reportPage";
+import { REPORT_TITLE_CLASS, ReportPage } from "../reportPage";
 import {
   authorityWords,
   GRID_COLUMN_LINES,
-  LEVEL_WORD_CLASS,
+  LEVEL_MARKED_CLASS,
+  LEVEL_MIDDLE_CLASS,
   LEVEL_WORDS,
   LINE_NAMES,
   MIDDLE_WORD,
+  NO_IN_SCOPE_WORDS,
   PROFILE_LINE_KEYS,
-  WORD_TINT_BASE,
   capitalise,
   constraintLabel,
   constraintNotices,
   deliveredLeadIn,
   documentsSummary,
-  evidenceOpener,
   evidenceSignal,
-  leverLabel,
   leverLine,
   maturityLine,
+  middleSummary,
   noOutcomeMeasuredLine,
   originLabel,
   outcomeCountLabel,
@@ -42,7 +41,7 @@ import {
   relationLabel,
   servesOutcome,
 } from "./longlistPresentation";
-import { ExcludeReasonForm, OptionActionButton, ShortlistActionButton, useOptionActions } from "./optionActions";
+import { ExcludeReasonForm, OptionActionButton, ShortlistToggle, useOptionActions } from "./optionActions";
 import { RetryCard } from "../../ui/feedback/RetryCard";
 import { LINK_CLASS, PROSE_LINK_CLASS } from "../../ui/brand/inlineActions";
 
@@ -214,29 +213,54 @@ function CardSection({
   );
 }
 
-/** The authority word's tint beside "Who decides" (R70): pale tint, dark text, as the level words. */
+/** The authority words beside "Who decides" (R70), in the column's one
+ *  type: Navy Semibold, Grey when it is unclear who can act (round 10: no
+ *  tint, as the level words). */
 const AUTHORITY_WORD_CLASS: Record<"within_your_power" | "needs_action_by" | "unclear", string> = {
-  within_your_power: `${WORD_TINT_BASE} bg-green-tint text-navy`,
-  needs_action_by: `${WORD_TINT_BASE} bg-yellow-tint text-navy`,
-  unclear: `${WORD_TINT_BASE} bg-paper-2 text-grey`,
+  within_your_power: "text-meta font-semibold text-navy",
+  needs_action_by: "text-meta font-semibold text-navy",
+  unclear: "text-meta font-semibold text-grey",
 };
 
-/** A line's level word on its tint, or "Middle" when the line has no mark. */
-function LevelWord({
-  line,
-  mark,
-  middleClassName = "font-semibold text-navy",
-}: {
-  line: keyof typeof LEVEL_WORDS;
-  mark: "less" | "more" | null;
-  middleClassName?: string;
-}) {
+/** A line's level word in the one Navy look after a 6 px Navy square, the
+ *  word saying the direction ("Quicker", "Higher"); "Middle" in Grey when the
+ *  line has no mark (round 10, lead ruling on finding 7). */
+function LevelWord({ line, mark }: { line: keyof typeof LEVEL_WORDS; mark: "less" | "more" | null }) {
   return mark === null ? (
-    <span className={middleClassName}>{MIDDLE_WORD}</span>
+    <span className={LEVEL_MIDDLE_CLASS}>{MIDDLE_WORD}</span>
   ) : (
-    <span className={LEVEL_WORD_CLASS[mark]}>{LEVEL_WORDS[line][mark]}</span>
+    <span className={LEVEL_MARKED_CLASS}>
+      <span aria-hidden="true" className="inline-block size-1.5 flex-none bg-navy" />
+      {LEVEL_WORDS[line][mark]}
+    </span>
   );
 }
+
+/** The documents behind the option, folded behind the report's disclosure
+ *  (round 10, finding 7): the summary line, then the chevron with "Show" or
+ *  "Hide" in the quiet control's look, never the browser's triangle. */
+function DocumentsDisclosure({ summary, children }: { summary: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="group flex w-full cursor-pointer items-baseline gap-3 text-left"
+      >
+        <span className="min-w-0 flex-1 font-bold text-navy">{summary}</span>
+        <DisclosureWord open={open} />
+      </button>
+      {open && <div className="mt-3 space-y-4">{children}</div>}
+    </div>
+  );
+}
+
+/** A notice's word in its tone: Red only for a failure (an exclusion, a
+ *  break), Navy for a likely shortfall or no in-scope evidence, Grey when it
+ *  cannot be said. */
+const NOTICE_WORD_CLASS = { red: "font-semibold text-red", navy: "font-semibold text-navy", grey: "font-semibold text-grey" } as const;
 
 /** The profile table's cells: three columns from `sm` up; stacked blocks below it, so the
  *  sentence keeps the full width at 390 px (22b, after the browser check). */
@@ -312,7 +336,6 @@ export function OptionCard() {
   const planOutcomes = evidence.outcome_counts?.by_outcome ?? [];
   const noneMeasured = planOutcomes.length > 0 && planOutcomes.every((entry) => entry.evaluated === 0);
   const maturity = maturityLine(item.maturity);
-  const opener = evidenceOpener(item.evaluated_count, item.document_count);
   const profile = item.profile ?? null;
   const profileLines = profile === null ? [] : PROFILE_LINE_KEYS.map((key) => ({ key, line: profile.lines.find((line) => line.key === key) }))
     // A profile written before the ninth line existed has eight; show no empty row.
@@ -324,31 +347,36 @@ export function OptionCard() {
       key,
       mark: key === "ambition" ? (item.ambition ?? null) : (profile.lines.find((line) => line.key === key)?.mark ?? null),
     }));
+  const markedCells = cellLines.filter(({ mark }) => mark !== null);
   const ambitionMark = item.ambition ?? null;
   const leverText = leverLine(item.primary_lever_type, item.secondary_lever_types);
   // One reason only: the none-fits reason says what the option does instead.
   const leverReason = (item.primary_lever_type == null ? (item.lever_none_fits_reason ?? item.lever_reason) : item.lever_reason) ?? "";
+  // Each thing said once (round 10, finding 7): the lever lives in How it
+  // works, the counts in the evidence line, so the grey line is where the
+  // option came from and how it relates to others.
   const headerLine = [
-    leverLabel(item),
-    originLabel(item.origin, item.document_count, item.from_section),
+    originLabel(item.origin, item.from_section),
     ...(item.relations ?? []).map(relationLabel),
     ...((item.also_found_as ?? []).length > 0 ? [`also found as: ${(item.also_found_as ?? []).join(", ")}`] : []),
   ].join(" · ");
+  const hasNotices = excluded || item.no_in_scope_evidence || item.search_pending || notices.length > 0;
 
   return (
     <ReportPage entries={sidebarEntries(item.profile != null)}>
-      <nav aria-label="Breadcrumb" className="print-hide mb-4 text-meta text-grey">
-        <Link to={`/tasks/${taskId}/result?view=longlist`} className={LINK_CLASS}>
-          Longlist
-        </Link>
-        <span aria-hidden="true" className="mx-2">/</span>
-        <span>{scrub(item.name)}</span>
-      </nav>
-
       <header className="mb-8">
-        <ReportKindRow kind="Option">
-          <div className="print-hide flex items-center gap-2">
-            <ShortlistActionButton
+        {/* The breadcrumb names the page's kind, so no "Option" label sits
+            over the title (round 10, C4); the option's controls share its row. */}
+        <div className="print-hide mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <nav aria-label="Breadcrumb" className="min-w-0 text-meta text-grey">
+            <Link to={`/tasks/${taskId}/result?view=longlist`} className={LINK_CLASS}>
+              Longlist
+            </Link>
+            <span aria-hidden="true" className="mx-2">/</span>
+            <span>{scrub(item.name)}</span>
+          </nav>
+          <div className="-my-1 flex items-center gap-3">
+            <ShortlistToggle
               actions={actions}
               optionId={optionId}
               shortlistState={item.shortlist?.state}
@@ -356,7 +384,7 @@ export function OptionCard() {
             />
             <OptionActionButton actions={actions} optionId={optionId} excluded={excluded} />
           </div>
-        </ReportKindRow>
+        </div>
         <h1 className={cn(REPORT_TITLE_CLASS, excluded && "text-grey")}>{scrub(item.name)}</h1>
         <p className={`mt-3 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(item.description)}</p>
         <p className="mt-2 text-body text-grey">{scrub(headerLine)}</p>
@@ -370,29 +398,34 @@ export function OptionCard() {
           </p>
         )}
 
-        {(excluded || item.no_in_scope_evidence || item.search_pending || notices.length > 0) && (
-          <Card className="mt-5 space-y-2 p-4 text-body text-ink">
+        {/* The notices: a flat block on the sheet with a hairline rule, each
+            a word in its tone then its sentence (round 10, finding 7: no card
+            inside the sheet, no chips). */}
+        {hasNotices && (
+          <div className="mt-5 max-w-prose-measure space-y-2 border-l border-line-2 pl-3 text-body text-ink">
             {excluded && item.exclusion != null && (
               <p>
-                <Chip tone="red" className="mr-2 align-middle">excluded</Chip>
-                Breaks "{constraintLabel(scrub(item.exclusion.constraint))}". {scrub(item.exclusion.reason)}
+                <span className={NOTICE_WORD_CLASS.red}>Excluded:</span>{" "}
+                {constraintLabel(item.exclusion.constraint ?? "") !== "" && (
+                  <>breaks "{constraintLabel(scrub(item.exclusion.constraint))}". </>
+                )}
+                {scrub(item.exclusion.reason)}
               </p>
             )}
             {item.no_in_scope_evidence && item.in_scope != null && (
               <p>
-                <Chip tone="yellow" className="mr-2 align-middle">no in-scope evidence</Chip>
-                None of its {item.in_scope.documents} documents pass {scrub(item.in_scope.restriction)}. It stays on
-                the longlist until the scope changes.
+                <span className={NOTICE_WORD_CLASS.navy}>{NO_IN_SCOPE_WORDS}:</span> None of its{" "}
+                {item.in_scope.documents} documents pass {scrub(item.in_scope.restriction)}. It stays on the longlist
+                until the scope changes.
               </p>
             )}
             {item.search_pending && <p className="text-grey">Its own evidence search is still running.</p>}
             {notices.map((notice) => (
               <p key={notice.key}>
-                <Chip tone={notice.tone} className="mr-2 align-middle">{notice.chip}</Chip>
-                {scrub(notice.text)}
+                <span className={NOTICE_WORD_CLASS[notice.tone]}>{notice.word}:</span> {scrub(notice.text)}
               </p>
             ))}
-          </Card>
+          </div>
         )}
       </header>
 
@@ -420,16 +453,25 @@ export function OptionCard() {
           defaultOpen={false}
           meta={ESTIMATE_LABEL}
           summaryNode={
-            <ul role="list" className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
-              {cellLines.map(({ key, mark }) => (
-                <li key={key}>
-                  <span className="block text-meta text-grey">{LINE_NAMES[key]}</span>
-                  <span className="mt-1 block min-h-6">
-                    <LevelWord line={key} mark={mark} middleClassName="text-meta font-semibold text-navy" />
-                  </span>
-                </li>
-              ))}
-            </ul>
+            // Collapsed: the lines that stand out, then "Middle" said once
+            // for the rest (round 10, lead ruling on finding 7).
+            <div>
+              {markedCells.length > 0 && (
+                <ul role="list" className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+                  {markedCells.map(({ key, mark }) => (
+                    <li key={key}>
+                      <span className="block text-meta text-grey">{LINE_NAMES[key]}</span>
+                      <span className="mt-1 block min-h-6">
+                        <LevelWord line={key} mark={mark} />
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className={cn("text-meta text-grey", markedCells.length > 0 && "mt-3")}>
+                {middleSummary(cellLines.length - markedCells.length, cellLines.length)}
+              </p>
+            </div>
           }
         >
           <table className="w-full border-collapse text-left">
@@ -464,9 +506,11 @@ export function OptionCard() {
         </CardSection>
       )}
 
-      <CardSection id="evidence-base" summary={maturity === null ? opener : `${maturity}. ${opener}`}>
+      {/* The counts are the header's evidence line; the section opens with
+          the evaluations' standing (round 10, C7: no opener repeating them). */}
+      <CardSection id="evidence-base" summary={maturity ?? ""}>
         {maturity !== null && <p className="font-semibold text-navy">{maturity}</p>}
-        <p>{opener}</p>
+        {item.document_count === 0 && <p className="text-grey">No document names this option yet.</p>}
         {item.document_count > 0 && (
           <>
             {planOutcomes.length > 0 && (
@@ -503,29 +547,31 @@ export function OptionCard() {
                     <div
                       key={entry.place}
                       data-where={entry.where ? "true" : undefined}
-                      className={cn("grid gap-x-4 py-1.5 sm:grid-cols-[10rem_1fr]", entry.where && "bg-aqua-tint")}
+                      className="grid gap-x-4 py-1.5 sm:grid-cols-[10rem_1fr]"
                     >
-                      <dt className="font-bold text-navy">{scrub(entry.place)}</dt>
+                      {/* The plan's own place carries the profile's Navy mark,
+                          not a tint (round 10). */}
+                      <dt className="flex items-baseline gap-1.5 font-bold text-navy">
+                        {entry.where && (
+                          <span aria-hidden="true" className="inline-block size-1.5 flex-none -translate-y-0.5 bg-navy" />
+                        )}
+                        {scrub(entry.place)}
+                      </dt>
                       <dd>{scrub(entry.sentence)}</dd>
                     </div>
                   ))}
                 </dl>
               </div>
             )}
-            <details className="group">
-              <summary className="cursor-pointer font-bold text-navy">
-                {documentsSummary(documents.length)}
-              </summary>
-              <div className="mt-3 space-y-4">
-                <DocumentGroup heading="Evaluated it" taskId={taskId} optionId={item.option_id} documents={evaluatedDocuments} />
-                <DocumentGroup
-                  heading="Describe or recommend it"
-                  taskId={taskId}
-                  optionId={item.option_id}
-                  documents={describingDocuments}
-                />
-              </div>
-            </details>
+            <DocumentsDisclosure summary={documentsSummary(documents.length)}>
+              <DocumentGroup heading="Evaluated it" taskId={taskId} optionId={item.option_id} documents={evaluatedDocuments} />
+              <DocumentGroup
+                heading="Describe or recommend it"
+                taskId={taskId}
+                optionId={item.option_id}
+                documents={describingDocuments}
+              />
+            </DocumentsDisclosure>
           </>
         )}
       </CardSection>

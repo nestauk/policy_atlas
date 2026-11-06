@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { useAnswerCheckIn } from "../../api/mutations";
@@ -15,11 +15,8 @@ import { useToast } from "../../ui/radix/Toast";
 import { useEasedHeight } from "../streamPacing";
 import { CheckInBundle, type SectionRow, type ThemeRename } from "./CheckInBundle";
 import {
-  BASELINE_GATE_HEADING,
   BASELINE_GATE_KIND,
   BASELINE_KEY_ASSUMPTION_ABSENT,
-  BASELINE_KEY_ASSUMPTION_LABEL,
-  BASELINE_SETTINGS_HEADING,
   STOP_THE_RUN,
   baselineGateCard,
   checkInHeadline,
@@ -40,6 +37,59 @@ type ChangeModeValue = (typeof CHANGE_MODE_VALUES)[number];
 /** The stages whose check-in is about what the search found: its facts line
  *  links to the Sources tab (annex scene 12). */
 const SOURCES_CHECK_IN_STAGES = new Set(["acquire", "screen"]);
+
+/** The baseline gate's question, its card's title (round 10, C9: the gate
+ *  reads as this week's check-ins do, the question as the title). The
+ *  backend's render leads with the same words
+ *  (`runtime/baseline_gate.GATE_HEADING`), so the card and the content of
+ *  record say the same thing. */
+export const BASELINE_GATE_QUESTION = "Does the plan still look right now you have the baseline?";
+
+/** The settled gate's grey label, as a settled part card names its part. */
+export const BASELINE_GATE_SETTLED_LABEL = "Baseline";
+
+/**
+ * The gate's one facts line (round 10, finding 8): the settings the walk ran
+ * from, in the plan document's order, each value as the bundle gives it, the
+ * outcomes as a count ("2 outcomes").
+ */
+export function baselineGateFacts(bundle: Record<string, unknown> | null): string[] {
+  const settings = baselineGateCard(bundle).settings;
+  const raw = bundle?.["settings"];
+  const outcomes =
+    raw !== null && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)["outcomes"]
+      : undefined;
+  const outcomeCount = Array.isArray(outcomes)
+    ? outcomes.filter((item) => typeof item === "string" && item !== "").length
+    : 0;
+  return settings.map(({ label, value }) =>
+    label === "Outcomes" && outcomeCount > 0 ? (outcomeCount === 1 ? "1 outcome" : `${outcomeCount} outcomes`) : value,
+  );
+}
+
+/**
+ * The gate once decided, in the settled part card's language (round 10,
+ * finding 8): the user's side of the thread (Blue Wash, a Blue Tint border,
+ * the 32 px indent) with the 2 px Green rule on its right edge, the grey
+ * label "Baseline" and the chosen option in deep green bold. The decision is
+ * said once: this card replaces the user bubble and the "recorded · plan
+ * version" line for the gate.
+ *
+ * Args:
+ *   label: The chosen option's label, as the check-in offered it.
+ */
+export function SettledGateCard({ label }: { label: string }) {
+  return (
+    <div
+      data-testid="settled-gate"
+      className="ml-8 border border-r-2 border-blue-tint border-r-green bg-blue-tint-2 px-3.5 py-2.5"
+    >
+      <p className={cn(LABEL_CLASS, "text-grey")}>{BASELINE_GATE_SETTLED_LABEL}</p>
+      <p className="mt-0.5 max-w-prose-measure text-lead font-bold text-[#0c6b5a]">{scrub(label)}</p>
+    </div>
+  );
+}
 
 /** The waiting-on-you card: the one orange rule, and one 900 ms orange ring
  *  that blooms 150 ms after it arrives (task 058, D15; round 9; reduce
@@ -283,35 +333,35 @@ function CheckInCardBody({
   // and the settings the walk ran from, risk appetite included (N19) — over
   // the same `sendOption` path every other option uses. Questions about the
   // baseline go to the Task Agent composer, which stays open at this pause.
+  // Since round 10 (finding 8) it reads as the other check-ins: the question
+  // as the title, the key assumption as a plain sentence, one facts line with
+  // the way to the baseline, no labels.
   if (checkIn.kind === BASELINE_GATE_KIND) {
     const card = baselineGateCard(bundleRecord);
+    const facts = baselineGateFacts(bundleRecord);
     return (
-      <Card aria-live="polite" data-testid="check-in-card" className={cn(WAITING_CARD_CLASS, "p-5")}>
-        <h3 className="max-w-prose-measure text-lead font-bold text-navy">{BASELINE_GATE_HEADING}</h3>
-        {card.keyAssumption === null ? (
-          <p className="mt-2 text-body text-grey">{BASELINE_KEY_ASSUMPTION_ABSENT}</p>
-        ) : (
-          <>
-            <p className={cn(LABEL_CLASS, "mt-3")}>{BASELINE_KEY_ASSUMPTION_LABEL}</p>
-            <blockquote className="mt-1 max-w-prose-measure border-l border-l-line-2 pl-3 text-body italic text-ink">
-              {scrub(card.keyAssumption)}
-            </blockquote>
-          </>
+      <Card aria-live="polite" data-testid="check-in-card" className={cn(WAITING_CARD_CLASS, compact ? "p-4" : "p-5")}>
+        <h3 className="max-w-prose-measure text-lead font-bold text-navy">{BASELINE_GATE_QUESTION}</h3>
+        {!compact && (
+          <p data-testid="check-in-facts" className="mt-1 max-w-prose-measure text-meta text-grey">
+            {facts.map((fact) => (
+              <Fragment key={fact}>
+                <span className="inline-block max-w-full">
+                  {scrub(fact)}
+                  <span aria-hidden="true">{" ·"}</span>
+                  <span className="sr-only">,</span>
+                </span>{" "}
+              </Fragment>
+            ))}
+            <Link to={`/tasks/${taskId}/result?view=baseline`} className={LINK_CLASS}>
+              Baseline →
+            </Link>
+          </p>
         )}
-        {!compact && card.settings.length > 0 && (
-          <>
-            <p className={cn(LABEL_CLASS, "mt-4")}>{BASELINE_SETTINGS_HEADING}</p>
-            <dl data-testid="check-in-facts" className="mt-1 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5">
-              {card.settings.map(({ label, value }) => (
-                <div key={label} className="contents">
-                  <dt className="text-meta text-grey">{label}</dt>
-                  <dd className="text-body text-ink">{scrub(value)}</dd>
-                </div>
-              ))}
-            </dl>
-          </>
-        )}
-        <div role="radiogroup" aria-label={BASELINE_GATE_HEADING} className="mt-3 flex max-w-prose-measure flex-col gap-1">
+        <p className={cn("mt-2 max-w-prose-measure text-body", card.keyAssumption === null ? "text-grey" : "text-ink")}>
+          {card.keyAssumption === null ? BASELINE_KEY_ASSUMPTION_ABSENT : scrub(card.keyAssumption)}
+        </p>
+        <div role="radiogroup" aria-label={BASELINE_GATE_QUESTION} className="mt-3 flex max-w-prose-measure flex-col gap-1">
           {(checkIn.options ?? []).map((option) => (
             <ChoiceRow
               key={option.id}

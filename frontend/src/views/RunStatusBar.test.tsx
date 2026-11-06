@@ -195,6 +195,11 @@ describe("RunStatusBar (task 058, owner rounds 7 and 8: the status bar returns, 
     expect(onLinkedView("/tasks/t1/sources/all", "/tasks/t1/sources/all")).toBe(true);
     expect(onLinkedView("/tasks/t1/result/", "/tasks/t1/result")).toBe(true);
     expect(onLinkedView("/tasks/t1/sources/landscape", "/tasks/t1/sources/all")).toBe(false);
+    // A link that names a Result view counts only there (round 10).
+    expect(onLinkedView("/tasks/t1/result", "/tasks/t1/result?view=baseline", "?view=baseline")).toBe(true);
+    expect(onLinkedView("/tasks/t1/result", "/tasks/t1/result?view=baseline", "")).toBe(true);
+    expect(onLinkedView("/tasks/t1/result", "/tasks/t1/result?view=baseline", "?view=shortlist")).toBe(false);
+    expect(onLinkedView("/tasks/t1/sources/all", "/tasks/t1/result?view=baseline", "")).toBe(false);
   });
 
   it("opens the Task Agent in the sidebar from md up", async () => {

@@ -220,9 +220,25 @@ describe("rowLink — where a done row points", () => {
     expect(rowLink(byLabel("Writing"), rows, "t1", "evidence_search", false)).toEqual({ href: "/tasks/t1/result", label: "Report" });
   });
 
-  it("links nothing on a scoping walk's rows", () => {
+  it("links a done longlist row nowhere: the ended card's Read it is the walk's one way on", () => {
     const rows = done(searchScreen);
     expect(rowLink(rows[0], rows, "t1", "longlist", false)).toBeNull();
+  });
+
+  it("maps the baseline walk as an Evidence search, its Writing row to the baseline (round 10, D4)", () => {
+    const rows = done([...searchScreen, entry({ stage: "synthesise", label: "Writing", status: "completed" })]);
+    expect(rowLink(rows[0], rows, "t1", "baseline", false)).toEqual({ href: "/tasks/t1/sources/all", label: "Sources" });
+    const writing = rows.find((row) => row.label === "Writing")!;
+    expect(rowLink(writing, rows, "t1", "baseline", false)).toEqual({
+      href: "/tasks/t1/result?view=baseline",
+      label: "Baseline",
+    });
+  });
+
+  it("links nothing on an added option's search or the shortlist walk", () => {
+    const rows = done(searchScreen);
+    expect(rowLink(rows[0], rows, "t1", "option_search", false)).toBeNull();
+    expect(rowLink(rows[0], rows, "t1", "shortlist", false)).toBeNull();
   });
 });
 
@@ -245,13 +261,34 @@ describe("rowLink — where the step in progress points", () => {
     expect(rowLink(row, rows, "t1", "evidence_search", false)).toEqual({ href, label: name });
   });
 
-  it("gives reading and shortlisting no link while they run, and a scoping walk none", () => {
+  it("gives reading and shortlisting no link while they run", () => {
     const reading = live("ingest", "Collecting the full texts");
     expect(rowLink(reading.row, reading.rows, "t1", "evidence_search", false)).toBeNull();
     const shortlisting = live("select", "Shortlisting");
     expect(rowLink(shortlisting.row, shortlisting.rows, "t1", "evidence_search", false)).toBeNull();
-    const searching = live("acquire", "Searching and screening");
-    expect(rowLink(searching.row, searching.rows, "t1", "longlist", false)).toBeNull();
+  });
+
+  it("points a longlist walk's step in progress at the longlist being built, from Suggesting options on (D4)", () => {
+    const walk = (stages: StageEntry[]) => {
+      const rows = cardRows(stages, null, "running");
+      return { rows, row: rows.find((row) => row.state === "progress")! };
+    };
+    const reading = walk([entry({ stage: "inherit", label: "Reading the linked search", status: "started" })]);
+    expect(rowLink(reading.row, reading.rows, "t1", "longlist", false)).toBeNull();
+    for (const [stage, label] of [
+      ["suggest", "Suggesting options"],
+      ["option_searches", "Searching for each option"],
+      ["theme", "Grouping into themes"],
+      ["shortlist", "Shortlisting"],
+    ] as const) {
+      const { rows, row } = walk([entry({ stage, label, status: "started" })]);
+      expect(rowLink(row, rows, "t1", "longlist", false)).toEqual({ href: "/tasks/t1/result", label: "Longlist" });
+    }
+  });
+
+  it("points the baseline walk's Writing at the baseline while it runs", () => {
+    const { rows, row } = live("synthesise", "Writing");
+    expect(rowLink(row, rows, "t1", "baseline", false)).toEqual({ href: "/tasks/t1/result?view=baseline", label: "Baseline" });
   });
 
   it("links a step still to come nowhere", () => {

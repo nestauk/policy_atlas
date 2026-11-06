@@ -20,32 +20,22 @@ export function capitalise(value: string): string {
   return value.length === 0 ? value : value[0].toUpperCase() + value.slice(1);
 }
 
-/** "from your evidence search", naming the report section it was drawn
- *  from when that was recorded (task 045, F3). */
-function fromEvidenceSearch(fromSection: string | null | undefined): string {
-  return fromSection != null && fromSection.trim() !== ""
-    ? `from your evidence search · ${fromSection.trim()}`
-    : "from your evidence search";
-}
+/** The origin words, one vocabulary from the first row of the build to the
+ *  option card (round 10, C1). The one place the `origin` literal becomes
+ *  words. */
+export const ORIGIN_WORDS: Record<OptionSummaryOut["origin"], string> = {
+  from_evidence_search: "from your report",
+  suggested: "suggested by Policy Atlas",
+  added_by_you: "added by you",
+  clustered: "found in the evidence",
+};
 
-/** The origin tag's exact wording (contract § Terms "entrant"; deliverable
- *  9's list view spec). `clustered` carries the document count; the other
- *  three are fixed phrases (the evidence-search one with its section). */
-export function originLabel(
-  origin: OptionSummaryOut["origin"],
-  documentCount: number,
-  fromSection?: string | null,
-): string {
-  switch (origin) {
-    case "clustered":
-      return `clustered from ${countOf(documentCount, "document", "documents")}`;
-    case "suggested":
-      return "suggested by Policy Atlas";
-    case "from_evidence_search":
-      return fromEvidenceSearch(fromSection);
-    case "added_by_you":
-      return "added by you";
-  }
+/** The option card's origin: the row's words, and for an option drawn from
+ *  the linked report the section it came from (task 045, F3; round 10, C1:
+ *  "from your report · <section>"). */
+export function originLabel(origin: OptionSummaryOut["origin"], fromSection?: string | null): string {
+  const section = fromSection?.trim() ?? "";
+  return origin === "from_evidence_search" && section !== "" ? `${ORIGIN_WORDS[origin]} · ${section}` : ORIGIN_WORDS[origin];
 }
 
 /** One relation, rendered from this option's side (contract § Terms
@@ -80,29 +70,36 @@ export function joinAnd(parts: readonly string[]): string {
 /** The note on the documents line about how they were read (task 046, amendment 4, R81). */
 export const ABSTRACTS_NOTE = "read from titles and abstracts only";
 
-/** The short origin: the count says "clustered"; the other three origins
- *  are the tag itself (the snapshot cell and the row meta). */
-export function originShort(
-  origin: OptionSummaryOut["origin"],
-  fromSection?: string | null,
-): string | null {
-  return origin === "clustered" ? null : originLabel(origin, 0, fromSection);
-}
+/** The words for an option with no in-scope evidence, as plain text at the
+ *  end of the row's meta line (round 10: no chip for a settled state). */
+export const NO_IN_SCOPE_WORDS = "No in-scope evidence";
 
-/** A list row's grey meta parts after the lever type (task 046, amendment 4, R85):
- *  the origin when it is not "clustered", the relations, then the evidence signal's
- *  own parts (no document count of its own). "searching for its evidence…" stands
- *  alone while the option's own search runs. */
-export function rowMetaParts(option: OptionSummaryOut): string[] {
-  const parts: string[] = [];
-  const place = placeWord(option.shortlist?.state);
-  if (place !== null) parts.push(place);
-  const origin = originShort(option.origin, option.from_section);
-  if (origin !== null) parts.push(origin);
-  for (const relation of option.relations ?? []) parts.push(relationLabel(relation));
-  if (option.search_pending) parts.push("searching for its evidence…");
-  else parts.push(...evidenceSignal(option).split(" · "));
-  return parts;
+/**
+ * A list row's meta fields after the lever (round 10, finding 6; task 046,
+ * amendment 4, R85): always the same fields in the same order, so a reader
+ * scans them in place. The theme when the list is not grouped by theme, the
+ * relations, then the evidence signal's own parts (no document count of its
+ * own), then "No in-scope evidence" when that holds. "searching for its
+ * evidence…" stands for the signal while the option's own search runs. The
+ * origin sits beside the name and the shortlist state is the row's toggle,
+ * so neither repeats here.
+ *
+ * Args:
+ *   option: The option's summary.
+ *   theme: The theme's name to show, or null when the grouping already says it.
+ *
+ * Returns:
+ *   The fields, each one whole (a line wraps between fields, never inside a
+ *   middot).
+ */
+export function rowMetaFields(option: OptionSummaryOut, theme: string | null): string[] {
+  const fields: string[] = [];
+  if (theme !== null) fields.push(theme);
+  for (const relation of option.relations ?? []) fields.push(relationLabel(relation));
+  if (option.search_pending) fields.push("searching for its evidence…");
+  else fields.push(...evidenceSignal(option).split(" · "));
+  if (option.no_in_scope_evidence) fields.push(NO_IN_SCOPE_WORDS);
+  return fields;
 }
 
 /** A lever type as the noun a theme heading uses ("services, subsidies
@@ -199,8 +196,10 @@ export function leverDefinitionFor(
   return typed === undefined ? current : definitionSentence(typed.definition);
 }
 
-export const SCOPING_PASS_SENTENCE =
-  "Screened on titles and abstracts · no full texts collected · document set not confirmed";
+/** The line under the longlist's counts that says how its documents were
+ *  read (round 10, C4: it replaces the "scoping pass" chip and its hover
+ *  sentence). */
+export const READ_FROM_ABSTRACTS = "Read from titles and abstracts";
 
 
 type LonglistCountsOut = components["schemas"]["LonglistCountsOut"];
@@ -289,16 +288,19 @@ export const GRID_COLUMN_LINES: readonly (ProfileLineKey | "ambition")[] = [
   "potential_impact",
 ];
 
-/** The shape every tinted word shares (level words, authority words). */
-export const WORD_TINT_BASE = "inline-block px-1.5 py-0.5 text-meta font-semibold leading-tight";
+/** A marked level word (round 10, lead ruling on finding 7): one Navy look
+ *  for both directions, the word itself saying which way ("Quicker",
+ *  "Higher"), after a 6 px Navy square; no tint, so no colour reads as good
+ *  or bad. A line with no mark reads "Middle" in Grey. */
+export const LEVEL_MARKED_CLASS = "inline-flex items-center gap-1.5 text-meta font-semibold text-navy";
+export const LEVEL_MIDDLE_CLASS = "text-meta font-semibold text-grey";
 
-/** The tint behind a level word: pale aqua for the lower level, pale violet
- *  for the higher one; navy text on both (the lead's proposal, for the owner
- *  to decide on the built screen). */
-export const LEVEL_WORD_CLASS: Record<Mark, string> = {
-  less: `${WORD_TINT_BASE} bg-aqua-tint text-navy`,
-  more: `${WORD_TINT_BASE} bg-violet-tint text-navy`,
-};
+/** The collapsed profile's summary of its unmarked lines (round 10): "Middle
+ *  on 6 of 8" once, rather than "Middle" in six cells; "No line stands out"
+ *  when no line carries a mark (C5). */
+export function middleSummary(unmarked: number, total: number): string {
+  return unmarked >= total ? "No line stands out" : `${MIDDLE_WORD} on ${unmarked} of ${total}`;
+}
 
 /** The authority labels' words (R43); a null body reads "another body". */
 export const AUTHORITY_LABELS: Record<AuthorityOut["label"], string> = {
@@ -399,18 +401,6 @@ export function evidenceSignal(
   return parts.join(" · ");
 }
 
-/** The opener of the card's Evidence section (R79, R82), by code. */
-export function evidenceOpener(evaluated: number, documents: number): string {
-  if (documents === 0) return "No document names this option yet.";
-  if (evaluated === 0) {
-    return `No evaluations. ${countOf(documents, "document describes", "documents describe")} or recommend${documents === 1 ? "s" : ""} it.`;
-  }
-  const describing = documents - evaluated;
-  const more =
-    describing > 0 ? ` ${describing} more describe${describing === 1 ? "s" : ""} or recommend${describing === 1 ? "s" : ""} it.` : "";
-  return `Evaluated in ${countOf(evaluated, "document", "documents")}.${more}`;
-}
-
 const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 
 /** The one line that stands for "Your outcomes" when no evaluation measured any (R79). */
@@ -460,13 +450,15 @@ export function deliveredLeadIn(settings: readonly string[] | undefined): string
   return phrases.length === 0 ? "It typically involves:" : `Delivered ${joinAnd(phrases)}. It typically involves:`;
 }
 
-/** One line of the callout under the description (R78). */
+/** One line of the notices under the description (R78; round 10: a word in
+ *  its tone, then the sentence, no chip). */
 export type ConstraintNotice = {
   key: string;
   /** The constraint's label, so the card can drop the notice the exclusion line already states. */
   constraint: string;
-  tone: "red" | "yellow" | "soft";
-  chip: string;
+  /** Red only for a break (a failure); Navy for a likely shortfall; Grey when it cannot be said. */
+  tone: "red" | "navy" | "grey";
+  word: string;
   text: string;
 };
 
@@ -484,17 +476,17 @@ export function constraintNotices(
     if (BUILT_IN_CHECK_IDS.includes(judgement.constraint_id)) continue;
     const label = constraintLabel(judgement.constraint_text);
     if (judgement.verdict === "breaks") {
-      notices.push({ key: judgement.constraint_id, constraint: label, tone: "red", chip: "breaks", text: `Breaks "${label}". ${judgement.reason}` });
+      notices.push({ key: judgement.constraint_id, constraint: label, tone: "red", word: "Breaks", text: `"${label}". ${judgement.reason}` });
     } else if (judgement.verdict === "cannot_check") {
-      notices.push({ key: judgement.constraint_id, constraint: label, tone: "soft", chip: "cannot check", text: `Cannot check "${label}". ${judgement.reason}` });
+      notices.push({ key: judgement.constraint_id, constraint: label, tone: "grey", word: "Cannot check", text: `"${label}". ${judgement.reason}` });
     }
   }
   for (const guess of guesses) {
     const label = constraintLabel(guess.constraint_text);
     if (guess.leaning === "likely_falls_short") {
-      notices.push({ key: guess.constraint_id, constraint: label, tone: "yellow", chip: "may fall short", text: `"${label}". ${guess.guess}` });
+      notices.push({ key: guess.constraint_id, constraint: label, tone: "navy", word: "May fall short", text: `"${label}". ${guess.guess}` });
     } else if (guess.leaning === "cannot_say") {
-      notices.push({ key: guess.constraint_id, constraint: label, tone: "soft", chip: "cannot check", text: `Cannot check "${label}". ${guess.guess}` });
+      notices.push({ key: guess.constraint_id, constraint: label, tone: "grey", word: "Cannot check", text: `"${label}". ${guess.guess}` });
     }
   }
   return notices;
@@ -560,26 +552,17 @@ export function maturityPhrase(
   return parts.join(", ");
 }
 
-type ShortlistState = NonNullable<OptionSummaryOut["shortlist"]>["state"];
 
 // --- The longlist while it is being built (task 058, N24; annex scene 15) ---
 
 type OptionProgressOut = components["schemas"]["OptionProgressOut"];
 type LonglistOut = components["schemas"]["LonglistOut"];
 
-/** The small grey origin word on a row while the longlist builds. The one
- *  place the `origin` literal becomes words. */
-export const ORIGIN_WORDS: Record<OptionSummaryOut["origin"], string> = {
-  from_evidence_search: "from your report",
-  suggested: "suggested",
-  added_by_you: "added by you",
-  clustered: "found in the evidence",
-};
-
-/** The clustering stage's note on the stage line (annex scene 15). */
-
-/** The word a shortlisted row gains on the shortlist wave. */
-export const SHORTLIST_WORD = "Shortlist";
+/** The shortlist toggle's words (round 10, lead ruling on finding 6): the
+ *  state a row holds, said in words beside the row's name, from the
+ *  shortlist wave of the build to the finished list. */
+export const SHORTLISTED_WORD = "Shortlisted";
+export const ADD_TO_SHORTLIST_WORDS = "Add to shortlist";
 
 /** A longlist walk's stages (the server's keys). "shortlist" is left out on
  *  purpose: a walk that runs only that stage is the standalone shortlist
@@ -621,22 +604,12 @@ export function isLonglistBuilding(
   return stage != null && LONGLIST_WALK_STAGES.has(stage);
 }
 
-/** The stage line's words: the server's label, then what it is doing in the
- *  server's words (the clustering stage's note included, task 058 N17). A
- *  detail that only repeats the label is dropped. */
-export function stageLineText(label: string | null | undefined, detail: string | null | undefined): string | null {
-  const head = (label ?? "").trim();
-  const tail = (detail ?? "").trim();
-  const parts = [head, tail.toLowerCase() === head.toLowerCase() ? "" : tail].filter((part) => part !== "");
-  return parts.length === 0 ? null : parts.join(" · ");
-}
-
 const FOUND_FORMAT = new Intl.NumberFormat("en-GB");
 
-/** A row's right-hand line: its own search, then its document count once the longlist exists. */
-export type BuildingStatus =
-  | { kind: "queued" | "searching" | "searched" | "failed"; text: string }
-  | { kind: "documents"; text: string };
+/** A row's right-hand line while its own search is the news; nothing once
+ *  the longlist read has the option (its evidence then sits on the meta
+ *  line, so the count is said once: round 10, finding 2 with R85). */
+export type BuildingStatus = { kind: "queued" | "searching" | "searched" | "failed"; text: string } | null;
 
 /** The right-hand line while the option's search is the news. */
 export function searchStatusLine(row: Pick<OptionProgressOut, "search_status" | "found">): BuildingStatus {
@@ -655,17 +628,20 @@ export function searchStatusLine(row: Pick<OptionProgressOut, "search_status" | 
   }
 }
 
-/** One row of the longlist being built. */
+/** One row of the longlist, built or being built: one anatomy from the
+ *  first row of the build to the finished list (round 10, finding 2). */
 export interface BuildingRow {
   id: string;
   name: string;
-  /** The grey origin word ("from your report", "found in the evidence"). */
+  description: string;
+  /** The grey origin words ("from your report", "found in the evidence"). */
   origin: string;
   status: BuildingStatus;
-  /** The lever line, from the profile wave on. */
+  /** The lever, from the profile wave on. */
   lever: string | null;
-  /** The exclusion's one-line reason, from the constrain wave on. */
-  reason: string | null;
+  /** The longlist read's summary, from clustering on: the meta line, the
+   *  exclusion and the shortlist state come from it. */
+  summary: OptionSummaryOut | null;
   /** True from the shortlist wave on, for a row that holds a place. */
   shortlisted: boolean;
   /** The suggestions clustering folded into this option, in row order. */
@@ -676,6 +652,8 @@ export interface BuildingRow {
 export interface BuildingGroup {
   key: string;
   title: string | null;
+  /** The theme's description, "" when it has none. */
+  description: string;
   rows: BuildingRow[];
 }
 
@@ -694,10 +672,16 @@ function profiled(option: OptionSummaryOut): boolean {
  *
  * The options read gives the rows and their order from the end of suggest,
  * with each option's search and, from clustering on, the folds. Once the
- * longlist read exists it fills them in, in waves: document counts, then
- * lever lines, then exclusions (into their own group), then themes (rows
- * regroup under them), then shortlist marks. Rows the clustering stage added
- * join the end; a folded row moves under the option it was folded into.
+ * longlist read exists it fills them in, in waves: the evidence line, then
+ * the lever, then exclusions (into their own group), then themes (rows move
+ * under them), then shortlist marks. Rows the clustering stage added join
+ * the end; a folded row moves under the option it was folded into. The
+ * finished list is the same layout (round 10, finding 2): without the
+ * options read (a finished task opened cold) the rows come from the
+ * longlist read alone.
+ *
+ * Within a theme the rows run by lever, then name, as the finished list
+ * sorts them, so the walk's end moves nothing.
  *
  * Args:
  *   rows: The options read's rows, oldest first.
@@ -711,15 +695,22 @@ export function buildingLayout(rows: readonly OptionProgressOut[], longlist: Lon
   const ids = new Set(rows.map((row) => row.option_id));
   const live = rows.filter((row) => row.merged_into_option_id == null || !ids.has(row.merged_into_option_id));
 
-  const toRow = (id: string, name: string, origin: OptionSummaryOut["origin"], search: BuildingStatus): BuildingRow => {
+  const toRow = (
+    id: string,
+    name: string,
+    description: string,
+    origin: OptionSummaryOut["origin"],
+    search: BuildingStatus,
+  ): BuildingRow => {
     const summary = summaries.get(id);
     return {
       id,
       name: summary?.name ?? name,
+      description: (summary?.description ?? description).trim(),
       origin: ORIGIN_WORDS[summary?.origin ?? origin],
-      status: summary !== undefined ? { kind: "documents", text: countOf(summary.document_count, "document", "documents") } : search,
+      status: summary !== undefined ? null : search,
       lever: summary !== undefined && profiled(summary) ? leverLabel(summary) : null,
-      reason: summary?.state === "excluded" ? (summary.exclusion?.reason ?? "").trim() || null : null,
+      summary: summary ?? null,
       shortlisted: summary !== undefined && holdsPlace(summary),
       folded: rows
         .filter((other) => other.merged_into_option_id === id)
@@ -728,12 +719,13 @@ export function buildingLayout(rows: readonly OptionProgressOut[], longlist: Lon
   };
 
   const all: BuildingRow[] = [
-    ...live.map((row) => toRow(row.option_id, row.name, row.origin, searchStatusLine(row))),
-    // An option the longlist has that the options read does not (it should
-    // not happen; never drop a row the reader could otherwise see).
+    ...live.map((row) => toRow(row.option_id, row.name, row.description, row.origin, searchStatusLine(row))),
+    // An option the longlist has that the options read does not: every row
+    // of a finished list opened before the options read answers (and never
+    // drop a row the reader could otherwise see).
     ...(longlist?.options ?? [])
       .filter((option) => !ids.has(option.option_id))
-      .map((option) => toRow(option.option_id, option.name, option.origin, { kind: "documents", text: "" })),
+      .map((option) => toRow(option.option_id, option.name, option.description, option.origin, null)),
   ];
   const excludedIds = new Set(
     [...summaries.values()].filter((option) => option.state === "excluded").map((option) => option.option_id),
@@ -743,18 +735,35 @@ export function buildingLayout(rows: readonly OptionProgressOut[], longlist: Lon
 
   const themes = longlist?.themes ?? [];
   if (themes.length === 0) {
-    return { groups: included.length > 0 ? [{ key: "all", title: null, rows: included }] : [], excluded };
+    return { groups: included.length > 0 ? [{ key: "all", title: null, description: "", rows: included }] : [], excluded };
   }
+  const byLever = byLeverThenName(longlist?.lever_types ?? []);
+  const sorted = (members: BuildingRow[]) =>
+    [...members].sort((a, b) =>
+      a.summary !== null && b.summary !== null
+        ? byLever(a.summary, b.summary)
+        : Number(a.summary === null) - Number(b.summary === null) || a.name.localeCompare(b.name),
+    );
   const placed = new Set<string>();
   const groups: BuildingGroup[] = themes.map((theme) => {
     const members = new Set(theme.option_ids ?? []);
     const themed = included.filter((row) => members.has(row.id) && !placed.has(row.id));
     for (const row of themed) placed.add(row.id);
-    return { key: theme.theme_id, title: theme.name, rows: themed };
+    return { key: theme.theme_id, title: theme.name, description: themeSummary(theme.description ?? ""), rows: sorted(themed) };
   });
   const rest = included.filter((row) => !placed.has(row.id));
-  if (rest.length > 0) groups.push({ key: "no-theme", title: "No theme", rows: rest });
+  if (rest.length > 0) groups.push({ key: "no-theme", title: "No theme", description: "", rows: sorted(rest) });
   return { groups: groups.filter((group) => group.rows.length > 0), excluded };
+}
+
+/**
+ * What the regrouping animation compares: the groups and their rows in
+ * order, and the excluded rows. When it changes the rows move to their new
+ * places (a View Transition); any other change lands in place.
+ */
+export function layoutSignature(layout: BuildingLayout): string {
+  const groups = layout.groups.map((group) => `${group.key}:${group.rows.map((row) => row.id).join(",")}`);
+  return `${groups.join("|")}#${layout.excluded.map((row) => row.id).join(",")}`;
 }
 
 /** Whether the option holds a place (a pick or one added by you); a
@@ -764,9 +773,3 @@ export function holdsPlace(option: Pick<OptionSummaryOut, "shortlist">): boolean
   return state === "proposed" || state === "added_by_you";
 }
 
-/** The one word the grey line gains for a place; nothing for set-aside. */
-export function placeWord(state: ShortlistState | null | undefined): string | null {
-  if (state === "proposed") return "Policy Atlas's pick";
-  if (state === "added_by_you") return "Added by you";
-  return null;
-}

@@ -138,20 +138,9 @@ export function decisionProse(decision: ResolvedDecision): string | null {
  *  Evidence search's card. */
 export const BASELINE_GATE_KIND = "baseline_confirm";
 
-/** The gate card's heading — the same words the backend's deterministic
- *  render leads with (`runtime/baseline_gate.GATE_HEADING`), so the card and
- *  the durable content of record cannot say different things. */
-export const BASELINE_GATE_HEADING = "Confirm the plan against the baseline";
-
-/** The label over the quoted baseline prose. */
-export const BASELINE_KEY_ASSUMPTION_LABEL = "Key assumption";
-
 /** An honest absence: a stub or degraded baseline carries no key-assumption
  *  section, and the card says so rather than quoting nothing. */
 export const BASELINE_KEY_ASSUMPTION_ABSENT = "The baseline records no key assumption.";
-
-/** The heading over the plan settings the walk actually ran from. */
-export const BASELINE_SETTINGS_HEADING = "Settings";
 
 /** The gate's own display copy, read off the check-in bundle. */
 export interface BaselineGateCard {

@@ -17,6 +17,7 @@ import {
   researchApproachLabel,
   SCOPING_DEPTH_LABEL,
   SCOPING_STEERING_MODE_LABEL,
+  scopingPlanSummary,
   SEARCH_EFFORT_LABEL,
   SEARCH_SCOPE_HINT,
   SEARCH_SCOPE_RECORD_CAP,
@@ -245,5 +246,16 @@ describe("RISK_APPETITE_LABELS", () => {
       open_to_untested: "Ambitious: the biggest ideas, even those never implemented",
     });
     expect(Object.keys(RISK_APPETITE_LABELS).sort()).toEqual(["mostly_tried", "open_to_untested", "tried_only"]);
+  });
+});
+
+describe("scopingPlanSummary", () => {
+  it("names the scoping plan and its time band, as the annex's plan card line", () => {
+    expect(scopingPlanSummary({ time_band: "~20 to 40 min" })).toBe("Scoping plan · ~20 to 40 min");
+  });
+
+  it("leaves the band out while the draft has none", () => {
+    expect(scopingPlanSummary({ time_band: null })).toBe("Scoping plan");
+    expect(scopingPlanSummary(undefined)).toBe("Scoping plan");
   });
 });

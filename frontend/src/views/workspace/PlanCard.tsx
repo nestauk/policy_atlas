@@ -9,7 +9,7 @@ import { Collapse } from "../../ui/motion/Collapse";
 import { isScoping } from "../scopingActivity";
 import type { PlanOverlay } from "./planOverlay";
 import { usePlanStart, useScopingPlanStart } from "./planStart";
-import { researchApproachLabel } from "./planVocabulary";
+import { researchApproachLabel, scopingPlanSummary } from "./planVocabulary";
 import { LINK_CLASS } from "../../ui/brand/inlineActions";
 
 type PlanDraft = components["schemas"]["PlanDraft"];
@@ -101,7 +101,9 @@ export function PlanCard({
   return (
     <Collapse show={!started}>
     <PlanReadyBox arrivalId={`plan-card:${planOut?.version ?? ""}`} leaving={started}>
-      {plan !== null && <p className="text-body font-semibold text-navy">{planSummary(plan)}</p>}
+      <p className="text-body font-semibold text-navy">
+        {plan !== null ? planSummary(plan) : scopingPlanSummary(planOut?.scoping)}
+      </p>
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-3">
         {showStart && (
           <Button

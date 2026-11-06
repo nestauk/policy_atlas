@@ -94,23 +94,28 @@ describe("OptionCard — shortlist (task 055)", () => {
     expect(screen.queryByText(/^Evaluated · /)).not.toBeInTheDocument();
   });
 
-  it("offers Remove from shortlist on a place and Add to shortlist on an option holding none", async () => {
+  // Round 10 (finding 6): the state is a toggle in words, pressed on a place.
+  it("shows Shortlisted, pressed, on a place, and pressing it gives the place up", async () => {
     const user = userEvent.setup();
     renderCard(MOCK_OPTION_ID_ADDED_BY_YOU);
-    await user.click(screen.getByRole("button", { name: "Remove from shortlist" }));
+    const toggle = screen.getByRole("button", { name: "Shortlisted" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await user.click(toggle);
     expect(unshortlistMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_ADDED_BY_YOU }, expect.anything());
   });
 
   it("offers Add to shortlist on a set-aside option", async () => {
     const user = userEvent.setup();
     renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
-    await user.click(screen.getByRole("button", { name: "Add to shortlist" }));
+    const toggle = screen.getByRole("button", { name: "Add to shortlist" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await user.click(toggle);
     expect(shortlistMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_NO_IN_SCOPE }, expect.anything());
   });
 
   it("offers no shortlist action on an excluded option", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    expect(screen.queryByRole("button", { name: /shortlist/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /shortlist/i })).not.toBeInTheDocument();
   });
 });
 
@@ -123,11 +128,12 @@ describe("OptionCard", () => {
     );
     expect(screen.getByRole("heading", { name: "National sanctions regime" })).toBeInTheDocument();
     expect(screen.queryByText("scoping pass")).not.toBeInTheDocument();
+    // The breadcrumb names the page's kind: no "Option" label (round 10, C4).
+    expect(screen.queryByText(/^Option$/i)).not.toBeInTheDocument();
     expect(screen.getByText("A duty to withdraw benefits on refusal of an offer")).toBeInTheDocument();
-    // One grey line: lever type, origin, relations (and "also found as" when present).
-    const line = screen.getByText(
-      "Enforce existing powers · clustered from 6 documents · part of Universal youth offer bundle",
-    );
+    // One grey line: origin, relations (and "also found as" when present);
+    // the lever is said once, in How it works (round 10, finding 7).
+    const line = screen.getByText("found in the evidence · part of Universal youth offer bundle");
     expect(line).toHaveClass("text-grey");
     // No snapshot boxes.
     expect(screen.queryByText("Origin")).not.toBeInTheDocument();
@@ -161,9 +167,7 @@ describe("OptionCard", () => {
       from_section: "What works for young people",
       relations: [],
     });
-    expect(
-      screen.getByText("Provide a service · from your evidence search · What works for young people"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("from your report · What works for young people")).toBeInTheDocument();
   });
 
   // Owner ruling 2026-09-24: a duplicate is merged into the kept option.
@@ -206,7 +210,7 @@ describe("OptionCard", () => {
     expect(reason).toHaveClass("text-body");
     expect(reason).not.toHaveClass("text-meta");
     expect(screen.getByText("A duty to withdraw benefits on refusal of an offer").closest("li")?.parentElement).toHaveClass("text-body");
-    const header = screen.getByText(/^Enforce existing powers · clustered/);
+    const header = screen.getByText(/^found in the evidence · part of/);
     expect(header).toHaveClass("text-body");
     expect(header).not.toHaveClass("text-meta");
   });
@@ -252,8 +256,9 @@ describe("OptionCard", () => {
     expect(screen.queryByText(/Outcomes measured/)).not.toBeInTheDocument();
   });
 
-  // The profile section: collapsed = eight cells, with "Middle" for no mark.
-  it("opens 'What it would take' collapsed: eight cells in order, 'Middle' for no mark", () => {
+  // The profile section: collapsed = the marked cells, then "Middle" said
+  // once for the rest (round 10, lead ruling on finding 7).
+  it("opens 'What it would take' collapsed: the marked cells in order, then Middle once", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
     const at = (title: string) => headings.findIndex((text) => text?.startsWith(title));
@@ -267,23 +272,28 @@ describe("OptionCard", () => {
     expect(cells.map((cell) => cell.textContent)).toEqual([
       "AmbitionBigger",
       "CostCheaper",
-      "Time to set upMiddle",
       "Time to effectSlower",
-      "Workforce requirementsMiddle",
       "Coordination requirementsHigher",
-      "Delivery complexityMiddle",
       "Potential impactHigher",
     ]);
+    expect(within(section).getByText("Middle on 3 of 8")).toBeInTheDocument();
+    // One Navy look for both directions, the word saying which way; no tint.
+    const bigger = within(section).getByText("Bigger");
+    expect(bigger).toHaveClass("text-navy");
+    expect(bigger.className).not.toMatch(/aqua|violet/);
+    expect(within(cells[1]).getByText("Cheaper").className).toBe(bigger.className);
     expect(within(section).queryByText("Who decides")).not.toBeInTheDocument();
     expect(within(section).queryByText("Dependencies")).not.toBeInTheDocument();
     expect(within(section).queryByRole("link")).not.toBeInTheDocument();
     expect(within(section).queryByText(/Costs are mostly staff time/)).not.toBeInTheDocument();
   });
 
-  it("says 'Middle' for an ambition with no mark", () => {
+  it("counts an ambition with no mark in the Middle summary rather than a cell of its own", () => {
     renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
     const section = document.getElementById("what-it-would-take") as HTMLElement;
-    expect(within(section).getAllByRole("listitem")[0]).toHaveTextContent("AmbitionMiddle");
+    const cells = within(section).queryAllByRole("listitem").map((cell) => cell.textContent ?? "");
+    expect(cells.some((text) => text.startsWith("Ambition"))).toBe(false);
+    expect(within(section).getByText(/^Middle on \d of 8$|^No line stands out$/)).toBeInTheDocument();
   });
 
   it("shows a table after a click on the heading, Ambition first, then the nine lines", async () => {
@@ -406,8 +416,10 @@ describe("OptionCard", () => {
     const signal = screen.getByText(
       "3 documents evaluated it · 3 more describe it · Evaluated in the United Kingdom · Measures 1 of your 2 outcomes",
     );
-    const grey = screen.getByText(/^Enforce existing powers · clustered/);
+    const grey = screen.getByText(/^found in the evidence · part of/);
     expect(grey.compareDocumentPosition(signal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The counts are said once: no opener repeats them in the Evidence section (C7).
+    expect(within(evidenceSection()).queryByText(/^Evaluated in \d+ documents\./)).not.toBeInTheDocument();
   });
 
   it("shows the evidence signal in its no-evaluation, no-place and no-document forms", () => {
@@ -470,13 +482,14 @@ describe("OptionCard", () => {
     expect(screen.queryByText("Feature 6")).not.toBeInTheDocument();
   });
 
-  it("opens the Evidence section with the opener in its three forms", () => {
+  // Round 10, C7: the header's evidence line says the counts; the section
+  // opens with the maturity line, and only an option with no document says so.
+  it("opens the Evidence section with the maturity line, not the counts again", () => {
     const first = renderCard(MOCK_OPTION_ID_EXCLUDED);
-    expect(within(evidenceSection()).getAllByText("Evaluated in 3 documents. 3 more describe or recommend it.").length).toBeGreaterThan(0);
+    const opening = within(evidenceSection()).getAllByText("Evaluated · 1 RCT, 2 observational")[0];
+    expect(opening).toHaveClass("text-navy");
+    expect(within(evidenceSection()).queryByText(/describe or recommend it\.$/)).not.toBeInTheDocument();
     first.unmount();
-    const second = renderCard(MOCK_OPTION_ID_EXCLUDED, { evaluated_count: 0, document_count: 4 });
-    expect(within(evidenceSection()).getAllByText("No evaluations. 4 documents describe or recommend it.").length).toBeGreaterThan(0);
-    second.unmount();
     renderCard(MOCK_OPTION_ID_EXCLUDED, { evaluated_count: 0, document_count: 0, documents: [] });
     expect(within(evidenceSection()).getAllByText("No document names this option yet.").length).toBeGreaterThan(0);
   });
@@ -523,14 +536,15 @@ describe("OptionCard", () => {
     expect(screen.queryByText("Your outcomes")).not.toBeInTheDocument();
   });
 
-  it("shows the place sentences in served order, the Where country tinted", () => {
+  it("shows the place sentences in served order, the Where country marked in Navy, no tint", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     const block = evidenceSection();
     const places = within(block).getAllByRole("term").map((term) => term.textContent);
     expect(places).toEqual(["United Kingdom", "No single place"]);
     const terms = within(block).getAllByRole("term");
-    expect(terms[0].closest("div")).toHaveClass("bg-aqua-tint");
-    expect(terms[1].closest("div")).not.toHaveClass("bg-aqua-tint");
+    expect(terms[0].querySelector(".bg-navy")).not.toBeNull();
+    expect(terms[1].querySelector(".bg-navy")).toBeNull();
+    expect(block.querySelector("[class*='aqua']")).toBeNull();
     expect(within(block).getByText(/One moderate local evaluation of the Benefit sanctions pilot/)).toBeInTheDocument();
   });
 
@@ -539,26 +553,43 @@ describe("OptionCard", () => {
     expect(screen.queryByText("Where it has been evaluated")).not.toBeInTheDocument();
   });
 
-  it("puts the documents behind a closed disclosure with the note, in two groups", () => {
+  /** Open the documents disclosure (round 10: the chevron with Show / Hide). */
+  const openDocuments = async () => {
+    const toggle = within(evidenceSection()).getByRole("button", { name: /^Documents · / });
+    await userEvent.click(toggle);
+    return toggle;
+  };
+
+  it("puts the documents behind a closed disclosure with the note, in two groups", async () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       documents: [doc(1, "evaluated"), doc(2, "evaluated"), doc(3, "described"), doc(4, "mentioned"), doc(5, "recommended")],
     });
-    const details = evidenceSection().querySelector("details") as HTMLDetailsElement;
-    expect(details.open).toBe(false);
-    expect(within(details).getByText("Documents · 5 · read from titles and abstracts only")).toBeInTheDocument();
-    expect(within(details).getByText("Evaluated it · 2")).toBeInTheDocument();
-    expect(within(details).getByText("Describe or recommend it · 3")).toBeInTheDocument();
-    const titles = within(details).getAllByRole("link").map((link) => link.textContent);
+    const section = evidenceSection();
+    expect(section.querySelector("details")).toBeNull();
+    const toggle = within(section).getByRole("button", { name: /^Documents · 5 · read from titles and abstracts only/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(within(toggle).getByText("Show")).toBeInTheDocument();
+    expect(within(section).queryByText("Paper 1")).not.toBeInTheDocument();
+    await openDocuments();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(within(toggle).getByText("Hide")).toBeInTheDocument();
+    expect(within(section).getByText("Evaluated it · 2")).toBeInTheDocument();
+    expect(within(section).getByText("Describe or recommend it · 3")).toBeInTheDocument();
+    const titles = within(section)
+      .getAllByRole("link")
+      .map((link) => link.textContent)
+      .filter((text) => text?.startsWith("Paper"));
     expect(titles).toEqual(["Paper 1", "Paper 2", "Paper 3", "Paper 4", "Paper 5"]);
   });
 
-  it("leaves out a group with no documents", () => {
+  it("leaves out a group with no documents", async () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, { documents: [doc(1, "described")] });
+    await openDocuments();
     expect(screen.queryByText(/^Evaluated it · /)).not.toBeInTheDocument();
     expect(screen.getByText("Describe or recommend it · 1")).toBeInTheDocument();
   });
 
-  it("shows a document in three lines: title, record parts, quality parts", () => {
+  it("shows a document in three lines: title, record parts, quality parts", async () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       documents: [
         doc(1, "evaluated", {
@@ -570,6 +601,7 @@ describe("OptionCard", () => {
         }),
       ],
     });
+    await openDocuments();
     const title = screen.getByRole("link", { name: "Paper 1" });
     const recordLine = title.closest("li")?.querySelectorAll("p")[1] as HTMLElement;
     expect(recordLine).toHaveTextContent(
@@ -584,6 +616,7 @@ describe("OptionCard", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       documents: Array.from({ length: 7 }, (_, index) => doc(index, "evaluated")),
     });
+    await openDocuments();
     expect(screen.queryByText("Paper 5")).not.toBeInTheDocument();
     expect(screen.getByText("Paper 4")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Show all 7" }));
@@ -591,10 +624,11 @@ describe("OptionCard", () => {
     expect(screen.queryByRole("button", { name: /Show all/ })).not.toBeInTheDocument();
   });
 
-  it("links '+N more' to the dossier with the option, only when several records name the option", () => {
+  it("links '+N more' to the dossier with the option, only when several records name the option", async () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       documents: [doc(1, "evaluated", { records_count: 3 }), doc(2, "evaluated", { records_count: 1 })],
     });
+    await openDocuments();
     expect(screen.getByRole("link", { name: "+2 more" })).toHaveAttribute(
       "href",
       `/tasks/${TASK_ID}/sources/all?source=doc-1&option=${MOCK_OPTION_ID_EXCLUDED}`,
@@ -602,7 +636,7 @@ describe("OptionCard", () => {
     expect(screen.getAllByRole("link", { name: /more$/ })).toHaveLength(1);
   });
 
-  it("shows a linked-task document with its title and quality line only", () => {
+  it("shows a linked-task document with its title and quality line only", async () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       documents: [
         doc(1, "mentioned", {
@@ -613,6 +647,7 @@ describe("OptionCard", () => {
         }),
       ],
     });
+    await openDocuments();
     expect(screen.getByText("Paper 1")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Paper 1" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Ignored/)).not.toBeInTheDocument();
@@ -620,7 +655,7 @@ describe("OptionCard", () => {
     expect(screen.getByText("Strong · Systematic review · 2021")).toBeInTheDocument();
   });
 
-  it("shows the thin card: the opener, one outcomes line and no place block", () => {
+  it("shows the thin card: one outcomes line and no place block, the counts in the header", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       evaluated_count: 0,
       document_count: 2,
@@ -632,7 +667,7 @@ describe("OptionCard", () => {
       },
     });
     const section = evidenceSection();
-    expect(within(section).getAllByText("No evaluations. 2 documents describe or recommend it.").length).toBeGreaterThan(0);
+    expect(screen.getByText("No evaluations, 2 documents describe it")).toBeInTheDocument();
     expect(within(section).getByText("No evaluation measured any of your outcome.")).toBeInTheDocument();
     expect(within(section).queryByText("Where it has been evaluated")).not.toBeInTheDocument();
   });
@@ -672,32 +707,43 @@ describe("OptionCard", () => {
       renderCard(MOCK_OPTION_ID_EXCLUDED, {
         judgements: [{ constraint_id: "req-1", constraint_text: constraint, verdict: "breaks", reason: "It is a levy." }],
       });
-      const callout = screen.getByText(/^excluded$/).closest("p")?.parentElement;
+      const callout = screen.getByText("Excluded:").closest("p")?.parentElement;
       expect(callout).not.toBeNull();
       expect(callout?.querySelectorAll("p").length).toBe(1);
-      expect(screen.queryByText(/^breaks$/)).toBeNull();
+      expect(screen.queryByText("Breaks:")).toBeNull();
     });
 
-    it("shows a broken constraint with the red chip", () => {
+    // Round 10 (finding 7): a flat block on the sheet, no card and no chips;
+    // each notice a word in its tone, red only for a failure.
+    it("sits on the sheet as a flat block, never a card inside it", () => {
       calloutOf({ judgements: [judgement("req-1", "breaks")] });
-      expect(screen.getByText("breaks")).toBeInTheDocument();
-      expect(screen.getByText('Breaks "Rule req-1". Because.', { exact: false })).toBeInTheDocument();
+      const block = screen.getByText("Breaks:").closest("p")?.parentElement as HTMLElement;
+      expect(block.className).toContain("border-l");
+      expect(block.className).not.toMatch(/shadow|bg-paper/);
+      expect(block.querySelector("[class*='text-[11.5px]']")).toBeNull();
+    });
+
+    it("shows a broken constraint with its word in red", () => {
+      calloutOf({ judgements: [judgement("req-1", "breaks")] });
+      expect(screen.getByText("Breaks:")).toHaveClass("text-red");
+      expect(screen.getByText("Breaks:").closest("p")).toHaveTextContent('Breaks: "Rule req-1". Because.');
     });
 
     it("shows a constraint that cannot be checked in the grey form", () => {
       calloutOf({ judgements: [judgement("req-1", "cannot_check")] });
-      expect(screen.getByText('Cannot check "Rule req-1". Because.', { exact: false })).toBeInTheDocument();
+      expect(screen.getByText("Cannot check:")).toHaveClass("text-grey");
+      expect(screen.getByText("Cannot check:").closest("p")).toHaveTextContent('Cannot check: "Rule req-1". Because.');
     });
 
-    it("shows a guess that likely falls short with the yellow chip", () => {
+    it("shows a guess that likely falls short with its word in Navy", () => {
       calloutOf({ guesses: [guess("pref-1", "likely_falls_short")] });
-      expect(screen.getByText("may fall short")).toBeInTheDocument();
+      expect(screen.getByText("May fall short:")).toHaveClass("text-navy");
       expect(screen.getByText('"Rule pref-1". A guess.', { exact: false })).toBeInTheDocument();
     });
 
     it("shows a guess that cannot be said in the grey form", () => {
       calloutOf({ guesses: [guess("pref-1", "cannot_say")] });
-      expect(screen.getByText('Cannot check "Rule pref-1". A guess.', { exact: false })).toBeInTheDocument();
+      expect(screen.getByText("Cannot check:").closest("p")).toHaveTextContent('Cannot check: "Rule pref-1". A guess.');
     });
 
     it("shows nothing for a pass or a likely meets", () => {
@@ -724,7 +770,7 @@ describe("OptionCard", () => {
     const exported = Object.values(presentation).filter((value) => typeof value !== "function");
     expect(JSON.stringify(exported)).not.toMatch(/\bstud(y|ies)\b|\bserves?\b|aimed at/i);
     const samples = [
-      presentation.evidenceOpener(2, 5),
+      presentation.middleSummary(6, 8),
       presentation.evidenceSignal({
         document_count: 5,
         evaluated_count: 2,

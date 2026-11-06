@@ -41,7 +41,7 @@ import { JumpToEnd } from "./chat/JumpToEnd";
 import { useFooterReveal } from "./chat/useFooterReveal";
 import { usePinToBottom } from "./chat/usePinToBottom";
 import { AnsweredCheckIn } from "./AnsweredCheckIn";
-import { CheckInCard } from "./CheckInCard";
+import { CheckInCard, SettledGateCard } from "./CheckInCard";
 import { BASELINE_GATE_KIND } from "./checkInPresentation";
 import type { components } from "../../api/gen/types";
 import { PartCard, type PartState, type PlanStep, confirmTarget, derivePartStates, planSteps, settledSummary } from "./PartCard";
@@ -425,14 +425,13 @@ function DurableTurn({
       </div>
     );
   }
+  // A gate decision is said once, in the settled part card's language
+  // (round 10, finding 8): no user bubble beside it, no "recorded" line.
   if (kind === "decision" && turn.decision != null) {
     return (
-      <div className="space-y-6">
-        {!isConfirmTurn && <UserBubble text={turn.user_message} turnId={turn.client_turn_id} />}
-        <Arrival arrivalId={`decision:${turn.client_turn_id}`}>
-          <DecisionLine label={turn.decision.label} planVersion={turn.decision.plan_version} />
-        </Arrival>
-      </div>
+      <Arrival arrivalId={`decision:${turn.client_turn_id}`}>
+        <SettledGateCard label={turn.decision.label} />
+      </Arrival>
     );
   }
   // Task 045: a confirmed longlist verb (add · exclude · include again) is
@@ -822,7 +821,7 @@ export function TaskAgentPane({
               />
             ) : item.type === "gate_decision" ? (
               <Arrival key={`gate-decision-${item.decision.checkInId}`} arrivalId={`gate-decision:${item.decision.checkInId}`}>
-                <DecisionLine label={item.decision.label} planVersion={item.decision.planVersion} />
+                <SettledGateCard label={item.decision.label} />
               </Arrival>
             ) : item.type === "task_agent_turn" ? (
               <DurableTurn

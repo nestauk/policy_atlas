@@ -13,18 +13,18 @@ import {
   leverLine,
   constraintNotices,
   countsLine,
-  rowMetaParts,
+  rowMetaFields,
   countryWithArticle,
   deliveredLeadIn,
   documentsSummary,
-  evidenceOpener,
   evidenceSignal,
+  middleSummary,
+  originLabel,
   noOutcomeMeasuredLine,
   outcomeCountLabel,
   placeWithDetail,
   MATURITY_WORDS,
   maturityLine,
-  placeWord,
   holdsPlace,
 } from "./longlistPresentation";
 
@@ -68,10 +68,13 @@ describe("longlist presentation (task 046)", () => {
     );
   });
 
-  // R85: the signal's parts close the grey line; pending search stands in for them.
-  it("ends a row's meta parts with the evidence signal and drops the document count", () => {
+  // R85 and round 10 (finding 6): the same fields in the same order, the
+  // signal's parts after the theme and relations, a pending search standing
+  // in for them, "No in-scope evidence" last as words; the origin and the
+  // shortlist state live elsewhere on the row.
+  it("gives a row's meta fields in one fixed order and drops the document count", () => {
     const option = {
-      origin: "clustered",
+      origin: "added_by_you",
       relations: [],
       search_pending: false,
       document_count: 3,
@@ -79,13 +82,37 @@ describe("longlist presentation (task 046)", () => {
       evaluated_countries: [],
       outcomes_evaluated: 0,
       outcomes_total: 2,
-    } as unknown as Parameters<typeof rowMetaParts>[0];
-    expect(rowMetaParts(option)).toEqual(["No evaluations, 3 documents describe it"]);
-    expect(rowMetaParts({ ...option, search_pending: true })).toEqual(["searching for its evidence…"]);
-    expect(rowMetaParts({ ...option, origin: "added_by_you", document_count: 0 })).toEqual([
-      "added by you",
-      "No documents yet",
-    ]);
+      no_in_scope_evidence: false,
+      shortlist: { state: "proposed", reason: "r" },
+    } as unknown as Parameters<typeof rowMetaFields>[0];
+    expect(rowMetaFields(option, null)).toEqual(["No evaluations, 3 documents describe it"]);
+    expect(rowMetaFields({ ...option, search_pending: true }, null)).toEqual(["searching for its evidence…"]);
+    expect(
+      rowMetaFields(
+        {
+          ...option,
+          document_count: 0,
+          no_in_scope_evidence: true,
+          relations: [{ kind: "part_of", other_option_id: "x", other_name: "A bundle" }],
+        } as Parameters<typeof rowMetaFields>[0],
+        "Staying in work",
+      ),
+    ).toEqual(["Staying in work", "part of A bundle", "No documents yet", "No in-scope evidence"]);
+  });
+
+  // Round 10, C1: one origin vocabulary; the card adds the report's section.
+  it("words the card's origin in the list's vocabulary, with the report section", () => {
+    expect(originLabel("from_evidence_search", "What works")).toBe("from your report · What works");
+    expect(originLabel("from_evidence_search", "  ")).toBe("from your report");
+    expect(originLabel("suggested")).toBe("suggested by Policy Atlas");
+    expect(originLabel("clustered", "ignored")).toBe("found in the evidence");
+  });
+
+  // Round 10, lead ruling on finding 7: "Middle" said once for the unmarked lines.
+  it("summarises the unmarked profile lines once", () => {
+    expect(middleSummary(6, 8)).toBe("Middle on 6 of 8");
+    expect(middleSummary(8, 8)).toBe("No line stands out");
+    expect(middleSummary(0, 8)).toBe("Middle on 0 of 8");
   });
 });
 
@@ -211,13 +238,6 @@ describe("longlist presentation (amendment 4)", () => {
     expect(countryWithArticle("Denmark")).toBe("Denmark");
   });
 
-  it("words the evidence opener in its three forms", () => {
-    expect(evidenceOpener(17, 29)).toBe("Evaluated in 17 documents. 12 more describe or recommend it.");
-    expect(evidenceOpener(2, 2)).toBe("Evaluated in 2 documents.");
-    expect(evidenceOpener(0, 4)).toBe("No evaluations. 4 documents describe or recommend it.");
-    expect(evidenceOpener(0, 0)).toBe("No document names this option yet.");
-  });
-
   it("words the outcomes lines", () => {
     expect(noOutcomeMeasuredLine(3)).toBe("No evaluation measured any of your three outcomes.");
     expect(noOutcomeMeasuredLine(12)).toBe("No evaluation measured any of your 12 outcomes.");
@@ -255,12 +275,12 @@ describe("longlist presentation (amendment 4)", () => {
       constraintNotices(
         [judgement("req-1", "breaks"), judgement("req-2", "cannot_check"), judgement("req-3", "passes"), judgement("relevant", "breaks")],
         [guess("pref-1", "likely_falls_short"), guess("pref-2", "cannot_say"), guess("pref-3", "likely_meets")],
-      ).map(({ tone, chip, text }) => [tone, chip, text]),
+      ).map(({ tone, word, text }) => [tone, word, text]),
     ).toEqual([
-      ["red", "breaks", 'Breaks "Rule req-1". Because.'],
-      ["soft", "cannot check", 'Cannot check "Rule req-2". Because.'],
-      ["yellow", "may fall short", '"Rule pref-1". A guess.'],
-      ["soft", "cannot check", 'Cannot check "Rule pref-2". A guess.'],
+      ["red", "Breaks", '"Rule req-1". Because.'],
+      ["grey", "Cannot check", '"Rule req-2". Because.'],
+      ["navy", "May fall short", '"Rule pref-1". A guess.'],
+      ["grey", "Cannot check", '"Rule pref-2". A guess.'],
     ]);
   });
 
@@ -317,12 +337,8 @@ describe("maturityLine (task 055)", () => {
   });
 });
 
-describe("place words (task 055)", () => {
-  it("words a pick and a user place, and nothing for set-aside or no place", () => {
-    expect(placeWord("proposed")).toBe("Policy Atlas's pick");
-    expect(placeWord("added_by_you")).toBe("Added by you");
-    expect(placeWord("set_aside")).toBeNull();
-    expect(placeWord(null)).toBeNull();
+describe("places (task 055)", () => {
+  it("holds a place for a pick and a user place, none for set-aside", () => {
     expect(holdsPlace({ shortlist: { state: "set_aside", reason: null } })).toBe(false);
     expect(holdsPlace({ shortlist: { state: "proposed", reason: "r" } })).toBe(true);
   });

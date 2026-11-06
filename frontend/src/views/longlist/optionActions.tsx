@@ -3,10 +3,11 @@ import { useState, type ReactNode } from "react";
 import type { components } from "../../api/gen/types";
 import { useOptionVerb, useShortlistVerb } from "../../api/mutations";
 import { actionFailedNotice } from "../../lib/errors";
-import { BanIcon, MinusIcon, PlusIcon, UndoIcon, iconButtonClass } from "../../ui/brand/icons";
+import { BanIcon, UndoIcon, iconButtonClass } from "../../ui/brand/icons";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { Tooltip, TooltipProvider } from "../../ui/radix/Tooltip";
+import { ADD_TO_SHORTLIST_WORDS, SHORTLISTED_WORD } from "./longlistPresentation";
 
 /** The reason and add-option inputs share one look. */
 export const REASON_INPUT_CLASS =
@@ -98,8 +99,9 @@ type OptionActions = ReturnType<typeof useOptionActions>;
 
 /** An icon-only row action: a square ghost-grey hit area, the action's name
  *  as the accessible label and as a hover tooltip in the system's own skin
- *  (owner, 2026-10-27: icons, not words; hover tooltips). The provider sits
- *  on each button so the rows need no wrapper. */
+ *  (owner, 2026-10-27: icons, not words; hover tooltips). Exclude and Include
+ *  again; the shortlist is a toggle in words since round 10. The provider
+ *  sits on each button so the rows need no wrapper. */
 
 function IconAction({
   label,
@@ -132,10 +134,46 @@ function IconAction({
 }
 type ShortlistState = NonNullable<components["schemas"]["OptionSummaryOut"]["shortlist"]>["state"];
 
-/** "Add to shortlist" on an included option holding no place (or only a
- *  Policy Atlas pick), "Remove from shortlist" on one holding any place
- *  (task 055). Nothing for an excluded or merged option. */
-export function ShortlistActionButton({
+/** Whether an option holds a shortlist place (a pick or one added by you). */
+function holdsPlace(state: ShortlistState | null | undefined): boolean {
+  return state === "proposed" || state === "added_by_you";
+}
+
+/** The toggle's words at Meta, the quiet control's underline turning Navy on
+ *  hover; held, the words go Navy after a 6 px Navy square, the mark the
+ *  building list shows before the toggle exists. 32 px tall, the icon
+ *  actions' height. */
+const SHORTLIST_TOGGLE_CLASS =
+  "inline-flex min-h-8 cursor-pointer items-center gap-1.5 whitespace-nowrap text-meta font-semibold " +
+  "underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 " +
+  "hover:text-navy hover:decoration-navy disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60";
+
+/** The held state's mark: a 6 px Navy square (DESIGN.md: the status mark's
+ *  size), not a word in a chip. */
+function HeldMark() {
+  return <span aria-hidden="true" className="inline-block size-1.5 flex-none bg-navy" />;
+}
+
+/** "Shortlisted" as plain words, for a row that holds a place while the
+ *  longlist is still being built (no controls yet): the toggle's held look
+ *  without the control, so the walk's end only adds the underline. */
+export function ShortlistedWord({ className }: { className?: string }) {
+  return (
+    <span className={cn("inline-flex min-h-8 items-center gap-1.5 whitespace-nowrap text-meta font-semibold text-navy", className)}>
+      <HeldMark />
+      {SHORTLISTED_WORD}
+    </span>
+  );
+}
+
+/**
+ * The shortlist state as a toggle in words (round 10, lead ruling on
+ * finding 6): "Shortlisted" with `aria-pressed` true on an option that holds
+ * a place (pressing it gives the place up), "Add to shortlist" on an
+ * included option that holds none. Nothing for an excluded option without a
+ * place. Disabled while a walk runs or the change is on its way.
+ */
+export function ShortlistToggle({
   actions,
   optionId,
   shortlistState,
@@ -148,29 +186,19 @@ export function ShortlistActionButton({
   excluded: boolean;
   className?: string;
 }) {
-  const holds = shortlistState === "proposed" || shortlistState === "added_by_you";
-  if (holds) {
-    return (
-      <IconAction
-        label="Remove from shortlist"
-        className={className}
-        disabled={actions.unshortlistPending || actions.walkActive}
-        onClick={() => actions.unshortlist(optionId)}
-      >
-        <MinusIcon />
-      </IconAction>
-    );
-  }
-  if (excluded) return null;
+  const holds = holdsPlace(shortlistState);
+  if (!holds && excluded) return null;
   return (
-    <IconAction
-      label="Add to shortlist"
-      className={className}
-      disabled={actions.shortlistPending || actions.walkActive}
-      onClick={() => actions.shortlist(optionId)}
+    <button
+      type="button"
+      aria-pressed={holds}
+      disabled={(holds ? actions.unshortlistPending : actions.shortlistPending) || actions.walkActive}
+      onClick={() => (holds ? actions.unshortlist(optionId) : actions.shortlist(optionId))}
+      className={cn(SHORTLIST_TOGGLE_CLASS, holds ? "text-navy" : "text-grey", className)}
     >
-      <PlusIcon />
-    </IconAction>
+      {holds && <HeldMark />}
+      {holds ? SHORTLISTED_WORD : ADD_TO_SHORTLIST_WORDS}
+    </button>
   );
 }
 

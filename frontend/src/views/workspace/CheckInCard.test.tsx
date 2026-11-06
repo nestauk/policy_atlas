@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { components } from "../../api/gen/types";
 import type { CheckInOut, StageEntry } from "../../store/types";
 import { ToastProvider } from "../../ui/radix/Toast";
-import { CheckInCard } from "./CheckInCard";
+import { CheckInCard, SettledGateCard, baselineGateFacts } from "./CheckInCard";
 import { presentCheckInRender } from "./checkInPresentation";
 
 type CheckInOption = components["schemas"]["CheckInOption"];
@@ -306,7 +306,7 @@ describe("CheckInCard — the baseline gate", () => {
       kind: "baseline_confirm",
       stage: "synthesise",
       component: "synthesise",
-      render: "Confirm the plan against the baseline",
+      render: "Does the plan still look right now you have the baseline?",
       bundle,
       options: [
         option({
@@ -334,23 +334,51 @@ describe("CheckInCard — the baseline gate", () => {
     },
   };
 
-  it("quotes the key assumption and the plan settings under the gate heading", () => {
+  // Round 10 (finding 8, C9): the gate reads as the other check-ins: the
+  // question as the title, one facts line with the way to the baseline, the
+  // key assumption as a plain sentence, no labels.
+  it("asks its question, then one facts line with Baseline →, then the key assumption", () => {
     renderCard(gateCheckIn(bundle));
 
     expect(
-      screen.getByRole("heading", { name: "Confirm the plan against the baseline" }),
+      screen.getByRole("heading", { name: "Does the plan still look right now you have the baseline?" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(bundle.key_assumption)).toBeInTheDocument();
-    expect(screen.getByText("Who or what should change")).toBeInTheDocument();
-    expect(screen.getByText("16-24 year-olds at risk of becoming NEET")).toBeInTheDocument();
-    expect(screen.getByText("United Kingdom")).toBeInTheDocument();
-    expect(
-      screen.getByText("NEET rate at 6 months · Sustained employment at 12 months"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Standard scoping")).toBeInTheDocument();
+    const facts = screen.getByTestId("check-in-facts");
     // The baseline gate's facts include the plan's risk appetite (N19).
-    expect(screen.getByText("Risk appetite")).toBeInTheDocument();
-    expect(screen.getByText("Proven options only")).toBeInTheDocument();
+    // Each field carries a screen reader's comma in place of its middot.
+    expect(facts.textContent?.replace(/,/g, "").replace(/\s+/g, " ").trim()).toBe(
+      "16-24 year-olds at risk of becoming NEET · United Kingdom · 2 outcomes · Standard scoping · Proven options only · Baseline →",
+    );
+    expect(within(facts).getByRole("link", { name: "Baseline →" })).toHaveAttribute(
+      "href",
+      `/tasks/${TASK_ID}/result?view=baseline`,
+    );
+    const assumption = screen.getByText(bundle.key_assumption);
+    expect(assumption.tagName).toBe("P");
+    expect(assumption.closest("blockquote")).toBeNull();
+    for (const label of ["Key assumption", "Settings", "Who or what should change", "Risk appetite"]) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument();
+    }
+  });
+
+  it("drops the facts line in the sidebar's compact card", () => {
+    renderCard(gateCheckIn(bundle), [], true, true);
+    expect(screen.queryByTestId("check-in-facts")).not.toBeInTheDocument();
+    expect(screen.getByText(bundle.key_assumption)).toBeInTheDocument();
+  });
+
+  it("counts one outcome in the singular and keeps settings the bundle lacks out", () => {
+    expect(baselineGateFacts({ settings: { where: "Wales", outcomes: ["NEET rate"] } })).toEqual(["Wales", "1 outcome"]);
+    expect(baselineGateFacts(null)).toEqual([]);
+  });
+
+  it("settles in the settled part card's language, the decision said once", () => {
+    render(<SettledGateCard label="Confirm plan and build longlist" />);
+    const card = screen.getByTestId("settled-gate");
+    expect(card).toHaveTextContent(/^BaselineConfirm plan and build longlist$/);
+    expect(card.className).toContain("bg-blue-tint-2");
+    expect(card.className).toContain("border-r-green");
+    expect(card).not.toHaveTextContent(/recorded|plan version/);
   });
 
   it("offers exactly the two server-supplied options and nothing else", () => {

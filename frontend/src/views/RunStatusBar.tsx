@@ -54,11 +54,21 @@ type Shown = {
 
 /** Whether the reader is already on the view a link opens: the themes are
  *  the Sources tab's index, so only its own path counts; any other view
- *  counts with whatever sits under it. */
-export function onLinkedView(pathname: string, href: string): boolean {
+ *  counts with whatever sits under it. A link that names a Result view
+ *  (`?view=baseline`, round 10) counts only on that view, or on the Result
+ *  tab with no view named: a baseline walk runs only while the task has no
+ *  longlist (the plan offers no rebuild after one), so the Result tab is
+ *  showing the baseline then. */
+export function onLinkedView(pathname: string, href: string, search = ""): boolean {
   const path = pathname.replace(/\/+$/, "");
-  if (href.endsWith("/sources")) return path === href;
-  return path === href || path.startsWith(`${href}/`);
+  const [hrefPath, hrefQuery = ""] = href.split("?");
+  const onPath = hrefPath.endsWith("/sources")
+    ? path === hrefPath
+    : path === hrefPath || path.startsWith(`${hrefPath}/`);
+  const wanted = new URLSearchParams(hrefQuery).get("view");
+  if (!onPath || wanted === null) return onPath;
+  const shown = new URLSearchParams(search).get("view");
+  return shown === null || shown === wanted;
 }
 
 /** What changed since the last render, so a tab switch can set the status bar at
@@ -107,7 +117,7 @@ export function RunStatusBar() {
   const { words, row, paused } = useRunWords(stream, live?.isOwner ?? false);
   const traces = useMountedTraces();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
 
   // A tab switch is navigation, seen tens of times a day: the status bar opens or
   // closes at a cut then. It eases when the run starts or ends or the
@@ -135,7 +145,7 @@ export function RunStatusBar() {
       : null;
   const here =
     target !== null &&
-    (onLinkedView(pathname, target.href) || (target.href.endsWith("/result") && live?.tab === "result"));
+    (onLinkedView(pathname, target.href, search) || (target.href.endsWith("/result") && live?.tab === "result"));
   const link = target !== null && !here ? target : null;
 
   const [head = "", ...restParts] = words.split(" · ");

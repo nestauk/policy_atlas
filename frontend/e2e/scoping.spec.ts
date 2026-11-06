@@ -115,7 +115,7 @@ test.describe("mock options-scoping baseline gate", () => {
 
     const thread = page.getByRole("region", { name: "Task Agent conversation" });
     await expect(
-      thread.getByRole("heading", { name: "Confirm the plan against the baseline" }),
+      thread.getByRole("heading", { name: "Does the plan still look right now you have the baseline?" }),
     ).toBeVisible();
     await expect(
       thread.getByText("Careers advice reaches the young people already in school"),
@@ -142,7 +142,9 @@ test.describe("mock options-scoping baseline gate", () => {
     const thread = page.getByRole("region", { name: "Task Agent conversation" });
     await thread.getByRole("radio", { name: /^Change the plan/ }).click();
 
-    await expect(thread.getByText("recorded")).toBeVisible();
+    // The decision is said once, in the settled part card's language (round 10).
+    await expect(thread.getByTestId("settled-gate")).toContainText("Change the plan");
+    await expect(thread.getByText("recorded")).toHaveCount(0);
 
     await page.getByRole("button", { name: "Review the plan" }).click();
     const plan = page.getByRole("dialog", { name: "Scoping plan" });
@@ -320,7 +322,7 @@ test.describe("task 058 options scoping: the gate and the longlist build", () =>
     await startScopingWalk(page);
 
     // The baseline runs and the walk parks on the gate, which is answerable.
-    await seen(page, "Confirm the plan against the baseline");
+    await seen(page, "Does the plan still look right now you have the baseline?");
     const thread = page.getByRole("region", { name: "Task Agent conversation" });
     await expect(thread.getByRole("radio", { name: /^Confirm plan and build longlist/ })).toBeVisible();
 
@@ -347,6 +349,8 @@ test.describe("task 058 options scoping: the gate and the longlist build", () =>
       .getByRole("radio", { name: /^Confirm plan and build longlist/ })
       .click();
     await seen(page, /^Searching for each option · \d+ of 12 searches done · [\d,]+ sources so far/);
+    // The step in progress links to the longlist being built (round 10, D4).
+    await seen(page, /Longlist →$/);
   });
 
   test("the longlist while it builds: rows search, fold, fill, group, and the status bar announces it", async ({
@@ -359,7 +363,8 @@ test.describe("task 058 options scoping: the gate and the longlist build", () =>
     await thread.getByRole("radio", { name: /^Confirm plan and build longlist/ }).click();
     await taskNav(page).getByRole("link", { name: /^Result/ }).click();
 
-    // The stage line walks the build, with the server's words after the label.
+    // The run status bar walks the build, with the server's words after the
+    // label; the page itself carries no stage line (round 10, D3).
     await seen(page, /^Searching for each option · \d+ of 12 searches done · [\d,]+ sources so far$/);
     await seen(page, /^Reading the abstracts · [\d,]+ of [\d,]+ abstracts read$/);
     await seen(page, /^Clustering into options/);
@@ -375,13 +380,16 @@ test.describe("task 058 options scoping: the gate and the longlist build", () =>
     // Clustering folds one row under another and adds two from the evidence.
     await seen(page, /^Folded into Youth hubs co-located with Jobcentre Plus$/);
     await seen(page, /found in the evidence$/);
-    await seen(page, /^Excluded · 2$/);
+    await seen(page, /^Excluded\s*2$/);
 
-    // The list carries no qualifier word, and the view then takes over.
+    // The list carries no qualifier word; the shortlist wave marks its rows
+    // in words, and the finished list then gains its controls in place.
     const lines = await seenLines(page);
     expect(lines.filter((line) => /provisional/i.test(line))).toEqual([]);
-    await expect(page.getByText("Longlist", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("Shortlist", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { level: 1, name: "Longlist" })).toBeVisible();
+    await seen(page, "Shortlisted");
+    await expect(page.getByRole("group", { name: "Group by" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { level: 1, name: "Longlist" })).toBeVisible();
   });
 
   test("the trace folds to The longlist is ready once the build ends, and nothing else shows the run", async ({

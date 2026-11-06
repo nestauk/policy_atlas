@@ -122,7 +122,9 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
 
   it("renders the title, the appetite select, both groups and the rows", async () => {
     await openShortlist();
-    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+    // The longlist's header (round 10): "Shortlist", the question under it.
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Shortlist$/);
+    expect(screen.getByText("How can we cut the NEET rate?")).toHaveClass("text-grey");
     expect(screen.getByRole("combobox", { name: "Risk appetite" })).toHaveValue("mostly_tried");
     // No baseline line and no facts strip (owner, 2026-10-27).
     expect(screen.queryByText(/situation today/)).not.toBeInTheDocument();
@@ -131,12 +133,19 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     // The pick: name, the option's description, the lever and the footing in
     // plain words, then Policy Atlas's reason under its label, and Remove.
     expect(screen.getByRole("link", { name: "Universal youth offer bundle" })).toBeInTheDocument();
-    expect(screen.getByText("Mock reason: names a fact on the card.")).toBeInTheDocument();
-    expect(screen.getByText("Policy Atlas's reason")).toBeInTheDocument();
+    // Round 10 (C4): a bold "Why:" lead-in on the line, no uppercase label over it.
+    const reason = screen.getByText(/Mock reason: names a fact on the card\./);
+    expect(reason).toHaveTextContent(/^Why: Mock reason: names a fact on the card\.$/);
+    expect(within(reason).getByText("Why:").tagName).toBe("STRONG");
+    expect(screen.queryByText("Policy Atlas's reason")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Shortlist$/i, { selector: "p" })).not.toBeInTheDocument();
     expect(screen.getAllByText(/Evaluated, including a review/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/4 observational/)).not.toBeInTheDocument();
     expect(screen.getByText(/Proposed, not yet implemented/)).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Remove from shortlist" })).toHaveLength(2);
+    // Round 10 (finding 6): each place's toggle says Shortlisted, pressed.
+    const toggles = screen.getAllByRole("button", { name: "Shortlisted" });
+    expect(toggles).toHaveLength(2);
+    for (const toggle of toggles) expect(toggle).toHaveAttribute("aria-pressed", "true");
   });
 
   it("puts a user place's row reason as 'Added by you' and lists places alphabetically within a group", async () => {
@@ -152,7 +161,7 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
   it("calls Remove from shortlist for a place", async () => {
     const user = await openShortlist();
     const row = screen.getByRole("link", { name: "Universal youth offer bundle" }).closest("li") as HTMLElement;
-    await user.click(within(row).getByRole("button", { name: "Remove from shortlist" }));
+    await user.click(within(row).getByRole("button", { name: "Shortlisted" }));
     expect(unshortlistMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_PACKAGE }, expect.anything());
   });
 
@@ -172,9 +181,12 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     await openShortlist({}, (longlist) => {
       longlist.shortlist.stale = false;
     });
+    // Round 10 (finding 4): the reason is words under it, not a tooltip.
     const button = screen.getByRole("button", { name: "Suggest more" });
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute("title", "Nothing left to propose");
+    expect(button).not.toHaveAttribute("title");
+    expect(screen.getByText("Nothing left to propose.")).toBeVisible();
+    expect(button).toHaveAccessibleDescription("Nothing left to propose.");
   });
 
   it("Suggest more is disabled while a walk runs", async () => {
@@ -184,7 +196,7 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     );
     const button = screen.getByRole("button", { name: "Suggest more" });
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute("title", "A walk is running");
+    expect(button).toHaveAccessibleDescription("A walk is running.");
   });
 
   it("Suggest more posts once when an included option is left", async () => {
@@ -198,10 +210,10 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     const user = await openShortlist({}, (longlist) => {
       longlist.shortlist.stale = true;
     });
-    expect(screen.getByText("Press Suggest more to re-propose")).toBeInTheDocument();
+    expect(screen.getByText("The plan has changed. Suggest more to update the picks.")).toBeInTheDocument();
     const button = screen.getByRole("button", { name: "Suggest more" });
     expect(button).toBeEnabled();
-    expect(button).not.toHaveAttribute("title");
+    expect(button).not.toHaveAttribute("aria-describedby");
     await user.click(button);
     expect(suggestMutate).toHaveBeenCalledTimes(1);
   });
@@ -237,22 +249,24 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     await openShortlist({}, (longlist) => {
       longlist.shortlist.stale = false;
     });
-    expect(screen.queryByText("Press Suggest more to re-propose")).not.toBeInTheDocument();
+    expect(screen.queryByText("The plan has changed. Suggest more to update the picks.")).not.toBeInTheDocument();
   });
 
-  it("shows the not-covered note under its label, and hides both when there is no note", async () => {
+  it("shows the not-covered note after its bold lead-in (round 10, C4)", async () => {
     await openShortlist({}, (longlist) => {
       longlist.shortlist.note = "Nothing here tackles the wider labour market.";
     });
-    expect(screen.getByText("What this shortlist leaves out")).toBeInTheDocument();
-    expect(screen.getByText("Nothing here tackles the wider labour market.")).toBeInTheDocument();
+    expect(screen.getByText(/Nothing here tackles the wider labour market\./)).toHaveTextContent(
+      /^Not covered: Nothing here tackles the wider labour market\.$/,
+    );
+    expect(screen.queryByText("What this shortlist leaves out")).not.toBeInTheDocument();
   });
 
-  it("hides the note section when the note is null", async () => {
+  it("hides the note when the note is null", async () => {
     await openShortlist({}, (longlist) => {
       longlist.shortlist.note = null;
     });
-    expect(screen.queryByText("What this shortlist leaves out")).not.toBeInTheDocument();
+    expect(screen.queryByText("Not covered:")).not.toBeInTheDocument();
   });
 
   it("adds the provenance footer only when it carries a total", async () => {
@@ -272,16 +286,24 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     expect(screen.queryByText(/document lines/)).not.toBeInTheDocument();
   });
 
-  it("shows Assess disabled with its line", async () => {
-    await openShortlist();
-    expect(screen.getByRole("button", { name: "Assess these 2" })).toBeDisabled();
-    expect(screen.getByText("Assessment is not yet available.")).toBeInTheDocument();
+  // Round 10 (finding 4): one primary, Assess; while it is off its reason
+  // is the line under it. Suggest more is a secondary.
+  it("makes Assess the page's one primary, off with its reason in words", async () => {
+    const { container } = renderShortlist();
+    const assess = screen.getByRole("button", { name: "Assess these 2" });
+    expect(assess).toBeDisabled();
+    expect(assess).toHaveAccessibleDescription("Assessment is not yet available.");
+    expect(container.querySelectorAll(".cutout, .cutout-sm")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Suggest more" }).className).not.toMatch(/cutout|bg-blue/);
   });
 
   it("links back to the longlist instead of repeating it", async () => {
     await openShortlist();
     expect(screen.queryByRole("heading", { name: "Other options" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add more from the longlist" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add more from the longlist" })).toHaveAttribute(
+      "href",
+      `/tasks/${TASK_ID}/result`,
+    );
     expect(screen.getByRole("button", { name: "Suggest more" })).toBeInTheDocument();
   });
 
@@ -312,7 +334,8 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
       option.state = "excluded";
       option.exclusion = { by: "constrain", constraint: "Only include options a local authority can fund directly", reason: "It needs national funding." };
     });
-    expect(screen.getByText(/It needs national funding\./)).toBeInTheDocument();
+    const notice = screen.getByText(/It needs national funding\./);
+    expect(within(notice).getByText("Excluded:")).toHaveClass("text-red");
   });
 
 });

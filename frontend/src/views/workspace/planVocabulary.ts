@@ -204,6 +204,14 @@ export const TAG_ORIGIN_LABEL: Record<string, string> = {
   your_call: "your choice",
 };
 
+/** The scoping plan card's summary line (annex, rulings during the build:
+ *  "Scoping plan · <time band>"), the band left out while the draft has
+ *  none. The Evidence search card's "Search plan · …" is its sibling. */
+export function scopingPlanSummary(scoping: { time_band?: string | null } | null | undefined): string {
+  const band = scoping?.time_band?.trim() ?? "";
+  return band === "" ? "Scoping plan" : `Scoping plan · ${band}`;
+}
+
 /** Depth screen labels — never the internal `rapid | standard` key (A8). */
 export const SCOPING_DEPTH_LABEL: Record<string, string> = {
   rapid: "Rapid scoping",

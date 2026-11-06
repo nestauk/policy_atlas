@@ -262,7 +262,13 @@ export function rowLiveness(
  * Searching and Screening to Sources, Classifying to the landscape, Mapping
  * to the themes, Writing to the report.
  *
- * Only an Evidence search's rows link.
+ * A scoping walk links too (round 10, lead ruling D4). The baseline walk
+ * maps as an Evidence search does, its Writing row pointing at the baseline
+ * ("Baseline →"). A longlist walk's step in progress, from Suggesting
+ * options on, points at the longlist being built ("Longlist →", the Result
+ * tab's default view); its done rows point nowhere, the ended card's
+ * "Read it →" being the walk's one destination. The other scoping walks
+ * (an added option's search, the shortlist walk) link nothing.
  */
 export function rowLink(
   row: CardRow,
@@ -273,13 +279,22 @@ export function rowLink(
   kind: WalkKind,
   hasFindings: boolean,
 ): { href: string; label: string } | null {
-  if (kind !== "evidence_search") return null;
+  if (kind === "longlist") {
+    return row.state === "progress" && !row.stages.every((stage) => stage === "inherit")
+      ? { href: `/tasks/${taskId}/result`, label: "Longlist" }
+      : null;
+  }
+  if (kind !== "evidence_search" && kind !== "baseline") return null;
   const has = (stage: string) => row.stages.includes(stage);
+  const written =
+    kind === "baseline"
+      ? { href: `/tasks/${taskId}/result?view=baseline`, label: "Baseline" }
+      : { href: `/tasks/${taskId}/result`, label: "Report" };
   if (row.state === "progress") {
     if (has("acquire") || has("screen")) return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
     if (has("classify") || has("appraise")) return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
     if (has("characterise")) return { href: `/tasks/${taskId}/sources`, label: "Themes" };
-    if (has("synthesise")) return { href: `/tasks/${taskId}/result`, label: "Report" };
+    if (has("synthesise")) return written;
     return null;
   }
   if (row.state !== "done") return null;
@@ -290,7 +305,7 @@ export function rowLink(
     return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
   }
   if (has("extract") && hasFindings) return { href: `/tasks/${taskId}/sources/findings`, label: "Findings" };
-  if (has("synthesise")) return { href: `/tasks/${taskId}/result`, label: "Report" };
+  if (has("synthesise")) return written;
   return null;
 }
 

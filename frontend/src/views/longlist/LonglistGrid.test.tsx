@@ -49,7 +49,7 @@ beforeEach(() => {
 
 describe("LonglistGrid", () => {
   it("lays out rows by lever type (plus None fits) and columns by the chosen line, Ambition first", () => {
-    renderGrid();
+    renderGrid(true);
     expect(screen.getByRole("row", { name: /Enforce existing powers/ })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /None fits/ })).toBeInTheDocument();
     expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
@@ -139,14 +139,19 @@ describe("LonglistGrid", () => {
     expect(container.querySelectorAll("table")).toHaveLength(1);
   });
 
-  it("places each option's tile at its lever/ambition intersection and leaves an empty row empty", () => {
+  // Round 10 (finding 13): the lever types with no option are one Grey line
+  // under the table, not empty bands (the absence is still the message).
+  it("places each option's tile at its lever/ambition intersection and folds the empty lever rows into one line", () => {
     renderGrid(true);
     const structuralCell = screen.getByRole("link", { name: "National sanctions regime" }).closest("td");
     expect(structuralCell).not.toBeNull();
     expect(within(structuralCell as HTMLElement).getByText("National sanctions regime")).toBeInTheDocument();
     expect(screen.queryByText("no option of this type on the longlist")).not.toBeInTheDocument();
-    const emptyRow = screen.getByRole("row", { name: /Convene/ });
-    expect(within(emptyRow).queryAllByRole("link")).toHaveLength(0);
+    expect(screen.queryByRole("row", { name: /Convene/ })).not.toBeInTheDocument();
+    const absent = screen.getByText(/^No options: /);
+    expect(absent).toHaveTextContent(/Convene/);
+    expect(absent).toHaveClass("text-grey");
+    expect(absent).not.toHaveTextContent(/Enforce existing powers|Regulate/);
   });
 
   it("hides excluded options until asked", () => {
@@ -154,16 +159,18 @@ describe("LonglistGrid", () => {
     expect(screen.queryByRole("link", { name: "National sanctions regime" })).not.toBeInTheDocument();
   });
 
-  it("carries the excluded state (struck through) and the no-in-scope-evidence tag on tiles", () => {
-    renderGrid(true);
+  // Round 10 (finding 6): states in words, no chips; red only on the failure word.
+  it("carries the excluded state and no in-scope evidence on tiles in words", () => {
+    const { container } = renderGrid(true);
     const excludedLink = screen.getByRole("link", { name: "National sanctions regime" });
-    expect(excludedLink.className).toContain("line-through");
+    expect(excludedLink).toHaveClass("text-grey");
     const excludedCell = excludedLink.closest("td") as HTMLElement;
-    expect(within(excludedCell).getByText("excluded")).toBeInTheDocument();
+    expect(within(excludedCell).getByText("Excluded")).toHaveClass("text-red");
 
     const noInScopeLink = screen.getByRole("link", { name: "School-based mentoring" });
     const noInScopeCell = noInScopeLink.closest("td") as HTMLElement;
-    expect(within(noInScopeCell).getByText("no in-scope evidence")).toBeInTheDocument();
+    expect(within(noInScopeCell).getByText("No in-scope evidence")).toHaveClass("text-grey");
+    expect(container.querySelector("[class*='text-[11.5px]']")).toBeNull();
   });
 
   it("folds a crowded cell behind +N more", async () => {
@@ -212,18 +219,18 @@ describe("LonglistGrid", () => {
     expect(screen.getByRole("button", { name: "+1 more" })).toBeInTheDocument();
   });
 
-  it("carries the place word and the shortlist action on tiles", async () => {
+  it("carries the shortlist toggle on tiles, in words", async () => {
     const user = userEvent.setup();
     renderGrid(true);
     // The bundle is Policy Atlas's pick; the youth guarantee was added by you.
     const bundle = screen.getByRole("link", { name: "Universal youth offer bundle" }).closest("li") as HTMLElement;
-    expect(within(bundle).getByText("Policy Atlas's pick")).toBeInTheDocument();
-    expect(within(bundle).getByRole("button", { name: "Remove from shortlist" })).toBeEnabled();
+    const held = within(bundle).getByRole("button", { name: "Shortlisted" });
+    expect(held).toBeEnabled();
+    expect(held).toHaveAttribute("aria-pressed", "true");
     const guarantee = screen.getByRole("link", { name: "Youth guarantee" }).closest("li") as HTMLElement;
-    expect(within(guarantee).getByText("Added by you")).toBeInTheDocument();
-    // A set-aside pick has no word and offers Add.
+    expect(within(guarantee).getByRole("button", { name: "Shortlisted" })).toBeInTheDocument();
+    // A set-aside pick offers Add.
     const mentoring = screen.getByRole("link", { name: "School-based mentoring" }).closest("li") as HTMLElement;
-    expect(within(mentoring).queryByText(/Policy Atlas's pick|Added by you/)).not.toBeInTheDocument();
     await user.click(within(mentoring).getByRole("button", { name: "Add to shortlist" }));
     expect(shortlistMutate).toHaveBeenCalledWith({ optionId: expect.any(String) }, expect.anything());
     // An excluded option offers neither.
@@ -245,7 +252,7 @@ describe("LonglistGrid", () => {
 
   it("disables the shortlist actions while a walk is running", () => {
     renderGrid(false, undefined, { capability_run_id: "x", status: "running", started_at: "2026-10-27T00:00:00Z" });
-    for (const button of screen.getAllByRole("button", { name: /shortlist/ })) expect(button).toBeDisabled();
+    for (const button of screen.getAllByRole("button", { name: /shortlist/i })) expect(button).toBeDisabled();
   });
 
   it("links a tile through to the option card", () => {
