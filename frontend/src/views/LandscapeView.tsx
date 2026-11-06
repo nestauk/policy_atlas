@@ -1,3 +1,4 @@
+import { lazy, Suspense, useState } from "react";
 import { useParams } from "react-router";
 
 import { useFunnel, useGroups, useLandscape, useTask } from "../api/queries";
@@ -19,11 +20,22 @@ import {
   RankedBars,
   singleTypeSentence,
 } from "./LandscapeViewCharts";
+import { normaliseGeographies } from "../ui/charts/EvidenceDistributionChart";
+
+/** The publisher map, loaded only when the reader asks for it (round 11),
+ *  so the Landscape page does not carry the atlas. */
+const PublisherMap = lazy(() => import("./LandscapeViewMap"));
+
+const GEOGRAPHY_VIEWS = [
+  { key: "list", label: "List" },
+  { key: "map", label: "Map" },
+] as const;
 import { LandscapeSkeleton } from "./LandscapeViewSkeleton";
 import { feedsSources, liveStages, useLiveRefetch } from "./sourcesPresentation";
 import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
 import { cn } from "../ui/brand/cn";
 import { RetryCard } from "../ui/feedback/RetryCard";
+import { OutlineSwitch } from "../ui/brand/OutlineSwitch";
 
 const TITLES = {
   funnel: "From search to citation",
@@ -50,6 +62,7 @@ export function LandscapeView() {
   const landscape = useLandscape(taskId);
   const funnel = useFunnel(taskId);
   const groups = useGroups(taskId);
+  const [geographyView, setGeographyView] = useState<"list" | "map">("list");
   // While a stage that feeds the landscape runs, its reads refetch every
   // 5 s and the rows it will fill breathe a placeholder (owner, round 8).
   const stream = useRunStream(taskId);
@@ -67,17 +80,31 @@ export function LandscapeView() {
   const facets = groups.data?.facets ?? [];
   const relevant = typeof funnel.data?.relevant === "number" ? funnel.data.relevant : null;
   const findings = typeof funnel.data?.findings === "number" ? funnel.data.findings : null;
-  const relevantFigure = relevant !== null ? population.relevant(relevant) : null;
 
-  const funnelTable = funnelRows(funnel.data, runLive, live);
+  // Each funnel row leads to the table filtered to its set, when the table
+  // can filter to it (round 11): Found to every source, Relevant to the
+  // screened-in set, Cited to the cited sources. Quality-checked, Full text
+  // and Shortlisted have no filter on the table, so they lead nowhere.
+  const allSources = `/tasks/${taskId}/sources/all`;
+  const funnelHref = (key: string): string | undefined =>
+    key === "found"
+      ? `${allSources}?status=all`
+      : key === "relevant"
+        ? `${allSources}?status=Included`
+        : key === "cited"
+          ? `${allSources}?cited=true`
+          : undefined;
+  const funnelTable = funnelRows(funnel.data, runLive, live).map((row) => {
+    const href = row.count ? funnelHref(row.key) : undefined;
+    return href !== undefined ? { ...row, href } : row;
+  });
   const typeRows = evidenceTypeRows(evidenceTypes, classifying);
   const showTypes = classifying || Object.values(evidenceTypes).some((count) => count > 0);
   const typeSentence = classifying ? null : singleTypeSentence(typeRows);
   const withYear = sum(years);
-  // The relevant count is said once, at the top of the page; a heading
-  // carries a count only when it differs from it (owner, consistency pass).
+  // The relevant count is not restated at the top (round 11: the funnel
+  // says it); a heading carries a count only when it differs from it.
   const yearsFigure = relevant !== null && withYear < relevant ? population.withYear(withYear) : null;
-  const allSources = `/tasks/${taskId}/sources/all`;
   const typeHref = (label: string) => `${allSources}?${new URLSearchParams({ type: label }).toString()}`;
   const rangeHref = (from: string, to: string) =>
     `${allSources}?${new URLSearchParams({ year_from: from, year_to: to }).toString()}`;
@@ -91,6 +118,11 @@ export function LandscapeView() {
   const linkCountries = geographyRows(geographies).map((row) =>
     row.count && row.tone !== "grey" ? { ...row, href: countryHref(row.key) } : row,
   );
+
+  // The map draws every country (no folded tail); "Not reported" is no place.
+  const mapCountries = Object.entries(normaliseGeographies(geographies))
+    .filter(([country, count]) => country !== "Not reported" && count > 0)
+    .map(([country, count]) => ({ country, count }));
 
   // `not_found` is the server's honest shape for "no landscape/funnel yet"
   // (screening hasn't run) — that's the expected empty state below, not a
@@ -128,11 +160,6 @@ export function LandscapeView() {
 
       {!isPending && (
         <div className="mx-auto w-full max-w-3xl">
-          {relevantFigure !== null && !noData && (
-            <p className="text-meta text-grey" data-testid="landscape-population">
-              {relevantFigure}
-            </p>
-          )}
           {funnelTable.length > 0 && (
             <LandscapeSection title={TITLES.funnel}>
               <RankedBars caption={TITLES.funnel} rows={funnelTable} busy={funnelTable.some((row) => row.pending)} />
@@ -161,7 +188,14 @@ export function LandscapeView() {
           )}
 
           {Object.keys(geographies).length > 0 && (
-            <LandscapeSection title={TITLES.geographies}>
+            <LandscapeSection
+              title={TITLES.geographies}
+              control={
+                onlyNotReported(geographies) ? null : (
+                  <OutlineSwitch label="Show as" choices={GEOGRAPHY_VIEWS} value={geographyView} onChange={setGeographyView} height={32} />
+                )
+              }
+            >
               {onlyNotReported(geographies) ? (
                 <p className="text-meta text-navy">No publisher country was reported for these sources.</p>
               ) : (
@@ -172,7 +206,19 @@ export function LandscapeView() {
                     The country of the publishing venue, when the database reports it. Sources
                     without one are counted as “Not reported”.
                   </p>
-                  <RankedBars caption={TITLES.geographies} rows={linkCountries} />
+                  {geographyView === "map" ? (
+                    // The list stays the keyboard's path (round 11): the map
+                    // is for the eye and its countries take no focus.
+                    <Suspense fallback={<div aria-hidden="true" className="publisher-map__placeholder" />}>
+                      <PublisherMap
+                        countries={mapCountries}
+                        caption={TITLES.geographies}
+                        hrefFor={(country) => countryHref(country)}
+                      />
+                    </Suspense>
+                  ) : (
+                    <RankedBars caption={TITLES.geographies} rows={linkCountries} />
+                  )}
                 </>
               )}
             </LandscapeSection>

@@ -104,7 +104,9 @@ describe("SourcesLayout — the four Sources subview tabs", () => {
     expect(active).toHaveClass("after:scale-x-100", "hover:after:scale-x-100", "font-extrabold", "text-navy");
     expect(active).not.toHaveClass("bg-navy");
     const idle = screen.getByRole("link", { name: "Themes" });
-    expect(idle).toHaveClass("border-transparent", "font-semibold", "text-grey");
+    // Inactive reads as greyed (owner, round 11): Grey at the medium weight.
+    expect(idle).toHaveClass("border-transparent", "font-medium", "text-grey");
+    expect(idle).not.toHaveClass("font-semibold");
     // The same rule as the lifecycle tabs: left edge to centre on hover.
     expect(idle).toHaveClass("after:origin-left", "after:scale-x-0", "hover:after:scale-x-50", "after:duration-200");
   });

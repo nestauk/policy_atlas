@@ -95,7 +95,10 @@ describe("LandscapeView — finished", () => {
     expect(screen.getByRole("region", { name: "Evidence types" }).parentElement).toHaveClass("max-w-3xl");
     // No card inside the Sources panel.
     expect(container.querySelector(".shadow-\\[0_1px_3px_rgba\\(15\\,41\\,74\\,0\\.05\\)\\,0_8px_24px_rgba\\(15\\,41\\,74\\,0\\.04\\)\\]")).toBeNull();
-    expect(container.querySelector(".border-line-2")).toBeNull();
+    // The one bordered thing is the List / Map switch's outline (round 11).
+    for (const bordered of container.querySelectorAll(".border-line-2")) {
+      expect(bordered.closest('[role="group"][aria-label="Show as"]')).not.toBeNull();
+    }
   });
 
   it("draws the funnel as a table of sources only, values in cells, no Findings row", () => {
@@ -115,11 +118,39 @@ describe("LandscapeView — finished", () => {
     expect(within(table).queryByText("Findings")).toBeNull();
   });
 
-  it("says the relevant count once, at the top; a heading counts only what differs from it", () => {
+  it("links each funnel row the table can filter to, and only those (round 11)", () => {
+    reads();
+    renderLandscape();
+    const table = screen.getByRole("table", { name: "From search to citation" });
+    const base = `/tasks/${TASK_ID}/sources/all`;
+    expect(within(table).getByRole("link", { name: "Found" })).toHaveAttribute("href", `${base}?status=all`);
+    expect(within(table).getByRole("link", { name: "Relevant" })).toHaveAttribute("href", `${base}?status=Included`);
+    expect(within(table).getByRole("link", { name: "Cited" })).toHaveAttribute("href", `${base}?cited=true`);
+    for (const name of ["Quality-checked", "Full text", "Shortlisted"]) {
+      expect(within(table).queryByRole("link", { name })).toBeNull();
+    }
+  });
+
+  it("switches the publisher countries between the list (the default) and the map", { timeout: 20_000 }, async () => {
+    reads();
+    renderLandscape();
+    const region = screen.getByRole("region", { name: "Where sources were published" });
+    const list = within(region).getByRole("button", { name: "List" });
+    expect(list).toHaveAttribute("aria-pressed", "true");
+    expect(within(region).getByRole("table", { name: "Where sources were published" })).toBeInTheDocument();
+    within(region).getByRole("button", { name: "Map" }).click();
+    // The map's module (and the atlas) loads lazily: allow for a busy runner.
+    expect(
+      await within(region).findByRole("img", { name: "Where sources were published" }, { timeout: 15_000 }),
+    ).toBeInTheDocument();
+    expect(within(region).queryByRole("table", { name: "Where sources were published" })).toBeNull();
+  });
+
+  it("puts no population line at the top (round 11); a heading counts only what differs", () => {
     reads({ landscape: { ...mockLandscape, years: { "2021": 20, "2022": 20 } as Record<string, number> } });
     renderLandscape();
-    expect(screen.getAllByText("46 relevant sources")).toHaveLength(1);
-    expect(screen.getByTestId("landscape-population")).toHaveTextContent("46 relevant sources");
+    expect(screen.queryByText("46 relevant sources")).toBeNull();
+    expect(screen.queryByTestId("landscape-population")).toBeNull();
     const within_ = (name: string) => within(screen.getByRole("region", { name }));
     expect(within_("Evidence types").queryByText(/relevant source/)).toBeNull();
     expect(within_("Publication years").getByText("40 with a year")).toBeInTheDocument();
@@ -236,7 +267,7 @@ describe("LandscapeView — small counts become sentences", () => {
     expect(screen.queryByText(/The country of the publishing venue/)).toBeNull();
     expect(screen.queryByRole("table", { name: "Evidence types" })).toBeNull();
     expect(screen.queryByTestId("years-chart")).toBeNull();
-    expect(screen.getByTestId("landscape-population")).toHaveTextContent("1 relevant source");
+    expect(screen.queryByTestId("landscape-population")).toBeNull();
     expect(within(screen.getByRole("region", { name: "Evidence types" })).queryByText("1 relevant source")).toBeNull();
   });
 });

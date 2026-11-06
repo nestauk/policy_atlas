@@ -150,10 +150,28 @@
   align-items: center;
   gap: 6px;
 }
-.sources-hint-dotted {
-  text-decoration: underline dotted var(--color-line-2);
+/* The standard affordance for a value with a reason behind it (round 11):
+   a dotted Grey underline and the help cursor, so the hover is found. */
+.sources-hint-word {
+  text-decoration: underline dotted var(--color-grey);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
+}
+
+/* The strength's tone: the 6 px status square before the word. */
+.sources-tone {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 7px;
+  vertical-align: 2px;
+  background-color: var(--color-grey);
+}
+.sources-tone[data-tone="strong"] {
+  background-color: var(--color-green);
+}
+.sources-tone[data-tone="moderate"] {
+  background-color: var(--color-navy);
 }
 
 .sources-pulse {

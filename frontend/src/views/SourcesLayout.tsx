@@ -32,7 +32,7 @@ export function SourcesLayout() {
   return (
     <div className={`${WIDE_PAGE_CLASS} min-h-full py-8`}>
       <div className="bg-paper">
-        {/* DESIGN.md § Navigation: Meta Semibold Grey, the active tab
+        {/* DESIGN.md § Navigation: Meta Grey at the medium weight, the active tab
             Extrabold Navy over the growing 3px Electric Blue rule, a Line
             hairline under the row (an inset shadow, so the rule sits on it
             without overflowing the scroller); one line, scrolling sideways
@@ -59,7 +59,10 @@ export function SourcesLayout() {
                   GROWING_RULE_CLASS,
                   isActive
                     ? cn(GROWING_RULE_ACTIVE_CLASS, "font-extrabold text-navy")
-                    : "font-semibold text-grey hover:text-navy",
+                    : // Inactive reads as greyed (owner, round 11): Grey at
+                      // the medium weight (Averta, with no 500, sets it
+                      // Regular), Navy on hover; Grey is AA on white.
+                      "font-medium text-grey hover:text-navy",
                 )
               }
             >

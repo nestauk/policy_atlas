@@ -273,3 +273,77 @@
   color: var(--color-navy);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------------------------------------------------------------------
+ * Where sources were published, as a map (round 11): a choropleth on the
+ * Natural Earth projection, the land alone on Paper (no globe outline); a country
+ * with sources is Navy by its count (`--fill`, five steps mixed into Paper),
+ * one with none is Line 2; a Paper hairline separates neighbours. Under a
+ * fine pointer the country under it turns Electric Blue, as a bar does, and
+ * the tooltip follows the pointer. Colour is the state: nothing transitions.
+ * ------------------------------------------------------------------------- */
+
+.publisher-map__frame {
+  position: relative;
+}
+
+.publisher-map__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.publisher-map__country {
+  fill: var(--fill, var(--color-line-2));
+  stroke: var(--color-paper);
+  stroke-width: 0.5;
+  stroke-linejoin: round;
+}
+.publisher-map__country[data-link] {
+  cursor: pointer;
+}
+.publisher-map__country[data-hover] {
+  fill: var(--color-blue);
+}
+
+.publisher-map__tooltip {
+  position: absolute;
+  z-index: 1;
+  translate: -50% calc(-100% - 12px);
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 6px 10px;
+  border: 1px solid var(--color-line-2);
+  background-color: var(--color-paper);
+  box-shadow: 0 4px 16px rgba(15, 41, 74, 0.12);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  font-weight: 600;
+  color: var(--color-navy);
+}
+
+.publisher-map__legend {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 12px;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  color: var(--color-grey);
+}
+.publisher-map__legend > .tabular-nums:first-child {
+  margin-right: 6px;
+}
+.publisher-map__legend > .tabular-nums:last-child {
+  margin-left: 6px;
+}
+.publisher-map__swatch {
+  width: 24px;
+  height: 10px;
+}
+
+/* The map's placeholder while its module loads: the frame's own shape, so
+   nothing moves when the map lands. */
+.publisher-map__placeholder {
+  aspect-ratio: 960 / 467;
+}

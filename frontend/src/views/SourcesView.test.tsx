@@ -47,7 +47,7 @@ function LocationProbe() {
   return <div data-testid="location">{location.search}</div>;
 }
 
-function renderSources(rows?: typeof mockEvidence) {
+function renderSources(rows?: typeof mockEvidence, search = "") {
   if (rows !== undefined) {
     vi.mocked(queries.useEvidence).mockReturnValue({
       data: evidencePage(rows),
@@ -56,13 +56,13 @@ function renderSources(rows?: typeof mockEvidence) {
       refetch: vi.fn(),
     } as unknown as ReturnType<typeof queries.useEvidence>);
   }
-  return render(sourcesTree());
+  return render(sourcesTree(search));
 }
 
-function sourcesTree() {
+function sourcesTree(search = "") {
   return (
     <TooltipProvider>
-      <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/sources`]}>
+      <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/sources${search}`]}>
         <Routes>
           <Route
             path="/tasks/:taskId/sources"
@@ -317,8 +317,9 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
   it("offers a theme select scoped to themes carrying a theme_id, defaulting to All themes", async () => {
     const user = userEvent.setup();
     renderSources();
-    const trigger = screen.getByRole("button", { name: /^Key theme/ });
-    expect(trigger).toHaveTextContent("All themes");
+    // Idle, the control names its facet; its name carries the value.
+    const trigger = screen.getByRole("button", { name: "Key theme: All themes" });
+    expect(trigger).toHaveTextContent("Key theme");
     await user.click(trigger);
     const listbox = screen.getByRole("listbox", { name: "Key theme" });
     expect(within(listbox).getByRole("option", { name: "All themes" })).toBeInTheDocument();
@@ -352,15 +353,18 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     expect(lastEvidenceQuery()).toMatchObject({ theme: SCHOOL_FOOD_THEME_ID });
   });
 
-  it("shows a sources count between the filters and the table, the download beside it", () => {
+  it("shows a sources count between the filters and the table, Download CSV at the filter bar's end", () => {
     renderSources();
     const count = screen.getAllByRole("status").find((node) => node.textContent === `${mockEvidence.length} sources`);
     expect(count).toBeDefined();
-    // Download CSV is an outline control on the count's row, not a primary.
+    // Download CSV is a 32 px outline control at the bar's right end
+    // (round 11), not a primary.
     const download = screen.getByRole("button", { name: "Download CSV" });
-    expect(download).toHaveClass("border-line-2");
+    expect(download).toHaveClass("border-line-2", "h-8");
     expect(download).not.toHaveClass("cutout");
-    expect(count?.parentElement).toContainElement(download);
+    const bar = screen.getByRole("group", { name: "Filter sources" });
+    expect(bar).toContainElement(download);
+    expect(download.parentElement?.parentElement).toHaveClass("ml-auto");
   });
 
   it("folds the committed search queries to one line at the top, the chevron opening one table", async () => {
@@ -369,19 +373,24 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     const block = screen.getByTestId("search-queries");
     // At the top of All sources, before the filters (owner, round 9).
     expect(block.compareDocumentPosition(screen.getByRole("group", { name: "Filter sources" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const toggle = within(block).getByRole("button", { name: "5 search queries · 128 results · Show" });
+    // Round 11: no card, one Meta line in the filter bar's column.
+    const toggle = within(block).getByRole("button", { name: "Found with 5 queries and 1 citation pass · Show" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(within(block).queryByRole("table")).toBeNull();
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(toggle).toHaveTextContent(/Hide$/);
     const table = within(block).getByRole("table");
-    // One table: the backend once per group, as a row-group label.
-    expect(within(table).getByRole("rowheader", { name: "OpenAlex" })).toBeInTheDocument();
-    expect(within(table).getByRole("rowheader", { name: "Overton" })).toBeInTheDocument();
-    expect(within(table).getByRole("columnheader", { name: "Query" })).toBeInTheDocument();
-    expect(within(table).getByRole("columnheader", { name: "Results" })).toBeInTheDocument();
+    // Ruled rows: the query, the database in Grey, the count; no visible
+    // header band and no row-group labels.
+    expect(within(table).queryByRole("rowheader")).toBeNull();
+    expect(within(table).getByRole("columnheader", { name: "Query" }).closest("thead")).toHaveClass("sr-only");
+    expect(within(table).getAllByText("Overton")[0]).toHaveClass("text-grey");
     expect(table).toHaveClass("text-meta");
+    expect(table).not.toHaveClass("border-y");
+    // The saved pass is its own Grey row, worded by the server.
+    expect(within(table).getByText("Followed citations from 50 sources")).toHaveClass("text-grey");
+    expect(within(table).getByText("184")).toHaveClass("tabular-nums");
     const query = within(table).getByText("childhood obesity school intervention UK");
     // Queries wrap on words.
     expect(query).toHaveClass("break-words");
@@ -441,7 +450,51 @@ describe("SourcesView — the search as it runs (owner, round 9)", () => {
       "completed",
     );
     renderSources();
-    expect(screen.getByRole("button", { name: "2 search queries · 35 results · Show" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Found with 2 queries · Show" })).toBeInTheDocument();
+  });
+
+  it("words a live pass in the past tense once the search ends, before the saved coverage lands", async () => {
+    const user = userEvent.setup();
+    vi.mocked(queries.useCoverage).mockReturnValue({ data: null } as unknown as ReturnType<typeof queries.useCoverage>);
+    streamState = searching(
+      [
+        { backend: "openalex", query: "school meals uptake", kind: "topic", results: 34 },
+        { backend: "openalex", query: "Following citations from 40 sources", kind: "citations", results: 212 },
+      ],
+      "completed",
+    );
+    renderSources();
+    const toggle = screen.getByRole("button", { name: "Found with 1 query and 1 citation pass · Show" });
+    await user.click(toggle);
+    const table = within(screen.getByTestId("search-queries")).getByRole("table");
+    expect(within(table).getByText("Followed citations from 40 sources")).toHaveClass("text-grey");
+    expect(within(table).getByText("212")).toHaveClass("tabular-nums");
+  });
+
+  it("takes the saved passes over the stream's once the coverage lands", () => {
+    vi.mocked(queries.useCoverage).mockReturnValue({
+      data: {
+        sentence: "",
+        backends_detail: [
+          {
+            backend: "OpenAlex",
+            relevant: 1,
+            results: 40,
+            queries: [{ query: "school meals uptake", results: 34 }],
+            passes: [
+              { pass: "citations", query: "Followed citations from 20 sources", results: 6 },
+              { pass: "lookup", query: "Looked up 200 cited works", results: 200 },
+            ],
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof queries.useCoverage>);
+    streamState = searching(
+      [{ backend: "openalex", query: "Following citations from 20 sources", kind: "citations", results: 6 }],
+      "completed",
+    );
+    renderSources();
+    expect(screen.getByRole("button", { name: "Found with 1 query and 2 citation passes · Show" })).toBeInTheDocument();
   });
 
   it("fades in a source that lands while a stage runs, and holds the page it opened on still", () => {
@@ -795,11 +848,32 @@ describe("SourcesView — the filter row (round 10)", { timeout: 20_000 }, () =>
     expect(within(screening).getAllByRole("button").map((button) => button.textContent)).toEqual(["All", "Included", "Screened out"]);
     expect(within(screening).queryByRole("button", { name: "Cited" })).toBeNull();
     // Each select is a visible bordered control at least 24 px tall.
+    // Every control is a 32 px outline box on the bar's one baseline (round 11).
     for (const name of [/^Key theme/, /^Origin/, /^Evidence type/, /^Strength/, /^Filter by year/]) {
       const trigger = within(row).getByRole("button", { name });
-      expect(trigger).toHaveClass("border", "min-h-[34px]");
+      expect(trigger).toHaveClass("border", "h-8", "text-meta");
       expect(trigger).not.toHaveClass("opacity-0");
     }
+    expect(row).toHaveClass("flex-wrap", "items-center", "gap-2");
+    // The screening switch: the chosen choice has a Navy border and words.
+    expect(within(screening).getByRole("button", { name: "Included" })).toHaveClass("border-navy", "text-navy", "h-8");
+    expect(within(screening).getByRole("button", { name: "All" })).toHaveClass("border-line-2", "text-grey");
+  });
+
+  it("shows an applied filter as a filled Navy chip whose × clears it", async () => {
+    const user = userEvent.setup();
+    renderSources(undefined, "?strength=Moderate&cited=true");
+    const chip = screen.getByRole("button", { name: "Strength: Moderate" });
+    expect(chip).toHaveTextContent("Strength: Moderate");
+    expect(chip.parentElement).toHaveClass("bg-navy", "text-paper", "h-8");
+    const cited = screen.getByRole("button", { name: "Cited" });
+    expect(cited).toHaveAttribute("aria-pressed", "true");
+    expect(cited.parentElement).toHaveClass("bg-navy");
+    await user.click(screen.getByRole("button", { name: "Clear the strength filter" }));
+    expect(screen.getByTestId("location")).not.toHaveTextContent("strength=");
+    expect(screen.getByTestId("location")).toHaveTextContent("cited=true");
+    // An idle facet stays the outline box.
+    expect(screen.getByRole("button", { name: "Strength: All" })).toHaveClass("border-line-2", "bg-paper");
   });
 
   it("filters by publisher country, the Landscape's names offered and the query carrying it", async () => {
@@ -834,9 +908,9 @@ describe("SourcesView — the filter row (round 10)", { timeout: 20_000 }, () =>
   it("offers a Sort select for phones, in column order with the direction named", async () => {
     const user = userEvent.setup();
     renderSources();
-    const trigger = screen.getByRole("button", { name: /^Sort Relevant/ });
-    expect(trigger.closest(".lg\\:hidden")).not.toBeNull();
-    expect(trigger).toHaveTextContent("Relevant, most likely first");
+    const trigger = screen.getByRole("button", { name: /^Sort: Relevant/ });
+    expect(trigger).toHaveClass("lg:hidden");
+    expect(trigger).toHaveTextContent("Sort: Relevant, most likely first");
     await user.click(trigger);
     const options = within(await screen.findByRole("listbox", { name: "Sort" })).getAllByRole("option");
     expect(options[0]).toHaveTextContent("Source, A to Z");
@@ -858,6 +932,23 @@ describe("SourcesView — the rows (round 10)", () => {
     }
     // The hover reasons are still there for a pointer.
     expect(screen.getAllByRole("button", { name: "Abstract only: why" })[0]).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("marks the values with a reason by the dotted underline, and the strength by its tone", () => {
+    renderSources([
+      { ...mockEvidence[2], source_id: "s1", title: "Strong one", appraisal_tier: "Very strong", classification_reason: "Why" },
+      { ...mockEvidence[2], source_id: "s2", title: "Middle one", appraisal_tier: "Moderate" },
+      { ...mockEvidence[2], source_id: "s3", title: "Weak one", appraisal_tier: "Weak" },
+      { ...mockEvidence[2], source_id: "s4", title: "Unrated one", appraisal_tier: "Unrated" },
+    ]);
+    const table = screen.getAllByRole("table")[0];
+    // The standard affordance: the value's word carries the dotted underline.
+    expect(within(table).getAllByText("Cohort study")[0]).toHaveClass("sources-hint-word");
+    expect(within(table).getByText("Very strong")).toHaveClass("sources-hint-word");
+    expect(within(table).getAllByText("91%")[0]).toHaveClass("sources-hint-word");
+    // The tone square before the strength: green, Navy, Grey, Grey.
+    const tones = within(table).getAllByTestId("strength-mark").map((mark) => mark.getAttribute("data-tone"));
+    expect(tones).toEqual(["strong", "moderate", "weak", "weak"]);
   });
 
   it("sets the values as plain text: the evidence type in sentence case, the one chip the green Cited", () => {

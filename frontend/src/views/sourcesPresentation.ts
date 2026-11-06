@@ -52,6 +52,54 @@ export function filterChipClass(active: boolean): string {
   }`;
 }
 
+/**
+ * The filter bar's controls (task 058, round 11): one row on one baseline,
+ * every control a 32 px outline box at Meta size. Idle, a control is the
+ * outline button (Line 2 border, Navy Semibold, hover #f0f0f3); a filter
+ * that narrows the view is a filled Navy chip with its ×; the screening
+ * switch's chosen choice takes a Navy border and Navy words, the others Grey
+ * (the longlist's outline switch, at the bar's height).
+ */
+export const FILTER_CONTROL_BASE =
+  "inline-flex h-8 min-w-0 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border px-2.5 text-meta font-semibold transition-colors duration-150";
+
+/** An idle filter control: the outline button at the bar's height. */
+export const FILTER_CONTROL_IDLE = `${FILTER_CONTROL_BASE} border-line-2 bg-paper text-navy hover:bg-[#f0f0f3]`;
+
+/** An applied filter: the filled Navy chip (its × sits inside it). */
+export const FILTER_CHIP_APPLIED = "inline-flex h-8 min-w-0 max-w-full shrink-0 items-stretch border border-navy bg-navy text-meta font-semibold text-paper";
+
+/** One part of an applied chip (its words, its ×): Navy Line on hover. */
+export const FILTER_CHIP_PART =
+  "inline-flex min-w-0 cursor-pointer items-center gap-1.5 whitespace-nowrap transition-colors duration-150 hover:bg-navy-line focus-visible:outline-offset-[-4px] focus-visible:outline-paper";
+
+/** A choice of the screening switch, chosen or not. */
+export function switchChoiceClass(chosen: boolean): string {
+  return `${FILTER_CONTROL_BASE} bg-paper ${
+    chosen ? "relative z-10 border-navy text-navy" : "border-line-2 text-grey hover:bg-[#f0f0f3] hover:text-navy"
+  }`;
+}
+
+/** The tone of an appraised strength (round 11): a 6 px square before the
+ *  word, as the status column marks its states. Green for strong, Navy for
+ *  moderate, Grey for weak and not assessed; ordered as the sort is. A tier
+ *  outside the vocabulary has no mark. */
+export type StrengthTone = "strong" | "moderate" | "weak";
+
+const STRENGTH_TONES: Record<string, StrengthTone> = {
+  "Very strong": "strong",
+  Strong: "strong",
+  Moderate: "moderate",
+  Limited: "weak",
+  Weak: "weak",
+  Unrated: "weak",
+};
+
+/** The strength's tone, or `null` for a tier the vocabulary does not hold. */
+export function strengthTone(tier: string | null | undefined): StrengthTone | null {
+  return tier ? (STRENGTH_TONES[tier] ?? null) : null;
+}
+
 /** Table header type: the Label style at Caption size (12 px Bold,
  *  uppercase, tracked), one line, so the headers label the columns without
  *  outweighing the rows (task 058, round 10, sources table entry 6). */

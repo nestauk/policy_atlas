@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { forwardRef, useRef, useState, type ComponentPropsWithoutRef, type KeyboardEvent, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import { useApiClient, useCoverage, useEvidence, useFindings, useLandscape, useTask, useSourceDossier, useSourceRecords } from "../api/queries";
@@ -17,6 +17,7 @@ import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { Tooltip } from "../ui/radix/Tooltip";
+import { CloseIcon } from "../ui/brand/icons";
 import { Arrival, ArrivalProvider, useFirstPaintDone } from "../ui/motion/arrivals";
 import { queryGroups, SearchQueries } from "./SearchQueries";
 import {
@@ -38,7 +39,11 @@ import {
   SOURCE_SORT_COLUMNS,
   STRENGTH_FILTER_OPTIONS,
   TABLE_HEADER_TEXT_CLASS,
-  filterChipClass,
+  FILTER_CHIP_APPLIED,
+  FILTER_CHIP_PART,
+  FILTER_CONTROL_IDLE,
+  strengthTone,
+  switchChoiceClass,
   type CellPulses,
   type EvidenceSortField,
   type SortOrder,
@@ -223,17 +228,18 @@ export function SourcesView() {
   return (
     <main className="py-8">
       <SearchQueries groups={groups} searching={searching} />
-      {/* One row of filters above the table they scope (task 058, round 10):
-          the screening toggles as a group, Cited, the selects, and "Clear
-          filters" once any narrows the view. The queries block above keeps
-          32 px of air (its own 24 px margin collapses into this one). */}
+      {/* The filter bar (task 058, round 11): one row above the table it
+          scopes, every control a 32 px outline box at Meta size on one
+          baseline, an applied filter a filled Navy chip with its ×, and
+          Download CSV at the row's right end. It wraps on narrow screens,
+          the gaps the same on every line. */}
       <div
         role="group"
         aria-label="Filter sources"
-        className={cn("mb-4 flex flex-wrap items-center gap-x-4 gap-y-2", groups.length > 0 && "mt-8")}
+        className={cn("mb-4 flex flex-wrap items-center gap-2", groups.length > 0 && searching && "mt-8")}
       >
-        <div role="group" aria-label="Screening" className="flex flex-wrap gap-1.5">
-          {STATUS_FILTERS.map((filter) => (
+        <div role="group" aria-label="Screening" className="flex">
+          {STATUS_FILTERS.map((filter, index) => (
             <button
               key={filter.key}
               type="button"
@@ -242,21 +248,29 @@ export function SourcesView() {
                 next.set("status", filter.key);
                 next.delete("page");
               })}
-              className={filterChipClass(statusFilter === filter.key)}
+              className={cn(switchChoiceClass(statusFilter === filter.key), index > 0 && "-ml-px")}
             >
               {filter.label}
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          aria-pressed={citedFilter}
-          onClick={() => setFacet("cited", citedFilter ? undefined : "true")}
-          className={filterChipClass(citedFilter)}
-        >
-          Cited
-        </button>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {citedFilter ? (
+          <span className={FILTER_CHIP_APPLIED}>
+            <button
+              type="button"
+              aria-pressed
+              onClick={() => setFacet("cited", undefined)}
+              className={cn(FILTER_CHIP_PART, "pl-2.5 pr-2")}
+            >
+              Cited
+              <CloseIcon size={12} />
+            </button>
+          </span>
+        ) : (
+          <button type="button" aria-pressed={false} onClick={() => setFacet("cited", "true")} className={FILTER_CONTROL_IDLE}>
+            Cited
+          </button>
+        )}
         <FilterSelect
           label="Key theme"
           allLabel="All themes"
@@ -303,7 +317,6 @@ export function SourcesView() {
             next.delete("page");
           })}
         />
-        </div>
         {/* Below lg the headers are hidden, so sorting moves here. */}
         <FilterSelect
           className="lg:hidden"
@@ -325,10 +338,13 @@ export function SourcesView() {
           }}
         />
         {filtered && (
-          <Button variant="ghost" className="px-2" onClick={clearFilters}>
+          <Button variant="ghost" className="h-8 px-2 py-0" onClick={clearFilters}>
             Clear filters
           </Button>
         )}
+        <span className="ml-auto">
+          <DownloadSourcesButton taskId={taskId} taskName={task.data?.name} />
+        </span>
       </div>
 
       <div ref={results} className="scroll-mt-4">
@@ -367,12 +383,9 @@ export function SourcesView() {
           // first results land after the page opened.
           <ArrivalProvider settled={firstPaintDone} scopeKey={`${taskId}?${viewKey}`}>
           <Arrival arrivalId="sources-table">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-              <p className="text-meta text-grey" role="status">
-                <Figures text={countLine} />
-              </p>
-              <DownloadSourcesButton taskId={taskId} taskName={task.data?.name} />
-            </div>
+            <p className="mb-3 text-meta text-grey" role="status">
+              <Figures text={countLine} />
+            </p>
             <div className="sources-frame">
               <table role="table" className="sources-table">
                 <SourcesColumns />
@@ -497,7 +510,7 @@ function SourceRow({
             {item.classification_reason ? (
               <Tooltip content={<p>{scrub(item.classification_reason)}</p>}>
                 <button type="button" tabIndex={-1} aria-label={`${type}: why this type`} className="sources-hint">
-                  {type}
+                  <span className="sources-hint-word">{type}</span>
                 </button>
               </Tooltip>
             ) : (
@@ -512,7 +525,12 @@ function SourceRow({
           <span className={cn("sources-nowrap", fade("strength"))}>
             <Tooltip content={<p>{scrub(strengthHint(item))}</p>}>
               <button type="button" tabIndex={-1} aria-label={`${item.appraisal_tier}: how strength is appraised`} className="sources-hint">
-                {scrub(item.appraisal_tier)}
+                {/* The strength's tone (round 11): green strong, Navy
+                    moderate, Grey weak and not assessed, beside its word. */}
+                {strengthTone(item.appraisal_tier) !== null && (
+                  <span aria-hidden="true" data-testid="strength-mark" className="sources-tone" data-tone={strengthTone(item.appraisal_tier)} />
+                )}
+                <span className="sources-hint-word">{scrub(item.appraisal_tier)}</span>
               </button>
             </Tooltip>
           </span>
@@ -531,8 +549,8 @@ function SourceRow({
               <span className="text-navy">{depth}</span>
             ) : (
               <Tooltip content={<p>{scrub(readDepthHint(item) ?? "")}</p>}>
-                <button type="button" tabIndex={-1} aria-label="Abstract only: why" className="sources-hint sources-hint-dotted text-grey">
-                  {depth}
+                <button type="button" tabIndex={-1} aria-label="Abstract only: why" className="sources-hint text-grey">
+                  <span className="sources-hint-word">{depth}</span>
                 </button>
               </Tooltip>
             )}
@@ -680,8 +698,9 @@ function csvCell(value: string | number | boolean | null | undefined): string {
 }
 
 /** Downloads the whole source list (every page, no filters) as a CSV file.
- *  An outline control beside the count line: the table has no single
- *  forward action, so nothing here takes the blue primary (lead, round 10). */
+ *  An outline control at the filter bar's right end (round 11): the table
+ *  has no single forward action, so nothing here takes the blue primary
+ *  (lead, round 10). */
 function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?: string }) {
   const client = useApiClient();
   const [downloading, setDownloading] = useState(false);
@@ -742,7 +761,7 @@ function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?
   return (
     <span className="flex items-center gap-3">
       {failed && <span role="alert" className="text-meta text-red">The download failed. Try again.</span>}
-      <Button type="button" variant="outline" size="sm" className="h-10 py-0" disabled={downloading} onClick={() => void download()}>
+      <Button type="button" variant="outline" size="sm" className="h-8 py-0" disabled={downloading} onClick={() => void download()}>
         {downloading ? "Preparing…" : "Download CSV"}
       </Button>
     </span>
@@ -826,17 +845,13 @@ function parseYearParam(value: string | null): number | undefined {
     : undefined;
 }
 
-/** The filter row's control: a 1 px Line 2 box on Paper, Meta Semibold
- *  Navy, its chevron Grey; the same box opens a listbox or the year range. */
-const SELECT_TRIGGER_CLASS =
-  "inline-flex min-h-[34px] min-w-0 cursor-pointer items-center justify-between gap-2 border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy transition-colors duration-150 hover:border-navy max-md:max-w-52";
-
+/** A filter control's chevron: 12 px, the trigger's colour. */
 function SelectChevron() {
   return (
     <svg
       aria-hidden="true"
       viewBox="0 0 24 24"
-      className="h-3.5 w-3.5 shrink-0 text-grey"
+      className="h-3 w-3 shrink-0 opacity-70"
       fill="none"
       stroke="currentColor"
       strokeWidth={2}
@@ -848,8 +863,52 @@ function SelectChevron() {
   );
 }
 
-/** The Year filter in the filter row: the range in words on the control
- *  ("Any", "2015 to 2020"), a popover of two four-digit fields that apply on
+/**
+ * A filter's trigger in the filter bar (round 11). Idle, the outline box
+ * with the facet's name and a chevron ("Evidence type"); applied, the
+ * filled Navy chip with the facet and its value ("Strength: Moderate") and
+ * a × that clears it. The words open the choices either way.
+ */
+const FilterTrigger = forwardRef<
+  HTMLButtonElement,
+  {
+    label: string;
+    /** The chosen value in words; `null` when the filter is idle. */
+    shown: string | null;
+    name: string;
+    onClear?: () => void;
+    clearName?: string;
+  } & ComponentPropsWithoutRef<"button">
+>(function FilterTrigger({ label, shown: value, name, onClear, clearName, className, ...props }, ref) {
+  if (value === null || onClear === undefined) {
+    return (
+      <button ref={ref} type="button" aria-label={name} className={cn(FILTER_CONTROL_IDLE, className)} {...props}>
+        <span className="truncate">{value === null ? label : <Figures text={`${label}: ${value}`} />}</span>
+        <SelectChevron />
+      </button>
+    );
+  }
+  return (
+    <span className={cn(FILTER_CHIP_APPLIED, className)}>
+      <button ref={ref} type="button" aria-label={name} className={cn(FILTER_CHIP_PART, "pl-2.5 pr-2")} {...props}>
+        <span className="truncate max-md:max-w-52">
+          <Figures text={`${label}: ${value}`} />
+        </span>
+      </button>
+      <button
+        type="button"
+        aria-label={clearName ?? `Clear the ${label.toLowerCase()} filter`}
+        onClick={onClear}
+        className={cn(FILTER_CHIP_PART, "border-l border-navy-line px-2")}
+      >
+        <CloseIcon size={12} />
+      </button>
+    </span>
+  );
+});
+
+/** The Year filter in the filter bar: "Year" idle, "Year: 2015 to 2020" as
+ *  the applied chip; a popover of two four-digit fields that apply on
  *  leaving a field or on Enter. */
 function YearFilter({
   from,
@@ -860,80 +919,67 @@ function YearFilter({
   to: number | undefined;
   onChange: (from: number | undefined, to: number | undefined) => void;
 }) {
-  const labelId = useId();
   const range = yearRangeLabel(from, to);
   const field = "mt-1 h-10 w-full border border-line-2 bg-paper px-3 text-meta font-normal text-navy";
   return (
-    <span className="flex min-w-0 max-w-full items-center gap-1.5 text-meta font-semibold text-grey">
-      <span id={labelId} aria-hidden="true" className="whitespace-nowrap">Year</span>
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label={`Filter by year: ${range === null ? "any" : range}`}
-            className={SELECT_TRIGGER_CLASS}
-          >
-            <span className="truncate"><Figures text={range ?? "Any"} /></span>
-            <SelectChevron />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-64 max-w-[calc(100vw-2rem)] p-4">
-          {/* Uncontrolled + apply-on-blur/Enter so partial typing ("20…")
-              never gets clobbered by a controlled reset. */}
-          <div className="flex items-start gap-3">
-            <label className="flex-1 text-meta font-semibold text-grey">
-              From
-              <input
-                key={`from-${from ?? "any"}`}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]{4}"
-                maxLength={4}
-                defaultValue={from ?? ""}
-                onBlur={(event) => onChange(parseYearParam(event.target.value || null), to)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") event.currentTarget.blur();
-                }}
-                placeholder="Any"
-                className={field}
-              />
-            </label>
-            <label className="flex-1 text-meta font-semibold text-grey">
-              To
-              <input
-                key={`to-${to ?? "any"}`}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]{4}"
-                maxLength={4}
-                defaultValue={to ?? ""}
-                onBlur={(event) => onChange(from, parseYearParam(event.target.value || null))}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") event.currentTarget.blur();
-                }}
-                placeholder="Any"
-                className={field}
-              />
-            </label>
-          </div>
-          {range !== null && (
-            <button
-              type="button"
-              onClick={() => onChange(undefined, undefined)}
-              className="mt-3 cursor-pointer text-meta font-semibold text-grey underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:text-navy hover:decoration-navy"
-            >
-              Clear
-            </button>
-          )}
-        </PopoverContent>
-      </Popover>
-    </span>
+    <Popover>
+      <PopoverTrigger asChild>
+        <FilterTrigger
+          label="Year"
+          shown={range}
+          name={`Filter by year: ${range === null ? "any" : range}`}
+          onClear={() => onChange(undefined, undefined)}
+          clearName="Clear the year filter"
+        />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 max-w-[calc(100vw-2rem)] p-4">
+        {/* Uncontrolled + apply-on-blur/Enter so partial typing ("20…")
+            never gets clobbered by a controlled reset. */}
+        <div className="flex items-start gap-3">
+          <label className="flex-1 text-meta font-semibold text-grey">
+            From
+            <input
+              key={`from-${from ?? "any"}`}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]{4}"
+              maxLength={4}
+              defaultValue={from ?? ""}
+              onBlur={(event) => onChange(parseYearParam(event.target.value || null), to)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              placeholder="Any"
+              className={field}
+            />
+          </label>
+          <label className="flex-1 text-meta font-semibold text-grey">
+            To
+            <input
+              key={`to-${to ?? "any"}`}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]{4}"
+              maxLength={4}
+              defaultValue={to ?? ""}
+              onBlur={(event) => onChange(from, parseYearParam(event.target.value || null))}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              placeholder="Any"
+              className={field}
+            />
+          </label>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
-/** One facet dropdown in the sources filter row. With `allLabel` the list
- *  opens on an "all" choice (value ""); without it (Sort) every choice is
- *  one of `options`. */
+/** One facet dropdown in the sources filter bar. With `allLabel` the list
+ *  opens on an "all" choice (value "") and a chosen value turns the control
+ *  into the applied chip; without it (Sort) every choice is one of
+ *  `options` and the control stays an outline box naming its value. */
 function FilterSelect({
   label,
   allLabel,
@@ -953,9 +999,6 @@ function FilterSelect({
   // native <select>: consistent chrome at every width, and long theme names
   // wrap in the menu instead of sizing (and overflowing) the closed control.
   const [open, setOpen] = useState(false);
-  const triggerId = useId();
-  const labelId = useId();
-  const valueId = useId();
   const listRef = useRef<HTMLUListElement>(null);
   const selected = options.find((option) => option.value === value);
   const pick = (next: string) => {
@@ -989,58 +1032,53 @@ function FilterSelect({
       active && "bg-blue-tint-2 font-semibold",
     );
   const choices = allLabel === undefined ? options : [{ value: "", label: allLabel }, ...options];
+  const facet = allLabel !== undefined;
+  const shown = facet ? (value === "" ? null : (selected?.label ?? value)) : (selected?.label ?? null);
   return (
-    <span className={cn("flex min-w-0 max-w-full items-center gap-1.5 text-meta font-semibold text-grey", className)}>
-      <label id={labelId} htmlFor={triggerId} className="cursor-pointer whitespace-nowrap">
-        {label}
-      </label>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            id={triggerId}
-            aria-haspopup="listbox"
-            aria-expanded={open}
-            aria-labelledby={`${labelId} ${valueId}`}
-            className={SELECT_TRIGGER_CLASS}
-          >
-            <span id={valueId} className="truncate">{selected?.label ?? allLabel ?? ""}</span>
-            <SelectChevron />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          className="w-72 max-w-[calc(100vw-2rem)] p-1"
-          onOpenAutoFocus={(event) => {
-            event.preventDefault();
-            const buttons = optionButtons();
-            (buttons.find((button) => button.getAttribute("aria-selected") === "true") ?? buttons[0])?.focus();
-          }}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <FilterTrigger
+          label={label}
+          shown={shown}
+          name={`${label}: ${selected?.label ?? allLabel ?? ""}`}
+          onClear={facet ? () => onChange("") : undefined}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          className={className}
+        />
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-72 max-w-[calc(100vw-2rem)] p-1"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          const buttons = optionButtons();
+          (buttons.find((button) => button.getAttribute("aria-selected") === "true") ?? buttons[0])?.focus();
+        }}
+      >
+        <ul
+          ref={listRef}
+          role="listbox"
+          aria-label={label}
+          onKeyDown={onListKeyDown}
+          className="flex max-h-80 flex-col overflow-y-auto"
         >
-          <ul
-            ref={listRef}
-            role="listbox"
-            aria-labelledby={labelId}
-            onKeyDown={onListKeyDown}
-            className="flex max-h-80 flex-col overflow-y-auto"
-          >
-            {choices.map((option) => (
-              <li key={option.value} role="none">
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={value === option.value}
-                  onClick={() => pick(option.value)}
-                  className={optionClass(value === option.value)}
-                >
-                  {option.label}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </PopoverContent>
-      </Popover>
-    </span>
+          {choices.map((option) => (
+            <li key={option.value} role="none">
+              <button
+                type="button"
+                role="option"
+                aria-selected={value === option.value}
+                onClick={() => pick(option.value)}
+                className={optionClass(value === option.value)}
+              >
+                {option.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -1100,8 +1138,8 @@ function RelevantCell({ item }: { item: Parameters<typeof screeningDetails>[0] }
     <Tooltip content={content}>
       <button type="button" tabIndex={-1} aria-label={name} className="sources-hint">
         <VerdictMark relevant={relevant} />
-        {figure !== null && <span className="tabular-nums text-navy">{figure}</span>}
-        {retracted && <span className="text-red">retracted</span>}
+        {figure !== null && <span className="sources-hint-word tabular-nums text-navy">{figure}</span>}
+        {retracted && <span className="sources-hint-word text-red">retracted</span>}
       </button>
     </Tooltip>
   );
@@ -1133,7 +1171,7 @@ function SourceDossier({
   return (
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent title={source ? scrub(source.title) : "Source dossier"}>
-        {isPending && <p role="status" className="anim-breathe text-body text-grey">Loading the dossier…</p>}
+        {isPending && <p role="status" className="anim-breathe-soft text-body text-grey">Loading the dossier…</p>}
         {isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
         {source && (
           <SourceDossierBody

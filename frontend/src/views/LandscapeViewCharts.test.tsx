@@ -251,8 +251,6 @@ describe("small counts: a sentence in place of a one-bar chart", () => {
   });
 
   it("words the headings' populations", () => {
-    expect(population.relevant(118)).toBe("118 relevant sources");
-    expect(population.relevant(1)).toBe("1 relevant source");
     expect(population.withYear(112)).toBe("112 with a year");
     expect(population.findings(71)).toBe("71 findings");
     expect(population.classifiedSoFar(18, 118)).toBe("Classified so far: 18 of 118 relevant sources");

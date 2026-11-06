@@ -41,8 +41,9 @@ export type RankedRow = {
   /** The label in Grey: a stage still to come. */
   muted?: boolean;
   /** Where the row leads: All sources (or Findings) filtered to its value.
-   *  Absent on rows that lead nowhere (folded tails, "Not reported", the
-   *  funnel), which then take no hover either (owner, consistency pass). */
+   *  Absent on rows that lead nowhere (folded tails, "Not reported", a
+   *  funnel stage the table cannot filter to), which then take no hover
+   *  either (owner, consistency pass; the funnel links since round 11). */
   href?: string;
 };
 
@@ -640,37 +641,46 @@ export function PublicationYears({
 
 /**
  * One Landscape section, uncarded on the Sources panel: the pane heading as
- * a real `h2` (Label style), its population figure right-aligned in Meta
- * Grey, a Line hairline, then the content.
+ * a real `h2` (Label style), its population figure or its control
+ * right-aligned, a Line hairline, then the content.
  */
 export function LandscapeSection({
   title,
   figure,
+  control,
   children,
 }: {
   title: string;
   figure?: string | null;
+  /** A control at the heading row's right end (the List / Map switch). */
+  control?: ReactNode;
   children: ReactNode;
 }) {
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} className="landscape-section min-w-0">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-line pb-2.5 pt-3.5">
+      <div
+        className={cn(
+          "flex flex-wrap justify-between gap-x-4 gap-y-0.5 border-b border-line pt-3.5",
+          control ? "items-center pb-2" : "items-baseline pb-2.5",
+        )}
+      >
         <h2 id={headingId} className={PANE_LABEL_CLASS}>
           {title}
         </h2>
         {figure ? <p className="text-meta text-grey">{figure}</p> : null}
+        {control}
       </div>
       <div className="min-w-0 pt-4">{children}</div>
     </section>
   );
 }
 
-/** "118 relevant sources" and its kin: the population a heading counts. */
+/** "112 with a year" and its kin: the population a heading counts. */
 export const population = {
-  relevant: (n: number) => `${plural(n, "relevant source")}`,
   withYear: (n: number) => `${n} with a year`,
   findings: (n: number) => plural(n, "finding"),
   classifiedSoFar: (classified: number, relevant: number) =>
     `Classified so far: ${classified} of ${plural(relevant, "relevant source")}`,
 };
+
