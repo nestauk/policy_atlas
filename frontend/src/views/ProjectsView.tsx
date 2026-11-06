@@ -35,16 +35,18 @@ import {
   sortProjectsByLastUpdated,
 } from "./listPageChrome";
 import type { Scope } from "./ScopeSwitcher";
-import { ScopeSwitcher } from "./ScopeSwitcher";
+import { ARCHIVED_HEADING_CLASS, ArchivedToggle, ScopeSwitcher } from "./ScopeSwitcher";
 import {
   ListEmpty,
   ListError,
+  FindTasks,
+  ListFootRow,
   ListSkeleton,
-  TaskListActions,
   TaskListPanel,
   pagedTasks,
 } from "./TaskListPanel";
 import { FindPopover } from "./FindPopover";
+import { ProjectName } from "./NameMenu";
 import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
 
 /**
@@ -75,7 +77,13 @@ export function ProjectsView() {
   // an unenrolled caller's page — including its queries — stays unchanged.
   const hasSwitcher = me.data?.organisation != null;
   const [scope, setScope] = useState<Scope>("mine");
-  const projects = useProjects(hasSwitcher ? { scope } : undefined);
+  // The Archived toggle (owner, round 11), as on Tasks: the archived
+  // projects of the open scope. Off, the queries are as before.
+  const [archived, setArchived] = useState(false);
+  const archivedFilter = archived ? { status: "archived" as const } : {};
+  const projects = useProjects(
+    hasSwitcher ? { scope, ...archivedFilter } : archived ? archivedFilter : undefined,
+  );
   const tasksQuery = useTasks(
     hasSwitcher
       ? { page_size: PROJECTS_OVERVIEW_TASKS_PAGE_SIZE, scope }
@@ -95,10 +103,23 @@ export function ProjectsView() {
       <PageHeader
         title={PROJECT.many}
         actions={
-          // Stays in its slot while the form is open, disabled, so the
-          // header does not reflow and the form's Create is the one blue
-          // fill on the page.
-          <>
+          // The header keeps only the primary (owner, round 11). It stays
+          // in its slot while the form is open, disabled, so the header
+          // does not reflow and the form's Create is the one blue fill on
+          // the page.
+          <PagePrimary onClick={() => setCreating(true)} disabled={creating}>
+            New {PROJECT.lower}
+          </PagePrimary>
+        }
+        filters={hasSwitcher ? <ScopeSwitcher scope={scope} onChange={setScope} /> : null}
+        // As on Tasks: the admin's note, then the magnifier.
+        aside={
+          <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-2">
+            {isAdminWideList && (
+              <p role="status" className="text-meta font-semibold text-grey">
+                {TENANCY_COPY.adminWiderList}
+              </p>
+            )}
             <FindPopover
               items={rows.map((project) => ({
                 id: project.project_id,
@@ -107,28 +128,9 @@ export function ProjectsView() {
                 updatedAt: projectLastUpdated(project, taskUpdatedAt),
               }))}
               copy={{ label: COPY.findProject, noun: PROJECT.lowerMany }}
+              className="-mr-3"
             />
-            <PagePrimary onClick={() => setCreating(true)} disabled={creating}>
-              New {PROJECT.lower}
-            </PagePrimary>
-          </>
-        }
-        filters={
-          hasSwitcher ? (
-            <ScopeSwitcher
-              scope={scope}
-              onChange={(next) => {
-                if (next !== "archived") setScope(next);
-              }}
-            />
-          ) : null
-        }
-        aside={
-          isAdminWideList ? (
-            <p role="status" className="text-meta font-semibold text-grey">
-              {TENANCY_COPY.adminWiderList}
-            </p>
-          ) : null
+          </div>
         }
       />
 
@@ -179,6 +181,8 @@ export function ProjectsView() {
       )}
 
       <div className="mt-4">
+        {/* With the archive open, the list says what it is (owner, round 11). */}
+        {archived && <h2 className={ARCHIVED_HEADING_CLASS}>Archived</h2>}
         {projects.isPending && <ListSkeleton label={`Loading ${PROJECT.lowerMany}`} />}
 
         {projects.isError && (
@@ -187,11 +191,16 @@ export function ProjectsView() {
           </ListError>
         )}
 
-        {projects.data !== undefined && projects.data.data.length === 0 && !creating && (
-          <ListEmpty label={`No ${PROJECT.lowerMany} yet`}>
-            A {PROJECT.lower} groups related {TASK.lowerMany} under one name.
-          </ListEmpty>
-        )}
+        {projects.data !== undefined &&
+          projects.data.data.length === 0 &&
+          !creating &&
+          (archived ? (
+            <ListEmpty label={`No archived ${PROJECT.lowerMany}`} />
+          ) : (
+            <ListEmpty label={`No ${PROJECT.lowerMany} yet`}>
+              A {PROJECT.lower} groups related {TASK.lowerMany} under one name.
+            </ListEmpty>
+          ))}
 
         {(projects.data?.data.length ?? 0) > 0 && (
           <ul role="list" className={listFrameClass}>
@@ -240,6 +249,11 @@ export function ProjectsView() {
             })}
           </ul>
         )}
+
+        {/* The list's foot: the archived toggle, at the right (round 11). */}
+        <ListFootRow
+          end={<ArchivedToggle pressed={archived} onToggle={() => setArchived((on) => !on)} />}
+        />
       </div>
     </main>
   );
@@ -318,24 +332,41 @@ export function ProjectDetailView() {
         context={<PageBackLink to="/projects">← {PROJECT.many}</PageBackLink>}
         // From the Projects list's cache when we came from there; otherwise
         // empty while the project loads, keeping its line box.
-        title={shown === undefined ? "" : scrub(shown.name)}
-        actions={<TaskListActions rows={tasks} newTaskHref={newTaskHref(projectId)} />}
+        // The name with its menu, Rename and Archive (owner, round 11).
+        title={
+          shown === undefined ? (
+            ""
+          ) : (
+            <ProjectName
+              projectId={projectId}
+              name={shown.name}
+              isOwner={shown.is_owner}
+              archived={shown.archived_at != null}
+            />
+          )
+        }
+        actions={<PagePrimary to={newTaskHref(projectId)}>{COPY.newTask}</PagePrimary>}
         filters={
           shown?.description != null ? (
             <p className="max-w-prose text-body text-grey">{scrub(shown.description)}</p>
           ) : null
         }
+        // The magnifier, then Make private (round 11: the header keeps
+        // only the primary).
         aside={
-          shown !== undefined ? (
-            <VisibilityControl
-              visibility={shown.visibility}
-              isOwner={shown.is_owner}
-              pending={updateProject.isPending}
-              onChange={changeVisibility}
-              // -mr-3: the label's right edge on the column's, under the primary.
-              className={`${PAGE_CONTROL_CLASS} -mr-3`}
-            />
-          ) : null
+          <div className="flex items-center gap-x-2">
+            <FindTasks rows={tasks} className={shown === undefined ? "-mr-3" : undefined} />
+            {shown !== undefined && (
+              <VisibilityControl
+                visibility={shown.visibility}
+                isOwner={shown.is_owner}
+                pending={updateProject.isPending}
+                onChange={changeVisibility}
+                // -mr-3: the label's right edge on the column's, under the primary.
+                className={`${PAGE_CONTROL_CLASS} -mr-3`}
+              />
+            )}
+          </div>
         }
       />
 

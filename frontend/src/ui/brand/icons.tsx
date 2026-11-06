@@ -189,3 +189,13 @@ export function CloseIcon(props: IconProps) {
     </Glyph>
   );
 }
+
+/** Find: the list pages' "Find a task" / "Find a project" (round 11). */
+export function SearchIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M10.5 10.5 13.5 13.5" />
+    </Glyph>
+  );
+}

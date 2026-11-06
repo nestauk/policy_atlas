@@ -2,10 +2,10 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { scrub } from "../lib/scrub";
-import { Button } from "../ui/brand/Button";
 import { cn } from "../ui/brand/cn";
-import { PAGE_CONTROL_CLASS } from "../ui/brand/PageHeader";
+import { SearchIcon } from "../ui/brand/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
+import { Tooltip, TooltipProvider } from "../ui/radix/Tooltip";
 
 /** One thing the popover can find: its name, where it opens, and when it
  *  last changed (for the starting list). */
@@ -24,7 +24,7 @@ export const FIND_RECENT_COUNT = 5;
 
 /** The list's words, by what it finds ("tasks", "projects"). */
 type FindCopy = {
-  /** The trigger's label and the field's name ("Find a task"). */
+  /** The trigger's name and tooltip, and the field's name ("Find a task"). */
   label: string;
   /** The plural noun ("tasks"). */
   noun: string;
@@ -56,9 +56,18 @@ function useSettled(value: string): string {
   return value.trim() === "" ? value : settled;
 }
 
+/** The magnifier: a 40 px target around the 16 px glyph, in the quiet
+ *  control's colours (Grey, Navy on hover and while open), the house focus
+ *  ring from the base rule, and the 3 % press. No fill, no box. */
+const FIND_TRIGGER_CLASS =
+  "pressable inline-flex size-10 shrink-0 cursor-pointer items-center justify-center text-grey " +
+  "transition-colors duration-150 ease-[ease] hover:text-navy";
+
 /**
  * "Find a task" and "Find a project" (task 058 consistency pass, owner and
- * lead rulings): a page-header control that opens a popover under itself.
+ * lead rulings): a magnifier at the right of the list's filters row (owner,
+ * round 11, out of the page header, which keeps only the primary), named
+ * and tooltipped by its label, that opens a popover under itself.
  *
  * - The field is focused on open; Escape and an outside press close it, and
  *   focus returns to the trigger (Radix).
@@ -72,7 +81,17 @@ function useSettled(value: string): string {
  *   overlay lift, 16 px padding, 384 px wide (capped at 92vw), scaling in
  *   from its trigger on the strong ease-out.
  */
-export function FindPopover({ items, copy }: { items: readonly FindItem[]; copy: FindCopy }) {
+export function FindPopover({
+  items,
+  copy,
+  className,
+}: {
+  items: readonly FindItem[];
+  copy: FindCopy;
+  /** Placement only: `-mr-3` puts the glyph on the column's right edge
+   *  when the magnifier ends the row. */
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
   const [active, setActive] = useState(0);
@@ -101,11 +120,20 @@ export function FindPopover({ items, copy }: { items: readonly FindItem[]; copy:
         }
       }}
     >
-      <PopoverTrigger asChild>
-        <Button variant="ghost" className={cn(PAGE_CONTROL_CLASS, open && "text-navy")}>
-          {copy.label}
-        </Button>
-      </PopoverTrigger>
+      <TooltipProvider delayDuration={250}>
+        {/* Below the glyph, so it never covers the header's primary above. */}
+        <Tooltip side="bottom" content={<p>{copy.label}</p>}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label={copy.label}
+              className={cn(FIND_TRIGGER_CLASS, open && "text-navy", className)}
+            >
+              <SearchIcon />
+            </button>
+          </PopoverTrigger>
+        </Tooltip>
+      </TooltipProvider>
       <PopoverContent
         align="end"
         aria-label={copy.label}

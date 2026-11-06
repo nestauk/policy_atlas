@@ -167,8 +167,8 @@ export function TaskListRow({
       <span className={`${rowFigureCellClass} max-md:hidden`}>
         {/* null and 0 differ: null means no run has asked yet. A failed
             run's count says nothing about the evidence, so it reads as the
-            dash (lead ruling, round 10). */}
-        {latestRun?.status === "failed" && !archived ? (
+            dash (lead ruling, round 10), archived or not (round 11). */}
+        {latestRun?.status === "failed" ? (
           "—"
         ) : sourceCount != null ? (
           <Figures text={sourceCount === 1 ? "1 source" : `${sourceCount} sources`} />

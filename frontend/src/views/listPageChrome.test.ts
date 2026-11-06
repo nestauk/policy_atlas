@@ -84,11 +84,11 @@ describe("rowAccessibleName", () => {
   });
 });
 
-// Round 10, lead ruling P6: the owner column is off on Mine and Archived.
+// Round 10, lead ruling P6: the owner column is off on Mine, active or
+// archived; on Organisation it shows, active or archived (round 11).
 describe("showOwnerColumn", () => {
   it("is off on the reader's own views and on for Organisation", () => {
     expect(showOwnerColumn(true, [{ is_owner: true }], "mine")).toBe(false);
-    expect(showOwnerColumn(true, [{ is_owner: true }], "archived")).toBe(false);
     expect(showOwnerColumn(true, [{ is_owner: true }], "all")).toBe(true);
     expect(showOwnerColumn(true, [{ is_owner: true }])).toBe(true);
     expect(showOwnerColumn(false, [{ is_owner: true }])).toBe(false);

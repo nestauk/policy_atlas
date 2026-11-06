@@ -115,18 +115,19 @@ export const listFrameClass = "border border-line-2 bg-paper";
  * false and `rows.some(is_owner === false)` false always travel together for
  * that caller — the column stays off, byte-identical to today.
  *
- * On Mine (and the reader's own Archived list) the column is off (lead
- * ruling P6, round 10): it would say the reader's own name on every row. It
- * shows on Organisation and on a Project, where every row renders it
- * (the reader's own rows read "You") — a column that appears on some rows
- * and not others reads as broken alignment, not as a considered omission.
+ * On Mine, active or archived, the column is off (lead ruling P6, round
+ * 10): it would say the reader's own name on every row. It shows on
+ * Organisation, active or archived (round 11), and on a Project, where every
+ * row renders it (the reader's own rows read "You") — a column that appears
+ * on some rows and not others reads as broken alignment, not as a
+ * considered omission.
  */
 export function showOwnerColumn(
   hasSwitcher: boolean,
   rows: readonly { is_owner?: boolean }[],
-  view?: "mine" | "all" | "archived",
+  scope?: "mine" | "all",
 ): boolean {
-  if (view === "mine" || view === "archived") return false;
+  if (scope === "mine") return false;
   return hasSwitcher || rows.some((row) => row.is_owner === false);
 }
 

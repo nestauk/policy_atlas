@@ -92,7 +92,7 @@ describe("TasksListView — the Organisation/Mine switcher (task 033 phase 10b, 
         typeof queries.useMe
       >,
     );
-    // Nothing archived, so no Archived entry either (round 10).
+    // Nothing archived; the Archived toggle is not a scope (round 11).
     tasks.mockImplementation(((query: Parameters<typeof queries.useTasksPaged>[0]) => ({
       data: { data: query?.status === "archived" ? [] : [ROW] },
       isPending: false,
@@ -221,11 +221,23 @@ const SOLO = {
 
 type TasksArg = Parameters<typeof queries.useTasksPaged>[0];
 
-/** The lists answering per query: `own` for Mine (or unscoped), `org` for Organisation. */
-function tasksBy({ own = [] as unknown[], archived = [] as unknown[], org = [] as unknown[] }) {
+/** The lists answering per query: `own` for Mine (or unscoped), `org` for
+ *  Organisation, `archived` and `orgArchived` for their archives. */
+function tasksBy({
+  own = [] as unknown[],
+  archived = [] as unknown[],
+  org = [] as unknown[],
+  orgArchived = [] as unknown[],
+}) {
   tasks.mockImplementation(((query: TasksArg) => {
     const rows =
-      query?.status === "archived" ? archived : query?.scope === "all" ? org : own;
+      query?.status === "archived"
+        ? query?.scope === "all"
+          ? orgArchived
+          : archived
+        : query?.scope === "all"
+          ? org
+          : own;
     return { data: { data: rows }, isPending: false, isError: false, refetch: vi.fn() };
   }) as unknown as (...args: unknown[]) => Flat);
 }
@@ -329,18 +341,23 @@ describe("TasksListView — the page header", () => {
     expect(organisation).not.toHaveClass("after:scale-x-100");
   });
 
-  it("puts Find a task and New task in the actions slot: 40 px ghost, then the 52 px primary", () => {
-    vi.mocked(queries.useMe).mockReturnValue(SOLO);
+  // Round 11 (owner): the header keeps only the primary; Find a task is a
+  // magnifier at the right of the filters row, then the archived toggle.
+  it("keeps only New task in the actions slot, and the Find a task magnifier in the filters row", () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
     const { container } = renderView();
     const actions = container.querySelector('[data-slot="actions"]') as HTMLElement;
+    const filters = container.querySelector('[data-slot="filters"]') as HTMLElement;
     const find = screen.getByRole("button", { name: "Find a task" });
     const primary = screen.getByRole("link", { name: "New task" });
-    expect(actions).toContainElement(find);
-    expect(actions).toContainElement(primary);
-    expect(find).toHaveClass("h-10", "text-body", "font-semibold");
+    expect(actions.children).toHaveLength(1);
+    expect(actions.firstElementChild).toBe(primary);
     expect(primary).toHaveClass("h-13", "min-w-36");
-    // The primary is last: rightmost in the cluster.
-    expect(actions.lastElementChild).toBe(primary);
+    expect(filters).toContainElement(find);
+    expect(screen.getByRole("tablist", { name: "Scope" })).not.toContainElement(find);
+    expect(find).toHaveClass("size-10", "text-grey");
+    // The filters row holds only the switcher and the magnifier.
+    expect(filters).not.toContainElement(screen.getByRole("button", { name: "Show archived" }));
   });
 
   it("reserves the filters row for a caller without an organisation (lead ruling P5)", () => {
@@ -449,43 +466,127 @@ describe("TasksListView — a list that failed to load", () => {
   });
 });
 
-// Round 10: the reader's archived tasks, behind an Archived entry in the
-// filters row that shows only while there are some.
-describe("TasksListView — Archived", () => {
+// Round 11 (owner): Archived is not a scope. The switcher keeps Mine and
+// Organisation; a quiet "Show archived" at the list's foot lists the
+// archived tasks of the open scope under an "Archived" heading.
+describe("TasksListView — the Archived toggle", () => {
   const ARCHIVED_ROW = { ...ROW, task_id: "task-9", name: "Old bus fares task", status: "archived" };
+  const COLLEAGUE_ARCHIVED_ROW = {
+    ...ROW,
+    task_id: "task-8",
+    name: "Retired school meals task",
+    status: "archived",
+    is_owner: false,
+    owner_display: "Grace Hopper",
+  };
+  const toggle = () => screen.getByRole("button", { name: /^(Show|Hide) archived$/ });
 
-  it("offers Archived when the reader has archived tasks, and lists them with the status word Archived", async () => {
+  it("sits at the list's foot, not in the filters row, and the switcher keeps two scopes", () => {
     vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
-    tasksBy({ own: [ROW], archived: [ARCHIVED_ROW] });
+    tasksBy({ own: [ROW] });
+    const { container } = renderRoutes();
+    const filters = container.querySelector('[data-slot="filters"]') as HTMLElement;
+    expect(filters).not.toContainElement(toggle());
+    const list = screen.getByRole("list");
+    expect(list.compareDocumentPosition(toggle()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Archived" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((tab) => tab.getAttribute("aria-selected"))).toHaveLength(2);
+    expect(screen.queryByRole("tab", { name: "Archived" })).not.toBeInTheDocument();
+    // The quiet control at Caption (owner, round 11): Grey words over the
+    // Line 2 underline, never a button box.
+    expect(toggle()).toHaveAccessibleName("Show archived");
+    expect(toggle()).toHaveAccessibleName("Show archived");
+    expect(toggle()).toHaveClass("text-caption", "text-grey", "underline", "decoration-line-2", "min-h-10");
+    expect(toggle()).not.toHaveClass("border", "bg-blue");
+  });
+
+  it("on Mine, lists the reader's archived tasks and turns back to the active list", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
+    tasksBy({ own: [ROW], archived: [ARCHIVED_ROW], orgArchived: [COLLEAGUE_ARCHIVED_ROW] });
     const user = userEvent.setup();
     renderRoutes();
     expect(screen.queryByText("Old bus fares task")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "Archived" }));
-    expect(screen.getByRole("tab", { name: "Archived" })).toHaveAttribute("aria-selected", "true");
+
+    await user.click(toggle());
+    expect(toggle()).toHaveAccessibleName("Hide archived");
+    expect(toggle()).toHaveAccessibleName("Hide archived");
+    expect(screen.getByRole("heading", { level: 2, name: "Archived" })).toHaveClass("text-meta");
+    expect(screen.getByRole("tab", { name: "Mine" })).toHaveAttribute("aria-selected", "true");
     const row = screen.getByRole("link", { name: /^Old bus fares task · Archived/ });
     expect(within(row).getByText("Archived")).toBeInTheDocument();
     expect(screen.queryByText("Healthier childhoods")).not.toBeInTheDocument();
+    expect(screen.queryByText("Retired school meals task")).not.toBeInTheDocument();
     // The reader's own list: no owner column.
     expect(within(row).queryByText("You")).not.toBeInTheDocument();
     expect(queries.useTasksPaged).toHaveBeenCalledWith({ scope: "mine", status: "archived" });
+
+    await user.click(toggle());
+    expect(toggle()).toHaveAccessibleName("Show archived");
+    expect(screen.queryByRole("heading", { name: "Archived" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Healthier childhoods/ })).toBeInTheDocument();
+    expect(screen.queryByText("Old bus fares task")).not.toBeInTheDocument();
   });
 
-  it("does not offer Archived when nothing is archived", () => {
+  it("on Organisation, lists the organisation's archived tasks with the owner column, and keeps the toggle across scopes", async () => {
     vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
-    tasksBy({ own: [ROW] });
-    renderRoutes();
-    expect(screen.queryByRole("tab", { name: "Archived" })).not.toBeInTheDocument();
-  });
-
-  it("gives a reader with no organisation Mine and Archived, and sends no scope", async () => {
-    vi.mocked(queries.useMe).mockReturnValue(SOLO);
-    tasksBy({ own: [ROW], archived: [ARCHIVED_ROW] });
+    tasksBy({ own: [ROW], archived: [ARCHIVED_ROW], orgArchived: [ARCHIVED_ROW, COLLEAGUE_ARCHIVED_ROW] });
     const user = userEvent.setup();
     renderRoutes();
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["MineMine", "ArchivedArchived"]);
-    await user.click(screen.getByRole("tab", { name: "Archived" }));
+    await user.click(screen.getByRole("tab", { name: "Organisation" }));
+    await user.click(toggle());
+    expect(queries.useTasksPaged).toHaveBeenCalledWith(
+      { scope: "all", status: "archived" },
+      { enabled: true },
+    );
+    const colleague = screen.getByRole("link", { name: /^Retired school meals task · Archived/ });
+    expect(within(colleague).getByText("Grace Hopper")).toBeInTheDocument();
+    const own = screen.getByRole("link", { name: /^Old bus fares task · Archived/ });
+    expect(within(own).getByText("You")).toBeInTheDocument();
+
+    // Back to Mine with the toggle still on: the reader's archive alone.
+    await user.click(screen.getByRole("tab", { name: "Mine" }));
+    expect(toggle()).toHaveAccessibleName("Hide archived");
+    expect(screen.getByRole("link", { name: /^Old bus fares task · Archived/ })).toBeInTheDocument();
+    expect(screen.queryByText("Retired school meals task")).not.toBeInTheDocument();
+  });
+
+  it("does not ask for the organisation's archive until it is open", () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
+    tasksBy({ own: [ROW] });
+    vi.mocked(queries.useTasksPaged).mockClear();
+    renderRoutes();
+    expect(queries.useTasksPaged).not.toHaveBeenCalledWith(
+      { scope: "all", status: "archived" },
+      { enabled: true },
+    );
+  });
+
+  it("says 'No archived tasks' when the open scope has none", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
+    tasksBy({ own: [ROW], orgArchived: [COLLEAGUE_ARCHIVED_ROW] });
+    const user = userEvent.setup();
+    renderRoutes();
+    await user.click(toggle());
+    const empty = screen.getByRole("status");
+    expect(empty).toHaveTextContent(/^No archived tasks$/);
+    // The way back stays under the empty list.
+    expect(toggle()).toHaveAccessibleName("Hide archived");
+    // Organisation has one from a colleague.
+    await user.click(screen.getByRole("tab", { name: "Organisation" }));
+    expect(screen.getByRole("link", { name: /^Retired school meals task · Archived/ })).toBeInTheDocument();
+  });
+
+  it("gives a reader with no organisation the toggle without a switcher, and sends no scope", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(SOLO);
+    tasksBy({ own: [ROW], archived: [ARCHIVED_ROW] });
+    vi.mocked(queries.useTasksPaged).mockClear();
+    const user = userEvent.setup();
+    renderRoutes();
+    expect(screen.queryByRole("tablist", { name: "Scope" })).not.toBeInTheDocument();
+    await user.click(toggle());
     expect(screen.getByRole("link", { name: /^Old bus fares task · Archived/ })).toBeInTheDocument();
     expect(queries.useTasksPaged).toHaveBeenCalledWith({ status: "archived" });
+    expect(queries.useTasksPaged).not.toHaveBeenCalledWith(expect.objectContaining({ scope: expect.anything() }));
   });
 });
 
@@ -540,6 +641,24 @@ describe("TasksListView — Show more", () => {
       expect(document.activeElement).toBe(screen.getByRole("link", { name: /^Task number 51 · / })),
     );
     expect(screen.queryByRole("button", { name: "Show more" })).not.toBeInTheDocument();
+  });
+
+  it("shares the foot row with Show archived, Show more first and Show archived at the right (round 11)", () => {
+    vi.mocked(queries.useMe).mockReturnValue(SOLO);
+    tasks.mockReturnValue({
+      data: { data: page(1, 50), pagination: { page: 1, page_size: 50, total_items: 60, has_more: true } },
+      hasNextPage: true,
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as Flat);
+    renderView();
+    const more = screen.getByRole("button", { name: "Show more" });
+    const archived = screen.getByRole("button", { name: "Show archived" });
+    const row = more.parentElement as HTMLElement;
+    expect(row).toContainElement(archived);
+    expect(archived.parentElement).toHaveClass("ml-auto");
+    expect(more.compareDocumentPosition(archived) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("holds the control, disabled, while the next page is on its way", () => {

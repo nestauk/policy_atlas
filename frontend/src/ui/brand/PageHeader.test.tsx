@@ -103,14 +103,14 @@ describe("header controls", () => {
       <MemoryRouter>
         <PagePrimary to="/new">New task</PagePrimary>
         <Button variant="ghost" className={PAGE_CONTROL_CLASS}>
-          Find a task
+          Make private
         </Button>
       </MemoryRouter>,
     );
     expect(screen.getByRole("link", { name: "New task" })).toHaveClass("text-body");
-    const find = screen.getByRole("button", { name: "Find a task" });
-    expect(find).toHaveClass("text-body", "font-semibold", "h-10");
-    expect(find).not.toHaveClass("text-meta");
+    const control = screen.getByRole("button", { name: "Make private" });
+    expect(control).toHaveClass("text-body", "font-semibold", "h-10");
+    expect(control).not.toHaveClass("text-meta");
   });
 
   it("the back link is a 40 px target drawn in the 24 px context row", () => {

@@ -80,11 +80,11 @@ describe("TaskListRow — the status mark", () => {
       latestRun: { capability_run_id: "r1", status: "running", started_at: startedAt },
       activeRun: { capability_run_id: "r1", status: "running", started_at: startedAt, stage: "acquire", stage_label: "Searching" },
     });
-    expect(markOf(container)).toHaveClass("bg-blue", "size-1.5", "anim-breathe");
+    expect(markOf(container)).toHaveClass("bg-blue", "size-1.5", "anim-breathe-mark");
     expect(liveMarkOf(container)).toBeNull();
     unmount();
     const before = renderRow({ latestRun: { capability_run_id: "r1", status: "running", started_at: startedAt } });
-    expect(markOf(before.container)).toHaveClass("bg-blue", "size-1.5", "anim-breathe");
+    expect(markOf(before.container)).toHaveClass("bg-blue", "size-1.5", "anim-breathe-mark");
     expect(liveMarkOf(before.container)).toBeNull();
   });
 
@@ -220,6 +220,17 @@ describe("TaskListRow — round 10 words and layout", () => {
   it("shows the dash, not 0 sources, on a failed row (lead ruling, round 10)", () => {
     renderRow({ sourceCount: 0, latestRun: { capability_run_id: "r1", status: "failed", started_at: "2026-01-01T00:00:00Z" } });
     expect(screen.queryByText("0")).not.toBeInTheDocument();
+    expect(screen.getByText("—")).toHaveClass("max-md:hidden");
+  });
+
+  it("shows the dash on an archived task whose run failed (lead ruling, round 11)", () => {
+    renderRow({
+      archived: true,
+      sourceCount: 0,
+      latestRun: { capability_run_id: "r1", status: "failed", started_at: "2026-01-01T00:00:00Z" },
+    });
+    expect(screen.getByTitle("Archived")).toBeInTheDocument();
+    expect(screen.queryByText("0 sources")).not.toBeInTheDocument();
     expect(screen.getByText("—")).toHaveClass("max-md:hidden");
   });
 

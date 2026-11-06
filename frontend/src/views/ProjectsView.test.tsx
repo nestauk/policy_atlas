@@ -37,6 +37,8 @@ function pagedResult(rows: unknown[], extra: Record<string, unknown> = {}) {
 vi.mock("../api/mutations", () => ({
   useCreateProject: vi.fn(),
   useUpdateProject: vi.fn(),
+  // The project page's title menu (round 11, the workspace builder's).
+  useArchiveProject: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 
 const PROJECT_ID = "project-1";
@@ -234,6 +236,66 @@ describe("ProjectsView — the Organisation/Mine switcher (task 033 phase 10b)",
   });
 });
 
+// Round 11 (owner): projects can be archived; the Projects page takes the
+// Tasks page's Archived toggle, listing the archived projects of the open
+// scope through the list's `status` parameter.
+describe("ProjectsView — the Archived toggle", () => {
+  const ENROLLED_ME = {
+    data: {
+      user_id: "u1",
+      display_name: "Ada Lovelace",
+      organisation: { org_id: "org-1", name: "Dept" },
+      is_admin: false,
+    },
+  } as unknown as ReturnType<typeof queries.useMe>;
+  const toggle = () => screen.getByRole("button", { name: /^(Show|Hide) archived$/ });
+
+  it("sits at the list's foot, off by default, with the queries as before", () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED_ME);
+    const { container } = renderList();
+    const filters = container.querySelector('[data-slot="filters"]') as HTMLElement;
+    expect(filters).not.toContainElement(toggle());
+    expect(toggle()).toHaveClass("text-caption");
+    expect(screen.queryByRole("heading", { name: "Archived" })).not.toBeInTheDocument();
+    expect(toggle()).toHaveAccessibleName("Show archived");
+    expect(queries.useProjects).toHaveBeenCalledWith({ scope: "mine" });
+    expect(queries.useProjects).not.toHaveBeenCalledWith(expect.objectContaining({ status: expect.anything() }));
+  });
+
+  it("asks for the archived projects of the open scope, and keeps the toggle across scopes", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED_ME);
+    const user = userEvent.setup();
+    renderList();
+    await user.click(toggle());
+    expect(toggle()).toHaveAccessibleName("Hide archived");
+    expect(toggle()).toHaveAccessibleName("Hide archived");
+    expect(screen.getByRole("heading", { level: 2, name: "Archived" })).toBeInTheDocument();
+    expect(queries.useProjects).toHaveBeenCalledWith({ scope: "mine", status: "archived" });
+    await user.click(screen.getByRole("tab", { name: "Organisation" }));
+    expect(toggle()).toHaveAccessibleName("Hide archived");
+    expect(queries.useProjects).toHaveBeenCalledWith({ scope: "all", status: "archived" });
+    await user.click(toggle());
+    expect(queries.useProjects).toHaveBeenLastCalledWith({ scope: "all" });
+  });
+
+  it("says 'No archived projects' when the open scope has none", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await user.click(toggle());
+    expect(screen.getByRole("status")).toHaveTextContent(/^No archived projects$/);
+  });
+
+  it("gives a reader with no organisation the toggle without a scope", async () => {
+    vi.mocked(queries.useProjects).mockClear();
+    const user = userEvent.setup();
+    renderList();
+    expect(queries.useProjects).toHaveBeenCalledWith(undefined);
+    await user.click(toggle());
+    expect(queries.useProjects).toHaveBeenCalledWith({ status: "archived" });
+    expect(queries.useProjects).not.toHaveBeenCalledWith(expect.objectContaining({ scope: expect.anything() }));
+  });
+});
+
 describe("ProjectDetailView — the visibility-outcome copy (task 033 phase 10b)", () => {
   it("renders the singular cascade line when exactly one Task follows", async () => {
     const mutate = vi.fn((_body, options: { onSuccess: (data: unknown) => void }) => {
@@ -315,13 +377,19 @@ describe("ProjectsView — the page header and list (lists polish)", () => {
     expect(screen.getByLabelText("Project name")).toBeInTheDocument();
   });
 
-  it("puts Find a project before New project in the actions slot, built as Find a task is", () => {
+  // Round 11 (owner): the header keeps only the primary; Find a project is
+  // the magnifier at the right of the filters row, before the archived toggle.
+  it("keeps only New project in the header and puts the Find a project magnifier in the filters row", () => {
     const { container } = renderList();
     const actions = container.querySelector('[data-slot="actions"]') as HTMLElement;
+    const filters = container.querySelector('[data-slot="filters"]') as HTMLElement;
     const find = screen.getByRole("button", { name: "Find a project" });
-    expect(actions).toContainElement(find);
-    expect(find).toHaveClass("h-10", "text-body", "font-semibold");
-    expect(actions.lastElementChild).toBe(screen.getByRole("button", { name: "New project" }));
+    expect(actions.children).toHaveLength(1);
+    expect(actions.firstElementChild).toBe(screen.getByRole("button", { name: "New project" }));
+    expect(filters).toContainElement(find);
+    expect(find).toHaveClass("size-10", "text-grey", "hover:text-navy");
+    expect(find.querySelector("svg")).not.toBeNull();
+    expect(filters).not.toContainElement(screen.getByRole("button", { name: "Show archived" }));
   });
 
   it("shows an empty list in the list's frame, left-aligned, without the card shadow", () => {
@@ -405,6 +473,16 @@ describe("ProjectDetailView — the page header and list (lists polish)", () => 
       screen.getByRole("link", { name: "New task" }),
     );
     expect(screen.getByRole("list", { name: "Loading tasks" })).toBeInTheDocument();
+  });
+
+  it("keeps only New task in a project's header, the Find a task magnifier in its filters row", () => {
+    const { container } = renderDetail();
+    const actions = container.querySelector('[data-slot="actions"]') as HTMLElement;
+    expect(actions.children).toHaveLength(1);
+    expect(actions.firstElementChild).toBe(screen.getByRole("link", { name: "New task" }));
+    expect(container.querySelector('[data-slot="filters"]')).toContainElement(
+      screen.getByRole("button", { name: "Find a task" }),
+    );
   });
 
   it("puts the way back in the context row, and Make private in the filters row at 40 px", () => {

@@ -4,7 +4,6 @@ import type { components } from "../api/gen/types";
 import type { useTasksPaged } from "../api/queries";
 import { COPY, TASK } from "../lib/vocabulary";
 import { Button } from "../ui/brand/Button";
-import { PagePrimary } from "../ui/brand/PageHeader";
 import { FindPopover, type FindItem } from "./FindPopover";
 import { taskDestination } from "./lifecycle";
 import { listFrameClass } from "./listPageChrome";
@@ -55,18 +54,20 @@ function projectPrefix(
   return projectNameList(ids, names).join(" · ");
 }
 
-/** Find-a-task and New-task controls shared by the Tasks and Project page
- *  headers: drop them straight into `PageHeader`'s actions slot. */
-export function TaskListActions({
+/** "Find a task", shared by the Tasks and Project pages: the magnifier at
+ *  the right of the filters row (round 11; the header keeps only the
+ *  primary). */
+export function FindTasks({
   rows,
   projectNames,
   showProjectPrefix = false,
-  newTaskHref,
+  className,
 }: {
   rows: readonly TaskListItem[];
   projectNames?: ReadonlyMap<string, string>;
   showProjectPrefix?: boolean;
-  newTaskHref: string;
+  /** Placement only, passed to the magnifier. */
+  className?: string;
 }) {
   const items: FindItem[] = rows.map((row) => {
     const projectName = showProjectPrefix ? projectPrefix(row.project_ids, projectNames) : "";
@@ -79,10 +80,11 @@ export function TaskListActions({
   });
 
   return (
-    <>
-      <FindPopover items={items} copy={{ label: COPY.findTask, noun: TASK.lowerMany }} />
-      <PagePrimary to={newTaskHref}>{COPY.newTask}</PagePrimary>
-    </>
+    <FindPopover
+      items={items}
+      copy={{ label: COPY.findTask, noun: TASK.lowerMany }}
+      className={className}
+    />
   );
 }
 
@@ -155,6 +157,8 @@ type TaskListPanelProps = {
   empty?: ReactNode;
   /** The list's foot: "Show more" while the server holds more rows. */
   more?: MoreTasks;
+  /** The foot row's right end, shown in every state (the archived toggle). */
+  footEnd?: ReactNode;
 };
 
 /**
@@ -230,33 +234,36 @@ export function ListError({
 }
 
 /**
- * The list's foot (round 10): "Show more" under the frame, at the list's
- * left edge, the outline button pagination uses. It holds its place, disabled,
- * while the next page is on its way; a page that fails offers Retry instead.
+ * The list's foot row (round 10, round 11): "Show more" at the list's left
+ * edge, and at the right what the page puts there (the archived toggle),
+ * alone when the other is absent. 40 px, 16 px under the frame; nothing
+ * when both are absent.
  */
-function ListFoot({ more, onShowMore }: { more: MoreTasks; onShowMore: () => void }) {
-  if (more.error) {
-    return (
-      <div className="mt-4">
-        <ListError actionLabel="Retry" onRetry={more.onRetry}>
-          Your {TASK.lowerMany} couldn't be loaded.
-        </ListError>
-      </div>
-    );
-  }
-  if (!more.hasMore) return null;
+export function ListFootRow({ start, end }: { start?: ReactNode; end?: ReactNode }) {
+  if ((start == null || start === false) && (end == null || end === false)) return null;
   return (
-    <div className="mt-4">
-      <Button
-        variant="outline"
-        className="h-10 py-0"
-        disabled={more.loading}
-        aria-busy={more.loading || undefined}
-        onClick={onShowMore}
-      >
-        Show more
-      </Button>
+    <div className="mt-4 flex min-h-10 flex-wrap items-center gap-x-4 gap-y-2">
+      {start}
+      {end != null && end !== false && <div className="ml-auto">{end}</div>}
     </div>
+  );
+}
+
+/**
+ * "Show more" (round 10): the outline button pagination uses. It holds its
+ * place, disabled, while the next page is on its way.
+ */
+function ShowMore({ more, onShowMore }: { more: MoreTasks; onShowMore: () => void }) {
+  return (
+    <Button
+      variant="outline"
+      className="h-10 py-0"
+      disabled={more.loading}
+      aria-busy={more.loading || undefined}
+      onClick={onShowMore}
+    >
+      Show more
+    </Button>
   );
 }
 
@@ -273,6 +280,7 @@ export function TaskListPanel({
   ownerlessLabel,
   empty,
   more,
+  footEnd,
 }: TaskListPanelProps) {
   // After "Show more", focus moves to the first row that arrived, so a
   // keyboard reader carries on reading where the list grew rather than at a
@@ -286,19 +294,36 @@ export function TaskListPanel({
     listRef.current?.querySelectorAll<HTMLAnchorElement>(":scope > li > a")[from]?.focus();
   }, [rows.length]);
 
+  const foot = (start?: ReactNode) => <ListFootRow start={start} end={footEnd} />;
+
   if (isPending) {
-    return <ListSkeleton label={`Loading ${TASK.lowerMany}`} />;
+    return (
+      <>
+        <ListSkeleton label={`Loading ${TASK.lowerMany}`} />
+        {foot()}
+      </>
+    );
   }
 
   if (isError) {
     return (
-      <ListError actionLabel="Retry" onRetry={() => onRetry?.()}>
-        Your {TASK.lowerMany} couldn't be loaded.
-      </ListError>
+      <>
+        <ListError actionLabel="Retry" onRetry={() => onRetry?.()}>
+          Your {TASK.lowerMany} couldn't be loaded.
+        </ListError>
+        {foot()}
+      </>
     );
   }
 
-  if (rows.length === 0) return loaded ? (empty ?? null) : null;
+  if (rows.length === 0) {
+    return (
+      <>
+        {loaded ? (empty ?? null) : null}
+        {foot()}
+      </>
+    );
+  }
 
   return (
     <>
@@ -326,14 +351,24 @@ export function TaskListPanel({
           </li>
         ))}
       </ul>
-      {more !== undefined && (
-        <ListFoot
-          more={more}
-          onShowMore={() => {
-            focusFrom.current = rows.length;
-            more.onShowMore();
-          }}
-        />
+      {/* A page after the first that fails offers Retry under the rows. */}
+      {more?.error === true && (
+        <div className="mt-4">
+          <ListError actionLabel="Retry" onRetry={more.onRetry}>
+            Your {TASK.lowerMany} couldn't be loaded.
+          </ListError>
+        </div>
+      )}
+      {foot(
+        more !== undefined && !more.error && more.hasMore ? (
+          <ShowMore
+            more={more}
+            onShowMore={() => {
+              focusFrom.current = rows.length;
+              more.onShowMore();
+            }}
+          />
+        ) : null,
       )}
     </>
   );

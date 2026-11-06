@@ -104,6 +104,16 @@ describe("FindPopover", () => {
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
+  it("is a magnifier named by its label: a 40 px target in the quiet control's colours (round 11)", () => {
+    renderFind();
+    const trigger = screen.getByRole("button", { name: "Find a task" });
+    expect(trigger).toHaveAttribute("aria-label", "Find a task");
+    expect(trigger).toHaveClass("size-10", "text-grey", "hover:text-navy");
+    expect(trigger).not.toHaveClass("bg-blue");
+    expect(trigger.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(trigger).toHaveTextContent("");
+  });
+
   it("closes on Escape and gives focus back to the trigger", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderFind();
