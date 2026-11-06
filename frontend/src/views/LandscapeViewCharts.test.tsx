@@ -1,6 +1,7 @@
-import { render, screen, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useLocation } from "react-router";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   EVIDENCE_TYPE_ORDER,
@@ -15,6 +16,7 @@ import {
   PublicationYears,
   RankedBars,
   singleTypeSentence,
+  yearAxis,
   yearTicks,
 } from "./LandscapeViewCharts";
 import { LandscapeSkeleton } from "./LandscapeViewSkeleton";
@@ -160,7 +162,9 @@ describe("evidenceTypeRows", () => {
       { "Observational Research Studies": 31, "Systematic Review and Meta-Analysis": 4 },
       false,
     );
-    expect(labels(rows)).toEqual([...EVIDENCE_TYPE_ORDER]);
+    // Shown in sentence case; the keys keep the classifier's labels.
+    expect(rows.map((row) => row.key)).toEqual([...EVIDENCE_TYPE_ORDER]);
+    expect(labels(rows)[0]).toBe("Systematic review and meta-analysis");
     expect(rows[0].count).toBe(4);
     expect(rows[1].count).toBe(0);
     expect(rows[2].count).toBe(31);
@@ -171,8 +175,8 @@ describe("evidenceTypeRows", () => {
       { "Unknown / Insufficient information": 5, "Other (Non-evidence documents)": 0, "Modelling & Simulation": 9 },
       false,
     );
-    expect(rows.at(-1)).toMatchObject({ label: "Unknown / Insufficient information", count: 5, tone: "grey" });
-    expect(labels(rows)).not.toContain("Other (Non-evidence documents)");
+    expect(rows.at(-1)).toMatchObject({ label: "Unknown / insufficient information", count: 5, tone: "grey" });
+    expect(labels(rows)).not.toContain("Other (non-evidence documents)");
   });
 
   it("puts a label outside the vocabulary after the substantive types, largest first", () => {
@@ -184,7 +188,7 @@ describe("evidenceTypeRows", () => {
     const rows = evidenceTypeRows({ "RCTs and Quasi-Experimental Studies": 6 }, true);
     expect(rows).toHaveLength(9);
     expect(rows[0]).toMatchObject({ count: null, pending: true });
-    expect(rows[1]).toMatchObject({ label: "RCTs and Quasi-Experimental Studies", count: 6, pending: false });
+    expect(rows[1]).toMatchObject({ label: "RCTs and quasi-experimental studies", count: 6, pending: false });
     expect(rows.at(-1)).toMatchObject({ count: null, pending: true, tone: "grey" });
   });
 
@@ -236,7 +240,7 @@ describe("facetRows", () => {
 describe("small counts: a sentence in place of a one-bar chart", () => {
   it("names the one evidence type there is", () => {
     const rows = evidenceTypeRows({ "Systematic Review and Meta-Analysis": 1 }, false);
-    expect(singleTypeSentence(rows)).toBe("1 source: Systematic Review and Meta-Analysis.");
+    expect(singleTypeSentence(rows)).toBe("1 source: Systematic review and meta-analysis.");
     expect(singleTypeSentence(evidenceTypeRows({ "Modelling & Simulation": 1, "Observational Research Studies": 2 }, false))).toBeNull();
   });
 
@@ -252,6 +256,16 @@ describe("small counts: a sentence in place of a one-bar chart", () => {
     expect(population.withYear(112)).toBe("112 with a year");
     expect(population.findings(71)).toBe("71 findings");
     expect(population.classifiedSoFar(18, 118)).toBe("Classified so far: 18 of 118 relevant sources");
+  });
+});
+
+describe("yearAxis", () => {
+  it("steps the value axis in at most four round steps, the top at or above the largest year", () => {
+    expect(yearAxis(1)).toEqual([0, 1]);
+    expect(yearAxis(6)).toEqual([0, 2, 4, 6]);
+    expect(yearAxis(10)).toEqual([0, 5, 10]);
+    expect(yearAxis(37)).toEqual([0, 10, 20, 30, 40]);
+    expect(yearAxis(90)).toEqual([0, 25, 50, 75, 100]);
   });
 });
 
@@ -273,35 +287,123 @@ describe("yearTicks", () => {
   });
 });
 
-describe("PublicationYears", () => {
-  it("hides the chart from assistive technology and carries every year, zeros included, in a hidden table", () => {
+describe("PublicationYears", { timeout: 20_000 }, () => {
+  // jsdom has no PointerEvent; a MouseEvent carries clientX and button.
+  beforeAll(() => {
+    if (typeof window.PointerEvent === "undefined") {
+      class PointerEventPolyfill extends MouseEvent {
+        pointerId: number;
+        pointerType: string;
+        constructor(type: string, init: PointerEventInit = {}) {
+          super(type, init);
+          this.pointerId = init.pointerId ?? 1;
+          this.pointerType = init.pointerType ?? "mouse";
+        }
+      }
+      (window as unknown as { PointerEvent: unknown }).PointerEvent = PointerEventPolyfill;
+    }
+  });
+
+  const DATA = { "2015": 2, "2016": 0, "2017": 3, "2018": 4, "2019": 6, "2020": 1 };
+
+  function renderYears(rangeHref?: (from: string, to: string) => string) {
+    function Where() {
+      return <p data-testid="where">{useLocation().pathname + useLocation().search}</p>;
+    }
     render(
-      <MemoryRouter>
-        <PublicationYears data={{ "2019": 6, "2021": 3, "2022": 1 }} caption="Publication years" />
+      <MemoryRouter initialEntries={["/landscape"]}>
+        <PublicationYears data={DATA} caption="Publication years" rangeHref={rangeHref} />
+        <Where />
       </MemoryRouter>,
     );
-    expect(screen.getByTestId("years-chart")).toHaveAttribute("aria-hidden", "true");
+    const list = screen.queryByRole("listbox", { name: "Publication years" });
+    if (list !== null) {
+      // Six columns over 600 px: column i spans [100i, 100i + 100).
+      vi.spyOn(list, "getBoundingClientRect").mockReturnValue({ left: 0, width: 600, top: 0, height: 200, right: 600, bottom: 200, x: 0, y: 0, toJSON: () => ({}) });
+    }
+    return list;
+  }
+  const href = (from: string, to: string) => `/all?year_from=${from}&year_to=${to}`;
+
+  it("carries every year, zeros included, in a hidden table", () => {
+    renderYears(href);
     const table = screen.getByRole("table", { name: "Publication years" });
     expect(table).toHaveClass("sr-only");
     const rows = within(table).getAllByRole("row").slice(1);
-    expect(rows.map((row) => row.textContent)).toEqual(["20196", "20200", "20213", "20221"]);
+    expect(rows.map((row) => row.textContent)).toEqual(["20152", "20160", "20173", "20184", "20196", "20201"]);
   });
 
-  it("links each year with sources to All sources for that year, the table showing while a link has focus", () => {
-    render(
-      <MemoryRouter>
-        <PublicationYears
-          data={{ "2019": 6, "2021": 3 }}
-          caption="Publication years"
-          yearHref={(year) => `/all?year_from=${year}&year_to=${year}`}
-        />
-      </MemoryRouter>,
-    );
-    const table = screen.getByRole("table", { name: "Publication years" });
-    expect(table).toHaveClass("sr-only", "focus-within:not-sr-only");
-    expect(within(table).getByRole("link", { name: "2019" })).toHaveAttribute("href", "/all?year_from=2019&year_to=2019");
-    // A year with no sources leads nowhere.
-    expect(within(table).queryByRole("link", { name: "2020" })).toBeNull();
+  it("is a horizontal listbox of the years, each named with its count, when it can choose", () => {
+    const list = renderYears(href) as HTMLElement;
+    expect(list).toHaveAttribute("aria-orientation", "horizontal");
+    expect(list).toHaveAttribute("aria-multiselectable", "true");
+    expect(list).toHaveAttribute("tabindex", "0");
+    expect(within(list).getByRole("option", { name: "2019: 6 sources" })).toBeInTheDocument();
+  });
+
+  it("is a still picture, out of the accessibility tree, when it leads nowhere", () => {
+    renderYears();
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(screen.getByRole("table", { name: "Publication years" })).toBeInTheDocument();
+  });
+
+  it("drags a range: the covered columns turn blue, the label says the range, release opens it", () => {
+    const list = renderYears(href) as HTMLElement;
+    fireEvent.pointerDown(list, { clientX: 150, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(list, { clientX: 350, pointerId: 1 });
+    fireEvent.pointerMove(list, { clientX: 450, pointerId: 1 });
+    const options = within(list).getAllByRole("option");
+    expect(options.map((option) => option.hasAttribute("data-blue"))).toEqual([false, true, true, true, true, false]);
+    expect(options.map((option) => option.getAttribute("aria-selected"))).toEqual(["false", "true", "true", "true", "true", "false"]);
+    expect(screen.getByTestId("years-range-label")).toHaveTextContent("2016 to 2019");
+    fireEvent.pointerUp(list, { clientX: 450, pointerId: 1 });
+    expect(screen.getByTestId("where")).toHaveTextContent("/all?year_from=2016&year_to=2019");
+  });
+
+  it("drags right to left as well, and a click on one column opens that year", () => {
+    const list = renderYears(href) as HTMLElement;
+    fireEvent.pointerDown(list, { clientX: 450, button: 0 });
+    fireEvent.pointerMove(list, { clientX: 250 });
+    expect(screen.getByTestId("years-range-label")).toHaveTextContent("2017 to 2019");
+    fireEvent.pointerCancel(list);
+    expect(screen.queryByTestId("years-range-label")).toBeNull();
+    fireEvent.pointerDown(list, { clientX: 520, button: 0 });
+    fireEvent.pointerUp(list, { clientX: 520 });
+    expect(screen.getByTestId("where")).toHaveTextContent("/all?year_from=2020&year_to=2020");
+  });
+
+  it("does not open a year, or a range, with no sources in it", () => {
+    const list = renderYears(href) as HTMLElement;
+    fireEvent.pointerDown(list, { clientX: 150, button: 0 });
+    fireEvent.pointerUp(list, { clientX: 150 });
+    expect(screen.getByTestId("where")).toHaveTextContent(/^\/landscape$/);
+  });
+
+  it("from the keyboard: arrows move, Shift extends the range, Enter opens it, Escape drops it", async () => {
+    const user = userEvent.setup();
+    const list = renderYears(href) as HTMLElement;
+    await user.tab();
+    expect(list).toHaveFocus();
+    await user.keyboard("{ArrowRight}{ArrowRight}");
+    expect(list.getAttribute("aria-activedescendant")).toBe(within(list).getAllByRole("option")[2].id);
+    await user.keyboard("{Shift>}{ArrowRight}{ArrowRight}{/Shift}");
+    expect(screen.getByTestId("years-range-label")).toHaveTextContent("2017 to 2019");
+    const options = within(list).getAllByRole("option");
+    expect(options[2]).toHaveAttribute("aria-selected", "true");
+    expect(options[4]).toHaveAttribute("aria-selected", "true");
+    expect(options[4]).toHaveAttribute("data-active");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByTestId("years-range-label")).toBeNull();
+    await user.keyboard("{Shift>}{ArrowLeft}{/Shift}{Enter}");
+    expect(screen.getByTestId("where")).toHaveTextContent("/all?year_from=2018&year_to=2019");
+  });
+
+  it("opens the focused year alone with Enter when no range is held", async () => {
+    const user = userEvent.setup();
+    renderYears(href);
+    await user.tab();
+    await user.keyboard("{End}{Enter}");
+    expect(screen.getByTestId("where")).toHaveTextContent("/all?year_from=2020&year_to=2020");
   });
 });
 

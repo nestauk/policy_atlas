@@ -79,11 +79,18 @@ export function LandscapeView() {
   const yearsFigure = relevant !== null && withYear < relevant ? population.withYear(withYear) : null;
   const allSources = `/tasks/${taskId}/sources/all`;
   const typeHref = (label: string) => `${allSources}?${new URLSearchParams({ type: label }).toString()}`;
-  const yearHref = (year: string) => `${allSources}?${new URLSearchParams({ year_from: year, year_to: year }).toString()}`;
+  const rangeHref = (from: string, to: string) =>
+    `${allSources}?${new URLSearchParams({ year_from: from, year_to: to }).toString()}`;
+  const countryHref = (country: string) => `${allSources}?${new URLSearchParams({ country }).toString()}`;
   const groupHref = (facet: string, group: string) =>
     `/tasks/${taskId}/sources/findings?${new URLSearchParams({ facet, group }).toString()}`;
   // A row leads somewhere only when it has sources to show.
   const linkTypes = typeRows.map((row) => (row.count ? { ...row, href: typeHref(row.key) } : row));
+  // A country leads to All sources filtered to it (`country=`, round 10);
+  // the folded tail and "Not reported" lead nowhere.
+  const linkCountries = geographyRows(geographies).map((row) =>
+    row.count && row.tone !== "grey" ? { ...row, href: countryHref(row.key) } : row,
+  );
 
   // `not_found` is the server's honest shape for "no landscape/funnel yet"
   // (screening hasn't run) — that's the expected empty state below, not a
@@ -149,7 +156,7 @@ export function LandscapeView() {
 
           {withYear > 0 && (
             <LandscapeSection title={TITLES.years} figure={yearsFigure}>
-              {fewYearsSentence(years) ?? <PublicationYears data={years} caption={TITLES.years} yearHref={yearHref} />}
+              {fewYearsSentence(years) ?? <PublicationYears data={years} caption={TITLES.years} rangeHref={rangeHref} />}
             </LandscapeSection>
           )}
 
@@ -165,7 +172,7 @@ export function LandscapeView() {
                     The country of the publishing venue, when the database reports it. Sources
                     without one are counted as “Not reported”.
                   </p>
-                  <RankedBars caption={TITLES.geographies} rows={geographyRows(geographies)} />
+                  <RankedBars caption={TITLES.geographies} rows={linkCountries} />
                 </>
               )}
             </LandscapeSection>

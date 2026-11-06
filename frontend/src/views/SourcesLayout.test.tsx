@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -131,5 +132,22 @@ describe("SourcesLayout — the four Sources subview tabs", () => {
     expect(screen.getByRole("navigation", { name: "Sources" }).closest(".mx-auto")).toHaveClass(
       "max-w-[1180px]",
     );
+  });
+});
+
+describe("SourcesLayout — the reader's choice of subtab (owner, round 10)", { timeout: 20_000 }, () => {
+  it("remembers the subtab the reader picks on this task", async () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => void values.set(key, value),
+    });
+    mockFunnel(3);
+    renderLayout();
+    await userEvent.click(screen.getByRole("link", { name: "Landscape" }));
+    expect(values.get(`policy-atlas:sources-subtab:${TASK_ID}`)).toBe("/landscape");
+    await userEvent.click(screen.getByRole("link", { name: "Themes" }));
+    expect(values.get(`policy-atlas:sources-subtab:${TASK_ID}`)).toBe("themes");
+    vi.unstubAllGlobals();
   });
 });

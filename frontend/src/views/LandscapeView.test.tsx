@@ -137,21 +137,28 @@ describe("LandscapeView — finished", () => {
     reads({ landscape: { ...mockLandscape, evidence_types: REALISTIC_TYPES } });
     renderLandscape();
     const table = screen.getByRole("table", { name: "Evidence types" });
-    const review = within(table).getByRole("link", { name: "Systematic Review and Meta-Analysis" });
+    // Sentence case on the page (the report's formatter); the link keeps the
+    // classifier's value.
+    const review = within(table).getByRole("link", { name: "Systematic review and meta-analysis" });
     expect(review.getAttribute("href")).toBe(
       `/tasks/${TASK_ID}/sources/all?type=Systematic+Review+and+Meta-Analysis`,
     );
     expect(review.closest("tr")).toHaveAttribute("data-link");
-    const modelling = within(table).getByRole("rowheader", { name: "Modelling & Simulation" });
+    const modelling = within(table).getByRole("rowheader", { name: "Modelling & simulation" });
     expect(within(modelling).queryByRole("link")).toBeNull();
     expect(modelling.closest("tr")).not.toHaveAttribute("data-link");
   });
 
-  it("leaves the geography rows unlinked (All sources has no country filter)", () => {
+  it("makes each country a link to All sources filtered to it; Not reported and the folded tail lead nowhere", () => {
     reads({ landscape: { ...mockLandscape, geographies: { "Not reported": 49, GB: 37, US: 12 } } });
     renderLandscape();
     const table = screen.getByRole("table", { name: "Where sources were published" });
-    expect(within(table).queryAllByRole("link")).toHaveLength(0);
+    expect(within(table).getByRole("link", { name: "United Kingdom" })).toHaveAttribute(
+      "href",
+      `/tasks/${TASK_ID}/sources/all?country=United+Kingdom`,
+    );
+    expect(within(table).getAllByRole("link")).toHaveLength(2);
+    expect(within(within(table).getByRole("rowheader", { name: "Not reported" })).queryByRole("link")).toBeNull();
   });
 
   it("orders evidence types by the classifier's vocabulary, zeros shown, Unknown last", () => {
@@ -159,10 +166,10 @@ describe("LandscapeView — finished", () => {
     renderLandscape();
     const table = screen.getByRole("table", { name: "Evidence types" });
     const headers = within(table).getAllByRole("rowheader").map((cell) => cell.textContent);
-    expect(headers[0]).toBe("Systematic Review and Meta-Analysis");
-    expect(headers.at(-1)).toBe("Unknown / Insufficient information");
-    expect(headers).toContain("Modelling & Simulation");
-    const modelling = within(table).getByRole("rowheader", { name: "Modelling & Simulation" }).closest("tr");
+    expect(headers[0]).toBe("Systematic review and meta-analysis");
+    expect(headers.at(-1)).toBe("Unknown / insufficient information");
+    expect(headers).toContain("Modelling & simulation");
+    const modelling = within(table).getByRole("rowheader", { name: "Modelling & simulation" }).closest("tr");
     expect(modelling).toHaveTextContent("0");
     expect(screen.queryByTestId("classified-so-far")).toBeNull();
   });
@@ -192,10 +199,11 @@ describe("LandscapeView — finished", () => {
     ]);
   });
 
-  it("keeps the years chart out of the accessibility tree with a hidden table beside it", () => {
+  it("makes the years chart a listbox of years, with a hidden table beside it", () => {
     reads();
     renderLandscape();
-    expect(screen.getByTestId("years-chart")).toHaveAttribute("aria-hidden", "true");
+    const years = screen.getByRole("listbox", { name: "Publication years" });
+    expect(within(years).getAllByRole("option")).toHaveLength(6);
     const table = screen.getByRole("table", { name: "Publication years" });
     expect(within(table).getAllByRole("row")).toHaveLength(7);
   });
@@ -222,7 +230,7 @@ describe("LandscapeView — small counts become sentences", () => {
       groups: undefined,
     });
     renderLandscape();
-    expect(screen.getByText("1 source: Systematic Review and Meta-Analysis.")).toBeInTheDocument();
+    expect(screen.getByText("1 source: Systematic review and meta-analysis.")).toBeInTheDocument();
     expect(screen.getByText("All from 2024.")).toBeInTheDocument();
     expect(screen.getByText("No publisher country was reported for these sources.")).toBeInTheDocument();
     expect(screen.queryByText(/The country of the publishing venue/)).toBeNull();
@@ -250,7 +258,7 @@ describe("LandscapeView — while a run is live", () => {
     expect(table).toHaveAttribute("aria-busy", "true");
     const rows = within(table).getAllByRole("row");
     expect(rows).toHaveLength(9);
-    expect(within(rows[0]).getByRole("rowheader")).toHaveTextContent("Systematic Review and Meta-Analysis");
+    expect(within(rows[0]).getByRole("rowheader")).toHaveTextContent("Systematic review and meta-analysis");
     expect(table.querySelectorAll(".placeholder-bar")).toHaveLength(9);
     expect(screen.getByTestId("classified-so-far")).toHaveTextContent("Classified so far: 0 of 118 relevant sources");
   });
@@ -265,7 +273,7 @@ describe("LandscapeView — while a run is live", () => {
     const table = screen.getByRole("table", { name: "Evidence types" });
     const rows = within(table).getAllByRole("row");
     expect(rows).toHaveLength(9);
-    expect(within(rows[2]).getByRole("rowheader")).toHaveTextContent("Observational Research Studies");
+    expect(within(rows[2]).getByRole("rowheader")).toHaveTextContent("Observational research studies");
     expect(within(rows[2]).getByRole("cell")).toHaveTextContent("12");
     expect(table.querySelectorAll(".placeholder-bar")).toHaveLength(7);
     expect(screen.getByTestId("classified-so-far")).toHaveTextContent("Classified so far: 18 of 118 relevant sources");

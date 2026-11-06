@@ -2,12 +2,20 @@ import { useEffect, useRef, useState } from "react";
 
 import type { components } from "../api/gen/types";
 import { useRunStream } from "../store";
-import { PANE_LABEL_CLASS } from "../ui/brand/label";
+import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
 
 type EvidenceItem = components["schemas"]["EvidenceItemOut"];
 
 export type EvidenceSortField = "title" | "year" | "type" | "strength" | "status" | "relevance";
 export type SortOrder = "asc" | "desc";
+
+/**
+ * The read-depth column's header ("Full text" / "Abstract only"), one
+ * constant so its name changes in one place: the owner is choosing it
+ * (round 10; the lead has proposed "Depth"). It names the header, the
+ * phone's sort options and the sort button ("Sort by status").
+ */
+export const STATUS_COLUMN_HEADER = "Status";
 
 /**
  * Sortable sources-table columns: the visible header label (source of truth
@@ -25,7 +33,7 @@ export const SOURCE_SORT_COLUMNS: ReadonlyArray<{
   { key: "year", label: "Year", defaultOrder: "desc" },
   { key: "type", label: "Evidence type", defaultOrder: "asc" },
   { key: "strength", label: "Evidence strength", defaultOrder: "asc" },
-  { key: "status", label: "Status", defaultOrder: "asc" },
+  { key: "status", label: STATUS_COLUMN_HEADER, defaultOrder: "asc" },
   // Relevance = the p(relevant) spectrum; desc (the table default) reads
   // confidently-relevant → uncertain → confidently-irrelevant.
   { key: "relevance", label: "Relevant", defaultOrder: "desc" },
@@ -44,8 +52,57 @@ export function filterChipClass(active: boolean): string {
   }`;
 }
 
-/** All-caps table header type — matches `PaneHeading` / `text-meta`. */
-export const TABLE_HEADER_TEXT_CLASS = `${PANE_LABEL_CLASS} max-md:text-caption`;
+/** Table header type: the Label style at Caption size (12 px Bold,
+ *  uppercase, tracked), one line, so the headers label the columns without
+ *  outweighing the rows (task 058, round 10, sources table entry 6). */
+export const TABLE_HEADER_TEXT_CLASS = `${CAPTION_LABEL_CLASS} whitespace-nowrap`;
+
+/** Evidence types in sentence case: the report's one formatter (round 10),
+ *  re-exported so the Sources views keep one import. Display only; filters
+ *  and links keep the classifier's own value. */
+export { evidenceTypeLabel } from "./artefactPresentation";
+
+/**
+ * The phone's sort choices (below `md` the table's headers are hidden, so
+ * sorting moves to a "Sort" select in the filter row): each column in the
+ * table's order, both directions, the column's own first direction first.
+ */
+const PHONE_SORTS: ReadonlyArray<{ label: string; sort: EvidenceSortField; order: SortOrder }> = [
+  { sort: "title", order: "asc", label: "Source, A to Z" },
+  { sort: "title", order: "desc", label: "Source, Z to A" },
+  { sort: "year", order: "desc", label: "Year, newest first" },
+  { sort: "year", order: "asc", label: "Year, oldest first" },
+  { sort: "type", order: "asc", label: "Evidence type, A to Z" },
+  { sort: "type", order: "desc", label: "Evidence type, Z to A" },
+  { sort: "strength", order: "desc", label: "Evidence strength, strongest first" },
+  { sort: "strength", order: "asc", label: "Evidence strength, weakest first" },
+  { sort: "relevance", order: "desc", label: "Relevant, most likely first" },
+  { sort: "relevance", order: "asc", label: "Relevant, least likely first" },
+  { sort: "status", order: "asc", label: `${STATUS_COLUMN_HEADER}, ascending` },
+  { sort: "status", order: "desc", label: `${STATUS_COLUMN_HEADER}, descending` },
+];
+
+/** The phone's sort choices with their select values (`sort:order`). */
+export const PHONE_SORT_OPTIONS = PHONE_SORTS.map((option) => ({ ...option, value: `${option.sort}:${option.order}` }));
+
+/** The URL params the filter row sets, besides the screening toggles:
+ *  "Clear filters" removes these and keeps the screening choice. */
+export const FACET_PARAMS = ["cited", "theme", "origin", "type", "strength", "year_from", "year_to", "country"] as const;
+
+/**
+ * A year range in words: "2015 to 2020", "2016" for one year, "2015 to
+ * any" or "Any to 2020" when one end is open; `null` when neither is set.
+ *
+ * Args:
+ *   from: The first year, if any.
+ *   to: The last year, if any.
+ */
+export function yearRangeLabel(from: number | string | undefined, to: number | string | undefined): string | null {
+  if (from === undefined && to === undefined) return null;
+  if (from !== undefined && to !== undefined) return String(from) === String(to) ? String(from) : `${from} to ${to}`;
+  return from !== undefined ? `${from} to any` : `Any to ${to}`;
+}
+
 
 /** Cycle a sources-table header click: none → the column's own default
  *  direction → the opposite direction → none. */

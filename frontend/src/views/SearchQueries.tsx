@@ -147,10 +147,10 @@ export function SearchQueries({ groups, searching }: { groups: readonly QueryGro
           <table className="w-full table-fixed border-y border-line text-left text-meta">
             <thead className={cn("border-b border-line", TABLE_HEADER_TEXT_CLASS)}>
               <tr>
-                <th scope="col" className="py-2 pr-4 font-extrabold">
+                <th scope="col" className="py-2 pr-4">
                   Query
                 </th>
-                <th scope="col" className="w-24 py-2 text-right font-extrabold max-md:w-16">
+                <th scope="col" className="w-24 py-2 text-right max-md:w-16">
                   Results
                 </th>
               </tr>

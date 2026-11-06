@@ -4,12 +4,13 @@ import { useParams, useSearchParams } from "react-router";
 import { useApiClient, useCoverage, useEvidence, useFindings, useLandscape, useTask, useSourceDossier, useSourceRecords } from "../api/queries";
 import type { components } from "../api/gen/types";
 import { errorCode } from "../lib/errors";
+import { Figures } from "../lib/figures";
 import { safeHref } from "../lib/safeHref";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { useRunStream } from "../store";
 import { Button } from "../ui/brand/Button";
-import { Card, Divider, PaneHeading } from "../ui/brand/Card";
+import { Divider, PaneHeading } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { cn } from "../ui/brand/cn";
@@ -21,6 +22,7 @@ import { queryGroups, SearchQueries } from "./SearchQueries";
 import {
   abstractSourceLabel,
   cellPulses,
+  evidenceTypeLabel,
   feedsSources,
   liveStages,
   nextEvidenceSort,
@@ -29,7 +31,10 @@ import {
   screeningDetails,
   sourceStatusLabel,
   strengthHint,
+  yearRangeLabel,
+  FACET_PARAMS,
   ORIGIN_FILTER_OPTIONS,
+  PHONE_SORT_OPTIONS,
   SOURCE_SORT_COLUMNS,
   STRENGTH_FILTER_OPTIONS,
   TABLE_HEADER_TEXT_CLASS,
@@ -44,13 +49,24 @@ import { numberedAuthorships } from "./artefactPresentation";
 import { isScoping } from "./scopingActivity";
 import { isFinished } from "./workspace/runProgress";
 import { PANE_LABEL_CLASS } from "../ui/brand/label";
-import { RetryCard } from "../ui/feedback/RetryCard";
+import { Pagination } from "./Pagination";
+import { normaliseGeographies } from "../ui/charts/EvidenceDistributionChart";
+import "./sources.css";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
   { key: "Included", label: "Included" },
   { key: "screened_out", label: "Screened out" },
 ] as const;
+
+const PAGE_SIZE = 50;
+
+type EvidenceItem = components["schemas"]["EvidenceItemOut"];
+type EvidenceQuery = NonNullable<Parameters<typeof useEvidence>[1]>;
+
+/** The 40 px ghost inside the table's frame (the list pages' `ListError`
+ *  control): Try again, Clear filters. */
+const FRAME_CONTROL_CLASS = "h-10 whitespace-nowrap px-3 py-0 text-meta";
 
 /** Sources: collection-true server filters and a URL-addressable source dossier. */
 export function SourcesView() {
@@ -78,6 +94,7 @@ export function SourcesView() {
   const strengthFilter = STRENGTH_FILTER_OPTIONS.find(
     (value) => value === searchParams.get("strength"),
   );
+  const countryFilter = searchParams.get("country") ?? undefined;
   const yearFrom = parseYearParam(searchParams.get("year_from"));
   const yearTo = parseYearParam(searchParams.get("year_to"));
   const rawPage = Number(searchParams.get("page") ?? "1");
@@ -102,13 +119,21 @@ export function SourcesView() {
   // Evidence-type filter options come from the landscape distribution — the
   // same closed set the classification wrote for this task.
   const evidenceTypeOptions = Object.keys(landscape.data?.evidence_types ?? {}).sort();
+  // Publisher countries as the Landscape names them (aliases folded), so a
+  // geography row's link lands on a value this select shows.
+  const countryOptions = Object.keys(normaliseGeographies(landscape.data?.geographies ?? {}))
+    .filter((country) => country !== "Not reported")
+    .sort();
   // No explicit sort → the relevance spectrum, descending (owner default:
   // confidently relevant → uncertain → confidently irrelevant).
   const effectiveSort = sortField ?? "relevance";
   const effectiveOrder = sortField !== null ? sortOrder : "desc";
+  // A filter besides the screening toggles narrows the view; "Clear
+  // filters" removes them all and keeps the screening choice.
+  const filtered = FACET_PARAMS.some((key) => searchParams.has(key));
   const evidence = useEvidence(taskId, {
     page,
-    page_size: 50,
+    page_size: PAGE_SIZE,
     status: statusFilter === "all" ? undefined : [statusFilter],
     cited: citedFilter || undefined,
     sort: effectiveSort,
@@ -119,6 +144,7 @@ export function SourcesView() {
     strength: strengthFilter,
     year_from: yearFrom,
     year_to: yearTo,
+    country: countryFilter,
   });
   const dossier = useSourceDossier(taskId, sourceId);
   const findings = useFindings(taskId, sourceId ? { page_size: 200, source_id: sourceId } : undefined);
@@ -141,9 +167,10 @@ export function SourcesView() {
     void evidence.refetch();
     void landscape.refetch();
   });
-  const totalPages = evidence.data === undefined
-    ? 0
-    : Math.ceil(evidence.data.pagination.total_items / evidence.data.pagination.page_size);
+  const results = useRef<HTMLDivElement>(null);
+  const totalItems = evidence.data?.pagination.total_items ?? 0;
+  const pageSize = evidence.data?.pagination.page_size ?? PAGE_SIZE;
+  const totalPages = evidence.data === undefined ? 0 : Math.ceil(totalItems / pageSize);
 
   const updateParams = (update: (next: URLSearchParams) => void) => {
     setSearchParams((current) => {
@@ -152,6 +179,17 @@ export function SourcesView() {
       return next;
     });
   };
+  const setFacet = (key: string, value: string | undefined) =>
+    updateParams((next) => {
+      if (value) next.set(key, value);
+      else next.delete(key);
+      next.delete("page");
+    });
+  const clearFilters = () =>
+    updateParams((next) => {
+      for (const key of FACET_PARAMS) next.delete(key);
+      next.delete("page");
+    });
 
   const handleSort = (field: EvidenceSortField) => {
     const next = nextEvidenceSort({ sort: sortField, order: sortOrder }, field);
@@ -166,12 +204,35 @@ export function SourcesView() {
       params.delete("page");
     });
   };
+  const goToPage = (target: number) => {
+    updateParams((next) => next.set("page", String(target)));
+    // The reader starts the new page at its first row, not mid-table.
+    results.current?.scrollIntoView?.({ block: "start" });
+  };
+
+  const header = (
+    <SourcesHeaderRow activeSort={effectiveSort} activeOrder={effectiveOrder} onSort={handleSort} />
+  );
+  const rows = evidence.data?.data ?? [];
+  const firstRow = (page - 1) * pageSize + 1;
+  const countLine =
+    totalItems > pageSize
+      ? `${firstRow.toLocaleString("en-GB")}–${(firstRow + rows.length - 1).toLocaleString("en-GB")} of ${totalItems.toLocaleString("en-GB")} sources`
+      : `${totalItems.toLocaleString("en-GB")} ${totalItems === 1 ? "source" : "sources"}`;
 
   return (
     <main className="py-8">
       <SearchQueries groups={groups} searching={searching} />
-      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div role="group" aria-label="Filter sources" className="flex flex-wrap gap-1.5">
+      {/* One row of filters above the table they scope (task 058, round 10):
+          the screening toggles as a group, Cited, the selects, and "Clear
+          filters" once any narrows the view. The queries block above keeps
+          32 px of air (its own 24 px margin collapses into this one). */}
+      <div
+        role="group"
+        aria-label="Filter sources"
+        className={cn("mb-4 flex flex-wrap items-center gap-x-4 gap-y-2", groups.length > 0 && "mt-8")}
+      >
+        <div role="group" aria-label="Screening" className="flex flex-wrap gap-1.5">
           {STATUS_FILTERS.map((filter) => (
             <button
               key={filter.key}
@@ -186,255 +247,158 @@ export function SourcesView() {
               {filter.label}
             </button>
           ))}
-          <button
-            type="button"
-            aria-pressed={citedFilter}
-            onClick={() => updateParams((next) => {
-              if (citedFilter) next.delete("cited");
-              else next.set("cited", "true");
-              next.delete("page");
-            })}
-            className={filterChipClass(citedFilter)}
-          >
-            Cited
-          </button>
-          <FilterSelect
-            label="Key theme"
-            allLabel="All themes"
-            value={themeFilter ?? ""}
-            options={themeOptions.map((theme) => ({ value: theme.theme_id, label: scrub(theme.name) }))}
-            onChange={(value) => updateParams((next) => {
-              if (value) next.set("theme", value);
-              else next.delete("theme");
-              next.delete("page");
-            })}
-          />
         </div>
-        <DownloadSourcesButton taskId={taskId} taskName={task.data?.name} />
-      </header>
-
-      {evidence.isPending && <SourceLoading />}
-
-      {evidence.isError &&
-        (errorCode(evidence.error) === "unauthenticated" ? (
-          <ReauthRedirect />
-        ) : (
-          <RetryCard copy="Sources couldn't be loaded." onRetry={() => void evidence.refetch()} />
-        ))}
-
-      {/* While the search runs and nothing has landed, the queries above are
-          the page: the table waits for the first results (owner, round 9). */}
-      {evidence.data !== undefined && evidence.data.data.length === 0 && !searching && (
-        <Card role="status" className="p-8 text-center text-body text-grey">
-          {statusFilter === "all" && !citedFilter
-            ? "No sources yet — they arrive as the analysis searches."
-            : "No sources match these filters."}
-        </Card>
-      )}
-
-      {evidence.data !== undefined && evidence.data.data.length > 0 && (
-        // The count line and the table appear together, rising in, when the
-        // first results land after the page opened.
-        <ArrivalProvider settled={firstPaintDone} scopeKey={`${taskId}?${viewKey}`}>
-        <Arrival arrivalId="sources-table">
-          <p className="mb-3 text-meta text-grey" role="status">
-            {evidence.data.pagination.total_items} sources
-          </p>
-          <Card className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left">
-            <thead className={`border-b border-line bg-paper-2 ${TABLE_HEADER_TEXT_CLASS}`}>
-              <tr>
-                <SortableColumnHeader
-                  column={SOURCE_SORT_COLUMNS[0]}
-                  className="px-4 py-3"
-                  activeSort={effectiveSort}
-                  activeOrder={effectiveOrder}
-                  onSort={handleSort}
-                />
-                <SortableColumnHeader
-                  column={SOURCE_SORT_COLUMNS[1]}
-                  activeSort={effectiveSort}
-                  activeOrder={effectiveOrder}
-                  onSort={handleSort}
-                >
-                  <YearRangeFilter
-                    from={yearFrom}
-                    to={yearTo}
-                    onChange={(from, to) => updateParams((next) => {
-                      if (from !== undefined) next.set("year_from", String(from));
-                      else next.delete("year_from");
-                      if (to !== undefined) next.set("year_to", String(to));
-                      else next.delete("year_to");
-                      next.delete("page");
-                    })}
-                  />
-                </SortableColumnHeader>
-                <th className="px-3 py-3 max-md:px-2 max-md:py-2.5">
-                  {/* One header rule (owner, consistency pass): the label
-                      and its filter on one line, never wrapping. */}
-                  <span className="flex items-end gap-1 whitespace-nowrap" data-testid="origin-header">
-                  Origin
-                  <HeaderFilter
-                    label="Filter by origin"
-                    allLabel="All"
-                    value={originFilter ?? ""}
-                    options={ORIGIN_FILTER_OPTIONS.map((value) => ({ value, label: value }))}
-                    onChange={(value) => updateParams((next) => {
-                      if (value) next.set("origin", value);
-                      else next.delete("origin");
-                      next.delete("page");
-                    })}
-                  />
-                  </span>
-                </th>
-                <SortableColumnHeader
-                  column={SOURCE_SORT_COLUMNS[2]}
-                  activeSort={effectiveSort}
-                  activeOrder={effectiveOrder}
-                  onSort={handleSort}
-                >
-                  <HeaderFilter
-                    label="Filter by evidence type"
-                    allLabel="All"
-                    value={typeFilter ?? ""}
-                    options={evidenceTypeOptions.map((value) => ({ value, label: scrub(value) }))}
-                    onChange={(value) => updateParams((next) => {
-                      if (value) next.set("type", value);
-                      else next.delete("type");
-                      next.delete("page");
-                    })}
-                  />
-                </SortableColumnHeader>
-                <SortableColumnHeader
-                  column={SOURCE_SORT_COLUMNS[3]}
-                  activeSort={effectiveSort}
-                  activeOrder={effectiveOrder}
-                  onSort={handleSort}
-                >
-                  <HeaderFilter
-                    label="Filter by evidence strength"
-                    allLabel="All"
-                    value={strengthFilter ?? ""}
-                    options={STRENGTH_FILTER_OPTIONS.map((value) => ({ value, label: value }))}
-                    onChange={(value) => updateParams((next) => {
-                      if (value) next.set("strength", value);
-                      else next.delete("strength");
-                      next.delete("page");
-                    })}
-                  />
-                </SortableColumnHeader>
-                <SortableColumnHeader
-                  column={SOURCE_SORT_COLUMNS[5]}
-                  activeSort={effectiveSort}
-                  activeOrder={effectiveOrder}
-                  onSort={handleSort}
-                />
-                <SortableColumnHeader
-                  column={SOURCE_SORT_COLUMNS[4]}
-                  activeSort={effectiveSort}
-                  activeOrder={effectiveOrder}
-                  onSort={handleSort}
-                />
-                <th className="px-3 py-3 max-md:px-2 max-md:py-2.5">Cited</th>
-              </tr>
-            </thead>
-            <tbody>
-              {evidence.data.data.map((item) => {
-                const pulse = cellPulses(item, live);
-                const landed = landing.cells.get(item.source_id);
-                const fade = (cell: keyof CellPulses) => (landed?.[cell] ? "anim-swap-in" : undefined);
-                return (
-                <tr
-                  key={item.source_id}
-                  className={cn("border-b border-line last:border-b-0", landing.rows.has(item.source_id) && "anim-swap-in")}
-                >
-                  <td className="max-w-md px-4 py-3 align-top max-md:px-3 max-md:py-2.5">
-                    <TitleWithDescription item={item} onOpen={() => updateParams((next) => { next.set("source", item.source_id); next.delete("option"); })} />
-                    {item.venue && <p className="mt-0.5 text-body text-grey max-md:text-caption">{scrub(item.venue)}</p>}
-                  </td>
-                  <td className="px-3 py-3 align-top text-body text-navy max-md:px-2 max-md:py-2.5 max-md:text-meta">{item.year ?? ""}</td>
-                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5"><Chip tone="soft">{scrub(item.origin)}</Chip></td>
-                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
-                    {pulse.type && <CellPulse width="w-20" />}
-                    {item.evidence_type && (
-                      <span className={fade("type")}>{
-                      item.classification_reason ? (
-                        <Tooltip content={<p>{scrub(item.classification_reason)}</p>}>
-                          <button type="button" aria-label={`${item.evidence_type}: why this type`} className="cursor-help">
-                            <Chip tone="soft">{scrub(item.evidence_type)}</Chip>
-                          </button>
-                        </Tooltip>
-                      ) : (
-                        <Chip tone="soft">{scrub(item.evidence_type)}</Chip>
-                      )
-                      }</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
-                    {pulse.strength && <CellPulse width="w-14" />}
-                    {item.appraisal_tier && (
-                      <span className={fade("strength")}>
-                      <Tooltip content={<p>{scrub(strengthHint(item))}</p>}>
-                        <button type="button" aria-label={`${item.appraisal_tier}: how strength is appraised`} className="cursor-help">
-                          <Chip tone="soft">{scrub(item.appraisal_tier)}</Chip>
-                        </button>
-                      </Tooltip>
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
-                    {pulse.relevant ? <CellPulse width="w-10" /> : <span className={fade("relevant")}><RelevantCell item={item} /></span>}
-                  </td>
-                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
-                    {pulse.status && <CellPulse width="w-16" />}
-                    {!pulse.status && readDepthLabel(item) !== null && (
-                      <span className={fade("status")}>{
-                      item.read_in_full ? (
-                        <Chip tone="blue">{readDepthLabel(item)}</Chip>
-                      ) : (
-                        <Tooltip content={<p>{scrub(readDepthHint(item) ?? "")}</p>}>
-                          <button type="button" aria-label="Abstract only: why" className="cursor-help">
-                            <Chip tone="yellow">{readDepthLabel(item)}</Chip>
-                          </button>
-                        </Tooltip>
-                      )
-                      }</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
-                    {item.cited && <Chip tone="green">Cited</Chip>}
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          </Card>
-        </Arrival>
-        </ArrivalProvider>
-      )}
-
-      {evidence.data !== undefined && totalPages > 1 && (
-        <nav aria-label="Pages" className="mt-5 flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => updateParams((next) => next.set("page", String(page - 1)))}
-          >
-            Previous
+        <button
+          type="button"
+          aria-pressed={citedFilter}
+          onClick={() => setFacet("cited", citedFilter ? undefined : "true")}
+          className={filterChipClass(citedFilter)}
+        >
+          Cited
+        </button>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <FilterSelect
+          label="Key theme"
+          allLabel="All themes"
+          value={themeFilter ?? ""}
+          options={themeOptions.map((theme) => ({ value: theme.theme_id, label: scrub(theme.name) }))}
+          onChange={(value) => setFacet("theme", value)}
+        />
+        <FilterSelect
+          label="Origin"
+          allLabel="All"
+          value={originFilter ?? ""}
+          options={ORIGIN_FILTER_OPTIONS.map((value) => ({ value, label: value }))}
+          onChange={(value) => setFacet("origin", value)}
+        />
+        <FilterSelect
+          label="Evidence type"
+          allLabel="All"
+          value={typeFilter ?? ""}
+          options={evidenceTypeOptions.map((value) => ({ value, label: evidenceTypeLabel(scrub(value)) }))}
+          onChange={(value) => setFacet("type", value)}
+        />
+        <FilterSelect
+          label="Strength"
+          allLabel="All"
+          value={strengthFilter ?? ""}
+          options={STRENGTH_FILTER_OPTIONS.map((value) => ({ value, label: value }))}
+          onChange={(value) => setFacet("strength", value)}
+        />
+        <FilterSelect
+          label="Country"
+          allLabel="All"
+          value={countryFilter ?? ""}
+          options={[...new Set([...countryOptions, ...(countryFilter ? [countryFilter] : [])])].map((value) => ({ value, label: scrub(value) }))}
+          onChange={(value) => setFacet("country", value)}
+        />
+        <YearFilter
+          from={yearFrom}
+          to={yearTo}
+          onChange={(from, to) => updateParams((next) => {
+            if (from !== undefined) next.set("year_from", String(from));
+            else next.delete("year_from");
+            if (to !== undefined) next.set("year_to", String(to));
+            else next.delete("year_to");
+            next.delete("page");
+          })}
+        />
+        </div>
+        {/* Below lg the headers are hidden, so sorting moves here. */}
+        <FilterSelect
+          className="lg:hidden"
+          label="Sort"
+          value={`${effectiveSort}:${effectiveOrder ?? "desc"}`}
+          options={PHONE_SORT_OPTIONS}
+          onChange={(value) => {
+            const [sort, order] = value.split(":");
+            updateParams((next) => {
+              if (sort === "relevance" && order === "desc") {
+                next.delete("sort");
+                next.delete("order");
+              } else {
+                next.set("sort", sort);
+                next.set("order", order);
+              }
+              next.delete("page");
+            });
+          }}
+        />
+        {filtered && (
+          <Button variant="ghost" className="px-2" onClick={clearFilters}>
+            Clear filters
           </Button>
-          <span className="text-caption text-grey">Page {page} of {totalPages}</span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages}
-            onClick={() => updateParams((next) => next.set("page", String(page + 1)))}
-          >
-            Next
-          </Button>
-        </nav>
-      )}
+        )}
+      </div>
+
+      <div ref={results} className="scroll-mt-4">
+        {evidence.isPending && <SourcesLoading header={header} />}
+
+        {evidence.isError &&
+          (errorCode(evidence.error) === "unauthenticated" ? (
+            <ReauthRedirect />
+          ) : (
+            <div role="alert" className="sources-frame flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-4 pl-4 pr-1">
+              <p className="text-body text-navy">Sources couldn't be loaded.</p>
+              <Button variant="ghost" className={FRAME_CONTROL_CLASS} onClick={() => void evidence.refetch()}>
+                Try again
+              </Button>
+            </div>
+          ))}
+
+        {/* While the search runs and nothing has landed, the queries above are
+            the page: the table waits for the first results (owner, round 9). */}
+        {evidence.data !== undefined && rows.length === 0 && !searching && (
+          filtered ? (
+            <SourcesNoMatch
+              taskId={taskId}
+              status={statusFilter === "all" ? undefined : [statusFilter]}
+              onClear={clearFilters}
+            />
+          ) : (
+            <SourcesEmpty label={statusFilter === "all" ? "No sources yet" : "No sources match"}>
+              {statusFilter === "all" ? "They appear here as the search finds them." : null}
+            </SourcesEmpty>
+          )
+        )}
+
+        {evidence.data !== undefined && rows.length > 0 && (
+          // The count line and the table appear together, rising in, when the
+          // first results land after the page opened.
+          <ArrivalProvider settled={firstPaintDone} scopeKey={`${taskId}?${viewKey}`}>
+          <Arrival arrivalId="sources-table">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <p className="text-meta text-grey" role="status">
+                <Figures text={countLine} />
+              </p>
+              <DownloadSourcesButton taskId={taskId} taskName={task.data?.name} />
+            </div>
+            <div className="sources-frame">
+              <table role="table" className="sources-table">
+                <SourcesColumns />
+                {header}
+                <tbody role="rowgroup">
+                  {rows.map((item) => (
+                    <SourceRow
+                      key={item.source_id}
+                      item={item}
+                      pulses={cellPulses(item, live)}
+                      landedRow={landing.rows.has(item.source_id)}
+                      landedCells={landing.cells.get(item.source_id)}
+                      onOpen={() => updateParams((next) => { next.set("source", item.source_id); next.delete("option"); })}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Arrival>
+          </ArrivalProvider>
+        )}
+
+        {evidence.data !== undefined && totalPages > 1 && (
+          <Pagination page={page} totalPages={totalPages} onPage={goToPage} />
+        )}
+      </div>
 
       <SourceDossier
         taskId={taskId}
@@ -451,6 +415,233 @@ export function SourcesView() {
   );
 }
 
+/** The table's fixed column widths (`sources.css`): the source takes what
+ *  the value columns leave, so a filter or a page never moves a column. */
+function SourcesColumns() {
+  return (
+    <colgroup>
+      <col className="sources-col-source" />
+      <col className="sources-col-year" />
+      <col className="sources-col-type" />
+      <col className="sources-col-strength" />
+      <col className="sources-col-relevant" />
+      <col className="sources-col-status" />
+    </colgroup>
+  );
+}
+
+/** The header row: every column sorts, the labels on one line at the
+ *  Caption label size, the Relevant figure's header right-aligned over it. */
+function SourcesHeaderRow({
+  activeSort,
+  activeOrder,
+  onSort,
+}: {
+  activeSort: EvidenceSortField;
+  activeOrder: SortOrder | null;
+  onSort: (field: EvidenceSortField) => void;
+}) {
+  const column = (key: EvidenceSortField) => SOURCE_SORT_COLUMNS.find((candidate) => candidate.key === key) ?? SOURCE_SORT_COLUMNS[0];
+  const props = { activeSort, activeOrder, onSort };
+  return (
+    <thead role="rowgroup" className="sources-head">
+      <tr role="row">
+        <SortableColumnHeader column={column("title")} className="pl-4" {...props} />
+        <SortableColumnHeader column={column("year")} {...props} />
+        <SortableColumnHeader column={column("type")} {...props} />
+        <SortableColumnHeader column={column("strength")} {...props} />
+        <SortableColumnHeader column={column("relevance")} align="end" {...props} />
+        <SortableColumnHeader column={column("status")} {...props} />
+      </tr>
+    </thead>
+  );
+}
+
+/**
+ * One source. From `md` up a table row: the title (the way into the
+ * dossier) over a Meta Grey line, "Venue · Origin" and the green "Cited"
+ * chip; then Year, the evidence type and strength, the Relevant figure and
+ * the text depth, plain Meta text in fixed columns. Below `lg` the same
+ * markup stacks (`sources.css`): the title, "Venue · Year · Origin", then
+ * the values in column order joined by " · ", each placeholder in its slot.
+ * The cells' hover reasons stay out of the tab order (lead, round 10); the
+ * title is the keyboard's way to the same words in the dossier.
+ */
+function SourceRow({
+  item,
+  pulses,
+  landedRow,
+  landedCells,
+  onOpen,
+}: {
+  item: EvidenceItem;
+  pulses: CellPulses;
+  landedRow: boolean;
+  landedCells: Partial<CellPulses> | undefined;
+  onOpen: () => void;
+}) {
+  const fade = (cell: keyof CellPulses) => (landedCells?.[cell] ? "anim-swap-in" : undefined);
+  const depth = readDepthLabel(item);
+  const type = item.evidence_type ? evidenceTypeLabel(scrub(item.evidence_type)) : null;
+  return (
+    <tr role="row" className={cn("sources-row", landedRow && "anim-swap-in")}>
+      <td role="cell" className="sources-cell sources-cell-source">
+        <TitleWithDescription item={item} onOpen={onOpen} />
+        <SourceMetaLine item={item} />
+      </td>
+      <td role="cell" className="sources-cell sources-cell-year">{item.year ?? ""}</td>
+      <td role="cell" className="sources-cell sources-value">
+        {pulses.type && <CellPulse width="w-20" />}
+        {type !== null && (
+          <span className={cn("sources-nowrap", fade("type"))}>
+            {item.classification_reason ? (
+              <Tooltip content={<p>{scrub(item.classification_reason)}</p>}>
+                <button type="button" tabIndex={-1} aria-label={`${type}: why this type`} className="sources-hint">
+                  {type}
+                </button>
+              </Tooltip>
+            ) : (
+              type
+            )}
+          </span>
+        )}
+      </td>
+      <td role="cell" className="sources-cell sources-value">
+        {pulses.strength && <CellPulse width="w-14" />}
+        {item.appraisal_tier && (
+          <span className={cn("sources-nowrap", fade("strength"))}>
+            <Tooltip content={<p>{scrub(strengthHint(item))}</p>}>
+              <button type="button" tabIndex={-1} aria-label={`${item.appraisal_tier}: how strength is appraised`} className="sources-hint">
+                {scrub(item.appraisal_tier)}
+              </button>
+            </Tooltip>
+          </span>
+        )}
+      </td>
+      <td role="cell" className="sources-cell sources-value sources-cell-relevant">
+        {pulses.relevant ? <CellPulse width="w-10" /> : (
+          item.screen_status != null && <span className={fade("relevant")}><RelevantCell item={item} /></span>
+        )}
+      </td>
+      <td role="cell" className="sources-cell sources-value">
+        {pulses.status && <CellPulse width="w-16" />}
+        {!pulses.status && depth !== null && (
+          <span className={cn("sources-nowrap", fade("status"))}>
+            {item.read_in_full ? (
+              <span className="text-navy">{depth}</span>
+            ) : (
+              <Tooltip content={<p>{scrub(readDepthHint(item) ?? "")}</p>}>
+                <button type="button" tabIndex={-1} aria-label="Abstract only: why" className="sources-hint sources-hint-dotted text-grey">
+                  {depth}
+                </button>
+              </Tooltip>
+            )}
+          </span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+/** The title's second line: "Venue · Origin" and, for a cited source, the
+ *  green "Cited" chip at its end (lead, round 10: Origin and Cited fold in
+ *  here). Below `lg` the year joins it after the venue, its column hidden. */
+function SourceMetaLine({ item }: { item: EvidenceItem }) {
+  const pieces: Array<{ key: string; text: string; phoneOnly: boolean }> = [];
+  if (item.venue) pieces.push({ key: "venue", text: scrub(item.venue), phoneOnly: false });
+  if (item.year != null) pieces.push({ key: "year", text: String(item.year), phoneOnly: true });
+  if (item.origin) pieces.push({ key: "origin", text: scrub(item.origin), phoneOnly: false });
+  if (pieces.length === 0 && !item.cited) return null;
+  return (
+    <p className="sources-meta">
+      {pieces.map((piece, index) => {
+        // A separator next to the phone-only year shows on phones only,
+        // unless it stands between two pieces shown at every width.
+        const before = pieces[index - 1];
+        const sepPhoneOnly = piece.phoneOnly || (before?.phoneOnly === true && index - 1 === 0);
+        return (
+          <span key={piece.key}>
+            {index > 0 && <span className={sepPhoneOnly ? "lg:hidden" : undefined}>{" · "}</span>}
+            <span className={piece.phoneOnly ? "lg:hidden" : undefined}>{piece.text}</span>
+          </span>
+        );
+      })}
+      {item.cited && <Chip tone="green" className="sources-cited">Cited</Chip>}
+    </p>
+  );
+}
+
+/** The list's loading state in the table's own frame: the real header row
+ *  and six rows at about the real row height, a placeholder bar where the
+ *  title and its line will sit and one in Year, type and strength. They
+ *  breathe, and hold still under reduced motion. */
+function SourcesLoading({ header }: { header: ReactNode }) {
+  return (
+    <div className="sources-frame" aria-busy="true" aria-label="Loading sources" role="status">
+      <table role="presentation" className="sources-table">
+        <SourcesColumns />
+        {header}
+        <tbody>
+          {Array.from({ length: 6 }).map((_, index) => (
+            <tr key={index} aria-hidden="true" className="sources-row sources-row-skeleton">
+              <td className="sources-cell sources-cell-source">
+                <span className="placeholder-bar h-3 w-3/5" />
+                <span className="placeholder-bar mt-3 h-2.5 w-2/5" />
+              </td>
+              <td className="sources-cell sources-cell-year"><span className="placeholder-bar h-2.5 w-10" /></td>
+              <td className="sources-cell sources-value"><span className="placeholder-bar h-2.5 w-14" /></td>
+              <td className="sources-cell sources-value"><span className="placeholder-bar h-2.5 w-14" /></td>
+              <td className="sources-cell sources-value" />
+              <td className="sources-cell sources-value" />
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** An empty table: its frame with a label and, when there is one, one plain
+ *  sentence, left-aligned at the table's edge (the list pages' pattern). */
+function SourcesEmpty({ label, children, action }: { label: string; children?: ReactNode; action?: ReactNode }) {
+  return (
+    <div role="status" className="sources-frame flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-5 pl-4 pr-1">
+      <div>
+        <p className="text-body font-semibold text-navy">{label}</p>
+        {children != null && <p className="mt-1 text-body text-grey">{children}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+/** Nothing matches the filters: say how many the screening view holds
+ *  without them, and offer to clear them. Asks for that total only here. */
+function SourcesNoMatch({
+  taskId,
+  status,
+  onClear,
+}: {
+  taskId: string;
+  status: EvidenceQuery["status"];
+  onClear: () => void;
+}) {
+  const unfiltered = useEvidence(taskId, { page: 1, page_size: 1, status });
+  const total = unfiltered.data?.pagination.total_items ?? 0;
+  return (
+    <SourcesEmpty
+      label="No sources match"
+      action={
+        <Button variant="ghost" className={FRAME_CONTROL_CLASS} onClick={onClear}>
+          Clear filters
+        </Button>
+      }
+    >
+      {total > 0 ? `Clear the filters to see all ${total.toLocaleString("en-GB")}.` : null}
+    </SourcesEmpty>
+  );
+}
+
 /** The title cell's button: opens the dossier on click and, when the source
  *  carries a description, previews it (clamped) on hover. */
 function TitleWithDescription({ item, onOpen }: { item: Parameters<typeof screeningDetails>[0] & { title: string; abstract?: string | null; abstract_source?: string | null }; onOpen: () => void }) {
@@ -458,7 +649,7 @@ function TitleWithDescription({ item, onOpen }: { item: Parameters<typeof screen
     <button
       type="button"
       onClick={onOpen}
-      className="cursor-pointer text-left text-body font-semibold leading-snug text-navy hover:text-blue hover:underline max-md:text-meta"
+      className="cursor-pointer text-left text-body font-semibold leading-snug text-navy hover:text-blue hover:underline hover:underline-offset-[3px]"
     >
       {scrub(item.title)}
     </button>
@@ -488,7 +679,9 @@ function csvCell(value: string | number | boolean | null | undefined): string {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
-/** Downloads the whole source list (every page, no filters) as a CSV file. */
+/** Downloads the whole source list (every page, no filters) as a CSV file.
+ *  An outline control beside the count line: the table has no single
+ *  forward action, so nothing here takes the blue primary (lead, round 10). */
 function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?: string }) {
   const client = useApiClient();
   const [downloading, setDownloading] = useState(false);
@@ -533,7 +726,7 @@ function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?
         ].map(csvCell).join(",")),
       ].join("\r\n");
       // UTF-8 BOM so spreadsheet apps decode non-ASCII source text correctly.
-      const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+      const url = URL.createObjectURL(new Blob(["﻿", csv], { type: "text/csv;charset=utf-8" }));
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = `${(taskName ?? "Task").replaceAll(/[\\/]/g, "-")} - sources.csv`;
@@ -547,115 +740,82 @@ function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?
   };
 
   return (
-    <span className="flex items-center gap-2">
-      {failed && <span role="alert" className="text-caption text-red">The download failed. Try again.</span>}
-      <Button type="button" variant="primary" size="sm" disabled={downloading} onClick={() => void download()}>
+    <span className="flex items-center gap-3">
+      {failed && <span role="alert" className="text-meta text-red">The download failed. Try again.</span>}
+      <Button type="button" variant="outline" size="sm" className="h-10 py-0" disabled={downloading} onClick={() => void download()}>
         {downloading ? "Preparing…" : "Download CSV"}
       </Button>
     </span>
   );
 }
 
-function SourceLoading() {
+/** The sort mark: a 12 px arrow at the funnel's 2 px stroke. Its slot is
+ *  always reserved, so a label never shifts as sorting changes. */
+function SortArrow({ order }: { order: SortOrder | null }) {
   return (
-    <div aria-busy="true" aria-label="Loading sources" className="space-y-2">
-      {Array.from({ length: 6 }).map((_, index) => (
-        <div key={index} className="h-14 anim-breathe border border-line bg-paper-2" />
-      ))}
-    </div>
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      data-testid="sort-arrow"
+      className={cn(
+        "h-3 w-3 shrink-0",
+        order === null
+          ? "text-line-2 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+          : "text-navy",
+        order === "asc" && "rotate-180",
+      )}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 4v16M6 14l6 6 6-6" />
+    </svg>
   );
 }
 
 /** One sortable `<th>` in the sources table: a real button (accessible name
- *  "Sort by <label>"), `aria-sort` on the header itself, and a ↑/↓
- *  indicator once this column is the active sort. Clicking cycles
- *  none → the column's default direction → the opposite → none, and the
- *  caller re-derives `sort`/`order` URL params from that (no client-side
- *  sort of the page — the 025 filters pattern). */
+ *  "Sort by <label>"), `aria-sort` on the header itself, and the arrow once
+ *  this column is the active sort (Line 2 on hover and focus otherwise).
+ *  Clicking cycles none → the column's default direction → the opposite →
+ *  none, and the caller re-derives `sort`/`order` URL params from that (no
+ *  client-side sort of the page — the 025 filters pattern). Every header is
+ *  one line and bottom-aligned, so the labels and arrows share a baseline. */
 function SortableColumnHeader({
   column,
   activeSort,
   activeOrder,
   onSort,
-  className = "px-3 py-3",
-  children,
+  align = "start",
+  className,
 }: {
   column: (typeof SOURCE_SORT_COLUMNS)[number];
   activeSort: EvidenceSortField | null;
   activeOrder: SortOrder | null;
   onSort: (field: EvidenceSortField) => void;
+  align?: "start" | "end";
   className?: string;
-  /** Optional header-mounted filter control, rendered under the label. */
-  children?: ReactNode;
 }) {
   const order = activeSort === column.key ? activeOrder : null;
   const ariaSort = order === "asc" ? "ascending" : order === "desc" ? "descending" : "none";
   return (
-    <th className={className} aria-sort={ariaSort}>
-      {/* The filter sits beside the label's last word: a label that wraps
-          by design ("Evidence strength") keeps it on its second line. */}
-      <span className="flex items-end gap-1">
-        <button
-          type="button"
-          aria-label={`Sort by ${column.label.toLowerCase()}`}
-          onClick={() => onSort(column.key)}
-          className={`flex cursor-pointer items-center gap-1 ${TABLE_HEADER_TEXT_CLASS} hover:text-navy`}
-        >
-          {column.label}
-          {order !== null && <span aria-hidden="true">{order === "asc" ? "↑" : "↓"}</span>}
-        </button>
-        {children}
-      </span>
-    </th>
-  );
-}
-
-function FunnelIcon({ active }: { active: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={`h-3.5 w-3.5 ${active ? "text-blue" : "text-grey"}`}
-      fill={active ? "currentColor" : "none"}
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M3 5h18l-7 8v5l-4 2v-7L3 5Z" />
-    </svg>
-  );
-}
-
-/** A facet filter behind a funnel icon beside the header label: the icon IS
- *  a native select (invisible overlay), so clicking it opens the dropdown. */
-function HeaderFilter({
-  label,
-  allLabel,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  allLabel: string;
-  value: string;
-  options: Array<{ value: string; label: string }>;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <span className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center">
-      <FunnelIcon active={value !== ""} />
-      <select
-        aria-label={label}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+    <th role="columnheader" scope="col" className={cn("sources-th", align === "end" && "text-right", className)} aria-sort={ariaSort}>
+      <button
+        type="button"
+        aria-label={`Sort by ${column.label.toLowerCase()}`}
+        onClick={() => onSort(column.key)}
+        className={cn(
+          "group inline-flex min-h-6 cursor-pointer items-center gap-1 py-1 transition-colors duration-150 hover:text-navy",
+          TABLE_HEADER_TEXT_CLASS,
+          order !== null && "text-navy",
+          align === "end" && "flex-row-reverse",
+        )}
       >
-        <option value="">{allLabel}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
-    </span>
+        {column.label}
+        <SortArrow order={order} />
+      </button>
+    </th>
   );
 }
 
@@ -666,8 +826,32 @@ function parseYearParam(value: string | null): number | undefined {
     : undefined;
 }
 
-/** The Year column's range filter: a funnel icon opening a two-field popover. */
-function YearRangeFilter({
+/** The filter row's control: a 1 px Line 2 box on Paper, Meta Semibold
+ *  Navy, its chevron Grey; the same box opens a listbox or the year range. */
+const SELECT_TRIGGER_CLASS =
+  "inline-flex min-h-[34px] min-w-0 cursor-pointer items-center justify-between gap-2 border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy transition-colors duration-150 hover:border-navy max-md:max-w-52";
+
+function SelectChevron() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-3.5 w-3.5 shrink-0 text-grey"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+/** The Year filter in the filter row: the range in words on the control
+ *  ("Any", "2015 to 2020"), a popover of two four-digit fields that apply on
+ *  leaving a field or on Enter. */
+function YearFilter({
   from,
   to,
   onChange,
@@ -676,77 +860,94 @@ function YearRangeFilter({
   to: number | undefined;
   onChange: (from: number | undefined, to: number | undefined) => void;
 }) {
+  const labelId = useId();
+  const range = yearRangeLabel(from, to);
+  const field = "mt-1 h-10 w-full border border-line-2 bg-paper px-3 text-meta font-normal text-navy";
   return (
-    <Popover>
-      <PopoverTrigger
-        aria-label="Filter by year range"
-        className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center"
-      >
-        <FunnelIcon active={from !== undefined || to !== undefined} />
-      </PopoverTrigger>
-      <PopoverContent className="w-56 p-3">
-        {/* Uncontrolled + apply-on-blur/Enter so partial typing ("20…")
-            never gets clobbered by a controlled reset. */}
-        <div className="flex items-center gap-2">
-          <label className="flex-1 text-caption font-semibold normal-case tracking-normal text-grey">
-            From
-            <input
-              key={`from-${from ?? "any"}`}
-              type="number"
-              inputMode="numeric"
-              defaultValue={from ?? ""}
-              onBlur={(event) => onChange(parseYearParam(event.target.value || null), to)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
-              }}
-              placeholder="Any"
-              className="mt-1 w-full border border-line-2 bg-paper px-2 py-1 text-meta text-navy"
-            />
-          </label>
-          <label className="flex-1 text-caption font-semibold normal-case tracking-normal text-grey">
-            To
-            <input
-              key={`to-${to ?? "any"}`}
-              type="number"
-              inputMode="numeric"
-              defaultValue={to ?? ""}
-              onBlur={(event) => onChange(from, parseYearParam(event.target.value || null))}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
-              }}
-              placeholder="Any"
-              className="mt-1 w-full border border-line-2 bg-paper px-2 py-1 text-meta text-navy"
-            />
-          </label>
-        </div>
-        {(from !== undefined || to !== undefined) && (
+    <span className="flex min-w-0 max-w-full items-center gap-1.5 text-meta font-semibold text-grey">
+      <span id={labelId} aria-hidden="true" className="whitespace-nowrap">Year</span>
+      <Popover>
+        <PopoverTrigger asChild>
           <button
             type="button"
-            onClick={() => onChange(undefined, undefined)}
-            className="mt-2 cursor-pointer text-caption font-semibold normal-case tracking-normal text-blue hover:underline"
+            aria-label={`Filter by year: ${range === null ? "any" : range}`}
+            className={SELECT_TRIGGER_CLASS}
           >
-            Clear
+            <span className="truncate"><Figures text={range ?? "Any"} /></span>
+            <SelectChevron />
           </button>
-        )}
-      </PopoverContent>
-    </Popover>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-64 max-w-[calc(100vw-2rem)] p-4">
+          {/* Uncontrolled + apply-on-blur/Enter so partial typing ("20…")
+              never gets clobbered by a controlled reset. */}
+          <div className="flex items-start gap-3">
+            <label className="flex-1 text-meta font-semibold text-grey">
+              From
+              <input
+                key={`from-${from ?? "any"}`}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{4}"
+                maxLength={4}
+                defaultValue={from ?? ""}
+                onBlur={(event) => onChange(parseYearParam(event.target.value || null), to)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
+                placeholder="Any"
+                className={field}
+              />
+            </label>
+            <label className="flex-1 text-meta font-semibold text-grey">
+              To
+              <input
+                key={`to-${to ?? "any"}`}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{4}"
+                maxLength={4}
+                defaultValue={to ?? ""}
+                onBlur={(event) => onChange(from, parseYearParam(event.target.value || null))}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
+                placeholder="Any"
+                className={field}
+              />
+            </label>
+          </div>
+          {range !== null && (
+            <button
+              type="button"
+              onClick={() => onChange(undefined, undefined)}
+              className="mt-3 cursor-pointer text-meta font-semibold text-grey underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:text-navy hover:decoration-navy"
+            >
+              Clear
+            </button>
+          )}
+        </PopoverContent>
+      </Popover>
+    </span>
   );
 }
 
-
-/** One facet dropdown in the sources filter row. */
+/** One facet dropdown in the sources filter row. With `allLabel` the list
+ *  opens on an "all" choice (value ""); without it (Sort) every choice is
+ *  one of `options`. */
 function FilterSelect({
   label,
   allLabel,
   value,
   options,
   onChange,
+  className,
 }: {
   label: string;
-  allLabel: string;
+  allLabel?: string;
   value: string;
-  options: Array<{ value: string; label: string }>;
+  options: ReadonlyArray<{ value: string; label: string }>;
   onChange: (value: string) => void;
+  className?: string;
 }) {
   // App-styled Popover listbox (the NewTaskView ProjectPicker pattern), not a
   // native <select>: consistent chrome at every width, and long theme names
@@ -784,12 +985,13 @@ function FilterSelect({
   };
   const optionClass = (active: boolean) =>
     cn(
-      "block w-full cursor-pointer px-3 py-2 text-left text-body font-normal text-navy hover:bg-blue-tint-2 hover:text-blue max-md:text-meta",
+      "block w-full cursor-pointer px-3 py-2 text-left text-meta font-normal text-navy hover:bg-blue-tint-2 hover:text-blue",
       active && "bg-blue-tint-2 font-semibold",
     );
+  const choices = allLabel === undefined ? options : [{ value: "", label: allLabel }, ...options];
   return (
-    <span className="flex min-w-0 max-w-full items-center gap-1.5 text-meta font-semibold text-grey max-md:text-caption">
-      <label id={labelId} htmlFor={triggerId} className="cursor-pointer">
+    <span className={cn("flex min-w-0 max-w-full items-center gap-1.5 text-meta font-semibold text-grey", className)}>
+      <label id={labelId} htmlFor={triggerId} className="cursor-pointer whitespace-nowrap">
         {label}
       </label>
       <Popover open={open} onOpenChange={setOpen}>
@@ -800,21 +1002,10 @@ function FilterSelect({
             aria-haspopup="listbox"
             aria-expanded={open}
             aria-labelledby={`${labelId} ${valueId}`}
-            className="inline-flex min-w-0 cursor-pointer items-center justify-between gap-2 border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy max-md:max-w-52 max-md:px-2 max-md:py-1 max-md:text-caption"
+            className={SELECT_TRIGGER_CLASS}
           >
-            <span id={valueId} className="truncate">{selected?.label ?? allLabel}</span>
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              className="h-3.5 w-3.5 shrink-0 text-grey"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
+            <span id={valueId} className="truncate">{selected?.label ?? allLabel ?? ""}</span>
+            <SelectChevron />
           </button>
         </PopoverTrigger>
         <PopoverContent
@@ -833,18 +1024,7 @@ function FilterSelect({
             onKeyDown={onListKeyDown}
             className="flex max-h-80 flex-col overflow-y-auto"
           >
-            <li role="none">
-              <button
-                type="button"
-                role="option"
-                aria-selected={value === ""}
-                onClick={() => pick("")}
-                className={optionClass(value === "")}
-              >
-                {allLabel}
-              </button>
-            </li>
-            {options.map((option) => (
+            {choices.map((option) => (
               <li key={option.value} role="none">
                 <button
                   type="button"
@@ -866,22 +1046,47 @@ function FilterSelect({
 
 /** A value on its way (owner, round 8): a short grey bar, breathing on the
  *  status mark's 1.6 s rhythm, in the cell the running stage will fill. It
- *  sits where the value's chip will, and holds still under reduced motion. */
+ *  sits where the value will, and holds still under reduced motion. */
 function CellPulse({ width }: { width: string }) {
   return (
-    <span aria-hidden="true" data-testid="cell-pulse" className="flex h-[1.625rem] items-center">
+    <span aria-hidden="true" data-testid="cell-pulse" className="sources-pulse">
       <span className={`placeholder-bar h-2.5 ${width}`} />
     </span>
   );
 }
 
-/** The screening verdict: tick/cross + confidence, the LLM's reasoning on
- *  hover (just the reasoning — basis and depth live in the Status column). */
+/** A 12 px tick or cross at the 2 px stroke, before the screening figure. */
+function VerdictMark({ relevant }: { relevant: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className={cn("h-3 w-3 shrink-0", relevant ? "text-green" : "text-red")}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {relevant ? <path d="M4 12.5l5 5L20 6.5" /> : <path d="M6 6l12 12M18 6L6 18" />}
+    </svg>
+  );
+}
+
+/** The screening verdict: the mark and the confidence figure, right-aligned
+ *  in tabular figures (the default sort key reads as a ranked figure); the
+ *  LLM's reasoning on hover, out of the tab order. Its name carries the
+ *  figure ("Relevant, 99% confidence: screening details"). */
 function RelevantCell({ item }: { item: Parameters<typeof screeningDetails>[0] }) {
   if (item.screen_status === null || item.screen_status === undefined) return null;
   const retracted = item.screen_status === "excluded_retracted";
   const relevant = item.screen_status === "relevant";
-  const label = retracted ? "Excluded — retracted" : relevant ? "Relevant" : "Not relevant";
+  const verdict = retracted ? "Excluded — retracted" : relevant ? "Relevant" : "Not relevant";
+  const figure =
+    !retracted && item.screen_confidence !== null && item.screen_confidence !== undefined
+      ? `${Math.round(item.screen_confidence * 100)}%`
+      : null;
+  const name = figure !== null ? `${verdict}, ${figure} confidence: screening details` : `${verdict}: screening details`;
   const content = (
     <p>
       {retracted
@@ -893,18 +1098,10 @@ function RelevantCell({ item }: { item: Parameters<typeof screeningDetails>[0] }
   );
   return (
     <Tooltip content={content}>
-      <button
-        type="button"
-        aria-label={`${label}: screening details`}
-        className="flex cursor-help items-baseline gap-1.5"
-      >
-        <span aria-hidden="true" className={`text-meta font-bold ${relevant ? "text-green" : "text-red"}`}>
-          {relevant ? "✓" : "✕"}
-        </span>
-        {!retracted && item.screen_confidence !== null && item.screen_confidence !== undefined && (
-          <span className="text-caption text-grey">{Math.round(item.screen_confidence * 100)}%</span>
-        )}
-        {retracted && <span className="text-caption text-red">retracted</span>}
+      <button type="button" tabIndex={-1} aria-label={name} className="sources-hint">
+        <VerdictMark relevant={relevant} />
+        {figure !== null && <span className="tabular-nums text-navy">{figure}</span>}
+        {retracted && <span className="text-red">retracted</span>}
       </button>
     </Tooltip>
   );
@@ -1133,7 +1330,7 @@ export function SourceDossierBody({
       {(source.evidence_type || source.appraisal_tier) && (
         <DossierSection title="Quality">
           <dl className="space-y-1.5">
-            {source.evidence_type && <DetailRow label="Evidence type" value={source.evidence_type} />}
+            {source.evidence_type && <DetailRow label="Evidence type" value={evidenceTypeLabel(source.evidence_type)} />}
             {source.classification_reason && (
               <DetailRow label="Why this type" value={source.classification_reason} />
             )}

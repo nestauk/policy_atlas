@@ -1,0 +1,244 @@
+/* ---------------------------------------------------------------------------
+ * The sources table on All sources (task 058, round 10; the sources table
+ * review's entries 1 to 16 with the lead's rulings).
+ *
+ * - One frame, the queries table's: a Line hairline above and below, no side
+ *   borders, no shadow, no header band (a sheet on the Sources panel, not a
+ *   card on it).
+ * - Fixed columns: the source takes what the value columns leave, so a
+ *   filter or a page change never moves a column, and values never wrap (a
+ *   long one ends in an ellipsis; its hover and the dossier carry it whole).
+ * - Values are plain Meta text; the one chip left is the green "Cited".
+ * - Below lg each source is a stacked row in the same markup: the title, its
+ *   "Venue · Year · Origin" line, then the values in column order joined by
+ *   " · ", each placeholder bar in its slot. The headers hide; sorting moves
+ *   to the filter row's Sort select.
+ * ------------------------------------------------------------------------- */
+
+@layer components {
+.sources-frame {
+  border-block: 1px solid var(--color-line);
+  background-color: var(--color-paper);
+}
+
+.sources-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+/* Widths hold every value of the classifier's vocabulary, and every header
+   with its sort arrow, on one line from xl up (measured in Averta; the
+   fallback face is wider, and a value too long ends in an ellipsis). */
+.sources-col-year {
+  width: 4rem;
+}
+.sources-col-type {
+  width: 17.25rem;
+}
+.sources-col-strength {
+  width: 10.75rem;
+}
+.sources-col-relevant {
+  width: 6.25rem;
+}
+.sources-col-status {
+  width: 6.5rem;
+}
+
+/* Between lg and xl a long evidence type gives way to the title and ends in
+   an ellipsis (its hover and the dossier carry it whole). */
+@media (max-width: 79.99rem) {
+  .sources-col-type {
+    width: 13rem;
+  }
+}
+
+.sources-th {
+  padding: 10px 8px 8px;
+  vertical-align: bottom;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.sources-cell {
+  padding: 12px 8px;
+  vertical-align: top;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  color: var(--color-ink);
+}
+
+/* The title's line box is the Body size's 22 px; the values sit 1 px lower
+   so their first line centres on it. */
+.sources-value,
+.sources-cell-year {
+  padding-top: 13px;
+}
+
+.sources-cell-source {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.sources-cell-year {
+  color: var(--color-navy);
+  font-variant-numeric: tabular-nums;
+}
+
+.sources-cell-relevant {
+  text-align: right;
+}
+
+.sources-row {
+  border-bottom: 1px solid var(--color-line);
+  transition: background-color 150ms ease;
+}
+.sources-row:last-child {
+  border-bottom: 0;
+}
+.sources-row:focus-within {
+  background-color: var(--color-paper-2);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sources-row:hover {
+    background-color: var(--color-paper-2);
+  }
+}
+
+.sources-row-skeleton {
+  height: 88px;
+}
+.sources-row-skeleton .sources-cell {
+  vertical-align: middle;
+}
+
+/* The title's second line: Meta Grey, the green "Cited" chip at its end. */
+.sources-meta {
+  margin-top: 2px;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  color: var(--color-grey);
+}
+.sources-cited {
+  margin-left: 8px;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+/* One line per value; a value too long for its column ends in an ellipsis. */
+.sources-nowrap,
+.sources-nowrap > .sources-hint {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A value with a reason behind it: hover only (the title is the keyboard's
+   way to the same words, in the dossier). */
+.sources-hint {
+  cursor: help;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+}
+.sources-cell-relevant .sources-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sources-hint-dotted {
+  text-decoration: underline dotted var(--color-line-2);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.sources-pulse {
+  display: flex;
+  align-items: center;
+  height: calc(var(--text-meta) * var(--text-meta--line-height));
+}
+.sources-cell-relevant .sources-pulse {
+  justify-content: flex-end;
+}
+
+/* Below lg the six fixed columns would leave the title under 100 px (at 768
+   the value columns alone take 600 of 672), so the stacked row the brief
+   gives phones holds from lg down. */
+@media (max-width: 63.99rem) {
+  .sources-table,
+  .sources-table tbody {
+    display: block;
+  }
+  .sources-table colgroup,
+  .sources-head {
+    display: none;
+  }
+  /* The row wraps its cells: the title cell takes the whole first lines,
+     then the values follow in column order, each carrying the dot that
+     separates it from the next, so a wrapped line never starts with one. */
+  .sources-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 6px;
+    padding: 12px 16px;
+  }
+  .sources-row-skeleton {
+    height: auto;
+  }
+  .sources-cell {
+    display: block;
+    padding: 0;
+  }
+  .sources-cell-source {
+    flex-basis: 100%;
+    margin-bottom: 4px;
+  }
+  .sources-cell-year,
+  .sources-value:empty {
+    display: none;
+  }
+  .sources-value:not(:empty):has(~ .sources-value:not(:empty))::after {
+    content: "\00a0·";
+    color: var(--color-grey);
+  }
+  .sources-row-skeleton .sources-value::after {
+    content: none !important;
+  }
+  .sources-row-skeleton .sources-value .placeholder-bar {
+    display: inline-block;
+    margin-right: 12px;
+  }
+  .sources-cell-relevant {
+    text-align: left;
+  }
+  .sources-nowrap,
+  .sources-nowrap > .sources-hint {
+    display: inline;
+    white-space: normal;
+  }
+  .sources-pulse {
+    display: inline-flex;
+    vertical-align: middle;
+  }
+  /* The verdict flows as text on the phone row. */
+  .sources-cell-relevant .sources-hint {
+    display: inline;
+  }
+  .sources-cell-relevant .sources-hint > svg {
+    display: inline;
+    margin-right: 6px;
+    vertical-align: -1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sources-row {
+    transition: none;
+  }
+}
+}

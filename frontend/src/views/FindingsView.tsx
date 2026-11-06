@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router";
 
@@ -30,7 +30,7 @@ import { cn } from "../ui/brand/cn";
 import { ChevronIcon } from "../ui/brand/icons";
 import { RetryCard } from "../ui/feedback/RetryCard";
 import { PROSE_LINK_CLASS } from "../ui/brand/inlineActions";
-import { Button } from "../ui/brand/Button";
+import { Pagination } from "./Pagination";
 
 type FindingOut = components["schemas"]["FindingOut"];
 type IofFinding = Extract<FindingOut, { profile: "iof" }>;
@@ -364,6 +364,7 @@ export function FindingsView() {
   });
   const groups = useGroups(taskId);
   const [open, setOpen] = useState<string | null>(null);
+  const top = useRef<HTMLParagraphElement>(null);
 
   const updateParams = (update: (next: URLSearchParams) => void) => {
     setSearchParams((current) => {
@@ -472,7 +473,7 @@ export function FindingsView() {
 
       {findings.data !== undefined && (
         <>
-          <p className="mt-4 text-meta text-grey" role="status">
+          <p ref={top} className="mt-4 scroll-mt-4 text-meta text-grey" role="status">
             {totalItems} finding{totalItems === 1 ? "" : "s"}
             {profile !== undefined || group !== undefined ? " match the filters" : ""}
           </p>
@@ -530,39 +531,15 @@ export function FindingsView() {
             </table>
           </div>
           {findings.data.pagination.total_items > findings.data.pagination.page_size && (
-            <nav aria-label="Pages" className="mt-5 flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() =>
-                  updateParams((next) => next.set("page", String(page - 1)))
-                }
-              >
-                Previous
-              </Button>
-              <span className="text-caption text-grey">
-                Page {page} of{" "}
-                {Math.ceil(
-                  findings.data.pagination.total_items / findings.data.pagination.page_size,
-                )}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={
-                  page >=
-                  Math.ceil(
-                    findings.data.pagination.total_items / findings.data.pagination.page_size,
-                  )
-                }
-                onClick={() =>
-                  updateParams((next) => next.set("page", String(page + 1)))
-                }
-              >
-                Next
-              </Button>
-            </nav>
+            <Pagination
+              page={page}
+              totalPages={Math.ceil(findings.data.pagination.total_items / findings.data.pagination.page_size)}
+              onPage={(target) => {
+                updateParams((next) => next.set("page", String(target)));
+                // The reader starts the new page at its first row.
+                top.current?.scrollIntoView?.({ block: "start" });
+              }}
+            />
           )}
         </>
       )}

@@ -47,7 +47,15 @@ function LocationProbe() {
   return <div data-testid="location">{location.search}</div>;
 }
 
-function renderSources() {
+function renderSources(rows?: typeof mockEvidence) {
+  if (rows !== undefined) {
+    vi.mocked(queries.useEvidence).mockReturnValue({
+      data: evidencePage(rows),
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof queries.useEvidence>);
+  }
   return render(sourcesTree());
 }
 
@@ -236,11 +244,21 @@ describe("SourcesView — pulsing cells while a stage runs (owner, round 8)", ()
 });
 
 describe("SourcesView — sortable table (028 strand 7)", () => {
-  it("keeps Origin a plain, non-sortable header (its filter select aside)", () => {
+  it("heads six sortable columns; Origin and Cited fold into the source's second line (round 10)", () => {
     renderSources();
-    const header = screen.getByRole("columnheader", { name: /Origin/ });
-    expect(header).not.toHaveAttribute("aria-sort");
-    expect(within(header).queryByRole("button")).toBeNull();
+    const table = screen.getAllByRole("table")[0];
+    const headers = within(table).getAllByRole("columnheader");
+    expect(headers.map((th) => th.textContent)).toEqual([
+      "Source", "Year", "Evidence type", "Evidence strength", "Relevant", "Status",
+    ]);
+    for (const th of headers) expect(th).toHaveAttribute("aria-sort");
+    // The cited source's line: venue, the year (phones only), origin, the chip.
+    const cited = mockEvidence.find((item) => item.cited) as (typeof mockEvidence)[number];
+    const row = within(table).getAllByRole("row").find((r) => r.textContent?.includes(cited.title)) as HTMLElement;
+    const line = row.querySelector(".sources-meta") as HTMLElement;
+    expect(line.textContent).toBe(`${cited.venue} · ${cited.year} · ${cited.origin}Cited`);
+    expect(within(line).getByText(String(cited.year))).toHaveClass("lg:hidden");
+    expect(within(line).getByText("Cited")).toHaveClass("sources-cited");
   });
 
   it("gives the renamed Evidence strength header a sort button with an accessible name", () => {
@@ -334,9 +352,15 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     expect(lastEvidenceQuery()).toMatchObject({ theme: SCHOOL_FOOD_THEME_ID });
   });
 
-  it("shows a sources count between the filters and the table", () => {
+  it("shows a sources count between the filters and the table, the download beside it", () => {
     renderSources();
-    expect(screen.getByText(`${mockEvidence.length} sources`)).toBeInTheDocument();
+    const count = screen.getAllByRole("status").find((node) => node.textContent === `${mockEvidence.length} sources`);
+    expect(count).toBeDefined();
+    // Download CSV is an outline control on the count's row, not a primary.
+    const download = screen.getByRole("button", { name: "Download CSV" });
+    expect(download).toHaveClass("border-line-2");
+    expect(download).not.toHaveClass("cutout");
+    expect(count?.parentElement).toContainElement(download);
   });
 
   it("folds the committed search queries to one line at the top, the chevron opening one table", async () => {
@@ -459,7 +483,7 @@ describe("SourcesView — fixture-driven render (mock mode)", () => {
   });
 });
 
-describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", () => {
+describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", { timeout: 20_000 }, () => {
   it("defaults to Included on the relevance spectrum, Relevant header marked descending", () => {
     renderSources();
     expect(lastEvidenceQuery()).toMatchObject({
@@ -482,43 +506,50 @@ describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", 
     expect(lastEvidenceQuery()).toMatchObject({ status: ["Included"] });
   });
 
-  it("binds the Year header's range filter to the query", async () => {
+  it("binds the filter row's Year control to the query, its name carrying the range", async () => {
     const user = userEvent.setup();
     renderSources();
-    await user.click(screen.getByRole("button", { name: "Filter by year range" }));
+    await user.click(screen.getByRole("button", { name: "Filter by year: any" }));
     const fromInput = screen.getByLabelText("From");
+    // Four-digit text fields, not number spinners.
+    expect(fromInput).toHaveAttribute("type", "text");
+    expect(fromInput).toHaveAttribute("inputmode", "numeric");
+    expect(fromInput).toHaveAttribute("maxlength", "4");
     await user.type(fromInput, "2021");
     await user.tab();
     expect(screen.getByTestId("location")).toHaveTextContent("year_from=2021");
     expect(lastEvidenceQuery()).toMatchObject({ year_from: 2021 });
+    expect(screen.getByRole("button", { name: "Filter by year: 2021 to any" })).toBeInTheDocument();
   });
 
-  it("binds the header-mounted origin, evidence type and strength filters to the query", async () => {
+  it("binds the filter row's origin, evidence type and strength selects to the query", async () => {
     const user = userEvent.setup();
     renderSources();
-    const originSelect = screen.getByRole("combobox", { name: "Filter by origin" });
-    // Uploaded is not offered — document upload isn't a live feature.
-    expect(within(originSelect).queryByRole("option", { name: "Uploaded" })).toBeNull();
-    await user.selectOptions(originSelect, "Overton");
+    // No native selects are left anywhere on the page (round 10).
+    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: /^Origin/ }));
+    const origins = await screen.findByRole("listbox", { name: "Origin" });
+    // Uploaded is not offered — document upload isn't a live feature. The
+    // provider names stay as they are (owner, 2026-11-06).
+    expect(within(origins).getAllByRole("option").map((option) => option.textContent)).toEqual(["All", "OpenAlex", "Overton"]);
+    await user.click(within(origins).getByRole("option", { name: "Overton" }));
     expect(screen.getByTestId("location")).toHaveTextContent("origin=Overton");
     expect(lastEvidenceQuery()).toMatchObject({ origin: "Overton" });
 
-    // Evidence-type options come from the landscape distribution.
-    const typeSelect = screen.getByRole("combobox", { name: "Filter by evidence type" });
-    expect(within(typeSelect).getByRole("option", { name: "Observational Research Studies" })).toBeInTheDocument();
-    await user.selectOptions(typeSelect, "Systematic Review and Meta-Analysis");
+    // Evidence-type options come from the landscape distribution, in
+    // sentence case; the query keeps the classifier's value.
+    await user.click(screen.getByRole("button", { name: /^Evidence type/ }));
+    const types = await screen.findByRole("listbox", { name: "Evidence type" });
+    expect(within(types).getByRole("option", { name: "Observational research studies" })).toBeInTheDocument();
+    await user.click(within(types).getByRole("option", { name: "Systematic review and meta-analysis" }));
     expect(lastEvidenceQuery()).toMatchObject({ evidence_type: "Systematic Review and Meta-Analysis" });
 
-    const strengthSelect = screen.getByRole("combobox", { name: "Filter by evidence strength" });
-    await user.selectOptions(strengthSelect, "Moderate");
-    expect(lastEvidenceQuery()).toMatchObject({ strength: "Moderate" });
+    await user.click(screen.getByRole("button", { name: /^Strength/ }));
+    const strengths = await screen.findByRole("listbox", { name: "Strength" });
     // Task 056: Unrated is its own band, offered last.
-    const strengthOptions = within(strengthSelect)
-      .getAllByRole("option")
-      .map((option) => option.textContent);
-    expect(strengthOptions.at(-1)).toBe("Unrated");
-    await user.selectOptions(strengthSelect, "Unrated");
-    expect(lastEvidenceQuery()).toMatchObject({ strength: "Unrated" });
+    expect(within(strengths).getAllByRole("option").at(-1)).toHaveTextContent("Unrated");
+    await user.click(within(strengths).getByRole("option", { name: "Moderate" }));
+    expect(lastEvidenceQuery()).toMatchObject({ strength: "Moderate" });
   });
 
   it("hovers Abstract only with a human-readable reason", () => {
@@ -530,9 +561,9 @@ describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", 
   it("renders the Relevant column as a verdict with confidence, reasoning behind a hover", () => {
     renderSources();
     // The screened-in breakfast-clubs row: ✓ + its screening confidence.
-    const verdicts = screen.getAllByRole("button", { name: "Relevant: screening details" });
-    expect(verdicts.length).toBeGreaterThan(0);
-    expect(screen.getByText("91%")).toBeInTheDocument();
+    // The name carries the figure (round 10).
+    expect(screen.getByRole("button", { name: "Relevant, 91% confidence: screening details" })).toBeInTheDocument();
+    expect(screen.getByText("91%")).toHaveClass("tabular-nums");
     // The retracted row keeps its honest verdict.
     expect(screen.getByRole("button", { name: "Excluded — retracted: screening details" })).toBeInTheDocument();
   });
@@ -738,16 +769,193 @@ describe("SourcesView — the dossier's records on a scoping task", () => {
   });
 });
 
-describe("SourcesView — one header rule (owner, consistency pass)", () => {
-  it("keeps Origin and its filter on one line, the filter never shrinking", () => {
+describe("SourcesView — one header line (owner, round 10)", () => {
+  it("keeps every header on one line at the Caption label size, each sort mark's slot reserved", () => {
     renderSources();
-    const origin = screen.getByTestId("origin-header");
-    expect(origin).toHaveClass("flex", "whitespace-nowrap");
-    const filter = screen.getByRole("combobox", { name: "Filter by origin" }).parentElement as HTMLElement;
-    expect(filter).toHaveClass("shrink-0");
-    const strength = screen.getByRole("combobox", { name: "Filter by evidence strength" }).parentElement as HTMLElement;
-    expect(strength).toHaveClass("shrink-0");
-    // A wrapping label keeps the filter beside its last word.
-    expect(strength.parentElement).toHaveClass("items-end");
+    const table = screen.getAllByRole("table")[0];
+    for (const th of within(table).getAllByRole("columnheader")) {
+      expect(th).toHaveClass("sources-th");
+      const button = within(th).getByRole("button");
+      expect(button).toHaveClass("whitespace-nowrap", "text-caption", "uppercase", "min-h-6");
+      // The arrow is always there (hidden until hover or focus when the
+      // column is not the sort), so every label sits at the same height.
+      expect(button.querySelector("[data-testid='sort-arrow']")).not.toBeNull();
+    }
+    // The header filters moved to the filter row: none left in the header.
+    expect(within(table).queryByRole("button", { name: /^Filter/ })).toBeNull();
+  });
+});
+
+// Several clicks through popovers each: a longer budget for a loaded machine.
+describe("SourcesView — the filter row (round 10)", { timeout: 20_000 }, () => {
+  it("groups the exclusive screening toggles and puts every filter in one row as a visible control", () => {
+    renderSources();
+    const row = screen.getByRole("group", { name: "Filter sources" });
+    const screening = within(row).getByRole("group", { name: "Screening" });
+    expect(within(screening).getAllByRole("button").map((button) => button.textContent)).toEqual(["All", "Included", "Screened out"]);
+    expect(within(screening).queryByRole("button", { name: "Cited" })).toBeNull();
+    // Each select is a visible bordered control at least 24 px tall.
+    for (const name of [/^Key theme/, /^Origin/, /^Evidence type/, /^Strength/, /^Filter by year/]) {
+      const trigger = within(row).getByRole("button", { name });
+      expect(trigger).toHaveClass("border", "min-h-[34px]");
+      expect(trigger).not.toHaveClass("opacity-0");
+    }
+  });
+
+  it("filters by publisher country, the Landscape's names offered and the query carrying it", async () => {
+    vi.mocked(queries.useLandscape).mockReturnValue(
+      { data: { ...mockLandscape, geographies: { GB: 30, US: 8, "Not reported": 5 } } } as unknown as ReturnType<typeof queries.useLandscape>,
+    );
+    const user = userEvent.setup();
+    renderSources();
+    await user.click(screen.getByRole("button", { name: /^Country/ }));
+    const countries = await screen.findByRole("listbox", { name: "Country" });
+    expect(within(countries).getAllByRole("option").map((option) => option.textContent)).toEqual(["All", "United Kingdom", "United States"]);
+    await user.click(within(countries).getByRole("option", { name: "United Kingdom" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("country=United+Kingdom");
+    expect(lastEvidenceQuery()).toMatchObject({ country: "United Kingdom" });
+  });
+
+  it("shows Clear filters once a filter narrows the view, and clears every filter but the screening choice", async () => {
+    const user = userEvent.setup();
+    renderSources();
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Included" }));
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Cited" }));
+    await user.click(screen.getByRole("button", { name: /^Origin/ }));
+    await user.click(screen.getByRole("option", { name: "Overton" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("cited=true");
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("?status=Included");
+    expect(screen.getByTestId("location")).not.toHaveTextContent(/cited|origin/);
+  });
+
+  it("offers a Sort select for phones, in column order with the direction named", async () => {
+    const user = userEvent.setup();
+    renderSources();
+    const trigger = screen.getByRole("button", { name: /^Sort Relevant/ });
+    expect(trigger.closest(".lg\\:hidden")).not.toBeNull();
+    expect(trigger).toHaveTextContent("Relevant, most likely first");
+    await user.click(trigger);
+    const options = within(await screen.findByRole("listbox", { name: "Sort" })).getAllByRole("option");
+    expect(options[0]).toHaveTextContent("Source, A to Z");
+    expect(options.map((option) => option.textContent)).toContain("Year, newest first");
+    await user.click(screen.getByRole("option", { name: "Year, newest first" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("sort=year&order=desc");
+    expect(lastEvidenceQuery()).toMatchObject({ sort: "year", order: "desc" });
+  });
+});
+
+describe("SourcesView — the rows (round 10)", () => {
+  it("leaves one tab stop per row, the title: the cells' reasons are hover only", () => {
+    renderSources();
+    const table = screen.getAllByRole("table")[0];
+    const body = within(table).getAllByRole("rowgroup")[1];
+    for (const row of within(body).getAllByRole("row")) {
+      const tabbable = within(row).getAllByRole("button").filter((button) => button.tabIndex >= 0);
+      expect(tabbable).toHaveLength(1);
+    }
+    // The hover reasons are still there for a pointer.
+    expect(screen.getAllByRole("button", { name: "Abstract only: why" })[0]).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("sets the values as plain text: the evidence type in sentence case, the one chip the green Cited", () => {
+    renderSources([{ ...mockEvidence[2], evidence_type: "RCTs and Quasi-Experimental Studies", cited: true }]);
+    const table = screen.getAllByRole("table")[0];
+    expect(within(table).getByText("RCTs and quasi-experimental studies")).not.toHaveClass("text-[11.5px]");
+    const chips = table.querySelectorAll(".text-\\[11\\.5px\\]");
+    expect([...chips].map((chip) => chip.textContent)).toEqual(["Cited"]);
+  });
+
+  it("stacks a row below lg with the values in column order (the markup the phone row restyles)", () => {
+    renderSources([{ ...mockEvidence[2] }]);
+    const table = screen.getAllByRole("table")[0];
+    const row = within(table).getAllByRole("row")[1];
+    const cells = within(row).getAllByRole("cell");
+    expect(cells.map((cell) => cell.className.split(" ").filter((name) => name.startsWith("sources-cell") || name === "sources-value"))).toEqual([
+      ["sources-cell", "sources-cell-source"],
+      ["sources-cell", "sources-cell-year"],
+      ["sources-cell", "sources-value"],
+      ["sources-cell", "sources-value"],
+      ["sources-cell", "sources-value", "sources-cell-relevant"],
+      ["sources-cell", "sources-value"],
+    ]);
+    expect(cells.slice(2).map((cell) => cell.textContent)).toEqual(["Cohort study", "Moderate confidence", "91%", "Abstract only"]);
+  });
+});
+
+describe("SourcesView — states in the table's frame (round 10)", { timeout: 20_000 }, () => {
+  const evidence = (value: Partial<ReturnType<typeof queries.useEvidence>>) =>
+    vi.mocked(queries.useEvidence).mockReturnValue({ refetch: vi.fn(), ...value } as unknown as ReturnType<typeof queries.useEvidence>);
+
+  it("loads inside the frame: the real header row and six placeholder rows", () => {
+    evidence({ data: undefined, isPending: true, isError: false } as never);
+    renderSources();
+    const loading = screen.getByLabelText("Loading sources");
+    expect(loading).toHaveClass("sources-frame");
+    expect(loading).toHaveAttribute("aria-busy", "true");
+    expect(within(loading).getByRole("button", { name: "Sort by source" })).toBeInTheDocument();
+    expect(loading.querySelectorAll(".sources-row-skeleton")).toHaveLength(6);
+  });
+
+  it("fails inside the frame with the sentence and a 40 px ghost Try again", async () => {
+    const refetch = vi.fn();
+    evidence({ data: undefined, isPending: false, isError: true, error: new Error("boom"), refetch } as never);
+    renderSources();
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveClass("sources-frame");
+    expect(alert).toHaveTextContent("Sources couldn't be loaded.");
+    const retry = within(alert).getByRole("button", { name: "Try again" });
+    expect(retry).toHaveClass("h-10");
+    await userEvent.click(retry);
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it("says no sources yet, with one sentence, when nothing has been found", () => {
+    evidence({ data: evidencePage([]), isPending: false, isError: false } as never);
+    streamState = { ...createInitialRunStreamState(), run: { id: "r", status: "running", startedAt: "2026-11-05T10:00:00Z" }, stages: [] } as RunStreamState;
+    renderSources();
+    const empty = screen.getAllByRole("status").find((node) => node.classList.contains("sources-frame")) as HTMLElement;
+    expect(empty).toHaveTextContent("No sources yet");
+    expect(empty).toHaveTextContent("They appear here as the search finds them.");
+    expect(empty).not.toHaveTextContent("—");
+  });
+
+  it("offers to clear the filters when nothing matches, saying how many there are without them", async () => {
+    vi.mocked(queries.useEvidence).mockImplementation((_task, query) => ({
+      data: query?.page_size === 1 ? evidencePage(mockEvidence.slice(0, 7)) : evidencePage([]),
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    }) as unknown as ReturnType<typeof queries.useEvidence>);
+    const user = userEvent.setup();
+    renderSources();
+    await user.click(screen.getByRole("button", { name: "Cited" }));
+    const empty = screen.getAllByRole("status").find((node) => node.classList.contains("sources-frame")) as HTMLElement;
+    expect(empty).toHaveTextContent("No sources match");
+    expect(empty).toHaveTextContent("Clear the filters to see all 7.");
+    await user.click(within(empty).getByRole("button", { name: "Clear filters" }));
+    expect(screen.getByTestId("location")).not.toHaveTextContent("cited");
+  });
+
+  it("names the rows a page shows, and starts the next page at its top", async () => {
+    const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
+    vi.mocked(queries.useEvidence).mockReturnValue({
+      data: { data: mockEvidence, pagination: { page: 1, page_size: 50, total_items: 52 } },
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof queries.useEvidence>);
+    renderSources();
+    expect(screen.getAllByRole("status").some((node) => node.textContent === `1–${mockEvidence.length} of 52 sources`)).toBe(true);
+    const pages = screen.getByRole("navigation", { name: "Pages" });
+    expect(pages).toHaveTextContent("Page 1 of 2");
+    const next = within(pages).getByRole("button", { name: "Next" });
+    expect(next).toHaveClass("h-10");
+    await userEvent.click(next);
+    expect(screen.getByTestId("location")).toHaveTextContent("page=2");
+    expect(scroll).toHaveBeenCalledWith({ block: "start" });
+    scroll.mockRestore();
   });
 });

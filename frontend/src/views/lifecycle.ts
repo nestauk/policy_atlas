@@ -1,5 +1,6 @@
 import { LIFECYCLE_LABELS } from "../lib/vocabulary";
 import type { components } from "../api/gen/types";
+import { rememberedSourcesSubtab } from "./sourcesSubtab";
 
 /** The generated contract inlines the run-status union rather than naming it. */
 type RunStatus = components["schemas"]["LatestRun"]["status"];
@@ -134,8 +135,11 @@ export function sourcesLanding(
   return classified ? "/landscape" : "/all";
 }
 
-/** Point the Sources tab's link at `sourcesLanding`'s view, keeping any
- *  `?chat=`; the tab stays marked on every Sources view. */
+/** Point the Sources tab's link at the subtab the reader last chose on this
+ *  task (owner, round 10: kept per task in `localStorage`), or, before they
+ *  have chosen one or when the storage cannot be read, at `sourcesLanding`'s
+ *  view; any `?chat=` is kept, and the tab stays marked on every Sources
+ *  view. */
 export function withSourcesLanding<T extends { tab: string; to: string }>(
   items: T[],
   landing: "" | "/all" | "/landscape",
@@ -143,9 +147,11 @@ export function withSourcesLanding<T extends { tab: string; to: string }>(
   return items.map((item) => {
     if (item.tab !== "sources") return item;
     const [path, query] = item.to.split("?");
+    const taskId = /\/tasks\/([^/]+)\/sources$/.exec(path)?.[1];
+    const chosen = taskId === undefined ? null : rememberedSourcesSubtab(decodeURIComponent(taskId));
     return {
       ...item,
-      to: `${path}${landing}${query === undefined ? "" : `?${query}`}`,
+      to: `${path}${chosen ?? landing}${query === undefined ? "" : `?${query}`}`,
       activePrefix: path,
     };
   });
