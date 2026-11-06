@@ -18,6 +18,8 @@ import {
   MOCK_INTRO_INDEX,
   MOCK_STREAMED_SECTION_INDEX,
   mockArtefact,
+  mockCoverage,
+  mockEvidence,
   mockArtefactSectionProse,
   mockArtefactSectionRepairedProse,
   mockCaseStudiesProse,
@@ -348,9 +350,11 @@ describe("mock API", () => {
     it("GET /projects returns the fixture project", async () => {
       resetMockScenario();
       const response = await mockFetch("http://localhost/api/v1/projects");
-      const { data } = await response.json() as { data: { project_id: string }[] };
+      const { data, pagination } = await response.json() as { data: { project_id: string }[]; pagination: { page_size: number; has_more: boolean } };
       expect(data).toHaveLength(1);
       expect(data[0].project_id).toBe(MOCK_PROJECT_ID);
+      // Twenty a page by default, as the server (round 12).
+      expect(pagination).toMatchObject({ page_size: 20, has_more: false });
     });
 
     it("archives a project: it leaves the default list, is listed as archived, and stays readable (round 11)", async () => {
@@ -378,7 +382,7 @@ describe("mock API", () => {
         backends_detail: { backend: string; passes?: { pass: string; query: string; results: number }[] }[];
       };
       const openalex = coverage.backends_detail.find((detail) => detail.backend === "OpenAlex")!;
-      expect(openalex.passes).toEqual([{ pass: "citations", query: "Followed citations from 50 sources", results: 184 }]);
+      expect(openalex.passes).toEqual([{ pass: "citations", query: "Followed citations from 50 sources", results: 184, query_id: 110 }]);
     });
 
     it("GET /projects/{id} resolves the fixture and 404s for an unknown id", async () => {
@@ -406,21 +410,24 @@ describe("mock API", () => {
 
       const unfiltered = await mockFetch("http://localhost/api/v1/tasks");
       const { data: unfilteredData } = await unfiltered.json() as { data: { task_id: string }[] };
-      expect(unfilteredData).toHaveLength(50);
+      expect(unfilteredData).toHaveLength(20);
       expect(unfilteredData[0].task_id).toBe(MOCK_TASK_ID);
     });
 
-    it("GET /tasks pages 50 at a time with has_more, honours scope=mine and status=archived (task 058, round 10)", async () => {
+    it("GET /tasks pages 20 at a time with has_more, honours scope=mine and status=archived (task 058, rounds 10 and 12)", async () => {
       resetMockScenario();
       type ListPage = { data: { task_id: string; is_owner: boolean; status: string }[]; pagination: { page: number; total_items: number; has_more: boolean } };
       const read = async (query: string) => await (await mockFetch(`http://localhost/api/v1/tasks?${query}`)).json() as ListPage;
       const first = await read("scope=mine");
-      expect(first.data).toHaveLength(50);
+      expect(first.data).toHaveLength(20);
       expect(first.pagination).toMatchObject({ page: 1, total_items: 56, has_more: true });
       expect(first.data.every((task) => task.is_owner)).toBe(true);
       const second = await read("scope=mine&page=2");
-      expect(second.data).toHaveLength(6);
-      expect(second.pagination.has_more).toBe(false);
+      expect(second.data).toHaveLength(20);
+      expect(second.pagination.has_more).toBe(true);
+      const third = await read("scope=mine&page=3");
+      expect(third.data).toHaveLength(16);
+      expect(third.pagination.has_more).toBe(false);
       const organisation = await read("scope=all");
       expect(organisation.pagination.total_items).toBe(62);
       const archived = await read("status=archived");
@@ -452,6 +459,59 @@ describe("mock API", () => {
       resetMockScenario();
       expect(mockTask.is_owner).toBe(true);
       expect(mockTask.is_public).toBe(false);
+    });
+
+    it("serves a dossier for every id a page links to: an option card's documents and the evidence rows (round 12)", async () => {
+      resetMockScenario();
+      const dossier = async (id: string) => await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/sources/${id}`);
+      const card = await dossier("mock-doc-a1");
+      expect(card.status).toBe(200);
+      expect(await card.json()).toMatchObject({ source_id: "mock-doc-a1", title: "Conditionality and NEET outcomes: a local authority review", country: "United Kingdom" });
+      const several = await (await dossier("mock-doc-a2")).json() as { country: string | null };
+      expect(several.country).toBeNull();
+      const row = await dossier(mockEvidence[0].source_id);
+      expect(row.status).toBe(200);
+      expect((await row.json() as { abstract: string | null }).abstract).toBe(mockEvidence[0].abstract);
+      expect((await dossier("no-such-source")).status).toBe(404);
+    });
+
+    it("GET /evidence pages like the server, honouring page and page_size (round 12)", async () => {
+      resetMockScenario();
+      type EvidencePage = { data: { source_id: string }[]; pagination: { page: number; page_size: number; total_items: number; has_more: boolean } };
+      const read = async (query: string) => await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?${query}`)).json() as EvidencePage;
+      const whole = await read("");
+      expect(whole.pagination).toMatchObject({ page: 1, page_size: 50, total_items: mockEvidence.length, has_more: false });
+      const first = await read("page_size=4");
+      expect(first.data.map((row) => row.source_id)).toEqual(mockEvidence.slice(0, 4).map((row) => row.source_id));
+      expect(first.pagination).toMatchObject({ page_size: 4, has_more: true });
+      const last = await read("page_size=4&page=3");
+      expect(last.data).toHaveLength(mockEvidence.length - 8);
+      expect(last.pagination.has_more).toBe(false);
+    });
+
+    it("GET /evidence?query= keeps what one coverage row's search returned (task 058, round 12)", async () => {
+      resetMockScenario();
+      const rows = async (query: number) => {
+        const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?query=${query}`);
+        return (await response.json() as { data: { source_id: string }[]; pagination: { total_items: number } });
+      };
+      const coverage = await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/coverage`)).json() as typeof mockCoverage;
+      const openalex = coverage.backends_detail!.find((row) => row.backend === "OpenAlex")!;
+      const first = await rows(openalex.queries![0].query_id);
+      expect(first.data.map((row) => row.source_id)).toEqual([mockEvidence[0].source_id, mockEvidence[4].source_id]);
+      expect((await rows(openalex.passes![0].query_id)).data).toHaveLength(3);
+      // A search from before the ids were kept: the empty page, never an error.
+      const older = await rows(999);
+      expect(older.data).toEqual([]);
+      expect(older.pagination.total_items).toBe(0);
+    });
+
+    it("an evidence row read in full carries where its full text came from (round 12)", async () => {
+      resetMockScenario();
+      const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence`);
+      const { data } = await response.json() as { data: { read_in_full: boolean; origin: string; full_text_url?: string | null }[] };
+      expect(data.filter((row) => row.full_text_url != null).every((row) => row.read_in_full)).toBe(true);
+      expect(data.some((row) => row.full_text_url?.startsWith("https://"))).toBe(true);
     });
 
     it("GET /evidence?country= keeps a Landscape row's sources, by any spelling (task 058, round 10)", async () => {
@@ -1164,9 +1224,10 @@ describe("mock API", () => {
         expect(order.slice(0, 10)).toEqual(Array(10).fill("running"));
 
         const searchLines = ofType(frames, "tick").filter((entry) => entry.stage === "option_searches").map((entry) => entry.activity);
-        expect(searchLines).toHaveLength(12);
-        expect(searchLines[3]).toMatch(/^4 of 12 searches done · [\d,]+ sources so far$/);
-        expect(searchLines.at(-1)).toMatch(/^11 of 12 searches done · [\d,]+ sources so far$/);
+        expect(searchLines).toHaveLength(13);
+        expect(searchLines[0]).toBe("0 of 12 searches done · 0 sources");
+        expect(searchLines[4]).toMatch(/^4 of 12 searches done · [\d,]+ sources$/);
+        expect(searchLines.at(-1)).toMatch(/^11 of 12 searches done · [\d,]+ sources$/);
         const done = ofType(frames, "stage.completed").find((frame) => frame.stage === "option_searches")!;
         expect(done.summary).toMatchObject({ total: 12, finished: 11, failed: 1, sources: expect.any(Number) });
 

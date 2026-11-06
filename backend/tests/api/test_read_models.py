@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import insert, select, update
 from sqlalchemy.engine import Connection, Engine
@@ -2676,14 +2677,152 @@ def test_coverage_names_each_citation_and_lookup_pass_in_words(
             details = {row["backend"]: row for row in coverage["backends_detail"]}
             openalex = details["OpenAlex"]
             assert [query["query"] for query in openalex["queries"]] == ["school meals attainment"]
+            # Round 12: each row carries its key for the sources filter.
+            assert all(isinstance(row.pop("query_id"), int) for row in openalex["passes"])
             assert openalex["passes"] == [
                 {"pass": "lookup", "query": "Looked up 3 cited works", "results": 3},
                 {"pass": "citations", "query": "Followed citations from 2 sources", "results": 130},
             ]
             assert openalex["results"] == 40 + 3 + 130
-            assert details["Overton"]["passes"] == [
+            overton_passes = details["Overton"]["passes"]
+            assert all(isinstance(row.pop("query_id"), int) for row in overton_passes)
+            assert overton_passes == [
                 {"pass": "lookup", "query": "Looked up 1 cited document", "results": 1}
             ]
+        finally:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)
+
+
+def test_the_sources_filter_to_what_one_query_or_pass_returned(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Task 058, round 12: ``?query=<query_id>`` keeps the rows that search
+    returned, matched by backend and record id; a pass is all its calls; a
+    search from before the ids were kept, or an unknown key, keeps nothing."""
+    with api_client(tmp_path) as (client, owner, _other):
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_read_model_ladder(engine, task_id)
+        try:
+            with engine.begin() as conn:
+                run_id = conn.execute(
+                    select(search_coverage_record.c.acquired_by_run_id).where(
+                        search_coverage_record.c.task_id == task_id
+                    )
+                ).scalar_one()
+                conn.execute(
+                    update(search_coverage_record)
+                    .where(search_coverage_record.c.task_id == task_id)
+                    .values(backends=[{"backend": "openalex"}, {"backend": "overton"}])
+                )
+                for title, backend, record_id in (
+                    ("Query hit", "openalex", "W10"),
+                    ("Second hit", "openalex", "W11"),
+                    ("Cited work", "openalex", "W12"),
+                    ("Same id, other backend", "overton", "W10"),
+                ):
+                    seed_source(
+                        conn,
+                        task_id,
+                        {"title": title, "backend": backend, "backend_record_id": record_id},
+                    )
+
+                def call(verb: str, query: str, ids: list[str] | None) -> None:
+                    payload: dict[str, Any] = {
+                        "backend": "openalex",
+                        "verb": verb,
+                        "query": query,
+                        "result_count": len(ids or []),
+                    }
+                    if ids is not None:
+                        payload["record_ids"] = ids
+                    events.append(
+                        conn,
+                        task_id=task_id,
+                        run_id=run_id,
+                        event_type="search.executed",
+                        payload=payload,
+                    )
+
+                call("search", "school meals", ["W10", "W11", "W99"])
+                call("search", "an older search", None)
+                call("fetch_references", "W1", ["W11"])
+                call("fetch_references", "W2", ["W12"])
+
+            coverage = client.get(f"/api/v1/tasks/{task_id}/coverage", headers=owner).json()
+            openalex = next(
+                row for row in coverage["backends_detail"] if row["backend"] == "OpenAlex"
+            )
+            by_query = {row["query"]: row["query_id"] for row in openalex["queries"]}
+            (lookup,) = openalex["passes"]
+
+            def titles(query_id: int) -> list[str]:
+                response = client.get(
+                    f"/api/v1/tasks/{task_id}/evidence?query={query_id}&sort=title",
+                    headers=owner,
+                )
+                assert response.status_code == 200
+                return [row["title"] for row in response.json()["data"]]
+
+            assert titles(by_query["school meals"]) == ["Query hit", "Second hit"]
+            assert titles(lookup["query_id"]) == ["Cited work", "Second hit"]
+            empty = client.get(
+                f"/api/v1/tasks/{task_id}/evidence?query={by_query['an older search']}",
+                headers=owner,
+            )
+            assert empty.status_code == 200
+            assert empty.json() == {
+                "data": [],
+                "pagination": {"page": 1, "page_size": 50, "total_items": 0, "has_more": False},
+            }
+            assert titles(999_999) == []
+        finally:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)
+
+
+def test_a_source_with_a_collected_full_text_links_to_it(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Task 058, round 12: ``full_text_url`` is where the full text came from,
+    only when it was collected and only an http(s) address; Europe PMC's XML
+    service reads as the article's page."""
+    with api_client(tmp_path) as (client, owner, _other):
+        task_id = uuid.UUID(create_task(client, owner))
+        try:
+            with engine.begin() as conn:
+                _, fetched = seed_source(conn, task_id, {"title": "Fetched"})
+                seed_ingested_full_text(conn, tss_id=fetched, chunks=["Body."])
+                _, pmc = seed_source(conn, task_id, {"title": "Europe PMC"})
+                seed_ingested_full_text(conn, tss_id=pmc, chunks=["Body."])
+                _, older = seed_source(conn, task_id, {"title": "Older, no address"})
+                seed_ingested_full_text(conn, tss_id=older, chunks=["Body."])
+                seed_source(conn, task_id, {"title": "Not collected"})
+                conn.execute(
+                    update(task_source_snapshot)
+                    .where(task_source_snapshot.c.task_source_snapshot_id == fetched)
+                    .values(fetched_from="https://example.org/report.pdf")
+                )
+                conn.execute(
+                    update(task_source_snapshot)
+                    .where(task_source_snapshot.c.task_source_snapshot_id == pmc)
+                    .values(
+                        fetched_from="https://www.ebi.ac.uk/europepmc/webservices/rest/PMC123/fullTextXML"
+                    )
+                )
+            rows = client.get(f"/api/v1/tasks/{task_id}/evidence", headers=owner).json()["data"]
+            links = {row["title"]: row["full_text_url"] for row in rows}
+            assert links == {
+                "Fetched": "https://example.org/report.pdf",
+                "Europe PMC": "https://europepmc.org/article/PMC/PMC123",
+                # The fixture's own locator is no http(s) address.
+                "Older, no address": None,
+                "Not collected": None,
+            }
+            dossier = client.get(
+                f"/api/v1/tasks/{task_id}/sources/{fetched}", headers=owner
+            ).json()
+            assert dossier["full_text_url"] == "https://example.org/report.pdf"
         finally:
             with engine.begin() as conn:
                 delete_task_data(conn, task_id)

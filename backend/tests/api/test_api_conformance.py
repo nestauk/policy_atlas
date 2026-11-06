@@ -21,7 +21,7 @@ from fastapi.routing import APIRoute
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.app import create_app
-from policy_atlas.api.contract import PAGE_SIZE_DEFAULT, TaskOut
+from policy_atlas.api.contract import LIST_PAGE_SIZE_DEFAULT, TaskOut
 from policy_atlas.api.dev_issuer import init
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import capability_run, evidence_scope
@@ -89,9 +89,12 @@ def test_pagination_envelope_shape_and_defaults(engine: Engine, tmp_path: Path) 
         assert set(body["pagination"]) == {"page", "page_size", "total_items", "has_more"}
         assert body["pagination"]["has_more"] is False
         assert body["pagination"]["page"] == 1
-        assert body["pagination"]["page_size"] == PAGE_SIZE_DEFAULT
+        assert body["pagination"]["page_size"] == LIST_PAGE_SIZE_DEFAULT == 20
         assert body["pagination"]["total_items"] == 1
         assert body["data"][0]["task_id"] == task_id
+        # The Projects list pages at the same twenty (task 058, round 12).
+        projects = client.get("/api/v1/projects", headers=owner).json()
+        assert projects["pagination"]["page_size"] == LIST_PAGE_SIZE_DEFAULT
 
 
 def test_pagination_respects_page_size_across_pages(tmp_path: Path) -> None:

@@ -132,6 +132,9 @@ class ProjectOut(BaseModel):
         archived_at: When the owner archived the project, or `None` while it
             is in use (task 058, round 11). Archiving leaves its tasks as
             they are.
+        last_activity_at: The newest of `created_at` and the `updated_at` of
+            the members `task_count` counts (task 058, round 12). `GET
+            /projects` lists newest activity first by it.
     """
 
     project_id: uuid.UUID
@@ -143,3 +146,4 @@ class ProjectOut(BaseModel):
     is_owner: bool
     owner_display: str | None
     archived_at: datetime | None = None
+    last_activity_at: datetime

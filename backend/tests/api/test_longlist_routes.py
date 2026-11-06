@@ -1013,7 +1013,9 @@ def test_the_signal_and_the_document_lines_carry_the_record_fields(conn: Connect
 
 
 def _stored_profile(
-    main: str | None = "Jobcentres", second: str | None = "Schools"
+    main: str | None = "Jobcentres",
+    second: str | None = "Schools",
+    acts_on: list[str] | None = None,
 ) -> dict[str, Any]:
     lines = {
         key: {"sentence": f"The {key} sentence.", "mark": "more" if key == "cost" else None}
@@ -1021,7 +1023,10 @@ def _stored_profile(
     }
     # A mark on a fact line is never served.
     lines["who_decides"]["mark"] = "less"
-    return {"lines": lines, "setting": {"main": main, "second": second}}
+    setting: dict[str, Any] = {"main": main, "second": second}
+    if acts_on is not None:
+        setting["acts_on"] = acts_on
+    return {"lines": lines, "setting": setting}
 
 
 def _profiled(
@@ -1067,6 +1072,21 @@ def test_a_stored_profile_is_served_with_its_marks_and_settings(conn: Connection
         assert by_key["time_to_set_up"].mark is None
         assert by_key["who_decides"].mark is None and by_key["dependencies"].mark is None
         assert out.profile.settings == ["Jobcentres", "Schools"]
+
+
+def test_the_profile_serves_whom_the_option_acts_on(conn: Connection) -> None:
+    """Task 058, round 12: the setting call's ``acts_on``, in its order; a
+    profile written before it serves none."""
+    walk, option_id = _profiled(
+        conn, profile=_stored_profile(acts_on=["outlets", "councils", "parents", " "])
+    )
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.profile is not None
+        assert out.profile.acts_on == ["outlets", "councils", "parents"]
+    walk, option_id = _profiled(conn, profile=_stored_profile())
+    summary, card = _summary_and_card(conn, walk, option_id)
+    assert summary.profile is not None and summary.profile.acts_on == []
+    assert card.profile is not None and card.profile.acts_on == []
 
 
 def test_the_settings_follow_what_the_profile_names(conn: Connection) -> None:
@@ -1699,7 +1719,17 @@ def test_the_documents_are_one_per_document_best_first_with_a_year(conn: Connect
     walk, added, scope_id = _added_option_search(conn)
     first = walk.doc({"title": "Wage subsidy trial", "doi": "10.9/ws", "publication_year": 2021})
     twin = walk.doc({"title": "Wage subsidy trial (preprint)", "doi": "https://doi.org/10.9/WS"})
-    strong = walk.doc({"title": "Strong description", "publication_date": "2018-05-01"})
+    strong = walk.doc(
+        {
+            "title": "Strong description",
+            "publication_date": "2018-05-01",
+            # Round 12: the reference line's authors and venue.
+            "venue": "Journal of Youth Work",
+            "provider_fields": {
+                "authorships": [{"author_name": "A. Sample"}, {"author_name": "B. Mock"}]
+            },
+        }
+    )
     weak = walk.doc({"title": "Weak description", "publication_year": 2010})
     entity = walk.doc({"title": "R&amp;D credits", "publication_year": 2019})
     for doc, score in ((first, 3), (twin, 3), (strong, 5), (weak, 2), (entity, 5)):
@@ -1720,11 +1750,15 @@ def test_the_documents_are_one_per_document_best_first_with_a_year(conn: Connect
         ("Weak description", "described", 2010),
     ]
     assert card.documents[0].task_source_snapshot_id in {first, twin}
+    described = next(d for d in card.documents if d.title == "Strong description")
+    assert described.authors == ["A. Sample", "B. Mock"]
+    assert described.venue == "Journal of Youth Work"
+    assert (card.documents[1].authors, card.documents[1].venue) == ([], None)
     # An added option reads template sentences from its own search's lines
     # until the profile step runs (task 046, amendment 4, S31; PA4-15): its one
     # evaluating document states no country.
     assert [(s.place, s.sentence, s.generated, s.where) for s in card.place_sentences] == [
-        ("No single place", "1 moderate trial.", False, False)
+        ("Place not stated", "1 moderate trial.", False, False)
     ]
 
 

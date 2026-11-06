@@ -14,7 +14,7 @@ from sqlalchemy.engine import Connection
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
-    PAGE_SIZE_DEFAULT,
+    LIST_PAGE_SIZE_DEFAULT,
     PAGE_SIZE_MAX,
     Page,
     PageMeta,
@@ -78,7 +78,7 @@ def list_tasks(
     project_id: Annotated[uuid.UUID | None, Query()] = None,
     owner_email: Annotated[str | None, Query(max_length=OWNER_EMAIL_MAX)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
+    page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = LIST_PAGE_SIZE_DEFAULT,
 ) -> Page[TaskOut]:
     """List the tasks the caller may see, with derived latest-run state.
 

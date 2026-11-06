@@ -41,10 +41,10 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
     "extract_interventions": ("Reading the abstracts", "Which interventions each source covers."),
     "longlist": (
         "Clustering into options",
-        "Sources grouped into options. Options may be folded together or added.",
+        "Sources grouped into options. Options may be combined or added.",
     ),
     "option_profile": (
-        "Writing what each option would take",
+        "Estimating what each option would take",
         "Cost, time, workforce and who decides, for each option.",
     ),
     "constrain": ("Applying your constraints", "Each option checked against the plan's limits."),
@@ -163,12 +163,12 @@ STEP_VERBS: dict[str, str] = {
     "longlist_distinct": "Checking the options are distinct",
     "longlist_authority": "Checking who can act",
     "longlist_shortlist": "Choosing the shortlist",
-    "option_profile_line": "Writing profile lines",
+    "option_profile_line": "Estimating each option",
     "option_profile_potential_impact": "Judging potential impact",
     "option_profile_ambition": "Judging ambition",
     "option_profile_setting": "Judging the setting",
     "option_profile_fold": "Folding duplicate options",
-    "option_profile_place_sentences": "Writing place sentences",
+    "option_profile_place_sentences": "Describing the places",
 }
 
 #: Activity-line templates (N2, N3, N21). The loops format these with their
@@ -216,14 +216,15 @@ ACTIVITY: dict[str, str] = {
     "select.batches": "Ranking sources · batch {done} of {total}",
     "characterise.batches": "Assigning themes · batch {done} of {total}",
     "group.batches": "Assigning findings · batch {done} of {total}",
-    "longlist.clustering": "options may be folded together or added",
+    "longlist.clustering": "options may be combined or added",
     "longlist.batches": "Assigning sources to options · batch {done} of {total}",
     "theme.batches": "Assigning options to themes · batch {done} of {total}",
     "constrain.batches": "Checking constraints · batch {done} of {total}",
     "option_profile.typing": "Typing options · batch {done} of {total}",
-    "option_profile.places": "Writing place sentences · {done} of {total} options",
-    # the option-search join loop (N21)
-    "option_searches.progress": "{done} of {total} searches done · {sources:,} sources so far",
+    "option_profile.places": "Describing the places · {done} of {total} options",
+    # the option-search count, from the fan-out to the join (N21; "so far"
+    # dropped, owner round 9 and round 12)
+    "option_searches.progress": "{done} of {total} searches done · {sources:,} sources",
     # the writer (N3): the section line rides on ``tick.section``
     "synthesise.section": "Section {number} of {total} · {title}",
     "synthesise.looking_for": "Looking for: {query}",

@@ -38,6 +38,7 @@ import {
   mockCoverage,
   mockDecisions,
   mockEvidence,
+  mockEvidenceByQuery,
   mockEvidenceThemeIds,
   mockOtherTasks,
   mockFindings,
@@ -755,10 +756,15 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   if (method === "GET" && path.endsWith("/api/v1/projects")) {
     // `status` (task 058, round 11): active by default, as the server lists.
     const status = url.searchParams.get("status") ?? "active";
-    const listed = mockProjects.filter((project) =>
-      status === "all" ? true : status === "archived" ? project.archived_at != null : project.archived_at == null,
-    );
-    return json(page(listed));
+    // Newest activity first, as the server pages them (round 12).
+    const listed = mockProjects
+      .filter((project) =>
+        status === "all" ? true : status === "archived" ? project.archived_at != null : project.archived_at == null,
+      )
+      .sort((left, right) =>
+        right.last_activity_at.localeCompare(left.last_activity_at) || right.project_id.localeCompare(left.project_id),
+      );
+    return json(pageOf(listed, url, 20));
   }
   const projectArchiveMatch = /\/api\/v1\/projects\/([^/]+)\/archive$/.exec(path);
   if (method === "POST" && projectArchiveMatch) {
@@ -797,8 +803,8 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   // `project_id` narrows to one project's members, server-side — mirrors
   // the real list's filter (contract task 033 phase 10a: `ProjectDetailView`
   // no longer filters the global page client-side).
-  // Task 058, round 10: the list pages like the server (50 a page by
-  // default, newest first, `has_more`), honours `status` and `scope=mine`,
+  // Task 058, round 10: the list pages like the server (20 a page by
+  // default since round 12, newest first, `has_more`), honours `status` and `scope=mine`,
   // and holds more than one page so "Show more" is walkable.
   if (method === "GET" && path.endsWith("/api/v1/tasks")) {
     const projectId = url.searchParams.get("project_id");
@@ -809,7 +815,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       .filter((task) => status === "all" || task.status === status)
       .filter((task) => scope !== "mine" || task.is_owner)
       .sort((left, right) => right.updated_at.localeCompare(left.updated_at));
-    return json(pageOf(rows, url));
+    return json(pageOf(rows, url, 20));
   }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}`)) return json(mockTask);
   const otherTaskMatch = path.match(/\/api\/v1\/tasks\/([^/]+)$/);
@@ -828,6 +834,9 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const evidenceType = url.searchParams.get("evidence_type");
     const strength = url.searchParams.get("strength");
     const country = url.searchParams.get("country");
+    // A coverage row's `query_id` (round 12): only what that search returned.
+    const queryId = url.searchParams.get("query");
+    const returned = queryId === null ? null : (mockEvidenceByQuery[Number(queryId)] ?? []);
     const sort = url.searchParams.get("sort") as EvidenceSortField | null;
     const order = url.searchParams.get("order") as "asc" | "desc" | null;
     let rows = mockEvidence.filter((item) => {
@@ -846,6 +855,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
         && (evidenceType === null || item.evidence_type === evidenceType)
         && (strength === null || item.appraisal_tier === strength)
         && (country === null || mockCountryMatches(item.country ?? null, country))
+        && (returned === null || returned.includes(item.source_id))
         && yearMatches;
     });
     // Server-side-equivalent sort (collection-true, matches
@@ -856,7 +866,9 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       const direction = order ?? (sort === "year" || sort === "relevance" ? "desc" : "asc");
       rows = [...rows].sort((left, right) => compareMockEvidenceSort(left, right, sort, direction));
     }
-    return json(page(rows));
+    // Paged like the server (50 by default; round 12), so the foot line's
+    // page controls show in mock mode.
+    return json(pageOf(rows, url));
   }
   // Task 046, amendment 3 (R67): the dossier's records on a scoping task,
   // derived from the option cards' documents (one per option holding it).
@@ -885,7 +897,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   }
   if (method === "GET" && path.includes(`/api/v1/tasks/${MOCK_TASK_ID}/sources/`)) {
     const sourceId = path.split("/").at(-1) ?? "";
-    const source = mockSourceDossiers[sourceId];
+    const source = mockDossierFor(sourceId);
     return source ? json(source) : json({ detail: "resource not found" }, 404);
   }
   if (method === "GET" && path.includes(`/api/v1/tasks/${MOCK_TASK_ID}/chunks/`) && path.endsWith("/context")) {
@@ -1815,10 +1827,42 @@ function page<T>(data: T[]) {
   return { data, pagination: { page: 1, page_size: data.length, total_items: data.length, has_more: false } };
 }
 
-/** One server-shaped page of `rows`, read from `page` and `page_size`. */
-function pageOf<T>(rows: T[], url: URL) {
+/**
+ * The dossier the mock serves for one source id (round 12): a written
+ * dossier when the fixtures hold one, else the evidence row's own fields, else
+ * an option card's document (`mock-doc-a1` and kin), so every id a page links
+ * to opens a dossier.
+ */
+function mockDossierFor(sourceId: string): components["schemas"]["SourceDossierOut"] | undefined {
+  const written = mockSourceDossiers[sourceId];
+  if (written !== undefined) return written;
+  const row = mockEvidence.find((item) => item.source_id === sourceId);
+  if (row !== undefined) return { ...row };
+  for (const card of Object.values(mockLonglistOptionCards)) {
+    const document = (card.documents ?? []).find((item) => item.task_source_snapshot_id === sourceId);
+    if (document === undefined) continue;
+    const noCountry = ["multiple countries", "not stated", "other"];
+    return {
+      source_id: sourceId,
+      title: document.title,
+      origin: "OpenAlex",
+      status: "relevant",
+      cited: false,
+      read_in_full: false,
+      evidence_type: document.evidence_type ?? null,
+      appraisal_tier: document.tier ?? null,
+      country: document.place != null && !noCountry.includes(document.place) ? document.place : null,
+    };
+  }
+  return undefined;
+}
+
+/** One server-shaped page of `rows`, read from `page` and `page_size`; the
+ *  server's default size when none is asked for: 20 for the Tasks and
+ *  Projects lists (round 12), 50 for the read models. */
+function pageOf<T>(rows: T[], url: URL, defaultSize = 50) {
   const pageNumber = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
-  const pageSize = Math.max(1, Number(url.searchParams.get("page_size") ?? "50") || 50);
+  const pageSize = Math.max(1, Number(url.searchParams.get("page_size") ?? String(defaultSize)) || defaultSize);
   const start = (pageNumber - 1) * pageSize;
   return {
     data: rows.slice(start, start + pageSize),
@@ -2121,6 +2165,13 @@ async function mockLonglistWalk(
   // does between the fan-out and the join (task 058, round 11): two rows live
   // at once, both the walk's.
   begin("option_searches");
+  // The count from the fan-out itself (round 12), before the walk's own search.
+  emit(tick("option_searches", `0 of ${MOCK_OPTION_COUNT} searches done · 0 sources`, {
+    done: 0,
+    total: MOCK_OPTION_COUNT,
+    unit: "searches",
+    runId: walkId,
+  }));
   const ownSearch = (async () => {
     emit(stageStarted("acquire", nextSequence(), walkId));
     await pace(MOCK_TICK_MS);
@@ -2177,7 +2228,7 @@ async function mockLonglistWalk(
         walk.capability_run_id === childId ? { ...walk, status: "failed", ended_at: failedAt } : walk,
       );
       failed += 1;
-      emit(tick("option_searches", `${finished} of ${MOCK_OPTION_COUNT} searches done · ${withCommas(sources)} sources so far`, {
+      emit(tick("option_searches", `${finished} of ${MOCK_OPTION_COUNT} searches done · ${withCommas(sources)} sources`, {
         done: finished,
         total: MOCK_OPTION_COUNT,
         unit: "searches",
@@ -2195,7 +2246,7 @@ async function mockLonglistWalk(
     );
     finished += 1;
     sources += found;
-    emit(tick("option_searches", `${finished} of ${MOCK_OPTION_COUNT} searches done · ${withCommas(sources)} sources so far`, {
+    emit(tick("option_searches", `${finished} of ${MOCK_OPTION_COUNT} searches done · ${withCommas(sources)} sources`, {
       done: finished,
       total: MOCK_OPTION_COUNT,
       unit: "searches",
@@ -2231,7 +2282,7 @@ async function mockLonglistWalk(
   }, () => names("longlist", finalList.options ?? []));
   await runStage("option_profile", [
     { activity: "Typing options · batch 1 of 1", done: 1, total: 1, unit: "batches" },
-    { activity: `Writing place sentences · ${counts.options} of ${counts.options} options`, done: counts.options, total: counts.options, unit: "options" },
+    { activity: `Describing the places · ${counts.options} of ${counts.options} options`, done: counts.options, total: counts.options, unit: "options" },
   ], { profiled: counts.options }, () => {
     mockLonglistWalkStage = "option_profile";
   });

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import re
 import uuid
 from collections import Counter
 from collections.abc import Collection, Iterable, Mapping, Sequence
@@ -10,6 +11,7 @@ from dataclasses import asdict, dataclass
 from datetime import date
 from functools import cmp_to_key
 from typing import Any, Literal, cast
+from urllib.parse import urlsplit
 
 import structlog
 from sqlalchemy import func, select
@@ -566,6 +568,48 @@ def _url(metadata: Mapping[str, Any], source_locator: str | None = None) -> str 
     return f"https://doi.org/{doi}" if doi is not None else None
 
 
+#: The full-text snapshot, joined beside the envelope one (same table).
+_full_text_snapshot = source_snapshot.alias("full_text_snapshot")
+
+#: Where a collected full text came from: the per-task fetch address (task
+#: 057), else the shared full-text snapshot's own locator (older rows).
+_FULL_TEXT_LOCATOR = func.coalesce(
+    task_source_snapshot.c.fetched_from, _full_text_snapshot.c.source_locator
+).label("full_text_locator")
+
+#: Europe PMC's full-text XML service address, which a reader is sent to as
+#: the article's own page instead.
+_EUROPE_PMC_XML_PATH = re.compile(r"^/europepmc/webservices/rest/(PMC\d+)/fullTextXML$")
+
+
+def _full_text_url(full_text_status: str | None, locator: str | None) -> str | None:
+    """The link a reader opens for a collected full text (task 058, round 12).
+
+    Only when the text was collected (``ingested``) and the address is an
+    http(s) URL with a host; the Europe PMC XML service maps to the article's
+    reader page.
+
+    Args:
+        full_text_status: The document's ``full_text_status``.
+        locator: Where its bytes came from (:data:`_FULL_TEXT_LOCATOR`).
+
+    Returns:
+        The URL, or ``None``.
+    """
+    if full_text_status != "ingested" or not locator:
+        return None
+    try:
+        parts = urlsplit(locator)
+    except ValueError:
+        return None
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return None
+    pmc = _EUROPE_PMC_XML_PATH.match(parts.path)
+    if parts.hostname == "www.ebi.ac.uk" and pmc is not None:
+        return f"https://europepmc.org/article/PMC/{pmc.group(1)}"
+    return locator
+
+
 #: Residual bucket for sources whose provider sent no publisher country (task
 #: 031). A stable, public-vocabulary string: the frontend must not rename or
 #: drop it, or the chart stops adding up to the population it draws.
@@ -1049,6 +1093,53 @@ def _expand_evidence_statuses(values: Iterable[str]) -> set[str]:
     return expanded
 
 
+def _query_record_ids(
+    conn: Connection, task_id: uuid.UUID, query_id: int
+) -> tuple[str, set[str]] | None:
+    """The backend and record ids one coverage row's search returned (round 12).
+
+    ``query_id`` is a ``search.executed`` event's sequence, as the coverage
+    read names its rows. A written query is that one call; a citations or
+    lookup pass is every call of the same run, backend and verb. Events
+    written before the ids were recorded carry none: an empty set.
+
+    Returns:
+        ``(backend, ids)``, or ``None`` when no search of this task has that key.
+    """
+    head = conn.execute(
+        select(event_log.c.run_id, event_log.c.payload).where(
+            event_log.c.task_id == task_id,
+            event_log.c.sequence == query_id,
+            event_log.c.event_type == "search.executed",
+        )
+    ).one_or_none()
+    if head is None or not isinstance(head.payload, Mapping):
+        return None
+    backend = head.payload.get("backend")
+    if not isinstance(backend, str):
+        return None
+    verb = head.payload.get("verb")
+    payloads: list[Any] = [head.payload]
+    if verb in _PASS_WORDS:
+        payloads = list(
+            conn.execute(
+                select(event_log.c.payload).where(
+                    event_log.c.task_id == task_id,
+                    event_log.c.run_id == head.run_id,
+                    event_log.c.event_type == "search.executed",
+                    event_log.c.payload["backend"].astext == backend,
+                    event_log.c.payload["verb"].astext == verb,
+                )
+            ).scalars()
+        )
+    ids: set[str] = set()
+    for payload in payloads:
+        values = payload.get("record_ids") if isinstance(payload, Mapping) else None
+        if isinstance(values, list):
+            ids.update(value for value in values if isinstance(value, str))
+    return backend, ids
+
+
 def evidence_page(
     conn: Connection,
     task_id: uuid.UUID,
@@ -1066,12 +1157,18 @@ def evidence_page(
     year_from: int | None = None,
     year_to: int | None = None,
     country: str | None = None,
+    query: int | None = None,
 ) -> Page[EvidenceItemOut]:
     """Return one evidence page, deriving status task-wide before paging.
 
     ``country`` keeps the sources whose publisher country is that country,
     by any spelling (:func:`country_name`); ``"Not reported"`` keeps those
     with none, the Landscape chart's own bucket (task 058, round 10).
+
+    ``query`` keeps the sources one search returned, named by the coverage
+    row's ``query_id`` (:func:`_query_record_ids`, task 058, round 12): a
+    row matches by its backend and backend record id. A key no search of this
+    task has, or a search from before the ids were recorded, keeps nothing.
 
     `status`/`cited`/`theme` filters are collection-true: status is derived for
     every task source (bounded — one task's worth of rows, the
@@ -1082,6 +1179,9 @@ def evidence_page(
     stable tie-breaker.
     """
     target_statuses = _expand_evidence_statuses(statuses) if statuses else None
+    returned = _query_record_ids(conn, task_id, query) if query is not None else None
+    if query is not None and (returned is None or not returned[1]):
+        return Page(data=[], pagination=PageMeta(page=page, page_size=page_size, total_items=0))
     rows = conn.execute(
         select(
             task_source_snapshot.c.task_source_snapshot_id,
@@ -1092,6 +1192,7 @@ def evidence_page(
             task_source_snapshot.c.full_text_error,
             source_snapshot.c.metadata,
             source_snapshot.c.source_locator,
+            _FULL_TEXT_LOCATOR,
         )
         .select_from(
             # Explicit onclause — same two-FK ambiguity as landscape_out.
@@ -1099,6 +1200,10 @@ def evidence_page(
                 source_snapshot,
                 task_source_snapshot.c.source_snapshot_id
                 == source_snapshot.c.source_snapshot_id,
+            ).outerjoin(
+                _full_text_snapshot,
+                task_source_snapshot.c.full_text_snapshot_id
+                == _full_text_snapshot.c.source_snapshot_id,
             )
         )
         .where(task_source_snapshot.c.task_id == task_id)
@@ -1155,6 +1260,11 @@ def evidence_page(
         screen = screens.get(row.task_source_snapshot_id)
         item_country = country_name(publication_country(metadata))
         if wanted_country is not None and (item_country or "").casefold() != wanted_country:
+            continue
+        if returned is not None and (
+            metadata.get("backend") != returned[0]
+            or metadata.get("backend_record_id") not in returned[1]
+        ):
             continue
         # Python-side membership over an already-fetched row + a precomputed
         # set, not a SQL join — tss_owns_snapshot doesn't fit here (task 029
@@ -1244,6 +1354,9 @@ def evidence_page(
                     abstract=abstract,
                     abstract_source=abstract_source,
                     country=item_country,
+                    full_text_url=_full_text_url(
+                        row.full_text_status, row.full_text_locator
+                    ),
                 ),
                 quality_score,
             )
@@ -2827,7 +2940,7 @@ def _backend_details(
     """
     events = (
         conn.execute(
-            select(event_log.c.run_id, event_log.c.payload)
+            select(event_log.c.run_id, event_log.c.payload, event_log.c.sequence)
             .where(
                 event_log.c.task_id == task_id,
                 event_log.c.run_id.in_(run_ids),
@@ -2847,8 +2960,10 @@ def _backend_details(
     # Round 11: a citations or lookup pass is many id calls; it is one row,
     # named in words, in the order the passes ran (one per run, backend and
     # verb). Before, its calls were listed as queries, their ids as the text.
-    passes: dict[tuple[Any, str, str], tuple[set[str], int]] = {}
-    for run_id, payload in events:
+    # Round 12: a row's ``query_id`` is its event's sequence (a pass's: its
+    # first call's), the key the sources filter takes.
+    passes: dict[tuple[Any, str, str], tuple[set[str], int, int]] = {}
+    for run_id, payload, sequence in events:
         if not isinstance(payload, Mapping):
             continue
         backend = payload.get("backend")
@@ -2859,17 +2974,21 @@ def _backend_details(
         verb = payload.get("verb")
         if verb in _PASS_WORDS:
             key = (run_id, name, verb)
-            ids, total = passes.get(key, (set(), 0))
+            ids, total, first = passes.get(key, (set(), 0, sequence))
             ids.update(part for part in query.split("|") if part)
-            passes[key] = (ids, total + results)
+            passes[key] = (ids, total + results, first)
             continue
-        queries[name].append(CoverageQueryOut(query=query, results=results))
+        queries[name].append(
+            CoverageQueryOut(query=query, results=results, query_id=sequence)
+        )
     pass_rows: dict[str, list[CoveragePassOut]] = {name: [] for name in backend_names}
-    for (_run_id, name, verb), (ids, total) in passes.items():
+    for (_run_id, name, verb), (ids, total, first) in passes.items():
         kind, many, one = _PASS_WORDS[verb]
         words = activity(one) if len(ids) == 1 else activity(many, count=len(ids))
         pass_rows[name].append(
-            CoveragePassOut.model_validate({"pass": kind, "query": words, "results": total})
+            CoveragePassOut.model_validate(
+                {"pass": kind, "query": words, "results": total, "query_id": first}
+            )
         )
     effective = effective_screen_rows()
     relevance_rows = (
@@ -2925,12 +3044,17 @@ def source_dossier_out(
                 task_source_snapshot.c.full_text_error,
                 source_snapshot.c.metadata,
                 source_snapshot.c.source_locator,
+                _FULL_TEXT_LOCATOR,
             )
             .select_from(
                 task_source_snapshot.join(
                     source_snapshot,
                     task_source_snapshot.c.source_snapshot_id
                     == source_snapshot.c.source_snapshot_id,
+                ).outerjoin(
+                    _full_text_snapshot,
+                    task_source_snapshot.c.full_text_snapshot_id
+                    == _full_text_snapshot.c.source_snapshot_id,
                 )
             )
             .where(
@@ -3033,6 +3157,7 @@ def source_dossier_out(
         read_in_full=row["full_text_status"] == "ingested",
         abstract=abstract,
         abstract_source=abstract_source,
+        full_text_url=_full_text_url(row["full_text_status"], row["full_text_locator"]),
         publisher=_metadata_text(metadata, "publisher_org"),
         record_type=_metadata_text(metadata, "record_type"),
         language=_metadata_text(metadata, "language"),
@@ -3715,7 +3840,13 @@ def _profile_out(entry: Mapping[str, Any], option_id: uuid.UUID) -> OptionProfil
         for value in (setting.get("main"), setting.get("second"))
         if isinstance(value, str) and value.strip()
     ]
-    return OptionProfileOut(lines=lines, settings=settings)
+    stored_acts_on = setting.get("acts_on")
+    acts_on = (
+        [value for value in stored_acts_on if isinstance(value, str) and value.strip()]
+        if isinstance(stored_acts_on, list)
+        else []
+    )
+    return OptionProfileOut(lines=lines, settings=settings, acts_on=acts_on)
 
 
 def _authority_out(record: Mapping[str, Any]) -> AuthorityOut | None:
@@ -4169,6 +4300,8 @@ def _search_documents(
                     evidence_type=evidence_type,
                     tier=tier,
                     year=metadata_year(metadata),
+                    authors=[author.name for author in _authorships(metadata)],
+                    venue=_venue(metadata),
                 ),
                 label.quality_score if label is not None else None,
                 (unit.study_country, unit.study_geography),
@@ -4595,6 +4728,8 @@ def _option_documents(
                     evidence_type=evidence_type,
                     tier=tier,
                     year=metadata_year(metadata),
+                    authors=[author.name for author in _authorships(metadata)],
+                    venue=_venue(metadata),
                 ),
                 label.quality_score if label is not None else None,
                 (country, geography),

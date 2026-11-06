@@ -13,7 +13,7 @@ emits a ``search.executed`` governance event; every acquire run writes one
 """
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, NamedTuple, Protocol
@@ -429,6 +429,38 @@ _MAPPERS = {
     "openalex": _map_openalex_work,
     "overton": _map_overton_document,
 }
+
+#: The raw-record field each mapper reads as ``backend_record_id`` (one key
+#: per mapper, kept beside it).
+_RECORD_ID_KEYS = {
+    "openalex": "id",
+    "overton": "policy_document_id",
+}
+
+
+def returned_record_ids(backend_name: str, records: list[dict[str, Any]]) -> list[str]:
+    """The backend record ids one search call returned, in order, once each.
+
+    Written on ``search.executed`` as ``record_ids`` (task 058, round 12) so a
+    reader can filter the sources table to what one query returned: the
+    values match ``source_snapshot.metadata.backend_record_id``.
+
+    Args:
+        backend_name: The backend that ran the call.
+        records: The call's raw records.
+
+    Returns:
+        The ids, without blanks or repeats.
+    """
+    key = _RECORD_ID_KEYS[backend_name]
+    ids: list[str] = []
+    seen: set[str] = set()
+    for record in records:
+        value = record.get(key) if isinstance(record, Mapping) else None
+        if isinstance(value, str) and value and value not in seen:
+            seen.add(value)
+            ids.append(value)
+    return ids
 
 
 def _chunk_text(envelope: dict[str, Any]) -> str:
@@ -880,6 +912,11 @@ def acquire_sources(
             "result_count": result_count,
             "error": error,
             "evidence_scope_id": str(context.scope_id),
+            # Round 12: what the call returned, for the sources table's
+            # filter by query (ok calls only; passes too).
+            "record_ids": returned_record_ids(backend.name, call.records)
+            if call.status == "ok"
+            else [],
         }
         if post_filter_excluded is not None:
             event_payload["post_filter_excluded"] = post_filter_excluded

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthApi } from "../auth/types";
-import { useChatTurns, useMe, useOptions, useTask, useTasksPaged } from "./queries";
+import { useChatTurns, useMe, useOptions, useProjects, useProjectsPaged, useTask, useTasksPaged } from "./queries";
 
 const conversationId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
@@ -258,5 +258,45 @@ describe("useTasksPaged (task 058, round 10)", () => {
     expect(result.current.data?.pages.flatMap((page) => page.data)).toHaveLength(61);
     const second = fetchMock.mock.calls[1][0] as Request;
     expect(new URL(second instanceof Request ? second.url : String(second)).searchParams.get("scope")).toBe("mine");
+  });
+});
+
+describe("the Projects list pages (task 058, round 12)", () => {
+  const projectsServer = (totalItems: number) =>
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), "http://localhost:3000");
+      const page = Number(url.searchParams.get("page") ?? "1");
+      const size = Number(url.searchParams.get("page_size") ?? "20");
+      const start = (page - 1) * size;
+      const data = Array.from({ length: Math.max(0, Math.min(size, totalItems - start)) }, (_, i) => ({
+        project_id: `project-${start + i}`,
+      }));
+      return new Response(
+        JSON.stringify({ data, pagination: { page, page_size: size, total_items: totalItems, has_more: start + size < totalItems } }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+  it("useProjectsPaged reads twenty, then the next page only while has_more", async () => {
+    const fetchMock = projectsServer(27);
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useProjectsPaged({ scope: "mine" }), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(1));
+    expect(result.current.data?.pages[0].data).toHaveLength(20);
+    expect(result.current.hasNextPage).toBe(true);
+    await result.current.fetchNextPage();
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(2));
+    expect(result.current.hasNextPage).toBe(false);
+    expect(result.current.data?.pages.flatMap((page) => page.data)).toHaveLength(27);
+  });
+
+  it("useProjects asks for the whole list, so a picker never stops at twenty", async () => {
+    const fetchMock = projectsServer(27);
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useProjects(), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.data).toHaveLength(27);
+    const first = fetchMock.mock.calls[0][0] as Request;
+    expect(new URL(first instanceof Request ? first.url : String(first)).searchParams.get("page_size")).toBe("200");
   });
 });

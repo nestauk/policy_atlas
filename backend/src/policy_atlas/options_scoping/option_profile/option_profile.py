@@ -474,6 +474,31 @@ class _Setting:
 
     main: str | None
     second: str | None
+    #: Whom the option acts on directly (task 058, round 12, owner): the
+    #: model's words, lower case, at most :data:`ACTS_ON_MAX`.
+    acts_on: tuple[str, ...] = ()
+
+
+#: The most "acts on" words one option may carry (the prompt's own limit).
+ACTS_ON_MAX = 4
+
+
+def _acts_on_words(values: Sequence[str]) -> tuple[str, ...] | None:
+    """The setting call's ``acts_on``, cleaned; ``None`` when malformed.
+
+    Each item is folded onto one line (whitespace runs become one space),
+    trimmed and lower-cased; a blank item, a repeat or more than
+    :data:`ACTS_ON_MAX` items makes the answer malformed.
+    """
+    if len(values) > ACTS_ON_MAX:
+        return None
+    words: list[str] = []
+    for value in values:
+        word = " ".join(value.split()).lower()
+        if word == "" or word in words:
+            return None
+        words.append(word)
+    return tuple(words)
 
 
 def _evidence_records(
@@ -675,7 +700,8 @@ def _checked_setting(
     """The setting response, checked fail-closed; ``None`` when malformed (R41).
 
     A setting is null or a non-blank word, lower-cased; the second setting is
-    null when the main one is.
+    null when the main one is. ``acts_on`` is at most :data:`ACTS_ON_MAX`
+    distinct non-blank phrases, lower-cased (:func:`_acts_on_words`).
     """
     pairs = _answered(response, SettingResponse, short_ids)
     if pairs is None:
@@ -684,9 +710,15 @@ def _checked_setting(
     for short_id, wire in pairs:
         main = None if wire.main_setting is None else wire.main_setting.strip().lower()
         second = None if wire.second_setting is None else wire.second_setting.strip().lower()
-        if main == "" or second == "" or (main is None and second is not None):
+        acts_on = _acts_on_words(wire.acts_on)
+        if (
+            main == ""
+            or second == ""
+            or (main is None and second is not None)
+            or acts_on is None
+        ):
             return None
-        settings[short_id] = _Setting(main=main, second=second)
+        settings[short_id] = _Setting(main=main, second=second, acts_on=acts_on)
     return settings
 
 
@@ -1491,7 +1523,7 @@ def _profile_column(
     """The ``longlist_result.option_profile`` value (S17; final § 2.10).
 
     ``{option_id: {design_version: {"lines": {line key: {"sentence",
-    "mark"}}, "setting": {"main", "second"}}}}`` for every option of the list,
+    "mark"}}, "setting": {"main", "second", "acts_on"}}}}`` for every option of the list,
     the lines in :data:`~policy_atlas.runtime.scoping_plan.PROFILE_LINE_KEYS`
     order.
     """
@@ -1506,7 +1538,11 @@ def _profile_column(
         column[str(o.option_id)] = {
             str(o.design_version): {
                 "lines": lines,
-                "setting": {"main": setting.main, "second": setting.second},
+                "setting": {
+                    "main": setting.main,
+                    "second": setting.second,
+                    "acts_on": list(setting.acts_on),
+                },
             }
         }
     return column

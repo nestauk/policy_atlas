@@ -19,6 +19,8 @@ describe("queryKeys.evidence", () => {
       { strength: "Unrated" },
       { year_from: 2019 },
       { year_to: 2024 },
+      { country: "United Kingdom" },
+      { query: 12 },
     ];
     for (const query of variants) {
       expect(queryKeys.evidence("p", query)).not.toEqual(base);

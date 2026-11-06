@@ -33,8 +33,8 @@ export const STAGE_PRESENTATION: Record<StageKey, readonly [label: string, blurb
   suggest: ["Suggesting options", "From your plan, the baseline and any linked report."],
   option_searches: ["Searching for each option", "One search per option."],
   extract_interventions: ["Reading the abstracts", "Which interventions each source covers."],
-  longlist: ["Clustering into options", "Sources grouped into options. Options may be folded together or added."],
-  option_profile: ["Writing what each option would take", "Cost, time, workforce and who decides, for each option."],
+  longlist: ["Clustering into options", "Sources grouped into options. Options may be combined or added."],
+  option_profile: ["Estimating what each option would take", "Cost, time, workforce and who decides, for each option."],
   constrain: ["Applying your constraints", "Each option checked against the plan's limits."],
   theme: ["Grouping into themes", "Included options grouped into themes."],
   shortlist: ["Shortlisting", "Proposing options for close reading."],
@@ -185,6 +185,8 @@ export const mockProject: components["schemas"]["ProjectOut"] = {
   is_owner: true,
   owner_display: "Ada Lovelace",
   archived_at: null,
+  // Its newest member's update, or its own creation (round 12).
+  last_activity_at: "2026-07-15T09:00:00Z",
 };
 
 /**
@@ -251,14 +253,14 @@ export const mockLandscape: components["schemas"]["LandscapeOut"] = {
 };
 
 export const mockEvidence: components["schemas"]["EvidenceItemOut"][] = [
-  { source_id: "10000000-0000-4000-8000-000000000001", title: "Childhood obesity prevention in urban primary schools", year: 2024, venue: "Public Health Nutrition", origin: "OpenAlex", status: "found", cited: false, read_in_full: false, country: "United States" },
-  { source_id: "10000000-0000-4000-8000-000000000002", title: "Borough food strategy consultation", year: 2023, venue: "Tower Hamlets Council", origin: "Overton", status: "screened_out", screen_status: "excluded_retracted", screen_confidence: 1, status_reason: "The record was retracted", cited: false, read_in_full: false, country: "United Kingdom" },
-  { source_id: "10000000-0000-4000-8000-000000000003", title: "Universal breakfast clubs and diet quality", year: 2022, venue: "BMJ Open", origin: "OpenAlex", status: "relevant", evidence_type: "Cohort study", appraisal_tier: "Moderate confidence", screen_status: "relevant", screen_confidence: 0.91, screen_basis: "title_abstract", screen_stage: 2, screen_reason: "Universal breakfast provision is a primary-school food-environment exposure in scope.", classification_reason: "Prospective cohort following ten schools over two academic years.", url: "https://example.org/universal-breakfast", cited: false, read_in_full: false, country: "United Kingdom" },
-  { source_id: "10000000-0000-4000-8000-000000000004", title: "Healthy High Streets programme review", year: 2023, venue: "London Assembly", origin: "Overton", status: "not_selected", status_reason: "Lower transferability", evidence_type: "Unknown / Insufficient information", appraisal_tier: "Unrated", screen_status: "relevant", screen_confidence: 0.72, screen_reason: "Covers food-environment levers around schools, though at borough rather than school level.", cited: false, read_in_full: false, country: "United Kingdom" },
-  { source_id: "10000000-0000-4000-8000-000000000005", title: "School meals and child weight outcomes", year: 2021, venue: "The Lancet Child & Adolescent Health", origin: "OpenAlex", status: "selected", evidence_type: "Systematic review", screen_status: "relevant", screen_confidence: 0.88, screen_reason: "Directly evaluates school-meal policies against child weight outcomes.", classification_reason: "Explicit systematic search and synthesis across 42 trials.", cited: false, read_in_full: false, country: "United Kingdom" },
-  { source_id: "10000000-0000-4000-8000-000000000006", title: "Neighbourhood food access and family choices", year: 2020, venue: "Health & Place", origin: "OpenAlex", status: "read_in_full", evidence_type: "Qualitative study", screen_status: "relevant", screen_confidence: 0.81, screen_reason: "Family food-choice mechanisms around primary schools are in scope.", cited: false, read_in_full: true, country: "Netherlands" },
-  { source_id: "10000000-0000-4000-8000-000000000007", title: "Active travel incentives: implementation findings", year: 2024, venue: "Local Government Studies", origin: "OpenAlex", status: "findings_extracted", evidence_type: "Mixed methods", screen_status: "relevant", screen_confidence: 0.86, screen_reason: "Implementation evidence for an in-scope active-travel lever.", cited: false, read_in_full: true, country: "United Kingdom" },
-  { source_id: "10000000-0000-4000-8000-000000000008", title: "Making healthy choices easier near schools", year: 2023, venue: "Nesta", origin: "Uploaded", status: "cited", evidence_type: "Policy analysis", appraisal_tier: "Moderate", screen_status: "relevant", screen_confidence: 0.95, screen_reason: "Uploaded by the task owner; directly addresses the question.", classification_reason: "Argument-led policy analysis rather than primary data collection.", cited: true, read_in_full: true, country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000001", title: "Childhood obesity prevention in urban primary schools", year: 2024, venue: "Public Health Nutrition", origin: "OpenAlex", status: "found", cited: false, read_in_full: false, abstract: "A cluster trial of classroom activity and school-meal changes in urban primary schools, measuring BMI z-score over two years.", abstract_source: "provider", country: "United States" },
+  { source_id: "10000000-0000-4000-8000-000000000002", title: "Borough food strategy consultation", year: 2023, venue: "Tower Hamlets Council", origin: "Overton", status: "screened_out", screen_status: "excluded_retracted", screen_confidence: 1, status_reason: "The record was retracted", cited: false, read_in_full: false, abstract: "The council's consultation on a borough food strategy, covering school food, takeaways near schools and community growing.", abstract_source: "provider", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000003", title: "Universal breakfast clubs and diet quality", year: 2022, venue: "BMJ Open", origin: "OpenAlex", status: "relevant", evidence_type: "Cohort study", appraisal_tier: "Moderate confidence", screen_status: "relevant", screen_confidence: 0.91, screen_basis: "title_abstract", screen_stage: 2, screen_reason: "Universal breakfast provision is a primary-school food-environment exposure in scope.", classification_reason: "Prospective cohort following ten schools over two academic years.", url: "https://example.org/universal-breakfast", cited: false, read_in_full: false, abstract: "A cohort study of universal breakfast provision and regular breakfast consumption.", abstract_source: "provider", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000004", title: "Healthy High Streets programme review", year: 2023, venue: "London Assembly", origin: "Overton", status: "not_selected", status_reason: "Lower transferability", evidence_type: "Unknown / Insufficient information", appraisal_tier: "Unrated", screen_status: "relevant", screen_confidence: 0.72, screen_reason: "Covers food-environment levers around schools, though at borough rather than school level.", cited: false, read_in_full: false, abstract: "A review of the Healthy High Streets programme: food outlets near schools, signage and local planning levers.", abstract_source: "provider", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000005", title: "School meals and child weight outcomes", year: 2021, venue: "The Lancet Child & Adolescent Health", origin: "OpenAlex", status: "selected", evidence_type: "Systematic review", screen_status: "relevant", screen_confidence: 0.88, screen_reason: "Directly evaluates school-meal policies against child weight outcomes.", classification_reason: "Explicit systematic search and synthesis across 42 trials.", cited: false, read_in_full: false, abstract: "A systematic review of 42 trials of school-meal standards and their effect on child weight.", abstract_source: "provider", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000006", title: "Neighbourhood food access and family choices", year: 2020, venue: "Health & Place", origin: "OpenAlex", status: "read_in_full", evidence_type: "Qualitative study", screen_status: "relevant", screen_confidence: 0.81, screen_reason: "Family food-choice mechanisms around primary schools are in scope.", cited: false, read_in_full: true, full_text_url: "https://example.org/neighbourhood-food-access.pdf", abstract: "Interviews with families on how food outlets near primary schools shape everyday food choices.", abstract_source: "provider", country: "Netherlands" },
+  { source_id: "10000000-0000-4000-8000-000000000007", title: "Active travel incentives: implementation findings", year: 2024, venue: "Local Government Studies", origin: "OpenAlex", status: "findings_extracted", evidence_type: "Mixed methods", screen_status: "relevant", screen_confidence: 0.86, screen_reason: "Implementation evidence for an in-scope active-travel lever.", cited: false, read_in_full: true, full_text_url: "https://europepmc.org/article/PMC/PMC1234567", abstract: "A mixed-methods study of how councils implemented active-travel incentives for school journeys.", abstract_source: "provider", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000008", title: "Making healthy choices easier near schools", year: 2023, venue: "Nesta", origin: "Uploaded", status: "cited", evidence_type: "Policy analysis", appraisal_tier: "Moderate", screen_status: "relevant", screen_confidence: 0.95, screen_reason: "Uploaded by the task owner; directly addresses the question.", classification_reason: "Argument-led policy analysis rather than primary data collection.", cited: true, read_in_full: true, abstract: "An AI-generated summary: measures near the school gate that make the healthy choice the easy choice.", abstract_source: "llm_description", country: "United Kingdom" },
   { source_id: "10000000-0000-4000-8000-000000000009", title: "Children's food environment survey", year: null, venue: null, origin: "Uploaded", status: "unavailable", status_reason: "Full text could not be obtained", screen_status: "relevant", screen_confidence: 0.79, screen_reason: "Survey coverage of children's food environments matches the scope.", cited: false, read_in_full: false, country: null },
 ];
 
@@ -273,6 +275,18 @@ export const mockEvidenceThemeIds: Record<string, string[]> = {
   [mockEvidence[7].source_id]: [MOCK_THEME_ID_SCHOOL_FOOD],
   [mockEvidence[6].source_id]: [MOCK_THEME_ID_ACTIVE_TRAVEL],
   [mockEvidence[3].source_id]: [MOCK_THEME_ID_HIGH_STREETS],
+};
+
+/** What each coverage row's search returned, by its `query_id` (round 12):
+ *  the mock's `GET /evidence?query=` keeps these rows. A key not listed
+ *  stands for a search from before the ids were kept: an empty page. */
+export const mockEvidenceByQuery: Record<number, string[]> = {
+  101: [mockEvidence[0].source_id, mockEvidence[4].source_id],
+  102: [mockEvidence[2].source_id, mockEvidence[5].source_id],
+  103: [mockEvidence[6].source_id],
+  104: [mockEvidence[1].source_id],
+  105: [mockEvidence[3].source_id],
+  110: [mockEvidence[2].source_id, mockEvidence[4].source_id, mockEvidence[6].source_id],
 };
 
 /** Shared + distinct institutions: markers 1, 1-2 — the D5 numbering path.
@@ -963,22 +977,23 @@ export const mockCoverage: components["schemas"]["CoverageOut"] = {
       backend: "OpenAlex",
       results: 270,
       relevant: 30,
+      // `query_id` (round 12): the key `GET /evidence?query=` takes.
       queries: [
-        { query: "childhood obesity school intervention UK", results: 34 },
-        { query: "primary school food environment obesity", results: 28 },
-        { query: "active travel school children obesity", results: 24 },
+        { query: "childhood obesity school intervention UK", results: 34, query_id: 101 },
+        { query: "primary school food environment obesity", results: 28, query_id: 102 },
+        { query: "active travel school children obesity", results: 24, query_id: 103 },
       ],
       // The live search's citations pass, worded for a finished search
       // (round 11): the saved coverage names its passes in the order run.
-      passes: [{ pass: "citations", query: "Followed citations from 50 sources", results: 184 }],
+      passes: [{ pass: "citations", query: "Followed citations from 50 sources", results: 184, query_id: 110 }],
     },
     {
       backend: "Overton",
       results: 42,
       relevant: 16,
       queries: [
-        { query: "Tower Hamlets school food policy", results: 19 },
-        { query: "UK childhood obesity local strategy", results: 23 },
+        { query: "Tower Hamlets school food policy", results: 19, query_id: 104 },
+        { query: "UK childhood obesity local strategy", results: 23, query_id: 105 },
       ],
       passes: [],
     },
@@ -1752,6 +1767,7 @@ type ProfileFixture = NonNullable<OptionOutFixture["profile"]>;
 function mockProfile(
   marks: Partial<Record<"cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "coordination" | "delivery_complexity" | "potential_impact", "less" | "more">>,
   settings: string[],
+  actsOn: string[] = [],
 ): ProfileFixture {
   const line = (key: ProfileFixture["lines"][number]["key"], sentence: string) => ({
     key,
@@ -1771,6 +1787,8 @@ function mockProfile(
       line("potential_impact", "Moderate if it works: it targets late referral, a main driver of the baseline; would apply to 16 to 24 year olds, tried on 18 to 24 year olds; the records describe proposals only."),
     ],
     settings,
+    // Whom it acts on directly, the setting call's words (round 12).
+    acts_on: actsOn,
   };
 }
 
@@ -1810,7 +1828,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     secondary_lever_types: ["regulate"],
     ambition: "more",
     ambition_reason: "Changes who is entitled to a national benefit, not just how it is delivered.",
-    profile: mockProfile({ cost: "less", time_to_effect: "more", coordination: "more", potential_impact: "more" }, ["Jobcentre", "Secondary school"]),
+    profile: mockProfile({ cost: "less", time_to_effect: "more", coordination: "more", potential_impact: "more" }, ["Jobcentre", "Secondary school"], ["young jobseekers", "work coaches", "councils"]),
     authority: {
       label: "needs_action_by",
       body: "the Department for Work and Pensions",
@@ -1829,7 +1847,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     outcomes_total: 2,
     place_sentences: [
       { place: "United Kingdom", sentence: "One moderate local evaluation of the Benefit sanctions pilot in England measured the NEET rate at 6 months in 18-24 year-olds.", generated: true, where: true },
-      { place: "No single place", sentence: "1 strong systematic review with 18-24 year-olds, measuring NEET rate at 6 months.", generated: false, where: false },
+      { place: "Several countries", sentence: "1 strong systematic review with 18-24 year-olds, measuring NEET rate at 6 months.", generated: false, where: false },
     ],
     evidence: {
       outcome_counts: {
@@ -1848,9 +1866,9 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     ],
     in_scope: null,
     documents: [
-      { task_source_snapshot_id: "mock-doc-a1", title: "Conditionality and NEET outcomes: a local authority review", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", place: "United Kingdom", programme_name: "Benefit sanctions pilot", tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: "England", records_count: 1 },
-      { task_source_snapshot_id: "mock-doc-a2", title: "Benefit sanctions for young jobseekers: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Strong", place: "multiple countries", programme_name: null, tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: null, records_count: 2 },
-      { task_source_snapshot_id: null, title: "National activation policy briefing", role: "mentioned", evidence_type: "Policy analysis", tier: null, place: "United Kingdom", programme_name: null, tried_on_kind: null, measured: null, place_detail: null, records_count: 0 },
+      { task_source_snapshot_id: "mock-doc-a1", title: "Conditionality and NEET outcomes: a local authority review", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", year: 2022, authors: ["R. Hollis", "M. Okafor"], venue: "Local Government Studies", place: "United Kingdom", programme_name: "Benefit sanctions pilot", tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: "England", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-a2", title: "Benefit sanctions for young jobseekers: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Strong", year: 2020, authors: ["J. Fenwick", "L. Garcia", "P. Shah"], venue: "Campbell Systematic Reviews", place: "multiple countries", programme_name: null, tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: null, records_count: 2 },
+      { task_source_snapshot_id: null, title: "National activation policy briefing", role: "mentioned", evidence_type: "Policy analysis", tier: null, year: 2023, authors: ["Department for Work and Pensions"], venue: null, place: "United Kingdom", programme_name: null, tried_on_kind: null, measured: null, place_detail: null, records_count: 0 },
     ],
   },
   [MOCK_OPTION_ID_NO_IN_SCOPE]: {
@@ -1876,7 +1894,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     secondary_lever_types: [],
     ambition: null,
     ambition_reason: "Adds support alongside the existing offer rather than changing who runs it.",
-    profile: mockProfile({ workforce: "more", time_to_set_up: "less" }, ["Secondary school"]),
+    profile: mockProfile({ workforce: "more", time_to_set_up: "less" }, ["Secondary school"], ["pupils", "mentors"]),
     authority: {
       label: "within_your_power",
       body: null,
@@ -1913,10 +1931,10 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     ],
     in_scope: { restriction: MOCK_LONGLIST_RESTRICTION_TEXT, in_scope_documents: 0, documents: 4 },
     documents: [
-      { task_source_snapshot_id: "mock-doc-b1", title: "Peer mentoring for at-risk pupils in Ontario schools", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", place: "Canada", programme_name: null, tried_on_kind: "pupils at risk of becoming NEET", measured: "NEET rate at 6 months", place_detail: "Ontario", records_count: 1 },
-      { task_source_snapshot_id: "mock-doc-b2", title: "School mentoring and NEET risk: an Australian cohort study", role: "evaluated", evidence_type: "Local evaluation", tier: "Limited", place: "Australia", programme_name: null, tried_on_kind: "secondary school pupils", measured: "school engagement", place_detail: "Victoria", records_count: 1 },
-      { task_source_snapshot_id: "mock-doc-b3", title: "Mentoring programmes for disengaged youth: a scoping review", role: "described", evidence_type: "Policy analysis", tier: null, place: "other", programme_name: null, tried_on_kind: "young people", measured: null, place_detail: "English-speaking countries", records_count: 1 },
-      { task_source_snapshot_id: "mock-doc-b4", title: "Youth mentoring outcomes: unclear geography", role: "recommended", evidence_type: "Local evaluation", tier: "Moderate", place: "not stated", programme_name: null, tried_on_kind: "young people", measured: null, place_detail: null, records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-b1", title: "Peer mentoring for at-risk pupils in Ontario schools", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", year: 2019, authors: ["K. Tremblay"], venue: "Canadian Journal of Education", place: "Canada", programme_name: null, tried_on_kind: "pupils at risk of becoming NEET", measured: "NEET rate at 6 months", place_detail: "Ontario", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-b2", title: "School mentoring and NEET risk: an Australian cohort study", role: "evaluated", evidence_type: "Local evaluation", tier: "Limited", year: 2021, authors: ["S. Nguyen", "D. Walsh"], venue: "Journal of Adolescence", place: "Australia", programme_name: null, tried_on_kind: "secondary school pupils", measured: "school engagement", place_detail: "Victoria", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-b3", title: "Mentoring programmes for disengaged youth: a scoping review", role: "described", evidence_type: "Policy analysis", tier: null, year: 2018, authors: ["H. Price"], venue: "Youth Studies Review", place: "other", programme_name: null, tried_on_kind: "young people", measured: null, place_detail: "English-speaking countries", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-b4", title: "Youth mentoring outcomes: unclear geography", role: "recommended", evidence_type: "Local evaluation", tier: "Moderate", year: null, authors: [], venue: null, place: "not stated", programme_name: null, tried_on_kind: "young people", measured: null, place_detail: null, records_count: 1 },
     ],
   },
   [MOCK_OPTION_ID_ADDED_BY_YOU]: {
@@ -1993,7 +2011,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     secondary_lever_types: ["provide a service"],
     ambition: "less",
     ambition_reason: "Reorganises the existing offer into one application rather than adding anything new.",
-    profile: mockProfile({ cost: "less", delivery_complexity: "more", time_to_set_up: "less", potential_impact: "less" }, ["Jobcentre", "Community centre"]),
+    profile: mockProfile({ cost: "less", delivery_complexity: "more", time_to_set_up: "less", potential_impact: "less" }, ["Jobcentre", "Community centre"], ["young people", "employers", "councils"]),
     authority: { label: "unclear", body: null, reason: "The sources do not say who could merge the application routes." },
     taxonomy_version: "lever-types-v1",
     document_count: 9,
@@ -2001,7 +2019,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     evaluated_countries: [{ country: "United Kingdom", documents: 3 }],
     place_sentences: [
       { place: "United Kingdom", sentence: "One very strong systematic review of the Youth Guarantee in England measured the NEET rate at 6 months in 18-24 year-olds.", generated: true, where: true },
-      { place: "No single place", sentence: "One strong local evaluation measured sustained employment or training at 12 months in 16-24 year-olds.", generated: true, where: false },
+      { place: "Place not stated", sentence: "One strong local evaluation measured sustained employment or training at 12 months in 16-24 year-olds.", generated: true, where: false },
     ],
     outcomes_evaluated: 2,
     outcomes_total: 2,
@@ -2023,9 +2041,9 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     ],
     in_scope: null,
     documents: [
-      { task_source_snapshot_id: "mock-doc-d1", title: "Single-application youth guarantees: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Very strong", place: "United Kingdom", programme_name: "Youth Guarantee", tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: "England", records_count: 1 },
-      { task_source_snapshot_id: "mock-doc-d2", title: "Combining careers advice and apprenticeships: a local evaluation", role: "evaluated", evidence_type: "Local evaluation", tier: "Strong", place: "multiple countries", programme_name: null, tried_on_kind: "16-24 year-olds", measured: "Sustained employment or training at 12 months", place_detail: null, records_count: 2 },
-      { task_source_snapshot_id: "mock-doc-d3", title: "One-stop youth offers outside the UK: a policy analysis", role: "described", evidence_type: "Policy analysis", tier: "Moderate", place: "Germany", programme_name: "Jugendberufsagentur", tried_on_kind: "young people", measured: "apprenticeship starts", place_detail: "Hamburg", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-d1", title: "Single-application youth guarantees: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Very strong", year: 2024, authors: ["A. Brennan", "T. Iqbal"], venue: "Campbell Systematic Reviews", place: "United Kingdom", programme_name: "Youth Guarantee", tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: "England", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-d2", title: "Combining careers advice and apprenticeships: a local evaluation", role: "evaluated", evidence_type: "Local evaluation", tier: "Strong", year: 2021, authors: ["C. Morgan"], venue: "Learning and Work Institute", place: "multiple countries", programme_name: null, tried_on_kind: "16-24 year-olds", measured: "Sustained employment or training at 12 months", place_detail: null, records_count: 2 },
+      { task_source_snapshot_id: "mock-doc-d3", title: "One-stop youth offers outside the UK: a policy analysis", role: "described", evidence_type: "Policy analysis", tier: "Moderate", year: 2017, authors: ["F. Becker", "U. Klein"], venue: null, place: "Germany", programme_name: "Jugendberufsagentur", tried_on_kind: "young people", measured: "apprenticeship starts", place_detail: "Hamburg", records_count: 1 },
     ],
   },
 };

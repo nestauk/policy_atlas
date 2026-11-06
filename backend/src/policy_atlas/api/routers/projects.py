@@ -9,16 +9,17 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal, NamedTuple
 
 import structlog
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import case, func, select, update
 from sqlalchemy.engine import Connection, RowMapping
+from sqlalchemy.sql.elements import ColumnElement
 
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
-    PAGE_SIZE_DEFAULT,
+    LIST_PAGE_SIZE_DEFAULT,
     PAGE_SIZE_MAX,
     Page,
     PageMeta,
@@ -140,9 +141,21 @@ def _cascade_visibility(
     )
 
 
+class _Members(NamedTuple):
+    """A project's caller-visible active members: how many, and the newest update."""
+
+    total: int
+    newest_update: datetime | None
+
+
+def _member_estate(user_id: str) -> list[ColumnElement[bool]]:
+    """The members a project's count and last activity read (contract § 8)."""
+    return [task.c.status == "active", own_estate(task, user_id)]
+
+
 def _task_counts(
     conn: Connection, project_ids: list[uuid.UUID], *, user_id: str
-) -> dict[uuid.UUID, int]:
+) -> dict[uuid.UUID, _Members]:
     """Count each project's active, caller-visible members in one query.
 
     Counted unconditionally before task 033, which would have shown a
@@ -151,7 +164,8 @@ def _task_counts(
     **and** rows in the caller's own organisation — :func:`own_estate`, which
     is the read grade minus the admin leg, so an administrator's card keeps
     showing their own organisation's count rather than a cross-organisation
-    sum.
+    sum. The same members give the project's last activity (their newest
+    ``updated_at``; task 058, round 12).
 
     Args:
         conn: Open database connection.
@@ -159,12 +173,15 @@ def _task_counts(
         user_id: The calling subject — the count is per-caller.
 
     Returns:
-        Counts by project id; projects with no visible member are absent.
+        Counts and newest updates by project id; projects with no visible
+        member are absent.
     """
     if not project_ids:
         return {}
     rows = conn.execute(
-        select(project_membership.c.project_id, func.count())
+        select(
+            project_membership.c.project_id, func.count(), func.max(task.c.updated_at)
+        )
         .select_from(
             project_membership.join(
                 task,
@@ -172,21 +189,36 @@ def _task_counts(
             )
         )
         .where(project_membership.c.project_id.in_(project_ids))
-        .where(task.c.status == "active")
-        .where(own_estate(task, user_id))
+        .where(*_member_estate(user_id))
         .group_by(project_membership.c.project_id)
     ).all()
-    return {row[0]: int(row[1]) for row in rows}
+    return {row[0]: _Members(int(row[1]), row[2]) for row in rows}
+
+
+def _last_activity_at(user_id: str) -> ColumnElement[Any]:
+    """A project's last activity as SQL: the newest of its own creation and
+    its caller-visible active members' ``updated_at`` (task 058, round 12)."""
+    newest = (
+        select(func.max(task.c.updated_at))
+        .select_from(
+            project_membership.join(task, task.c.task_id == project_membership.c.task_id)
+        )
+        .where(project_membership.c.project_id == project.c.project_id)
+        .where(*_member_estate(user_id))
+        .scalar_subquery()
+    )
+    return func.greatest(project.c.created_at, newest)
 
 
 def _project_out(
-    row: RowMapping, task_count: int, *, user_id: str, owner_display: str | None
+    row: RowMapping, members: _Members | None, *, user_id: str, owner_display: str | None
 ) -> ProjectOut:
     """Project one project row into its public contract shape for one caller.
 
     Args:
         row: The project row.
-        task_count: The caller-visible member count.
+        members: The caller-visible members (:func:`_task_counts`), or
+            ``None`` when it has none.
         user_id: The calling subject, for `is_owner`.
         owner_display: How to name the owner — never an email.
 
@@ -198,7 +230,10 @@ def _project_out(
         name=row["name"],
         description=row["description"],
         created_at=row["created_at"],
-        task_count=task_count,
+        task_count=members.total if members is not None else 0,
+        last_activity_at=max(row["created_at"], members.newest_update)
+        if members is not None and members.newest_update is not None
+        else row["created_at"],
         visibility=row["visibility"],
         is_owner=row["owner_user_id"] == user_id,
         owner_display=owner_display,
@@ -213,7 +248,7 @@ def list_projects(
     scope: Annotated[Literal["all", "mine"], Query()] = "all",
     owner_email: Annotated[str | None, Query(max_length=OWNER_EMAIL_MAX)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
+    page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = LIST_PAGE_SIZE_DEFAULT,
     status_filter: Annotated[
         Literal["active", "archived", "all"], Query(alias="status")
     ] = "active",
@@ -257,7 +292,9 @@ def list_projects(
             project.outerjoin(app_user, app_user.c.user_id == project.c.owner_user_id)
         )
         .where(*where)
-        .order_by(project.c.created_at.desc(), project.c.project_id.desc())
+        # Newest activity first (task 058, round 12), so the page the list
+        # shows is the page it would sort to; the project id breaks ties.
+        .order_by(_last_activity_at(user.user_id).desc(), project.c.project_id.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).mappings().all()
@@ -280,7 +317,7 @@ def list_projects(
         data=[
             _project_out(
                 row,
-                counts.get(row["project_id"], 0),
+                counts.get(row["project_id"]),
                 user_id=user.user_id,
                 owner_display=owner_display_for(
                     row["owner_user_id"], row["owner_display_name"]
@@ -369,7 +406,7 @@ def create_project(
     ).mappings().one()
     return _project_out(
         row,
-        1 if source is not None else 0,
+        _task_counts(conn, [project_id], user_id=user.user_id).get(project_id),
         user_id=user.user_id,
         owner_display=resolve_owner_display(conn, user.user_id),
     )
@@ -388,7 +425,7 @@ def get_project(
     counts = _task_counts(conn, [project_id], user_id=user.user_id)
     return _project_out(
         access.row,
-        counts.get(project_id, 0),
+        counts.get(project_id),
         user_id=user.user_id,
         owner_display=resolve_owner_display(conn, access.row["owner_user_id"]),
     )
@@ -435,7 +472,7 @@ def archive_project(
     counts = _task_counts(conn, [project_id], user_id=user.user_id)
     return _project_out(
         row,
-        counts.get(project_id, 0),
+        counts.get(project_id),
         user_id=user.user_id,
         owner_display=resolve_owner_display(conn, row["owner_user_id"]),
     )
@@ -520,7 +557,7 @@ def update_project(
     counts = _task_counts(conn, [project_id], user_id=user.user_id)
     return _project_out(
         row,
-        counts.get(project_id, 0),
+        counts.get(project_id),
         user_id=user.user_id,
         owner_display=resolve_owner_display(conn, row["owner_user_id"]),
     )

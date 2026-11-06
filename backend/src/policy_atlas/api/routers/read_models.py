@@ -99,6 +99,16 @@ def evidence(
     year_from: Annotated[int | None, Query(ge=1000, le=3000)] = None,
     year_to: Annotated[int | None, Query(ge=1000, le=3000)] = None,
     country: Annotated[str | None, Query(min_length=1, max_length=200)] = None,
+    query: Annotated[
+        int | None,
+        Query(
+            ge=1,
+            description=(
+                "A coverage row's `query_id`: only the sources that search returned "
+                "(task 058, round 12). Empty for a search run before the ids were kept."
+            ),
+        ),
+    ] = None,
 ) -> Page[EvidenceItemOut]:
     """Return a bounded page from the evidence status ladder, optionally filtered."""
     _readable(conn, task_id, user)
@@ -120,6 +130,7 @@ def evidence(
         year_from=year_from,
         year_to=year_to,
         country=country,
+        query=query,
     )
 
 

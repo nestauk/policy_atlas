@@ -2530,6 +2530,9 @@ export interface components {
          *             citations from 40 sources", "Looked up 120 cited works",
          *             "Looked up 30 cited documents". Never its ids.
          *         results: The records the pass's calls returned.
+         *         query_id: The pass's key for the sources filter
+         *             (`GET /tasks/{id}/evidence?query=`; task 058, round 12): the
+         *             records every call of the pass returned.
          */
         CoveragePassOut: {
             /**
@@ -2539,16 +2542,26 @@ export interface components {
             pass: "citations" | "lookup";
             /** Query */
             query: string;
+            /** Query Id */
+            query_id: number;
             /** Results */
             results: number;
         };
         /**
          * CoverageQueryOut
          * @description One completed query and its result count for a public backend.
+         *
+         *     Args:
+         *         query: The query as written.
+         *         results: The records the call returned.
+         *         query_id: The query's key for the sources filter
+         *             (`GET /tasks/{id}/evidence?query=`; task 058, round 12).
          */
         CoverageQueryOut: {
             /** Query */
             query: string;
+            /** Query Id */
+            query_id: number;
             /** Results */
             results: number;
         };
@@ -2674,6 +2687,9 @@ export interface components {
          *         appraisal_tier: Optional appraisal tier label.
          *         cited: Whether this source is cited in the artefact.
          *         url: Optional source URL.
+         *         full_text_url: The address the full text was collected from (an
+         *             http(s) link a reader can open), or `None` when no full text was
+         *             collected.
          */
         EvidenceItemOut: {
             /** Abstract */
@@ -2690,6 +2706,8 @@ export interface components {
             country?: string | null;
             /** Evidence Type */
             evidence_type?: string | null;
+            /** Full Text Url */
+            full_text_url?: string | null;
             /**
              * Origin
              * @enum {string}
@@ -3558,6 +3576,10 @@ export interface components {
          *         evidence_type: Its evidence type, when classified.
          *         tier: Its quality tier label, when appraised.
          *         year: Its publication year, when the metadata has one.
+         *         authors: Its authors' names, in order, as the reference line names
+         *             them (task 058, round 12); empty when unknown.
+         *         venue: Where it was published, as the evidence row's `venue`
+         *             (task 058, round 12), or `None`.
          *         place: Where it was studied: its where-tried top level.
          *         programme_name: The programme name of its first member record under
          *             the option (by role order); `null` when none is given or the
@@ -3572,6 +3594,8 @@ export interface components {
          *             a linked finding).
          */
         OptionDocumentOut: {
+            /** Authors */
+            authors?: string[];
             /** Evidence Type */
             evidence_type?: string | null;
             /** Measured */
@@ -3600,6 +3624,8 @@ export interface components {
             title: string;
             /** Tried On Kind */
             tried_on_kind?: string | null;
+            /** Venue */
+            venue?: string | null;
             /** Year */
             year?: number | null;
         };
@@ -3754,8 +3780,13 @@ export interface components {
          *         lines: The eight lines, in display order.
          *         settings: The delivery setting, main first, then the second; empty
          *             when none is named (R41).
+         *         acts_on: Whom the option acts on directly, the model's words in its
+         *             order (task 058, round 12); empty for a whole-system instrument and
+         *             for a profile written before round 12.
          */
         OptionProfileOut: {
+            /** Acts On */
+            acts_on?: string[];
             /** Lines */
             lines: components["schemas"]["ProfileLineOut"][];
             /** Settings */
@@ -4242,7 +4273,8 @@ export interface components {
          * @description One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).
          *
          *     Args:
-         *         place: The place: a country's short English name, or "No single place".
+         *         place: The place: a country's short English name, or after the
+         *             countries "Several countries", "Place not stated" or "Other".
          *         sentence: What the evaluations in that place are.
          *         generated: The sentence was generated and passed the trace check;
          *             ``false`` for the code-built template.
@@ -4596,6 +4628,9 @@ export interface components {
          *         archived_at: When the owner archived the project, or `None` while it
          *             is in use (task 058, round 11). Archiving leaves its tasks as
          *             they are.
+         *         last_activity_at: The newest of `created_at` and the `updated_at` of
+         *             the members `task_count` counts (task 058, round 12). `GET
+         *             /projects` lists newest activity first by it.
          */
         ProjectOut: {
             /** Archived At */
@@ -4609,6 +4644,11 @@ export interface components {
             description?: string | null;
             /** Is Owner */
             is_owner: boolean;
+            /**
+             * Last Activity At
+             * Format: date-time
+             */
+            last_activity_at: string;
             /** Name */
             name: string;
             /** Owner Display */
@@ -5409,6 +5449,8 @@ export interface components {
             doi?: string | null;
             /** Evidence Type */
             evidence_type?: string | null;
+            /** Full Text Url */
+            full_text_url?: string | null;
             /** Fwci */
             fwci?: number | null;
             /** Language */
@@ -7420,6 +7462,8 @@ export interface operations {
                 year_from?: number | null;
                 year_to?: number | null;
                 country?: string | null;
+                /** @description A coverage row's `query_id`: only the sources that search returned (task 058, round 12). Empty for a search run before the ids were kept. */
+                query?: number | null;
             };
             header?: never;
             path: {

@@ -15,7 +15,6 @@ import pytest
 
 from policy_atlas.options_scoping.labels import DocumentLabels
 from policy_atlas.options_scoping.option_profile.place_sentences import (
-    NO_SINGLE_PLACE,
     PlaceDocument,
     PlaceGroup,
     call_input,
@@ -65,7 +64,7 @@ def _group(*docs: PlaceDocument) -> PlaceGroup:
 # --- the grouping ---------------------------------------------------------------------
 
 
-def test_the_where_country_leads_then_count_then_name_and_no_single_place_is_last() -> None:
+def test_the_where_country_leads_then_count_then_name_then_the_places_with_no_country() -> None:
     docs = [
         _doc("fr1", place="France"),
         _doc("ca1", place="Canada", quality_score=2, tier="Limited"),
@@ -86,7 +85,9 @@ def test_the_where_country_leads_then_count_then_name_and_no_single_place_is_las
         ("p2", "United States", False, 3),
         ("p3", "Canada", False, 2),
         ("p4", "France", False, 2),
-        ("p5", NO_SINGLE_PLACE, False, 3),
+        ("p5", "Several countries", False, 1),
+        ("p6", "Place not stated", False, 1),
+        ("p7", "Other", False, 1),
     ]
     # Inside a group: quality score descending, unrated last, then title.
     assert [d.doc_key for d in groups[2].documents] == ["doc:ca2", "doc:ca1"]
@@ -94,12 +95,21 @@ def test_the_where_country_leads_then_count_then_name_and_no_single_place_is_las
     assert all(d.doc_key != "doc:de1" for g in groups for d in g.documents)
 
 
-def test_no_where_country_orders_by_count_and_an_empty_no_single_place_is_absent() -> None:
+def test_no_where_country_orders_by_count_and_an_empty_no_country_group_is_absent() -> None:
     groups = group_places(
         [_doc("a", place="France"), _doc("b", place="Canada"), _doc("c", place="Canada")],
         where_country=None,
     )
     assert [(g.place, g.is_where) for g in groups] == [("Canada", False), ("France", False)]
+    # Task 058, round 12: each of the three is absent when empty.
+    groups = group_places(
+        [_doc("o", place="other"), _doc("n", place="not stated"), _doc("p", place="not stated")],
+        where_country=None,
+    )
+    assert [(g.place, g.documents_total) for g in groups] == [
+        ("Place not stated", 2),
+        ("Other", 1),
+    ]
     assert group_places([], where_country="United Kingdom") == []
 
 
@@ -552,9 +562,9 @@ def test_the_prompt_s_two_example_sentences_pass_on_their_own_places() -> None:
 def test_the_stub_sentence_passes_the_trace_check() -> None:
     sentence = "4 evaluations in United Kingdom."
     assert trace_check(sentence, _FIXED, plan_outcomes=[], vocabulary={}) is None
-    no_single = group_places([_doc("m", place="multiple countries")], where_country=None)[0]
+    several = group_places([_doc("m", place="multiple countries")], where_country=None)[0]
     assert (
-        trace_check("1 evaluations in No single place.", no_single, plan_outcomes=[], vocabulary={})
+        trace_check("1 evaluations in Several countries.", several, plan_outcomes=[], vocabulary={})
         is None
     )
 

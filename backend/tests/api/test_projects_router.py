@@ -350,3 +350,32 @@ def test_an_archived_project_leaves_the_default_list_and_keeps_its_tasks(
         refused = client.post(f"/api/v1/projects/{kept['project_id']}/archive", headers=other)
         assert refused.status_code == 404
         assert names(None) == ["Kept"]
+
+
+def test_the_list_pages_by_last_activity_newest_first(tmp_path: Path) -> None:
+    """Task 058, round 12: a project with recent task activity is on the first
+    page even when it was created first; ``last_activity_at`` says why."""
+    with api_client(tmp_path) as (client, owner, _):
+        made = [
+            client.post("/api/v1/projects", headers=owner, json={"name": name}).json()
+            for name in ("Oldest", "Middle", "Newest")
+        ]
+        oldest, middle, newest = (project["project_id"] for project in made)
+        task_id = create_task(client, owner)
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}", headers=owner, json={"project_ids": [oldest]}
+        )
+        assert patched.status_code == 200, patched.text
+        task_updated = client.get(f"/api/v1/tasks/{task_id}", headers=owner).json()["updated_at"]
+
+        first = client.get("/api/v1/projects?page_size=2", headers=owner).json()
+        assert [row["project_id"] for row in first["data"]] == [oldest, newest]
+        assert first["pagination"]["has_more"] is True
+        second = client.get("/api/v1/projects?page_size=2&page=2", headers=owner).json()
+        assert [row["project_id"] for row in second["data"]] == [middle]
+
+        rows = {row["project_id"]: row for row in first["data"] + second["data"]}
+        assert rows[oldest]["last_activity_at"] == task_updated
+        assert rows[newest]["last_activity_at"] == rows[newest]["created_at"]
+        single = client.get(f"/api/v1/projects/{oldest}", headers=owner).json()
+        assert single["last_activity_at"] == task_updated

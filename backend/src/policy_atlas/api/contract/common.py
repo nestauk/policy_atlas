@@ -15,6 +15,10 @@ from pydantic import BaseModel, Field, model_validator
 #: Default page size when the caller omits `page_size`.
 PAGE_SIZE_DEFAULT = 50
 
+#: Default page size of the Tasks and Projects lists (task 058, round 12,
+#: owner): twenty rows, then "Show more" while `has_more`.
+LIST_PAGE_SIZE_DEFAULT = 20
+
 #: Server-enforced page-size cap (`Query(le=PAGE_SIZE_MAX)` at the route).
 PAGE_SIZE_MAX = 200
 

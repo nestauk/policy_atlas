@@ -57,8 +57,8 @@ def _text() -> str:
         "Pays employers to take on young recruits.",
         "Delivered at work. It typically involves:",
         "- Six-month wage top-up",
-        # What it would take: ambition, the nine lines, marks only where present.
-        "### What it would take",
+        # What it could take: ambition, the nine lines, marks only where present.
+        "### What it could take",
         "Ambition: Covers every young jobseeker nationally. (Bigger)",
         "Cost: Costs about a fifth of a wage per recruit. (Costlier)",
         "Time to set up: Needs a payment scheme set up.\n",
@@ -68,7 +68,8 @@ def _text() -> str:
         "Dependencies: Depends on employers taking it up.\n",
         "Coordination requirements: Needs the tax office to share wage data. (Higher)",
         "Delivery complexity: Simple claims, but fraud checks. (Simpler)",
-        "Potential impact: Moderate if it works: more first jobs through lower hiring costs.\n",
+        # Last in the text since round 12: nothing follows it.
+        "Potential impact: Moderate if it works: more first jobs through lower hiring costs.",
         # Evidence: opener, your outcomes, place sentences, the rung and modifiers.
         "### Evidence",
         "Evaluated in 2 documents. 1 more describes or recommends it.",
@@ -89,6 +90,31 @@ def _text() -> str:
 )
 def test_every_block_of_the_card_appears_once(words: str) -> None:
     assert _text().count(words) == 1
+
+
+def test_the_blocks_follow_the_cards_order() -> None:
+    """Task 058, round 12: what it is, Evidence with the places first, the
+    documents, then What it could take."""
+    text = _text()
+    order = [
+        "### How it works",
+        "### Evidence",
+        "- United Kingdom: One trial",
+        "- the NEET rate: 2 evaluations",
+        "Maturity: Evaluated",
+        "Documents · 3",
+        "- Policy brief on youth hiring",
+        "### What it could take",
+        "Potential impact:",
+    ]
+    positions = [text.index(words) for words in order]
+    assert positions == sorted(positions)
+    # A cut drops document lines only; the profile stays after them.
+    card = option_card_text(OptionOut.model_validate(_fixture()), today_year=2026)
+    (cut_text,), cut = fit_cards([card], len(card.fixed) + len(card.tail) + 1)
+    assert cut == 3
+    assert cut_text.endswith(card.tail)
+    assert "### What it could take" in cut_text
 
 
 def test_no_link_and_no_left_out_block_reaches_the_text() -> None:
@@ -131,7 +157,8 @@ def test_a_card_with_no_profile_and_no_documents_says_so() -> None:
         "maturity": {"rung": "proposal_only"},
     }
     card = option_card_text(OptionOut.model_validate(data), today_year=2026)
-    assert "### What it would take" not in card.fixed
+    assert "What it could take" not in card.render()
+    assert card.tail == ""
     assert "No document names this option yet." in card.fixed
     assert "Maturity: Proposed, not yet implemented" in card.fixed
     assert card.document_lines == []

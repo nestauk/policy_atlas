@@ -162,7 +162,7 @@ def test_theme_needs_a_longlist(conn: Connection) -> None:
         (
             "option_profile",
             (
-                "Writing what each option would take",
+                "Estimating what each option would take",
                 "Cost, time, workforce and who decides, for each option.",
             ),
             True,
@@ -187,7 +187,7 @@ def test_the_registry_the_graph_the_plan_mapping_and_the_stream_know_the_step(
     assert STAGE_PRESENTATION[component] == presentation
     assert STAGE_PRESENTATION["longlist"] == (
         "Clustering into options",
-        "Sources grouped into options. Options may be folded together or added.",
+        "Sources grouped into options. Options may be combined or added.",
     )
     assert [c for c, _ in LONGLIST_CHAIN][-5:] == [
         "longlist",

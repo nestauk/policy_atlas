@@ -192,6 +192,9 @@ class EvidenceItemOut(BaseModel):
         appraisal_tier: Optional appraisal tier label.
         cited: Whether this source is cited in the artefact.
         url: Optional source URL.
+        full_text_url: The address the full text was collected from (an
+            http(s) link a reader can open), or `None` when no full text was
+            collected.
     """
 
     source_id: uuid.UUID
@@ -223,6 +226,9 @@ class EvidenceItemOut(BaseModel):
     # value the Landscape chart's row shows and the `country` filter takes;
     # null when the provider sent none (the chart's "Not reported").
     country: str | None = None
+    # Task 058, round 12: where the full text came from, for the All sources
+    # "Full text" link; null unless the text was collected.
+    full_text_url: str | None = None
 
 
 class FindingBaseOut(BaseModel):
@@ -671,10 +677,18 @@ class CoverageOut(BaseModel):
 
 
 class CoverageQueryOut(BaseModel):
-    """One completed query and its result count for a public backend."""
+    """One completed query and its result count for a public backend.
+
+    Args:
+        query: The query as written.
+        results: The records the call returned.
+        query_id: The query's key for the sources filter
+            (`GET /tasks/{id}/evidence?query=`; task 058, round 12).
+    """
 
     query: str
     results: int
+    query_id: int
 
 
 class CoveragePassOut(BaseModel):
@@ -688,6 +702,9 @@ class CoveragePassOut(BaseModel):
             citations from 40 sources", "Looked up 120 cited works",
             "Looked up 30 cited documents". Never its ids.
         results: The records the pass's calls returned.
+        query_id: The pass's key for the sources filter
+            (`GET /tasks/{id}/evidence?query=`; task 058, round 12): the
+            records every call of the pass returned.
     """
 
     model_config = ConfigDict(populate_by_name=True, serialize_by_alias=True)
@@ -695,6 +712,7 @@ class CoveragePassOut(BaseModel):
     pass_: Literal["citations", "lookup"] = Field(alias="pass")
     query: str
     results: int
+    query_id: int
 
 
 class CoverageBackendDetailOut(BaseModel):
@@ -903,10 +921,14 @@ class OptionProfileOut(BaseModel):
         lines: The eight lines, in display order.
         settings: The delivery setting, main first, then the second; empty
             when none is named (R41).
+        acts_on: Whom the option acts on directly, the model's words in its
+            order (task 058, round 12); empty for a whole-system instrument and
+            for a profile written before round 12.
     """
 
     lines: list[ProfileLineOut]
     settings: list[str]
+    acts_on: list[str] = Field(default_factory=list)
 
 
 class AuthorityOut(BaseModel):
@@ -1214,6 +1236,10 @@ class OptionDocumentOut(BaseModel):
         evidence_type: Its evidence type, when classified.
         tier: Its quality tier label, when appraised.
         year: Its publication year, when the metadata has one.
+        authors: Its authors' names, in order, as the reference line names
+            them (task 058, round 12); empty when unknown.
+        venue: Where it was published, as the evidence row's `venue`
+            (task 058, round 12), or `None`.
         place: Where it was studied: its where-tried top level.
         programme_name: The programme name of its first member record under
             the option (by role order); `null` when none is given or the
@@ -1234,6 +1260,8 @@ class OptionDocumentOut(BaseModel):
     evidence_type: str | None = None
     tier: str | None = None
     year: int | None = None
+    authors: list[str] = Field(default_factory=list)
+    venue: str | None = None
     place: str | None = None
     programme_name: str | None = None
     tried_on_kind: str | None = None
@@ -1292,7 +1320,8 @@ class PlaceSentenceOut(BaseModel):
     """One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).
 
     Args:
-        place: The place: a country's short English name, or "No single place".
+        place: The place: a country's short English name, or after the
+            countries "Several countries", "Place not stated" or "Other".
         sentence: What the evaluations in that place are.
         generated: The sentence was generated and passed the trace check;
             ``false`` for the code-built template.

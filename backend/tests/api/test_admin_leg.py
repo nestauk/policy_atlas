@@ -504,7 +504,7 @@ def test_administrator_listing_spans_organisations_and_emits_one_line_per_reques
                 "scope": "all",
                 "owner_email": address,
                 "page": 1,
-                "page_size": 50,
+                "page_size": 20,
                 "row_count": 3,
                 "total_items": 3,
             }

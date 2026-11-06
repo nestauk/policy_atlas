@@ -21,6 +21,7 @@ export const queryKeys = {
   // rows.
   tasks: (query?: TasksQuery) => ["tasks", "list", query] as const,
   tasksPaged: (query?: Omit<TasksQuery, "page">) => ["tasks", "list", "paged", query] as const,
+  projectsPaged: (query?: Omit<ProjectsQuery, "page">) => ["projects", "list", "paged", query] as const,
   task: (taskId: string) => ["tasks", taskId, "detail"] as const,
   checkIns: (taskId: string, status?: "pending" | "all") =>
     ["tasks", taskId, "check-ins", status] as const,
@@ -28,7 +29,7 @@ export const queryKeys = {
   landscape: (taskId: string, scope?: "cited") =>
     ["tasks", taskId, "landscape", scope] as const,
   evidence: (taskId: string, query?: EvidenceQuery) =>
-    ["tasks", taskId, "evidence", query?.page, query?.page_size, query?.status, query?.cited, query?.sort, query?.order, query?.theme, query?.origin, query?.evidence_type, query?.strength, query?.year_from, query?.year_to, query?.country] as const,
+    ["tasks", taskId, "evidence", query?.page, query?.page_size, query?.status, query?.cited, query?.sort, query?.order, query?.theme, query?.origin, query?.evidence_type, query?.strength, query?.year_from, query?.year_to, query?.country, query?.query] as const,
   findings: (taskId: string, query?: FindingsQuery) =>
     ["tasks", taskId, "findings", query?.page, query?.page_size, query?.profile, query?.facet, query?.group, query?.group_id, query?.source_id] as const,
   decisions: (taskId: string, page?: number, pageSize?: number) =>
@@ -117,6 +118,10 @@ export interface EvidenceQuery extends PageQuery {
    *  "United Kingdom", "GB" and "UK" name the same sources); "Not reported"
    *  keeps the sources with none (task 058, round 10). */
   country?: string;
+  /** A coverage row's `query_id` (`CoverageQueryOut` / `CoveragePassOut`):
+   *  only the sources that search or pass returned; an empty page for a
+   *  search from before the ids were kept (task 058, round 12). */
+  query?: number;
 }
 
 interface FindingsQuery extends PageQuery {
@@ -170,13 +175,23 @@ export function useMe() {
  *  keeps showing "Analysing"/"Paused" after the run has actually moved on.
  *  `refetchIntervalInBackground` defaults to `false`, so this only polls
  *  while the tab is visible. */
+/**
+ * The page size a one-page list read asks for when its caller names none: the
+ * server's cap. The Tasks and Projects lists page at 20 by default (task 058,
+ * round 12), so a picker or a name lookup that reads one page would otherwise
+ * stop at the first 20 rows without saying so.
+ */
+export const WHOLE_LIST_PAGE_SIZE = 200;
+
 export function useTasks(query?: TasksQuery, options?: { enabled?: boolean }) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.tasks(query),
     enabled: options?.enabled,
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/tasks", { params: { query } });
+      const { data, error } = await client.GET("/api/v1/tasks", {
+        params: { query: { page_size: WHOLE_LIST_PAGE_SIZE, ...query } },
+      });
       if (error) throw error;
       return data;
     },
@@ -191,8 +206,9 @@ export function useTasks(query?: TasksQuery, options?: { enabled?: boolean }) {
 
 /**
  * `GET /api/v1/tasks`, a page at a time, for a list with "Show more" (task
- * 058, round 10). The server keeps 50 a page and says `has_more`; the next
- * page is asked for only when it does. `data.pages` holds the pages in order.
+ * 058, round 10). The server keeps 20 a page (round 12) and says `has_more`;
+ * the next page is asked for only when it does. `data.pages` holds the pages
+ * in order.
  */
 export function useTasksPaged(
   query?: Omit<TasksQuery, "page">,
@@ -219,16 +235,43 @@ export function useTasksPaged(
   });
 }
 
-/** `GET /api/v1/projects` — the screen's Projects, with a derived task count. */
+/** `GET /api/v1/projects` — the screen's Projects, with a derived task count.
+ *  One page of up to {@link WHOLE_LIST_PAGE_SIZE} unless the caller names a
+ *  size: pickers and name lookups read every project. */
 export function useProjects(query?: ProjectsQuery) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.projects(query),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects", { params: { query } });
+      const { data, error } = await client.GET("/api/v1/projects", {
+        params: { query: { page_size: WHOLE_LIST_PAGE_SIZE, ...query } },
+      });
       if (error) throw error;
       return data;
     },
+  });
+}
+
+/**
+ * `GET /api/v1/projects`, a page at a time, for the Projects list with "Show
+ * more" (task 058, round 12): 20 a page by default, the next page asked for
+ * only while `has_more`. `data.pages` holds the pages in order, as
+ * {@link useTasksPaged}.
+ */
+export function useProjectsPaged(query?: Omit<ProjectsQuery, "page">) {
+  const client = useApiClient();
+  return useInfiniteQuery({
+    queryKey: queryKeys.projectsPaged(query),
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await client.GET("/api/v1/projects", {
+        params: { query: { ...query, page: pageParam } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    getNextPageParam: (last) =>
+      last.pagination.has_more === true ? last.pagination.page + 1 : undefined,
   });
 }
 

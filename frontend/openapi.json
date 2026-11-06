@@ -2029,7 +2029,7 @@
         "type": "object"
       },
       "CoveragePassOut": {
-        "description": "One citations or lookup pass of a finished search (task 058, round 11).\n\nArgs:\n    pass_: `citations` (the works citing the best-connected sources) or\n        `lookup` (cited works or documents fetched by id). Serialised as\n        `pass`.\n    query: The pass in words, as a finished search names it: \"Followed\n        citations from 40 sources\", \"Looked up 120 cited works\",\n        \"Looked up 30 cited documents\". Never its ids.\n    results: The records the pass's calls returned.",
+        "description": "One citations or lookup pass of a finished search (task 058, round 11).\n\nArgs:\n    pass_: `citations` (the works citing the best-connected sources) or\n        `lookup` (cited works or documents fetched by id). Serialised as\n        `pass`.\n    query: The pass in words, as a finished search names it: \"Followed\n        citations from 40 sources\", \"Looked up 120 cited works\",\n        \"Looked up 30 cited documents\". Never its ids.\n    results: The records the pass's calls returned.\n    query_id: The pass's key for the sources filter\n        (`GET /tasks/{id}/evidence?query=`; task 058, round 12): the\n        records every call of the pass returned.",
         "properties": {
           "pass": {
             "enum": [
@@ -2043,6 +2043,10 @@
             "title": "Query",
             "type": "string"
           },
+          "query_id": {
+            "title": "Query Id",
+            "type": "integer"
+          },
           "results": {
             "title": "Results",
             "type": "integer"
@@ -2051,17 +2055,22 @@
         "required": [
           "pass",
           "query",
-          "results"
+          "results",
+          "query_id"
         ],
         "title": "CoveragePassOut",
         "type": "object"
       },
       "CoverageQueryOut": {
-        "description": "One completed query and its result count for a public backend.",
+        "description": "One completed query and its result count for a public backend.\n\nArgs:\n    query: The query as written.\n    results: The records the call returned.\n    query_id: The query's key for the sources filter\n        (`GET /tasks/{id}/evidence?query=`; task 058, round 12).",
         "properties": {
           "query": {
             "title": "Query",
             "type": "string"
+          },
+          "query_id": {
+            "title": "Query Id",
+            "type": "integer"
           },
           "results": {
             "title": "Results",
@@ -2070,7 +2079,8 @@
         },
         "required": [
           "query",
-          "results"
+          "results",
+          "query_id"
         ],
         "title": "CoverageQueryOut",
         "type": "object"
@@ -2275,7 +2285,7 @@
         "type": "object"
       },
       "EvidenceItemOut": {
-        "description": "One row of the paginated evidence/source list.\n\nArgs:\n    source_id: The source's identity.\n    title: Source title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    origin: Acquisition backend.\n    status: Position on the evidence status ladder.\n    status_reason: Optional human-readable reason for the current status\n        (e.g. why screened out).\n    evidence_type: Optional evidence type label.\n    appraisal_tier: Optional appraisal tier label.\n    cited: Whether this source is cited in the artefact.\n    url: Optional source URL.",
+        "description": "One row of the paginated evidence/source list.\n\nArgs:\n    source_id: The source's identity.\n    title: Source title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    origin: Acquisition backend.\n    status: Position on the evidence status ladder.\n    status_reason: Optional human-readable reason for the current status\n        (e.g. why screened out).\n    evidence_type: Optional evidence type label.\n    appraisal_tier: Optional appraisal tier label.\n    cited: Whether this source is cited in the artefact.\n    url: Optional source URL.\n    full_text_url: The address the full text was collected from (an\n        http(s) link a reader can open), or `None` when no full text was\n        collected.",
         "properties": {
           "abstract": {
             "anyOf": [
@@ -2350,6 +2360,17 @@
               }
             ],
             "title": "Evidence Type"
+          },
+          "full_text_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Text Url"
           },
           "origin": {
             "enum": [
@@ -4173,8 +4194,15 @@
         "type": "object"
       },
       "OptionDocumentOut": {
-        "description": "One document behind an option (\"Show the documents\"), one per document.\n\nArgs:\n    task_source_snapshot_id: This task's document row, when the task holds one.\n    title: The document's title.\n    role: What the document does with the intervention.\n    evidence_type: Its evidence type, when classified.\n    tier: Its quality tier label, when appraised.\n    year: Its publication year, when the metadata has one.\n    place: Where it was studied: its where-tried top level.\n    programme_name: The programme name of its first member record under\n        the option (by role order); `null` when none is given or the\n        document is a linked finding (task 046, amendment 4, R81).\n    tried_on_kind: That record's unit as its folded Tried on kind (its\n        own word when the fold has none).\n    measured: The plan outcome that record measures, in the plan's words,\n        else its outcome as its folded Measures kind.\n    place_detail: That record's place below the document's country, when\n        it adds one.\n    records_count: The document's member records under the option (0 for\n        a linked finding).",
+        "description": "One document behind an option (\"Show the documents\"), one per document.\n\nArgs:\n    task_source_snapshot_id: This task's document row, when the task holds one.\n    title: The document's title.\n    role: What the document does with the intervention.\n    evidence_type: Its evidence type, when classified.\n    tier: Its quality tier label, when appraised.\n    year: Its publication year, when the metadata has one.\n    authors: Its authors' names, in order, as the reference line names\n        them (task 058, round 12); empty when unknown.\n    venue: Where it was published, as the evidence row's `venue`\n        (task 058, round 12), or `None`.\n    place: Where it was studied: its where-tried top level.\n    programme_name: The programme name of its first member record under\n        the option (by role order); `null` when none is given or the\n        document is a linked finding (task 046, amendment 4, R81).\n    tried_on_kind: That record's unit as its folded Tried on kind (its\n        own word when the fold has none).\n    measured: The plan outcome that record measures, in the plan's words,\n        else its outcome as its folded Measures kind.\n    place_detail: That record's place below the document's country, when\n        it adds one.\n    records_count: The document's member records under the option (0 for\n        a linked finding).",
         "properties": {
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
           "evidence_type": {
             "anyOf": [
               {
@@ -4282,6 +4310,17 @@
               }
             ],
             "title": "Tried On Kind"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
           },
           "year": {
             "anyOf": [
@@ -4672,8 +4711,15 @@
         "type": "object"
       },
       "OptionProfileOut": {
-        "description": "What the option would take, in eight lines and its delivery setting.\n\nPolicy Atlas's estimate before assessment, not a finding.\n\nArgs:\n    lines: The eight lines, in display order.\n    settings: The delivery setting, main first, then the second; empty\n        when none is named (R41).",
+        "description": "What the option would take, in eight lines and its delivery setting.\n\nPolicy Atlas's estimate before assessment, not a finding.\n\nArgs:\n    lines: The eight lines, in display order.\n    settings: The delivery setting, main first, then the second; empty\n        when none is named (R41).\n    acts_on: Whom the option acts on directly, the model's words in its\n        order (task 058, round 12); empty for a whole-system instrument and\n        for a profile written before round 12.",
         "properties": {
+          "acts_on": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Acts On",
+            "type": "array"
+          },
           "lines": {
             "items": {
               "$ref": "#/components/schemas/ProfileLineOut"
@@ -5579,7 +5625,7 @@
         "type": "object"
       },
       "PlaceSentenceOut": {
-        "description": "One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).\n\nArgs:\n    place: The place: a country's short English name, or \"No single place\".\n    sentence: What the evaluations in that place are.\n    generated: The sentence was generated and passed the trace check;\n        ``false`` for the code-built template.\n    where: The place is the plan's Where country.",
+        "description": "One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).\n\nArgs:\n    place: The place: a country's short English name, or after the\n        countries \"Several countries\", \"Place not stated\" or \"Other\".\n    sentence: What the evaluations in that place are.\n    generated: The sentence was generated and passed the trace check;\n        ``false`` for the code-built template.\n    where: The place is the plan's Where country.",
         "properties": {
           "generated": {
             "title": "Generated",
@@ -6297,7 +6343,7 @@
         "type": "object"
       },
       "ProjectOut": {
-        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    description: Current description, or `None` if not set.\n    created_at: When the project was created.\n    task_count: How many active tasks **the caller may read, in the\n        caller's own organisation** are assigned to this project,\n        derived per request and never cached on the row (contract \u00a7 8).\n        A colleague's private member is not counted, and an\n        administrator's count stays their own organisation's count rather\n        than a cross-organisation sum.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all.\n    archived_at: When the owner archived the project, or `None` while it\n        is in use (task 058, round 11). Archiving leaves its tasks as\n        they are.",
+        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    description: Current description, or `None` if not set.\n    created_at: When the project was created.\n    task_count: How many active tasks **the caller may read, in the\n        caller's own organisation** are assigned to this project,\n        derived per request and never cached on the row (contract \u00a7 8).\n        A colleague's private member is not counted, and an\n        administrator's count stays their own organisation's count rather\n        than a cross-organisation sum.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all.\n    archived_at: When the owner archived the project, or `None` while it\n        is in use (task 058, round 11). Archiving leaves its tasks as\n        they are.\n    last_activity_at: The newest of `created_at` and the `updated_at` of\n        the members `task_count` counts (task 058, round 12). `GET\n        /projects` lists newest activity first by it.",
         "properties": {
           "archived_at": {
             "anyOf": [
@@ -6330,6 +6376,11 @@
           "is_owner": {
             "title": "Is Owner",
             "type": "boolean"
+          },
+          "last_activity_at": {
+            "format": "date-time",
+            "title": "Last Activity At",
+            "type": "string"
           },
           "name": {
             "title": "Name",
@@ -6371,7 +6422,8 @@
           "task_count",
           "visibility",
           "is_owner",
-          "owner_display"
+          "owner_display",
+          "last_activity_at"
         ],
         "title": "ProjectOut",
         "type": "object"
@@ -7911,6 +7963,17 @@
               }
             ],
             "title": "Evidence Type"
+          },
+          "full_text_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Text Url"
           },
           "fwci": {
             "anyOf": [
@@ -10449,7 +10512,7 @@
             "name": "page_size",
             "required": false,
             "schema": {
-              "default": 50,
+              "default": 20,
               "maximum": 200,
               "minimum": 1,
               "title": "Page Size",
@@ -10789,7 +10852,7 @@
             "name": "page_size",
             "required": false,
             "schema": {
-              "default": 50,
+              "default": 20,
               "maximum": 200,
               "minimum": 1,
               "title": "Page Size",
@@ -12002,6 +12065,25 @@
                 }
               ],
               "title": "Country"
+            }
+          },
+          {
+            "description": "A coverage row's `query_id`: only the sources that search returned (task 058, round 12). Empty for a search run before the ids were kept.",
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A coverage row's `query_id`: only the sources that search returned (task 058, round 12). Empty for a search run before the ids were kept.",
+              "title": "Query"
             }
           }
         ],

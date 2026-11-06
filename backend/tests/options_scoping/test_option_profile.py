@@ -361,7 +361,7 @@ def test_the_profile_merges_into_the_row_and_types_every_option_not_merged(
         "run_id": str(profile_run),
         "backend_mode": "stub",
         "usage_totals": after.provenance["option_profile"]["usage_totals"],
-        "prompt_version": "option_profile_v4",
+        "prompt_version": "option_profile_v5",
         "model": "stub",
         "records_max": 5,
         "calls": 11,
@@ -456,7 +456,7 @@ def test_each_line_is_written_for_every_option_not_merged(conn: Connection) -> N
                 else f"Stub {line_key} sentence."
             )
             assert line == {"sentence": expected, "mark": None}
-        assert entry["1"]["setting"] == {"main": "stub setting", "second": None}
+        assert entry["1"]["setting"] == {"main": "stub setting", "second": None, "acts_on": []}
     result = walk.result(run_id)
     assert summary["profiled"] == result.counts["profiled"] == 2
 
@@ -528,18 +528,33 @@ def test_the_setting_is_lower_cased_and_a_null_main_setting_gives_two_nulls(
     backend = StubLonglistBackend(
         setting_responses=SettingResponse(
             options=[
-                SettingWire(option_id="o1", main_setting=" School ", second_setting="Home"),
+                SettingWire(
+                    option_id="o1",
+                    main_setting=" School ",
+                    second_setting="Home",
+                    acts_on=[" Head  Teachers", "parents"],
+                ),
                 SettingWire(option_id="o2", main_setting=None, second_setting=None),
-                SettingWire(option_id="o3", main_setting="GP surgery", second_setting=None),
+                SettingWire(
+                    option_id="o3",
+                    main_setting="GP surgery",
+                    second_setting=None,
+                    acts_on=["GPs", "practice nurses", "patients", "pharmacists"],
+                ),
             ]
         )
     )
     _profile(walk, backend)
     column = _column(walk, run_id)
     assert [column[str(ids[s])]["1"]["setting"] for s in ("o1", "o2", "o3")] == [
-        {"main": "school", "second": "home"},
-        {"main": None, "second": None},
-        {"main": "gp surgery", "second": None},
+        # Round 12: whom it acts on, folded onto one line and lower-cased.
+        {"main": "school", "second": "home", "acts_on": ["head teachers", "parents"]},
+        {"main": None, "second": None, "acts_on": []},
+        {
+            "main": "gp surgery",
+            "second": None,
+            "acts_on": ["gps", "practice nurses", "patients", "pharmacists"],
+        },
     ]
 
 
@@ -752,6 +767,20 @@ def test_a_line_call_malformed_twice_fails_the_step_and_writes_nothing(
         SettingWire(option_id="o3", main_setting="  ", second_setting=None),
         SettingWire(option_id="o3", main_setting=None, second_setting="home"),
         SettingWire(option_id="o3", main_setting="school", second_setting=" "),
+        # Round 12: acts_on, a blank item, a repeat, or more than four.
+        SettingWire(option_id="o3", main_setting="school", second_setting=None, acts_on=[" "]),
+        SettingWire(
+            option_id="o3",
+            main_setting="school",
+            second_setting=None,
+            acts_on=["Parents", "parents"],
+        ),
+        SettingWire(
+            option_id="o3",
+            main_setting="school",
+            second_setting=None,
+            acts_on=["pupils", "parents", "teachers", "governors", "councils"],
+        ),
     ],
 )
 def test_a_malformed_setting_fails_the_step(conn: Connection, bad_setting: SettingWire) -> None:
@@ -1615,4 +1644,4 @@ def test_place_sentences_publish_options_done_and_a_retry_does_not_move_it(
     place_calls = [c for c in calls if c.get("unit") == "options"]
     assert all(c["total"] == 1 for c in place_calls)
     assert [c["done"] for c in place_calls] == [0, 1]
-    assert place_calls[-1]["activity"] == "Writing place sentences · 1 of 1 options"
+    assert place_calls[-1]["activity"] == "Describing the places · 1 of 1 options"

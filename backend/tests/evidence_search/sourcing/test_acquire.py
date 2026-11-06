@@ -26,6 +26,7 @@ from policy_atlas.core.schema import (
 from policy_atlas.evidence_search.assess.appraise import AppraiseContext, appraise_sources
 from policy_atlas.evidence_search.assess.classify import ClassifyContext, classify_sources
 from policy_atlas.evidence_search.assess.screen import ScreenContext, screen_sources
+from policy_atlas.evidence_search.sourcing import acquire as acquire_module
 from policy_atlas.evidence_search.sourcing.acquire import (
     AcquireContext,
     BackendCaps,
@@ -724,6 +725,21 @@ def test_search_executed_event_per_backend(conn: Connection) -> None:
         assert payload["result_count"] == 12
         assert payload["error"] is None
         assert payload["evidence_scope_id"] == str(scope_id)
+        # Round 12: the ids the call returned, the ones the rows carry.
+        assert len(payload["record_ids"]) == 12
+    stored = {
+        metadata["backend_record_id"]
+        for metadata in conn.execute(select(source_snapshot.c.metadata)).scalars()
+        if isinstance(metadata, dict) and metadata.get("backend") == "openalex"
+    }
+    assert set(by_backend["openalex"]["record_ids"]) <= stored
+
+
+def test_the_record_id_keys_cover_every_mapper() -> None:
+    assert set(acquire_module._RECORD_ID_KEYS) == set(acquire_module._MAPPERS)
+    assert acquire_module.returned_record_ids(
+        "overton", [{"policy_document_id": "a"}, {"policy_document_id": "a"}, {}, {"x": 1}]
+    ) == ["a"]
 
 
 def test_source_acquired_events(conn: Connection) -> None:
