@@ -1,33 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { mockArtefact } from "../mock/fixtures";
-import { mostRelevantSources, sectionNavLabel, artefactMarkdown, downloadFilename, fullReportIntro, splitLeadColon, cardEvidenceChipLabels, numberedAuthorships, referenceAuthorsLine } from "./artefactPresentation";
-
-describe("referenceAuthorsLine", () => {
-  it("returns null for absent or empty authorships", () => {
-    expect(referenceAuthorsLine(undefined)).toBeNull();
-    expect(referenceAuthorsLine([])).toBeNull();
-    expect(referenceAuthorsLine([{ name: "" }])).toBeNull();
-  });
-
-  it("joins up to three names in full", () => {
-    expect(referenceAuthorsLine([{ name: "A One" }])).toBe("A One");
-    expect(
-      referenceAuthorsLine([{ name: "A One" }, { name: "B Two" }, { name: "C Three" }]),
-    ).toBe("A One, B Two, C Three");
-  });
-
-  it("truncates a fourth author to et al.", () => {
-    expect(
-      referenceAuthorsLine([
-        { name: "A One" },
-        { name: "B Two" },
-        { name: "C Three" },
-        { name: "D Four" },
-      ]),
-    ).toBe("A One, B Two, C Three et al.");
-  });
-});
+import { displayUrl, referenceCitation, referenceAuthorName, referenceAuthorsShort, withFullStop, mostRelevantSources, sectionNavLabel, artefactMarkdown, downloadFilename, fullReportIntro, splitLeadColon, numberedAuthorships } from "./artefactPresentation";
 
 describe("numberedAuthorships", () => {
   it("dedupes institutions and numbers them by first appearance", () => {
@@ -255,12 +229,12 @@ describe("artefactMarkdown", () => {
       },
     ],
     references: [
-      { n: 1, title: "A study", year: 2022, venue: "BMJ Open" },
+      { n: 1, title: "A study", year: 2022, venue: "BMJ Open", url: "https://doi.org/10.1000/a" },
       {
         n: 2,
         title: "An authored study",
         year: 2021,
-        authorships: [{ name: "A One" }, { name: "B Two" }],
+        authorships: [{ name: "Alex One" }, { name: "Bea Two" }],
       },
     ],
   };
@@ -275,8 +249,16 @@ describe("artefactMarkdown", () => {
     expect(markdown).toContain("## Full report");
     expect(markdown).not.toContain("group the evidence by theme");
     expect(markdown).toContain("### References");
-    expect(markdown).toContain("1. A study (2022, BMJ Open)");
-    expect(markdown).toContain("2. An authored study — A One, B Two (2021)");
+    // The page's citation form (round 10, C5), the full address at the end.
+    expect(markdown).toContain("1. A study (2022). BMJ Open. https://doi.org/10.1000/a");
+    expect(markdown).toContain("2. One A, Two B (2021). An authored study.");
+  });
+
+  it("heads the file with the question, as the page does, and keeps the title without one", () => {
+    const question = "What helps children eat breakfast?";
+    expect(artefactMarkdown(artefact, question).split("\n")[0]).toBe(`# ${question}`);
+    expect(artefactMarkdown(artefact).split("\n")[0]).toBe("# Policy options for healthier childhoods");
+    expect(artefactMarkdown(artefact, "  ").split("\n")[0]).toBe("# Policy options for healthier childhoods");
   });
 
   it("omits an unverified summary — same honesty as the on-screen callout", () => {
@@ -291,7 +273,7 @@ describe("artefactMarkdown", () => {
     expect(markdown).toMatch(/^1\. /m);
   });
 
-  it("bolds lead-colon key-findings bullets and lists most relevant sources before the body", () => {
+  it("bolds lead-colon key-findings bullets and lists most relevant sources after the body, before the references", () => {
     const markdown = artefactMarkdown({
       title: "Report",
       summary: "Takeaway.",
@@ -333,8 +315,9 @@ describe("artefactMarkdown", () => {
     });
     expect(markdown).toContain("- **Universal breakfast helped:** eleven of fifteen evaluations reported higher uptake.");
     expect(markdown).toContain("- No colon on this line.");
-    expect(markdown.indexOf("### Most relevant sources")).toBeGreaterThan(markdown.indexOf("### Key findings"));
-    expect(markdown.indexOf("### Most relevant sources")).toBeLessThan(markdown.indexOf("### What works"));
+    // In the page's order (round 10, D2): after the body, before the references.
+    expect(markdown.indexOf("### Most relevant sources")).toBeGreaterThan(markdown.indexOf("### What works"));
+    expect(markdown.indexOf("### Most relevant sources")).toBeLessThan(markdown.indexOf("### References"));
     expect(markdown).toContain("**A breakfast study**");
   });
 });
@@ -350,40 +333,6 @@ describe("fullReportIntro", () => {
 
   it("returns null when no generated intro is available", () => {
     expect(fullReportIntro(3)).toBeNull();
-  });
-});
-
-describe("cardEvidenceMeta", () => {
-  it("falls back to claim citations when rollup metadata is absent", () => {
-    expect(
-      cardEvidenceChipLabels({
-        strength: null,
-        design: null,
-        claims: [
-          {
-            citations: [
-              { appraisal_label: "Strong", evidence_type: "RCTs and Quasi-Experimental Studies" },
-            ],
-          },
-        ],
-      }),
-    ).toEqual(["Strong", "RCTs and Quasi-Experimental Studies"]);
-  });
-
-  it("shows an Unrated citation's label as is (task 056)", () => {
-    expect(
-      cardEvidenceChipLabels({
-        strength: null,
-        design: null,
-        claims: [
-          {
-            citations: [
-              { appraisal_label: "Unrated", evidence_type: "Unknown / Insufficient information" },
-            ],
-          },
-        ],
-      }),
-    ).toEqual(["Unrated", "Unknown / Insufficient information"]);
   });
 });
 
@@ -571,5 +520,44 @@ describe("downloadFilename", () => {
       "what-retains-early-years-staff.md",
     );
     expect(downloadFilename("???", "pdf")).toBe("report.pdf");
+  });
+});
+
+describe("reference form (task 058, round 10, C5)", () => {
+  it("names a person by surname and initials, and keeps an organisation as written", () => {
+    expect(referenceAuthorName("Alex Sampleton")).toBe("Sampleton A");
+    expect(referenceAuthorName("Alex J. Sampleton")).toBe("Sampleton AJ");
+    expect(referenceAuthorName("Sampleton, Alex")).toBe("Sampleton A");
+    expect(referenceAuthorName("Jan van der Berg")).toBe("van der Berg J");
+    expect(referenceAuthorName("Jean-Paul Mockford")).toBe("Mockford JP");
+    expect(referenceAuthorName("Example Policy Institute")).toBe("Example Policy Institute");
+    expect(referenceAuthorName("Department for Education")).toBe("Department for Education");
+    expect(referenceAuthorName("OECD")).toBe("OECD");
+  });
+
+  it("lists up to three authors, then et al., and nothing when there are none", () => {
+    const names = (...list: string[]) => list.map((name) => ({ name }));
+    expect(referenceAuthorsShort(names("Alex Sampleton", "Casey Mockford"))).toBe("Sampleton A, Mockford C");
+    expect(referenceAuthorsShort(names("A One", "B Two", "C Three", "D Four"))).toBe("One A, Two B, Three C et al.");
+    expect(referenceAuthorsShort([])).toBeNull();
+  });
+
+  it("shows an address without its scheme and ends a phrase with one full stop", () => {
+    expect(displayUrl("https://doi.org/10.1000/x")).toBe("doi.org/10.1000/x");
+    expect(displayUrl("http://example.org/report/")).toBe("example.org/report");
+    expect(withFullStop("BMJ Open")).toBe("BMJ Open.");
+    expect(withFullStop("Does it work?")).toBe("Does it work?");
+  });
+});
+
+describe("referenceCitation (round 10, C5)", () => {
+  it("starts at the title with no authors, carrying the year after it, and adds no second stop", () => {
+    expect(referenceCitation({ title: "Uploaded note", year: 2023, venue: null })).toBe("Uploaded note (2023).");
+    expect(referenceCitation({ title: "Does it work?", year: null, venue: "Health & Place" })).toBe(
+      "Does it work? Health & Place.",
+    );
+    expect(
+      referenceCitation({ title: "A study", year: null, authorships: [{ name: "Alex One" }], url: "ftp://x" }),
+    ).toBe("One A. A study.");
   });
 });

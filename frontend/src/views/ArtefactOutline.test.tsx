@@ -57,7 +57,7 @@ describe("SectionDisclosure", () => {
     expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
   });
 
-  it("collapsed sections show both the heading-row label and a mobile trailing Expand button", async () => {
+  it("collapsed sections show both the heading-row word and a mobile trailing Show button", async () => {
     const user = userEvent.setup();
     render(
       <SectionDisclosure id="s5" section={section} collapsible defaultOpen={false}>
@@ -65,14 +65,42 @@ describe("SectionDisclosure", () => {
       </SectionDisclosure>,
     );
     const toggle = screen.getByRole("button", { name: headingName, expanded: false });
-    expect(within(toggle).getByText("Expand +")).toBeInTheDocument();
+    // One disclosure vocabulary (round 10, C7): the chevron, then "Show".
+    expect(within(toggle).getByText("Show")).toBeInTheDocument();
+    expect(toggle.querySelector("svg")).not.toBeNull();
 
-    const trailing = screen.getByRole("button", { name: "Expand +" });
+    const trailing = screen.getByRole("button", { name: "Show" });
     expect(trailing).toHaveAttribute("aria-expanded", "false");
     await user.click(trailing);
     expect(screen.getByRole("button", { name: headingName, expanded: true })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Collapse −" })).toHaveAttribute("aria-expanded", "true");
+    expect(within(screen.getByRole("button", { name: headingName, expanded: true })).getByText("Hide")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
+  });
+
+  it("keeps the heading a heading, with the button inside it, at the level it is given", () => {
+    const { rerender } = render(
+      <SectionDisclosure id="s6" section={section} collapsible defaultOpen={false}>
+        <p>Full cited prose.</p>
+      </SectionDisclosure>,
+    );
+    // GOV.UK accordion pattern (round 10, finding 5): never a heading
+    // inside a button.
+    const heading = screen.getByRole("heading", { level: 2, name: headingName });
+    expect(heading.querySelector("button")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: headingName }).querySelector("h2, h3")).toBeNull();
+    rerender(
+      <SectionDisclosure id="s6" section={section} collapsible defaultOpen={false} level={3}>
+        <p>Full cited prose.</p>
+      </SectionDisclosure>,
+    );
+    expect(screen.getByRole("heading", { level: 3, name: headingName })).toBeInTheDocument();
+    rerender(
+      <SectionDisclosure id="s6" section={section} collapsible={false} defaultOpen level={3}>
+        <p>Full cited prose.</p>
+      </SectionDisclosure>,
+    );
+    expect(screen.getByRole("heading", { level: 3, name: headingName }).querySelector("button")).toBeNull();
   });
 
   it("fallback summaries render unmarked — provenance is not user copy", () => {
@@ -138,13 +166,13 @@ describe("SectionDisclosure", () => {
         </SectionDisclosure>
       </TooltipProvider>,
     );
-    expect(screen.getByRole("button", { name: /raised uptake/ })).toBeInTheDocument();
+    expect(screen.getByText(text)).toHaveClass("citation-marker");
 
     await user.click(screen.getByRole("button", { name: headingName, expanded: true }));
-    expect(screen.queryByRole("button", { name: /raised uptake/ })).toBeNull();
+    expect(screen.queryByText(text)).toBeNull();
 
     await user.click(screen.getByRole("button", { name: headingName, expanded: false }));
-    expect(screen.getByRole("button", { name: /raised uptake/ })).toBeInTheDocument();
+    expect(screen.getByText(text)).toHaveClass("citation-marker");
   });
 
   it("expands a collapsed section when its contents link is clicked", async () => {
@@ -231,7 +259,7 @@ describe("SectionDisclosure", () => {
     history.replaceState(null, "", window.location.pathname);
   });
 
-  it("expands every collapsible full-report section when Expand all is clicked", async () => {
+  it("expands every collapsible full-report section when Show all is clicked", async () => {
     const user = userEvent.setup();
     render(
       <FullReportExpandProvider>
@@ -246,12 +274,12 @@ describe("SectionDisclosure", () => {
     );
     expect(screen.queryByText("First section prose.")).toBeNull();
     expect(screen.queryByText("Second section prose.")).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    await user.click(screen.getByRole("button", { name: "Show all" }));
     expect(screen.getByText("First section prose.")).toBeInTheDocument();
     expect(screen.getByText("Second section prose.")).toBeInTheDocument();
   });
 
-  it("collapses every collapsible full-report section when Collapse all is clicked", async () => {
+  it("collapses every collapsible full-report section when Hide all is clicked", async () => {
     const user = userEvent.setup();
     render(
       <FullReportExpandProvider>
@@ -262,8 +290,8 @@ describe("SectionDisclosure", () => {
       </FullReportExpandProvider>,
     );
     expect(screen.getByText("First section prose.")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Expand all" }));
-    await user.click(screen.getByRole("button", { name: "Collapse all" }));
+    await user.click(screen.getByRole("button", { name: "Show all" }));
+    await user.click(screen.getByRole("button", { name: "Hide all" }));
     expect(screen.queryByText("First section prose.")).toBeNull();
   });
 });
@@ -286,7 +314,14 @@ describe("AnnotatedProse bullets (fork B)", () => {
     };
     render(<TooltipProvider><AnnotatedProse block={block} onOpenClaim={vi.fn()} /></TooltipProvider>);
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
-    expect(screen.getByRole("button", { name: /universal provision/ })).toBeInTheDocument();
+    expect(screen.getByText("universal provision")).toHaveClass("citation-marker");
+    expect(screen.getByText("universal provision").closest("li")).not.toBeNull();
+    // The bullet is the Navy square, not the blue running-step mark, and the
+    // items stand apart (round 10, finding 8).
+    const bullet = screen.getAllByRole("listitem")[0].querySelector("[data-bullet]");
+    expect(bullet).toHaveClass("bg-navy");
+    expect(bullet).not.toHaveClass("bg-blue");
+    expect(screen.getAllByRole("listitem")[0].parentElement).toHaveClass("space-y-3");
   });
 
   it("a span crossing a bullet boundary degrades to the anchored list, never mis-renders", () => {
@@ -310,8 +345,8 @@ describe("AnnotatedProse bullets (fork B)", () => {
     // Both bullets render as plain text; the claim survives as one anchored
     // entry below the list rather than a span split across two bullets.
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
-    const anchored = screen.getByRole("button");
-    expect(anchored.textContent ?? "").toContain("second");
+    const anchored = document.querySelector("p span.citation-marker");
+    expect(anchored?.textContent ?? "").toContain("second");
   });
 
   it("bolds the lead before the first colon-space and leaves no-colon bullets unbolded", () => {

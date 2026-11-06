@@ -441,7 +441,7 @@ describe("evidence shown live (task 058, owner 2026-11-05)", () => {
     expect(line.className).toContain("text-meta");
     expect(line.className).toContain("text-grey");
     // Under the heading, before the action line; nothing in it is a link.
-    expect(costs.querySelector("h2")?.nextElementSibling).toBe(line);
+    expect(costs.querySelector("h3")?.nextElementSibling).toBe(line);
     expect(line.compareDocumentPosition(within(costs).getByTestId("action-line"))).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
@@ -603,10 +603,19 @@ describe("the live page looks like the final page (task 058, owner round 7)", ()
     render(<LiveArtefactBody stream={stream} question="What raises take-up?" />);
     const page = screen.getByRole("main");
     expect(within(page).getByText("Report")).toBeInTheDocument();
-    const headings = within(page)
-      .getAllByRole("heading", { level: 2 })
-      .map((heading) => heading.textContent);
-    expect(headings).toEqual(["Executive summary", "Key findings", "Case studies", "Full report", "Costs", "Conclusions"]);
+    // The parts are h2 and the sections inside them h3 (round 10, finding 5).
+    const outline = within(page)
+      .getAllByRole("heading")
+      .map((heading) => `${heading.tagName} ${heading.textContent}`);
+    expect(outline).toEqual([
+      "H1 What raises take-up?",
+      "H2 Executive summary",
+      "H3 Key findings",
+      "H3 Case studies",
+      "H2 Full report",
+      "H3 Costs",
+      "H3 Conclusions",
+    ]);
     // Anchored as the committed report anchors them, so the contents work live.
     const nav = screen.getByRole("navigation");
     // Anchored by the committed order (case studies second on the page).
@@ -629,9 +638,9 @@ describe("the live page looks like the final page (task 058, owner round 7)", ()
     );
     render(<LiveArtefactBody stream={stream} />);
     const headings = within(screen.getByRole("main"))
-      .getAllByRole("heading", { level: 2 })
+      .getAllByRole("heading", { level: 3 })
       .map((heading) => heading.textContent);
-    expect(headings).toEqual(["Executive summary", "Key findings", "Examples", "Full report", "Costs", "Conclusions"]);
+    expect(headings).toEqual(["Key findings", "Examples", "Costs", "Conclusions"]);
   });
 
   it("lays the case-study cards out as the report does, one by one as each closes", () => {
@@ -654,8 +663,12 @@ describe("the live page looks like the final page (task 058, owner round 7)", ()
     expect(within(section).getByText("Relevant examples from the cited evidence.")).toBeInTheDocument();
     const cards = within(section).getAllByRole("listitem");
     expect(cards).toHaveLength(1);
-    expect(cards[0]).toHaveClass("border", "border-line", "p-4");
-    expect(within(cards[0]).getByText("Leeds pilot")).toHaveClass("font-bold");
+    // Ruled entries on the sheet, not boxes; the title an h4 under the
+    // section's h3 (round 10, findings 5 and 7).
+    expect(cards[0].parentElement).toHaveClass("divide-y", "border-t");
+    expect(cards[0]).toHaveClass("py-4");
+    expect(cards[0]).not.toHaveClass("border", "p-4");
+    expect(within(cards[0]).getByRole("heading", { level: 4, name: "Leeds pilot" })).toHaveClass("font-bold");
     expect(cards[0]).toHaveTextContent("Take-up rose after direct payment.");
     expect(within(section).queryByTestId("placeholder-lines")).toBeNull();
   });
@@ -919,7 +932,8 @@ describe("round 8: the Result tab while it is written (task 058, owner notes 202
     const { rerender } = render(<LiveArtefactBody stream={streamWith(sections, "running")} />);
     const headings = () =>
       within(screen.getByRole("main"))
-        .getAllByRole("heading", { level: 2 })
+        .getAllByRole("heading")
+        .filter((heading) => heading.tagName !== "H1")
         .map((heading) => heading.textContent);
     // Not a section: the page's order and contents are as before.
     expect(headings()).toEqual(["Executive summary", "Key findings", "Full report", "Costs"]);
@@ -980,16 +994,18 @@ describe("round 8: the Result tab while it is written (task 058, owner notes 202
     expect(within(block).getByText("Sources cited most often in this report.")).toBeInTheDocument();
     const items = within(block).getAllByRole("listitem");
     expect(items).toHaveLength(1);
-    expect(items[0]).toHaveClass("border", "border-line", "p-4", "anim-rise");
+    expect(items[0]).toHaveClass("py-4", "anim-rise");
+    expect(items[0]).not.toHaveClass("border");
     expect(within(items[0]).getByText("Smith 2023")).toHaveClass("font-bold");
     expect(within(items[0]).getByText("The largest trial of direct payment.")).toBeInTheDocument();
     // Not links yet, no chips yet.
     expect(within(block).queryByRole("button")).toBeNull();
     expect(within(block).queryByText(/Cited by/)).toBeNull();
-    // In the executive summary, before the full report, as the report sets it.
+    // Supporting material after the full report's sections, as the report
+    // sets it (round 10, D2).
     expect(
-      block.compareDocumentPosition(screen.getAllByRole("heading", { name: "Full report" })[0]) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      block.compareDocumentPosition(screen.getByRole("heading", { name: "Costs" })) &
+        Node.DOCUMENT_POSITION_PRECEDING,
     ).toBeTruthy();
     expect(within(screen.getByRole("navigation")).getByRole("link", { name: "Most relevant sources" })).toHaveAttribute(
       "href",
@@ -1049,7 +1065,13 @@ describe("AnnotatedProse", () => {
         />
       </TooltipProvider>,
     );
-    expect(screen.getByRole("button", { name: /talks/ })).toHaveTextContent("talks");
+    // The words are a pointer target, not a button or a tab stop (round 10,
+    // finding 4): the marker after them is the control.
+    const span = screen.getByText("talks");
+    expect(span).toHaveClass("citation-marker", "cursor-pointer");
+    expect(span).not.toHaveAttribute("role");
+    expect(span).not.toHaveAttribute("tabindex");
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 
   it("slices spans by code points so astral characters never shift offsets", () => {
@@ -1063,7 +1085,7 @@ describe("AnnotatedProse", () => {
         />
       </TooltipProvider>,
     );
-    expect(screen.getByRole("button", { name: /policy/ })).toHaveTextContent("policy");
+    expect(screen.getByText("policy")).toHaveClass("citation-marker");
   });
 
   it("skips overlapping spans (first wins) and drops invalid spans cleanly", () => {
@@ -1085,7 +1107,7 @@ describe("AnnotatedProse", () => {
         />
       </TooltipProvider>,
     );
-    const spans = screen.getAllByRole("button");
+    const spans = document.querySelectorAll("span.citation-marker");
     expect(spans).toHaveLength(1);
     expect(spans[0]).toHaveTextContent("Plain");
     // The prose renders complete despite the dropped spans.
@@ -1234,35 +1256,68 @@ describe("CitationProvenanceBlock authorships (042)", () => {
   });
 });
 
-describe("ReferencesSection authors (042 item 1)", () => {
+describe("ReferencesSection (042 item 1; round 10, C5)", () => {
   const references = [
     {
       n: 1,
       title: "Universal breakfast clubs and diet quality",
       year: 2022,
       venue: "BMJ Open",
+      url: "https://doi.org/10.1000/example.1",
       authorships: [
         { name: "Alex Sampleton", institutions: ["University of Exampleshire"] },
         { name: "Casey Mockford", institutions: [] },
       ],
     },
-    // Corporate author (D2): the issuing organisation in the author slot.
+    // Corporate author (D2): the issuing organisation in the author slot, as written.
     { n: 2, title: "School food policy brief", year: 2023, venue: null, authorships: [{ name: "Example Policy Institute", institutions: [] }] },
-    // Honest absence (D1): no authors line, no separator.
-    { n: 3, title: "Uploaded evidence note", year: null, venue: null, authorships: [] },
+    // Honest absence (D1): no authors, so the entry starts at its title.
+    { n: 12, title: "Uploaded evidence note", year: null, venue: null, authorships: [] },
   ];
 
-  it("renders names-only author lines between title and year, nothing when absent", async () => {
+  it("sets each reference in the citation form, authors and year first, nothing invented when absent", async () => {
     const user = userEvent.setup();
     render(<ReferencesSection references={references} onOpenReference={() => {}} />);
-    await user.click(screen.getByRole("button", { name: /References/ }));
+    await user.click(screen.getByRole("button", { name: "References" }));
     const items = screen.getAllByRole("listitem");
-    expect(items[0]).toHaveTextContent("Universal breakfast clubs and diet quality — Alex Sampleton, Casey Mockford (2022) · BMJ Open");
-    expect(items[1]).toHaveTextContent("School food policy brief — Example Policy Institute (2023)");
-    expect(items[2]).toHaveTextContent("Uploaded evidence note");
-    expect(items[2].textContent).not.toContain("—");
+    expect(items[0]).toHaveTextContent(
+      "[1]Sampleton A, Mockford C (2022). Universal breakfast clubs and diet quality. BMJ Open. doi.org/10.1000/example.1",
+    );
+    expect(items[1]).toHaveTextContent("[2]Example Policy Institute (2023). School food policy brief.");
+    expect(items[2]).toHaveTextContent("[12]Uploaded evidence note.");
+    expect(items[2].textContent).not.toContain("()");
     // Names only in the list (D4) — superscript markers belong to the sheets.
     expect(items[0].querySelector("sup")).toBeNull();
+    // The number sits in its own Grey column, not in Electric Blue.
+    const number = within(items[0]).getByText("[1]");
+    expect(number).toHaveClass("w-9", "text-right", "tabular-nums", "text-grey");
+    expect(number).not.toHaveClass("text-blue");
+  });
+
+  it("links the title to its dossier and the address out, the scheme only in print", async () => {
+    const user = userEvent.setup();
+    const onOpen = vi.fn();
+    render(<ReferencesSection references={references} onOpenReference={onOpen} defaultOpen />);
+    const title = screen.getByRole("link", { name: "Universal breakfast clubs and diet quality" });
+    expect(title).toHaveAttribute("href", expect.stringContaining("source=Universal+breakfast+clubs+and+diet+quality"));
+    await user.click(title);
+    expect(onOpen).toHaveBeenCalledWith("Universal breakfast clubs and diet quality");
+    const address = screen.getByRole("link", { name: /doi\.org\/10\.1000\/example\.1/ });
+    expect(address).toHaveAttribute("href", "https://doi.org/10.1000/example.1");
+    expect(address).toHaveAttribute("target", "_blank");
+    expect(within(address).getByText("doi.org/10.1000/example.1")).toHaveClass("print:hidden");
+    expect(within(address).getByText("https://doi.org/10.1000/example.1")).toHaveClass("hidden", "print:inline");
+    // The heading stays a heading with the button inside it (GOV.UK pattern).
+    expect(screen.getByRole("heading", { level: 2, name: "References" }).querySelector("button")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
+  it("shows only the titles, not links, while the report is live", () => {
+    render(<ReferencesSection references={[{ n: 1, title: "Smith 2023" }]} defaultOpen />);
+    expect(screen.getByRole("listitem")).toHaveTextContent(/^\[1\]Smith 2023$/);
+    expect(screen.queryByRole("link")).toBeNull();
   });
 });
 

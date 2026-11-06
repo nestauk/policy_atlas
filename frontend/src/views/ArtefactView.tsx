@@ -8,7 +8,9 @@ import { useQuery } from "@tanstack/react-query";
 import {
   cardEvidenceMeta,
   CASE_STUDIES_INTRO,
+  displayUrl,
   drawingOnLine,
+  evidenceTypeLabel,
   EXECUTIVE_SUMMARY_ANCHOR,
   fullReportIntro,
   FULL_REPORT_ANCHOR,
@@ -18,6 +20,7 @@ import {
   REPORT_BODY_CLASS,
   REPORT_PART_HEADING_CLASS,
   REPORT_SECTION_HEADING_CLASS,
+  referenceParts,
   sectionNavLabel,
   splitLeadColon,
 } from "./artefactPresentation";
@@ -44,16 +47,19 @@ import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
-import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage, SnapshotCells, type SnapshotCell } from "./reportPage";
+import { REPORT_ACTIONS_CLASS, REPORT_TITLE_CLASS, ReportFacts, ReportKindRow, ReportPage, type ReportFact } from "./reportPage";
 import { usePublicView } from "./publicView";
 import {
+  DisclosureHeading,
   FullReportExpandAllButton,
   FullReportExpandProvider,
+  GATHERED_SECTION_TITLE,
   GatheredSection,
+  gatheredSectionShows,
   MobileDisclosureToggle,
   type OutlineSection,
   SectionDisclosure,
-  SECTION_EXPAND_LINK_CLASS,
+  type SectionHeadingLevel,
   sectionAnchor,
   useExpandAll,
   useOpenWhenNavigated,
@@ -62,13 +68,13 @@ import {
 } from "./ArtefactOutline";
 import { Tooltip } from "../ui/radix/Tooltip";
 import { AuthorsLine, InstitutionsLine, SourceDossierBody, useDossierRecords } from "./SourcesView";
-import { referenceAuthorsLine } from "./artefactPresentation";
 import { useActiveConversation } from "./workspace/chat/conversationState";
 import "./artefact.css";
 import { scrollPane, useEasedHeight, useFollowTail, useHoldHeightWhileShorter, useRevealedText } from "./streamPacing";
 import { RetryCard } from "../ui/feedback/RetryCard";
 import { LINK_CLASS, QUIET_CONTROL_CLASS } from "../ui/brand/inlineActions";
 import { cn } from "../ui/brand/cn";
+import { GROWING_RULE_CLASS } from "../ui/brand/Nav";
 
 type CitationOut = components["schemas"]["CitationOut"];
 type GapOut = components["schemas"]["GapOut"];
@@ -161,7 +167,7 @@ export const CITATION_SPAN_CLASS = `citation-marker cursor-pointer transition-co
  *  References row marker) share this one copy instead of the superscript-link
  *  treatment drifting apart from the report (029/030 parity fix). */
 export const CITATION_MARKER_CLASS =
-  "citation-marker mx-1 cursor-pointer border border-blue/25 bg-blue-tint-2 px-1.5 align-[2px] text-caption font-semibold text-blue/80 hover:border-blue/60 hover:text-blue disabled:cursor-default disabled:border-line disabled:bg-ground disabled:text-grey disabled:hover:border-line disabled:hover:text-grey";
+  "citation-marker citation-number ml-1 cursor-pointer border border-blue/25 bg-blue-tint-2 px-1.5 align-[2px] text-caption font-semibold text-blue/80 hover:border-blue/60 hover:text-blue disabled:cursor-default disabled:border-line disabled:bg-ground disabled:text-grey disabled:hover:border-line disabled:hover:text-grey";
 
 /** Claim types whose marking is dev-facing only: the judge's source-check
  *  flags and the writer's connective reasoning have no detail to reveal, so
@@ -328,12 +334,15 @@ function useChunkContext(taskId: string, citationId: string | null) {
   });
 }
 
-/** One citation's provenance block (demo CitationContext/ClaimPanel):
- *  source link, its grounding/appraisal chips (a caller-supplied slot — the
- *  reader's tier+appraisal pair, chat's single verdict chip), and the quote
- *  highlighted inside its surrounding source passage — or, on a lookup
- *  failure, the caller's honest fallback line instead of a broken panel.
- *  Presentational: callers own the chunk-context query and the chips. */
+/** One citation's provenance block (demo CitationContext/ClaimPanel), in
+ *  the order a reader checks a claim (round 10, D5): "[2] Title", the year
+ *  and venue, the quote highlighted inside its surrounding source passage
+ *  (or, on a lookup failure, the caller's honest fallback line instead of a
+ *  broken panel), then the authors, their institutions and the grounding /
+ *  appraisal chips (a caller-supplied slot: the reader's tier and appraisal
+ *  pair, chat's single verdict chip). On a phone's bottom sheet the passage
+ *  is the first thing under the title. Presentational: callers own the
+ *  chunk-context query and the chips. */
 export function CitationProvenanceBlock({
   n,
   sourceTitle,
@@ -376,12 +385,9 @@ export function CitationProvenanceBlock({
           <span>{scrub(sourceTitle)}</span>
         )}
       </p>
-      <AuthorsLine authorships={context.data?.authorships} className="mt-0.5 text-body text-grey" />
       {meta.length > 0 && (
         <p className="mt-0.5 text-body text-grey">{meta.map((m) => scrub(String(m))).join(" · ")}</p>
       )}
-      <InstitutionsLine authorships={context.data?.authorships} className="mt-0.5 text-caption text-grey" />
-      <div className="mt-2 flex flex-wrap gap-1.5">{chips}</div>
       <div className="mt-3 space-y-2 text-body">
         {context.isPending && (
           <p role="status" className="anim-breathe text-body text-grey">
@@ -408,26 +414,30 @@ export function CitationProvenanceBlock({
           </>
         )}
       </div>
+      <AuthorsLine authorships={context.data?.authorships} className="mt-3 text-body text-grey" />
+      <InstitutionsLine authorships={context.data?.authorships} className="mt-0.5 text-caption text-grey" />
+      <div className="mt-2 flex flex-wrap gap-1.5">{chips}</div>
     </div>
   );
 }
 
-/** The appraisal chip (blue `ChipWithTooltip`) + its evidence-type-aware
+/** The appraisal chip (soft `ChipWithTooltip`) + its evidence-type-aware
  *  tooltip wording — shared by the reader's `CitationContext` and chat's
  *  citation-sheet block (030 parity fold) so the wording can never drift.
  *  Renders unconditionally; callers gate on `appraisal_label` presence
  *  themselves (honest absence — no chip when the citation carries none). */
 export function AppraisalChip({ label, evidenceType }: { label: string; evidenceType?: string | null }) {
+  // The soft tone (round 10, D4): blue is for capability tags and "checked".
   return (
     <ChipWithTooltip
-      tone="blue"
+      tone="soft"
       label={scrub(label)}
       content={
         <span className="text-meta">
           {typeof evidenceType === "string"
             ? label === "Unrated"
-              ? `Unrated — the document type (${scrub(evidenceType)}) is not scored; the source can be cited but counts below the evidence bar.`
-              : `${scrub(label)} evidence strength — appraised from the document type: ${scrub(evidenceType)}.`
+              ? `Unrated — the document type (${scrub(evidenceTypeLabel(evidenceType))}) is not scored; the source can be cited but counts below the evidence bar.`
+              : `${scrub(label)} evidence strength — appraised from the document type: ${scrub(evidenceTypeLabel(evidenceType))}.`
             : APPRAISAL_FALLBACK_HINT}
         </span>
       }
@@ -510,7 +520,9 @@ export function ProvenanceSheet({
         if (!open) onClose();
       }}
     >
-      <SheetContent title="Where this comes from" description={description}>
+      {/* "Claim provenance" repeats the title on screen: it stays the
+          dialog's accessible description only (round 10, C3). */}
+      <SheetContent title="Where this comes from" description={description} descriptionHidden>
         <div className="space-y-5">
           {claimTexts
             .filter((text) => text !== "")
@@ -702,9 +714,35 @@ export function CitationTooltipBody({
   );
 }
 
-/** A claim span in the prose (demo ClaimSpan): the whole span is clickable,
- *  hover previews the first citation, click opens the provenance panel.
- *  Citation numbers ride as one inline chip; typed claims carry their label. */
+/** A claim's citation numbers, each once, in ascending order ("[7,12]"). */
+function sortedNumbers(citations: readonly { n: number }[] | undefined): number[] {
+  return [...new Set((citations ?? []).map((citation) => citation.n))].sort((a, b) => a - b);
+}
+
+/** "7 and 12", "3, 7 and 12". */
+function numberList(numbers: readonly number[]): string {
+  return numbers.length < 2 ? numbers.join("") : `${numbers.slice(0, -1).join(", ")} and ${numbers.at(-1)}`;
+}
+
+/**
+ * The marker's accessible name (round 10, C1): what it opens. One source
+ * names it, "Source 2: School meals and child weight outcomes"; several are
+ * counted, "Sources 7 and 12".
+ */
+export function markerName(citations: readonly { n: number; source_title: string }[]): string {
+  const numbers = sortedNumbers(citations);
+  if (numbers.length === 1) {
+    const title = citations.find((citation) => citation.n === numbers[0])?.source_title ?? "";
+    return title === "" ? `Source ${numbers[0]}` : `Source ${numbers[0]}: ${scrub(title)}`;
+  }
+  return `Sources ${numberList(numbers)}`;
+}
+
+/** A claim span in the prose (demo ClaimSpan): the whole span is clickable
+ *  and hover previews the first citation; the marker is the one control
+ *  (round 10, finding 4), with the same preview on hover and on keyboard
+ *  focus, and opens the provenance panel. Citation numbers ride as one
+ *  inline chip; typed claims carry their label. */
 function ClaimSpan({
   claim,
   text,
@@ -728,7 +766,7 @@ function ClaimSpan({
   // Dev-facing markings (source-check flags, connective reasoning) carry no
   // user-facing detail: their prose renders unmarked (owner, 2026-07-29).
   if (UNMARKED_TYPES.has(claim.claim_type)) return <span>{scrub(text)}</span>;
-  const citationNumbers = [...new Set((claim.citations ?? []).map((citation) => citation.n))];
+  const citationNumbers = sortedNumbers(claim.citations);
   const inert =
     live && ((claim.citations ?? []).length === 0 || (claim.citations ?? []).some((citation) => !citation.citation_id));
   if (inert) {
@@ -793,21 +831,15 @@ function ClaimSpan({
   const typeLabel = TYPE_LABEL[claim.claim_type];
   return (
     <span>
-      {/* A real <button> is an ATOMIC inline-block: a sentence-length span
-          could never wrap mid-line and shattered the paragraph flow. The
-          demo's span[role=button] wraps like ordinary prose (keyboard: Enter
-          and Space both activate). */}
+      {/* The words are a pointer target only: hover tints them and shows the
+          preview, a click opens the panel. The marker after them is the one
+          control a keyboard and a screen reader meet (round 10, finding 4),
+          so a claim is one tab stop and the sentence is not read as a
+          button. A real <button> around the words would be an atomic inline
+          block that could never wrap mid-line. */}
       <Tooltip content={tip}>
         <span
-          role="button"
-          tabIndex={0}
           onClick={() => onOpen(claim)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              onOpen(claim);
-            }
-          }}
           className={
             claim.claim_type === "citation"
               ? CITATION_SPAN_CLASS
@@ -818,27 +850,31 @@ function ClaimSpan({
         </span>
       </Tooltip>
       {claim.claim_type === "citation" && citationNumbers.length > 0 && showCitationMarker && (
-        <button
-          type="button"
-          aria-label={`Citations ${citationNumbers.join(", ")}`}
-          onClick={() => onOpen(claim)}
-          className={renumbered ? `${CITATION_MARKER_CLASS} anim-swap-in` : CITATION_MARKER_CLASS}
-        >
-          [{citationNumbers.join(",")}]
-        </button>
+        <Tooltip content={tip}>
+          <button
+            type="button"
+            aria-label={markerName(claim.citations ?? [])}
+            onClick={() => onOpen(claim)}
+            className={renumbered ? `${CITATION_MARKER_CLASS} anim-swap-in` : CITATION_MARKER_CLASS}
+          >
+            [{citationNumbers.join(",")}]
+          </button>
+        </Tooltip>
       )}
       {claim.claim_type !== "citation" && typeLabel !== undefined && (
-        <button
-          type="button"
-          onClick={() => onOpen(claim)}
-          className={`mx-1 cursor-pointer border px-1.5 align-[2px] text-caption font-semibold ${
-            claim.claim_type === "gap"
-              ? "border-yellow/60 bg-yellow-tint/60 text-navy/80 hover:border-yellow"
-              : "border-line bg-ground text-grey hover:border-line-2"
-          }`}
-        >
-          {typeLabel}
-        </button>
+        <Tooltip content={tip}>
+          <button
+            type="button"
+            onClick={() => onOpen(claim)}
+            className={`citation-number ml-1 cursor-pointer border px-1.5 align-[2px] text-caption font-semibold ${
+              claim.claim_type === "gap"
+                ? "border-yellow/60 bg-yellow-tint/60 text-navy/80 hover:border-yellow"
+                : "border-line bg-ground text-grey hover:border-line-2"
+            }`}
+          >
+            {typeLabel}
+          </button>
+        </Tooltip>
       )}
     </span>
   );
@@ -1040,7 +1076,10 @@ export function AnnotatedProse({
     if (current.length > 0) bullets.push(current);
     return (
       <div className={`max-w-prose-measure ${REPORT_BODY_CLASS}`}>
-        <ul className="list-none space-y-1.5">
+        {/* The bullet is a Navy square, not the blue running-step mark; the
+            items stand apart (round 10, finding 8). `data-bullet` prints it
+            as a border, since print drops backgrounds. */}
+        <ul className="list-none space-y-3">
           {bullets.map((bullet, bulletIndex) => {
             const isGap = bullet.some(
               (segment) => segment.kind === "claim" && segment.claim.claim_type === "gap",
@@ -1049,7 +1088,8 @@ export function AnnotatedProse({
               <li key={bulletIndex} className="flex gap-2">
                 <span
                   aria-hidden="true"
-                  className={`mt-2 h-1.5 w-1.5 shrink-0 ${isGap ? "bg-yellow" : "bg-blue"}`}
+                  data-bullet={isGap ? "gap" : ""}
+                  className={`mt-2 h-1.5 w-1.5 shrink-0 ${isGap ? "bg-yellow" : "bg-navy"}`}
                 />
                 <span>{renderLeadColonBullet(bullet, onOpenClaim, live)}</span>
               </li>
@@ -1428,13 +1468,13 @@ export function draftParagraphs(
  *  owner round 7): the final marker's chip in its muted look (Line border,
  *  Ground fill, grey text), a dot in place of the number. Not a control. */
 export const CITATION_MARKER_PENDING_CLASS =
-  "citation-marker pending-mark mx-1 border border-line bg-ground px-1.5 align-[2px] text-caption font-semibold text-grey";
+  "citation-marker citation-number pending-mark ml-1 border border-line bg-ground px-1.5 align-[2px] text-caption font-semibold text-grey";
 
 /** The checked marker while the report is still live and its citations do
  *  not carry their ids (an older stream): the final marker's look, without
  *  the control's cursor and hover. */
 export const CITATION_MARKER_LIVE_CLASS =
-  "citation-marker mx-1 border border-blue/25 bg-blue-tint-2 px-1.5 align-[2px] text-caption font-semibold text-blue/80";
+  "citation-marker citation-number ml-1 border border-blue/25 bg-blue-tint-2 px-1.5 align-[2px] text-caption font-semibold text-blue/80";
 
 /** The writer's own citation while the section is written: the marker's chip,
  *  muted, after the cited words. Its titles are the hover text. `at` is its
@@ -1650,10 +1690,10 @@ function DraftProse({
   if (list) {
     return (
       <div data-testid="draft-prose" aria-hidden={ariaHidden || undefined} className={rootClass}>
-        <ul className="list-none space-y-1.5">
+        <ul className="list-none space-y-3">
           {blocks.map((runs, at) => (
             <li key={at} className="flex gap-2">
-              <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 bg-blue" />
+              <span aria-hidden="true" data-bullet="" className="mt-2 h-1.5 w-1.5 shrink-0 bg-navy" />
               <span>{render(runs, at)}</span>
             </li>
           ))}
@@ -2321,7 +2361,7 @@ function liveMarkerNumbers(stream: RunStreamState): ReadonlyMap<string, string> 
   const numbers = new Map<string, string>();
   for (const section of Object.values(stream.liveSections)) {
     for (const claim of liveClaims(section.prose ?? "", section.citations)) {
-      const ns = [...new Set((claim.citations ?? []).map((citation) => citation.n))].join(",");
+      const ns = sortedNumbers(claim.citations).join(",");
       numbers.set(markerKey(claim.span, claim.text), ns);
     }
   }
@@ -2426,12 +2466,14 @@ function useLiveReport(
   const notes = report ? liveSourceNotes(stream) : [];
   const onOpenClaim = sheet?.onOpenClaim;
 
+  // Sections inside a part are h3; a baseline has no parts (round 10).
+  const level: SectionHeadingLevel = report ? 3 : 2;
   const entries: SidebarEntry[] = [
     ...(report ? [{ kind: "part" as const, id: EXECUTIVE_SUMMARY_ANCHOR, title: "Executive summary" }] : []),
-    ...front.map(({ section, id }) => ({ id, title: sectionNavLabel({ title: section.title }, 28) })),
-    ...(notes.length > 0 ? [{ id: "sources", title: "Most relevant sources" }] : []),
+    ...front.map(({ section, id }) => ({ id, title: sectionNavLabel({ title: section.title }, Infinity) })),
     ...(report && body.length > 0 ? [{ kind: "part" as const, id: FULL_REPORT_ANCHOR, title: "Full report" }] : []),
-    ...body.map(({ section, id }) => ({ id, title: sectionNavLabel({ title: section.title }, 28) })),
+    ...body.map(({ section, id }) => ({ id, title: sectionNavLabel({ title: section.title }, Infinity) })),
+    ...(notes.length > 0 ? [{ id: "sources", title: "Most relevant sources" }] : []),
     ...(references.length > 0 ? [{ id: "references", title: "References" }] : []),
   ];
 
@@ -2448,6 +2490,7 @@ function useLiveReport(
           key={`section:${id}`}
           section={{ title: section.title, role: "case_studies", cards }}
           id={id}
+          level={level}
           live
           onOpenClaim={onOpenClaim}
           busy={isActive}
@@ -2469,6 +2512,7 @@ function useLiveReport(
         section={{ title: section.title, role: section.role === "intro" ? "standard" : section.role }}
         collapsible={false}
         defaultOpen
+        level={level}
         busy={isActive}
         subhead={subhead}
       >
@@ -2509,7 +2553,13 @@ function useLiveReport(
     <header key="header" id="answer" className="mb-8">
       <ReportKindRow kind={report ? "Report" : "Baseline"} />
       {question != null && question !== "" && <h1 className={REPORT_TITLE_CLASS}>{scrub(question)}</h1>}
-      {onSeePlan !== undefined && <SeePlanLink onClick={onSeePlan} />}
+      {/* The committed report's action line, holding only what the live
+          page has, so the swap fills it in place (round 10, finding 9). */}
+      {onSeePlan !== undefined && (
+        <div className={REPORT_ACTIONS_CLASS}>
+          <SeePlanLink onClick={onSeePlan} />
+        </div>
+      )}
       <p role="status" aria-live="polite" className="sr-only">
         {active !== undefined ? `${scrub(active.title)} is being written` : ""}
       </p>
@@ -2520,7 +2570,6 @@ function useLiveReport(
       </h2>
     ) : null,
     ...front.map(renderSection),
-    <div key="most-relevant">{notes.length > 0 && <MostRelevantSources live sources={liveTopSources(notes)} />}</div>,
     <FullReportExpandProvider key="full-report">
       {report && body.length > 0 && (
         <div id={FULL_REPORT_ANCHOR} className="mb-6 mt-10 border-t border-line pt-4">
@@ -2552,6 +2601,8 @@ function useLiveReport(
         </div>
       )}
       {body.map(renderSection)}
+      {/* Supporting material, just before the references (round 10, D2). */}
+      <div key="most-relevant">{notes.length > 0 && <MostRelevantSources live sources={liveTopSources(notes)} level={level} />}</div>
       {references.length > 0 && <ReferencesSection references={references} defaultOpen />}
     </FullReportExpandProvider>,
     sheet?.panel ?? null,
@@ -2624,28 +2675,78 @@ export function ReportToBe({
       <p className="mt-4 text-body text-grey">
         {ended ? "This run ended before writing began." : "The report's sections are set out when writing begins."}
       </p>
-      {onSeePlan !== undefined && <SeePlanLink onClick={onSeePlan} />}
+      {onSeePlan !== undefined && <SeePlanLink onClick={onSeePlan} className="mt-2" />}
     </ReportPage>
   );
 }
 
-/** The Result tab's small link to the plan document. */
-function SeePlanLink({ onClick }: { onClick: () => void }) {
+/** The Result tab's small link to the plan document. Not printed. */
+function SeePlanLink({ onClick, className }: { onClick: () => void; className?: string }) {
   return (
-    <button type="button" onClick={onClick} className={cn(QUIET_CONTROL_CLASS, "mt-2 text-meta")}>
+    <button type="button" onClick={onClick} className={cn(QUIET_CONTROL_CLASS, "print-hide text-meta", className)}>
       See the plan
     </button>
   );
 }
 
-/** "3 November", with the year only when it is not this year. */
-export function reportDateLabel(iso: string, now: Date = new Date()): string {
+/** "3 November", with the year only when it is not this year, or always
+ *  with `alwaysYear` ("5 November 2026": the report's facts line, which a
+ *  printed copy carries out of its year; round 10, C4). */
+export function reportDateLabel(iso: string, now: Date = new Date(), alwaysYear = false): string {
   const date = new Date(iso);
   return date.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "long",
-    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+    ...(!alwaysYear && date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
   });
+}
+
+/** A link to a source's dossier on this page (`?source=`), keeping the
+ *  page's other parameters: a real address, so it opens in a new tab or
+ *  copies, while a plain click opens the sheet in place (round 10). */
+function sourceHref(sourceRef: string): string {
+  const params = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
+  params.set("source", sourceRef);
+  params.delete("option");
+  return `?${params.toString()}`;
+}
+
+/** Whether a click should open the link in place: a plain primary click,
+ *  not one asking for a new tab or window. */
+function plainClick(event: React.MouseEvent): boolean {
+  return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+}
+
+/** A source title that opens its dossier (the references, the most relevant
+ *  sources): Navy, underlined in Line 2, the underline turning Navy on
+ *  hover (round 10, finding 1). */
+const SOURCE_TITLE_LINK_CLASS =
+  "text-navy underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:decoration-navy";
+
+function SourceTitleLink({
+  sourceRef,
+  onOpen,
+  className,
+  children,
+}: {
+  sourceRef: string;
+  onOpen: (sourceRef: string) => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <a
+      href={sourceHref(sourceRef)}
+      onClick={(event) => {
+        if (!plainClick(event)) return;
+        event.preventDefault();
+        onOpen(sourceRef);
+      }}
+      className={cn(SOURCE_TITLE_LINK_CLASS, className)}
+    >
+      {children}
+    </a>
+  );
 }
 
 /** Whole minutes since `iso`, never below one. */
@@ -2731,6 +2832,7 @@ function CaseStudiesSection({
   busy = false,
   subhead,
   pending,
+  level = 3,
 }: {
   section: SectionLike;
   id: string;
@@ -2741,32 +2843,36 @@ function CaseStudiesSection({
   subhead?: ReactNode;
   /** What stands in for the cards before the first one closes (live only). */
   pending?: ReactNode;
+  level?: SectionHeadingLevel;
 }) {
   useScrollWhenNavigated(id);
   const arriving = useArrivingClass();
   const cards = section.cards ?? [];
   if (cards.length === 0 && !live) return null;
+  const Heading = level === 3 ? "h3" : "h2";
+  const CardHeading = level === 3 ? "h4" : "h3";
   return (
     <section id={id} aria-busy={busy ? true : undefined} className="mb-9">
-      <h2 className={REPORT_SECTION_HEADING_CLASS}>{scrub(section.title)}</h2>
+      <Heading className={REPORT_SECTION_HEADING_CLASS}>{scrub(section.title)}</Heading>
       {subhead}
       <p className={`mt-1.5 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{CASE_STUDIES_INTRO}</p>
       {cards.length === 0 ? (
         pending
       ) : (
-        <ul role="list" className="mt-3 grid gap-3">
+        // Ruled entries on the sheet, not boxes on it (round 10, finding 7).
+        <ul role="list" className="mt-3 divide-y divide-line border-t border-line">
           {cards.map((card, at) => {
             const { strength, design, sinceYear } = cardEvidenceMeta(card);
             return (
-              <li key={`${at}:${card.title}`} className={`border border-line p-4 ${live ? "anim-rise" : ""}`}>
-                <p className={`${REPORT_BODY_CLASS} font-bold`}>{scrub(card.title)}</p>
+              <li key={`${at}:${card.title}`} className={`py-4 ${live ? "anim-rise" : ""}`}>
+                <CardHeading className="text-lead font-bold text-navy max-md:text-body">{scrub(card.title)}</CardHeading>
                 <CaseStudyCardProse card={card} onOpenClaim={onOpenClaim} live={live} />
                 {/* Empty while live; the chips fade in with the committed report. */}
                 <div className={`mt-2 flex flex-wrap gap-1.5 ${arriving}`}>
                   {strength != null && (
                     <AppraisalChip label={strength} evidenceType={design} />
                   )}
-                  {design != null && <Chip tone="soft">{scrub(design)}</Chip>}
+                  {design != null && <Chip tone="soft">{scrub(evidenceTypeLabel(design))}</Chip>}
                   {sinceYear != null && <Chip tone="soft">Since {sinceYear}</Chip>}
                 </div>
               </li>
@@ -2790,6 +2896,7 @@ function MostRelevantSources({
   onOpenDossier,
   live = false,
   arrivingClass = "",
+  level = 3,
 }: {
   sources: TopSource[];
   /* Opens by source id: the citation-time title snapshot can drift from the
@@ -2797,27 +2904,28 @@ function MostRelevantSources({
   onOpenDossier?: (sourceId: string) => void;
   live?: boolean;
   arrivingClass?: string;
+  level?: SectionHeadingLevel;
 }) {
   useScrollWhenNavigated("sources");
   if (sources.length === 0) return null;
+  const Heading = level === 3 ? "h3" : "h2";
   return (
     <section id="sources" className="mb-9">
-      <h2 className={REPORT_SECTION_HEADING_CLASS}>Most relevant sources</h2>
+      <Heading className={REPORT_SECTION_HEADING_CLASS}>Most relevant sources</Heading>
       <p className={`mt-1.5 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{MOST_RELEVANT_SOURCES_INTRO}</p>
-      <ul role="list" className="mt-3 grid gap-3">
+      {/* Ruled entries, as the case studies (round 10, finding 7). */}
+      <ul role="list" className="mt-3 divide-y divide-line border-t border-line">
         {sources.map((source) => (
-          <li key={source.sourceId} className={`border border-line p-4 ${live ? "anim-rise" : ""}`}>
-            {live || onOpenDossier === undefined ? (
-              <p className={`${REPORT_BODY_CLASS} font-bold`}>{scrub(source.title)}</p>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onOpenDossier(source.sourceId)}
-                className={`cursor-pointer text-left ${REPORT_BODY_CLASS} font-bold hover:underline`}
-              >
-                {scrub(source.title)}
-              </button>
-            )}
+          <li key={source.sourceId} className={`py-4 ${live ? "anim-rise" : ""}`}>
+            <p className={`${REPORT_BODY_CLASS} font-bold`}>
+              {live || onOpenDossier === undefined ? (
+                scrub(source.title)
+              ) : (
+                <SourceTitleLink sourceRef={source.sourceId} onOpen={onOpenDossier}>
+                  {scrub(source.title)}
+                </SourceTitleLink>
+              )}
+            </p>
             {source.authors != null && source.authors.length > 0 && (
               <p className={`mt-0.5 ${REPORT_BODY_CLASS} ${arrivingClass}`}>
                 {source.authors.map((a) => scrub(a)).join(", ")}
@@ -2831,7 +2939,7 @@ function MostRelevantSources({
                 {source.appraisalLabel != null && (
                   <AppraisalChip label={source.appraisalLabel} evidenceType={source.evidenceType} />
                 )}
-                {source.evidenceType != null && <Chip tone="soft">{scrub(source.evidenceType)}</Chip>}
+                {source.evidenceType != null && <Chip tone="soft">{scrub(evidenceTypeLabel(source.evidenceType))}</Chip>}
                 <Chip tone="soft">
                   {source.citationCount === 1 ? "Cited by 1 claim" : `Cited by ${source.citationCount} claims`}
                 </Chip>
@@ -2882,19 +2990,24 @@ function ScopingResult({ taskId, building }: { taskId: string; building: boolean
   return (
     <>
       <Tabs value={view} onValueChange={select} className="mx-auto w-full max-w-5xl px-6 pt-6 max-md:px-4">
-        <TabsList aria-label="Result view">
+        {/* The tab language of the whole app (round 10, finding 3): the
+            growing rule, one line on a phone (scrolling sideways if it must),
+            and a view still to come locked as a lifecycle stage is, with no
+            note beside it (C3). */}
+        <TabsList aria-label="Result view" className="overflow-x-auto whitespace-nowrap [scrollbar-width:none]">
           {RESULT_VIEWS.map((option) => (
             <TabsTrigger
               key={option.key}
               value={option.key}
               disabled={option.note !== undefined}
-              title={option.note}
-              className="disabled:cursor-default disabled:text-grey/70"
+              className={cn(
+                "mb-0 shrink-0 border-b-[3px] pb-2 data-[state=active]:border-transparent",
+                GROWING_RULE_CLASS,
+                "data-[state=active]:after:scale-x-100 data-[state=active]:hover:after:scale-x-100 data-[state=active]:focus-visible:after:scale-x-100",
+                "disabled:cursor-not-allowed disabled:text-line-2 disabled:hover:text-line-2 disabled:after:hidden",
+              )}
             >
               {option.label}
-              {option.note !== undefined && (
-                <span className="ml-1.5 font-normal">· {option.note}</span>
-              )}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -2952,9 +3065,10 @@ function ArtefactReport() {
     { kind: "chat", status: "active" },
     { enabled: !isPublicView },
   );
-  // Cited-scoped distributions for the facts strip: study types and years
-  // count what the report CITES, not the whole included corpus (owner,
-  // 2026-08-05); the durable coverage_snapshot keeps the corpus-wide counts.
+  // Cited-scoped distributions for the facts line: the years count what the
+  // report CITES, not the whole included corpus (owner, 2026-08-05); the
+  // durable coverage_snapshot keeps the corpus-wide counts. The same read
+  // says whether the method section renders.
   const citedLandscape = useLandscape(taskId, "cited");
   const stream = useRunStream(taskId);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -3158,12 +3272,8 @@ function ArtefactReport() {
   if (showLive || readyHere) return liveBody;
 
   const snapshot = data.coverage_snapshot;
-  // Study types and years count the CITED set (the live cited-scope
-  // landscape), not the whole included corpus.
-  const citedTypes = Object.entries(citedLandscape.data?.evidence_types ?? {}).sort(
-    ([, a], [, b]) => b - a,
-  );
-  const shownTypes = citedTypes.slice(0, 3);
+  // The years count the CITED set (the live cited-scope landscape), not the
+  // whole included corpus.
   const citedYears = Object.keys(citedLandscape.data?.years ?? {})
     .map(Number)
     .filter(Number.isInteger);
@@ -3183,33 +3293,25 @@ function ArtefactReport() {
           index: firstBodyIndex + index,
         }));
 
+  // The facts line (round 10, finding 2 and C4): Sources, Published, Last
+  // updated; the study types are the method section's, not repeated here.
   // Sources links into the sources view, filtered to the cited set
   // (028 F.5): there is no `status=cited` value, so the cited count routes
   // through the boolean `cited=true` param.
-  const snapshotCells: SnapshotCell[] = [];
+  const facts: ReportFact[] = [];
   if (typeof snapshot?.source_count === "number" && typeof snapshot?.included === "number") {
     // Transcription trap 3: `source_count` is the cited/reference count —
     // never "found".
-    snapshotCells.push([
+    facts.push([
       "Sources",
       `${snapshot.source_count} cited out of ${snapshot.included} included`,
       `/tasks/${taskId}/sources/all?cited=true`,
     ]);
   }
-  if (shownTypes.length > 0) {
-    snapshotCells.push([
-      "Study types",
-      shownTypes.map(([key, count]) => `${count} ${key.toLowerCase()}`).join(" · ") +
-        (citedTypes.length > 3 ? ` · +${citedTypes.length - 3} more` : ""),
-      null,
-    ]);
-  }
   if (citedYears.length > 0) {
-    snapshotCells.push([
-      "Published",
-      `${Math.min(...citedYears)}–${Math.max(...citedYears)}`,
-      null,
-    ]);
+    const from = Math.min(...citedYears);
+    const to = Math.max(...citedYears);
+    facts.push(["Published", from === to ? String(from) : `${from}–${to}`, null]);
   }
   // The report states when it was made. The run's end is the honest answer —
   // the artefact read model carries no timestamp of its own. There is
@@ -3217,7 +3319,7 @@ function ArtefactReport() {
   // and inventing one would have the report assert something nobody wrote.
   const lastUpdated = task.data?.latest_run?.ended_at;
   if (lastUpdated != null) {
-    snapshotCells.push(["Last updated", new Date(lastUpdated).toLocaleDateString(), null]);
+    facts.push(["Last updated", reportDateLabel(lastUpdated, new Date(), true), null]);
   }
 
   const topSources = mergeMostRelevantNotes(
@@ -3230,33 +3332,37 @@ function ArtefactReport() {
   // A baseline is one linear profile, not a summary over a full report: the
   // two part headings would frame an empty half (it mints no key findings and
   // no case studies), so the outline lists its sections flat.
+  // Titles in full: the sidebar wraps them (round 10, finding 6); a
+  // server `nav_label` still wins.
   const outlineHead: SidebarEntry[] = baseline
     ? sections.map((section, index) => ({
         id: sectionAnchor(section.title, index),
-        title: sectionNavLabel(section, 28),
+        title: sectionNavLabel(section, Infinity),
       }))
     : [
         { kind: "part", id: EXECUTIVE_SUMMARY_ANCHOR, title: "Executive summary" },
         ...frontSections.map(({ section, index }) => ({
           id: sectionAnchor(section.title, index),
-          title: sectionNavLabel(section, 28),
+          title: sectionNavLabel(section, Infinity),
         })),
-        ...(topSources.length > 0
-          ? [{ id: "sources", title: "Most relevant sources" }]
-          : []),
         ...(bodySections.length > 0
           ? [{ kind: "part" as const, id: FULL_REPORT_ANCHOR, title: "Full report" }]
           : []),
         ...bodySections.map(({ section, index }) => ({
           id: sectionAnchor(section.title, index),
-          title: sectionNavLabel(section, 28),
+          title: sectionNavLabel(section, Infinity),
         })),
+        ...(topSources.length > 0 ? [{ id: "sources", title: "Most relevant sources" }] : []),
       ];
   const outlineEntries: SidebarEntry[] = [
     ...outlineHead,
     ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
-    { id: "gathered", title: "Method" },
+    // Listed only when the section will render (round 10, finding 6), under
+    // its heading's own words (C2).
+    ...(gatheredSectionShows(citedLandscape) ? [{ id: "gathered", title: GATHERED_SECTION_TITLE }] : []),
   ];
+  // Sections inside a part are h3; a baseline has no parts (round 10).
+  const level: SectionHeadingLevel = baseline ? 2 : 3;
 
   const sectionBlocks = (section: SectionLike) => (
     <SectionBody blocks={section.blocks ?? []} onOpenClaim={setDetailClaim} />
@@ -3264,7 +3370,7 @@ function ArtefactReport() {
   const renderSection = ({ section, index }: { section: SectionLike; index: number }) => {
     const id = sectionAnchor(section.title, index);
     return section.role === "case_studies" ? (
-      <CaseStudiesSection key={`section:${id}`} section={section} id={id} onOpenClaim={setDetailClaim} />
+      <CaseStudiesSection key={`section:${id}`} section={section} id={id} onOpenClaim={setDetailClaim} level={level} />
     ) : (
       <SectionDisclosure
         key={`section:${id}`}
@@ -3273,6 +3379,7 @@ function ArtefactReport() {
         collapsible={section.role !== "key_findings"}
         defaultOpen={false}
         arrivingClass={arriving}
+        level={level}
       >
         {sectionBlocks(section)}
       </SectionDisclosure>
@@ -3295,25 +3402,33 @@ function ArtefactReport() {
                   surfaces; the Result's heading says what the reader is
                   looking at (owner ruling 2026-09-18). */}
               <span className={arriving}>
-                <ArtefactDownload artefact={data} />
+                <ArtefactDownload artefact={data} question={baseline ? null : question} />
               </span>
             </ReportKindRow>
-            <h1 className={REPORT_TITLE_CLASS}>{scrub(data.title)}</h1>
-            {!isPublicView && <SeePlanLink onClick={planPanel.openPlan} />}
-            <div className={arriving}>
-              <SnapshotCells cells={snapshotCells} />
-            </div>
+            {/* A report's title is its question, live and committed, so the
+                heading never changes at the swap; the generated title names
+                the download (round 10, D1). A baseline keeps its own title
+                ("Do nothing: …"), which says what the profile is. */}
+            <h1 className={REPORT_TITLE_CLASS}>{scrub(baseline ? data.title : (question ?? data.title))}</h1>
+            {/* One action line under the title, then the facts (round 10,
+                finding 9). */}
             {!isPublicView && (
-              <button
-                type="button"
-                onClick={askAboutAnalysis}
-                disabled={!chatsEnabled}
-                title={chatsEnabled ? undefined : COPY.newChatUnavailable}
-                className={cn(LINK_CLASS, "print-hide mt-3 text-meta", arriving)}
-              >
-                Ask about this analysis
-              </button>
+              <div className={REPORT_ACTIONS_CLASS}>
+                <SeePlanLink onClick={planPanel.openPlan} />
+                <button
+                  type="button"
+                  onClick={askAboutAnalysis}
+                  disabled={!chatsEnabled}
+                  title={chatsEnabled ? undefined : COPY.newChatUnavailable}
+                  className={cn(LINK_CLASS, "text-meta", arriving)}
+                >
+                  Ask about this analysis
+                </button>
+              </div>
             )}
+            <div className={arriving}>
+              <ReportFacts facts={facts} />
+            </div>
             {/* Coverage banner removed (owner, 2026-07-29): the adequacy verdict
                 surfaces where it matters — inside each gap claim's detail. */}
           </header>,
@@ -3328,20 +3443,6 @@ function ArtefactReport() {
           ),
 
           ...frontSections.map(renderSection),
-
-          /* A baseline writes no most-relevant-source notes and cites few
-             sources per section, so the report's "cited most often" block
-             would rank two or three documents as if that were a finding.
-             Report only (task 044). */
-          <div key="most-relevant" className={swap.hadNotes ? "" : arriving}>
-            {baseline ? null : (
-              <MostRelevantSources
-                sources={topSources}
-                onOpenDossier={openDossier}
-                arrivingClass={swap.hadNotes ? arriving : ""}
-              />
-            )}
-          </div>,
 
           /* Full report part */
           <FullReportExpandProvider key="full-report">
@@ -3372,6 +3473,22 @@ function ArtefactReport() {
               ))}
 
             {bodySections.map(renderSection)}
+
+            {/* Supporting material, just before the references (round 10,
+                D2). A baseline writes no most-relevant-source notes and
+                cites few sources per section, so the report's "cited most
+                often" block would rank two or three documents as if that
+                were a finding. Report only (task 044). */}
+            <div key="most-relevant" className={swap.hadNotes ? "" : arriving}>
+              {baseline ? null : (
+                <MostRelevantSources
+                  sources={topSources}
+                  onOpenDossier={openDossier}
+                  arrivingClass={swap.hadNotes ? arriving : ""}
+                  level={level}
+                />
+              )}
+            </div>
 
             {(data.references ?? []).length > 0 && (
               <ReferencesSection references={data.references ?? []} onOpenReference={openDossier} />
@@ -3404,7 +3521,13 @@ function ArtefactReport() {
  *  (028 strand 10, binding record). While the report is written the same
  *  list grows as sections are checked, open, titles only and no links
  *  (task 058, owner round 7); the committed report adds the links and the
- *  authors in place. */
+ *  details in place.
+ *
+ *  Each reference is one entry in a citation form (round 10, C5): "Sampleton
+ *  A, Mockford C (2022). Title. Venue. doi.org/…", the number in a Grey
+ *  column, the title a link to its dossier, the address a Grey link without
+ *  its scheme on screen and in full in print, so the list carries a source
+ *  out of the workspace. A reference with no authors starts at its title. */
 export function ReferencesSection({
   references,
   onOpenReference,
@@ -3415,6 +3538,7 @@ export function ReferencesSection({
     title: string;
     year?: number | null;
     venue?: string | null;
+    url?: string | null;
     authorships?: components["schemas"]["AuthorshipOut"][];
   }>;
   /** Absent while the report is live: the titles are not links yet. */
@@ -3428,17 +3552,9 @@ export function ReferencesSection({
   useExpandAll(setOpen);
   return (
     <section aria-label="References" id="references" className="mt-12 border-t border-line pt-6">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full cursor-pointer items-baseline gap-2 text-left"
-      >
-        <h2 className={`flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>References</h2>
-        <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
-          {open ? "Collapse −" : "Expand +"}
-        </span>
-      </button>
+      <DisclosureHeading level={2} open={open} onToggle={() => setOpen((value) => !value)}>
+        References
+      </DisclosureHeading>
       {!open && (
         <p className="mt-1.5 text-lead text-grey max-md:text-body">
           {references.length === 1 ? "1 numbered source" : `${references.length} numbered sources`} cited
@@ -3447,40 +3563,77 @@ export function ReferencesSection({
       )}
       {!open && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}
       {open && (
-        <ol className="mt-3 space-y-1.5 text-lead text-ink max-md:text-body">
-          {references.map((reference) => {
-            const authors = referenceAuthorsLine(reference.authorships);
-            return (
-              <li key={reference.n} className="flex gap-2">
-                <span className="font-bold text-blue">[{reference.n}]</span>
-                <span>
-                  {onOpenReference === undefined ? (
-                    <span>{scrub(reference.title)}</span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="cursor-pointer text-left hover:underline"
-                      onClick={() => onOpenReference(reference.title)}
-                    >
-                      {scrub(reference.title)}
-                    </button>
-                  )}
-                  <span className={arriving}>
-                    {authors !== null && <span className="text-grey"> — {scrub(authors)}</span>}
-                    {reference.year !== null && reference.year !== undefined && (
-                      <span className="text-grey"> ({reference.year})</span>
-                    )}
-                    {reference.venue !== null && reference.venue !== undefined && (
-                      <span className="text-grey"> · {scrub(reference.venue)}</span>
-                    )}
-                  </span>
-                </span>
-              </li>
-            );
-          })}
+        <ol className="mt-3 space-y-2 text-body text-ink">
+          {references.map((reference) => (
+            <li key={reference.n} className="flex gap-3">
+              <span className="w-9 shrink-0 text-right font-semibold tabular-nums text-grey">[{reference.n}]</span>
+              <ReferenceEntry reference={reference} onOpen={onOpenReference} arrivingClass={arriving} />
+            </li>
+          ))}
         </ol>
       )}
       {open && <MobileDisclosureToggle expanded onToggle={() => setOpen(false)} />}
     </section>
+  );
+}
+
+/** One reference in the list's citation form. While the report is live it
+ *  is the title alone, not a link; the committed report adds the authors
+ *  and year before it and the venue and address after it, fading in. */
+function ReferenceEntry({
+  reference,
+  onOpen,
+  arrivingClass,
+}: {
+  reference: {
+    title: string;
+    year?: number | null;
+    venue?: string | null;
+    url?: string | null;
+    authorships?: components["schemas"]["AuthorshipOut"][];
+  };
+  onOpen?: (title: string) => void;
+  arrivingClass: string;
+}) {
+  const committed = onOpen !== undefined;
+  // The parts the Markdown download writes too (`referenceParts`); while the
+  // report is live the entry is its title alone.
+  const parts = referenceParts(reference);
+  const lead = committed && parts.lead !== null ? scrub(parts.lead) : null;
+  const afterTitle = parts.afterTitle;
+  const venue = committed ? parts.venue : null;
+  const url = committed ? parts.url : null;
+  const title = scrub(reference.title);
+  return (
+    <span className="min-w-0 [overflow-wrap:anywhere]">
+      {lead !== null && <span className={arrivingClass}>{lead}</span>}
+      {committed ? (
+        <SourceTitleLink sourceRef={reference.title} onOpen={onOpen}>
+          {title}
+        </SourceTitleLink>
+      ) : (
+        <span>{title}</span>
+      )}
+      {committed && (
+        <span className={arrivingClass}>
+          {afterTitle}
+          {venue !== null && <span className="text-grey"> {scrub(venue)}</span>}
+          {url !== null && (
+            <>
+              {" "}
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-grey underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:text-navy hover:decoration-navy"
+              >
+                <span className="print:hidden">{displayUrl(url)}</span>
+                <span className="hidden print:inline">{url}</span>
+              </a>
+            </>
+          )}
+        </span>
+      )}
+    </span>
   );
 }

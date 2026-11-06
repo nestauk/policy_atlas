@@ -180,7 +180,7 @@ describe("ArtefactView around a run", () => {
     );
     // No button: the status bar and the sidebar are the routes to the run.
     expect(screen.queryByRole("button", { name: /run/i })).toBeNull();
-    expect(screen.getByRole("heading", { name: "The old report" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Body" })).toBeInTheDocument();
   });
 
   it("shows no re-run line while replaying the run that made the report", () => {
@@ -203,14 +203,18 @@ describe("ArtefactView around a run", () => {
     ]);
     view.rerender(page());
     expect(screen.getByRole("heading", { name: "Costs and funding" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "The old report" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Body" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Read the full report" })).toBeNull();
 
     // The read models catch up: the committed report takes the page.
     world.latestRun = { capability_run_id: "run-2", status: "succeeded", started_at: "2026-11-05T09:58:00Z", ended_at: "2026-11-05T10:00:00Z" };
     world.artefact = committedArtefact;
     view.rerender(page());
-    expect(await screen.findByRole("heading", { name: "The old report" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Body" })).toBeInTheDocument();
+    // The title is still the question: the heading does not change at the
+    // swap, and the generated title is the download's name only (round 10, D1).
+    expect(screen.getByRole("heading", { level: 1, name: QUESTION })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "The old report" })).toBeNull();
     expect(screen.queryByText("Report ready")).toBeNull();
   });
 
@@ -269,9 +273,9 @@ describe("ArtefactView around a run", () => {
     expect(after).toBe(costs);
     // The section the reader was reading stays open; its control fades in.
     expect(within(after).getByRole("button", { name: /Costs and funding/ })).toHaveAttribute("aria-expanded", "true");
-    expect(within(after).getAllByText("Collapse −")[0]).toHaveClass("anim-swap-in");
+    expect(within(after).getAllByText("Hide")[0].closest(".anim-swap-in")).not.toBeNull();
     // The marker is a control now, and its new number fades in.
-    const marker = within(after).getByRole("button", { name: "Citations 1" });
+    const marker = within(after).getByRole("button", { name: "Source 1: Smith 2023" });
     expect(marker).toHaveClass("anim-swap-in");
   });
 
@@ -322,15 +326,15 @@ describe("ArtefactView around a run", () => {
     render(page());
     const costs = screen.getByRole("heading", { name: "Costs and funding" }).closest("section") as HTMLElement;
     // The judged marker is a control now, as on the committed report.
-    const marker = within(costs).getByRole("button", { name: "Citations 2" });
+    const marker = within(costs).getByRole("button", { name: "Source 2: Smith 2023" });
     expect(marker).toHaveTextContent("[2]");
     // Hover: the citation's title, its quote and its tier.
-    await user.hover(within(costs).getByRole("button", { name: PROSE }));
+    await user.hover(within(costs).getByText(PROSE));
     const tip = await screen.findByRole("tooltip");
     expect(tip).toHaveTextContent("Smith 2023");
     expect(tip).toHaveTextContent("Charges stopped families taking a place.");
     expect(tip).toHaveTextContent("Tier 2 · grounded");
-    await user.unhover(within(costs).getByRole("button", { name: PROSE }));
+    await user.unhover(within(costs).getByText(PROSE));
     // Click: the sheet, built from what the run knows.
     await user.click(marker);
     const sheet = await screen.findByRole("dialog");
@@ -381,7 +385,7 @@ describe("ArtefactView around a run", () => {
       { index: 2, title: "Outreach", focus: "", state: "writing" },
     ]);
     render(page());
-    await user.click(screen.getByRole("button", { name: "Citations 2" }));
+    await user.click(screen.getByRole("button", { name: "Source 2: Smith 2023" }));
     const sheet = await screen.findByRole("dialog");
     expect(within(sheet).getByText("Costs prose.")).toBeInTheDocument();
     expect(within(sheet).getByText("Smith 2023").closest("button")).toBeNull();
@@ -449,7 +453,7 @@ describe("ArtefactView around a run", () => {
     expect(note.closest(".anim-swap-in")).toBeNull();
     // What the committed report adds to them does fade in: the title as a
     // link, the chips.
-    expect(within(note).getByRole("button", { name: "Smith 2023" })).toBeInTheDocument();
+    expect(within(note).getByRole("link", { name: "Smith 2023" })).toBeInTheDocument();
     expect(within(note).getByText("Cited by 1 claim").closest(".anim-swap-in")).not.toBeNull();
   });
 
@@ -458,7 +462,8 @@ describe("ArtefactView around a run", () => {
     world.latestRun = { capability_run_id: "run-2", status: "succeeded", started_at: "2026-11-05T09:58:00Z", ended_at: "2026-11-05T10:00:00Z" };
     world.stream = streamOf("succeeded", [{ ...SECTIONS[1], state: "filled", prose: "Costs prose." }]);
     render(page());
-    expect(screen.getByRole("heading", { name: "The old report" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Body" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: QUESTION })).toBeInTheDocument();
     expect(screen.queryByText("Report ready")).toBeNull();
   });
 });

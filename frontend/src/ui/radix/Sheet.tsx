@@ -55,11 +55,15 @@ export function SheetContent({
   children,
   title,
   description,
+  descriptionHidden = false,
   side = "right",
   ...props
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
   title: string;
   description?: string;
+  /** The description names the dialog for a screen reader but is not shown
+   *  (the provenance sheet's "Claim provenance"; task 058, round 10). */
+  descriptionHidden?: boolean;
   side?: "right" | "left";
 }) {
   return (
@@ -95,7 +99,7 @@ export function SheetContent({
             {description === undefined ? (
               <VisuallyHiddenDescription />
             ) : (
-              <DialogPrimitive.Description className="mt-1 text-body text-grey">
+              <DialogPrimitive.Description className={descriptionHidden ? "sr-only" : "mt-1 text-body text-grey"}>
                 {description}
               </DialogPrimitive.Description>
             )}

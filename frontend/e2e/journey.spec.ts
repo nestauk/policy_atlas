@@ -263,7 +263,9 @@ test.describe("mock task-lifecycle journey", () => {
     // Demo annotation grammar: the citation numbers ride as one inline chip;
     // clicking it (or the span) opens the "Where this comes from" panel with
     // the quote highlighted in its source passage.
-    const marker = page.getByRole("button", { name: /^Citations 1/ });
+    // The marker is the claim's one control, named for what it opens
+    // (round 10, C1): "Source 1: <title>".
+    const marker = page.getByRole("button", { name: /^Source 1: / });
     await expect(marker).toBeVisible();
     await marker.click();
     await expect(page.getByText("Where this comes from")).toBeVisible();
@@ -377,6 +379,45 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(page.getByRole("heading", { name: "This task is unavailable" })).toBeVisible();
   });
 
+  // Round 10 (owner and lead): a country from the Landscape opens All
+  // sources filtered to it, the Country control in the filter row says so,
+  // and Clear filters keeps the screening choice; a year range chosen from
+  // the keyboard on the years chart opens that range.
+  test("round 10: the sources filter row, a country and a year range from the Landscape", async ({ page }) => {
+    await driveRunToSuccess(page);
+    await taskNav(page).getByRole("link", { name: /^Sources/ }).click();
+    const sourcesSubnav = page.getByRole("navigation", { name: "Sources" });
+    const sourceFilters = page.getByRole("group", { name: "Filter sources" });
+    const sourceRows = page.getByRole("table").first().getByRole("row");
+    const includedCount = mockEvidence.filter(
+      (item) => item.status !== "found" && item.status !== "screened_out",
+    ).length;
+    await sourcesSubnav.getByRole("link", { name: "Landscape" }).click();
+    await page
+      .getByRole("table", { name: "Where sources were published" })
+      .getByRole("link", { name: "United Kingdom" })
+      .click();
+    await expect(page).toHaveURL(/\/sources\/all\?country=United\+Kingdom$/);
+    await expect(sourceFilters.getByRole("button", { name: /^Country United Kingdom/ })).toBeVisible();
+    const ukIncluded = mockEvidence.filter(
+      (item) => item.status !== "found" && item.status !== "screened_out" && item.country === "United Kingdom",
+    ).length;
+    await expect(sourceRows).toHaveCount(ukIncluded + 1);
+    await sourceFilters.getByRole("button", { name: "Clear filters" }).click();
+    await expect(page).toHaveURL(/\/sources\/all\??$/);
+    await expect(sourceRows).toHaveCount(includedCount + 1);
+    // The Sources tab now returns to the subtab chosen last (Landscape).
+    await taskNav(page).getByRole("link", { name: /^Result/ }).click();
+    await taskNav(page).getByRole("link", { name: /^Sources/ }).click();
+    await expect(page).toHaveURL(/\/sources\/landscape$/);
+    await page.getByRole("listbox", { name: "Publication years" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Shift+ArrowRight");
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/sources\/all\?year_from=2020&year_to=2021$/);
+    await expect(sourceFilters.getByRole("button", { name: "Filter by year: 2020 to 2021" })).toBeVisible();
+  });
+
   // (n) Keyboard check: Tab to a citation marker and open it with Enter.
   // Results is gated on run state: locked with no run / after a failed run,
   // open while executing so the in-progress write-up is reachable. A bare
@@ -385,14 +426,13 @@ test.describe("mock task-lifecycle journey", () => {
     await driveRunToSuccess(page);
     await runCompletionLink(page).click();
     await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/result$`));
-    await expect(
-      page.getByRole("heading", { name: "Policy options for healthier childhoods" }),
-    ).toBeVisible();
+    // The question is the report's title, live and committed (round 10, D1).
+    await expect(page.getByRole("heading", { level: 1, name: mockTask.question ?? "" })).toBeVisible();
     // Let a citation marker actually attach before tabbing through the page:
     // right after this client-side navigation there's a brief window where
     // the DOM hasn't finished settling, which flakes how many tab presses it
     // takes to reach the first one.
-    await expect(page.getByRole("button", { name: /^Citations 1/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Source 1: / })).toBeVisible();
 
     let found = false;
     for (let i = 0; i < 60 && !found; i++) {
@@ -400,7 +440,7 @@ test.describe("mock task-lifecycle journey", () => {
       const label = await page.evaluate(
         () => document.activeElement?.getAttribute("aria-label") ?? "",
       );
-      found = label.startsWith("Citation");
+      found = label.startsWith("Source");
     }
     expect(found).toBe(true);
 
@@ -901,7 +941,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     // the references list grows at the foot (round 7). Its hover and its
     // sheet work while later sections are still written (round 8).
     const findings = page.locator("section", { has: page.getByRole("heading", { name: "What appears to help" }) });
-    const firstMarker = findings.getByRole("button", { name: "Citations 1" });
+    const firstMarker = findings.getByRole("button", { name: `Source 1: ${CITED_SOURCE_TITLE}` });
     await expect(firstMarker).toHaveText("[1]", { timeout: 20_000 });
     await expect(page.getByRole("region", { name: "References" }).getByRole("listitem").first()).toHaveText(
       `[1]${CITED_SOURCE_TITLE}`,
@@ -929,7 +969,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     // sentence citing 2 and 3 on one span, which the report sets as one
     // marker.
     const implications = page.locator("section", { has: page.getByRole("heading", { name: "Implications for local action" }) });
-    await expect(implications.getByRole("button", { name: /^Citations / })).toHaveText(["[2]", "[2,3]"], {
+    await expect(implications.getByRole("button", { name: /^Sources? \d/ })).toHaveText(["[2]", "[2,3]"], {
       timeout: 30_000,
     });
     // The case studies stream card by card in the report's card layout; the
@@ -961,9 +1001,14 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await neverSeen(page, /being revised|^revised$/i);
     await expect(page.getByTestId("drawing-on")).toHaveCount(0);
     await expect(page.getByTestId("provisional-mark")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Policy options for healthier childhoods" })).toBeVisible({
+    // The committed report has landed (its action line is whole) and the
+    // title is still the question: the heading does not change at the swap
+    // (round 10, D1).
+    await expect(page.getByRole("button", { name: "Ask about this analysis" })).toBeVisible({
       timeout: 30_000,
     });
+    await expect(page.getByRole("heading", { level: 1, name: mockTask.question ?? "" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Policy options for healthier childhoods" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Read the full report" })).toHaveCount(0);
     await neverSeen(page, /attaching citations/);
   });

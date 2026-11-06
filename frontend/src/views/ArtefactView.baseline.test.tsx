@@ -182,7 +182,7 @@ describe("ArtefactView — the options-scoping baseline", () => {
       "Cost of inaction",
       "Key assumption",
       "Sources",
-      "Method",
+      "How the evidence was gathered",
     ]);
   });
 
@@ -223,10 +223,14 @@ describe("ArtefactView — the Result's view switch (task 045, deliverable 9)", 
       "Baseline",
       "Longlist",
       "Shortlist",
-      "Report· available after assessment",
+      "Report",
     ]);
     expect(tabs[1]).toHaveAttribute("aria-selected", "true");
+    // Locked as a lifecycle stage is, with no note (round 10, C3), and the
+    // growing rule on every tab (finding 3).
     expect(tabs[3]).toBeDisabled();
+    expect(tabs[3].className).toContain("disabled:text-line-2");
+    for (const tab of tabs) expect(tab.className).toContain("after:scale-x-0");
     expect(screen.getByText(`Longlist view for ${TASK_ID} from run-longlist`)).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Do nothing: current policy and trajectory" }),

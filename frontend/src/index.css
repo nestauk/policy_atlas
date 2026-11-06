@@ -407,6 +407,28 @@
     color: #000 !important;
     text-decoration: none !important;
   }
+  /* Markers print as plain numbers after the words, not boxed chips
+     (DESIGN.md § Report and citations; round 10, finding 3). */
+  .citation-number {
+    border: 0 !important;
+    padding: 0 !important;
+    margin: 0 0 0 2px !important;
+  }
+  /* The key findings' square bullet: print drops backgrounds, so it prints
+     as a border, which survives. */
+  .artefact-page [data-bullet] {
+    border: 3px solid #000 !important;
+  }
+  /* Headings stay with what follows them; an entry (a finding, a case
+     study, a source, a reference) is not split across pages. */
+  .artefact-page h2,
+  .artefact-page h3,
+  .artefact-page h4 {
+    break-after: avoid;
+  }
+  .artefact-page li {
+    break-inside: avoid;
+  }
   @page {
     margin: 2cm;
   }

@@ -1,12 +1,15 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import { Link } from "react-router";
 
 import { useFunnel, useLandscape } from "../api/queries";
 import { scrub } from "../lib/scrub";
-import { REPORT_SECTION_HEADING_CLASS } from "./artefactPresentation";
+import { evidenceTypeLabel, REPORT_SECTION_HEADING_CLASS } from "./artefactPresentation";
 import { LABEL_CLASS } from "../ui/brand/label";
-import { LINK_CLASS } from "../ui/brand/inlineActions";
+import { LINK_CLASS, QUIET_CONTROL_CLASS } from "../ui/brand/inlineActions";
+import { ChevronIcon } from "../ui/brand/icons";
+import { cn } from "../ui/brand/cn";
+import { Collapse } from "../ui/motion/Collapse";
 
 /** Minimal section shape the outline consumes (mirrors SectionOut). */
 export interface OutlineSection {
@@ -47,8 +50,88 @@ export function sectionAnchor(title: string, index: number): string {
 }
 
 const OPEN_SECTION_EVENT = "artefact-open-section";
-/** Matches the per-section Expand + / Collapse − affordance. */
+/** A small blue Meta link that hides in print (the longlist grid's "more"
+ *  control). The report's disclosures use `DisclosureWord` instead. */
 export const SECTION_EXPAND_LINK_CLASS = `${LINK_CLASS} print-hide shrink-0 text-meta`;
+
+/** The heading level a report section takes: `h3` inside a part (Executive
+ *  summary, Full report), `h2` on a page without parts (a baseline, the
+ *  longlist) and for the end matter (References, the method). */
+export type SectionHeadingLevel = 2 | 3;
+
+/**
+ * The report's one disclosure vocabulary (round 10, C7): the chevron, then
+ * "Show" or "Hide", Grey Semibold Meta over a Line 2 underline that turns
+ * Navy on hover, as the trace's "Show steps" and the search queries' "Show".
+ * The chevron points right when shut and turns down as it opens (200 ms).
+ * Decorative inside a disclosure button (its name is the heading), so
+ * `aria-hidden`; it hides in print, where everything prints open.
+ */
+export function DisclosureWord({
+  open,
+  className,
+  named = false,
+}: {
+  open: boolean;
+  className?: string;
+  /** The word names its own button (the phone's twin toggle). */
+  named?: boolean;
+}) {
+  return (
+    <span
+      aria-hidden={named ? undefined : true}
+      className={cn("print-hide inline-flex shrink-0 items-center gap-1 text-meta font-semibold text-grey", className)}
+    >
+      <ChevronIcon
+        size={12}
+        className={cn("shrink-0 transition-transform duration-200 ease-[var(--ease-out-strong)]", open && "rotate-90")}
+      />
+      <span className="underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 group-hover:text-navy group-hover:decoration-navy">
+        {open ? "Hide" : "Show"}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * A collapsible section's heading (round 10, finding 5): the GOV.UK
+ * accordion pattern, a heading holding a button, so the heading stays in a
+ * screen reader's list of headings and the button carries `aria-expanded`
+ * (a heading inside a button is invalid, and Safari drops it from the
+ * rotor). It looks as the section heading always has, with the disclosure
+ * word at the right from `md` up.
+ */
+export function DisclosureHeading({
+  level,
+  open,
+  onToggle,
+  className,
+  wordClassName,
+  children,
+}: {
+  level: SectionHeadingLevel;
+  open: boolean;
+  onToggle: () => void;
+  className?: string;
+  /** Extra classes for the disclosure word (the swap's fade-in). */
+  wordClassName?: string;
+  children: React.ReactNode;
+}) {
+  const Heading = level === 3 ? "h3" : "h2";
+  return (
+    <Heading className={cn(REPORT_SECTION_HEADING_CLASS, className)}>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        className="group flex w-full cursor-pointer items-baseline gap-3 text-left"
+      >
+        <span className="min-w-0 flex-1">{children}</span>
+        <DisclosureWord open={open} className={cn("max-md:hidden", wordClassName)} />
+      </button>
+    </Heading>
+  );
+}
 /** Leave a little air under the scrollport top after a contents jump. */
 const SECTION_SCROLL_OFFSET_PX = 8;
 /** Ignore the spy while a click-driven scroll is settling. */
@@ -124,7 +207,8 @@ export function FullReportExpandProvider({ children }: { children: React.ReactNo
   return <FullReportExpandContext.Provider value={value}>{children}</FullReportExpandContext.Provider>;
 }
 
-/** Expand all / Collapse all beside the Full report heading. */
+/** "Show all" / "Hide all" beside the Full report heading (round 10, C7:
+ *  the disclosure vocabulary, a quiet control at Meta). */
 export function FullReportExpandAllButton() {
   const control = useContext(FullReportExpandContext);
   if (control == null) return null;
@@ -133,9 +217,9 @@ export function FullReportExpandAllButton() {
     <button
       type="button"
       onClick={() => setAllExpanded(!expanded)}
-      className={`${SECTION_EXPAND_LINK_CLASS} cursor-pointer`}
+      className={cn(QUIET_CONTROL_CLASS, "print-hide shrink-0 text-meta")}
     >
-      {expanded ? "Collapse all" : "Expand all"}
+      {expanded ? "Hide all" : "Show all"}
     </button>
   );
 }
@@ -222,9 +306,9 @@ function requestScrollToSection(id: string): void {
 
 /**
  * Sticky contents sidebar with scroll-spy (mock-up's sidebar variant; built
- * for the real section-list shape — long question-specific titles wrap).
- * Stacks above the report on small screens so the outline stays reachable
- * instead of disappearing below a breakpoint.
+ * for the real section-list shape — long question-specific titles wrap, in
+ * full). From `md` up only; below it the page carries `MobileContents`
+ * under its title block instead.
  *
  * Entries with `kind: "part"` render as clickable part headings (Executive
  * summary, Full report) that scroll to the matching anchor on the page.
@@ -248,7 +332,13 @@ export function ContentsSidebar({
     const checkpoint = () => {
       if (Date.now() < spyLockUntil.current) return;
       const scroller = root;
-      const line = scroller != null ? scroller.getBoundingClientRect().top + 16 : 16;
+      // The current section is the last whose heading has passed a line a
+      // quarter of the way down the pane (at most 160 px): a heading the
+      // reader is reading under counts, not only one at the very top
+      // (round 10, finding 6).
+      const top = scroller != null ? scroller.getBoundingClientRect().top : 0;
+      const height = scroller != null ? scroller.clientHeight : window.innerHeight;
+      const line = top + Math.min(160, height * 0.25);
       let current = list[0]?.id ?? null;
       for (const entry of list) {
         const element = document.getElementById(entry.id);
@@ -323,6 +413,77 @@ export function ContentsSidebar({
   );
 }
 
+/** Below Tailwind's `md` (768 px). */
+const NARROW_QUERY = "(max-width: 767.98px)";
+
+function narrowNow(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.(NARROW_QUERY).matches === true;
+}
+
+function subscribeNarrow(onChange: () => void): () => void {
+  const query = typeof window === "undefined" ? undefined : window.matchMedia?.(NARROW_QUERY);
+  query?.addEventListener?.("change", onChange);
+  return () => query?.removeEventListener?.("change", onChange);
+}
+
+/**
+ * The contents on a phone (round 10, D3): a closed "Contents" disclosure
+ * under the title block, below `md` only. Opened, it lists the same entries
+ * as the sidebar; choosing one closes it and opens and scrolls to that
+ * section, as the sidebar does. `ReportPage` places it.
+ */
+export function MobileContents({ entries }: { entries: SidebarEntry[] }) {
+  const [open, setOpen] = useState(false);
+  const listId = useId();
+  // Mounted only below md, so a wide page carries one "Contents" landmark.
+  const narrow = useSyncExternalStore(subscribeNarrow, narrowNow, () => false);
+  if (!narrow) return null;
+  const go = (entry: SidebarEntry) => {
+    setOpen(false);
+    if ("kind" in entry) requestScrollToSection(entry.id);
+    else requestOpenSection(entry.id);
+  };
+  return (
+    <nav aria-label="Contents" className="print-hide mb-8 border-y border-line md:hidden">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        onClick={() => setOpen((value) => !value)}
+        className="group flex min-h-11 w-full cursor-pointer items-center gap-2 text-left"
+      >
+        <ChevronIcon
+          size={12}
+          className={cn("shrink-0 text-grey transition-transform duration-200 ease-[var(--ease-out-strong)]", open && "rotate-90")}
+        />
+        <span className={cn(LABEL_CLASS, "group-hover:text-navy")}>Contents</span>
+      </button>
+      <Collapse show={open} durationMs={200}>
+        <ul id={listId} className="pb-3">
+          {entries.map((entry) => (
+            <li key={entry.id}>
+              <a
+                href={`#${entry.id}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  go(entry);
+                }}
+                className={
+                  "kind" in entry
+                    ? cn(LABEL_CLASS, "flex min-h-10 items-center pt-2 hover:text-navy")
+                    : "flex min-h-10 items-center py-1.5 pl-3 text-body text-navy hover:underline hover:underline-offset-[3px]"
+                }
+              >
+                {scrub(entry.title)}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </Collapse>
+    </nav>
+  );
+}
+
 /**
  * A collapsible artefact section (028 strand 5): real button, aria-expanded,
  * title + one-line summary visible while collapsed. Key findings is NOT
@@ -344,6 +505,7 @@ export function SectionDisclosure({
   subhead,
   busy = false,
   arrivingClass = "",
+  level = 2,
   children,
 }: {
   id: string;
@@ -363,6 +525,8 @@ export function SectionDisclosure({
   /** A class for controls that arrive with the committed report (the
    *  swap's fade-in), empty otherwise. */
   arrivingClass?: string;
+  /** `h3` inside a report part, `h2` on a page without parts (round 10). */
+  level?: SectionHeadingLevel;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -378,6 +542,7 @@ export function SectionDisclosure({
   useExpandAll(setOpen, collapsible);
   const summary = sectionSummary(section);
   const expanded = !collapsible || open;
+  const Heading = level === 3 ? "h3" : "h2";
   // The meta moves to its own line as a whole when it does not fit beside
   // the title, and wraps inside itself when it is wider than the column (a
   // list with no themes puts every lever noun on one line; 390 px, task 058).
@@ -392,25 +557,20 @@ export function SectionDisclosure({
       className={section.role === "conclusions" ? "mb-9 border-t border-line pt-6" : "mb-9"}
     >
       {collapsible ? (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          onClick={() => setOpen((value) => !value)}
-          className="flex w-full cursor-pointer items-baseline gap-2 text-left"
+        <DisclosureHeading
+          level={level}
+          open={expanded}
+          onToggle={() => setOpen((value) => !value)}
+          wordClassName={arrivingClass}
         >
-          <h2 className={`min-w-0 flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>
-            {scrub(section.title)}
-            {metaSpan}
-          </h2>
-          <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden ${arrivingClass}`}>
-            {expanded ? "Collapse −" : "Expand +"}
-          </span>
-        </button>
-      ) : (
-        <h2 className={REPORT_SECTION_HEADING_CLASS}>
           {scrub(section.title)}
           {metaSpan}
-        </h2>
+        </DisclosureHeading>
+      ) : (
+        <Heading className={REPORT_SECTION_HEADING_CLASS}>
+          {scrub(section.title)}
+          {metaSpan}
+        </Heading>
       )}
       {subhead}
       {/* Fallback (first-sentence) summaries render unmarked — the checked/
@@ -431,8 +591,9 @@ export function SectionDisclosure({
 
 /**
  * Mobile-only secondary disclosure toggle (040 D8): the heading row hides its
- * Expand/Collapse label below md, so collapsible sections render this tappable
- * twin after the summary (collapsed) or at the section end (expanded). The
+ * disclosure word below md, so collapsible sections render this tappable
+ * twin after the summary (collapsed) or at the section end (expanded), in
+ * the same vocabulary (the chevron, "Show" or "Hide"; round 10, C7). The
  * heading row remains a toggle too; this one carries its own aria-expanded.
  */
 export function MobileDisclosureToggle({
@@ -447,9 +608,9 @@ export function MobileDisclosureToggle({
       type="button"
       aria-expanded={expanded}
       onClick={onToggle}
-      className={`${SECTION_EXPAND_LINK_CLASS} block md:hidden ${expanded ? "mt-3" : "mt-1.5"}`}
+      className={cn("group print-hide flex min-h-6 cursor-pointer items-center md:hidden", expanded ? "mt-3" : "mt-1.5")}
     >
-      {expanded ? "Collapse −" : "Expand +"}
+      <DisclosureWord open={expanded} named />
     </button>
   );
 }
@@ -460,6 +621,30 @@ export function MobileDisclosureToggle({
  * the report cites, with the compact whole-search funnel line and the
  * Landscape pointer for the full corpus. Counts label "Documents".
  */
+/** The method section's heading, and its entry in the contents (round 10, C2). */
+export const GATHERED_SECTION_TITLE = "How the evidence was gathered";
+
+/**
+ * Whether "How the evidence was gathered" renders, from the cited-scope
+ * landscape read it is built on: not when the read failed or came back with
+ * nothing to show. The contents leave its entry out on the same test
+ * (round 10, finding 6). While the read is in flight the section shows.
+ */
+export function gatheredSectionShows(landscape: {
+  isError: boolean;
+  data?: { themes?: unknown[] | null; evidence_types?: object | null; years?: object | null; geographies?: object | null } | null;
+}): boolean {
+  if (landscape.isError) return false;
+  const cited = landscape.data;
+  if (cited == null) return true;
+  return (
+    (cited.themes ?? []).length > 0 ||
+    Object.keys(cited.evidence_types ?? {}).length > 0 ||
+    Object.keys(cited.years ?? {}).length > 0 ||
+    Object.keys(cited.geographies ?? {}).length > 0
+  );
+}
+
 export function GatheredSection({ taskId, id }: { taskId: string; id: string }) {
   const [open, setOpen] = useState(false);
   useOpenWhenNavigated(id, setOpen);
@@ -471,7 +656,9 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
   const distributions = useMemo(() => {
     if (cited === undefined) return [];
     const rows: Array<{ label: string; entries: Array<[string, number]> }> = [];
-    const types = Object.entries(cited.evidence_types ?? {}).sort(([, a], [, b]) => b - a);
+    const types = Object.entries(cited.evidence_types ?? {})
+      .sort(([, a], [, b]) => b - a)
+      .map(([type, count]): [string, number] => [evidenceTypeLabel(type), count]);
     if (types.length > 0) rows.push({ label: "Evidence types", entries: types });
     const years = Object.entries(cited.years ?? {}).sort(([a], [b]) => a.localeCompare(b));
     if (years.length > 0) rows.push({ label: "Publication years", entries: years });
@@ -488,25 +675,13 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
       ? `${funnel.data.found} found → ${funnel.data.relevant} included → ${funnel.data.cited} cited`
       : null;
 
-  if (landscape.isError || (cited !== undefined && (cited.themes ?? []).length === 0 && distributions.length === 0)) {
-    return null;
-  }
+  if (!gatheredSectionShows(landscape)) return null;
 
   return (
     <section id={id} className="mt-12 border-t border-line pt-6">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full cursor-pointer items-baseline gap-2 text-left"
-      >
-        <h2 className={`flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>
-          How the evidence was gathered
-        </h2>
-        <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
-          {open ? "Collapse −" : "Expand +"}
-        </span>
-      </button>
+      <DisclosureHeading level={2} open={open} onToggle={() => setOpen((value) => !value)}>
+        {GATHERED_SECTION_TITLE}
+      </DisclosureHeading>
       {!open && funnelLine !== null && (
         <p className="mt-1.5 text-body text-grey">{funnelLine}</p>
       )}
@@ -554,15 +729,17 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
                 {(cited?.themes ?? []).map((theme) => (
                   <li key={theme.name} className="flex items-baseline gap-2 text-body text-navy">
                     <span className="min-w-0 flex-1 truncate">{scrub(theme.name)}</span>
+                    {/* The counts at the list's size, one style beside the
+                        distributions' (round 10, finding 11). */}
                     {theme.theme_id != null ? (
                       <Link
                         to={`/tasks/${taskId}/sources/all?theme=${theme.theme_id}`}
-                        className={`${LINK_CLASS} shrink-0 text-caption`}
+                        className={`${LINK_CLASS} shrink-0 text-body`}
                       >
                         {theme.size === 1 ? "1 document →" : `${theme.size} documents →`}
                       </Link>
                     ) : (
-                      <span className="shrink-0 text-caption text-grey">
+                      <span className="shrink-0 text-body text-grey">
                         {theme.size === 1 ? "1 document" : `${theme.size} documents`}
                       </span>
                     )}
