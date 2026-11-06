@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 
 import type { components } from "../api/gen/types";
+import type { useTasksPaged } from "../api/queries";
 import { COPY, TASK } from "../lib/vocabulary";
 import { Button } from "../ui/brand/Button";
 import { PagePrimary } from "../ui/brand/PageHeader";
@@ -28,6 +29,8 @@ type TaskListItem = {
   source_count?: number | null;
   is_owner?: boolean;
   owner_display?: string | null;
+  /** `TaskOut.status`: an archived task's row reads "Archived". */
+  status?: "active" | "archived";
 };
 
 /** Where a row lands: the Result once there is one to read (a finished run,
@@ -83,6 +86,58 @@ export function TaskListActions({
   );
 }
 
+type PagedTasks = ReturnType<typeof useTasksPaged>;
+type TaskRow = NonNullable<PagedTasks["data"]>["pages"][number]["data"][number];
+
+/** What the list's foot needs to offer the next page (round 10). */
+export type MoreTasks = {
+  /** The server holds rows the list has not asked for yet. */
+  hasMore: boolean;
+  /** The page just asked for is on its way. */
+  loading: boolean;
+  /** The page just asked for failed. */
+  error: boolean;
+  onShowMore: () => void;
+  onRetry: () => void;
+};
+
+/**
+ * A paged task list's rows and its foot (round 10: "Show more").
+ *
+ * `useTasksPaged` holds the pages and asks for the next one only while the
+ * server says `has_more`. The rows are the pages in order with any task
+ * already listed dropped, since a task that changes between two requests
+ * can move across a page boundary.
+ *
+ * Args:
+ *   result: A `useTasksPaged` result.
+ *
+ * Returns:
+ *   The loaded rows and the foot's state.
+ */
+export function pagedTasks(result: PagedTasks): { rows: TaskRow[]; more: MoreTasks } {
+  const seen = new Set<string>();
+  const rows: TaskRow[] = [];
+  for (const page of result.data?.pages ?? []) {
+    for (const row of page.data) {
+      if (seen.has(row.task_id)) continue;
+      seen.add(row.task_id);
+      rows.push(row);
+    }
+  }
+  const askForNext = () => void result.fetchNextPage();
+  return {
+    rows,
+    more: {
+      hasMore: result.hasNextPage,
+      loading: result.isFetchingNextPage,
+      error: result.isFetchNextPageError,
+      onShowMore: askForNext,
+      onRetry: askForNext,
+    },
+  };
+}
+
 type TaskListPanelProps = {
   rows: readonly TaskListItem[];
   projectNames?: ReadonlyMap<string, string>;
@@ -98,6 +153,8 @@ type TaskListPanelProps = {
   ownerlessLabel?: string;
   /** What an empty list shows, in the list's frame; nothing when absent. */
   empty?: ReactNode;
+  /** The list's foot: "Show more" while the server holds more rows. */
+  more?: MoreTasks;
 };
 
 /**
@@ -172,6 +229,37 @@ export function ListError({
   );
 }
 
+/**
+ * The list's foot (round 10): "Show more" under the frame, at the list's
+ * left edge, the outline button pagination uses. It holds its place, disabled,
+ * while the next page is on its way; a page that fails offers Retry instead.
+ */
+function ListFoot({ more, onShowMore }: { more: MoreTasks; onShowMore: () => void }) {
+  if (more.error) {
+    return (
+      <div className="mt-4">
+        <ListError actionLabel="Retry" onRetry={more.onRetry}>
+          Your {TASK.lowerMany} couldn't be loaded.
+        </ListError>
+      </div>
+    );
+  }
+  if (!more.hasMore) return null;
+  return (
+    <div className="mt-4">
+      <Button
+        variant="outline"
+        className="h-10 py-0"
+        disabled={more.loading}
+        aria-busy={more.loading || undefined}
+        onClick={onShowMore}
+      >
+        Show more
+      </Button>
+    </div>
+  );
+}
+
 /** Shared task list body: loading, empty, and rows. */
 export function TaskListPanel({
   rows,
@@ -184,7 +272,20 @@ export function TaskListPanel({
   showOwner = false,
   ownerlessLabel,
   empty,
+  more,
 }: TaskListPanelProps) {
+  // After "Show more", focus moves to the first row that arrived, so a
+  // keyboard reader carries on reading where the list grew rather than at a
+  // button that may now be gone.
+  const listRef = useRef<HTMLUListElement>(null);
+  const focusFrom = useRef<number | null>(null);
+  useEffect(() => {
+    const from = focusFrom.current;
+    if (from === null || rows.length <= from) return;
+    focusFrom.current = null;
+    listRef.current?.querySelectorAll<HTMLAnchorElement>(":scope > li > a")[from]?.focus();
+  }, [rows.length]);
+
   if (isPending) {
     return <ListSkeleton label={`Loading ${TASK.lowerMany}`} />;
   }
@@ -200,26 +301,40 @@ export function TaskListPanel({
   if (rows.length === 0) return loaded ? (empty ?? null) : null;
 
   return (
-    <ul role="list" className={listFrameClass}>
-      {rows.map((row) => (
-        <li key={row.task_id} className="border-b border-line last:border-b-0">
-          <TaskListRow
-            to={rowDestination(row)}
-            name={row.name}
-            capabilityKey={row.capability}
-            projectNames={
-              showProjectPrefix ? projectNameList(row.project_ids, projectNames) : null
-            }
-            showProjectPrefix={showProjectPrefix}
-            sourceCount={row.source_count}
-            updatedAt={row.updated_at}
-            latestRun={statusRun(row)}
-            activeRun={row.active_run}
-            ownerDisplay={showOwner ? (row.owner_display ?? null) : undefined}
-            ownerlessLabel={ownerlessLabel}
-          />
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul ref={listRef} role="list" className={listFrameClass}>
+        {rows.map((row) => (
+          <li key={row.task_id} className="border-b border-line last:border-b-0">
+            <TaskListRow
+              to={rowDestination(row)}
+              name={row.name}
+              capabilityKey={row.capability}
+              projectNames={
+                showProjectPrefix ? projectNameList(row.project_ids, projectNames) : null
+              }
+              showProjectPrefix={showProjectPrefix}
+              sourceCount={row.source_count}
+              updatedAt={row.updated_at}
+              latestRun={statusRun(row)}
+              activeRun={row.active_run}
+              isOwner={row.is_owner ?? true}
+              ownerName={row.owner_display ?? null}
+              showOwner={showOwner}
+              ownerlessLabel={ownerlessLabel}
+              archived={row.status === "archived"}
+            />
+          </li>
+        ))}
+      </ul>
+      {more !== undefined && (
+        <ListFoot
+          more={more}
+          onShowMore={() => {
+            focusFrom.current = rows.length;
+            more.onShowMore();
+          }}
+        />
+      )}
+    </>
   );
 }

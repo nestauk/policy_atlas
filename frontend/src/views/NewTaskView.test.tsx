@@ -220,6 +220,17 @@ describe("NewTaskView — project selector", () => {
     ).toBeInTheDocument();
   });
 
+  it.each([
+    ["evidence_search", "What do you need evidence on?", "Evidence search"],
+    ["options_scoping", "What are you trying to change?", "Options scoping"],
+  ])("opens the %s question on its heading, with no capability line above it (owner, round 10)", (key, heading, name) => {
+    renderNewTask(`/new?capability=${key}`);
+    const title = screen.getByRole("heading", { name: heading });
+    expect(title.previousElementSibling).toBeNull();
+    expect(title).not.toHaveClass("mt-2");
+    expect(screen.queryByText(name)).toBeNull();
+  });
+
   it("reads 'Prepare plan' on the scoping form, not the ES's 'Start'", () => {
     renderNewTask("/new?capability=options_scoping");
     expect(screen.getByRole("button", { name: "Prepare plan" })).toBeInTheDocument();

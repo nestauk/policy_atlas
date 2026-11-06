@@ -213,10 +213,9 @@ function StartsFromPicker({
  *  3.4): the task's own plan is what the next screen opens on. */
 const FORM_COPY: Record<
   SelectableCapabilityKey,
-  { eyebrow: string; heading: string; blurb: string; placeholder: string; submitLabel: string }
+  { heading: string; blurb: string; placeholder: string; submitLabel: string }
 > = {
   evidence_search: {
-    eyebrow: "Evidence search",
     heading: "What do you need evidence on?",
     blurb:
       "Ask a policy question. Policy Atlas will clarify what you need, draft a search plan for your review, then find the evidence.",
@@ -224,7 +223,6 @@ const FORM_COPY: Record<
     submitLabel: "Start",
   },
   options_scoping: {
-    eyebrow: "Options scoping",
     heading: "What are you trying to change?",
     blurb:
       "Describe the change you want. Policy Atlas will clarify what you need, draft a plan for your review, then set out what happens if nothing changes.",
@@ -281,10 +279,10 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
         submit();
       }}
     >
-      <p className="text-body font-semibold uppercase tracking-label text-grey max-md:text-meta">
-        {copy.eyebrow}
-      </p>
-      <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title">
+      {/* No capability line above the heading: the heading names the kind of
+          work (owner, round 10), and the title starts at the page's 44 px
+          top padding, where the lists' titles start. */}
+      <h1 className="text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title">
         {copy.heading}
       </h1>
       <p className="mt-3 max-w-prose text-lead font-normal leading-[25px] text-grey text-pretty max-md:text-body max-md:leading-snug">

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { queryKeys, useMe, useProject, useProjects, useTasks } from "../api/queries";
+import { queryKeys, useMe, useProject, useProjects, useTasks, useTasksPaged } from "../api/queries";
 import { useCreateProject, useUpdateProject } from "../api/mutations";
 import { isConflictCode, conflictSentences } from "../lib/errors";
 import { Figures } from "../lib/figures";
@@ -21,6 +21,7 @@ import {
 } from "../ui/brand/PageHeader";
 import { useToast } from "../ui/radix/Toast";
 import {
+  formatListDate,
   listFrameClass,
   newTaskHref,
   newestTaskUpdateByProject,
@@ -28,6 +29,7 @@ import {
   projectListRowGridClass,
   projectListRowGridClassWithOwner,
   rowFigureCellClass,
+  rowAccessibleName,
   rowNameCellClass,
   showOwnerColumn,
   sortProjectsByLastUpdated,
@@ -40,6 +42,7 @@ import {
   ListSkeleton,
   TaskListActions,
   TaskListPanel,
+  pagedTasks,
 } from "./TaskListPanel";
 import { FindPopover } from "./FindPopover";
 import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
@@ -83,7 +86,7 @@ export function ProjectsView() {
   const [creating, setCreating] = useState(false);
   const taskUpdatedAt = newestTaskUpdateByProject(tasksQuery.data?.data ?? []);
   const rows = sortProjectsByLastUpdated(projects.data?.data ?? [], taskUpdatedAt);
-  const showOwner = showOwnerColumn(hasSwitcher, rows);
+  const showOwner = showOwnerColumn(hasSwitcher, rows, scope);
   const isAdminWideList = hasSwitcher && me.data?.is_admin === true && scope === "all";
   const ownerlessLabel = isAdminWideList ? TENANCY_COPY.noOrganisation : TENANCY_COPY.ownerlessRow;
 
@@ -110,7 +113,16 @@ export function ProjectsView() {
             </PagePrimary>
           </>
         }
-        filters={hasSwitcher ? <ScopeSwitcher scope={scope} onChange={setScope} /> : null}
+        filters={
+          hasSwitcher ? (
+            <ScopeSwitcher
+              scope={scope}
+              onChange={(next) => {
+                if (next !== "archived") setScope(next);
+              }}
+            />
+          ) : null
+        }
         aside={
           isAdminWideList ? (
             <p role="status" className="text-meta font-semibold text-grey">
@@ -185,10 +197,27 @@ export function ProjectsView() {
           <ul role="list" className={listFrameClass}>
             {rows.map((project) => {
               const lastUpdated = projectLastUpdated(project, taskUpdatedAt);
+              const date = formatListDate(lastUpdated);
+              const owner = project.is_owner
+                ? "You"
+                : project.owner_display !== null
+                  ? scrub(project.owner_display)
+                  : ownerlessLabel;
+              const count =
+                project.task_count === 1
+                  ? `1 ${TASK.lower}`
+                  : `${project.task_count} ${TASK.lowerMany}`;
               return (
                 <li key={project.project_id} className="border-b border-line last:border-b-0">
                   <Link
                     to={`/projects/${project.project_id}`}
+                    // Its content in order, as the task rows (round 10).
+                    aria-label={rowAccessibleName([
+                      scrub(project.name),
+                      showOwner && owner !== TENANCY_COPY.ownerlessRow ? owner : null,
+                      count,
+                      date,
+                    ])}
                     className={showOwner ? projectListRowGridClassWithOwner : projectListRowGridClass}
                   >
                     <span
@@ -197,23 +226,13 @@ export function ProjectsView() {
                       {scrub(project.name)}
                     </span>
                     {showOwner && (
-                      <span className={`${rowFigureCellClass} text-meta max-md:hidden`}>
-                        {project.owner_display !== null
-                          ? scrub(project.owner_display)
-                          : ownerlessLabel}
-                      </span>
+                      <span className={`${rowFigureCellClass} max-md:hidden`}>{owner}</span>
                     )}
-                    <span className={`${rowFigureCellClass} text-meta max-md:text-left`}>
-                      <Figures
-                        text={
-                          project.task_count === 1
-                            ? `1 ${TASK.lower}`
-                            : `${project.task_count} ${TASK.lowerMany}`
-                        }
-                      />
+                    <span className={`${rowFigureCellClass} max-md:text-left`}>
+                      <Figures text={count} />
                     </span>
-                    <time dateTime={lastUpdated} className={`${rowFigureCellClass} text-caption tabular-nums`}>
-                      {new Date(lastUpdated).toLocaleDateString()}
+                    <time dateTime={lastUpdated} className={rowFigureCellClass}>
+                      <Figures text={date} />
                     </time>
                   </Link>
                 </li>
@@ -260,15 +279,16 @@ export function ProjectDetailView() {
   // server-max convention as the overview page above: without it this call
   // still falls back to the 50-row default and a project with 51+ tasks
   // would silently truncate.
-  const tasksQuery = useTasks({
+  // Past the 200-row page, "Show more" asks for the next (round 10).
+  const tasksQuery = useTasksPaged({
     project_id: projectId,
     page_size: PROJECTS_OVERVIEW_TASKS_PAGE_SIZE,
   });
+  const { rows: tasks, more } = pagedTasks(tasksQuery);
   const updateProject = useUpdateProject(projectId);
   const toast = useToast();
   useDocumentTitle(shown?.name, PROJECT.one);
 
-  const tasks = tasksQuery.data?.data ?? [];
   const hasSwitcher = me.data?.organisation != null;
   const showOwner = showOwnerColumn(hasSwitcher, tasks);
   const isAdminWideList = hasSwitcher && me.data?.is_admin === true;
@@ -323,7 +343,7 @@ export function ProjectDetailView() {
         <TaskListPanel
           rows={tasks}
           isPending={project.isPending || tasksQuery.isPending}
-          isError={project.isError || tasksQuery.isError}
+          isError={project.isError || (tasksQuery.isError && !tasksQuery.isFetchNextPageError)}
           onRetry={() => {
             void project.refetch();
             void tasksQuery.refetch();
@@ -331,6 +351,7 @@ export function ProjectDetailView() {
           loaded={project.data !== undefined && tasksQuery.data !== undefined}
           showOwner={showOwner}
           ownerlessLabel={ownerlessLabel}
+          more={more}
           empty={
             <ListEmpty label={COPY.noTasks}>
               {TASK.many} you start here join this {PROJECT.lower}.

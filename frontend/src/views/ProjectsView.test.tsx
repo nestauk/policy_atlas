@@ -15,7 +15,24 @@ vi.mock("../api/queries", async (importOriginal) => ({
   useProject: vi.fn(),
   useProjects: vi.fn(),
   useTasks: vi.fn(),
+  // A project's own list is paged (round 10).
+  useTasksPaged: vi.fn(),
 }));
+
+/** One page as the infinite query's result. */
+function pagedResult(rows: unknown[], extra: Record<string, unknown> = {}) {
+  return {
+    data: { pages: [{ data: rows, pagination: { page: 1, page_size: 200, total_items: rows.length, has_more: false } }] },
+    isPending: false,
+    isError: false,
+    isFetchNextPageError: false,
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    fetchNextPage: vi.fn(),
+    refetch: vi.fn(),
+    ...extra,
+  } as unknown as ReturnType<typeof queries.useTasksPaged>;
+}
 
 vi.mock("../api/mutations", () => ({
   useCreateProject: vi.fn(),
@@ -77,6 +94,7 @@ beforeEach(() => {
       typeof queries.useTasks
     >,
   );
+  vi.mocked(queries.useTasksPaged).mockReturnValue(pagedResult([]));
   vi.mocked(queries.useProjects).mockReturnValue(
     { data: { data: [] }, isPending: false } as unknown as ReturnType<typeof queries.useProjects>,
   );
@@ -88,17 +106,17 @@ beforeEach(() => {
 describe("ProjectDetailView — the project_id filter (task 033 phase 10a)", () => {
   it("requests its member tasks with the project_id filter and the 200-row page size, not the unfiltered global page or the 50-row default", () => {
     renderDetail();
-    expect(queries.useTasks).toHaveBeenCalledWith({
+    expect(queries.useTasksPaged).toHaveBeenCalledWith({
       project_id: PROJECT_ID,
       page_size: 200,
     });
     // Never called with no filter — that would be the pre-10a client-side
     // filter over the global 50-row page, the exact bug this phase fixes.
-    expect(queries.useTasks).not.toHaveBeenCalledWith();
-    expect(queries.useTasks).not.toHaveBeenCalledWith({});
+    expect(queries.useTasksPaged).not.toHaveBeenCalledWith();
+    expect(queries.useTasksPaged).not.toHaveBeenCalledWith({});
     // Never called with the filter alone, either — that would fall back to
     // the server's 50-row default and silently truncate a 51+-task project.
-    expect(queries.useTasks).not.toHaveBeenCalledWith({ project_id: PROJECT_ID });
+    expect(queries.useTasksPaged).not.toHaveBeenCalledWith({ project_id: PROJECT_ID });
   });
 });
 
@@ -324,7 +342,7 @@ describe("ProjectsView — the page header and list (lists polish)", () => {
     expect(skeleton.querySelectorAll("li")).toHaveLength(5);
   });
 
-  it("lays project rows on the task rows' tail: owner, count, date in fixed columns", () => {
+  it("lays project rows on the task rows' tail: owner, count, date in fixed columns", async () => {
     vi.mocked(queries.useMe).mockReturnValue(
       {
         data: {
@@ -338,17 +356,31 @@ describe("ProjectsView — the page header and list (lists polish)", () => {
     vi.mocked(queries.useProjects).mockReturnValue(
       { data: { data: [PROJECT_ROW] }, isPending: false } as unknown as ReturnType<typeof queries.useProjects>,
     );
+    const user = userEvent.setup();
     renderList();
+    // Mine: the reader's own list, no owner column (round 10, P6).
+    expect(screen.getByRole("link", { name: /Child health, Tower Hamlets/ })).toHaveClass(
+      "grid",
+      "min-h-14",
+      "grid-cols-[minmax(0,1fr)_5.5rem_5.5rem]",
+    );
+    expect(screen.queryByText("You")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Organisation" }));
     const row = screen.getByRole("link", { name: /Child health, Tower Hamlets/ });
-    expect(row).toHaveClass("grid", "min-h-14", "grid-cols-[minmax(0,1fr)_8rem_5.5rem_7rem]");
+    expect(row).toHaveClass("grid", "min-h-14", "grid-cols-[minmax(0,1fr)_8rem_5.5rem_5.5rem]");
+    // Its content in order, one separator (round 10, ruling 1).
+    expect(row).toHaveAccessibleName(/^Child health, Tower Hamlets · You · 3 tasks · 1 Jan( 2026)?$/);
     // Two fixed lines on phones: the name truncates on line 1, never wraps.
     expect(screen.getByText("Child health, Tower Hamlets")).toHaveClass("truncate", "max-md:col-span-2");
-    // The owner drops on phones (lead ruling P3).
-    expect(screen.getByText("Ada Lovelace")).toHaveClass("max-md:hidden");
+    // The owner drops on phones (lead ruling P3); the reader's own row says You.
+    expect(screen.getByText("You")).toHaveClass("max-md:hidden");
     // Digits in tabular figures, the words and spaces at their normal width.
     expect(screen.getByText("3").parentElement).toHaveTextContent("3 tasks");
-    expect(screen.getByText("3").parentElement).toHaveClass("text-right");
+    expect(screen.getByText("3").parentElement).toHaveClass("text-right", "text-meta");
     expect(screen.getByText("3")).toHaveClass("tabular-nums");
+    // The date at Meta, in the one list form.
+    expect(row.querySelector("time")).toHaveClass("text-meta");
+    expect(row.querySelector("time")).not.toHaveClass("text-caption");
   });
 });
 
@@ -459,5 +491,33 @@ describe("ProjectsView — a list that failed to load (lead ruling, 2026-11-05)"
     expect(again).toHaveClass("h-10", "text-meta");
     await user.click(again);
     expect(refetch).toHaveBeenCalled();
+  });
+});
+
+// Round 10 (lead ruling): a project past the 200-row page gets the same
+// "Show more" as the Tasks page, asking for the next page of its members.
+describe("ProjectDetailView — Show more", () => {
+  it("asks for the next page of the project's tasks", async () => {
+    const member = (index: number) => ({
+      task_id: `task-${index}`,
+      name: `Member task ${index}`,
+      updated_at: "2026-07-21T09:00:00Z",
+      latest_run: null,
+      project_ids: [PROJECT_ID],
+      is_owner: true,
+      owner_display: "Ada Lovelace",
+    });
+    const fetchNextPage = vi.fn();
+    vi.mocked(queries.useTasksPaged).mockReturnValue(
+      pagedResult(
+        Array.from({ length: 200 }, (_, index) => member(index)),
+        { hasNextPage: true, fetchNextPage },
+      ),
+    );
+    const user = userEvent.setup();
+    renderDetail();
+    expect(screen.getAllByRole("listitem")).toHaveLength(200);
+    await user.click(screen.getByRole("button", { name: "Show more" }));
+    expect(fetchNextPage).toHaveBeenCalledTimes(1);
   });
 });
