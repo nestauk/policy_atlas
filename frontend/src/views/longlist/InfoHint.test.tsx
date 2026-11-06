@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { InfoHint } from "./InfoHint";
 
-const LINES = ["Theme: a group of options that work in a similar way.", "Lever: the kind of action government takes."];
+const LINES = ["Theme: a group of options that work in a similar way.", "Lever: the kind of action that the policy takes."];
 
 // Round 12 (lead): one "i", two paths; a tap opens the words as a popover,
 // hover and keyboard focus as the tooltip.

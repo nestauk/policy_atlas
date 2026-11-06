@@ -71,7 +71,7 @@ const GROUP_BY: { key: GroupBy; label: string }[] = [
 export const GROUP_BY_INFO_LABEL = "What a theme and a lever are";
 export const GROUP_BY_INFO = [
   "Theme: a group of options that work in a similar way.",
-  "Lever: the kind of action government takes.",
+  "Lever: the kind of action that the policy takes.",
 ] as const;
 
 const MODES: { key: Mode; label: string }[] = [

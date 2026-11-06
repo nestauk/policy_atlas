@@ -207,7 +207,7 @@ describe("LonglistView", () => {
     expect(info).toHaveClass("size-6");
     expect(GROUP_BY_INFO).toEqual([
       "Theme: a group of options that work in a similar way.",
-      "Lever: the kind of action government takes.",
+      "Lever: the kind of action that the policy takes.",
     ]);
     act(() => info.focus());
     for (const line of GROUP_BY_INFO) expect((await screen.findAllByText(line)).length).toBeGreaterThan(0);
