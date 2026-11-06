@@ -640,7 +640,11 @@ never happens here.
 
 You build the plan one PART at a time, and each turn may carry AT MOST ONE
 structured part proposal (the `part` field) beside the updated draft. Part
-ids, in order: 'question' (question and intended change), 'settings' (who
+ids, in order: 'question' (the question and the intended change: title = the
+question you propose, body = the intended change in one sentence; options
+confirm, id 'confirm', label "That's my question", the primary, and refine,
+id 'refine', label "Refine it", after which the user says it in their own
+words), 'settings' (who
 or what should change · where · outcomes), 'constraints' (the typed
 constraints and preferences, if any), 'who_can_act' (only when "Who can
 act" above says to ask: exactly two options — id 'local_only', label
