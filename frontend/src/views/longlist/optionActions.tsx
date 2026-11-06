@@ -7,7 +7,7 @@ import { BanIcon, UndoIcon, iconButtonClass } from "../../ui/brand/icons";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { Tooltip, TooltipProvider } from "../../ui/radix/Tooltip";
-import { ADD_TO_SHORTLIST_WORDS, SHORTLISTED_WORD } from "./longlistPresentation";
+import { ADD_TO_SHORTLIST_WORDS, REMOVE_FROM_SHORTLIST_WORDS, SHORTLISTED_WORD } from "./longlistPresentation";
 
 /** The reason and add-option inputs share one look. */
 export const REASON_INPUT_CLASS =
@@ -140,18 +140,46 @@ function holdsPlace(state: ShortlistState | null | undefined): boolean {
 }
 
 /** The toggle's words at Meta, the quiet control's underline turning Navy on
- *  hover; held, the words go Navy after a 6 px Navy square, the mark the
+ *  hover; held, the words go Navy after the check mark, the mark the
  *  building list shows before the toggle exists. 32 px tall, the icon
- *  actions' height. */
+ *  actions' height. Its labels share one grid cell, so the button is always
+ *  as wide as its longest words and swapping them moves nothing. */
 const SHORTLIST_TOGGLE_CLASS =
-  "inline-flex min-h-8 cursor-pointer items-center gap-1.5 whitespace-nowrap text-meta font-semibold " +
+  "inline-grid min-h-8 cursor-pointer items-center whitespace-nowrap text-meta font-semibold " +
   "underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 " +
-  "hover:text-navy hover:decoration-navy disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60";
+  "hover:text-navy hover:decoration-navy focus-visible:decoration-navy " +
+  "disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60";
 
-/** The held state's mark: a 6 px Navy square (DESIGN.md: the status mark's
- *  size), not a word in a chip. */
-function HeldMark() {
-  return <span aria-hidden="true" className="inline-block size-1.5 flex-none bg-navy" />;
+/** One label of the toggle, laid over the others in the same cell. */
+const TOGGLE_LAYER_CLASS = "col-start-1 row-start-1 inline-flex items-center gap-1.5";
+
+/** Where the toggle's words sit inside its held width: at its end where the
+ *  control closes a row (the longlist row from `sm` up, the shortlist, the
+ *  option card), at its start where words begin a line (the grid's tiles). */
+const TOGGLE_ALIGN = {
+  start: "justify-items-start",
+  end: "justify-items-end",
+  "end-sm": "justify-items-start sm:justify-items-end",
+} as const;
+
+/** The held state's mark: a 12 px check at the Sources table's tick stroke
+ *  (round 11, owner: "Shortlisted" with the check mark). */
+function CheckMark() {
+  return (
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      viewBox="0 0 24 24"
+      className="h-3 w-3 flex-none"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 12.5l5 5L20 6.5" />
+    </svg>
+  );
 }
 
 /** "Shortlisted" as plain words, for a row that holds a place while the
@@ -160,44 +188,85 @@ function HeldMark() {
 export function ShortlistedWord({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex min-h-8 items-center gap-1.5 whitespace-nowrap text-meta font-semibold text-navy", className)}>
-      <HeldMark />
+      <CheckMark />
       {SHORTLISTED_WORD}
     </span>
   );
 }
 
+/** Whether focus arrived from the keyboard (`:focus-visible`); true where
+ *  the selector cannot be asked. A mouse press focuses the button too, and
+ *  that must not swap the words under the pointer. */
+function focusVisible(element: Element): boolean {
+  try {
+    return element.matches(":focus-visible");
+  } catch {
+    return true;
+  }
+}
+
 /**
  * The shortlist state as a toggle in words (round 10, lead ruling on
- * finding 6): "Shortlisted" with `aria-pressed` true on an option that holds
- * a place (pressing it gives the place up), "Add to shortlist" on an
- * included option that holds none. Nothing for an excluded option without a
- * place. Disabled while a walk runs or the change is on its way.
+ * finding 6; round 11, owner): "Shortlisted" after the check mark, with
+ * `aria-pressed` true, on an option that holds a place; on hover and on
+ * keyboard focus its words become "Remove from shortlist", what pressing it
+ * does. "Add to shortlist" on an included option that holds none. The
+ * labels share one grid cell, so the swap moves nothing and pressing the
+ * toggle never shifts the row. Pressing it ends the swap until the pointer
+ * leaves and comes back, so the words that answer a press are the new
+ * state's. Touch has no hover: a tap never shows the swap. The accessible
+ * name is the resting words; the swap is visual. Nothing for an excluded
+ * option without a place. Disabled while a walk runs or the change is on its
+ * way.
  */
 export function ShortlistToggle({
   actions,
   optionId,
   shortlistState,
   excluded,
+  align = "end",
   className,
 }: {
   actions: OptionActions;
   optionId: string;
   shortlistState: ShortlistState | null | undefined;
   excluded: boolean;
+  /** Where the words sit in the held width (`TOGGLE_ALIGN`). */
+  align?: keyof typeof TOGGLE_ALIGN;
   className?: string;
 }) {
+  const [swapped, setSwapped] = useState(false);
   const holds = holdsPlace(shortlistState);
   if (!holds && excluded) return null;
+  const disabled = (holds ? actions.unshortlistPending : actions.shortlistPending) || actions.walkActive;
+  const removing = holds && swapped && !disabled;
   return (
     <button
       type="button"
       aria-pressed={holds}
-      disabled={(holds ? actions.unshortlistPending : actions.shortlistPending) || actions.walkActive}
-      onClick={() => (holds ? actions.unshortlist(optionId) : actions.shortlist(optionId))}
-      className={cn(SHORTLIST_TOGGLE_CLASS, holds ? "text-navy" : "text-grey", className)}
+      disabled={disabled}
+      onPointerEnter={(event) => {
+        if (event.pointerType !== "touch") setSwapped(true);
+      }}
+      onPointerLeave={() => setSwapped(false)}
+      onFocus={(event) => {
+        if (focusVisible(event.currentTarget)) setSwapped(true);
+      }}
+      onBlur={() => setSwapped(false)}
+      onClick={() => {
+        setSwapped(false);
+        if (holds) actions.unshortlist(optionId);
+        else actions.shortlist(optionId);
+      }}
+      className={cn(SHORTLIST_TOGGLE_CLASS, TOGGLE_ALIGN[align], holds ? "text-navy" : "text-grey", className)}
     >
-      {holds && <HeldMark />}
-      {holds ? SHORTLISTED_WORD : ADD_TO_SHORTLIST_WORDS}
+      <span className={cn(TOGGLE_LAYER_CLASS, removing && "opacity-0")}>
+        {holds && <CheckMark />}
+        {holds ? SHORTLISTED_WORD : ADD_TO_SHORTLIST_WORDS}
+      </span>
+      <span aria-hidden="true" data-swap="" className={cn(TOGGLE_LAYER_CLASS, !removing && "opacity-0")}>
+        {REMOVE_FROM_SHORTLIST_WORDS}
+      </span>
     </button>
   );
 }

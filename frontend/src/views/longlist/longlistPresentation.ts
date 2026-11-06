@@ -1,4 +1,5 @@
 import type { components } from "../../api/gen/types";
+import type { LiveTheme, RunStreamState } from "../../store";
 import { countOf } from "../../lib/vocabulary";
 import { PROFILE_LINE_LABELS } from "../workspace/planVocabulary";
 
@@ -75,29 +76,29 @@ export const ABSTRACTS_NOTE = "read from titles and abstracts only";
 export const NO_IN_SCOPE_WORDS = "No in-scope evidence";
 
 /**
- * A list row's meta fields after the lever (round 10, finding 6; task 046,
- * amendment 4, R85): always the same fields in the same order, so a reader
- * scans them in place. The theme when the list is not grouped by theme, the
- * relations, then the evidence signal's own parts (no document count of its
- * own), then "No in-scope evidence" when that holds. "searching for its
- * evidence…" stands for the signal while the option's own search runs. The
- * origin sits beside the name and the shortlist state is the row's toggle,
- * so neither repeats here.
+ * A list row's one meta line (round 11, review finding 4; round 10's fixed
+ * order kept): the lever (or, under a lever heading, the theme), the
+ * evidence signal's first part, then "No in-scope evidence" when that holds.
+ * "searching for its evidence…" stands for the signal while the option's
+ * own search runs. Relations, origin and the rest of the signal are the
+ * option card's.
  *
  * Args:
  *   option: The option's summary.
- *   theme: The theme's name to show, or null when the grouping already says it.
+ *   lever: The lever's words, or null when the grouping says it or the
+ *     profile wave has not written it.
+ *   theme: The theme's name to show, or null when the grouping says it.
  *
  * Returns:
  *   The fields, each one whole (a line wraps between fields, never inside a
  *   middot).
  */
-export function rowMetaFields(option: OptionSummaryOut, theme: string | null): string[] {
+export function rowMetaFields(option: OptionSummaryOut, lever: string | null, theme: string | null): string[] {
   const fields: string[] = [];
+  if (lever !== null) fields.push(lever);
   if (theme !== null) fields.push(theme);
-  for (const relation of option.relations ?? []) fields.push(relationLabel(relation));
   if (option.search_pending) fields.push("searching for its evidence…");
-  else fields.push(...evidenceSignal(option).split(" · "));
+  else fields.push(evidenceSignal(option).split(" · ")[0]);
   if (option.no_in_scope_evidence) fields.push(NO_IN_SCOPE_WORDS);
   return fields;
 }
@@ -563,6 +564,9 @@ type LonglistOut = components["schemas"]["LonglistOut"];
  *  shortlist wave of the build to the finished list. */
 export const SHORTLISTED_WORD = "Shortlisted";
 export const ADD_TO_SHORTLIST_WORDS = "Add to shortlist";
+/** What pressing "Shortlisted" does, said on hover and keyboard focus
+ *  (round 11, owner): the held words alone did not say it. */
+export const REMOVE_FROM_SHORTLIST_WORDS = "Remove from shortlist";
 
 /** A longlist walk's stages (the server's keys). "shortlist" is left out on
  *  purpose: a walk that runs only that stage is the standalone shortlist
@@ -609,7 +613,7 @@ const FOUND_FORMAT = new Intl.NumberFormat("en-GB");
 /** A row's right-hand line while its own search is the news; nothing once
  *  the longlist read has the option (its evidence then sits on the meta
  *  line, so the count is said once: round 10, finding 2 with R85). */
-export type BuildingStatus = { kind: "queued" | "searching" | "searched" | "failed"; text: string } | null;
+export type BuildingStatus = { kind: "queued" | "searching" | "searched" | "failed" | "assigning"; text: string } | null;
 
 /** The right-hand line while the option's search is the news. */
 export function searchStatusLine(row: Pick<OptionProgressOut, "search_status" | "found">): BuildingStatus {
@@ -628,10 +632,67 @@ export function searchStatusLine(row: Pick<OptionProgressOut, "search_status" | 
   }
 }
 
+/**
+ * The names a longlist walk's steps publish while they run (round 11),
+ * before the step commits anything to a read: the options "Clustering into
+ * options" names, then the themes "Grouping into themes" names. Names and
+ * descriptions only; the committed longlist brings the counts and which
+ * option is in which theme.
+ */
+export interface LiveNames {
+  options: readonly LiveTheme[];
+  themes: readonly LiveTheme[];
+}
+
+export const NO_LIVE_NAMES: LiveNames = { options: [], themes: [] };
+
+/**
+ * The names the walk's clustering steps have published, from the run
+ * stream: the options of "Clustering into options" (`liveOptions`, the
+ * Themes frame with `stage: "longlist"`; the residual pass sends the whole
+ * list again) and the themes of "Grouping into themes" (`liveOptionThemes`,
+ * `stage: "theme"`). The empty lists are shared, so a memo on them holds.
+ *
+ * Args:
+ *   stream: The task's run stream state.
+ *
+ * Returns:
+ *   The published names, or `NO_LIVE_NAMES` when none are.
+ */
+export function liveNamesOf(stream: Pick<RunStreamState, "liveOptions" | "liveOptionThemes">): LiveNames {
+  return {
+    options: stream.liveOptions ?? NO_LIVE_NAMES.options,
+    themes: stream.liveOptionThemes ?? NO_LIVE_NAMES.themes,
+  };
+}
+
+/** A name compared as the server compares it: case, width and spacing
+ *  folded. */
+export function foldName(text: string): string {
+  return text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/** A stable key for a name (a React key and a View Transition name, so a
+ *  CSS identifier): the prefix and a hash of the folded name. */
+export function nameKey(prefix: string, text: string): string {
+  let hash = 5381;
+  for (const char of foldName(text)) hash = ((hash * 33) ^ char.codePointAt(0)!) >>> 0;
+  return `${prefix}-${hash.toString(36)}`;
+}
+
+/** The right-hand line of a row while "Clustering into options" assigns the
+ *  sources (round 11): it breathes until the step commits, when the row's
+ *  evidence line brings its count. */
+export const ASSIGNING_LINE: BuildingStatus = { kind: "assigning", text: "Assigning sources" };
+
 /** One row of the longlist, built or being built: one anatomy from the
  *  first row of the build to the finished list (round 10, finding 2). */
 export interface BuildingRow {
   id: string;
+  /** The row's React key and View Transition name: the option's id, or for
+   *  an option clustering found, its name's key, so the row a published name
+   *  drew keeps its place when the read brings the option (round 11). */
+  key: string;
   name: string;
   description: string;
   /** The grey origin words ("from your report", "found in the evidence"). */
@@ -655,6 +716,9 @@ export interface BuildingGroup {
   /** The theme's description, "" when it has none. */
   description: string;
   rows: BuildingRow[];
+  /** A theme "Grouping into themes" has named and the read does not have
+   *  yet: its heading shows before any option is in it (round 11). */
+  named?: true;
 }
 
 export interface BuildingLayout {
@@ -671,14 +735,19 @@ function profiled(option: OptionSummaryOut): boolean {
  * The longlist being built, as rows in place (N24, D9).
  *
  * The options read gives the rows and their order from the end of suggest,
- * with each option's search and, from clustering on, the folds. Once the
- * longlist read exists it fills them in, in waves: the evidence line, then
- * the lever, then exclusions (into their own group), then themes (rows move
- * under them), then shortlist marks. Rows the clustering stage added join
- * the end; a folded row moves under the option it was folded into. The
- * finished list is the same layout (round 10, finding 2): without the
- * options read (a finished task opened cold) the rows come from the
- * longlist read alone.
+ * with each option's search and, from clustering on, the folds. While
+ * "Clustering into options" runs, the names it publishes join as rows at
+ * once (an option the options read does not have yet, origin "found in the
+ * evidence"), and every row not yet on the longlist reads "Assigning
+ * sources" with its count as the batches land (round 11). Once the longlist
+ * read exists it fills them in, in waves: the evidence line, then the
+ * lever, then exclusions (into their own group), then themes (rows move
+ * under them), then shortlist marks. While "Grouping into themes" runs, the
+ * themes it names stand as headings under the rows before the read has
+ * them, and an option moves under its theme as it is assigned (round 11).
+ * A folded row moves under the option it was folded into. The finished list
+ * is the same layout (round 10, finding 2): without the options read (a
+ * finished task opened cold) the rows come from the longlist read alone.
  *
  * Within a theme the rows run by lever, then name, as the finished list
  * sorts them, so the walk's end moves nothing.
@@ -686,14 +755,23 @@ function profiled(option: OptionSummaryOut): boolean {
  * Args:
  *   rows: The options read's rows, oldest first.
  *   longlist: The longlist read, or `null` while it 404s.
+ *   live: The names the walk's steps have published (`NO_LIVE_NAMES` on a
+ *     finished list).
  *
  * Returns:
  *   The groups of included rows in order, and the excluded rows.
  */
-export function buildingLayout(rows: readonly OptionProgressOut[], longlist: LonglistOut | null | undefined): BuildingLayout {
+export function buildingLayout(
+  rows: readonly OptionProgressOut[],
+  longlist: LonglistOut | null | undefined,
+  live: LiveNames = NO_LIVE_NAMES,
+): BuildingLayout {
   const summaries = new Map((longlist?.options ?? []).map((option) => [option.option_id, option]));
   const ids = new Set(rows.map((row) => row.option_id));
-  const live = rows.filter((row) => row.merged_into_option_id == null || !ids.has(row.merged_into_option_id));
+  const liveRows = rows.filter((row) => row.merged_into_option_id == null || !ids.has(row.merged_into_option_id));
+  const named = new Map(live.options.map((option) => [foldName(option.label), option]));
+  // The clustering step is naming options and nothing is on the longlist yet.
+  const assigning = named.size > 0 && (longlist?.options ?? []).length === 0;
 
   const toRow = (
     id: string,
@@ -703,12 +781,16 @@ export function buildingLayout(rows: readonly OptionProgressOut[], longlist: Lon
     search: BuildingStatus,
   ): BuildingRow => {
     const summary = summaries.get(id);
+    const shownName = summary?.name ?? name;
+    const liveName = named.get(foldName(shownName));
+    const shownOrigin = summary?.origin ?? origin;
     return {
       id,
-      name: summary?.name ?? name,
+      key: shownOrigin === "clustered" && liveName !== undefined ? nameKey("named", shownName) : id,
+      name: shownName,
       description: (summary?.description ?? description).trim(),
-      origin: ORIGIN_WORDS[summary?.origin ?? origin],
-      status: summary !== undefined ? null : search,
+      origin: ORIGIN_WORDS[shownOrigin],
+      status: summary !== undefined ? null : assigning ? ASSIGNING_LINE : search,
       lever: summary !== undefined && profiled(summary) ? leverLabel(summary) : null,
       summary: summary ?? null,
       shortlisted: summary !== undefined && holdsPlace(summary),
@@ -719,7 +801,7 @@ export function buildingLayout(rows: readonly OptionProgressOut[], longlist: Lon
   };
 
   const all: BuildingRow[] = [
-    ...live.map((row) => toRow(row.option_id, row.name, row.description, row.origin, searchStatusLine(row))),
+    ...liveRows.map((row) => toRow(row.option_id, row.name, row.description, row.origin, searchStatusLine(row))),
     // An option the longlist has that the options read does not: every row
     // of a finished list opened before the options read answers (and never
     // drop a row the reader could otherwise see).
@@ -727,16 +809,35 @@ export function buildingLayout(rows: readonly OptionProgressOut[], longlist: Lon
       .filter((option) => !ids.has(option.option_id))
       .map((option) => toRow(option.option_id, option.name, option.description, option.origin, null)),
   ];
+  if (assigning) {
+    // A name the clustering step published that no read has yet joins at
+    // the end, as the options it found do once the read has them.
+    const shown = new Set(all.map((row) => foldName(row.name)));
+    for (const option of live.options) {
+      const folded = foldName(option.label);
+      if (folded === "" || shown.has(folded)) continue;
+      shown.add(folded);
+      const key = nameKey("named", option.label);
+      all.push({
+        id: key,
+        key,
+        name: option.label.trim(),
+        description: (option.description ?? "").trim(),
+        origin: ORIGIN_WORDS.clustered,
+        status: ASSIGNING_LINE,
+        lever: null,
+        summary: null,
+        shortlisted: false,
+        folded: [],
+      });
+    }
+  }
   const excludedIds = new Set(
     [...summaries.values()].filter((option) => option.state === "excluded").map((option) => option.option_id),
   );
   const included = all.filter((row) => !excludedIds.has(row.id));
   const excluded = all.filter((row) => excludedIds.has(row.id));
 
-  const themes = longlist?.themes ?? [];
-  if (themes.length === 0) {
-    return { groups: included.length > 0 ? [{ key: "all", title: null, description: "", rows: included }] : [], excluded };
-  }
   const byLever = byLeverThenName(longlist?.lever_types ?? []);
   const sorted = (members: BuildingRow[]) =>
     [...members].sort((a, b) =>
@@ -744,12 +845,42 @@ export function buildingLayout(rows: readonly OptionProgressOut[], longlist: Lon
         ? byLever(a.summary, b.summary)
         : Number(a.summary === null) - Number(b.summary === null) || a.name.localeCompare(b.name),
     );
+  // A theme's key is its name's, so a heading the theming step named keeps
+  // its place (and does not rise again) when the read brings the theme.
+  const takenKeys = new Set<string>();
+  const themeKey = (name: string, fallback: string) => {
+    const key = nameKey("theme", name);
+    const unique = takenKeys.has(key) ? `${key}-${fallback}` : key;
+    takenKeys.add(unique);
+    return unique;
+  };
+
+  const themes = longlist?.themes ?? [];
+  if (themes.length === 0) {
+    const flat: BuildingGroup[] = included.length > 0 ? [{ key: "all", title: null, description: "", rows: included }] : [];
+    if (live.themes.length === 0 || longlist == null) return { groups: flat, excluded };
+    // "Grouping into themes" has named its themes: each stands as a heading
+    // under the rows until the committed themes move the rows under theirs.
+    const headings: BuildingGroup[] = live.themes.map((theme, index) => ({
+      key: themeKey(theme.label, String(index)),
+      title: theme.label.trim(),
+      description: themeSummary(theme.description ?? ""),
+      rows: [],
+      named: true,
+    }));
+    return { groups: [...flat, ...headings], excluded };
+  }
   const placed = new Set<string>();
   const groups: BuildingGroup[] = themes.map((theme) => {
     const members = new Set(theme.option_ids ?? []);
     const themed = included.filter((row) => members.has(row.id) && !placed.has(row.id));
     for (const row of themed) placed.add(row.id);
-    return { key: theme.theme_id, title: theme.name, description: themeSummary(theme.description ?? ""), rows: sorted(themed) };
+    return {
+      key: themeKey(theme.name, theme.theme_id),
+      title: theme.name,
+      description: themeSummary(theme.description ?? ""),
+      rows: sorted(themed),
+    };
   });
   const rest = included.filter((row) => !placed.has(row.id));
   if (rest.length > 0) groups.push({ key: "no-theme", title: "No theme", description: "", rows: sorted(rest) });
@@ -762,8 +893,8 @@ export function buildingLayout(rows: readonly OptionProgressOut[], longlist: Lon
  * places (a View Transition); any other change lands in place.
  */
 export function layoutSignature(layout: BuildingLayout): string {
-  const groups = layout.groups.map((group) => `${group.key}:${group.rows.map((row) => row.id).join(",")}`);
-  return `${groups.join("|")}#${layout.excluded.map((row) => row.id).join(",")}`;
+  const groups = layout.groups.map((group) => `${group.key}:${group.rows.map((row) => row.key).join(",")}`);
+  return `${groups.join("|")}#${layout.excluded.map((row) => row.key).join(",")}`;
 }
 
 /** Whether the option holds a place (a pick or one added by you); a

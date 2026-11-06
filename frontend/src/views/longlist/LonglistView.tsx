@@ -14,8 +14,17 @@ import { StatusMark } from "../../ui/brand/Card";
 import { cn } from "../../ui/brand/cn";
 import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
 import { prefersReducedMotion } from "../../ui/motion/motion";
+import { useRunStream } from "../../store";
 import { REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
-import { SectionDisclosure, sectionAnchor, type SidebarEntry } from "../ArtefactOutline";
+import {
+  DisclosureWord,
+  sectionAnchor,
+  useExpandForPrint,
+  useOpenWhenNavigated,
+  type SidebarEntry,
+} from "../ArtefactOutline";
+import { LABEL_CLASS } from "../../ui/brand/label";
+import { OutlineSwitch } from "../../ui/brand/OutlineSwitch";
 import { REPORT_TITLE_CLASS, ReportPage } from "../reportPage";
 import { isRunActive } from "../scopingActivity";
 import { LonglistGrid } from "./LonglistGrid";
@@ -26,10 +35,11 @@ import {
   constraintLabel,
   countsParts,
   definitionSentence,
-  instrumentsSummary,
   layoutSignature,
   leverDefinitionFor,
+  liveNamesOf,
   longlistTitle,
+  NO_LIVE_NAMES,
   rowMetaFields,
   type BuildingLayout,
   type BuildingRow,
@@ -45,7 +55,6 @@ import {
 import "./longlist.css";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
-type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
 type GroupBy = "theme" | "lever";
 type Mode = "list" | "grid";
 type OptionActions = ReturnType<typeof useOptionActions>;
@@ -154,11 +163,10 @@ function useWideScreen(): boolean {
 function arrivalKeys(layout: BuildingLayout): Set<string> {
   const keys = new Set<string>();
   const add = (row: BuildingRow) => {
-    keys.add(`row:${row.id}`);
-    if (row.summary !== null) keys.add(`meta:${row.id}`);
-    if (row.lever !== null) keys.add(`lever:${row.id}`);
-    if (row.shortlisted) keys.add(`short:${row.id}`);
-    for (const folded of row.folded) keys.add(`fold:${folded.id}`);
+    keys.add(`row:${row.key}`);
+    if (row.summary !== null) keys.add(`meta:${row.key}`);
+    if (row.lever !== null) keys.add(`lever:${row.key}`);
+    if (row.shortlisted) keys.add(`short:${row.key}`);
   };
   for (const group of layout.groups) {
     if (group.title !== null) keys.add(`theme:${group.key}`);
@@ -170,46 +178,62 @@ function arrivalKeys(layout: BuildingLayout): Set<string> {
 }
 
 /**
- * A switch between two or three views (round 10, finding 3): the outline
- * button's look, joined into one bar, `aria-pressed` on each; the chosen one
- * takes a Navy border and Navy words, the others stay Grey. 40 px tall, the
- * height of every control but the primary. Never a fill: the fill belongs to
- * the page's one primary.
+ * A group of options on the list (round 11, review findings 3, 11 and 13): a
+ * theme, a lever type or the excluded options. Its heading is the Label
+ * style (uppercase, tracked, Grey) with the count beside it, holding the
+ * disclosure button (the report's pattern, so it stays in the outline) and
+ * the chevron with "Show" or "Hide" at every width; under it one Body Grey
+ * line, the group's description, open or shut (ruling 1: a collapsed header
+ * carries its one-line takeaway); then the rows, 16 px apart. Opens when the
+ * contents or a link points at it, and for print.
  */
-function OutlineSwitch<K extends string>({
-  label,
-  choices,
-  value,
-  onChange,
+function GroupSection({
+  id,
+  title,
+  count,
+  description,
+  defaultOpen,
+  className,
+  children,
 }: {
-  label: string;
-  choices: { key: K; label: string }[];
-  value: K;
-  onChange: (key: K) => void;
+  id: string;
+  title: string;
+  /** The count beside the title; "" for a theme no option is in yet. */
+  count: string;
+  description: string;
+  defaultOpen: boolean;
+  className?: string;
+  children: ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+  useOpenWhenNavigated(id, setOpen);
+  useExpandForPrint(setOpen);
   return (
-    <div role="group" aria-label={label} className="flex">
-      {choices.map((choice, index) => {
-        const pressed = choice.key === value;
-        return (
-          <button
-            key={choice.key}
-            type="button"
-            aria-pressed={pressed}
-            onClick={() => onChange(choice.key)}
-            className={cn(
-              "pressable relative h-10 cursor-pointer border bg-paper px-3.5 text-meta font-semibold transition-colors duration-150",
-              index > 0 && "-ml-px",
-              pressed
-                ? "z-10 border-navy text-navy"
-                : "border-line-2 text-grey hover:bg-[#f0f0f3] hover:text-navy",
+    <section id={id} className={cn("mb-8", className)}>
+      <h2 className={LABEL_CLASS}>
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+          className="group flex min-h-10 w-full cursor-pointer items-center gap-3 text-left"
+        >
+          {/* The button resets text-transform (Tailwind's preflight), so the
+              title carries the Label's uppercase itself. */}
+          <span className="min-w-0 flex-1 uppercase">
+            {scrub(title)}
+            {count !== "" && (
+              <>
+                {" "}
+                <span className="ml-1 font-normal tabular-nums tracking-normal normal-case">{count}</span>
+              </>
             )}
-          >
-            {choice.label}
-          </button>
-        );
-      })}
-    </div>
+          </span>
+          <DisclosureWord open={open} className="normal-case tracking-normal" />
+        </button>
+      </h2>
+      {description !== "" && <p className="max-w-prose-measure text-body text-grey">{scrub(description)}</p>}
+      {open && children}
+    </section>
   );
 }
 
@@ -232,13 +256,16 @@ function MetaField({ last, children }: { last: boolean; children: ReactNode }) {
 
 /**
  * One option row, the same from the first row of the build to the finished
- * list (round 10, finding 2): the name with its origin words beside it, the
- * row's own search while it runs at the right, the description, one meta
- * line of fixed fields (the lever, the theme when the grouping does not say
- * it, relations, the evidence, "No in-scope evidence"), the exclusion, and
- * the suggestions folded into it. The finished list adds its controls: the
- * name links to the option card, the shortlist toggle and Exclude or
- * Include again.
+ * list (round 10, finding 2), and as light as a scanning list needs (round
+ * 11, review findings 4, 6, 12 and 14): the name, its one-sentence
+ * description (ruling 8), one Meta Grey line (the lever, or the theme under
+ * a lever heading; the evidence's first part; "No in-scope evidence"), and
+ * the exclusion for an excluded option (ruling 4: the constraint it broke).
+ * At the right the row's own search while it is the news, then the shortlist
+ * toggle and Exclude or Include again (ruling 42's row actions); on a phone
+ * they close the row. Origin words, relations, the rest of the evidence and
+ * the suggestions folded in are the option card's. Nothing in the row is
+ * bold but the name.
  */
 function OptionRow({
   taskId,
@@ -260,40 +287,60 @@ function OptionRow({
   /** The row itself arrives (it rises in). */
   rises: boolean;
   /** Which of its parts arrive now (they fade in). */
-  lands: (part: "meta" | "lever" | "short" | "fold", id?: string) => boolean;
+  lands: (part: "meta" | "lever" | "short") => boolean;
 }) {
   const summary = row.summary;
-  const lever = showLever ? row.lever : null;
   const excluded = summary?.state === "excluded";
-  const fields = summary === null ? [] : rowMetaFields(summary, theme);
+  const fields = summary === null ? [] : rowMetaFields(summary, showLever ? row.lever : null, theme);
   const status = row.status;
   const exclusion = excluded ? (summary?.exclusion ?? null) : null;
   const notice = controls?.notice ?? null;
   // The row's name in the regrouping transition (`longlist.css`).
-  const style = { "--longlist-row": `opt-${row.id}` } as CSSProperties;
+  const style = { "--longlist-row": `opt-${row.key}` } as CSSProperties;
   return (
-    <li className={cn("longlist-row border-b border-line py-4", rises && "anim-rise")} style={style}>
-      <div className="flex items-start justify-between gap-x-6 gap-y-1 max-sm:flex-col">
-        <p className="min-w-0 text-body">
-          {controls !== null ? (
-            <Link
-              to={`/tasks/${taskId}/options/${row.id}`}
-              className={cn("font-bold underline-offset-4 hover:underline", excluded ? "text-grey" : "text-navy")}
-            >
-              {scrub(row.name)}
-            </Link>
-          ) : (
-            <span className={cn("font-bold", excluded ? "text-grey" : "text-navy")}>{scrub(row.name)}</span>
+    <li className={cn("longlist-row", rises && "anim-rise")} style={style}>
+      <div className="flex items-start gap-x-6 gap-y-1 max-sm:flex-col">
+        <div className="min-w-0 flex-1">
+          <p className="text-body">
+            {controls !== null ? (
+              <Link
+                to={`/tasks/${taskId}/options/${row.id}`}
+                className={cn("font-bold underline-offset-4 hover:underline", excluded ? "text-grey" : "text-navy")}
+              >
+                {scrub(row.name)}
+              </Link>
+            ) : (
+              <span className={cn("font-bold", excluded ? "text-grey" : "text-navy")}>{scrub(row.name)}</span>
+            )}
+          </p>
+          {row.description !== "" && (
+            <p className={cn("max-w-[44em] text-body", excluded ? "text-grey" : "text-ink")}>{scrub(row.description)}</p>
           )}
-          {/* A space, so a long name can break before its origin words. */}{" "}
-          <span className="ml-1.5 whitespace-nowrap text-meta text-grey">{row.origin}</span>
-        </p>
-        <div className="-mt-1 flex flex-none items-center gap-x-4 text-meta text-grey max-sm:mt-0 max-sm:-ml-px">
+          {fields.length > 0 && (
+            <p className={cn("mt-0.5 max-w-[44em] text-meta text-grey", (lands("meta") || lands("lever")) && "anim-swap-in")}>
+              {fields.map((field, index) => (
+                <span key={`${index}-${field}`}>
+                  <MetaField last={index === fields.length - 1}>{scrub(field)}</MetaField>{" "}
+                </span>
+              ))}
+            </p>
+          )}
+          {exclusion !== null && (
+            <p className="mt-0.5 max-w-[44em] text-meta text-ink">
+              <span className="font-semibold text-red">Excluded:</span>{" "}
+              {constraintLabel(exclusion.constraint ?? "") !== "" && (
+                <>breaks "{constraintLabel(scrub(exclusion.constraint ?? ""))}". </>
+              )}
+              {scrub(exclusion.reason ?? "")}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-none items-center gap-x-4 text-meta text-grey sm:-mt-1">
           {status !== null && (
             <span className="inline-flex min-h-8 items-center gap-2 whitespace-nowrap">
               {/* A live search breathes its 6 px blue square; the one turning
                   mark on the screen is the status bar's (round 10, D3). */}
-              {status.kind === "searching" && <StatusMark tone="running" breathing />}
+              {(status.kind === "searching" || status.kind === "assigning") && <StatusMark tone="running" breathing />}
               {status.kind === "failed" && <StatusMark tone="failed" />}
               <span className={cn(status.kind === "failed" && "font-semibold text-red")}>
                 <Figures text={status.text} />
@@ -307,56 +354,16 @@ function OptionRow({
                 optionId={row.id}
                 shortlistState={summary.shortlist?.state}
                 excluded={excluded}
+                align="end-sm"
+                className="font-normal"
               />
               <OptionActionButton actions={controls} optionId={row.id} excluded={excluded} />
             </>
           ) : (
-            row.shortlisted && <ShortlistedWord className={cn(lands("short") && "anim-swap-in")} />
+            row.shortlisted && <ShortlistedWord className={cn("font-normal", lands("short") && "anim-swap-in")} />
           )}
         </div>
       </div>
-      {row.description !== "" && (
-        <p className={cn("mt-1 max-w-[44em] text-body", excluded ? "text-grey" : "text-ink")}>{scrub(row.description)}</p>
-      )}
-      {(lever !== null || fields.length > 0) && (
-        <p className={cn("mt-1.5 max-w-[44em] text-meta text-grey", lands("meta") && "anim-swap-in")}>
-          {lever !== null && (
-            <>
-              <MetaField last={fields.length === 0}>
-                <span
-                  className={cn(
-                    "font-semibold",
-                    excluded ? "text-grey" : "text-navy",
-                    !lands("meta") && lands("lever") && "inline-block anim-swap-in",
-                  )}
-                >
-                  {scrub(lever)}
-                </span>
-              </MetaField>{" "}
-            </>
-          )}
-          {fields.map((field, index) => (
-            <span key={`${index}-${field}`}>
-              <MetaField last={index === fields.length - 1}>{scrub(field)}</MetaField>{" "}
-            </span>
-          ))}
-        </p>
-      )}
-      {exclusion !== null && (
-        <p className="mt-1.5 max-w-[44em] text-meta text-ink">
-          <span className="font-semibold text-red">Excluded:</span>{" "}
-          {constraintLabel(exclusion.constraint ?? "") !== "" && (
-            <>breaks "{constraintLabel(scrub(exclusion.constraint ?? ""))}". </>
-          )}
-          {scrub(exclusion.reason ?? "")}
-        </p>
-      )}
-      {row.folded.map((folded) => (
-        <div key={folded.id} className={cn("mt-3 border-l border-line-2 pl-4", lands("fold", folded.id) && "anim-rise")}>
-          <p className="text-body text-grey">{scrub(folded.name)}</p>
-          <p className="text-meta text-grey">Folded into {scrub(row.name)}</p>
-        </div>
-      ))}
       {controls !== null && (
         <ExcludeReasonForm actions={controls} optionId={row.id} className="mt-3 flex flex-wrap items-center gap-2" />
       )}
@@ -371,7 +378,7 @@ function OptionRow({
 
 /** A group of rows on the page: a theme, a lever type, or (before the theme
  *  wave) the one untitled run of rows. */
-type Section = { key: string; title: string | null; description: string; rows: BuildingRow[] };
+type Section = { key: string; title: string | null; description: string; rows: BuildingRow[]; named?: true };
 
 /**
  * The longlist, from the first row of its build to the finished list (task
@@ -404,6 +411,7 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   const plan = usePlan(taskId);
   const options = useOptions(taskId);
   const longlistRead = useLonglist(taskId);
+  const stream = useRunStream(taskId);
   const addOption = useAddOption(taskId);
   const wide = useWideScreen();
 
@@ -420,18 +428,25 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
 
   const longlist = finished ?? longlistRead.data ?? null;
   const optionRows = options.data?.options;
+  // The names the walk's clustering steps publish before they commit
+  // (round 11); a finished list reads only its reads.
+  const published = liveNamesOf(stream);
+  const live = useMemo(
+    () => (building ? { options: published.options, themes: published.themes } : NO_LIVE_NAMES),
+    [building, published.options, published.themes],
+  );
   // Once the list is finished the longlist read is the authority: a row the
   // options read has but the longlist does not (and that was not folded
   // into another) is not on the list.
   const computed = useMemo(() => {
-    const layout = buildingLayout(optionRows ?? [], longlist);
+    const layout = buildingLayout(optionRows ?? [], longlist, live);
     if (building) return layout;
     const listed = (rows: BuildingRow[]) => rows.filter((row) => row.summary !== null);
     return {
       groups: layout.groups.map((group) => ({ ...group, rows: listed(group.rows) })).filter((group) => group.rows.length > 0),
       excluded: listed(layout.excluded),
     };
-  }, [optionRows, longlist, building]);
+  }, [optionRows, longlist, building, live]);
   const layout = useRegroupTransition(computed);
   // Only a list being built has arrivals; a finished list opens still.
   const [initialKeys] = useState(() => arrivalKeys(layout));
@@ -462,8 +477,6 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   for (const theme of longlist?.themes ?? []) {
     for (const id of theme.option_ids ?? []) themeOfOption.set(id, theme.name);
   }
-  const summaryOf = (row: BuildingRow): Pick<OptionSummaryOut, "primary_lever_type"> =>
-    row.summary ?? { primary_lever_type: null };
 
   // By lever type (the finished list only): the taxonomy's own one-line
   // definition under each heading; the meta adds how many themes it spans.
@@ -494,8 +507,10 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
       rows: includedRows.filter((row) => row.summary?.primary_lever_type == null).sort(byName),
     },
   ];
+  // A theme the theming step has named shows its heading before any option
+  // is in it (round 11).
   const sections = (groupBy === "theme" ? layout.groups : byLever)
-    .filter((group) => group.rows.length > 0)
+    .filter((group) => group.rows.length > 0 || group.named === true)
     .map((group, index) => ({ ...group, id: group.title === null ? "options" : sectionAnchor(group.title, index) }));
   const titled = sections.some((section) => section.title !== null);
   const excludedRows = layout.excluded;
@@ -504,171 +519,157 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
     mode !== "list" || !titled
       ? []
       : [
-          ...sections.map((section) => ({ id: section.id, title: section.title ?? "" })),
+          ...sections.flatMap((section) => (section.title === null ? [] : [{ id: section.id, title: section.title }])),
           ...(excludedRows.length > 0 ? [{ id: EXCLUDED_ANCHOR, title: "Excluded" }] : []),
           ...(building ? [] : [{ id: ADD_OPTION_ANCHOR, title: "Add an option" }]),
         ];
 
   // A new grouping, or Show all / Hide all, remounts the sections.
   const sectionKey = (key: string) => `${groupBy}-${allOpen.revision}-${key}`;
-  const themeCount = (rows: readonly BuildingRow[]) =>
-    countOf(new Set(rows.map((row) => themeOfOption.get(row.id) ?? "No theme")).size, "theme", "themes");
   const rowTheme = (row: BuildingRow) =>
     groupBy === "theme" && row.summary?.state !== "excluded" ? null : (themeOfOption.get(row.id) ?? null);
 
   const renderRow = (row: BuildingRow, flat: boolean) => (
     <OptionRow
-      key={row.id}
+      key={row.key}
       taskId={taskId}
       row={row}
       theme={rowTheme(row)}
       showLever={groupBy !== "lever" || row.summary?.state === "excluded"}
       controls={controls}
-      rises={flat && arrives(`row:${row.id}`)}
-      lands={(part, id) => arrives(part === "fold" ? `fold:${id}` : `${part}:${row.id}`)}
+      rises={flat && arrives(`row:${row.key}`)}
+      lands={(part) => arrives(`${part}:${row.key}`)}
     />
   );
 
   const question = scrub(longlistTitle(plan.data?.scoping, task.data?.name));
   const counts = longlist === null ? null : countsParts(longlist.counts);
+  // The shortlist the reader is assembling, said in the count line (round
+  // 11, review finding 2).
+  const shortlisted = includedRows.filter((row) => row.shortlisted).length;
+  const showAll = (
+    <button
+      type="button"
+      onClick={() => setAllOpen(({ open, revision }) => ({ open: !open, revision: revision + 1 }))}
+      className={cn(QUIET_CONTROL_CLASS, "text-meta")}
+    >
+      {allOpen.open ? "Hide all" : "Show all"}
+    </button>
+  );
 
   return (
     <ReportPage entries={entries} className={cn("longlist-paper", mode === "grid" && "md:max-w-[1180px]")}>
-      <header className="mb-6">
+      {/* The first screen is the title, the question, one count line and the
+          options (round 11, review finding 1). */}
+      <header className="mb-4">
         <h1 className={REPORT_TITLE_CLASS}>Longlist</h1>
         {question !== "Longlist" && (
           <p className="mt-2 max-w-prose-measure text-lead text-grey max-md:text-body">{question}</p>
         )}
         {counts !== null && (
-          <div className="mt-3 text-meta text-grey">
-            <p>
-              {counts.head}
-              {counts.excluded !== null && (
-                <>
-                  {" · "}
-                  {mode === "list" ? (
-                    <a href={`#${EXCLUDED_ANCHOR}`} className="underline underline-offset-4 hover:text-navy">
-                      {counts.excluded}
-                    </a>
-                  ) : (
-                    counts.excluded
-                  )}
-                </>
-              )}
-              {counts.noInScope !== null && ` · ${counts.noInScope}`}
-            </p>
-            <p>{READ_FROM_ABSTRACTS}</p>
-          </div>
+          <p className="mt-3 text-meta text-grey">
+            {counts.head}
+            {shortlisted > 0 && ` · ${shortlisted} shortlisted`}
+            {counts.excluded !== null && (
+              <>
+                {" · "}
+                {mode === "list" ? (
+                  <a href={`#${EXCLUDED_ANCHOR}`} className="underline underline-offset-4 hover:text-navy">
+                    {counts.excluded}
+                  </a>
+                ) : (
+                  counts.excluded
+                )}
+              </>
+            )}
+            {counts.noInScope !== null && ` · ${counts.noInScope}`}
+          </p>
         )}
       </header>
 
+      {/* One row of view controls (round 11, review finding 10): Group by on
+          the left; Show all and the list or grid switch on the right. */}
       {!building && (
-        <div className="print-hide mb-6 flex min-h-10 flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <div className="print-hide mb-6 flex min-h-10 flex-wrap items-center justify-between gap-x-6 gap-y-2">
           {mode === "list" ? (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <span className="text-meta font-semibold text-grey">Group by</span>
               <OutlineSwitch label="Group by" choices={GROUP_BY} value={groupBy} onChange={setGroupBy} />
             </div>
+          ) : longlist !== null && longlist.counts.excluded > 0 ? (
+            <button
+              type="button"
+              aria-pressed={showExcludedInGrid}
+              onClick={() => setShowExcludedInGrid((value) => !value)}
+              className={cn(QUIET_CONTROL_CLASS, "text-meta")}
+            >
+              {showExcludedInGrid ? "Hide excluded" : "Show excluded"}
+            </button>
           ) : (
-            longlist !== null &&
-            longlist.counts.excluded > 0 && (
-              <button
-                type="button"
-                aria-pressed={showExcludedInGrid}
-                onClick={() => setShowExcludedInGrid((value) => !value)}
-                className={cn(
-                  "pressable h-10 cursor-pointer border bg-paper px-3.5 text-meta font-semibold transition-colors duration-150",
-                  showExcludedInGrid ? "border-navy text-navy" : "border-line-2 text-grey hover:bg-[#f0f0f3] hover:text-navy",
-                )}
-              >
-                Show excluded
-                <span className="ml-1.5 font-normal tabular-nums">{longlist.counts.excluded}</span>
-              </button>
-            )
+            <span />
           )}
-          {wide && <OutlineSwitch label="View" choices={MODES} value={mode} onChange={setMode} />}
+          <div className="flex items-center gap-6">
+            {mode === "list" && titled && showAll}
+            {wide && <OutlineSwitch label="View" choices={MODES} value={mode} onChange={setMode} />}
+          </div>
         </div>
       )}
+      {building && titled && <div className="print-hide mb-4 flex justify-end">{showAll}</div>}
 
       {mode === "grid" && longlist !== null ? (
         <LonglistGrid taskId={taskId} longlist={longlist} showExcluded={showExcludedInGrid} />
       ) : (
-        <>
-          {titled && (
-            <div className="print-hide mb-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setAllOpen(({ open, revision }) => ({ open: !open, revision: revision + 1 }))}
-                className={cn(QUIET_CONTROL_CLASS, "text-meta")}
-              >
-                {allOpen.open ? "Hide all" : "Show all"}
-              </button>
-            </div>
-          )}
-          {sections.map((section, index) =>
-            section.title === null ? (
-              <ul key={section.key} role="list" aria-label="Options" className="border-t border-line">
-                {section.rows.map((row) => renderRow(row, true))}
-              </ul>
-            ) : (
-              <div
-                key={sectionKey(section.key)}
-                className={cn(
-                  arrives(`theme:${section.key}`) && "anim-rise",
-                  arrives(`theme:${section.key}`) && RISE_DELAY_CLASSES[Math.min(index, RISE_DELAY_CLASSES.length - 1)],
-                )}
-              >
-                <SectionDisclosure
-                  id={section.id}
-                  section={{ title: section.title, role: "standard", summary: section.description, summary_status: "verified" }}
-                  defaultOpen={allOpen.open}
-                  collapsible
-                  meta={[
-                    countOf(section.rows.length, "option", "options"),
-                    groupBy === "theme"
-                      ? instrumentsSummary(section.rows.map(summaryOf), leverTypes)
-                      : themeCount(section.rows),
-                  ]
-                    .filter((part) => part !== "")
-                    .join(" · ")}
-                >
-                  {section.description !== "" && (
-                    <p className="max-w-prose-measure text-body text-grey">{scrub(section.description)}</p>
-                  )}
-                  <ul role="list" className="border-t border-line">
-                    {section.rows.map((row) => renderRow(row, false))}
-                  </ul>
-                </SectionDisclosure>
-              </div>
-            ),
-          )}
-        </>
+        sections.map((section, index) =>
+          section.title === null ? (
+            <ul key={section.key} role="list" aria-label="Options" className="mb-8 space-y-4">
+              {section.rows.map((row) => renderRow(row, true))}
+            </ul>
+          ) : (
+            <GroupSection
+              key={sectionKey(section.key)}
+              id={section.id}
+              title={section.title}
+              count={section.rows.length === 0 ? "" : countOf(section.rows.length, "option", "options")}
+              description={section.description}
+              defaultOpen={allOpen.open}
+              className={cn(
+                arrives(`theme:${section.key}`) && "anim-rise",
+                arrives(`theme:${section.key}`) && RISE_DELAY_CLASSES[Math.min(index, RISE_DELAY_CLASSES.length - 1)],
+              )}
+            >
+              {/* A theme just named holds no option yet: its heading and
+                  words only, until the first moves under it. */}
+              {section.rows.length > 0 && (
+                <ul role="list" className="mt-4 space-y-4">
+                  {section.rows.map((row) => renderRow(row, false))}
+                </ul>
+              )}
+            </GroupSection>
+          ),
+        )
       )}
       {/* Show all opens the themes, not the set-aside options. */}
       {mode === "list" && excludedRows.length > 0 && (
-        <div className={cn("mt-10", arrives("excluded") && "anim-rise")}>
-          <SectionDisclosure
-            key={`${groupBy}-excluded`}
-            id={EXCLUDED_ANCHOR}
-            section={{ title: "Excluded", role: "conclusions", summary: EXCLUDED_SUMMARY, summary_status: "verified" }}
-            defaultOpen={false}
-            collapsible
-            meta={String(excludedRows.length)}
-          >
-            {!building && (
-              <p className="max-w-prose-measure text-body text-grey">
-                {EXCLUDED_SUMMARY} Include again puts one back in its theme.
-              </p>
-            )}
-            <ul role="list" className="border-t border-line">
-              {excludedRows.map((row) => renderRow(row, false))}
-            </ul>
-          </SectionDisclosure>
-        </div>
+        <GroupSection
+          key={`${groupBy}-excluded`}
+          id={EXCLUDED_ANCHOR}
+          title="Excluded"
+          count={countOf(excludedRows.length, "option", "options")}
+          description={EXCLUDED_SUMMARY}
+          defaultOpen={false}
+          className={cn("mt-10", arrives("excluded") && "anim-rise")}
+        >
+          <ul role="list" className="mt-4 space-y-4">
+            {excludedRows.map((row) => renderRow(row, false))}
+          </ul>
+        </GroupSection>
       )}
+      {/* How the list was read, at its foot rather than over it (round 11,
+          review finding 22). */}
+      {counts !== null && <p className="mt-6 text-meta text-grey">{READ_FROM_ABSTRACTS}</p>}
 
       {!building && (
-        <form id={ADD_OPTION_ANCHOR} onSubmit={handleAddOption} className="print-hide mt-12 border-t border-line pt-6">
+        <form id={ADD_OPTION_ANCHOR} onSubmit={handleAddOption} className="print-hide mt-8 border-t border-line pt-6">
           <label htmlFor="longlist-add-option" className={`block ${REPORT_SECTION_HEADING_CLASS}`}>
             Add an option
           </label>

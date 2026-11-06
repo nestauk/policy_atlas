@@ -149,3 +149,71 @@ describe("buildingLayout (N24, D9)", () => {
     expect(layoutSignature(buildingLayout(rows, themed))).not.toBe(before);
   });
 });
+
+describe("names while clustering and theming (round 11)", () => {
+  const named = (label: string) => ({ label, description: null });
+
+  it("joins the names clustering publishes as rows, every row assigning its sources, and drops no searched row", () => {
+    const rows = [row(1, { search_status: "searched", found: 312 }), row(2, { search_status: "failed" })];
+    const layout = buildingLayout(rows, null, {
+      options: [named("option 1"), named("Benefit run-ons when a young person starts work")],
+      themes: [],
+    });
+    const shown = layout.groups[0].rows;
+    expect(shown.map((r) => r.name)).toEqual(["Option 1", "Option 2", "Benefit run-ons when a young person starts work"]);
+    expect(shown.map((r) => r.status)).toEqual([
+      { kind: "assigning", text: "Assigning sources" },
+      { kind: "assigning", text: "Assigning sources" },
+      { kind: "assigning", text: "Assigning sources" },
+    ]);
+    expect(shown[2].origin).toBe("found in the evidence");
+  });
+
+  it("keeps a named row's key when the reads bring its option, so the row stays where it is", () => {
+    const name = "Employer-led pre-apprenticeship traineeships";
+    const before = buildingLayout([row(1)], null, { options: [named(name)], themes: [] });
+    const longlist = longlistOf([1, 7], (option, n) => {
+      if (n === 7) {
+        option.name = name;
+        option.origin = "clustered";
+      }
+    });
+    const after = buildingLayout([row(1), row(7, { name, origin: "clustered" })], longlist, { options: [named(name)], themes: [] });
+    const keyOf = (layout: typeof before) => layout.groups[0].rows.find((r) => r.name === name)?.key;
+    expect(keyOf(after)).toBe(keyOf(before));
+    expect(after.groups[0].rows.find((r) => r.name === name)?.id).toBe(id(7));
+    // Once the longlist read has the options, the row's evidence line says the count.
+    expect(after.groups[0].rows.every((r) => r.status === null)).toBe(true);
+    // A suggested option keeps its id as its key all the way.
+    expect(after.groups[0].rows.find((r) => r.name === "Option 1")?.key).toBe(id(1));
+  });
+
+  it("drops a published name the longlist read does not have once the read exists", () => {
+    const layout = buildingLayout([row(1)], longlistOf([1]), { options: [named("Gone in the commit")], themes: [] });
+    expect(layout.groups[0].rows.map((r) => r.name)).toEqual(["Option 1"]);
+  });
+
+  it("stands the themes the theming step names as headings under the rows, then moves the rows under the committed themes", () => {
+    const live = { options: [], themes: [named("Getting into work"), { label: "Staying in work", description: "Keeping a first job." }] };
+    const during = buildingLayout([row(1), row(2)], longlistOf([1, 2]), live);
+    expect(during.groups.map((g) => g.title)).toEqual([null, "Getting into work", "Staying in work"]);
+    expect(during.groups[0].rows).toHaveLength(2);
+    expect(during.groups.slice(1).every((g) => g.rows.length === 0 && g.named === true)).toBe(true);
+
+    const committed = longlistOf([1, 2]);
+    committed.themes = [
+      { theme_id: "t1", name: "Getting into work", description: "", option_ids: [id(1)] },
+      { theme_id: "t2", name: "Staying in work", description: "", option_ids: [id(2)] },
+    ] as Longlist["themes"];
+    const after = buildingLayout([row(1), row(2)], committed, live);
+    expect(after.groups.map((g) => g.title)).toEqual(["Getting into work", "Staying in work"]);
+    // The headings keep their keys, so they neither remount nor rise again.
+    expect(after.groups.map((g) => g.key)).toEqual(during.groups.slice(1).map((g) => g.key));
+    expect(layoutSignature(after)).not.toBe(layoutSignature(during));
+  });
+
+  it("ignores names on a list with nothing published", () => {
+    const layout = buildingLayout([row(1, { search_status: "searched", found: 5 })], null);
+    expect(layout.groups[0].rows[0].status?.text).toBe("Searched · 5 found");
+  });
+});

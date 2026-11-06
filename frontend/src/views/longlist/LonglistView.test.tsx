@@ -28,6 +28,12 @@ const unshortlistMutate = vi.fn();
 const suggestMutate = vi.fn();
 const patchMutate = vi.fn();
 
+// The finished list reads no live names, but the page asks the stream (round 11).
+vi.mock("../../store", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../store")>();
+  return { ...actual, useRunStream: vi.fn(() => actual.createInitialRunStreamState()) };
+});
+
 vi.mock("../../api/mutations", () => ({
   useAddOption: vi.fn(),
   useOptionVerb: vi.fn(),
@@ -107,9 +113,11 @@ describe("LonglistView", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Longlist$/);
     expect(screen.getByText("How can we cut the NEET rate?")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "1 excluded" })).toHaveAttribute("href", "#excluded-options");
+    // Round 11 (review finding 2): the shortlist the reader assembles is counted.
     expect(screen.getByText(/^4 options in 2 themes/)).toHaveTextContent(
-      "4 options in 2 themes · 1 excluded · 1 with no in-scope evidence",
+      "4 options in 2 themes · 2 shortlisted · 1 excluded · 1 with no in-scope evidence",
     );
+    // At the list's foot, not over it (review finding 22).
     expect(screen.getByText("Read from titles and abstracts")).toBeInTheDocument();
     expect(screen.queryByText("scoping pass")).not.toBeInTheDocument();
     expect(screen.queryByText(/^Longlist$/i, { selector: "p" })).not.toBeInTheDocument();
@@ -121,7 +129,7 @@ describe("LonglistView", () => {
       longlist.counts.excluded = 0;
     });
     expect(screen.getByText(/^4 options in 2 themes/)).toHaveTextContent(
-      "4 options in 2 themes · 1 with no in-scope evidence",
+      "4 options in 2 themes · 2 shortlisted · 1 with no in-scope evidence",
     );
     expect(screen.queryByText(/excluded/)).not.toBeInTheDocument();
   });
@@ -151,14 +159,16 @@ describe("LonglistView", () => {
     renderLonglist();
     expect(screen.queryByText("National sanctions regime")).not.toBeInTheDocument();
     const heading = screen.getByRole("button", { name: /^Excluded/ });
-    expect(heading).toHaveTextContent(/^Excluded1/);
+    expect(heading).toHaveTextContent(/^Excluded 1 option/);
     await user.click(heading);
     expect(screen.getByText("National sanctions regime")).toBeInTheDocument();
   });
 
-  it("tags each row with its lever only, no mark and no ambition word, and names the theme's instruments", async () => {
+  // Round 11 (review finding 3): a theme heading says its count, not its instruments.
+  it("tags each row with its lever only, no mark and no ambition word, and counts the theme's options", async () => {
     renderLonglist();
-    expect(screen.getByRole("button", { name: /A universal offer.*1 option · regulation only/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^A universal offer 1 option$/ })).toBeInTheDocument();
+    expect(screen.queryByText(/regulation only/)).toBeNull();
     const row = screen.getByText("Universal youth offer bundle").closest("li") as HTMLElement;
     expect(within(row).getByText("Regulate")).toBeInTheDocument();
     expect(row).not.toHaveTextContent(/Smaller|Bigger|Cheaper|Costlier|Middle|Do minimum|Incremental|Structural/);
@@ -168,7 +178,7 @@ describe("LonglistView", () => {
     const user = userEvent.setup();
     renderLonglist();
     await user.click(within(screen.getByRole("group", { name: "Group by" })).getByRole("button", { name: "Lever type" }));
-    expect(screen.getByRole("button", { name: /^Provide a service.*1 option · 1 theme/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Provide a service 1 option$/ })).toBeInTheDocument();
     expect(screen.getByText("Deliver or fund a service or programme directly to people.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Conditionality and support/ })).not.toBeInTheDocument();
     const row = screen.getByText("School-based mentoring").closest("li") as HTMLElement;
@@ -196,8 +206,9 @@ describe("LonglistView", () => {
     expect(screen.getByRole("group", { name: "Group by" })).toBeInTheDocument();
   });
 
-  // R85: the grey line ends in the evidence signal; the document count is not its own part.
-  it("carries the evidence signal on the grey line, without a document count part", async () => {
+  // R85; round 11 (review finding 4): the grey line carries the signal's
+  // first part only; the rest is the card's.
+  it("carries the evidence signal's first part on the grey line, without a document count part", async () => {
     renderLonglist({}, (longlist) => {
       const mentoring = (longlist.options ?? []).find((o) => o.name === "School-based mentoring");
       if (mentoring) {
@@ -207,9 +218,8 @@ describe("LonglistView", () => {
     });
     const rich = within(screen.getByText("Universal youth offer bundle").closest("li") as HTMLElement);
     expect(rich.getByText("5 documents evaluated it")).toBeInTheDocument();
-    expect(rich.getByText("4 more describe it")).toBeInTheDocument();
-    expect(rich.getByText("Evaluated in the United Kingdom")).toBeInTheDocument();
-    expect(rich.getByText("Measures 2 of your 2 outcomes")).toBeInTheDocument();
+    expect(rich.queryByText("4 more describe it")).toBeNull();
+    expect(rich.queryByText("Measures 2 of your 2 outcomes")).toBeNull();
     expect(rich.queryByText("9 documents")).not.toBeInTheDocument();
     const bare = within(screen.getByText("School-based mentoring").closest("li") as HTMLElement);
     expect(bare.getByText("No evaluations, 3 documents describe it")).toBeInTheDocument();
@@ -231,7 +241,7 @@ describe("LonglistView", () => {
     expect(screen.getByRole("button", { name: /No theme/ })).toBeInTheDocument();
   });
 
-  it("an excluded row shows its count, exclusion reason and relation", async () => {
+  it("an excluded row shows its evidence and exclusion reason; its relation is the card's", async () => {
     const user = userEvent.setup();
     renderLonglist();
     await user.click(screen.getByRole("button", { name: /^Excluded/ }));
@@ -246,16 +256,17 @@ describe("LonglistView", () => {
     expect(exclusion.parentElement).toHaveTextContent(
       /^Excluded: breaks "Only include options a local authority can fund directly"\./,
     );
-    expect(scoped.getByText("part of Universal youth offer bundle")).toBeInTheDocument();
+    expect(scoped.queryByText("part of Universal youth offer bundle")).toBeNull();
   });
 
-  it("shows a package's has_part relation and the added-by-you entrant's no-documents signal", async () => {
+  // Round 11 (review finding 4): relations and origin words are the card's.
+  it("shows the added-by-you entrant's no-documents signal and leaves relations and origin to the card", async () => {
     renderLonglist();
     const packageRow = screen.getByText("Universal youth offer bundle").closest("li");
-    expect(within(packageRow as HTMLElement).getByText("includes National sanctions regime")).toBeInTheDocument();
+    expect(within(packageRow as HTMLElement).queryByText("includes National sanctions regime")).toBeNull();
     const addedRow = screen.getByText("Youth guarantee").closest("li");
     expect(within(addedRow as HTMLElement).getByText("No documents yet")).toBeInTheDocument();
-    expect(within(addedRow as HTMLElement).getByText("added by you")).toBeInTheDocument();
+    expect(within(addedRow as HTMLElement).queryByText("added by you")).toBeNull();
   });
 
   it("Exclude asks for a reason and posts once", async () => {

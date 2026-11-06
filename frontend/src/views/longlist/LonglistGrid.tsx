@@ -197,7 +197,8 @@ export function LonglistGrid({
                                 optionId={option.option_id}
                                 shortlistState={option.shortlist?.state}
                                 excluded={option.state === "excluded"}
-                                className="mt-0.5 flex w-fit"
+                                align="start"
+                                className="mt-0.5 grid w-fit"
                               />
                               {actions.notice !== null &&
                                 actions.notice.optionId === option.option_id && (

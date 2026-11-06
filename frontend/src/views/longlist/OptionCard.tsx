@@ -11,7 +11,6 @@ import { Button } from "../../ui/brand/Button";
 import { Card } from "../../ui/brand/Card";
 import { cn } from "../../ui/brand/cn";
 import { ReauthRedirect } from "../../ui/feedback";
-import { REPORT_BODY_CLASS } from "../artefactPresentation";
 import { DisclosureWord, SectionDisclosure, type SidebarEntry } from "../ArtefactOutline";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
 import { REPORT_TITLE_CLASS, ReportPage } from "../reportPage";
@@ -47,6 +46,10 @@ import { LINK_CLASS, PROSE_LINK_CLASS } from "../../ui/brand/inlineActions";
 
 type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
 
+/** Every field's label on the card, one style (round 11, item 4): Meta
+ *  Grey, regular, so the value is what reads. */
+const FIELD_LABEL_CLASS = "text-meta text-grey";
+
 /** Documents shown in a group before "Show all N". */
 const DOCUMENTS_SHOWN = 5;
 /** Design features shown on the card (R63; § 2.5). */
@@ -74,7 +77,7 @@ function DocumentLine({
   const { place, detail } = placeWithDetail(document.place, document.place_detail);
   const recordParts: ReactNode[] = [];
   if (linked && document.programme_name != null && document.programme_name !== "") {
-    recordParts.push(<strong key="programme" className="font-bold">{scrub(document.programme_name)}</strong>);
+    recordParts.push(<span key="programme">{scrub(document.programme_name)}</span>);
   }
   if (linked && place !== null) {
     recordParts.push(
@@ -97,9 +100,9 @@ function DocumentLine({
   const more = (document.records_count ?? 0) - 1;
   return (
     <li>
-      <p className={`${REPORT_BODY_CLASS} font-bold`}>
+      <p className="text-body text-navy">
         {dossier !== null ? (
-          <Link className="underline underline-offset-2" to={dossier}>
+          <Link className={PROSE_LINK_CLASS} to={dossier}>
             {scrub(document.title)}
           </Link>
         ) : (
@@ -140,7 +143,7 @@ function DocumentGroup({
   const shown = showAll ? documents : documents.slice(0, DOCUMENTS_SHOWN);
   return (
     <div className="space-y-3">
-      <p className="font-bold text-navy">
+      <p className={FIELD_LABEL_CLASS}>
         {heading} · {documents.length}
       </p>
       <ul role="list" className="grid gap-3">
@@ -168,7 +171,7 @@ const PAGE_CLASS = `${LIFECYCLE_PAGE_CLASS} py-8`;
 const SECTIONS = [
   { id: "how-it-works", title: "How it works" },
   { id: "what-it-would-take", title: "What it would take" },
-  { id: "evidence-base", title: "Evidence" },
+  { id: "evidence-base", title: "Where it stands" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -199,17 +202,21 @@ function CardSection({
   summaryNode?: ReactNode;
 }) {
   const { title } = SECTIONS.find((section) => section.id === id) ?? { title: id };
+  // Each block under the one rule, its sentences at Body (round 11, item 4:
+  // no Lead on the card).
   return (
-    <SectionDisclosure
-      id={id}
-      section={{ title, role: "standard", blocks: summary === "" ? null : [{ prose: summary }] }}
-      defaultOpen={defaultOpen}
-      collapsible
-      meta={meta}
-      summaryNode={summaryNode}
-    >
-      <div className={`max-w-prose-measure space-y-3 ${REPORT_BODY_CLASS}`}>{children}</div>
-    </SectionDisclosure>
+    <div className="border-t border-line pt-6">
+      <SectionDisclosure
+        id={id}
+        section={{ title, role: "standard", blocks: summary === "" ? null : [{ prose: summary }] }}
+        defaultOpen={defaultOpen}
+        collapsible
+        meta={meta}
+        summaryNode={summaryNode}
+      >
+        <div className="max-w-prose-measure space-y-4 text-body text-ink">{children}</div>
+      </SectionDisclosure>
+    </div>
   );
 }
 
@@ -249,7 +256,7 @@ function DocumentsDisclosure({ summary, children }: { summary: string; children:
         onClick={() => setOpen((value) => !value)}
         className="group flex w-full cursor-pointer items-baseline gap-3 text-left"
       >
-        <span className="min-w-0 flex-1 font-bold text-navy">{summary}</span>
+        <span className={cn("min-w-0 flex-1", FIELD_LABEL_CLASS)}>{summary}</span>
         <DisclosureWord open={open} />
       </button>
       {open && <div className="mt-3 space-y-4">{children}</div>}
@@ -264,9 +271,9 @@ const NOTICE_WORD_CLASS = { red: "font-semibold text-red", navy: "font-semibold 
 
 /** The profile table's cells: three columns from `sm` up; stacked blocks below it, so the
  *  sentence keeps the full width at 390 px (22b, after the browser check). */
-const PROFILE_NAME_CELL = "block pt-2.5 pr-4 align-top font-semibold text-navy sm:w-48 sm:table-cell sm:py-2.5";
+const PROFILE_NAME_CELL = "block pt-2.5 pr-4 align-top text-meta font-normal text-grey sm:w-44 sm:table-cell sm:py-2.5";
 const PROFILE_WORD_CELL = "block pr-4 align-top sm:w-40 sm:table-cell sm:py-2.5";
-const PROFILE_SENTENCE_CELL = "block pb-2.5 align-top sm:table-cell sm:py-2.5";
+const PROFILE_SENTENCE_CELL = "block pb-2.5 align-top text-body sm:table-cell sm:py-2.5";
 
 /**
  * The option card (contract deliverable 9, D15) on the report's page chrome:
@@ -386,9 +393,10 @@ export function OptionCard() {
           </div>
         </div>
         <h1 className={cn(REPORT_TITLE_CLASS, excluded && "text-grey")}>{scrub(item.name)}</h1>
-        <p className={`mt-3 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(item.description)}</p>
-        <p className="mt-2 text-body text-grey">{scrub(headerLine)}</p>
-        <p className="mt-1.5 text-body text-navy">{evidenceSignal(item)}</p>
+        {/* What it is (round 11, item 4): the description at Body, then one
+            Meta Grey line of where it came from and how it relates. */}
+        <p className="mt-3 max-w-prose-measure text-body text-ink">{scrub(item.description)}</p>
+        <p className="mt-2 text-meta text-grey">{scrub(headerLine)}</p>
 
         <ExcludeReasonForm actions={actions} optionId={optionId} className="mt-4 flex flex-wrap items-center gap-2" />
 
@@ -398,47 +406,17 @@ export function OptionCard() {
           </p>
         )}
 
-        {/* The notices: a flat block on the sheet with a hairline rule, each
-            a word in its tone then its sentence (round 10, finding 7: no card
-            inside the sheet, no chips). */}
-        {hasNotices && (
-          <div className="mt-5 max-w-prose-measure space-y-2 border-l border-line-2 pl-3 text-body text-ink">
-            {excluded && item.exclusion != null && (
-              <p>
-                <span className={NOTICE_WORD_CLASS.red}>Excluded:</span>{" "}
-                {constraintLabel(item.exclusion.constraint ?? "") !== "" && (
-                  <>breaks "{constraintLabel(scrub(item.exclusion.constraint))}". </>
-                )}
-                {scrub(item.exclusion.reason)}
-              </p>
-            )}
-            {item.no_in_scope_evidence && item.in_scope != null && (
-              <p>
-                <span className={NOTICE_WORD_CLASS.navy}>{NO_IN_SCOPE_WORDS}:</span> None of its{" "}
-                {item.in_scope.documents} documents pass {scrub(item.in_scope.restriction)}. It stays on the longlist
-                until the scope changes.
-              </p>
-            )}
-            {item.search_pending && <p className="text-grey">Its own evidence search is still running.</p>}
-            {notices.map((notice) => (
-              <p key={notice.key}>
-                <span className={NOTICE_WORD_CLASS[notice.tone]}>{notice.word}:</span> {scrub(notice.text)}
-              </p>
-            ))}
-          </div>
-        )}
       </header>
 
       <CardSection id="how-it-works" summary={leverText}>
         <div>
-          <p>
-            <strong className="font-bold text-navy">Lever:</strong> {leverText.replace(/^Lever: /, "")}
-          </p>
-          {leverReason.trim() !== "" && <p className="text-body text-grey">{scrub(leverReason)}</p>}
+          <p className={FIELD_LABEL_CLASS}>Lever</p>
+          <p>{leverText.replace(/^Lever: /, "")}</p>
+          {leverReason.trim() !== "" && <p className="text-grey">{scrub(leverReason)}</p>}
         </div>
         <p>{scrub(deliveredLeadIn(profile?.settings))}</p>
         {item.design.design_features.length > 0 && (
-          <ul className="list-disc space-y-1 pl-5 text-body">
+          <ul className="list-disc space-y-1 pl-5">
             {item.design.design_features.slice(0, FEATURES_SHOWN).map((feature, index) => (
               <li key={index}>{capitalise(scrub(feature))}</li>
             ))}
@@ -508,14 +486,48 @@ export function OptionCard() {
 
       {/* The counts are the header's evidence line; the section opens with
           the evaluations' standing (round 10, C7: no opener repeating them). */}
-      <CardSection id="evidence-base" summary={maturity ?? ""}>
-        {maturity !== null && <p className="font-semibold text-navy">{maturity}</p>}
+      <CardSection id="evidence-base" summary={evidenceSignal(item)}>
+        {/* The notices open "Where it stands" (round 11, item 4): a flat
+            block with a hairline rule, each a word in its tone then its
+            sentence (round 10, finding 7: no card inside the sheet, no chips). */}
+        {hasNotices && (
+          <div className="max-w-prose-measure space-y-2 border-l border-line-2 pl-3 text-body text-ink">
+            {excluded && item.exclusion != null && (
+              <p>
+                <span className={NOTICE_WORD_CLASS.red}>Excluded:</span>{" "}
+                {constraintLabel(item.exclusion.constraint ?? "") !== "" && (
+                  <>breaks "{constraintLabel(scrub(item.exclusion.constraint))}". </>
+                )}
+                {scrub(item.exclusion.reason)}
+              </p>
+            )}
+            {item.no_in_scope_evidence && item.in_scope != null && (
+              <p>
+                <span className={NOTICE_WORD_CLASS.navy}>{NO_IN_SCOPE_WORDS}:</span> None of its{" "}
+                {item.in_scope.documents} documents pass {scrub(item.in_scope.restriction)}. It stays on the longlist
+                until the scope changes.
+              </p>
+            )}
+            {item.search_pending && <p className="text-grey">Its own evidence search is still running.</p>}
+            {notices.map((notice) => (
+              <p key={notice.key}>
+                <span className={NOTICE_WORD_CLASS[notice.tone]}>{notice.word}:</span> {scrub(notice.text)}
+              </p>
+            ))}
+          </div>
+        )}
+        {/* The counts once, on one line with the middot, then the standing. */}
+        <div>
+          <p className={FIELD_LABEL_CLASS}>Sources</p>
+          <p>{evidenceSignal(item)}</p>
+          {maturity !== null && <p>{maturity}</p>}
+        </div>
         {item.document_count === 0 && <p className="text-grey">No document names this option yet.</p>}
         {item.document_count > 0 && (
           <>
             {planOutcomes.length > 0 && (
               <div>
-                <p className="font-bold text-navy">Your outcomes</p>
+                <p className={FIELD_LABEL_CLASS}>Your outcomes</p>
                 {noneMeasured ? (
                   <p>{noOutcomeMeasuredLine(planOutcomes.length)}</p>
                 ) : (
@@ -523,7 +535,7 @@ export function OptionCard() {
                     {planOutcomes.map((entry) => (
                       <li key={entry.outcome} className="flex items-baseline justify-between gap-4 py-1.5">
                         <span>{scrub(entry.outcome)}</span>
-                        <span className="shrink-0 text-right">
+                        <span className="shrink-0 text-right text-meta text-grey">
                           {entry.evaluated === 0 ? (
                             <span className="text-grey">none</span>
                           ) : (
@@ -541,7 +553,7 @@ export function OptionCard() {
             )}
             {placeSentences.length > 0 && (
               <div>
-                <p className="font-bold text-navy">Where it has been evaluated</p>
+                <p className={FIELD_LABEL_CLASS}>Where it has been evaluated</p>
                 <dl aria-label="Where it has been evaluated" className="divide-y divide-line">
                   {placeSentences.map((entry) => (
                     <div
@@ -551,7 +563,7 @@ export function OptionCard() {
                     >
                       {/* The plan's own place carries the profile's Navy mark,
                           not a tint (round 10). */}
-                      <dt className="flex items-baseline gap-1.5 font-bold text-navy">
+                      <dt className="flex items-baseline gap-1.5 text-navy">
                         {entry.where && (
                           <span aria-hidden="true" className="inline-block size-1.5 flex-none -translate-y-0.5 bg-navy" />
                         )}

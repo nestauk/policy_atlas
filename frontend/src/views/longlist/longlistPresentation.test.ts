@@ -68,36 +68,27 @@ describe("longlist presentation (task 046)", () => {
     );
   });
 
-  // R85 and round 10 (finding 6): the same fields in the same order, the
-  // signal's parts after the theme and relations, a pending search standing
-  // in for them, "No in-scope evidence" last as words; the origin and the
-  // shortlist state live elsewhere on the row.
-  it("gives a row's meta fields in one fixed order and drops the document count", () => {
+  // Round 11 (review finding 4): the lever or the theme, the evidence's
+  // first part, "No in-scope evidence" last; relations and the rest of the
+  // signal are the card's.
+  it("gives a row's one meta line in a fixed order", () => {
     const option = {
       origin: "added_by_you",
-      relations: [],
+      relations: [{ kind: "part_of", other_option_id: "x", other_name: "A bundle" }],
       search_pending: false,
-      document_count: 3,
-      evaluated_count: 0,
+      document_count: 9,
+      evaluated_count: 5,
       evaluated_countries: [],
-      outcomes_evaluated: 0,
+      outcomes_evaluated: 1,
       outcomes_total: 2,
       no_in_scope_evidence: false,
       shortlist: { state: "proposed", reason: "r" },
     } as unknown as Parameters<typeof rowMetaFields>[0];
-    expect(rowMetaFields(option, null)).toEqual(["No evaluations, 3 documents describe it"]);
-    expect(rowMetaFields({ ...option, search_pending: true }, null)).toEqual(["searching for its evidence…"]);
+    expect(rowMetaFields(option, "Subsidise", null)).toEqual(["Subsidise", "5 documents evaluated it"]);
+    expect(rowMetaFields({ ...option, search_pending: true }, null, null)).toEqual(["searching for its evidence…"]);
     expect(
-      rowMetaFields(
-        {
-          ...option,
-          document_count: 0,
-          no_in_scope_evidence: true,
-          relations: [{ kind: "part_of", other_option_id: "x", other_name: "A bundle" }],
-        } as Parameters<typeof rowMetaFields>[0],
-        "Staying in work",
-      ),
-    ).toEqual(["Staying in work", "part of A bundle", "No documents yet", "No in-scope evidence"]);
+      rowMetaFields({ ...option, document_count: 0, no_in_scope_evidence: true }, null, "Staying in work"),
+    ).toEqual(["Staying in work", "No documents yet", "No in-scope evidence"]);
   });
 
   // Round 10, C1: one origin vocabulary; the card adds the report's section.

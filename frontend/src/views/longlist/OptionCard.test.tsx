@@ -184,9 +184,11 @@ describe("OptionCard", () => {
   // Task 046, amendment 3 (§ 2.5): "Lever: <primary>, with <secondary>." and the reason under it.
   it("shows the lever line with its secondary types, the reason under it, and no 'also touches'", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    const line = screen.getByText(/Enforce existing powers, with Regulate\./);
-    expect(line).toHaveTextContent("Lever: Enforce existing powers, with Regulate.");
-    expect(line.querySelector("strong")).toHaveTextContent("Lever:");
+    // Round 11 (item 4): the field's label in the one label style over its value.
+    const line = screen.getByText("Enforce existing powers, with Regulate.");
+    expect(line.previousElementSibling).toHaveTextContent(/^Lever$/);
+    expect(line.previousElementSibling).toHaveClass("text-meta", "text-grey");
+    expect(line.querySelector("strong")).toBeNull();
     const reason = screen.getByText("The council withholds a benefit payment when a young person refuses an offer.");
     expect(line.compareDocumentPosition(reason) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByText(/also touches/)).not.toBeInTheDocument();
@@ -195,7 +197,7 @@ describe("OptionCard", () => {
 
   it("shows the lever line with no 'with' part when there are no secondary types", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, { secondary_lever_types: [], lever_reason: null });
-    expect(screen.getByText(/Enforce existing powers\.$/)).toHaveTextContent("Lever: Enforce existing powers.");
+    expect(screen.getByText("Enforce existing powers.")).toBeInTheDocument();
     expect(screen.queryByText(/, with /)).not.toBeInTheDocument();
   });
 
@@ -204,15 +206,17 @@ describe("OptionCard", () => {
     expect(screen.getByText(/with Regulate and Provide a service\./)).toBeInTheDocument();
   });
 
-  it("puts the lever sentences in the body text size, not the meta size", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED);
+  // Round 11 (item 4): every sentence at Body, every label and secondary
+  // line at Meta; no Lead on the card.
+  it("puts the card's sentences at Body and its secondary lines at Meta", () => {
+    const { container } = renderCard(MOCK_OPTION_ID_EXCLUDED);
     const reason = screen.getByText("The council withholds a benefit payment when a young person refuses an offer.");
-    expect(reason).toHaveClass("text-body");
+    expect(reason.closest(".text-body")).not.toBeNull();
     expect(reason).not.toHaveClass("text-meta");
-    expect(screen.getByText("A duty to withdraw benefits on refusal of an offer").closest("li")?.parentElement).toHaveClass("text-body");
+    expect(screen.getByText("A duty to withdraw benefits on refusal of an offer").closest(".text-body")).not.toBeNull();
     const header = screen.getByText(/^found in the evidence · part of/);
-    expect(header).toHaveClass("text-body");
-    expect(header).not.toHaveClass("text-meta");
+    expect(header).toHaveClass("text-meta");
+    expect(container.querySelector(".text-lead, .md\\:text-lead")).toBeNull();
   });
 
   // Task 046, amendment 3 (B13): no runner-up line (the field left the read model).
@@ -263,7 +267,7 @@ describe("OptionCard", () => {
     const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
     const at = (title: string) => headings.findIndex((text) => text?.startsWith(title));
     expect(at("How it works")).toBeLessThan(at("What it would take"));
-    expect(at("What it would take")).toBeLessThan(at("Evidence"));
+    expect(at("What it would take")).toBeLessThan(at("Where it stands"));
     const toggle = screen.getByRole("button", { name: /What it would take/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(toggle).toHaveTextContent("Policy Atlas's estimate");
@@ -437,13 +441,14 @@ describe("OptionCard", () => {
     expect(screen.getByText("No documents yet")).toBeInTheDocument();
   });
 
-  it("orders the sections How it works, What it would take, Evidence, with no Checks", () => {
+  // Round 11 (item 4): three blocks, the third "Where it stands".
+  it("orders the sections How it works, What it would take, Where it stands, with no Checks", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent ?? "");
-    expect(headings.map((text) => ["How it works", "What it would take", "Evidence"].find((name) => text.startsWith(name)))).toEqual([
+    expect(headings.map((text) => ["How it works", "What it would take", "Where it stands"].find((name) => text.startsWith(name)))).toEqual([
       "How it works",
       "What it would take",
-      "Evidence",
+      "Where it stands",
     ]);
     expect(document.getElementById("constraints")).toBeNull();
     expect(screen.queryByText(/Built-in checks/)).not.toBeInTheDocument();
@@ -486,8 +491,9 @@ describe("OptionCard", () => {
   // opens with the maturity line, and only an option with no document says so.
   it("opens the Evidence section with the maturity line, not the counts again", () => {
     const first = renderCard(MOCK_OPTION_ID_EXCLUDED);
+    // Round 11 (item 4): the standing is a value, regular weight.
     const opening = within(evidenceSection()).getAllByText("Evaluated · 1 RCT, 2 observational")[0];
-    expect(opening).toHaveClass("text-navy");
+    expect(opening).not.toHaveClass("font-semibold");
     expect(within(evidenceSection()).queryByText(/describe or recommend it\.$/)).not.toBeInTheDocument();
     first.unmount();
     renderCard(MOCK_OPTION_ID_EXCLUDED, { evaluated_count: 0, document_count: 0, documents: [] });
@@ -608,7 +614,8 @@ describe("OptionCard", () => {
       "Youth Guarantee · United Kingdom (south-west England) · 16-24 year-olds · NEET rate at 6 months",
     );
     expect(recordLine).toHaveClass("text-grey");
-    expect(within(recordLine).getByText("Youth Guarantee").tagName).toBe("STRONG");
+    // Round 11 (item 4): nothing bold inside a value line.
+    expect(within(recordLine).getByText("Youth Guarantee").tagName).toBe("SPAN");
     expect(screen.getByText("Strong · Systematic review · 2021")).toHaveClass("text-grey");
   });
 
