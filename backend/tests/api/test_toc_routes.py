@@ -10,6 +10,8 @@ from sqlalchemy import update
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.app import create_app
+from policy_atlas.api.dev_issuer import init
+from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import task, toc_box
 from tests.api.org_support import make_org, ops_enrol, seeded, tenancy_client
 from tests.api.resource_support import (
@@ -28,8 +30,18 @@ def _url(route: str, task_id: uuid.UUID | str, evidence_id: uuid.UUID) -> str:
     return route.format(task_id=task_id, evidence_id=evidence_id)
 
 
-def test_the_reads_are_mounted_and_in_the_openapi_document() -> None:
-    app = create_app()
+def test_the_reads_are_mounted_and_in_the_openapi_document(tmp_path: Path) -> None:
+    # A throwaway key pair, as the conformance sweep builds it: CI has no local
+    # signing key, and create_app() with no settings reads one from the environment.
+    settings = Settings(
+        "http://dev-issuer.local",
+        "toc-routes-test",
+        None,
+        init(tmp_path / "issuer"),
+        "http://app.example.test",
+        "postgresql+psycopg://unused/unused",
+    )
+    app = create_app(settings=settings)
     mounted = {route.path for route in _flatten_api_routes(app.routes)}
     paths = app.openapi()["paths"]
     for route in ROUTES:
