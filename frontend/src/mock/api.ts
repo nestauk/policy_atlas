@@ -39,6 +39,7 @@ import {
   mockDecisions,
   mockEvidence,
   mockEvidenceThemeIds,
+  mockOtherTasks,
   mockFindings,
   mockFunnel,
   mockGroups,
@@ -70,6 +71,8 @@ import {
   mockLonglistExtraOptionIds,
   mockLonglistOptionCards,
   mockWalkLonglist,
+  mockWalkOptionCards,
+  toLonglistOptionSummary,
   type MockWalkLonglistStage,
   mockShortlistState,
   MOCK_SHORTLIST_PLACES_TARGET,
@@ -234,6 +237,8 @@ let checkInAnswered = false;
 // from the Evidence search check-in above so the two scripts cannot collide.
 let baselineGateAnswer = createDeferred();
 let baselineGateDecision: { optionId: string; label: string } | null = null;
+/** When the gate's card opened in this session (its `created_at`). */
+let baselineGateOpenedAt: string | null = null;
 let runStarted = createDeferred();
 let currentRun: RunOut | null = null;
 let taskAgentTurns: TaskAgentTranscriptTurnOut[] = seedTaskAgentTurns();
@@ -295,6 +300,7 @@ export function resetMockScenario() {
   checkInAnswered = false;
   baselineGateAnswer = createDeferred();
   baselineGateDecision = null;
+  baselineGateOpenedAt = null;
   runStarted = createDeferred();
   currentRun = null;
   mockTask.latest_run = null;
@@ -309,6 +315,10 @@ export function resetMockScenario() {
   currentScopingPlan = { ...mockScopingPlanReady };
   currentMe = { ...mockMeUnenrolled };
   mockProjects = [{ ...mockProject }];
+  mockTask.is_owner = true;
+  mockTask.is_public = false;
+  // Options added by hand belong to one scenario, not the next.
+  for (const optionId of mockLonglistExtraOptionIds.splice(0)) delete mockLonglistOptionCards[optionId];
   resetMockLonglistWalks();
   resetMockShortlist();
 }
@@ -483,8 +493,15 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     ) {
       return json({ error: { code: "visibility_conflict", message: `${TASK.one} is in a ${PROJECT.one}.` } }, 409);
     }
+    // Task 058, round 10: PATCH is owner-only; a colleague's project change
+    // gets the server's 403 and its plain message (flip `mockTask.is_owner`
+    // to walk the colleague's Share page).
+    if (isRecord(body) && "project_ids" in body && mockTask.is_owner === false) {
+      return json({ error: { code: "forbidden", message: PROJECTS_OWNER_ONLY } }, 403);
+    }
     if (isRecord(body) && typeof body.name === "string") mockTask.name = body.name;
     if (isRecord(body) && typeof body.question === "string") mockTask.question = body.question;
+    if (isRecord(body) && typeof body.is_public === "boolean") mockTask.is_public = body.is_public;
     if (isRecord(body) && (body.visibility === "org" || body.visibility === "private")) {
       mockTask.visibility = body.visibility;
     }
@@ -721,7 +738,11 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       const decided = baselineGateDecision !== null;
       if (currentRun === null) return json(page([]));
       if (status === "pending" && decided) return json(page([]));
-      return json(page([{ ...mockBaselineGateCheckIn, status: decided ? "decided" : "pending" }]));
+      return json(page([{
+        ...mockBaselineGateCheckIn,
+        created_at: baselineGateOpenedAt ?? mockBaselineGateCheckIn.created_at,
+        status: decided ? "decided" : "pending",
+      }]));
     }
     const rows = status === "pending" && checkInAnswered ? [] : [mockCheckIn];
     return json(page(rows));
@@ -757,15 +778,27 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   // `project_id` narrows to one project's members, server-side — mirrors
   // the real list's filter (contract task 033 phase 10a: `ProjectDetailView`
   // no longer filters the global page client-side).
+  // Task 058, round 10: the list pages like the server (50 a page by
+  // default, newest first, `has_more`), honours `status` and `scope=mine`,
+  // and holds more than one page so "Show more" is walkable.
   if (method === "GET" && path.endsWith("/api/v1/tasks")) {
     const projectId = url.searchParams.get("project_id");
-    const rows =
-      projectId === null || mockTask.project_ids?.includes(projectId) === true
-        ? [mockTask]
-        : [];
-    return json(page(rows));
+    const status = url.searchParams.get("status") ?? "active";
+    const scope = url.searchParams.get("scope") ?? "all";
+    const rows = [mockTask, ...mockOtherTasks]
+      .filter((task) => projectId === null || task.project_ids?.includes(projectId) === true)
+      .filter((task) => status === "all" || task.status === status)
+      .filter((task) => scope !== "mine" || task.is_owner)
+      .sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+    return json(pageOf(rows, url));
   }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}`)) return json(mockTask);
+  const otherTaskMatch = path.match(/\/api\/v1\/tasks\/([^/]+)$/);
+  const otherTask =
+    method === "GET" && otherTaskMatch !== null
+      ? mockOtherTasks.find((task) => task.task_id === otherTaskMatch[1])
+      : undefined;
+  if (otherTask !== undefined) return json(otherTask);
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/funnel`)) return json(mockFunnel);
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/landscape`)) return json(mockLandscape);
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/evidence`)) {
@@ -775,6 +808,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const origin = url.searchParams.get("origin");
     const evidenceType = url.searchParams.get("evidence_type");
     const strength = url.searchParams.get("strength");
+    const country = url.searchParams.get("country");
     const sort = url.searchParams.get("sort") as EvidenceSortField | null;
     const order = url.searchParams.get("order") as "asc" | "desc" | null;
     let rows = mockEvidence.filter((item) => {
@@ -792,6 +826,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
         && (origin === null || item.origin === origin)
         && (evidenceType === null || item.evidence_type === evidenceType)
         && (strength === null || item.appraisal_tier === strength)
+        && (country === null || mockCountryMatches(item.country ?? null, country))
         && yearMatches;
     });
     // Server-side-equivalent sort (collection-true, matches
@@ -882,7 +917,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     });
     return json(page(rows));
   }
-  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/decisions`)) return json(page(mockDecisions));
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/decisions`)) return json(pageOf(mockDecisions, url));
   // Task 044 (deliverable 9): a scoping task's Result is its baseline, not an
   // Evidence search report.
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/artefact`)) {
@@ -979,6 +1014,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     if (mockLonglistBuilding) return json({ detail: "resource not found" }, 404);
     // While a walk runs the read grows stage by stage over the options read's rows.
     if (mockLonglistWalkStage !== null) return json(mockWalkLonglist(mockOptionRows, mockLonglistWalkStage));
+    if (mockFinishedWalk !== null) return json(mockFinishedWalkLonglist());
     return json(mockLonglist());
   }
   // Task 058, N22: the options read, served from the end of the suggest stage.
@@ -1006,13 +1042,19 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   }
   if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/shortlist/suggest`)) {
     if (mockTask.active_run != null) return mockConflict("run_active", "A walk is already running.");
-    const open = Object.values(mockLonglistOptionCards).filter(
+    // The proposal takes a moment on the server; a short wait lets the
+    // button's pending state show (task 058, round 10).
+    await pace(800);
+    const current = currentMockOptionIds()
+      .map((optionId) => mockLonglistOptionCards[optionId])
+      .filter((option) => option !== undefined);
+    const open = current.filter(
       (option) => option.state === "included" && option.shortlist == null,
     );
     if (open.length === 0 && !mockShortlistState.stale) {
       return mockConflict("nothing_to_propose", "Nothing is left to propose.");
     }
-    const held = Object.values(mockLonglistOptionCards).filter(
+    const held = current.filter(
       (option) => option.shortlist?.state === "proposed" || option.shortlist?.state === "added_by_you",
     ).length;
     // Up to the target; past it, Suggest more still adds one place.
@@ -1661,7 +1703,16 @@ async function scopingBaselineWalk(emit: (frame: SseFrame) => void, nextSequence
   }
   setRunArtefact(mockBaselineArtefact.artefact_id);
   emit(runStatus("paused", nextSequence()));
-  emit({ type: "checkin.pending", check_in: mockBaselineGateCheckIn, occurred_at: frameTime(), sequence: nextSequence() });
+  // The card is placed by its own time: it opens now, after the question
+  // that started the task, never at the fixture's fixed time above it.
+  baselineGateOpenedAt = frameTime();
+  const gateSequence = nextSequence();
+  emit({
+    type: "checkin.pending",
+    check_in: { ...mockBaselineGateCheckIn, created_at: baselineGateOpenedAt, sequence: gateSequence },
+    occurred_at: baselineGateOpenedAt,
+    sequence: gateSequence,
+  });
 
   await baselineGateAnswer.promise;
   const decision = baselineGateDecision ?? { optionId: "confirm_plan", label: "Confirm plan and build longlist" };
@@ -1737,7 +1788,41 @@ function toSse(frame: SseFrame): string {
 }
 
 function page<T>(data: T[]) {
-  return { data, pagination: { page: 1, page_size: data.length, total_items: data.length } };
+  return { data, pagination: { page: 1, page_size: data.length, total_items: data.length, has_more: false } };
+}
+
+/** One server-shaped page of `rows`, read from `page` and `page_size`. */
+function pageOf<T>(rows: T[], url: URL) {
+  const pageNumber = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
+  const pageSize = Math.max(1, Number(url.searchParams.get("page_size") ?? "50") || 50);
+  const start = (pageNumber - 1) * pageSize;
+  return {
+    data: rows.slice(start, start + pageSize),
+    pagination: {
+      page: pageNumber,
+      page_size: pageSize,
+      total_items: rows.length,
+      has_more: start + pageSize < rows.length,
+    },
+  };
+}
+
+/** The server's 403 message for a colleague's project change (task 058, round 10). */
+export const PROJECTS_OWNER_ONLY = "Only the task's owner can change its projects.";
+
+/** The spellings the server folds into one country name (`country_name`). */
+const MOCK_COUNTRY_ALIASES: Record<string, string> = {
+  gb: "united kingdom",
+  uk: "united kingdom",
+  us: "united states",
+  usa: "united states",
+};
+
+/** Mirror of the server's `country` filter: any spelling; "Not reported" is none. */
+function mockCountryMatches(itemCountry: string | null, wanted: string): boolean {
+  if (wanted.trim() === "Not reported") return itemCountry === null;
+  const key = wanted.trim().toLowerCase();
+  return itemCountry !== null && itemCountry.toLowerCase() === (MOCK_COUNTRY_ALIASES[key] ?? key);
 }
 
 function json(data: unknown, status = 200): Response {
@@ -1783,6 +1868,51 @@ let mockOptionRows: components["schemas"]["OptionProgressOut"][] = [];
  *  `null` outside a walk (the finished longlist is then served). */
 let mockLonglistWalkStage: MockWalkLonglistStage | null = null;
 
+/** The longlist a finished mock walk built (task 058, round 10): its option
+ *  ids (cards in `mockLonglistOptionCards`) and its themes. `null` until a
+ *  walk finishes; the fixture's four-option longlist is served meanwhile. */
+let mockFinishedWalk: {
+  optionIds: string[];
+  themes: components["schemas"]["LonglistOut"]["themes"];
+} | null = null;
+
+/** The option search the mock fails, so the build shows a failed row: the
+ *  last seed, "Conditionality reform for under-25s". */
+const MOCK_FAILED_SEARCH_INDEX = 11;
+
+/** The options the longlist currently holds: the finished walk's, else the
+ *  fixture's four; either way plus any added by hand since. */
+function currentMockOptionIds(): string[] {
+  const base = mockFinishedWalk?.optionIds ?? (mockLonglist().options ?? []).map((option) => option.option_id);
+  return [...new Set([...base, ...mockLonglistExtraOptionIds])];
+}
+
+/** `GET /longlist` after a walk: the build's options, themed, read off their
+ *  cards so the verbs' changes show. */
+function mockFinishedWalkLonglist(): components["schemas"]["LonglistOut"] {
+  const finished = mockFinishedWalk!;
+  const base = mockLonglist();
+  const options = currentMockOptionIds()
+    .map((optionId) => mockLonglistOptionCards[optionId])
+    .filter((card) => card !== undefined)
+    .map(toLonglistOptionSummary);
+  const themed = new Set(finished.themes?.flatMap((theme) => theme.option_ids ?? []) ?? []);
+  return {
+    ...base,
+    counts: {
+      options: options.length,
+      themes: finished.themes?.length ?? 0,
+      included: options.filter((option) => option.state === "included").length,
+      excluded: options.filter((option) => option.state === "excluded").length,
+      no_in_scope: options.filter((option) => option.no_in_scope_evidence).length,
+      none_fits: options.filter((option) => option.primary_lever_type == null).length,
+    },
+    themes: finished.themes,
+    unthemed_option_ids: options.map((option) => option.option_id).filter((optionId) => !themed.has(optionId)),
+    options,
+  };
+}
+
 /** The scoping plan's current version; edits and confirms move it. */
 let mockScopingPlanVersion = 1;
 /** The longlist walks opened so far, newest first. */
@@ -1801,6 +1931,8 @@ function resetMockLonglistWalks() {
   mockOptionRows = [];
   mockTask.active_run = null;
   mockTask.has_longlist = false;
+  for (const optionId of mockFinishedWalk?.optionIds ?? []) delete mockLonglistOptionCards[optionId];
+  mockFinishedWalk = null;
 }
 
 /** A 409 in the API's error envelope. */
@@ -1914,6 +2046,7 @@ async function mockLonglistWalk(
   };
   let nextOption = 0;
   let finished = 0;
+  let failed = 0;
   let sources = 0;
   const searchOption = async (index: number) => {
     const childId = mockChildRunId(index);
@@ -1937,6 +2070,33 @@ async function mockLonglistWalk(
     patchRow(index, { search_status: "searching" });
     emit(stageStarted("acquire", nextSequence(), childId));
     await pace(500 + ((index * 7) % 5) * 220);
+    if (index === MOCK_FAILED_SEARCH_INDEX) {
+      // One search fails, as one can on the server: the row says so, the
+      // join counts it failed, not finished.
+      emit({
+        type: "stage.failed",
+        capability_run_id: childId,
+        stage: "acquire",
+        label: STAGE_PRESENTATION.acquire[0],
+        reason: "The search service did not respond.",
+        skipped: false,
+        occurred_at: frameTime(),
+        sequence: nextSequence(),
+      });
+      patchRow(index, { search_status: "failed", found: null });
+      emit(runStatus("failed", nextSequence(), childId));
+      const failedAt = new Date().toISOString();
+      mockLonglistWalks = mockLonglistWalks.map((walk) =>
+        walk.capability_run_id === childId ? { ...walk, status: "failed", ended_at: failedAt } : walk,
+      );
+      failed += 1;
+      emit(tick("option_searches", `${finished} of ${MOCK_OPTION_COUNT} searches done · ${withCommas(sources)} sources so far`, {
+        done: finished,
+        total: MOCK_OPTION_COUNT,
+        unit: "searches",
+      }));
+      return;
+    }
     const found = mockOptionFound(index);
     emit(stageCompleted("acquire", { acquired: found }, nextSequence(), childId));
     patchRow(index, { search_status: "searched", found });
@@ -1961,7 +2121,7 @@ async function mockLonglistWalk(
     }
   };
   await Promise.all(Array.from({ length: 10 }, worker));
-  finish("option_searches", { total: MOCK_OPTION_COUNT, finished, sources });
+  finish("option_searches", { total: MOCK_OPTION_COUNT, finished, failed, sources });
 
   await runStage("extract_interventions", [
     { activity: "900 of 2,410 abstracts read", done: 900, total: 2410, unit: "documents" },
@@ -1992,13 +2152,21 @@ async function mockLonglistWalk(
   ], { themes: counts.themes }, () => {
     mockLonglistWalkStage = "theme";
   });
+  // Hold the themed build a moment, so it can be seen before the shortlist.
+  await pace(1500);
   const placed = Object.values(mockLonglistOptionCards).filter(
     (option) => option.shortlist?.state === "proposed" || option.shortlist?.state === "added_by_you",
   ).length;
   await runStage("shortlist", [{ activity: "Choosing the shortlist" }], { kept: placed }, () => {
     mockLonglistWalkStage = "shortlist";
   });
-  // The walk is over: the finished longlist (with its working cards) takes over.
+  // The walk is over: the finished longlist takes over, the same options the
+  // build showed, themed, each with a working card.
+  const built = mockWalkLonglist(mockOptionRows, "shortlist");
+  for (const optionId of mockFinishedWalk?.optionIds ?? []) delete mockLonglistOptionCards[optionId];
+  const cards = mockWalkOptionCards(built);
+  for (const card of cards) mockLonglistOptionCards[card.option_id] = card;
+  mockFinishedWalk = { optionIds: cards.map((card) => card.option_id), themes: built.themes };
   mockLonglistWalkStage = null;
 
   const endedAt = new Date().toISOString();

@@ -141,7 +141,15 @@ def test_add_on_a_pick_makes_it_yours_and_a_repeat_changes_nothing(
         assert [h["kind"] for h in history] == ["option.shortlisted"]  # one event, not two
         assert history[0]["decided_by"] == "user"
         assert history[0]["detail"]["actor"] == owner.user_id
-        assert history[0]["summary"] == "Added “Mentoring” to the shortlist."
+        assert history[0]["summary"] == "You added “Mentoring” to the shortlist."
+        assert history[0]["actor_is_viewer"] is True
+        # Task 058, round 10: "You" is the reader's word only; a colleague
+        # reads the owner's name.
+        seen_by_colleague = _history(client, built, colleague.headers)
+        name = seen_by_colleague[0]["actor_display"]
+        assert name and name != "You"
+        assert seen_by_colleague[0]["actor_is_viewer"] is False
+        assert seen_by_colleague[0]["summary"] == f"{name} added “Mentoring” to the shortlist."
 
 
 def test_add_on_an_option_with_no_place_makes_it_yours(engine: Engine, tmp_path: Path) -> None:
@@ -199,7 +207,7 @@ def test_remove_sets_a_pick_aside_clears_your_place_and_opens_no_walk(
         history = _history(client, built, owner.headers)
         assert [h["kind"] for h in history] == ["option.unshortlisted"] * 2
         assert all(h["decided_by"] == "user" for h in history)
-        assert history[1]["summary"] == "Removed “Mentoring” from the shortlist."
+        assert history[1]["summary"] == "You removed “Mentoring” from the shortlist."
         assert history[0]["detail"]["previous_state"] == "added_by_you"
 
 

@@ -82,6 +82,7 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.contract.read_models import EvaluatedCountryOut, PlaceSentenceOut
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
+from policy_atlas.api.read_models import history
 from policy_atlas.core.schema import (
     GROUPING_FACETS,
     OPTION_SHORTLIST_STATES,
@@ -145,9 +146,11 @@ from policy_atlas.options_scoping.longlist.coverage import (
 )
 from policy_atlas.options_scoping.longlist.maturity import maturity_of
 from policy_atlas.options_scoping.longlist.where_tried import (
+    COUNTRY_DISPLAY_NAMES,
     NOT_STATED,
     country_level,
     document_where,
+    names_country,
     resolve_country,
 )
 from policy_atlas.options_scoping.longlist_intent import longlist_plan_data
@@ -567,6 +570,33 @@ def _url(metadata: Mapping[str, Any], source_locator: str | None = None) -> str 
 GEOGRAPHY_NOT_REPORTED = "Not reported"
 
 
+def country_name(raw: str | None) -> str | None:
+    """The short English name a publisher country is shown and filtered by.
+
+    One name per country whichever way the provider spelled it (task 058,
+    round 10): OpenAlex's ISO code ``GB``, Overton's ``UK`` and a written
+    "United Kingdom" all read "United Kingdom", so the Landscape chart's row
+    and the All sources filter it links to name the same set. A value the
+    country tables do not know is kept as written.
+
+    Args:
+        raw: The provider's value, as :func:`publication_country` reads it.
+
+    Returns:
+        The country's display name, the value as written, or ``None`` when
+        there is none.
+    """
+    text = raw.strip() if isinstance(raw, str) else ""
+    if not text:
+        return None
+    if len(text) == 2 and text.isalpha() and text.upper() in COUNTRY_DISPLAY_NAMES:
+        return COUNTRY_DISPLAY_NAMES[text.upper()]
+    found = resolve_country(text)
+    if found is not None and names_country(text):
+        return found[1]
+    return text
+
+
 def publication_country(metadata: Mapping[str, Any]) -> str | None:
     """Read a document's publication country from its snapshot metadata.
 
@@ -861,7 +891,7 @@ def landscape_out(
         # residual always equal the population drawn — at either scope, because
         # base_rows is already narrowed. An authorship country is never
         # substituted here; the slim authorships answer a different question.
-        geography = publication_country(metadata)
+        geography = country_name(publication_country(metadata))
         geographies[geography if geography is not None else GEOGRAPHY_NOT_REPORTED] += 1
     characterisation = conn.execute(
         select(characterisation_result.c.themes)
@@ -1033,8 +1063,13 @@ def evidence_page(
     strength: str | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
+    country: str | None = None,
 ) -> Page[EvidenceItemOut]:
     """Return one evidence page, deriving status task-wide before paging.
+
+    ``country`` keeps the sources whose publisher country is that country,
+    by any spelling (:func:`country_name`); ``"Not reported"`` keeps those
+    with none, the Landscape chart's own bucket (task 058, round 10).
 
     `status`/`cited`/`theme` filters are collection-true: status is derived for
     every task source (bounded — one task's worth of rows, the
@@ -1105,10 +1140,20 @@ def evidence_page(
         if theme is not None
         else None
     )
+    wanted_country = (
+        None
+        if country is None
+        else ""
+        if country.strip() == GEOGRAPHY_NOT_REPORTED
+        else (country_name(country) or "").casefold()
+    )
     sortable_items: list[tuple[EvidenceItemOut, int | None]] = []
     for row in rows:
         metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
         screen = screens.get(row.task_source_snapshot_id)
+        item_country = country_name(publication_country(metadata))
+        if wanted_country is not None and (item_country or "").casefold() != wanted_country:
+            continue
         # Python-side membership over an already-fetched row + a precomputed
         # set, not a SQL join — tss_owns_snapshot doesn't fit here (task 029
         # delta-review sweep).
@@ -1196,6 +1241,7 @@ def evidence_page(
                     read_in_full=row.full_text_status == "ingested",
                     abstract=abstract,
                     abstract_source=abstract_source,
+                    country=item_country,
                 ),
                 quality_score,
             )
@@ -1599,77 +1645,108 @@ _EVENT_KINDS = {
 } | both_generations(*LIFECYCLE_EVENT_KINDS)
 
 
-def _option_event_summary(event_type: str, payload: Mapping[str, Any]) -> str:
-    """One History sentence naming the verb, the option and the reason."""
-    name = str(payload.get("option_name") or "an option")
-    reason = payload.get("reason")
-    if event_type in (OPTION_SHORTLISTED, OPTION_UNSHORTLISTED):
-        verb = "Added" if event_type == OPTION_SHORTLISTED else "Removed"
-        where = "to" if event_type == OPTION_SHORTLISTED else "from"
-        return f"{verb} \u201c{name}\u201d {where} the shortlist."
-    verb = {
-        OPTION_ADDED: "Added the option",
-        OPTION_EXCLUDED: "Excluded the option",
-        OPTION_INCLUDED: "Included the option",
-    }[event_type]
-    again = " again" if event_type == OPTION_INCLUDED else ""
-    sentence = f"{verb} \u201c{name}\u201d{again}."
-    if isinstance(reason, str) and reason.strip():
-        sentence = f"{sentence[:-1]}: {reason.strip()}"
-    return sentence
+#: The verb each option event's History line uses.
+_OPTION_VERBS = {
+    OPTION_ADDED: "added",
+    OPTION_EXCLUDED: "excluded",
+    OPTION_INCLUDED: "included",
+    OPTION_SHORTLISTED: "shortlisted",
+    OPTION_UNSHORTLISTED: "unshortlisted",
+}
+
+#: The bare lifecycle kind of each stored lifecycle event type, both
+#: generations (``task.renamed`` and pre-038 ``project.renamed`` alike).
+_LIFECYCLE_KIND = {
+    event_type: kind
+    for kind in LIFECYCLE_EVENT_KINDS
+    for event_type in both_generations(kind)
+}
 
 
-def _event_decision(row: Any, walk_id: uuid.UUID | None = None) -> DecisionOut:
+def _event_decision(
+    row: Any, people: history.People, walk_id: uuid.UUID | None = None
+) -> DecisionOut:
+    """One audit event as its History line (task 058, round 10: what happened, by whom)."""
     payload = row.payload if isinstance(row.payload, Mapping) else {}
-    actor = payload.get("actor") if isinstance(payload.get("actor"), str) else None
-    if row.event_type in OPTION_EVENT_KINDS:
-        return DecisionOut(
-            sequence=int(row.sequence),
-            occurred_at=row.occurred_at,
-            kind=row.event_type,
-            summary=_option_event_summary(row.event_type, payload),
-            decided_by=cast(Any, "user") if actor else None,
-            detail=dict(payload),
-            capability_run_id=walk_id,
+    event_type = row.event_type
+    actor: history.Actor | None = None
+    decided_by: str | None = None
+    if event_type in OPTION_EVENT_KINDS:
+        actor = people.actor(payload.get("actor"))
+        decided_by = "agent" if actor is history.SYSTEM else "user"
+        summary = history.option_sentence(
+            _OPTION_VERBS[event_type],
+            str(payload.get("option_name") or "an option"),
+            payload.get("reason"),
+            actor,
         )
-    if row.event_type == SHORTLIST_PROPOSED:
+    elif event_type == SHORTLIST_PROPOSED:
         places = payload.get("places")
         count = len(places) if isinstance(places, list) else 0
-        return DecisionOut(
-            sequence=int(row.sequence),
-            occurred_at=row.occurred_at,
-            kind=row.event_type,
-            summary=f"Policy Atlas proposed {count} place{'' if count == 1 else 's'}.",
-            decided_by=cast(Any, "agent"),
-            detail=dict(payload),
-            capability_run_id=walk_id,
-        )
-    text = {
-        "component.completed": "Completed an evidence-search step.",
-        "component.failed": "An evidence-search step failed.",
-        "component.skipped": "Skipped an evidence-search step.",
-        "search.executed": "Executed a search query.",
-        "run.opened": "Opened an evidence-search run.",
-        "run.parked": "Parked the run for a check-in.",
-        "run.finished": "Finished the run.",
-        "run.interrupted": "Interrupted the run.",
-        "plan.approved": "Approved the plan.",
-        # Both generations read as the same sentence — the words on screen are
-        # today's, whichever word the stored row carries.
-        **dict.fromkeys(both_generations("renamed"), "Renamed the task."),
-        **dict.fromkeys(both_generations("archived"), "Archived the task."),
-        **dict.fromkeys(both_generations("shared_publicly"), "Made the task public."),
-        **dict.fromkeys(both_generations("unshared"), "Made the task private."),
-    }[row.event_type]
+        actor, decided_by = history.SYSTEM, "agent"
+        summary = f"{history.POLICY_ATLAS} proposed {count} place{'' if count == 1 else 's'}."
+    elif event_type in _LIFECYCLE_KIND:
+        actor, decided_by = people.actor(payload.get("actor")), "user"
+        summary = history.lifecycle_sentence(_LIFECYCLE_KIND[event_type], payload, actor)
+    elif event_type == "plan.approved":
+        # Only the task's owner approves its plan; the payload names no one.
+        actor, decided_by = people.actor(None), "user"
+        summary = f"{actor.subject} approved the plan."
+    elif event_type.startswith("component."):
+        summary = history.step_sentence(event_type, payload)
+    else:
+        summary = history.run_sentence(event_type, payload)
+    person = actor if actor is not None and actor is not history.SYSTEM else None
     return DecisionOut(
         sequence=int(row.sequence),
         occurred_at=row.occurred_at,
-        kind=row.event_type,
-        summary=text,
-        decided_by=cast(Any, "user") if actor else None,
+        kind=event_type,
+        summary=summary,
+        decided_by=cast(Any, decided_by),
         detail=dict(payload),
         capability_run_id=walk_id,
+        actor_display=person.display if person is not None else None,
+        actor_is_viewer=person.is_viewer if person is not None else None,
     )
+
+
+def _search_decisions(
+    rows: Sequence[Any], walks: Mapping[uuid.UUID, uuid.UUID]
+) -> list[DecisionOut]:
+    """One History line per run's searches, not one per query (task 058, round 10).
+
+    The line quotes the first few distinct queries and counts the rest; the
+    detail carries every query, in the order sent, so the row can expand to
+    them. Raw search payloads (backends, filters, errors) stay off the page.
+    """
+    grouped: dict[uuid.UUID | None, list[Any]] = {}
+    for row in rows:
+        walk = walks.get(row.run_id) if row.run_id is not None else None
+        grouped.setdefault(walk, []).append(row)
+    out: list[DecisionOut] = []
+    for walk, members in grouped.items():
+        members.sort(key=lambda member: int(member.sequence))
+        queries = list(
+            dict.fromkeys(
+                payload["query"].strip()
+                for member in members
+                if isinstance(payload := member.payload, Mapping)
+                and isinstance(payload.get("query"), str)
+                and payload["query"].strip()
+            )
+        )
+        first = members[0]
+        out.append(
+            DecisionOut(
+                sequence=int(first.sequence),
+                occurred_at=first.occurred_at,
+                kind="search.executed",
+                summary=history.search_sentence(queries),
+                detail={"queries": queries},
+                capability_run_id=walk,
+            )
+        )
+    return out
 
 
 def walks_of_event_runs(
@@ -1709,36 +1786,75 @@ def walks_of_event_runs(
 
 
 def decisions_page(
-    conn: Connection, task_id: uuid.UUID, page: int, page_size: int
+    conn: Connection,
+    task_id: uuid.UUID,
+    page: int,
+    page_size: int,
+    viewer_user_id: str | None = None,
 ) -> Page[DecisionOut]:
-    """Return steering-history decisions plus the explicitly allowlisted audit events."""
-    allowed = (
-        conn.execute(
-            select(event_log).where(
-                event_log.c.task_id == task_id, event_log.c.event_type.in_(_EVENT_KINDS)
-            )
+    """Return the task's History: steering decisions plus the allowlisted audit events.
+
+    Args:
+        conn: Open database connection.
+        task_id: The task.
+        page: 1-indexed page.
+        page_size: Rows per page.
+        viewer_user_id: The reader, so their own acts read "You" (task 058,
+            round 10); ``None`` names everyone.
+
+    Returns:
+        One page, newest first. A run's searches are one row, not one per query.
+    """
+    rows = conn.execute(
+        select(event_log).where(
+            event_log.c.task_id == task_id, event_log.c.event_type.in_(_EVENT_KINDS)
         )
-        .mappings()
-        .all()
+    ).all()
+    walks = walks_of_event_runs(conn, task_id, [row._mapping for row in rows])
+    stories = steering_history(conn, task_id)
+    people = history.People(
+        conn,
+        task_id,
+        viewer_user_id,
+        {
+            row.payload["actor"]
+            for row in rows
+            if isinstance(row.payload, Mapping) and isinstance(row.payload.get("actor"), str)
+        },
     )
-    walks = walks_of_event_runs(conn, task_id, allowed)
     decision_events: list[DecisionOut] = [
-        _event_decision(row, walks.get(row.run_id) if row.run_id is not None else None)
-        for row in allowed
+        _event_decision(row, people, walks.get(row.run_id) if row.run_id is not None else None)
+        for row in rows
+        if row.event_type != "search.executed"
     ]
-    for story in steering_history(conn, task_id):
+    decision_events.extend(
+        _search_decisions([row for row in rows if row.event_type == "search.executed"], walks)
+    )
+    for story in stories:
+        labels: dict[str, str] = {}
         for event in story["events"]:
+            payload = event["payload"] if isinstance(event["payload"], Mapping) else {}
+            if event["event_type"] == "steering.pause":
+                # The card the next decision answers: its options' labels.
+                labels = history.option_labels(payload)
+                continue
             if event["event_type"] != "steering.decision":
                 continue
-            payload = event["payload"] if isinstance(event["payload"], Mapping) else {}
             # Pre-038 rows carry the old actor word; the set would drop them.
             decided_by = canonical_actor(payload.get("decided_by"))
+            actor = people.actor(None) if decided_by == "user" else history.SYSTEM
+            option_id = payload.get("option_id")
+            person = actor if actor is not history.SYSTEM else None
             decision_events.append(
                 DecisionOut(
                     sequence=int(event["sequence"]),
                     occurred_at=event["occurred_at"],
                     kind="steering.decision",
-                    summary="Recorded a steering decision.",
+                    summary=history.check_in_sentence(
+                        payload,
+                        labels.get(option_id) if isinstance(option_id, str) else None,
+                        actor,
+                    ),
                     decided_by=cast(Any, decided_by)
                     if decided_by in {"user", "agent", "standing_default"}
                     else None,
@@ -1746,6 +1862,8 @@ def decisions_page(
                     # A steering event's walk is its story's key, never an
                     # event_log.run_id join (see runtime.steering_history).
                     capability_run_id=story["capability_run_id"],
+                    actor_display=person.display if person is not None else None,
+                    actor_is_viewer=person.is_viewer if person is not None else None,
                 )
             )
     decision_events.sort(key=lambda item: item.sequence, reverse=True)

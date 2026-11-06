@@ -33,6 +33,7 @@ import {
   foldMockOptionRows,
   mockWalkLonglist,
   seedMockOptionRows,
+  mockTask,
 } from "./fixtures";
 
 interface MockChatTurn {
@@ -375,8 +376,86 @@ describe("mock API", () => {
       expect(nonMatchingData).toHaveLength(0);
 
       const unfiltered = await mockFetch("http://localhost/api/v1/tasks");
-      const { data: unfilteredData } = await unfiltered.json() as { data: unknown[] };
-      expect(unfilteredData).toHaveLength(1);
+      const { data: unfilteredData } = await unfiltered.json() as { data: { task_id: string }[] };
+      expect(unfilteredData).toHaveLength(50);
+      expect(unfilteredData[0].task_id).toBe(MOCK_TASK_ID);
+    });
+
+    it("GET /tasks pages 50 at a time with has_more, honours scope=mine and status=archived (task 058, round 10)", async () => {
+      resetMockScenario();
+      type ListPage = { data: { task_id: string; is_owner: boolean; status: string }[]; pagination: { page: number; total_items: number; has_more: boolean } };
+      const read = async (query: string) => await (await mockFetch(`http://localhost/api/v1/tasks?${query}`)).json() as ListPage;
+      const first = await read("scope=mine");
+      expect(first.data).toHaveLength(50);
+      expect(first.pagination).toMatchObject({ page: 1, total_items: 56, has_more: true });
+      expect(first.data.every((task) => task.is_owner)).toBe(true);
+      const second = await read("scope=mine&page=2");
+      expect(second.data).toHaveLength(6);
+      expect(second.pagination.has_more).toBe(false);
+      const organisation = await read("scope=all");
+      expect(organisation.pagination.total_items).toBe(62);
+      const archived = await read("status=archived");
+      expect(archived.data).toHaveLength(3);
+      expect(archived.data.every((task) => task.status === "archived")).toBe(true);
+      const opened = await mockFetch(`http://localhost/api/v1/tasks/${archived.data[0].task_id}`);
+      expect(opened.status).toBe(200);
+    });
+
+    it("PATCH /tasks/{id} stores is_public, and refuses a colleague's project change with the server's message", async () => {
+      resetMockScenario();
+      const shared = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_public: true }),
+      });
+      expect((await shared.json() as { is_public: boolean }).is_public).toBe(true);
+      const reread = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}`);
+      expect((await reread.json() as { is_public: boolean }).is_public).toBe(true);
+
+      mockTask.is_owner = false;
+      const refused = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}`, {
+        method: "PATCH",
+        body: JSON.stringify({ project_ids: [] }),
+      });
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toEqual({
+        error: { code: "forbidden", message: "Only the task's owner can change its projects." },
+      });
+      resetMockScenario();
+      expect(mockTask.is_owner).toBe(true);
+      expect(mockTask.is_public).toBe(false);
+    });
+
+    it("GET /evidence?country= keeps a Landscape row's sources, by any spelling (task 058, round 10)", async () => {
+      resetMockScenario();
+      const titles = async (country: string) => {
+        const response = await mockFetch(
+          `http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?country=${encodeURIComponent(country)}`,
+        );
+        return (await response.json() as { data: { country?: string | null }[] }).data;
+      };
+      const uk = await titles("United Kingdom");
+      expect(uk.length).toBeGreaterThan(0);
+      expect(uk.every((row) => row.country === "United Kingdom")).toBe(true);
+      expect(await titles("GB")).toHaveLength(uk.length);
+      expect((await titles("Not reported")).every((row) => row.country === null)).toBe(true);
+      expect(await titles("France")).toHaveLength(0);
+      expect(Object.keys(mockLandscape.geographies ?? {})).toEqual(
+        expect.arrayContaining(["United Kingdom", "United States", "Netherlands", "Not reported"]),
+      );
+    });
+
+    it("GET /decisions names the step, the chooser and the search terms (task 058, round 10)", async () => {
+      resetMockScenario();
+      const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/decisions`);
+      const { data } = await response.json() as { data: { kind: string; summary: string; detail: { queries?: string[] } | null; actor_is_viewer?: boolean }[] };
+      const summaries = data.map((row) => row.summary);
+      expect(summaries).toContain("Screening finished: 118 of 312 relevant.");
+      expect(summaries).toContain("You chose \u201cLooks right, assess these\u201d at the check-in.");
+      expect(summaries).not.toContain("Completed an evidence-search step.");
+      const search = data.find((row) => row.kind === "search.executed");
+      expect(search?.summary).toMatch(/^Searched with 12 queries: .* and 7 more\.$/);
+      expect(search?.detail?.queries).toHaveLength(12);
+      expect(data.find((row) => row.kind === "plan.approved")?.actor_is_viewer).toBe(true);
     });
 
     it("PATCH /tasks/{id} refuses a rename bundled with a visibility conflict all-or-nothing — the name is never assigned before the 409", async () => {
@@ -953,6 +1032,25 @@ describe("mock API", () => {
       expect(read.data[0].kind).toBe("steer_point");
     });
 
+    it("opens the baseline gate at its own time, after the opening question, with the plan's risk appetite", async () => {
+      const opened = new Date().toISOString();
+      await freshTask("options_scoping");
+      await mockFetch(`${base}/runs`, { method: "POST" });
+      const response = await mockFetch(`${base}/events`);
+      const frames: SseFrame[] = [];
+      void consumeEventStream(response.body!, 0, (frame) => frames.push(frame));
+      await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
+      const pending = frames.at(-1) as Extract<SseFrame, { type: "checkin.pending" }>;
+      expect(pending.check_in.created_at >= opened).toBe(true);
+      expect(pending.check_in.render?.split("\n")[0]).toBe("Does the plan still look right now you have the baseline?");
+      expect((pending.check_in.bundle as { settings: { risk_appetite: string } }).settings.risk_appetite).toBe(
+        "Balanced: mostly evaluated, plus one or two not yet evaluated",
+      );
+      const read = (await (await mockFetch(`${base}/check-ins`)).json()) as { data: { created_at: string }[] };
+      expect(read.data[0].created_at).toBe(pending.check_in.created_at);
+      resetMockScenario();
+    });
+
     describe("the scoping walk", () => {
       /** Open the scoping run, confirm the baseline gate and read frames until
        *  the longlist walk's parent run succeeds. */
@@ -994,11 +1092,15 @@ describe("mock API", () => {
         expect(childIds).toHaveLength(12);
         expect(new Set(childIds).size).toBe(12);
         expect(childIds).not.toContain(parent);
+        // Eleven searches succeed; one fails (task 058, round 10), as one can.
+        const failedChild = childIds.find((childId) => childId.endsWith("000000000012"));
         for (const childId of childIds) {
           const acquire = frames.filter((frame) => "capability_run_id" in frame && frame.capability_run_id === childId);
-          expect(acquire.map((frame) => (frame.type === "run.status" ? `${frame.type}:${frame.status}` : `${frame.type}:${"stage" in frame ? frame.stage : ""}`))).toEqual([
-            "run.status:running", "stage.started:acquire", "stage.completed:acquire", "run.status:succeeded",
-          ]);
+          expect(acquire.map((frame) => (frame.type === "run.status" ? `${frame.type}:${frame.status}` : `${frame.type}:${"stage" in frame ? frame.stage : ""}`))).toEqual(
+            childId === failedChild
+              ? ["run.status:running", "stage.started:acquire", "stage.failed:acquire", "run.status:failed"]
+              : ["run.status:running", "stage.started:acquire", "stage.completed:acquire", "run.status:succeeded"],
+          );
         }
         // Ten start before the first one ends; the last two wait for a slot.
         const order = frames.map((frame) =>
@@ -1009,20 +1111,39 @@ describe("mock API", () => {
         const searchLines = ofType(frames, "tick").filter((entry) => entry.stage === "option_searches").map((entry) => entry.activity);
         expect(searchLines).toHaveLength(12);
         expect(searchLines[3]).toMatch(/^4 of 12 searches done · [\d,]+ sources so far$/);
+        expect(searchLines.at(-1)).toMatch(/^11 of 12 searches done · [\d,]+ sources so far$/);
         const done = ofType(frames, "stage.completed").find((frame) => frame.stage === "option_searches")!;
-        expect(done.summary).toMatchObject({ total: 12, finished: 12, sources: expect.any(Number) });
+        expect(done.summary).toMatchObject({ total: 12, finished: 11, failed: 1, sources: expect.any(Number) });
 
         // The options read follows the child walks and the clustering.
         const options = (await (await mockFetch(`${base}/options`)).json()) as {
           options: { name: string; origin: string; merged_into_option_id: string | null; search_status: string; found: number | null }[];
         };
         expect(options.options).toHaveLength(14);
-        const searched = options.options.slice(0, 12);
+        const searched = options.options.slice(0, 11);
         expect(searched.every((row) => row.search_status === "searched" && row.found !== null)).toBe(true);
+        expect(options.options[11]).toMatchObject({ name: "Conditionality reform for under-25s", search_status: "failed", found: null });
         expect(searched.reduce((total, row) => total + (row.found ?? 0), 0)).toBe(done.summary?.sources);
         expect(options.options.filter((row) => row.merged_into_option_id !== null).map((row) => row.name)).toEqual(["Transport subsidies for young job seekers"]);
         expect(options.options.slice(12).map((row) => row.origin)).toEqual(["clustered", "clustered"]);
         expect((await mockFetch(`${base}/longlist`)).status).toBe(200);
+
+        // The finished longlist is the build's own options, themed (task 058,
+        // round 10), not the fixture's four; each has a working card.
+        const finished = (await (await mockFetch(`${base}/longlist`)).json()) as {
+          options: { option_id: string; state: string }[];
+          themes: { option_ids: string[] }[];
+        };
+        const live = options.options.filter((row) => row.merged_into_option_id === null) as unknown as { option_id: string }[];
+        expect(finished.options.map((option) => option.option_id)).toEqual(live.map((row) => row.option_id));
+        expect(finished.themes).toHaveLength(2);
+        expect(finished.themes.flatMap((theme) => theme.option_ids).sort()).toEqual(
+          finished.options.filter((option) => option.state === "included").map((option) => option.option_id).sort(),
+        );
+        const card = await mockFetch(`${base}/options/${finished.options[0].option_id}/unshortlist`, { method: "POST" });
+        expect(card.status).toBe(200);
+        resetMockScenario();
+        expect(((await (await mockFetch(`${base}/longlist`)).json()) as { options: unknown[] }).options).toHaveLength(4);
       });
 
       it("serves the longlist read over the same option ids as the options read", async () => {
@@ -1083,6 +1204,7 @@ describe("mock API", () => {
         expect(mid.options).toHaveLength(12);
         expect(mid.options.filter((row) => row.search_status === "searching").length).toBeLessThanOrEqual(10);
         expect(mid.options.every((row) => (row.search_status === "searched") === (row.found !== null))).toBe(true);
+        expect(mid.options.every((row) => row.search_status !== "failed" || row.found === null)).toBe(true);
         await vi.waitFor(() => expect(walkDone(frames)).toBe(true), { timeout: 8000 });
       });
     });

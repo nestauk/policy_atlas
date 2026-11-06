@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "../auth";
 import { createAuthedApiClient } from "./client";
@@ -20,6 +20,7 @@ export const queryKeys = {
   // gets its own cache entry rather than silently serving another scope's
   // rows.
   tasks: (query?: TasksQuery) => ["tasks", "list", query] as const,
+  tasksPaged: (query?: Omit<TasksQuery, "page">) => ["tasks", "list", "paged", query] as const,
   task: (taskId: string) => ["tasks", taskId, "detail"] as const,
   checkIns: (taskId: string, status?: "pending" | "all") =>
     ["tasks", taskId, "check-ins", status] as const,
@@ -27,7 +28,7 @@ export const queryKeys = {
   landscape: (taskId: string, scope?: "cited") =>
     ["tasks", taskId, "landscape", scope] as const,
   evidence: (taskId: string, query?: EvidenceQuery) =>
-    ["tasks", taskId, "evidence", query?.page, query?.page_size, query?.status, query?.cited, query?.sort, query?.order, query?.theme, query?.origin, query?.evidence_type, query?.strength, query?.year_from, query?.year_to] as const,
+    ["tasks", taskId, "evidence", query?.page, query?.page_size, query?.status, query?.cited, query?.sort, query?.order, query?.theme, query?.origin, query?.evidence_type, query?.strength, query?.year_from, query?.year_to, query?.country] as const,
   findings: (taskId: string, query?: FindingsQuery) =>
     ["tasks", taskId, "findings", query?.page, query?.page_size, query?.profile, query?.facet, query?.group, query?.group_id, query?.source_id] as const,
   decisions: (taskId: string, page?: number, pageSize?: number) =>
@@ -109,6 +110,10 @@ export interface EvidenceQuery extends PageQuery {
   strength?: "Very strong" | "Strong" | "Moderate" | "Limited" | "Weak" | "Unrated";
   year_from?: number;
   year_to?: number;
+  /** Publisher country as the Landscape chart's row shows it (any spelling:
+   *  "United Kingdom", "GB" and "UK" name the same sources); "Not reported"
+   *  keeps the sources with none (task 058, round 10). */
+  country?: string;
 }
 
 interface FindingsQuery extends PageQuery {
@@ -176,6 +181,36 @@ export function useTasks(query?: TasksQuery, options?: { enabled?: boolean }) {
       // A scoping task can be busy while its `latest_run` is finished (an
       // option search runs under `active_run` only — task 045, S15).
       const hasActiveRun = activeQuery.state.data?.data.some(isRunActive);
+      return hasActiveRun ? 15_000 : false;
+    },
+  });
+}
+
+/**
+ * `GET /api/v1/tasks`, a page at a time, for a list with "Show more" (task
+ * 058, round 10). The server keeps 50 a page and says `has_more`; the next
+ * page is asked for only when it does. `data.pages` holds the pages in order.
+ */
+export function useTasksPaged(
+  query?: Omit<TasksQuery, "page">,
+  options?: { enabled?: boolean },
+) {
+  const client = useApiClient();
+  return useInfiniteQuery({
+    queryKey: queryKeys.tasksPaged(query),
+    enabled: options?.enabled,
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await client.GET("/api/v1/tasks", {
+        params: { query: { ...query, page: pageParam } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    getNextPageParam: (last) =>
+      last.pagination.has_more === true ? last.pagination.page + 1 : undefined,
+    refetchInterval: (activeQuery) => {
+      const hasActiveRun = activeQuery.state.data?.pages.some((page) => page.data.some(isRunActive));
       return hasActiveRun ? 15_000 : false;
     },
   });

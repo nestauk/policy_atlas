@@ -20,6 +20,7 @@ from langfuse import Langfuse
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.lifecycle import touch_task
 from policy_atlas.core import events, tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.inference import StubEchoProvider
@@ -5523,6 +5524,10 @@ def _open_capability_run(
         context (task 046, AM4: it marks an acquire-only option search).
     """
     with engine.begin() as conn:
+        # A run's start is work on the task (task 058, round 10); first in the
+        # transaction, as in ``_finish_run``.
+        if parent_capability_run_id is None:
+            touch_task(conn, task_id)
         capability = capability_of_task(conn, task_id)
         purpose = purpose_of_scope(
             conn, task_id=task_id, evidence_scope_id=evidence_scope_id
@@ -5574,8 +5579,8 @@ def _finish_run(
     follow_on: str | None = None,
 ) -> RunPlanOutcome:
     with engine.connect() as conn:
-        purpose = conn.execute(
-            select(evidence_scope.c.purpose)
+        walk_scope = conn.execute(
+            select(evidence_scope.c.purpose, capability_run.c.parent_capability_run_id)
             .select_from(
                 capability_run.join(
                     evidence_scope,
@@ -5585,13 +5590,20 @@ def _finish_run(
             )
             .where(capability_run.c.capability_run_id == capability_run_id)
             .where(capability_run.c.task_id == task_id)
-        ).scalar_one_or_none()
+        ).one_or_none()
+    purpose = walk_scope.purpose if walk_scope is not None else None
     if purpose == LONGLIST_PURPOSE:
         # Every end of a longlist walk — the spine failed, an abort, or the
         # walk's own finish — ends the option searches the join never waited
         # for, before the walk itself (task 045, S2). After a join, a no-op.
         option_search.abandon_children(engine, task_id=task_id, parent_id=capability_run_id)
     with engine.begin() as conn:
+        # A run's end is work on the task (task 058, round 10). First in the
+        # transaction, before the walk row is locked: the API takes the task
+        # row before run rows, and one order means no deadlock. Only a walk
+        # the user started: an option search ends inside its parent's run.
+        if walk_scope is not None and walk_scope.parent_capability_run_id is None:
+            touch_task(conn, task_id)
         ended_at = datetime.now(UTC)
         walk = conn.execute(
             select(

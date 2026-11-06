@@ -43,6 +43,7 @@ secrets, no raw source text, no unredacted traces.
 | Owner round 8 (live-run notes, 2026-11-05, evening; three agents: backend + store, Result tab, workspace + shell) | lead: `make verify && pnpm e2e` on the combined tree; the agents: the same lanes on their own trees | pass | backend 4,344 passed, 1 skipped (6 min 48 s), mypy 468 files, ruff; okf-validate 200; infra 113; prompt-guard 41 unchanged; drift-check OK; frontend 94 files / 1,233 passed, build; Playwright 33 passed. Items: citation ids and quotes on completion (live tooltips and sheets), key findings and the introduction streamed, source notes published and named, searching and screening two rows again; the trace one card from start to end with right-aligned counts, times and links, links while a step runs, the activity line breathing; "Change" on its own line and the decision card settling in place; the run status bar inset after the rail, a button that opens the Task Agent, hidden while the sidebar shows it; the rail static with no timer; the task list's running mark at 6 px; the Sources tab mark removed; staggered repairs with eased height; the chips breathing in turn during the check; pulsing placeholders in empty cells keyed to the live stage with a 5 s refetch; the tooltip no longer closes on scroll the page caused. Unverified live: the key-findings and intro streams on Bedrock (fallback counted in `stream_fallbacks`). |
 | Owner round 9 (live-run notes, 2026-11-05/06; four builders: backend + store, the page, the lists and project page, the Landscape subtab; three read-only reviews: animation sweep, lists, Landscape) | lead: `make verify && pnpm e2e` on the combined tree | pass | backend 4,358 passed, 1 skipped (7 min 45 s), mypy 468 files, ruff; okf-validate 200; infra 113; prompt-guard 41 unchanged; drift-check OK; frontend 97 files / 1,346 passed, build; Playwright 34 passed. Items: search queries published live (`search.query`), "Writing search queries" and "keeping N of M candidates" lines, no "new"/"so far"; themes published at discovery (`characterise.themes`); "Writing · Introduction"; the full-text stage is "Collecting the full texts" (owner: no model reads it; chip "Full text", funnel "Full text"); the queries block at the top of All sources, live then folded; the run status bar (renamed from the strip, code included) inset, a button plus the running step's link; the chip wave in blue; themes listed while assigning; the thread makes room for arriving blocks and only new blocks rise (the sweep's ten entries); the nav's growing rule; the lists share one page header with fixed slots (layout shift on the phone walk 0.109 → 0.042) and open on Organisation when Mine is empty; the Landscape charts are accessible ranked-bar tables in Navy, the funnel without its Findings row. Unverified live: the case-studies, key-findings and intro strict-schema streams on Bedrock. |
 | Consistency pass (owner, 2026-11-06; one builder on the clean tree from `research/consistency-sweep.md`, plus seven owner additions) | lead: `make verify && pnpm e2e` | pass | backend unchanged; frontend 98 files / 1,363 passed, build; Playwright 34 passed; drift-check OK. Recount: off-scale text sizes 7 → 1 (the approved chip), hand-written tracking 23 → 0, `font-medium` 12 → 0, grey shadows 4 → 0, `START_SEARCH_CLASS` 6 → 0, `animate-pulse` 0. One `:focus-visible` rule and an inset ring on the cut-corner primaries (they showed no ring: the cut clipped it); `buttonVariants` exported; an outline variant; Retry as a `Button` everywhere; one `CloseButton`; one icon module; splash on the scale; dark-panel tokens; the radio recorded as the one radius exception; the nav rule grows left-to-centre on hover and full when active (Sources subtabs the same); "Find a project"; header controls at Body; the Find popover (recent items, no empty 'no match', keyboard); the account menu arriving from its button; the New page's eyebrow removed; greyed subtabs; Landscape rows link to the filtered Sources view with one hover and one count line; Sources table headers on one line. |
+| Round 10 (owner, 2026-11-06; six builders from five read-only reviews: the report page, the Sources table and Landscape years, the list rows, Share and History, Options scoping, and the backend) | lead: `make verify && pnpm e2e` on the combined tree | pass | backend 4,365 passed, 1 skipped (7 min 17 s), mypy 470 files, ruff; okf-validate 200; infra 113; prompt-guard 41 unchanged; drift-check OK; frontend 100 files / 1,480 passed, build; Playwright 35 passed. Items: the question as the report's title on both pages, the facts line, references with addresses, markers as the one control with tooltip and sorted numbers, a heading outline, ruled lists, print without chrome; visible Sources filters with Country and a year range, fixed columns, a stacked phone row, the years drag range, the subtab remembered per task; the row's accessible name carrying its status, the name cell widened, dates as "5 Nov", Show more paging and an Archived view, the switcher's growing rule; History grouped by day with sentences naming the step and the actor, runs folded behind Show steps; Share reordered with a two-step public confirm and no blue fill; the longlist as one component with rows moving into themes, one primary on the shortlist page, the gate card in the settled language, scoping trace links; the backend's history sentences, the run touching the task's date, has_more paging, the country filter, the refusal message, the gate heading and the scoping mock. Open: D1 (themes open by default; switch `THEMES_OPEN_BY_DEFAULT`). |
 
 (The gate map's step-6 exit is this command; it is re-run after the owner-gated phases.)
 
@@ -399,6 +400,67 @@ live run, 2026-11-05, night). No prompt text changed; nothing new is judged or p
   `test_round8_live.py`, `test_acquire.py`, `test_screen.py` (strings); frontend
   `store/reducer.test.ts` (2), `mock/api.test.ts` (2 new, 2 updated).
 
+## Round 10 backend: History lines that say what happened; runs touch the task; paging, country, a reason on a refused share
+
+Built by a deep-reasoner agent from `research/briefs/round-10-backend.md` (four design reviews:
+`share-history-polish.md` H2/P6/S5/S8, `lists-rows-polish.md`, `landscape-polish.md`). No
+prompt text changed; no schema change (the new fields are read-model fields and two payload
+keys).
+
+- **History lines.** The sentences are written by the History read model
+  (`api/read_models/history.py`, new; `repository.decisions_page`), per reader: a person's act
+  reads "You" for that person and their display name for anyone else (`owner_display_for`, never
+  the email); Policy Atlas's acts name it; a step's line has no subject. Step words come from
+  `stage_vocabulary` (the run page's labels and counts). A run's searches are one row (per walk)
+  quoting the first five distinct queries, then "and N more", with every query in
+  `detail.queries`. A check-in answer names the option in the card's words: the decision payload
+  now records `option_id` (`continuation.answer_check_in`, the gate's two ends), and the label is
+  read from the pause it answers. `DecisionOut` gains `actor_display` and `actor_is_viewer`
+  (null when no person acted). The plan approval and a user's check-in answer have no actor in
+  their payloads; both are owner-only acts, so they read as the task owner.
+- **A run touches the task.** `lifecycle.touch_task` sets `task.updated_at`; called first in the
+  transaction (task row before run rows, the API's order) at a top-level walk's open and end
+  (`runner._open_run`'s transaction, `runner._finish_run`) and in every check-in answer
+  (`continuation._append_decision`). Option searches (child walks) do not touch it.
+- **Paging.** `PageMeta.has_more` (derived: `page * page_size < total_items`) on every page;
+  `GET /tasks` already took `page` / `page_size` (50 default) and `status=archived`. Store:
+  `useTasksPaged` (infinite query, next page only while `has_more`).
+- **Country.** `GET /tasks/{id}/evidence?country=` (any spelling: "United Kingdom", "GB", "UK";
+  "Not reported" = none); `EvidenceItemOut.country`; the Landscape `geographies` keys are now
+  the same display names (`repository.country_name`, from the options-scoping ISO tables), so
+  the chart row and the filter share one value.
+- **Refused project change.** A non-owner's `PATCH /tasks/{id}` carrying `project_ids` gets 403
+  `{"error": {"code": "forbidden", "message": "Only the task's owner can change its
+  projects."}}`.
+- **Mock.** History fixture with the new lines and actors; 64 more tasks (55 the owner's, 6 a
+  colleague's, 3 archived) paged like the server; a country on every source and the Landscape
+  geographies to match; `is_public` stored; a colleague's project change refused with the
+  server's message (`mockTask.is_owner = false`).
+
+- **Follow-up (lead, same round).** The gate's server heading
+  (`runtime/baseline_gate.GATE_HEADING`) is now the card's title, "Does the plan still look
+  right now you have the baseline?" (`CheckInCard.BASELINE_GATE_QUESTION`). Mock gaps from the
+  scoping builder: the finished longlist is the build's own 13 live options (14 rows less the
+  folded one), themed, with working cards (`mockWalkOptionCards`), not the fixture's four; the
+  themed build is held 1.5 s before the shortlist stage; Suggest more waits 0.8 s; one option
+  search fails ("Conditionality reform for under-25s": `stage.failed`, child `failed`, row
+  `search_status: "failed"`, join summary `{total 12, finished 11, failed 1}`); the gate
+  bundle carries `risk_appetite` (the label); the gate card's `created_at` is the time it opens,
+  so it sits after the opening question. `resetMockScenario` now also clears hand-added
+  options. Gate: `pnpm vitest run src/mock src/store src/api` "Tests 180 passed (180)";
+  backend gate tests (`test_baseline_gate.py`, `test_baseline_gate_checkin.py`,
+  `test_task_agent_gate_turns.py`) "48 passed"; `make prompt-guard` 41 unchanged.
+
+Tests: `tests/api/test_history_sentences.py` (new: step, search, run and check-in lines; a page
+with grouped searches and a named chooser, seen by the owner and a colleague);
+`test_continuation_protocol.py` (run start, answer and end touch the task; the decision carries
+`option_id`); `test_tenancy_api_surface.py` (the 403 message); `test_tasks_router.py` (paging,
+`has_more`, archived listed); `test_read_models.py` (country filter by spelling, the geography
+name, the search golden); `test_shortlist_routes.py` (owner "You", colleague by name);
+`test_pre_038_vocabulary_compatibility.py`, `test_api_conformance.py` and three pagination
+literals (`has_more`); frontend `api/queries.test.ts` (paged hook), `mock/api.test.ts` (4 new,
+1 updated).
+
 ## Diff summary
 
 Filled per phase as it lands; the flagged deviations are in § Review handoff.
@@ -465,6 +527,7 @@ writer's publisher never logs it).
 | round-7-backend | citations on `section_completed`; case studies streamed card by card (slot last with roles, frame, hub, store, mock); a fixed reference order in `artefact_out` | deep-reasoner | deep-reasoner (Opus) | done 2026-11-05 after two lead decisions: `make -C backend verify` "4322 passed, 1 skipped", mypy "Success: no issues found in 467 source files", ruff "All checks passed!", build ok; `make drift-check` "drift-check: OK" (after `make openapi-sync`); `make prompt-guard` "41 prompt file(s) unchanged"; `pnpm vitest run src/store src/api src/mock` "Tests 165 passed (165)"; `pnpm exec tsc -b` clean on the combined tree. An earlier full run had `test_option_searches_run_at_the_configured_width` fail once under load (passes alone and on every rerun). |
 | round-8-backend | citation ids and quote on `section_completed`; key findings and the introduction streamed into their slots (intro slot, role `intro`); source notes live (`artefact.source_note`, hub, store); search and screen as two rows; mock | deep-reasoner | deep-reasoner (Opus) | done 2026-11-05: `make -C backend verify` "4344 passed, 1 skipped", mypy "Success: no issues found in 468 source files", ruff "All checks passed!", build ok; `make drift-check` "drift-check: OK" (after `make openapi-sync`); `make prompt-guard` "41 prompt file(s) unchanged"; `pnpm vitest run src/store src/api src/mock` "Tests 170 passed (170)"; `pnpm exec tsc -b`: one error, in `views/workspace/runProgress.ts` (a concurrent designer edit), none in the store, api or mock. |
 | round-9-backend | the search says it writes its queries and shows each query out and back (`search.query`, id passes in words); "new" and "so far" gone from the counts; themes shown once found (`characterise.themes`, `ClusteringPolicy.on_labels`); the introduction's line "Introduction"; store and mock; then the lead's rulings (`acquire.keeping`, no query frames from option searches, mock themes aligned) and the owner's "Collecting the full texts" | deep-reasoner | deep-reasoner (Opus) | done 2026-11-05 (first gate, before the rulings): `make -C backend verify` "4356 passed, 1 skipped", mypy "Success: no issues found in 468 source files", ruff "All checks passed!", build ok; `make drift-check` "drift-check: OK" (after `make openapi-sync`); `make prompt-guard` "41 prompt file(s) unchanged"; `pnpm vitest run src/store src/api src/mock` "Tests 174 passed (174)"; `pnpm exec tsc -b` clean on the combined tree.; after the rulings and the "collecting" copy: `make -C backend verify` "4358 passed, 1 skipped", mypy "Success: no issues found in 468 source files", ruff "All checks passed!", build ok; `make drift-check` "drift-check: OK"; `make prompt-guard` "41 prompt file(s) unchanged"; `pnpm vitest run src/store src/api src/mock` "Tests 174 passed (174)"; `pnpm exec tsc -b` clean. |
+| round-10-backend | History lines that say what happened, with the actor ("You" for the reader, the name for others, "Policy Atlas"), one search row with its queries, the check-in's option recorded and named; a run's start and end and a check-in answer touch `task.updated_at`; `has_more` on every page and a paged tasks hook; `country=` on All sources and `country` on each source, the Landscape geography names shared; the 403 message on a colleague's project change; mock | deep-reasoner | deep-reasoner (Opus) | done 2026-11-06: `make -C backend verify` "4365 passed, 1 skipped", mypy "Success: no issues found in 470 source files", ruff "All checks passed!", build ok; `make drift-check` "drift-check: OK" (after `make openapi-sync`); `make prompt-guard` "41 prompt file(s) unchanged"; `pnpm vitest run src/store src/api src/mock` "Tests 179 passed (179)"; `pnpm exec tsc -b`: two errors, both in `views/LandscapeViewCharts.test.tsx` (a concurrent designer edit), none in the store, api or mock. |
 
 **Executor substitution (memory rule, owner 2026-07-09):** the Codex workspace spend cap was
 hit at about 09:30 on 2026-11-05 during Phase 1. Every Codex-marked seam from that point

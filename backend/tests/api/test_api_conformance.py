@@ -78,7 +78,7 @@ _PUBLIC_STRUCTURAL_GETS = _CONDITIONALLY_PUBLIC_GETS - frozenset(
 
 
 def test_pagination_envelope_shape_and_defaults(engine: Engine, tmp_path: Path) -> None:
-    """List routes return exactly `{data, pagination:{page, page_size, total_items}}`."""
+    """List routes return exactly `{data, pagination:{page, page_size, total_items, has_more}}`."""
     del engine  # forces the session migration fixture before any request hits the DB
     with api_client(tmp_path) as (client, owner, _other):
         task_id = create_task(client, owner)
@@ -86,7 +86,8 @@ def test_pagination_envelope_shape_and_defaults(engine: Engine, tmp_path: Path) 
         assert listed.status_code == 200
         body = listed.json()
         assert set(body) == {"data", "pagination"}
-        assert set(body["pagination"]) == {"page", "page_size", "total_items"}
+        assert set(body["pagination"]) == {"page", "page_size", "total_items", "has_more"}
+        assert body["pagination"]["has_more"] is False
         assert body["pagination"]["page"] == 1
         assert body["pagination"]["page_size"] == PAGE_SIZE_DEFAULT
         assert body["pagination"]["total_items"] == 1
@@ -101,12 +102,22 @@ def test_pagination_respects_page_size_across_pages(tmp_path: Path) -> None:
 
         first = client.get("/api/v1/tasks?page=1&page_size=2", headers=owner)
         assert first.status_code == 200
-        assert first.json()["pagination"] == {"page": 1, "page_size": 2, "total_items": 3}
+        assert first.json()["pagination"] == {
+            "page": 1,
+            "page_size": 2,
+            "total_items": 3,
+            "has_more": True,
+        }
         assert len(first.json()["data"]) == 2
 
         second = client.get("/api/v1/tasks?page=2&page_size=2", headers=owner)
         assert second.status_code == 200
-        assert second.json()["pagination"] == {"page": 2, "page_size": 2, "total_items": 3}
+        assert second.json()["pagination"] == {
+            "page": 2,
+            "page_size": 2,
+            "total_items": 3,
+            "has_more": False,
+        }
         assert len(second.json()["data"]) == 1
 
 

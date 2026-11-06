@@ -264,7 +264,12 @@ def test_task_agent_turn_is_durable_idempotent_and_ready_turn_persists_plan(
 
         transcript = client.get(f"/api/v1/tasks/{task_id}/task-agent-turns", headers=owner)
         assert transcript.status_code == 200
-        assert transcript.json()["pagination"] == {"page": 1, "page_size": 50, "total_items": 1}
+        assert transcript.json()["pagination"] == {
+            "page": 1,
+            "page_size": 50,
+            "total_items": 1,
+            "has_more": False,
+        }
         assert transcript.json()["data"][0]["turn_index"] == 0
         assert transcript.json()["data"][0]["status"] == "completed"
         conversation_id = first.json()["conversation_id"]

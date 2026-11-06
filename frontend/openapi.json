@@ -2099,8 +2099,30 @@
         "type": "object"
       },
       "DecisionOut": {
-        "description": "One entry in the paginated decision log.\n\nArgs:\n    sequence: The underlying event's `event_log` sequence.\n    occurred_at: When the decision was recorded.\n    kind: Decision kind.\n    summary: Human-readable summary of the decision.\n    decided_by: Who decided, when known.\n    detail: Optional structured detail.\n    capability_run_id: The walk the underlying event belongs to, when\n        the event carries a run (task 045) \u2014 lets the thread tell a\n        hidden child walk's lines from its parent's. Null otherwise.",
+        "description": "One entry in the paginated decision log.\n\nArgs:\n    sequence: The underlying event's `event_log` sequence.\n    occurred_at: When the decision was recorded.\n    kind: Decision kind.\n    summary: Human-readable summary of the decision.\n    decided_by: Who decided, when known.\n    detail: Optional structured detail.\n    capability_run_id: The walk the underlying event belongs to, when\n        the event carries a run (task 045) \u2014 lets the thread tell a\n        hidden child walk's lines from its parent's. Null otherwise.\n    actor_display: The display name of the person who acted (task 058,\n        round 10), never an email; null for Policy Atlas's own acts. The\n        summary already names them (\"You\" for the reader).\n    actor_is_viewer: Whether the person who acted is the reader; null\n        when no person acted (Policy Atlas's acts, a step's line).",
         "properties": {
+          "actor_display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Display"
+          },
+          "actor_is_viewer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Is Viewer"
+          },
           "capability_run_id": {
             "anyOf": [
               {
@@ -2261,6 +2283,17 @@
               }
             ],
             "title": "Classification Reason"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
           },
           "evidence_type": {
             "anyOf": [
@@ -5136,8 +5169,13 @@
         "type": "object"
       },
       "PageMeta": {
-        "description": "Pagination metadata attached to a paginated list response.\n\nArgs:\n    page: 1-indexed page number returned.\n    page_size: Number of items requested per page (server-capped at\n        `PAGE_SIZE_MAX`).\n    total_items: Total number of items across all pages.",
+        "description": "Pagination metadata attached to a paginated list response.\n\nArgs:\n    page: 1-indexed page number returned.\n    page_size: Number of items requested per page (server-capped at\n        `PAGE_SIZE_MAX`).\n    total_items: Total number of items across all pages.\n    has_more: Whether a later page holds more items (task 058, round 10):\n        ``page * page_size < total_items``. Derived, never set by a route,\n        so a \"Show more\" control needs no arithmetic of its own.",
         "properties": {
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          },
           "page": {
             "minimum": 1.0,
             "title": "Page",
@@ -7666,6 +7704,17 @@
               }
             ],
             "title": "Classification Reason"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
           },
           "doi": {
             "anyOf": [
@@ -11684,6 +11733,24 @@
                 }
               ],
               "title": "Year To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "country",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Country"
             }
           }
         ],

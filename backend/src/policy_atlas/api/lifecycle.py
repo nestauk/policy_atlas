@@ -47,6 +47,24 @@ def both_generations(*kinds: str) -> frozenset[str]:
     return frozenset(f"{prefix}.{kind}" for kind in kinds for prefix in ("task", "project"))
 
 
+def touch_task(conn: Connection, task_id: uuid.UUID) -> None:
+    """Mark a task as worked on now, so lists sorted newest first see it.
+
+    A run starting or ending, and a check-in answer, are work on the task
+    even though no task field changes (task 058, round 10): without this the
+    Tasks list's "newest first" is creation order for Evidence search.
+
+    Call it **first** in the transaction, before any run row is written: the
+    API's task-locked writes take the task row before the run rows, and the
+    same order here means the two can never wait on each other.
+
+    Args:
+        conn: Open connection whose transaction owns the write.
+        task_id: The task to touch.
+    """
+    conn.execute(update(task).where(task.c.task_id == task_id).values(updated_at=datetime.now(UTC)))
+
+
 def rename_task(
     conn: Connection,
     task_id: uuid.UUID,

@@ -308,7 +308,12 @@ def test_turn_reads_are_ascending_paginated_and_deep_links_hide_archived(
         )
         assert turns.status_code == 200
         assert [turn["turn_index"] for turn in turns.json()["data"]] == [2]
-        assert turns.json()["pagination"] == {"page": 2, "page_size": 2, "total_items": 3}
+        assert turns.json()["pagination"] == {
+            "page": 2,
+            "page_size": 2,
+            "total_items": 3,
+            "has_more": False,
+        }
 
         closed_id = _conversation(engine, task_id=task_id, status="closed")
         archived_id = _conversation(engine, task_id=task_id, status="archived")

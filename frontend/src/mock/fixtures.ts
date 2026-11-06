@@ -129,6 +129,49 @@ export const mockTask: components["schemas"]["TaskOut"] = {
   has_longlist: false,
 };
 
+/**
+ * Task 058, round 10: the rest of the mock's task list, so the Tasks page has
+ * more than one page (50 a page) and "Show more" shows. Fifty-five are the
+ * signed-in owner's, six a colleague's (Organisation only), three archived
+ * (the archived filter). All older than `mockTask`, which stays first. Only
+ * their rows are served: opening one reads its row and nothing else.
+ */
+const OTHER_TASK_TOPICS = [
+  "School streets and air quality",
+  "Free school meals auto-enrolment",
+  "Holiday activities and food",
+  "Sugar levy reinvestment",
+  "Healthy start voucher uptake",
+  "Takeaway planning restrictions",
+  "Family hubs and early years",
+  "Active travel to secondary school",
+];
+export const mockOtherTasks: components["schemas"]["TaskOut"][] = Array.from({ length: 64 }, (_, index) => {
+  const colleague = index >= 55 && index < 61;
+  const archived = index >= 61;
+  const day = new Date(Date.UTC(2026, 6, 17) - index * 86_400_000).toISOString();
+  return {
+    task_id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    name: `${OTHER_TASK_TOPICS[index % OTHER_TASK_TOPICS.length]} ${Math.floor(index / OTHER_TASK_TOPICS.length) + 1}`,
+    question: null,
+    status: archived ? "archived" : "active",
+    created_at: day,
+    updated_at: day,
+    archived_at: archived ? day : null,
+    latest_run: null,
+    visibility: "org",
+    is_owner: !colleague,
+    owner_display: colleague ? "Grace Hopper" : "Ada Lovelace",
+    is_public: false,
+    access: "full",
+    project_ids: [],
+    capability: "evidence_search",
+    links: [],
+    active_run: null,
+    has_longlist: false,
+  };
+});
+
 /** Task 033 phase 10a: the one project the mock serves. `task_count`
  *  mirrors the real read model's own derivation (never cached on the row) —
  *  it counts `mockTask`, the fixture's only member. */
@@ -200,19 +243,22 @@ export const mockLandscape: components["schemas"]["LandscapeOut"] = {
     // frame names, in its order, so the handover neither reorders nor drops one.
     { name: "Healthy high streets", size: 6, description: "Food outlets and advertising around schools.", theme_id: MOCK_THEME_ID_HIGH_STREETS },
   ],
-  geographies: { "Tower Hamlets": 22, "London": 14, "Comparable UK cities": 10 },
+  // Publisher countries by the one name the server gives them (task 058,
+  // round 10): each row links to All sources filtered by that value, and the
+  // mock sources carry the same countries.
+  geographies: { "United Kingdom": 30, "United States": 8, Netherlands: 3, "Not reported": 5 },
 };
 
 export const mockEvidence: components["schemas"]["EvidenceItemOut"][] = [
-  { source_id: "10000000-0000-4000-8000-000000000001", title: "Childhood obesity prevention in urban primary schools", year: 2024, venue: "Public Health Nutrition", origin: "OpenAlex", status: "found", cited: false, read_in_full: false },
-  { source_id: "10000000-0000-4000-8000-000000000002", title: "Borough food strategy consultation", year: 2023, venue: "Tower Hamlets Council", origin: "Overton", status: "screened_out", screen_status: "excluded_retracted", screen_confidence: 1, status_reason: "The record was retracted", cited: false, read_in_full: false },
-  { source_id: "10000000-0000-4000-8000-000000000003", title: "Universal breakfast clubs and diet quality", year: 2022, venue: "BMJ Open", origin: "OpenAlex", status: "relevant", evidence_type: "Cohort study", appraisal_tier: "Moderate confidence", screen_status: "relevant", screen_confidence: 0.91, screen_basis: "title_abstract", screen_stage: 2, screen_reason: "Universal breakfast provision is a primary-school food-environment exposure in scope.", classification_reason: "Prospective cohort following ten schools over two academic years.", url: "https://example.org/universal-breakfast", cited: false, read_in_full: false },
-  { source_id: "10000000-0000-4000-8000-000000000004", title: "Healthy High Streets programme review", year: 2023, venue: "London Assembly", origin: "Overton", status: "not_selected", status_reason: "Lower transferability", evidence_type: "Unknown / Insufficient information", appraisal_tier: "Unrated", screen_status: "relevant", screen_confidence: 0.72, screen_reason: "Covers food-environment levers around schools, though at borough rather than school level.", cited: false, read_in_full: false },
-  { source_id: "10000000-0000-4000-8000-000000000005", title: "School meals and child weight outcomes", year: 2021, venue: "The Lancet Child & Adolescent Health", origin: "OpenAlex", status: "selected", evidence_type: "Systematic review", screen_status: "relevant", screen_confidence: 0.88, screen_reason: "Directly evaluates school-meal policies against child weight outcomes.", classification_reason: "Explicit systematic search and synthesis across 42 trials.", cited: false, read_in_full: false },
-  { source_id: "10000000-0000-4000-8000-000000000006", title: "Neighbourhood food access and family choices", year: 2020, venue: "Health & Place", origin: "OpenAlex", status: "read_in_full", evidence_type: "Qualitative study", screen_status: "relevant", screen_confidence: 0.81, screen_reason: "Family food-choice mechanisms around primary schools are in scope.", cited: false, read_in_full: true },
-  { source_id: "10000000-0000-4000-8000-000000000007", title: "Active travel incentives: implementation findings", year: 2024, venue: "Local Government Studies", origin: "OpenAlex", status: "findings_extracted", evidence_type: "Mixed methods", screen_status: "relevant", screen_confidence: 0.86, screen_reason: "Implementation evidence for an in-scope active-travel lever.", cited: false, read_in_full: true },
-  { source_id: "10000000-0000-4000-8000-000000000008", title: "Making healthy choices easier near schools", year: 2023, venue: "Nesta", origin: "Uploaded", status: "cited", evidence_type: "Policy analysis", appraisal_tier: "Moderate", screen_status: "relevant", screen_confidence: 0.95, screen_reason: "Uploaded by the task owner; directly addresses the question.", classification_reason: "Argument-led policy analysis rather than primary data collection.", cited: true, read_in_full: true },
-  { source_id: "10000000-0000-4000-8000-000000000009", title: "Children's food environment survey", year: null, venue: null, origin: "Uploaded", status: "unavailable", status_reason: "Full text could not be obtained", screen_status: "relevant", screen_confidence: 0.79, screen_reason: "Survey coverage of children's food environments matches the scope.", cited: false, read_in_full: false },
+  { source_id: "10000000-0000-4000-8000-000000000001", title: "Childhood obesity prevention in urban primary schools", year: 2024, venue: "Public Health Nutrition", origin: "OpenAlex", status: "found", cited: false, read_in_full: false, country: "United States" },
+  { source_id: "10000000-0000-4000-8000-000000000002", title: "Borough food strategy consultation", year: 2023, venue: "Tower Hamlets Council", origin: "Overton", status: "screened_out", screen_status: "excluded_retracted", screen_confidence: 1, status_reason: "The record was retracted", cited: false, read_in_full: false, country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000003", title: "Universal breakfast clubs and diet quality", year: 2022, venue: "BMJ Open", origin: "OpenAlex", status: "relevant", evidence_type: "Cohort study", appraisal_tier: "Moderate confidence", screen_status: "relevant", screen_confidence: 0.91, screen_basis: "title_abstract", screen_stage: 2, screen_reason: "Universal breakfast provision is a primary-school food-environment exposure in scope.", classification_reason: "Prospective cohort following ten schools over two academic years.", url: "https://example.org/universal-breakfast", cited: false, read_in_full: false, country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000004", title: "Healthy High Streets programme review", year: 2023, venue: "London Assembly", origin: "Overton", status: "not_selected", status_reason: "Lower transferability", evidence_type: "Unknown / Insufficient information", appraisal_tier: "Unrated", screen_status: "relevant", screen_confidence: 0.72, screen_reason: "Covers food-environment levers around schools, though at borough rather than school level.", cited: false, read_in_full: false, country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000005", title: "School meals and child weight outcomes", year: 2021, venue: "The Lancet Child & Adolescent Health", origin: "OpenAlex", status: "selected", evidence_type: "Systematic review", screen_status: "relevant", screen_confidence: 0.88, screen_reason: "Directly evaluates school-meal policies against child weight outcomes.", classification_reason: "Explicit systematic search and synthesis across 42 trials.", cited: false, read_in_full: false, country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000006", title: "Neighbourhood food access and family choices", year: 2020, venue: "Health & Place", origin: "OpenAlex", status: "read_in_full", evidence_type: "Qualitative study", screen_status: "relevant", screen_confidence: 0.81, screen_reason: "Family food-choice mechanisms around primary schools are in scope.", cited: false, read_in_full: true, country: "Netherlands" },
+  { source_id: "10000000-0000-4000-8000-000000000007", title: "Active travel incentives: implementation findings", year: 2024, venue: "Local Government Studies", origin: "OpenAlex", status: "findings_extracted", evidence_type: "Mixed methods", screen_status: "relevant", screen_confidence: 0.86, screen_reason: "Implementation evidence for an in-scope active-travel lever.", cited: false, read_in_full: true, country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000008", title: "Making healthy choices easier near schools", year: 2023, venue: "Nesta", origin: "Uploaded", status: "cited", evidence_type: "Policy analysis", appraisal_tier: "Moderate", screen_status: "relevant", screen_confidence: 0.95, screen_reason: "Uploaded by the task owner; directly addresses the question.", classification_reason: "Argument-led policy analysis rather than primary data collection.", cited: true, read_in_full: true, country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000009", title: "Children's food environment survey", year: null, venue: null, origin: "Uploaded", status: "unavailable", status_reason: "Full text could not be obtained", screen_status: "relevant", screen_confidence: 0.79, screen_reason: "Survey coverage of children's food environments matches the scope.", cited: false, read_in_full: false, country: null },
 ];
 
 /** Theme membership for the mock evidence rows, keyed by theme id — the
@@ -358,13 +404,53 @@ export const mockGroups: components["schemas"]["GroupsOut"] = {
   ],
 };
 
+/**
+ * The History read model as the server writes it (task 058, round 10): each
+ * line says what happened, to what, and who did it. The mock signs in as the
+ * owner, so the owner's acts read "You"; Policy Atlas's acts name it; a
+ * step's line needs no subject. A run's searches are one row whose detail
+ * lists every query. Newest first, as the server pages it.
+ */
+const ADA = { actor_display: "Ada Lovelace", actor_is_viewer: true } as const;
+const SYSTEM_ACT = { actor_display: null, actor_is_viewer: null } as const;
+const mockSearchTerms = [
+  "school food environment childhood obesity",
+  "universal free school meals BMI",
+  "breakfast clubs diet quality primary school",
+  "active travel primary school children",
+  "healthy high streets fast food outlets schools",
+  "sugar-sweetened beverages school policy",
+  "family cooking skills programme obesity",
+  "local authority planning hot food takeaways",
+  "school food standards evaluation",
+  "whole-systems approach childhood obesity",
+  "after-school physical activity provision",
+  "children's food advertising restrictions",
+];
 export const mockDecisions: components["schemas"]["DecisionOut"][] = [
-  { sequence: 5, occurred_at: "2026-07-21T09:31:10Z", kind: "search.executed", summary: "Searched OpenAlex for school-food intervention studies.", decided_by: null, detail: { openalex: 12 } },
-  { sequence: 6, occurred_at: "2026-07-21T09:31:40Z", kind: "search.executed", summary: "Searched Overton for local policy documents.", decided_by: null, detail: { overton: 8 } },
-  { sequence: 17, occurred_at: "2026-07-21T09:34:00Z", kind: "scope", summary: "Kept the focus on primary-school children and local policy levers.", decided_by: "user", detail: null },
-  { sequence: 20, occurred_at: "2026-07-21T09:36:00Z", kind: "component.completed", summary: "Appraisal completed.", decided_by: null, detail: { appraised: 31 } },
-  { sequence: 24, occurred_at: "2026-07-21T09:38:00Z", kind: "component.skipped", summary: "Landscape mapping was skipped — no themes requested for this run.", decided_by: null, detail: null },
-  { sequence: 31, occurred_at: "2026-07-21T09:41:00Z", kind: "steering", summary: "Accepted the suggested evidence balance for the synthesis.", decided_by: "user", detail: { option_id: "suggested-balanced" } },
+  { sequence: 31, occurred_at: "2026-07-21T10:12:00Z", kind: "task.renamed", summary: "You renamed the task to \u201cHealthier childhoods in Tower Hamlets\u201d.", decided_by: "user", detail: { actor: "mock-policy-lead", name_from: "Childhood obesity", name_to: "Healthier childhoods in Tower Hamlets" }, ...ADA },
+  { sequence: 30, occurred_at: "2026-07-21T10:06:00Z", kind: "run.finished", summary: "Policy Atlas finished the run.", decided_by: null, detail: { status: "succeeded" }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 29, occurred_at: "2026-07-21T10:05:30Z", kind: "component.completed", summary: "Writing finished: 7 sections.", decided_by: null, detail: { component: "synthesise", section_count: 7 }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 27, occurred_at: "2026-07-21T09:58:00Z", kind: "component.skipped", summary: "Grouping findings skipped.", decided_by: null, detail: { component: "group" }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 25, occurred_at: "2026-07-21T09:52:00Z", kind: "component.completed", summary: "Mapping finished: 7 themes.", decided_by: null, detail: { component: "characterise", theme_count: 7 }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 23, occurred_at: "2026-07-21T09:47:00Z", kind: "component.completed", summary: "Collecting the full texts finished: 38 collected, 5 failed.", decided_by: null, detail: { component: "ingest_full_text", ingested: 38, fetch_failed: 4, parse_failed: 1 }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 21, occurred_at: "2026-07-21T09:41:00Z", kind: "component.completed", summary: "Classifying finished: 118 sources.", decided_by: null, detail: { component: "classify", classified: 118 }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 20, occurred_at: "2026-07-21T09:36:00Z", kind: "steering.decision", summary: "You chose \u201cLooks right, assess these\u201d at the check-in.", decided_by: "user", detail: { option_id: "continue", response: "continue" }, capability_run_id: MOCK_RUN_ID, ...ADA },
+  { sequence: 19, occurred_at: "2026-07-21T09:34:10Z", kind: "run.parked", summary: "Policy Atlas paused for a check-in.", decided_by: null, detail: {}, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 18, occurred_at: "2026-07-21T09:34:00Z", kind: "component.completed", summary: "Screening finished: 118 of 312 relevant.", decided_by: null, detail: { component: "screen", screened: 312, relevant: 118, not_relevant: 194 }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 17, occurred_at: "2026-07-21T09:32:30Z", kind: "component.completed", summary: "Searching finished: 312 sources found.", decided_by: null, detail: { component: "acquire", acquired: 312 }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  {
+    sequence: 5,
+    occurred_at: "2026-07-21T09:31:10Z",
+    kind: "search.executed",
+    summary: `Searched with ${mockSearchTerms.length} queries: ${mockSearchTerms.slice(0, 5).map((term) => `\u201c${term}\u201d`).join(", ")} and ${mockSearchTerms.length - 5} more.`,
+    decided_by: null,
+    detail: { queries: mockSearchTerms },
+    capability_run_id: MOCK_RUN_ID,
+    ...SYSTEM_ACT,
+  },
+  { sequence: 2, occurred_at: "2026-07-21T09:30:05Z", kind: "run.opened", summary: "Policy Atlas started the run.", decided_by: null, detail: {}, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 1, occurred_at: "2026-07-21T09:30:00Z", kind: "plan.approved", summary: "You approved the plan.", decided_by: "user", detail: { version: 1 }, ...ADA },
 ];
 
 /**
@@ -1451,6 +1537,31 @@ export function mockWalkLonglist(
   };
 }
 
+/**
+ * The finished longlist after a mock walk (task 058, round 10): the same
+ * options the build showed, themed, as working cards (a card per option, so
+ * the verbs and Suggest more act on them). Built from the build's last read.
+ */
+export function mockWalkOptionCards(
+  built: components["schemas"]["LonglistOut"],
+): components["schemas"]["OptionOut"][] {
+  return (built.options ?? []).map((summary) => ({
+    ...buildMockAddedOption(summary.name),
+    ...summary,
+    design: {
+      name: summary.name,
+      description: summary.description,
+      design_features: [summary.name],
+      outcomes_served: [],
+      assumed: [],
+      version: 1,
+    },
+    design_features: [summary.name],
+    shortlist: summary.shortlist ?? null,
+    maturity: summary.maturity ?? null,
+  }));
+}
+
 // --- The options-scoping baseline gate (task 044, Phase 5.5) -------------
 
 export const MOCK_BASELINE_CHECK_IN_ID = "4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef635";
@@ -1477,7 +1588,7 @@ export const mockBaselineGateCheckIn: components["schemas"]["CheckInOut"] = {
   component: "synthesise",
   stage: "synthesise",
   render: [
-    "Confirm the plan against the baseline",
+    "Does the plan still look right now you have the baseline?",
     `Key assumption: ${MOCK_KEY_ASSUMPTION}`,
     "Settings",
     "Target unit: 16-24 year-olds at risk of becoming NEET",
@@ -1513,6 +1624,9 @@ export const mockBaselineGateCheckIn: components["schemas"]["CheckInOut"] = {
       where: "United Kingdom",
       outcomes: ["NEET rate at 6 months", "Sustained employment or training at 12 months"],
       depth: "standard",
+      // The label the user sees, as the server sends it (N19); the mock
+      // plan's appetite is `mostly_tried`.
+      risk_appetite: "Balanced: mostly evaluated, plus one or two not yet evaluated",
     },
   },
   segment_reentry_allowed: false,
@@ -1913,7 +2027,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
 
 /** Project one option card down to the list/grid's summary shape (the same
  *  fields `GET /longlist` returns for each option). */
-function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixture {
+export function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixture {
   return {
     option_id: option.option_id,
     name: option.name,

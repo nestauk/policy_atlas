@@ -31,7 +31,7 @@ KEY_ASSUMPTION_TITLE = "Key assumption"
 KEY_ASSUMPTION_ABSENT = "Key assumption: not found"
 
 #: The card's heading.
-GATE_HEADING = "Confirm the plan against the baseline"
+GATE_HEADING = "Does the plan still look right now you have the baseline?"
 
 
 def baseline_settings(plan: ScopingPlan) -> dict[str, Any]:

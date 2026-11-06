@@ -219,6 +219,10 @@ class EvidenceItemOut(BaseModel):
     # the provider's LLM-written description (flagged as such).
     abstract: str | None = None
     abstract_source: Literal["provider", "llm_description"] | None = None
+    # Task 058, round 10: the publisher country by its one display name, the
+    # value the Landscape chart's row shows and the `country` filter takes;
+    # null when the provider sent none (the chart's "Not reported").
+    country: str | None = None
 
 
 class FindingBaseOut(BaseModel):
@@ -364,6 +368,11 @@ class DecisionOut(BaseModel):
         capability_run_id: The walk the underlying event belongs to, when
             the event carries a run (task 045) — lets the thread tell a
             hidden child walk's lines from its parent's. Null otherwise.
+        actor_display: The display name of the person who acted (task 058,
+            round 10), never an email; null for Policy Atlas's own acts. The
+            summary already names them ("You" for the reader).
+        actor_is_viewer: Whether the person who acted is the reader; null
+            when no person acted (Policy Atlas's acts, a step's line).
     """
 
     sequence: int
@@ -373,6 +382,8 @@ class DecisionOut(BaseModel):
     decided_by: DecidedBy | None = None
     detail: dict[str, Any] | None = None
     capability_run_id: uuid.UUID | None = None
+    actor_display: str | None = None
+    actor_is_viewer: bool | None = None
 
 
 class CitationOut(BaseModel):

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 #: Default page size when the caller omits `page_size`.
 PAGE_SIZE_DEFAULT = 50
@@ -88,11 +88,20 @@ class PageMeta(BaseModel):
         page_size: Number of items requested per page (server-capped at
             `PAGE_SIZE_MAX`).
         total_items: Total number of items across all pages.
+        has_more: Whether a later page holds more items (task 058, round 10):
+            ``page * page_size < total_items``. Derived, never set by a route,
+            so a "Show more" control needs no arithmetic of its own.
     """
 
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=PAGE_SIZE_MAX)
     total_items: int = Field(ge=0)
+    has_more: bool = False
+
+    @model_validator(mode="after")
+    def _derive_has_more(self) -> PageMeta:
+        self.has_more = self.page * self.page_size < self.total_items
+        return self
 
 
 class Page[T](BaseModel):

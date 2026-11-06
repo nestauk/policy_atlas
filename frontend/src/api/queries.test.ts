@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthApi } from "../auth/types";
-import { useChatTurns, useMe, useOptions, useTask } from "./queries";
+import { useChatTurns, useMe, useOptions, useTask, useTasksPaged } from "./queries";
 
 const conversationId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
@@ -224,5 +224,39 @@ describe("useOptions (task 058, N22)", () => {
     const { result } = renderHook(() => useOptions(taskId), { wrapper: wrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBeNull();
+  });
+});
+
+describe("useTasksPaged (task 058, round 10)", () => {
+  it("asks for the next page only while the server says has_more", async () => {
+    const totalItems = 61;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), "http://localhost:3000");
+      const page = Number(url.searchParams.get("page") ?? "1");
+      const start = (page - 1) * 50;
+      const data = Array.from({ length: Math.max(0, Math.min(50, totalItems - start)) }, (_, i) => ({
+        task_id: `task-${start + i}`,
+        latest_run: null,
+        active_run: null,
+      }));
+      return new Response(
+        JSON.stringify({
+          data,
+          pagination: { page, page_size: 50, total_items: totalItems, has_more: page * 50 < totalItems },
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useTasksPaged({ scope: "mine" }), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(1));
+    expect(result.current.hasNextPage).toBe(true);
+    await result.current.fetchNextPage();
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(2));
+    expect(result.current.hasNextPage).toBe(false);
+    expect(result.current.data?.pages.flatMap((page) => page.data)).toHaveLength(61);
+    const second = fetchMock.mock.calls[1][0] as Request;
+    expect(new URL(second instanceof Request ? second.url : String(second)).searchParams.get("scope")).toBe("mine");
   });
 });

@@ -2519,8 +2519,17 @@ export interface components {
          *         capability_run_id: The walk the underlying event belongs to, when
          *             the event carries a run (task 045) — lets the thread tell a
          *             hidden child walk's lines from its parent's. Null otherwise.
+         *         actor_display: The display name of the person who acted (task 058,
+         *             round 10), never an email; null for Policy Atlas's own acts. The
+         *             summary already names them ("You" for the reader).
+         *         actor_is_viewer: Whether the person who acted is the reader; null
+         *             when no person acted (Policy Atlas's acts, a step's line).
          */
         DecisionOut: {
+            /** Actor Display */
+            actor_display?: string | null;
+            /** Actor Is Viewer */
+            actor_is_viewer?: boolean | null;
             /** Capability Run Id */
             capability_run_id?: string | null;
             /** Decided By */
@@ -2602,6 +2611,8 @@ export interface components {
             cited: boolean;
             /** Classification Reason */
             classification_reason?: string | null;
+            /** Country */
+            country?: string | null;
             /** Evidence Type */
             evidence_type?: string | null;
             /**
@@ -4005,8 +4016,16 @@ export interface components {
          *         page_size: Number of items requested per page (server-capped at
          *             `PAGE_SIZE_MAX`).
          *         total_items: Total number of items across all pages.
+         *         has_more: Whether a later page holds more items (task 058, round 10):
+         *             ``page * page_size < total_items``. Derived, never set by a route,
+         *             so a "Show more" control needs no arithmetic of its own.
          */
         PageMeta: {
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
             /** Page */
             page: number;
             /** Page Size */
@@ -5252,6 +5271,8 @@ export interface components {
             cited_in?: components["schemas"]["CitedInOut"][];
             /** Classification Reason */
             classification_reason?: string | null;
+            /** Country */
+            country?: string | null;
             /** Doi */
             doi?: string | null;
             /** Evidence Type */
@@ -7225,6 +7246,7 @@ export interface operations {
                 strength?: ("Very strong" | "Strong" | "Moderate" | "Limited" | "Weak" | "Unrated") | null;
                 year_from?: number | null;
                 year_to?: number | null;
+                country?: string | null;
             };
             header?: never;
             path: {

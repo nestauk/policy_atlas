@@ -681,7 +681,12 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
                 f"/api/v1/tasks/{task_id}/evidence?page=1&page_size=2", headers=owner
             )
             assert evidence.status_code == 200
-            assert evidence.json()["pagination"] == {"page": 1, "page_size": 2, "total_items": 3}
+            assert evidence.json()["pagination"] == {
+                "page": 1,
+                "page_size": 2,
+                "total_items": 3,
+                "has_more": True,
+            }
             assert {row["status"] for row in evidence.json()["data"]} <= {
                 "cited",
                 "screened_out",
@@ -728,7 +733,11 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             decisions = client.get(f"/api/v1/tasks/{task_id}/decisions", headers=owner)
             assert decisions.status_code == 200
             assert decisions.json()["data"][0]["kind"] == "search.executed"
-            assert decisions.json()["data"][0]["summary"] == "Executed a search query."
+            assert (
+                decisions.json()["data"][0]["summary"]
+                == "Searched with 1 query: “training uptake”."
+            )
+            assert decisions.json()["data"][0]["detail"] == {"queries": ["training uptake"]}
             coverage = client.get(f"/api/v1/tasks/{task_id}/coverage", headers=owner).json()
             assert coverage["sentence"] == "Searching completed. Coverage was judged adequate."
             assert coverage["base"]["counts"] == {"found": 3, "relevant": 1, "screened_out": 1}
@@ -1093,7 +1102,12 @@ def test_evidence_status_filter_collection_true_counts(tmp_path: Path, engine: E
             body = found.json()
             # Collection-true: total reflects the filtered collection (3), not the
             # page length (2) and not the unfiltered task total (7).
-            assert body["pagination"] == {"page": 1, "page_size": 2, "total_items": 3}
+            assert body["pagination"] == {
+                "page": 1,
+                "page_size": 2,
+                "total_items": 3,
+                "has_more": True,
+            }
             assert len(body["data"]) == 2
             assert {row["status"] for row in body["data"]} == {"found"}
 
@@ -1560,7 +1574,7 @@ def test_landscape_geography_residual_makes_every_scope_add_up(
 
             funnel = client.get(f"/api/v1/tasks/{task_id}/funnel", headers=owner).json()
             whole = client.get(f"/api/v1/tasks/{task_id}/landscape", headers=owner).json()
-            assert whole["geographies"] == {"GB": 1, "Not reported": 1}
+            assert whole["geographies"] == {"United Kingdom": 1, "Not reported": 1}
             assert sum(whole["geographies"].values()) == funnel["relevant"] == 2
 
             cited = client.get(
@@ -1572,6 +1586,30 @@ def test_landscape_geography_residual_makes_every_scope_add_up(
             # happens inside the loop over the already-narrowed rows.
             assert cited["geographies"] == {"Not reported": 1}
             assert sum(cited["geographies"].values()) == 1 != funnel["relevant"]
+
+            # Task 058, round 10: a geography row links to All sources filtered
+            # by the value it shows; any spelling of the country names the same
+            # set, and "Not reported" is the chart's own bucket.
+            def titles(country: str) -> list[str]:
+                body = client.get(
+                    f"/api/v1/tasks/{task_id}/evidence",
+                    params={"country": country},
+                    headers=owner,
+                ).json()
+                assert body["pagination"]["total_items"] == len(body["data"])
+                return [row["title"] for row in body["data"]]
+
+            for spelling in ("United Kingdom", "GB", "UK", "united kingdom"):
+                assert titles(spelling) == ["Reported country"]
+            assert "Reported country" not in titles("Not reported")
+            assert titles("Not reported")
+            assert titles("France") == []
+            every = client.get(f"/api/v1/tasks/{task_id}/evidence", headers=owner).json()
+            countries = {row["title"]: row["country"] for row in every["data"]}
+            assert countries["Reported country"] == "United Kingdom"
+            assert {value for key, value in countries.items() if key != "Reported country"} == {
+                None
+            }
         finally:
             with engine.begin() as conn:
                 delete_task_data(conn, task_id)
