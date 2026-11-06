@@ -4,8 +4,8 @@ sys.path.insert(0, "scripts/evals/theory_of_change"); sys.path.insert(0, sys.arg
 import _route  # noqa
 import harness as H
 import judge_v7 as V7
-from policy_atlas.theory_of_change.evidence import judge_prompt as V6
-from policy_atlas.theory_of_change import check
+from policy_atlas.theory_of_change.check import judge_prompt as V6
+from policy_atlas.theory_of_change.check import shared
 from policy_atlas.core.db import get_engine
 from sqlalchemy import text as sql
 TASK = uuid.UUID(sys.argv[2])
@@ -23,7 +23,7 @@ def judge(mod, r):
     msgs = mod.build_judge_messages(item_text=l.item_text, population=l.population, place=l.place, document_id="d", title=r[2] or "", year=int(r[4]) if (r[4] or "").isdigit() else None, text=text, neighbours=l.neighbours)
     resp = h.client.chat.completions.parse(model="gpt-6.1-terra", messages=msgs, response_format=mod.JudgeResponse, max_completion_tokens=4000, reasoning_effort="none")
     p = resp.choices[0].message.parsed; sup = p.support
-    if sup != "not_about" and not check.quote_found(text, p.quote): sup = "not_about"
+    if sup != "not_about" and not shared.quote_found(text, p.quote): sup = "not_about"
     return sup, (p.relevance if sup != "not_about" else 0), p.relevance_reason
 jobs = [r for r in rows if r[0] in links]
 with ThreadPoolExecutor(12) as ex:
@@ -36,7 +36,7 @@ def verdicts(res):
     out = {}
     for lid in links:
         W = sum(1 * rel / 9 for s, rel in per[lid]); S = (sum(rel / 9 * SUP[s] for s, rel in per[lid]) / W) if W else 0
-        out[lid] = ("insufficient" if W < 1 else "confident" if S >= 1 else "not_confident" if S <= -0.5 else "mixed", round(W, 2), len(per[lid]))
+        out[lid] = ("insufficient" if W < 1 else "supported" if S >= 1 else "against" if S <= -0.5 else "mixed", round(W, 2), len(per[lid]))
     return out
 va, vb = verdicts(a), verdicts(b)
 print("pairs", len(jobs), "| on-topic v6", sum(s != "not_about" for s, _, _ in a), "| on-topic v7", sum(s != "not_about" for s, _, _ in b))

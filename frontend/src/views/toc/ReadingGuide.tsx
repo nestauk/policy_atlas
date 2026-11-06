@@ -6,9 +6,9 @@ import type { TocGraph, Verdict } from "./types";
 export function CriticalMark({ x = 0, y = 0 }: { x?: number; y?: number }) {
   return (
     <g transform={`translate(${x},${y})`} aria-hidden="true">
-      <path d="M0,-9 L9,7 L-9,7 Z" fill="var(--color-paper)" stroke={VERDICT_VAR.not_confident} strokeWidth={2} strokeLinejoin="round" />
-      <path d="M0,-3 L0,2" stroke={VERDICT_VAR.not_confident} strokeWidth={2} strokeLinecap="round" />
-      <circle cx="0" cy="4.6" r="1.1" fill={VERDICT_VAR.not_confident} />
+      <path d="M0,-9 L9,7 L-9,7 Z" fill="var(--color-paper)" stroke={VERDICT_VAR.against} strokeWidth={2} strokeLinejoin="round" />
+      <path d="M0,-3 L0,2" stroke={VERDICT_VAR.against} strokeWidth={2} strokeLinecap="round" />
+      <circle cx="0" cy="4.6" r="1.1" fill={VERDICT_VAR.against} />
     </g>
   );
 }
@@ -24,10 +24,10 @@ export function CriticalIcon() {
 
 /** Each verdict's dash on the canvas; a solid line has none. */
 const DASH: Record<Verdict, string | undefined> = {
-  confident: undefined,
+  supported: undefined,
   not_sure_mixed: undefined,
   not_sure_insufficient: "6 5",
-  not_confident: "2 5",
+  against: "2 5",
   leaning_supports: "12 5",
   leaning_against: "12 5",
 };

@@ -147,7 +147,7 @@ These extend `01_ground_truth_pack.md` §8. Each `edge` and each `assumption` ga
   "total_weight": 0.0,
   "mean_support": 0.0,
   "refute_share": 0.0,
-  "verdict": "confident|not_sure_mixed|not_sure_insufficient|not_confident",
+  "verdict": "supported|not_sure_mixed|not_sure_insufficient|against",
   "near_threshold": false
 }
 ```

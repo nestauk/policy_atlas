@@ -22,19 +22,15 @@ from policy_atlas.core.schema import (
     toc_pathway_link,
 )
 from policy_atlas.evidence_search.sourcing.search_live import crossref_abstracts
-from policy_atlas.theory_of_change import check, store
+from policy_atlas.theory_of_change import store
 from policy_atlas.theory_of_change.backend import StubTocBackend, stub_draft
-from policy_atlas.theory_of_change.check import (
-    LINK_LISTS,
-    LinkCandidate,
-    fold_box,
-    fold_problem,
-    picked_ids,
-)
+from policy_atlas.theory_of_change.check import selecting
+from policy_atlas.theory_of_change.check.merge import fold_box, fold_problem
+from policy_atlas.theory_of_change.check.merge_prompt import BoxMergeWire, MergeResponse
+from policy_atlas.theory_of_change.check.pick_prompt import PICK_N
+from policy_atlas.theory_of_change.check.selecting import LINK_LISTS, LinkCandidate, picked_ids
 from policy_atlas.theory_of_change.cost import usd
 from policy_atlas.theory_of_change.draft_prompt import DraftLinkWire, DraftPathwayWire
-from policy_atlas.theory_of_change.evidence.pick_prompt import PICK_N
-from policy_atlas.theory_of_change.merge_prompt import BoxMergeWire, MergeResponse
 from tests.helpers import seed_source, seed_task_and_run
 from tests.theory_of_change.test_check_steps import _replies, _run, _summary
 from tests.theory_of_change.test_walks import seed_toc
@@ -49,7 +45,7 @@ def _cands(n: int) -> list[LinkCandidate]:
 
 def _programme_judgements(conn: Any, task_id: uuid.UUID) -> list[dict[str, Any]]:
     from policy_atlas.core.schema import event_log
-    from policy_atlas.theory_of_change.check import PROGRAMME_EVENT
+    from policy_atlas.theory_of_change.check.shared import PROGRAMME_EVENT
 
     payload = conn.execute(
         select(event_log.c.payload).where(
@@ -299,11 +295,11 @@ def test_crossref_abstracts_strip_jats_and_skip_failures(monkeypatch: Any) -> No
 def test_found_abstracts_are_stored_on_the_snapshot(conn: Connection, monkeypatch: Any) -> None:
     task_id, _ = seed_task_and_run(conn)
     snap_id, tss_id = seed_source(conn, task_id, {"title": "A trial", "doi": "10.1/x"})
-    monkeypatch.setattr(check, "crossref_abstracts", lambda dois: {"10.1/x": "An abstract."})
+    monkeypatch.setattr(selecting, "crossref_abstracts", lambda dois: {"10.1/x": "An abstract."})
     cand = LinkCandidate(
         tss_id, LINK_LISTS[0], 1, title="A trial", doi="10.1/x", snapshot_id=snap_id
     )
-    filled = check._fill_abstracts(conn, {"l": [cand]})
+    filled = selecting._fill_abstracts(conn, {"l": [cand]})
     assert filled["l"][0].abstract == "An abstract."
     metadata = conn.execute(
         select(source_snapshot.c.metadata).where(source_snapshot.c.source_snapshot_id == snap_id)
@@ -348,7 +344,7 @@ def _picks(engine: Engine, task_id: uuid.UUID) -> dict[str, list[str]]:
             conn.execute(
                 select(event_log.c.payload)
                 .where(event_log.c.task_id == task_id)
-                .where(event_log.c.event_type == check.PICKED_EVENT)
+                .where(event_log.c.event_type == selecting.PICKED_EVENT)
             ).scalar_one()
         )
 
@@ -357,7 +353,7 @@ class _PicksTheShared(StubTocBackend):
     """Picks the last 10 candidates: the shared ones from other links' searches."""
 
     def pick(self, *, item_text: str, candidates: list[dict[str, object]]) -> Any:
-        from policy_atlas.theory_of_change.evidence.pick_prompt import PickResponse
+        from policy_atlas.theory_of_change.check.pick_prompt import PickResponse
 
         self._next("pick", {"candidates": candidates})
         return PickResponse(ids=[str(c["id"]) for c in candidates[-PICK_N:]]), None
@@ -412,7 +408,7 @@ class _JudgesHalfOffTopic(StubTocBackend):
     """Not about the step for documents whose id ends in an even hex digit."""
 
     def judge(self, **kwargs: Any) -> Any:
-        from policy_atlas.theory_of_change.evidence.judge_prompt import JudgeResponse
+        from policy_atlas.theory_of_change.check.judge_prompt import JudgeResponse
 
         if int(str(kwargs["document_id"])[-1], 16) % 2 == 0:
             self._next("judge", kwargs)
@@ -534,7 +530,7 @@ def _picks_latest(engine: Engine, task_id: uuid.UUID) -> dict[str, list[str]]:
             conn.execute(
                 select(event_log.c.payload)
                 .where(event_log.c.task_id == task_id)
-                .where(event_log.c.event_type == check.PICKED_EVENT)
+                .where(event_log.c.event_type == selecting.PICKED_EVENT)
                 .order_by(event_log.c.sequence.desc())
                 .limit(1)
             ).scalar_one()

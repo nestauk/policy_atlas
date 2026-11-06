@@ -472,7 +472,7 @@ ground_truth_v1/` (ground-truth pack, evaluation protocol, simplified BEAM). **D
 owner's design review.** **Approved 2026-10-28** (owner: "the design concepts are good … the
 evidence balance looks very good … the narrative summary is PERFECT"), with two conditions: the
 canvas keeps its established look (arrows, curves, boxes), and only the line style carries the
-verdict; and the wireframe's narrative (`wireframes-iteration3.html`, frame 4) is the target for
+verdict; and the iteration 3 wireframe's narrative (a five-section report, since removed from the task folder) is the target for
 brevity and tone, used as the worked example in `toc_report_v1`. Short codes in box corners are
 kept.
 

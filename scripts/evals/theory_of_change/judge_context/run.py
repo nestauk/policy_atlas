@@ -8,9 +8,10 @@ import harness as H
 from labels import LABELS
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text as sql
-from policy_atlas.theory_of_change import check, store
+from policy_atlas.theory_of_change import store
+from policy_atlas.theory_of_change.check import shared
 from policy_atlas.theory_of_change.draft import walk_toc_plan
-from policy_atlas.theory_of_change.evidence import judge_prompt as JP
+from policy_atlas.theory_of_change.check import judge_prompt as JP
 from policy_atlas.core.db import get_engine
 
 OUTDIR = sys.argv[1]; VARIANTS = sys.argv[2].split(","); MODEL = sys.argv[3]; REPS = int(sys.argv[4])
@@ -130,7 +131,7 @@ def call(v, l, policy, chain, doc):
     out = {"usd": usd, "s": time.time() - t, "reading": p.reading.model_dump() if v == "V3" else None}
     for name, w in (("e", p.worked_elsewhere), ("h", p.holds_here)):
         st = w.stance
-        if st != "not_about" and not check.quote_found(doc["abstract"], w.quote): st = "not_about*"
+        if st != "not_about" and not shared.quote_found(doc["abstract"], w.quote): st = "not_about*"
         out[name] = st; out[name + "_q"] = w.quote
     return out
 

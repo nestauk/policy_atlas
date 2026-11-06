@@ -1227,7 +1227,7 @@ def _run_plan_impl(
             # ``toc_search_new`` picks their documents.
             if step.component == "toc_search_new" and not toc_new_joined:
                 toc_new_joined = True
-                from policy_atlas.theory_of_change.check import links_without_search
+                from policy_atlas.theory_of_change.check.selecting import links_without_search
 
                 with engine.connect() as conn:
                     new_links = links_without_search(

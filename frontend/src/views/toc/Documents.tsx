@@ -29,10 +29,10 @@ export function VerdictWords({ verdict }: { verdict: Verdict }) {
 
 /** Block colours: the verdict colours, weak support a lighter green. */
 const BLOCK: Record<Exclude<Support, "not_about">, { background: string; opacity?: number }> = {
-  refutes: { background: VERDICT_VAR.not_confident },
+  refutes: { background: VERDICT_VAR.against },
   mixed: { background: VERDICT_VAR.not_sure_mixed },
-  weak: { background: VERDICT_VAR.confident, opacity: 0.55 },
-  strong: { background: VERDICT_VAR.confident },
+  weak: { background: VERDICT_VAR.supported, opacity: 0.55 },
+  strong: { background: VERDICT_VAR.supported },
 };
 /** Pixels of block height per unit of weight (one strong, fully relevant study). */
 const PX_PER_WEIGHT = 40;

@@ -6459,8 +6459,6 @@ export interface components {
              * @enum {string}
              */
             check_status: "none" | "drafting" | "drafted" | "checking" | "checked" | "stopped" | "failed";
-            /** Confidence */
-            confidence: ("confident" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "not_confident") | null;
             /** Context */
             context: string[];
             /**
@@ -6616,9 +6614,9 @@ export interface components {
              * Verdict
              * @enum {string}
              */
-            verdict: "confident" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "not_confident";
+            verdict: "supported" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "against";
             /** Verdict If Accepted */
-            verdict_if_accepted?: ("confident" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "not_confident") | null;
+            verdict_if_accepted?: ("supported" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "against") | null;
             weights: components["schemas"]["TocWeightsOut"];
         };
         /**

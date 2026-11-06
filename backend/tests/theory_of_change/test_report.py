@@ -50,9 +50,9 @@ def _link(code: str, verdict: str, **values: Any) -> LinkFacts:
 
 
 LINKS = [
-    _link("#1", "confident", conditions=["c1a", "c1b", "c1c"], on_pathways=4),
+    _link("#1", "supported", conditions=["c1a", "c1b", "c1c"], on_pathways=4),
     _link("#2", "not_sure_mixed", critical=True, conditions=["c2a", "c2b"], on_pathways=3),
-    _link("#3", "not_confident", conditions=["c3a"]),
+    _link("#3", "against", conditions=["c3a"]),
     _link(
         "#4",
         "not_sure_insufficient",
@@ -62,7 +62,7 @@ LINKS = [
         on_pathways=0,
     ),
     # On no kept pathway: left out of the table.
-    _link("#5", "confident", on_success=False, on_pathways=0),
+    _link("#5", "supported", on_success=False, on_pathways=0),
 ]
 
 
@@ -266,7 +266,7 @@ def test_one_paper_found_twice_gets_one_number_and_split_capitals_are_mended() -
 def test_the_report_notices_when_steps_hold_but_the_programme_does_not() -> None:
     from policy_atlas.theory_of_change.report import steps_hold_but_programme_does_not
 
-    assert steps_hold_but_programme_does_not(["confident", "leaning_supports"], "not_sure_mixed")
-    assert not steps_hold_but_programme_does_not(["confident"], "confident")
-    assert not steps_hold_but_programme_does_not(["confident", "not_sure_mixed"], "not_sure_mixed")
+    assert steps_hold_but_programme_does_not(["supported", "leaning_supports"], "not_sure_mixed")
+    assert not steps_hold_but_programme_does_not(["supported"], "supported")
+    assert not steps_hold_but_programme_does_not(["supported", "not_sure_mixed"], "not_sure_mixed")
     assert not steps_hold_but_programme_does_not([], "not_sure_mixed")

@@ -59,10 +59,11 @@ from policy_atlas.evidence_search.sourcing.search_live import (
     OpenAlexLiveBackend,
     OvertonLiveBackend,
 )
-from policy_atlas.theory_of_change import check, store
+from policy_atlas.theory_of_change import store
+from policy_atlas.theory_of_change.check import judge, shared
 from policy_atlas.theory_of_change.cost import usd as model_usd
 from policy_atlas.theory_of_change.draft import walk_toc_plan
-from policy_atlas.theory_of_change.evidence.grade import (
+from policy_atlas.theory_of_change.check.grade import (
     DocAppraisal,
 )
 from policy_atlas.theory_of_change.graph import item_hash, item_text
@@ -335,7 +336,7 @@ class Doc:
         return DocAppraisal(
             score=self.score,
             web=self.web_rule == "capped",
-            modelling=self.evidence_type == check.MODELLING_TYPE,
+            modelling=self.evidence_type == shared.MODELLING_TYPE,
         )
 
 
@@ -756,7 +757,7 @@ class Harness:
             ),
             population=plan.target_population,
             place=plan.where or "not stated",
-            neighbours=check.neighbour_lines(graph, link_id),
+            neighbours=judge.neighbour_lines(graph, link_id),
             source_text=src,
             target_text=tgt,
             walk_id=walk_id,

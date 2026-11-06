@@ -83,7 +83,7 @@ DIRECTLY_INFLUENCED = "outputs"
 #: Words of a source's quote the model sees as its finding.
 FINDING_WORDS = 30
 #: Verdicts that count as the evidence supporting a step.
-SUPPORTED = frozenset({"confident", "leaning_supports"})
+SUPPORTED = frozenset({"supported", "leaning_supports"})
 
 
 def steps_hold_but_programme_does_not(step_verdicts: list[str], programme_verdict: str) -> bool:

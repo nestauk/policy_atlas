@@ -220,7 +220,7 @@ def _count_seeded(engine: Engine, ids: Any) -> None:
 def test_removing_a_document_takes_it_out_of_the_verdict_and_restore_puts_it_back(
     engine: Engine, ids: Any
 ) -> None:
-    from policy_atlas.theory_of_change.check import counted_judgements
+    from policy_atlas.theory_of_change.check.shared import counted_judgements
 
     task_id = ids["task_id"]
     _count_seeded(engine, ids)
@@ -249,7 +249,7 @@ def test_the_users_scores_count_instead_of_the_judges_and_undo_returns_them(
     engine: Engine, ids: Any
 ) -> None:
     from policy_atlas.api.routers.toc import toc_evidence_out
-    from policy_atlas.theory_of_change.check import counted_judgements, row_judgement
+    from policy_atlas.theory_of_change.check.shared import counted_judgements, row_judgement
 
     task_id = ids["task_id"]
     _count_seeded(engine, ids)
@@ -320,7 +320,7 @@ def test_an_added_doi_resolves_to_the_tasks_document_and_decisions_carry_over(
     engine: Engine, ids: Any
 ) -> None:
     from policy_atlas.core.schema import source_snapshot, task_source_snapshot
-    from policy_atlas.theory_of_change.check import _studies_by_link, _user_decisions
+    from policy_atlas.theory_of_change.check.selecting import _studies_by_link, _user_decisions
 
     task_id = ids["task_id"]
     with engine.begin() as conn:
@@ -356,7 +356,7 @@ def test_an_added_doi_resolves_to_the_tasks_document_and_decisions_carry_over(
 def test_pending_evidence_waits_for_accept_and_shows_the_verdict_if_accepted(
     engine: Engine, ids: Any
 ) -> None:
-    from policy_atlas.theory_of_change.check import counted_judgements
+    from policy_atlas.theory_of_change.check.shared import counted_judgements
 
     task_id = ids["task_id"]
     _count_seeded(engine, ids)

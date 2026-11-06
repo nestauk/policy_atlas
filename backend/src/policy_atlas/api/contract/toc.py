@@ -18,12 +18,12 @@ from policy_atlas.theory_of_change.graph import Layer
 
 #: One evidence verdict per link (C36, simplified BEAM).
 Verdict = Literal[
-    "confident",
+    "supported",
     "leaning_supports",
     "not_sure_mixed",
     "leaning_against",
     "not_sure_insufficient",
-    "not_confident",
+    "against",
 ]
 Support = Literal["strong", "weak", "mixed", "refutes", "not_about"]
 LinkState = Literal["unchecked", "checking", "checked", "pending", "kept", "no_change"]
@@ -320,8 +320,6 @@ class TocGraphOut(BaseModel):
     context: list[str]
     supporting_activities: list[str]
     grade_rules: list[TocGradeRuleOut]
-    #: The theory's confidence: the lowest verdict among its critical links; null without one.
-    confidence: Verdict | None
     #: The latest check's narrative report; null until one is written.
     report: TocReportOut | None
     #: Links the 80-link cap left unchecked in the last check walk.

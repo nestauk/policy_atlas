@@ -44,12 +44,12 @@ export function referencesCsv(graph: TocGraph): string {
 
 // draw.io has no CSS variables: the verdict colours and dashes from index.css, written out.
 const DRAWIO_EDGE: Record<Verdict, string> = {
-  confident: "strokeColor=#18a48c;",
+  supported: "strokeColor=#18a48c;",
   leaning_supports: "strokeColor=#18a48c;dashed=1;dashPattern=12 5;",
   not_sure_mixed: "strokeColor=#f0a823;",
   not_sure_insufficient: "strokeColor=#b4b4bb;dashed=1;dashPattern=6 5;",
   leaning_against: "strokeColor=#d93a12;dashed=1;dashPattern=12 5;",
-  not_confident: "strokeColor=#d93a12;dashed=1;dashPattern=2 5;",
+  against: "strokeColor=#d93a12;dashed=1;dashPattern=2 5;",
 };
 const NAVY = "#0f294a";
 const GREY = "#646363";

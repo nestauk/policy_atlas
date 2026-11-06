@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from policy_atlas.theory_of_change.evidence.grade import (
+from policy_atlas.theory_of_change.check.grade import (
     DocAppraisal,
     Judgement,
     link_verdict,
@@ -51,7 +51,7 @@ def test_the_beam_worked_example() -> None:
         # Some evidence pulling both ways (S̄ -0.25): not enough to lean.
         ([("weak", 2, 2), ("refutes", 1, 2)], "not_sure_insufficient", False),
         # Two strong, fully relevant studies: Confident, far from every threshold.
-        ([("strong", 3, 3), ("strong", 3, 3)], "confident", False),
+        ([("strong", 3, 3), ("strong", 3, 3)], "supported", False),
         # Five supporting, one refuting (run 9 #4; 17% of the weight against): Confident.
         (
             [
@@ -62,7 +62,7 @@ def test_the_beam_worked_example() -> None:
                 ("weak", 3, 1),
                 ("strong", 3, 1),
             ],
-            "confident",
+            "supported",
             True,
         ),
         # Supportive on average (S̄ 0.67) but a third of the weight against: leaning supports.
@@ -70,9 +70,9 @@ def test_the_beam_worked_example() -> None:
         # Enough evidence that neither supports nor refutes: mixed.
         ([("strong", 3, 3), ("refutes", 3, 3), ("mixed", 3, 3)], "not_sure_mixed", False),
         # Clearly against.
-        ([("refutes", 3, 3), ("refutes", 3, 3)], "not_confident", False),
+        ([("refutes", 3, 3), ("refutes", 3, 3)], "against", False),
         # S̄ exactly 1.0 with W 2: Confident, and on the threshold.
-        ([("strong", 3, 3), ("mixed", 3, 3)], "confident", True),
+        ([("strong", 3, 3), ("mixed", 3, 3)], "supported", True),
     ],
 )
 def test_each_verdict_branch(rows: Any, verdict: str, near: bool) -> None:
@@ -104,10 +104,10 @@ def test_quality_mapping(appraisal: Any, robust: Any, q: int) -> None:
 
 
 def test_the_lowest_verdict_is_the_theory_confidence() -> None:
-    assert lowest(["confident", "not_sure_mixed", "not_sure_insufficient"]) == (
+    assert lowest(["supported", "not_sure_mixed", "not_sure_insufficient"]) == (
         "not_sure_insufficient"
     )
-    assert lowest(["not_sure_mixed", "not_confident"]) == "not_confident"
+    assert lowest(["not_sure_mixed", "against"]) == "against"
     assert lowest([]) is None
 
 

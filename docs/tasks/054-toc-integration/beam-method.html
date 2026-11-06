@@ -98,7 +98,7 @@ figcaption b { color: var(--ink); }
 
 <p class="part">The method</p>
 <h2>From documents to a verdict</h2>
-<p>The check runs six steps for each connection. Only step 2 asks a language model for a judgement. Every later step is arithmetic in <code>evidence/grade.py</code>, computed each time the page is read, so a verdict can never drift from the judgements behind it.</p>
+<p>The check runs six steps for each connection. Only step 2 asks a language model for a judgement. Every later step is arithmetic in <code>check/grade.py</code>, computed each time the page is read, so a verdict can never drift from the judgements behind it.</p>
 </div>
 <figure class="wide"><div class="fig-scroll"><svg viewBox="0 0 880 140" role="img" aria-label="Six steps from documents to a verdict">
 <defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--grey)"/></marker></defs>
@@ -188,9 +188,9 @@ figcaption b { color: var(--ink); }
 
 <h2>Where it lives in the code</h2>
 <ul>
-  <li><code>backend/src/policy_atlas/theory_of_change/evidence/grade.py</code>: quality, weight and the verdict rule; every threshold is a named constant.</li>
-  <li><code>backend/src/policy_atlas/theory_of_change/evidence/judge_prompt.py</code>: the judge's support, relevance and quote rules.</li>
-  <li><code>backend/src/policy_atlas/theory_of_change/check.py</code>: <code>critical_link</code>, the critical-connection rule.</li>
+  <li><code>backend/src/policy_atlas/theory_of_change/check/grade.py</code>: quality, weight and the verdict rule; every threshold is a named constant.</li>
+  <li><code>backend/src/policy_atlas/theory_of_change/check/judge_prompt.py</code>: the judge's support, relevance and quote rules.</li>
+  <li><code>backend/src/policy_atlas/theory_of_change/check/choose.py</code>: <code>critical_link</code>, the critical-connection rule.</li>
   <li><code>frontend/src/views/toc/Documents.tsx</code>: the evidence balance chart.</li>
   <li>Source method: Christie, A. P. et al. (2023). Assessing diverse evidence to improve conservation decision-making. <i>Conservation Science and Practice</i> 5(10), e13024. <a href="https://doi.org/10.1111/csp2.13024">doi.org/10.1111/csp2.13024</a>.</li>
 </ul>

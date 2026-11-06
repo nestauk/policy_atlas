@@ -43,7 +43,7 @@ from policy_atlas.runtime.task_plan import (
     ComposedChain,
     ScopeConstraints,
 )
-from policy_atlas.theory_of_change.evidence.item_search_prompt import ITEM_SEARCH_GUIDANCE
+from policy_atlas.theory_of_change.check.item_search_prompt import ITEM_SEARCH_GUIDANCE
 
 #: The intent-record purpose of every main theory-of-change walk.
 TOC_PURPOSE = "toc"

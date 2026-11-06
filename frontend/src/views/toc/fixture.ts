@@ -100,7 +100,7 @@ export function link(n: number, source: number, target: number, type: string, ve
 }
 
 const LINKS: TocLink[] = [
-  link(1, 1, 3, "delivery", "confident"),
+  link(1, 1, 3, "delivery", "supported"),
   link(2, 2, 4, "delivery", "not_sure_insufficient", { evidence_sentence: "No evidence was found in the documents read." }),
   link(3, 3, 5, "take-up", "not_sure_mixed", {
     critical: true,
@@ -109,10 +109,10 @@ const LINKS: TocLink[] = [
     evidence_sentence: "Exposure fell under Chile's rules and on London transport, but brands moved to brand-only adverts.",
     evidence_cites: [docId(1), docId(2)],
   }),
-  link(4, 5, 6, "behaviour change", "confident", { conditions: ["The effect seen in short trials lasts in everyday life"] }),
+  link(4, 5, 6, "behaviour change", "supported", { conditions: ["The effect seen in short trials lasts in everyday life"] }),
   link(5, 6, 7, "behaviour change", "not_sure_mixed"),
-  link(6, 4, 6, "take-up", "confident"),
-  link(7, 7, 8, "benefits and side effects", "not_confident"),
+  link(6, 4, 6, "take-up", "supported"),
+  link(7, 7, 8, "benefits and side effects", "against"),
   link(8, 3, 9, "if it goes wrong", "not_sure_mixed"),
   link(9, 9, 10, "if it goes wrong", "not_sure_insufficient", { state: "checking" as LinkState }),
 ];
@@ -163,7 +163,6 @@ export function tocGraphFixture(overrides: Partial<TocGraph> = {}): TocGraph {
       { label: "Not enough evidence", rule: "the documents add up to less than one strong, relevant study." },
       { label: "Evidence against", rule: "enough evidence, and on average it is against the step." },
     ],
-    confidence: "not_sure_mixed",
     report: {
       title: "Food advert limits and childhood obesity",
       summary_text: "Removing adverts should cut snacking, but whether children see fewer adverts overall is the weakest step.",

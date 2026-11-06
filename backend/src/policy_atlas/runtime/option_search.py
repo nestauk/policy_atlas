@@ -749,7 +749,7 @@ def dispatch_toc_item_searches(
     """
     # Imported here: the ToC steps import the registry, which this module's
     # importers (the runner) must load first.
-    from policy_atlas.theory_of_change.check import item_search_intents
+    from policy_atlas.theory_of_change.check.shared import item_search_intents
 
     with engine.connect() as conn:
         already = dispatched_children(

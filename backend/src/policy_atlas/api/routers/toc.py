@@ -122,17 +122,16 @@ from policy_atlas.runtime.toc_plan import (
 )
 from policy_atlas.theory_of_change import edits, importing, proposals, store
 from policy_atlas.theory_of_change.backend import StubTocBackend, TocBackend
-from policy_atlas.theory_of_change.check import (
+from policy_atlas.theory_of_change.check.grade import quality, rule_text, weight
+from policy_atlas.theory_of_change.check.shared import (
     Document,
     appraisals_for,
     counted_judgements,
     link_verdict_of,
     pending_judgements,
-    row_case_score,
     row_judgement,
-    top_case_studies,
 )
-from policy_atlas.theory_of_change.evidence.grade import lowest, quality, rule_text, weight
+from policy_atlas.theory_of_change.check.summarise import row_case_score, top_case_studies
 from policy_atlas.theory_of_change.graph import assumption_type, item_hash, link_state
 from policy_atlas.theory_of_change.review import (
     REVIEW_FINISHED,
@@ -374,7 +373,6 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID, *, public: bool = False)
         context=[row.text for row in rows.band_items if row.band == "context"],
         supporting_activities=[row.text for row in rows.band_items if row.band == "supporting"],
         grade_rules=[TocGradeRuleOut(label=label, rule=rule) for label, rule in rule_text()],
-        confidence=lowest(link.verdict for link in links if link.critical),
         report=_report(conn, task_id),
         links_left_out=_links_left_out(conn, task_id),
     )

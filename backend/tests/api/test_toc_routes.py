@@ -122,7 +122,6 @@ def test_the_reads_serve_the_contract_shapes(engine: Engine, tmp_path: Path) -> 
             "n_documents": 0,
         }
         assert link["evidence_sentence"] is None
-        assert body["confidence"] is None  # the seeded link is not critical
         assert link["assumption_type"] == "delivery"
         [pathway] = body["pathways"]
         assert pathway["link_ids"] == [str(ids["link"])] and pathway["broken"] is False

@@ -123,10 +123,10 @@ from policy_atlas.runtime.inherit import inherit_documents
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Config
 from policy_atlas.runtime.scoping_plan import ScopingPlan
-from policy_atlas.theory_of_change import check as toc_check
-from policy_atlas.theory_of_change import figures as toc_figures
 from policy_atlas.theory_of_change import report as toc_report
 from policy_atlas.theory_of_change.backend import StubTocBackend, TocBackend
+from policy_atlas.theory_of_change.check import choose, discover, judge, merge, selecting, summarise
+from policy_atlas.theory_of_change.check import figures as toc_figures
 from policy_atlas.theory_of_change.draft import toc_draft_scope
 
 log = structlog.get_logger()
@@ -483,14 +483,14 @@ def _scoping_node(name: str) -> Any:
 #: ``toc_select`` makes one small pick call per link (C28).
 _TOC_STEPS: dict[str, Callable[..., dict[str, Any]]] = {
     "toc_draft": toc_draft_scope,
-    "toc_select": toc_check.toc_select_scope,
-    "toc_search_new": toc_check.toc_search_new_scope,
-    "toc_discover": toc_check.toc_discover_scope,
-    "toc_merge": toc_check.toc_merge_scope,
-    "toc_judge": toc_check.toc_judge_scope,
+    "toc_select": selecting.toc_select_scope,
+    "toc_search_new": selecting.toc_search_new_scope,
+    "toc_discover": discover.toc_discover_scope,
+    "toc_merge": merge.toc_merge_scope,
+    "toc_judge": judge.toc_judge_scope,
     "toc_figures": toc_figures.toc_figures_scope,
-    "toc_choose": toc_check.toc_choose_scope,
-    "toc_summarise": toc_check.toc_summarise_scope,
+    "toc_choose": choose.toc_choose_scope,
+    "toc_summarise": summarise.toc_summarise_scope,
     "toc_report": toc_report.toc_report_scope,
 }
 

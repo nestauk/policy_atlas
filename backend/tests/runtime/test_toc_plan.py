@@ -20,7 +20,7 @@ from policy_atlas.runtime.toc_plan import (
     TocPlan,
     compose_toc,
 )
-from policy_atlas.theory_of_change.evidence.item_search_prompt import ITEM_SEARCH_GUIDANCE
+from policy_atlas.theory_of_change.check.item_search_prompt import ITEM_SEARCH_GUIDANCE
 from tests.helpers import delete_task_data, seed_task_and_run, seed_walk
 
 

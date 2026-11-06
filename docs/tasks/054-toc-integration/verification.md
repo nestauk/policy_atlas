@@ -110,8 +110,8 @@ curl -H "$H" -H 'content-type: application/json' localhost:8000/api/v1/tasks/$TI
 
 This is well under the owner's $30 limit for the try. The Consensus API was not used; there is no Consensus client in product code.
 
-**Screenshots:** `screenshots/live-checking-result.png` (during the check), `live-checked-result.png`,
-`live-checked-panel.png`, `live-checked-workspace.png`.
+**Screenshots:** four PNG files (during the check, the checked result, the panel and the workspace),
+attached to PR #114. Binary evidence is not committed (`docs/knowledge/binary-evidence-stays-off-the-tree.md`).
 
 ### Findings for the iteration phase (the owner reads these first)
 
@@ -152,7 +152,7 @@ What changed:
   - Connections are right-angled. Each turns in the gaps between columns and runs along the empty lanes between rows, so no connection crosses a box. A fan-out reads as one trunk with branches.
   - The critical-connection dot sits on the connection's own last stretch.
   - No layout library was added.
-  - On the live theory, the outcomes now spread over 4 columns and the impact is visible at the right. See `screenshots/iter1-canvas-layout.png`.
+  - On the live theory, the outcomes now spread over 4 columns and the impact is visible at the right. Screenshot attached to PR #114.
 
 ## Diff summary
 
@@ -312,7 +312,7 @@ cleanup re-raises the 422 after removing the row and the file; no error is swall
   `test_ops_remove_toc_tasks`, `test_migration_054_core`, `test_embeddings`,
   `test_task_agent_toc`); `mypy` clean (244 files); `ruff` clean.
 - Frontend (the fix pass): 1,032 tests passed, typecheck clean, lint 0 errors and one pre-existing
-  warning. Screenshots from the running `make dev` after the fixes: `screenshots/review-*.png`
+  warning. Screenshots from the running `make dev` after the fixes are attached to PR #114
   (1280 and 400 px, a connection selected from the keyboard, the legend, the panel scrolled into
   view on a phone width).
 - `make okf-validate`: 211 concepts, 0 violations.
@@ -491,7 +491,7 @@ and the `import_synthetic` dataset.
 
 **Review handoff:** the review covers `fba53321..HEAD` together with the merge of `dev`. Leave
 these out of the diff: `frontend/openapi.json`, `frontend/src/api/gen/types.ts`, the eval PNG and
-SVG files, and `docs/tasks/054-toc-integration/toc_examples/` (not committed). Run
+SVG files. The two example diagrams used for the import try are not committed. Run
 `/security-review` on the upload route, the bucket, and colleague access to originals. Use the
 Codex family for the adversarial pass: the lead (Claude) wrote all of this code.
 
@@ -599,3 +599,77 @@ this is the owner's ruling over them, for staging only.
 - Tests: the API's environment map includes the setting (`"1"` on the staging template), and
   `test_theory_of_change_is_on_in_staging_only` pins the two config values. Infra tests 116
   passed; the deploy build-guard test passed.
+
+## Tidy of the `theory_of_change` package (2026-11-06, owner request)
+
+A restructure with no behaviour change. `check.py` (2,805 lines, six chain steps behind comment
+banners) became the package `theory_of_change/check/`: one module per step (`selecting` for
+`toc_select` and `toc_search_new`, `discover`, `merge`, `judge`, `figures`, `choose`,
+`summarise`), `shared.py` for the reads every step uses and `grade.py` for the verdict rule.
+The half-home `evidence/` folder was dissolved into `check/`, and each step's prompt now sits
+beside it. The module is called `selecting`, not `select`, so it never shadows SQLAlchemy's
+`select` in an importer. Nothing in `runtime/` moved (owner ruling: that is a later sweep
+across all three capabilities).
+
+Evidence:
+
+- Every one of the 85 top-level definitions of the old `check.py` is AST-identical to its copy
+  in the new modules (a script compared `ast.dump` of each; none missing, none extra, none
+  changed). `ruff format --diff` on the old module reports zero lines, so the moved text keeps
+  its formatting.
+- `scripts/prompt_hashes.json` re-pinned: path keys moved, every hash value unchanged;
+  `make prompt-guard` reports 55 prompt files unchanged.
+- `make -C backend lint` and `make -C backend typecheck` clean (531 files).
+- `make okf-validate`: 211 concepts, 0 violations (one path updated in
+  `lower-grade-colours-the-canvas.md`).
+- Targeted run: `tests/theory_of_change`, `test_toc_plan`, `test_capability_registry`,
+  `test_task_agent_toc`, `test_toc_uploads`, `test_toc_routes`: 230 passed.
+- Full run: `make -C backend test-fast`: 4,366 passed, 1 skipped, 2 failed under `-n auto` (`test_figures.py::test_the_step_stores_checked_figures_and_the_read_attaches_them_to_the_box`, `test_walks.py::test_a_check_already_following_the_draft_is_not_minted_twice`, a duplicate `event_log` sequence and a missing row). Both pass 3 of 3 re-runs alone and in the targeted run above; the moved code is AST-identical, so this is the shared-database race class in `failure-log.md` (2026-07-11), not the restructure.
+- Adversarial review (Codex, read-only brief: surviving old paths, monkeypatch targets, import
+  cycles, run-time name lookups, structure judgement): one low finding, stale `evidence/` paths in living docs, fixed in `components.md`, `lower-grade-colours-the-canvas.md` and `beam-method.html`; the `judge_prompt.py` docstring (line 12) was fixed on the owner's request and its hash re-pinned (the only change in that module is the path in the docstring; the prompt text is untouched). The eval prompt drafts keep the old path. Nothing found for surviving imports, monkeypatch targets, import cycles or run-time name lookups. Structure verdict: keep the split and the `selecting` name; keep the underscore helpers package-private, except that `report.py` imports `_ask` and `_year` from `shared.py`, which the reviewer suggests making public in the later runtime sweep.
+
+### Live runs after the tidy (2026-11-06, lead; port-8002 server on this checkout, `openai-direct`)
+
+Two full runs, draft then check, started through the API as the end-to-end command above does,
+one with the usual opening message and one on a new topic. Both completed every step on the
+restructured code.
+
+| Run | Task | Topic | Time | Cost | Boxes / links | Confidence | Links with no on-topic evidence |
+|---|---|---|---|---|---|---|---|
+| A | `5ef199d8` | unhealthy food advertising (the usual message) | 4 min 50 s | $0.53 | 20 / 22 | not sure, insufficient | 7 |
+| B | `1c53c120` | universal free school meals in primary schools | 7 min 0 s | $0.55 | 22 / 26 | leaning against | 7 |
+
+Cost is the `run.finished` cost payload (model cost of the check walk). The higher cost than runs
+4 to 7 ($0.37) is the route and the later prompt versions (judge v8, figures, report v7), not the
+move: the code is AST-identical.
+
+One artefact to know about: at 12:38:52 run B's check walk received a `run.interrupted` event
+from the API's boot-time sweep (`continuation.startup_sweep`), which another backend process on
+the same dev database wrote when it restarted (the owner's `make dev` on port 8000 runs with
+`--reload`, and a second server sat on port 8001). The walk kept running in its own process and
+finished `succeeded` ten seconds later; the row's final status is `succeeded` and the page reads
+`checked`. The poller showed `failed` for those ten seconds. This is the multi-process hazard of
+one shared dev database, not the restructure.
+
+### The `confidence` field removed (2026-11-06, owner ruling)
+
+The graph read returned `confidence`, the lowest verdict among the critical links, as the theory's
+overall confidence. No screen, export or prompt read it, and in live run B it contradicted the
+report (the critical link #21 leaned against while the report's two-axis verdict read "Evidence
+supports it"). The owner ruled that the report's verdict is the overall judgement and the critical
+link is a pointer, so the field is removed from `TocGraphOut` and the router; `grade.lowest` stays
+for the report's per-pathway verdicts. `make openapi-sync` regenerated the types; `drift-check`
+OK; lint and mypy clean; 91 backend tests and 70 frontend ToC tests pass.
+
+### Verdict values renamed (2026-11-06, owner ruling)
+
+The two ends of the link verdict scale were `confident` and `not_confident`, while their labels
+read "Supported" and "Evidence against". The values are now `supported` and `against`; the four
+middle values and every label are unchanged. Nothing is deployed, so no compatibility shim. Touched:
+the contract enum, `grade.py`, the report's supported set, three backend test files, the
+ground-truth scorer and the judge-context rescorer under `scripts/evals`, the eval scheme note,
+and in the frontend the CSS edge and text classes keyed by value, the model, reading guide,
+documents view, draw.io export styles, fixture and one test. CSS colour variable names and prose
+stay. No prompt carries the values: `make prompt-guard` unchanged. `openapi-sync` and
+`drift-check` OK; lint and mypy clean; 203 backend ToC tests and the full frontend suite (1,033)
+pass.

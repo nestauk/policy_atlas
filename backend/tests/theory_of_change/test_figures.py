@@ -13,8 +13,8 @@ from policy_atlas.api.routers.toc import toc_evidence_out
 from policy_atlas.core.schema import toc_figure, toc_item_evidence
 from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.theory_of_change.backend import StubTocBackend
-from policy_atlas.theory_of_change.evidence.figures_prompt import FiguresResponse, FigureWire
-from policy_atlas.theory_of_change.figures import CheckedFigure, check_figure, number_in_quote
+from policy_atlas.theory_of_change.check.figures import CheckedFigure, check_figure, number_in_quote
+from policy_atlas.theory_of_change.check.figures_prompt import FiguresResponse, FigureWire
 from tests.theory_of_change.test_check_steps import _summary
 from tests.theory_of_change.test_walks import Records, _start, seed_toc
 

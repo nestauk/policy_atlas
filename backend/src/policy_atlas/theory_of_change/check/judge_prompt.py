@@ -9,7 +9,7 @@ end of the link, and, for a modelling study only, whether the model is robust.
 
 Every quote is checked by code against the document text; a stance whose quote
 does not verify is dropped and counted. The grade is never decided here: code
-computes it from the stances (``evidence/grade.py``).
+computes it from the stances (``check/grade.py``).
 """
 
 from __future__ import annotations

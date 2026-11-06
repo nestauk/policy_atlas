@@ -178,15 +178,15 @@ WEAK_VERDICTS = (
     "not_sure_mixed",
     "leaning_against",
     "not_sure_insufficient",
-    "not_confident",
+    "against",
 )
 VERDICT_STRENGTH = {
-    "confident": 3,
+    "supported": 3,
     "leaning_supports": 2,
     "not_sure_mixed": 2,
     "not_sure_insufficient": 1,
     "leaning_against": 1,
-    "not_confident": 0,
+    "against": 0,
 }
 
 
@@ -995,8 +995,8 @@ class Models:
             "PUBLISHED THEORY (the dataset, with its notes on how it was built):\n\n"
             + gt["notes"]
             + "\n\nGENERATED THEORY (JSON; each link's evidence is its verdict, best first: "
-            "confident, leaning_supports, not_sure_mixed (mixed), not_sure_insufficient (not "
-            "enough evidence), leaning_against or not_confident; or, on older builds, "
+            "supported, leaning_supports, not_sure_mixed (mixed), not_sure_insufficient (not "
+            "enough evidence), leaning_against or against; or, on older builds, "
             "lower_grade, the lower of two grades: strong, medium, weak or none):\n\n"
             + json.dumps(generated, indent=1, ensure_ascii=False)
             + "\n\nGENERATED NARRATIVE REPORT (shown to the user as Detailed information):\n\n"

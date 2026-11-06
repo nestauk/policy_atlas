@@ -56,12 +56,12 @@ describe("canvas", () => {
 
   it("styles each edge by its verdict: solid, dashed, dotted", () => {
     renderResult();
-    expect(edge(1)?.querySelector(".toc-edge--confident")).not.toBeNull();
+    expect(edge(1)?.querySelector(".toc-edge--supported")).not.toBeNull();
     // Mixed is one solid amber line (owner, 2026-11-04).
     expect(edge(5)?.querySelector(".toc-edge--not_sure_mixed")).not.toBeNull();
     expect(edge(5)?.querySelectorAll("path")).toHaveLength(edge(1)?.querySelectorAll("path").length ?? 0);
     expect(edge(2)?.querySelector(".toc-edge--not_sure_insufficient")).not.toBeNull();
-    expect(edge(7)?.querySelector(".toc-edge--not_confident")).not.toBeNull();
+    expect(edge(7)?.querySelector(".toc-edge--against")).not.toBeNull();
     expect(edge(9)?.querySelector(".toc-edge--pending")).not.toBeNull(); // still checking
   });
 
@@ -583,7 +583,7 @@ describe("finding more and stopping (C44, C48)", () => {
   it("shows new evidence waiting for Accept, with the verdict if accepted, and a dot on the canvas", async () => {
     const user = userEvent.setup();
     const links = tocGraphFixture().links.map((item) =>
-      item.link_id === linkId(3) ? { ...item, pending_count: 2, verdict_if_accepted: "confident" as const } : item,
+      item.link_id === linkId(3) ? { ...item, pending_count: 2, verdict_if_accepted: "supported" as const } : item,
     );
     const evidence = tocEvidenceFixture();
     const onLink3 = evidence.links.find((entry) => entry.link_id === linkId(3));

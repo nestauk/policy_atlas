@@ -8,7 +8,7 @@ timestamp: 2026-11-05
 
 # Rule
 
-- The link's colour is `min(worked_elsewhere, holds_here)` (`evidence/grade.py`, the only
+- The link's colour is `min(worked_elsewhere, holds_here)` (`check/grade.py`, the only
   place a grade is decided).
 - Diagnose an empty-looking canvas in this order: the holds-here rate per link, then the
   search (did the policy source answer: an Overton 401 falls back to academic sources without
@@ -25,7 +25,7 @@ the UK for England, answers holds here as it answers worked elsewhere).
 
 # Citations
 
-- `backend/src/policy_atlas/theory_of_change/evidence/grade.py`;
-  `evidence/judge_prompt.py`
+- `backend/src/policy_atlas/theory_of_change/check/grade.py`;
+  `check/judge_prompt.py`
 - [054 verification § First try, findings 2](../tasks/054-toc-integration/verification.md)
   and § Iteration log, loop 1

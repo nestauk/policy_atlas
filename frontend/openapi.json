@@ -9855,25 +9855,6 @@
             "title": "Check Status",
             "type": "string"
           },
-          "confidence": {
-            "anyOf": [
-              {
-                "enum": [
-                  "confident",
-                  "leaning_supports",
-                  "not_sure_mixed",
-                  "leaning_against",
-                  "not_sure_insufficient",
-                  "not_confident"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Confidence"
-          },
           "context": {
             "items": {
               "type": "string"
@@ -9956,7 +9937,6 @@
           "context",
           "supporting_activities",
           "grade_rules",
-          "confidence",
           "report",
           "links_left_out"
         ],
@@ -10210,12 +10190,12 @@
           },
           "verdict": {
             "enum": [
-              "confident",
+              "supported",
               "leaning_supports",
               "not_sure_mixed",
               "leaning_against",
               "not_sure_insufficient",
-              "not_confident"
+              "against"
             ],
             "title": "Verdict",
             "type": "string"
@@ -10224,12 +10204,12 @@
             "anyOf": [
               {
                 "enum": [
-                  "confident",
+                  "supported",
                   "leaning_supports",
                   "not_sure_mixed",
                   "leaning_against",
                   "not_sure_insufficient",
-                  "not_confident"
+                  "against"
                 ],
                 "type": "string"
               },

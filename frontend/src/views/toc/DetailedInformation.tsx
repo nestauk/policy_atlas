@@ -89,8 +89,8 @@ export function codeTargets(graph: TocGraph): Map<string, Selection> {
 const VERDICT_OF = new Map<string, Verdict>([
   ...Object.entries(VERDICT_LABEL).map(([verdict, label]) => [label, verdict as Verdict] as const),
   // The labels on reports written before 2026-11-04.
-  ["Confident", "confident"],
-  ["Not confident: evidence against", "not_confident"],
+  ["Confident", "supported"],
+  ["Not confident: evidence against", "against"],
 ]);
 
 /** A verdict as text, in its colour (the canvas's verdict colours, as text). */

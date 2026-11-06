@@ -32,9 +32,6 @@ one weak analogue study decide (owner, task 054). The keys ``not_sure_mixed``
 and ``not_sure_insufficient`` keep their names; only their labels changed.
 - **Close to the threshold** when S̄ is within 0.2 of a support threshold that
   applies, or W is within 0.25 of 1: one more document could change the verdict.
-
-The theory's confidence is the lowest verdict among its critical links
-(BEAM §3.3).
 """
 
 from __future__ import annotations
@@ -49,12 +46,12 @@ from urllib.parse import urlparse
 
 Support = Literal["strong", "weak", "mixed", "refutes", "not_about"]
 Verdict = Literal[
-    "confident",
+    "supported",
     "leaning_supports",
     "not_sure_mixed",
     "leaning_against",
     "not_sure_insufficient",
-    "not_confident",
+    "against",
 ]
 
 #: The value of each support in the weighted average (BEAM Table 1).
@@ -80,23 +77,23 @@ LEAN_AGAINST = -0.5
 NEAR_SUPPORT = 0.2
 NEAR_WEIGHT = 0.25
 
-#: Low to high: the theory's confidence is the lowest among its critical links.
+#: Low to high: ``lowest`` picks the weakest of a set (a pathway's verdict in the report).
 VERDICT_ORDER: tuple[Verdict, ...] = (
-    "not_confident",
+    "against",
     "leaning_against",
     "not_sure_insufficient",
     "not_sure_mixed",
     "leaning_supports",
-    "confident",
+    "supported",
 )
 
 VERDICT_LABELS: dict[Verdict, str] = {
-    "confident": "Supported",
+    "supported": "Supported",
     "leaning_supports": "Leaning supports",
     "not_sure_mixed": "Mixed",
     "leaning_against": "Leaning against",
     "not_sure_insufficient": "Not enough evidence",
-    "not_confident": "Evidence against",
+    "against": "Evidence against",
 }
 
 
@@ -247,11 +244,11 @@ def link_verdict(
             else "not_sure_insufficient"
         )
     elif mean >= CONFIDENT_SUPPORT and share < MAX_REFUTE_SHARE:
-        verdict = "confident"
+        verdict = "supported"
     elif mean >= LEAN_SUPPORT:
         verdict = "leaning_supports"
     elif mean <= AGAINST_SUPPORT:
-        verdict = "not_confident"
+        verdict = "against"
     elif mean <= LEAN_AGAINST:
         verdict = "leaning_against"
     else:
@@ -273,7 +270,7 @@ def link_verdict(
 
 
 def lowest(verdicts: Iterable[Verdict]) -> Verdict | None:
-    """The lowest verdict, or ``None`` when there is none (the theory's confidence)."""
+    """The lowest verdict, or ``None`` when there is none (a pathway's verdict in the report)."""
     return min(verdicts, key=VERDICT_ORDER.index, default=None)
 
 
@@ -285,7 +282,7 @@ def rule_text() -> list[tuple[str, str]]:
     """
     return [
         (
-            VERDICT_LABELS["confident"],
+            VERDICT_LABELS["supported"],
             f"The documents add up to at least one strong, relevant study (total weight "
             f"{MIN_WEIGHT:g} or more), on average they support the step (average "
             f"{CONFIDENT_SUPPORT:+g} or more, on a scale from -2 to +2), and less than "
@@ -308,7 +305,7 @@ def rule_text() -> list[tuple[str, str]]:
             "Not confident.",
         ),
         (
-            VERDICT_LABELS["not_confident"],
+            VERDICT_LABELS["against"],
             f"Enough evidence, and on average it is against the step (average "
             f"{AGAINST_SUPPORT:+g} or lower).",
         ),

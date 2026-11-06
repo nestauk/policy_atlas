@@ -5,7 +5,7 @@ from typing import Any
 
 from policy_atlas.core.model_routes import route
 from policy_atlas.theory_of_change.backend import OpenAITocBackend
-from policy_atlas.theory_of_change.evidence.judge_prompt import JudgeResponse
+from policy_atlas.theory_of_change.check.judge_prompt import JudgeResponse
 
 
 class _Client:

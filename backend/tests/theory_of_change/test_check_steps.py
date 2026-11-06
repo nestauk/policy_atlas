@@ -21,21 +21,8 @@ from policy_atlas.runtime.capability_registry import THEORY_OF_CHANGE, compose_p
 from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.steering import pause_points
 from policy_atlas.theory_of_change.backend import StubTocBackend, stub_draft
-from policy_atlas.theory_of_change.check import (
-    CASE_STUDIES_PER_BOX,
-    JUDGE_TOP_K,
-    LINK_LISTS,
-    NOT_SELECTED_REASON,
-    SELECTED_REASON,
-    UNSETTLED_SENTENCE,
-    LinkCandidate,
-    critical_link,
-    links_to_check,
-    neighbour_lines,
-    select_for_link,
-    top_case_studies,
-)
-from policy_atlas.theory_of_change.discover_prompt import (
+from policy_atlas.theory_of_change.check.choose import critical_link
+from policy_atlas.theory_of_change.check.discover_prompt import (
     CONSOLIDATE_MAX_NEW_SUCCESS,
     ConsolidatedPathwayWire,
     ConsolidateResponse,
@@ -45,12 +32,27 @@ from policy_atlas.theory_of_change.discover_prompt import (
     NewLinkWire,
     ProposalWire,
 )
+from policy_atlas.theory_of_change.check.grade import LinkVerdict, Verdict
+from policy_atlas.theory_of_change.check.judge import neighbour_lines
+from policy_atlas.theory_of_change.check.judge_prompt import JudgeResponse
+from policy_atlas.theory_of_change.check.pick_prompt import PICK_N
+from policy_atlas.theory_of_change.check.selecting import (
+    JUDGE_TOP_K,
+    LINK_LISTS,
+    NOT_SELECTED_REASON,
+    SELECTED_REASON,
+    LinkCandidate,
+    select_for_link,
+)
+from policy_atlas.theory_of_change.check.shared import links_to_check
+from policy_atlas.theory_of_change.check.summarise import (
+    CASE_STUDIES_PER_BOX,
+    UNSETTLED_SENTENCE,
+    top_case_studies,
+)
+from policy_atlas.theory_of_change.check.summary_prompt import LinkSentencesWire
 from policy_atlas.theory_of_change.draft_prompt import DraftPathwayWire
-from policy_atlas.theory_of_change.evidence.grade import LinkVerdict, Verdict
-from policy_atlas.theory_of_change.evidence.judge_prompt import JudgeResponse
-from policy_atlas.theory_of_change.evidence.pick_prompt import PICK_N
 from policy_atlas.theory_of_change.graph import Box, Graph, Link, Pathway
-from policy_atlas.theory_of_change.summary_prompt import LinkSentencesWire
 from tests.theory_of_change.test_walks import (
     Records,
     _start,
@@ -205,7 +207,7 @@ def test_the_critical_connection_is_the_weakest_important_success_step() -> None
     ]
     graph = Graph(boxes=boxes, links=links, pathways=pathways)
     # The lowest verdict wins, though l2 is on more pathways.
-    verdicts = _verdicts({"l1": "not_confident", "l2": "not_sure_mixed", "l3": "confident"})
+    verdicts = _verdicts({"l1": "against", "l2": "not_sure_mixed", "l3": "supported"})
     assert critical_link(graph, verdicts) == "l1"
     # Equal verdicts: the link on the most kept pathways.
     verdicts = _verdicts({"l1": "not_sure_mixed", "l2": "not_sure_mixed", "l3": "not_sure_mixed"})
@@ -216,7 +218,7 @@ def test_the_critical_connection_is_the_weakest_important_success_step() -> None
     assert critical_link(graph, _verdicts({"l1": "not_sure_mixed", "l3": "not_sure_mixed"})) == "l1"
     assert critical_link(graph, _verdicts({"l1": "not_sure_mixed"})) == "l3"
     # Every step supported (or leaning that way): no connection is critical.
-    assert critical_link(graph, _verdicts({"l1": "confident", "l3": "leaning_supports"})) is None
+    assert critical_link(graph, _verdicts({"l1": "supported", "l3": "leaning_supports"})) is None
     # Only failure pathways are never critical.
     graph.pathways = [Pathway(key="p3", kind="failure", links=["l3"])]
     assert critical_link(graph, _verdicts({})) is None
@@ -261,11 +263,11 @@ def test_the_judge_stores_support_quote_and_relevance(
     # Unscored documents (Q 1) at relevance 2 weigh 2/9 each: the verdicts follow the rule.
     # The critical connection is the weakest step, unless every step is supported.
     critical = [link for link in out.links if link.critical]
-    supported = {"confident", "leaning_supports"}
+    supported = {"supported", "leaning_supports"}
     if all(link.verdict in supported for link in out.links):
-        assert critical == [] and out.confidence is None
+        assert critical == []
     else:
-        assert len(critical) == 1 and out.confidence == critical[0].verdict
+        assert len(critical) == 1
 
 
 def test_an_unverified_quote_is_dropped_and_counted(
@@ -511,7 +513,7 @@ class _Conditions(StubTocBackend):
         return response.model_copy(update={"condition": "Only where schools take part"}), usage
 
     def choose(self, **kwargs: Any) -> Any:
-        from policy_atlas.theory_of_change.choose_prompt import AddedConditionWire
+        from policy_atlas.theory_of_change.check.choose_prompt import AddedConditionWire
 
         response, usage = super().choose(**kwargs)
         added = [
@@ -553,7 +555,7 @@ class _ConditionsOverTheRule(StubTocBackend):
         return response.model_copy(update={"condition": "Recorded"}), usage
 
     def choose(self, **kwargs: Any) -> Any:
-        from policy_atlas.theory_of_change.choose_prompt import AddedConditionWire
+        from policy_atlas.theory_of_change.check.choose_prompt import AddedConditionWire
 
         response, usage = super().choose(**kwargs)
         first, second = (str(item["link"]) for item in kwargs["recorded_conditions"][:2])
@@ -675,7 +677,7 @@ def test_merge_keeps_one_of_each_kind_and_the_thread_lists_its_changes(
     engine: Engine, cleanup: list[uuid.UUID]
 ) -> None:
     from policy_atlas.api.toc_start import STRESS_TEST_MESSAGE
-    from policy_atlas.theory_of_change.merge_prompt import MergeDecisionWire, MergeResponse
+    from policy_atlas.theory_of_change.check.merge_prompt import MergeDecisionWire, MergeResponse
 
     merge = MergeResponse(
         box_merges=[],
@@ -728,7 +730,10 @@ class _DiscoversThenMerges(_Discovers):
     """The found route is merged into the first success pathway in the same check."""
 
     def merge(self, *, plan: Any, boxes: Any, pathways: Any) -> Any:
-        from policy_atlas.theory_of_change.merge_prompt import MergeDecisionWire, MergeResponse
+        from policy_atlas.theory_of_change.check.merge_prompt import (
+            MergeDecisionWire,
+            MergeResponse,
+        )
 
         self._next("merge", {})
         first = next(p for p in pathways if p["kind"] == "success")
@@ -800,7 +805,8 @@ def test_an_os_longlist_and_a_toc_check_join_side_by_side(
 def test_judge_candidates_are_reranked_by_select_s_rerank_backend() -> None:
     from policy_atlas.core.usage import UsageAccumulator
     from policy_atlas.evidence_search.corpus.ranking import StubRankingBackend
-    from policy_atlas.theory_of_change.check import Document, rerank
+    from policy_atlas.theory_of_change.check.selecting import rerank
+    from policy_atlas.theory_of_change.check.shared import Document
 
     docs = [
         Document(
@@ -825,7 +831,7 @@ def test_judge_candidates_are_reranked_by_select_s_rerank_backend() -> None:
 
 
 def _doc(i: int) -> Any:
-    from policy_atlas.theory_of_change.check import Document
+    from policy_atlas.theory_of_change.check.shared import Document
 
     return Document(
         tss_id=uuid.UUID(int=i),
@@ -860,7 +866,7 @@ def test_select_for_link_takes_the_lists_in_turn_with_abstracts_first() -> None:
 
 def test_ten_candidates_skip_the_rerank() -> None:
     from policy_atlas.core.usage import UsageAccumulator
-    from policy_atlas.theory_of_change.check import rerank
+    from policy_atlas.theory_of_change.check.selecting import rerank
 
     class NeverCalled:
         def rank(self, *_: Any, **__: Any) -> Any:
@@ -873,7 +879,7 @@ def test_ten_candidates_skip_the_rerank() -> None:
 
 def test_a_link_without_its_own_search_reads_the_closest_documents() -> None:
     from policy_atlas.core.embeddings import EMBEDDING_DIMENSIONS
-    from policy_atlas.theory_of_change.check import nearest
+    from policy_atlas.theory_of_change.check.selecting import nearest
 
     def vec(*head: float) -> list[float]:
         return [*head, *([0.0] * (EMBEDDING_DIMENSIONS - len(head)))]
@@ -897,7 +903,7 @@ def test_a_link_without_its_own_search_reads_the_closest_documents() -> None:
 def test_summarise_writes_titles_cited_sentences_and_box_texts(
     engine: Engine, cleanup: list[uuid.UUID]
 ) -> None:
-    from policy_atlas.theory_of_change.summary_prompt import BoxDescriptionWire
+    from policy_atlas.theory_of_change.check.summary_prompt import BoxDescriptionWire
 
     class _SeenIn(StubTocBackend):
         """Adds a "seen in" note to every box, citing a document no case study names."""
@@ -941,10 +947,11 @@ def test_summarise_writes_titles_cited_sentences_and_box_texts(
 def test_an_as_drawn_diagram_gets_found_routes_as_one_suggestion(
     engine: Engine, cleanup: list[uuid.UUID], monkeypatch: Any
 ) -> None:
-    from policy_atlas.theory_of_change import check, proposals
+    from policy_atlas.theory_of_change import proposals
+    from policy_atlas.theory_of_change.check import discover
 
     # The theory is the user's diagram, kept as drawn (owner, 2026-11-04).
-    monkeypatch.setattr(check, "as_drawn", lambda plan: True)
+    monkeypatch.setattr(discover, "as_drawn", lambda plan: True)
     task_id = _run(engine, cleanup, _Discovers())
     with engine.connect() as conn:
         found = conn.execute(

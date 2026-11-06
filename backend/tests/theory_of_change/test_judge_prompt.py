@@ -1,6 +1,6 @@
 """toc_judge_v4 message assembly: the test block and the tidied step text."""
 
-from policy_atlas.theory_of_change.evidence.judge_prompt import build_judge_messages
+from policy_atlas.theory_of_change.check.judge_prompt import build_judge_messages
 
 ITEM = (
     "Lower excess energy leads to less obesity.\n"

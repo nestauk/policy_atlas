@@ -341,10 +341,10 @@
   stroke-width: 2;
   stroke-linecap: round;
 }
-.react-flow .toc-edge--confident { stroke: var(--color-verdict-confident); }
+.react-flow .toc-edge--supported { stroke: var(--color-verdict-confident); }
 .react-flow .toc-edge--not_sure_mixed { stroke: var(--color-verdict-mixed); }
 .react-flow .toc-edge--not_sure_insufficient { stroke: var(--color-verdict-little); stroke-dasharray: 6 5; }
-.react-flow .toc-edge--not_confident { stroke: var(--color-verdict-against); stroke-dasharray: 2 5; }
+.react-flow .toc-edge--against { stroke: var(--color-verdict-against); stroke-dasharray: 2 5; }
 .react-flow .toc-edge--leaning_supports { stroke: var(--color-verdict-confident); stroke-dasharray: 12 5; }
 .react-flow .toc-edge--leaning_against { stroke: var(--color-verdict-against); stroke-dasharray: 12 5; }
 .react-flow .toc-edge--pending { stroke: var(--color-line-2); animation: toc-pulse 1.6s ease-in-out infinite; }
@@ -368,10 +368,10 @@
 @media (prefers-reduced-motion: reduce) {
   .toc-edge--pending { animation: none; }
 }
-.toc-verdict-confident { color: var(--color-verdict-confident-text); }
+.toc-verdict-supported { color: var(--color-verdict-confident-text); }
 .toc-verdict-not_sure_mixed { color: var(--color-verdict-mixed-text); }
 .toc-verdict-not_sure_insufficient { color: var(--color-verdict-little-text); }
-.toc-verdict-not_confident { color: var(--color-verdict-against-text); }
+.toc-verdict-against { color: var(--color-verdict-against-text); }
 .toc-verdict-leaning_supports { color: var(--color-verdict-confident-text); }
 .toc-verdict-leaning_against { color: var(--color-verdict-against-text); }
 /* PDF: the panel is hidden (aside), the canvas and toolbar stay. */
