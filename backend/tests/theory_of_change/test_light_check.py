@@ -425,6 +425,55 @@ class _JudgesHalfOffTopic(StubTocBackend):
         return super().judge(**kwargs)
 
 
+class _OnlyTheProgrammeIsOnTopic(StubTocBackend):
+    """Every link's documents are off topic; the whole programme's are strong support.
+
+    So every link is left thin and the second search (C44) runs for all of them.
+    """
+
+    def judge(self, **kwargs: Any) -> Any:
+        from policy_atlas.theory_of_change.check.judge_prompt import JudgeResponse
+
+        self._next("judge", kwargs)
+        if kwargs.get("neighbours"):  # a connection's job; the programme's has none
+            return JudgeResponse(
+                support="not_about",
+                quote=None,
+                relevance=0,
+                relevance_reason=None,
+                condition=None,
+                case_study=None,
+                indicator=None,
+                robust_model=None,
+            ), None
+        return super().judge(**kwargs)
+
+
+def test_the_second_search_keeps_the_programme_s_documents_classified(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    """C44: a judge on the retried links must not screen out the programme's on-topic documents."""
+    from policy_atlas.core.schema import source_classification_result
+
+    task_id = _run(engine, cleanup, _OnlyTheProgrammeIsOnTopic(), per_call=12)
+    again = _summary(engine, task_id, "toc_search_again")
+    assert again["links"] > 0  # every link was thin, so the second search ran
+    with engine.connect() as conn:
+        programme = {
+            uuid.UUID(j["tss"])
+            for j in _programme_judgements(conn, task_id)
+            if j["support"] != "not_about"
+        }
+        classified = set(
+            conn.execute(
+                select(source_classification_result.c.task_source_snapshot_id).where(
+                    source_classification_result.c.task_id == task_id
+                )
+            ).scalars()
+        )
+    assert programme and programme <= classified
+
+
 def test_classify_reads_only_what_the_judge_found_on_topic(
     engine: Engine, cleanup: list[uuid.UUID]
 ) -> None:

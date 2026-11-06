@@ -374,7 +374,11 @@ def toc_judge_scope(
         )
         # Kept for classify and appraise, which weigh them like any document.
         on_topic |= {uuid.UUID(j["tss"]) for j in programme if j["support"] != "not_about"}
-    off_topic = set(pool_by_id) - on_topic
+    # Only the documents this call read can be screened out: a judge on named
+    # links or on the second search (C40, C44) does not read the whole programme's
+    # documents, whose on-topic judgements live in the programme event, not in
+    # the evidence rows, and must stay in for classify and appraise.
+    off_topic = {job.document.tss_id for job in jobs} - on_topic
     if off_topic:
         screen_in(
             conn,

@@ -782,3 +782,14 @@ wording ("Children ask less often for advertised less healthy foods"). Both repo
 verdict with the same caveats (online exposure uncertain, obesity reductions modelled, not
 measured). One topic, one run each. The route file keeps Sol until the owner rules; the
 2026-11-04 ruling put the draft on the middle tier.
+- **CI failure after the push (2026-11-06 15:42, `make verify`):**
+  `test_classify_reads_only_what_the_judge_found_on_topic` failed: four documents judged on topic
+  were not classified. Cause: the judge screened out every pool document without an on-topic
+  evidence row, but the whole programme's on-topic judgements live in the programme event, not in
+  evidence rows, so a judge that skips the programme (the second search, and any named-link check,
+  C40) screened the programme's documents out and classify never read them. The stub judge's
+  verdicts follow random ids, so the second search did not always fire locally. Fix: the judge
+  screens out only the documents it read in this call. Regression test:
+  `test_the_second_search_keeps_the_programme_s_documents_classified` (every link thin, the
+  programme on topic). The ToC suite passed three times in a row after the fix; one unrelated
+  seminal-lookup test failed once in the first run and passed alone and in ten further runs.
