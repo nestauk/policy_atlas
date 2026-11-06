@@ -220,9 +220,40 @@ describe("rowLink — where a done row points", () => {
     expect(rowLink(byLabel("Writing"), rows, "t1", "evidence_search", false)).toEqual({ href: "/tasks/t1/result", label: "Report" });
   });
 
-  it("links a done longlist row nowhere: the ended card's Read it is the walk's one way on", () => {
-    const rows = done(searchScreen);
-    expect(rowLink(rows[0], rows, "t1", "longlist", false)).toBeNull();
+  // Owner, round 11: a longlist walk searches, screens and classifies as an
+  // Evidence search does, so those rows link as an Evidence search's do.
+  it("links a longlist walk's done Searching and Screening to Sources and Classifying to the landscape", () => {
+    const rows = cardRows(
+      [
+        entry({ stage: "suggest", label: "Suggesting options", status: "completed" }),
+        entry({ stage: "acquire", label: "Searching", status: "completed" }),
+        entry({ stage: "screen", label: "Screening", status: "completed" }),
+        entry({ stage: "classify", label: "Classifying", status: "completed" }),
+        entry({ stage: "appraise", label: "Classifying", status: "completed" }),
+        entry({ stage: "extract_interventions", label: "Reading the abstracts", status: "started" }),
+      ],
+      null,
+      "running",
+    );
+    const byLabel = (label: string) => rows.find((row) => row.label === label)!;
+    expect(rowLink(byLabel("Searching"), rows, "t1", "longlist", false)).toEqual({ href: "/tasks/t1/sources/all", label: "Sources" });
+    expect(rowLink(byLabel("Screening"), rows, "t1", "longlist", false)).toEqual({ href: "/tasks/t1/sources/all", label: "Sources" });
+    expect(rowLink(byLabel("Classifying"), rows, "t1", "longlist", false)).toEqual({
+      href: "/tasks/t1/sources/landscape",
+      label: "Landscape",
+    });
+  });
+
+  it("links a longlist walk's other done rows nowhere: the ended card's Read it is the walk's one way on", () => {
+    const rows = cardRows(
+      [
+        entry({ stage: "suggest", label: "Suggesting options", status: "completed" }),
+        entry({ stage: "theme", label: "Grouping into themes", status: "completed" }),
+      ],
+      null,
+      "succeeded",
+    );
+    for (const row of rows) expect(rowLink(row, rows, "t1", "longlist", false)).toBeNull();
   });
 
   it("maps the baseline walk as an Evidence search, its Writing row to the baseline (round 10, D4)", () => {
@@ -268,6 +299,26 @@ describe("rowLink — where the step in progress points", () => {
     expect(rowLink(shortlisting.row, shortlisting.rows, "t1", "evidence_search", false)).toBeNull();
   });
 
+  it("points a longlist walk's Searching and Screening at Sources and its Classifying at the landscape while they run", () => {
+    for (const [stage, label, href, name] of [
+      ["acquire", "Searching", "/tasks/t1/sources/all", "Sources"],
+      ["screen", "Screening", "/tasks/t1/sources/all", "Sources"],
+      ["classify", "Classifying", "/tasks/t1/sources/landscape", "Landscape"],
+      ["appraise", "Classifying", "/tasks/t1/sources/landscape", "Landscape"],
+    ] as const) {
+      const rows = cardRows(
+        [
+          entry({ stage: "suggest", label: "Suggesting options", status: "completed" }),
+          entry({ stage, label, status: "started" }),
+        ],
+        null,
+        "running",
+      );
+      const row = rows.find((candidate) => candidate.state === "progress")!;
+      expect(rowLink(row, rows, "t1", "longlist", false)).toEqual({ href, label: name });
+    }
+  });
+
   it("points a longlist walk's step in progress at the longlist being built, from Suggesting options on (D4)", () => {
     const walk = (stages: StageEntry[]) => {
       const rows = cardRows(stages, null, "running");
@@ -278,6 +329,10 @@ describe("rowLink — where the step in progress points", () => {
     for (const [stage, label] of [
       ["suggest", "Suggesting options"],
       ["option_searches", "Searching for each option"],
+      ["extract_interventions", "Reading the abstracts"],
+      ["longlist", "Clustering into options"],
+      ["option_profile", "Writing what each option would take"],
+      ["constrain", "Applying your constraints"],
       ["theme", "Grouping into themes"],
       ["shortlist", "Shortlisting"],
     ] as const) {
@@ -433,5 +488,13 @@ describe("one source of stage copy (task 058, N17)", () => {
       return RETIRED_STAGE_LABELS.filter((label) => text.includes(label)).map((label) => `${relative(root, path)}: ${label}`);
     });
     expect(hits).toEqual([]);
+  });
+});
+
+describe("traceWords, a verb that repeats the label", () => {
+  it("drops the detail when it only repeats the row's label", () => {
+    const row = { key: "categorise", label: "Classifying", stages: ["classify"], entries: [], state: "progress" as const };
+    expect(traceWords(row, "Classifying", "live", true)).toBe("Classifying");
+    expect(traceWords(row, "1,200 of 2,410 classified", "live", true)).toBe("Classifying · 1,200 of 2,410 classified");
   });
 });

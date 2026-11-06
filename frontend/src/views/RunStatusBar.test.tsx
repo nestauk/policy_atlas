@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createInitialRunStreamState } from "../store";
+import { reduceRunStreamFrame } from "../store/reducer";
 import type { PlanDraft, RunStatus, RunStreamState, StageEntry } from "../store";
 import { onLinkedView, RunStatusBar } from "./RunStatusBar";
 import * as taskLive from "./taskLive";
@@ -62,13 +63,13 @@ function stream(status: RunStatus | null, overrides: Partial<RunStreamState> = {
   };
 }
 
-function live(tab: LifecycleTab | null, runStream: RunStreamState, isOwner = true) {
+function live(tab: LifecycleTab | null, runStream: RunStreamState, isOwner = true, capability = "evidence_search") {
   vi.mocked(taskLive.useTaskLive).mockReturnValue({
     taskId: "t1",
     tab,
     stream: runStream,
     marks: taskLive.NO_MARKS,
-    capability: "evidence_search",
+    capability,
     isOwner,
   });
 }
@@ -330,5 +331,65 @@ describe("RunStatusBar (task 058, owner rounds 7 and 8: the status bar returns, 
     vi.mocked(taskLive.useMountedTraces).mockReturnValue(1);
     renderStrip();
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  // Owner, round 11: on a scoping walk the bar says the longlist walk's step,
+  // never one of its option searches' (child walks on the same stream).
+  it("says the longlist walk's step and links to the longlist, never a child search's step", () => {
+    let sequence = 0;
+    const frame = (body: Record<string, unknown>) =>
+      ({ occurred_at: ago(30), sequence: (sequence += 1), ...body }) as never;
+    const frames = [
+      frame({ type: "run.status", capability_run_id: "walk", status: "running" }),
+      frame({ type: "stage.started", capability_run_id: "walk", stage: "suggest", label: "Suggesting options", blurb: "" }),
+      frame({ type: "stage.completed", capability_run_id: "walk", stage: "suggest", label: "Suggesting options", summary: {}, seconds: 4, counts: [] }),
+      frame({ type: "stage.started", capability_run_id: "walk", stage: "option_searches", label: "Searching for each option", blurb: "" }),
+      // A child option search opens and starts its own step.
+      frame({ type: "run.status", capability_run_id: "child-1", status: "running" }),
+      frame({ type: "stage.started", capability_run_id: "child-1", stage: "acquire", label: "Searching", blurb: "" }),
+    ];
+    const walk = frames.reduce(reduceRunStreamFrame, { ...createInitialRunStreamState(), plan: null } as RunStreamState);
+    expect(walk.run?.id).toBe("walk");
+    live("sources", walk, true, "options_scoping");
+    renderStrip();
+    const words = within(statusBar()).getByRole("button", { name: /^Open the Task Agent/ });
+    expect(flat(words.textContent)).toMatch(/^Searching for each option/);
+    expect(flat(words.textContent)).not.toMatch(/^Searching(?! for each option)/);
+    expect(within(statusBar()).getByRole("link", { name: "Longlist →" })).toHaveAttribute("href", "/tasks/t1/result");
+  });
+
+  // Owner, round 11: the reconnecting line takes the bar's frame (after the
+  // rail), in place of its words, and the words come back with the stream.
+  it("carries the reconnecting line in its frame, in place of its words, on every tab but Agent", () => {
+    live("sources", stream(null, { connectionStatus: "reconnecting" }));
+    const view = renderStrip();
+    expect(statusBar()).toHaveAttribute("data-open", "true");
+    expect(within(statusBar()).getByRole("status")).toHaveTextContent("Reconnecting to live updates…");
+    expect(within(statusBar()).getByRole("status")).toHaveClass("bg-yellow-tint", "text-meta", "py-2.5");
+
+    live("sources", stream("running", { connectionStatus: "reconnecting" }));
+    view.rerender(
+      <MemoryRouter initialEntries={["/tasks/t1/sources"]}>
+        <RunStatusBar />
+      </MemoryRouter>,
+    );
+    expect(within(statusBar()).queryByRole("button", { name: /^Open the Task Agent/ })).toBeNull();
+    expect(within(statusBar()).getByText(/Reconnecting to live updates/)).toBeInTheDocument();
+
+    live("sources", stream("running", { connectionStatus: "connected" }));
+    view.rerender(
+      <MemoryRouter initialEntries={["/tasks/t1/sources"]}>
+        <RunStatusBar />
+      </MemoryRouter>,
+    );
+    expect(within(statusBar()).queryByText(/Reconnecting/)).toBeNull();
+    expect(within(statusBar()).getByRole("button", { name: /^Open the Task Agent: Writing/ })).toBeInTheDocument();
+  });
+
+  it("leaves the reconnecting line to the Task Agent's column on the Agent tab", () => {
+    live("agent", stream("running", { connectionStatus: "reconnecting" }));
+    renderStrip();
+    expect(statusBar()).toHaveAttribute("data-open", "false");
+    expect(within(statusBar()).queryByText(/Reconnecting/)).toBeNull();
   });
 });

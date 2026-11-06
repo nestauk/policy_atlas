@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -40,11 +43,25 @@ describe("StatusMark (task 058; DESIGN.md § Status mark)", () => {
 
   it("breathes only while live", () => {
     const { container, rerender } = render(<StatusMark tone="running" breathing />);
-    expect(container.firstElementChild).toHaveClass("anim-breathe");
+    expect(container.firstElementChild).toHaveClass("anim-breathe-mark");
     rerender(<StatusMark tone="running" />);
-    expect(container.firstElementChild).not.toHaveClass("anim-breathe");
+    expect(container.firstElementChild).not.toHaveClass("anim-breathe-mark");
     rerender(<StatusMark tone="paused" breathing />);
-    expect(container.firstElementChild).not.toHaveClass("anim-breathe");
+    expect(container.firstElementChild).not.toHaveClass("anim-breathe-mark");
+  });
+
+  it("breathes deeper than before and shrinks as it breathes (owner, round 11)", () => {
+    const css = readFileSync(join(__dirname, "../../index.css"), "utf8");
+    const block = (head: string) => css.slice(css.indexOf(head), css.indexOf("\n}", css.indexOf(head)));
+    // The shared rhythm's trough is 0.25, for skeletons and placeholder bars too.
+    expect(block("@keyframes breathe {")).toContain("opacity: 0.25");
+    // The mark alone adds the scale, on the same 1.6 s rhythm.
+    const mark = block("@keyframes breathe-mark {");
+    expect(mark).toContain("opacity: 0.25");
+    expect(mark).toContain("transform: scale(0.8)");
+    const utility = block("@utility anim-breathe-mark {");
+    expect(utility).toContain("breathe-mark 1.6s ease-in-out infinite");
+    expect(utility).toContain("prefers-reduced-motion: reduce");
   });
 });
 

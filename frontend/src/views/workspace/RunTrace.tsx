@@ -27,6 +27,7 @@ import {
   rowLink,
   rowLiveness,
   rowSeconds,
+  threadRunStages,
   traceWords,
   walkKind,
   type CardRow,
@@ -351,21 +352,13 @@ function TopLine({
  * time and "Read it →"; the rows fold behind "Show steps". Every label and
  * count is the server's.
  */
-export function RunTrace({
-  taskId,
-  status,
-  stages,
-  liveness,
-  plan,
-  startedAt,
-  endedAt,
-  hasFindings,
-  capability,
-  purpose,
-  isOwner,
-  checkInWaiting = false,
-  onSeePlan,
-}: {
+export function RunTrace(props: TraceProps) {
+  // While a trace is mounted the run status bar's live region stays quiet.
+  useRegisterTrace();
+  return <TraceCard {...props} />;
+}
+
+type TraceProps = {
   taskId: string;
   status: RunStatus | undefined;
   stages: StageEntry[];
@@ -386,11 +379,33 @@ export function RunTrace({
   checkInWaiting?: boolean;
   /** Opens the plan document, from the foot of the list. */
   onSeePlan?: () => void;
-}) {
+};
+
+/**
+ * The card both a followed run and a past run draw (owner, round 11: the
+ * past run is the ended card, not a copy of it). `past` marks a run the
+ * stream is not following: no landmark (the thread's one "Analysis run"
+ * region is the run the stream follows) and no live region (nothing about
+ * it changes).
+ */
+function TraceCard({
+  taskId,
+  status,
+  stages,
+  liveness,
+  plan,
+  startedAt,
+  endedAt,
+  hasFindings,
+  capability,
+  purpose,
+  isOwner,
+  checkInWaiting = false,
+  onSeePlan,
+  past = false,
+}: TraceProps & { past?: boolean }) {
   const [open, setOpen] = useState(false);
   const listId = useId();
-  // While a trace is mounted the run status bar's live region stays quiet.
-  useRegisterTrace();
   const kind = walkKind(capability, stages, purpose);
   const ended = endedLine(status, kind);
   const ticking = ended === null && (status === "running" || status === "paused");
@@ -472,12 +487,17 @@ export function RunTrace({
   );
 
   return (
-    <Card role="region" aria-label="Analysis run" className="@container">
+    <Card
+      {...(past ? { "data-testid": "past-run" } : { role: "region", "aria-label": "Analysis run" })}
+      className="@container"
+    >
       {/* The header's words for a screen reader, announced as they change;
-          the ticking clock stays out of it. */}
-      <p role="status" aria-live="polite" className="sr-only">
-        {scrub(words)}
-      </p>
+          the ticking clock stays out of it. A past run says nothing new. */}
+      {!past && (
+        <p role="status" aria-live="polite" className="sr-only">
+          {scrub(words)}
+        </p>
+      )}
       <div
         data-testid="trace-header"
         className="px-4 pt-3 pb-2.5 max-sm:px-3"
@@ -541,30 +561,55 @@ function useLandedRows(rows: CardRow[]): ReadonlySet<string> {
 
 /**
  * A past run in the thread (one the stream is not following): the same card
- * as a run that ended in front of you, folded to its top line (owner, round
- * 8): its mark, its status word in the label style and its wall time. It has
- * no step list, so no "Show steps", and no link (annex § The run trace). The
- * words are the ones its own walk ended with ("Report ready", "The longlist
- * is ready", "Stopped", "Failed"), so every run reads alike.
+ * as a run that ended in front of you (owner, round 8), drawn by the same
+ * code (owner, round 11). Its top line is its mark, the words its own walk
+ * ended with ("Report ready", "The baseline is ready", "Stopped") in the
+ * label style, its wall time and the link that walk ended with ("Read it →"
+ * to the report, the baseline or the longlist; none after a stop or a
+ * failure). When its thread run carries its steps, they fold behind "Show
+ * steps" as the ended card's do; without them there is no control. A run
+ * the thread lists that has not ended keeps its status word and no link.
  */
-export function PastRunLine({ run, capability }: { run: TaskAgentThreadRun; capability?: string | null }) {
+export function PastRunLine({
+  run,
+  taskId,
+  capability,
+  hasFindings = false,
+}: {
+  run: TaskAgentThreadRun;
+  taskId: string;
+  capability?: string | null;
+  /** Whether the task has findings, for a done Extracting row's link. */
+  hasFindings?: boolean;
+}) {
   const status = run.status as RunStatus;
-  const ended = endedLine(status, walkKind(capability, [], run.purpose));
+  const stages = threadRunStages(run);
+  if (endedLine(status, walkKind(capability, stages, run.purpose)) !== null) {
+    return (
+      <TraceCard
+        past
+        taskId={taskId}
+        status={status}
+        stages={stages}
+        plan={null}
+        startedAt={run.started_at}
+        endedAt={run.ended_at ?? undefined}
+        hasFindings={hasFindings}
+        capability={capability}
+        purpose={run.purpose}
+        isOwner={false}
+      />
+    );
+  }
   const fallback = RUN_BLOCK_STATUS[run.status] ?? run.status;
-  const words = ended?.words ?? fallback.charAt(0).toUpperCase() + fallback.slice(1);
-  const tone: StatusTone = ended?.tone ?? (status === "paused" ? "paused" : "running");
-  const time =
-    run.ended_at == null ? "" : formatMinutes(elapsedSeconds(run.started_at, run.ended_at, Date.parse(run.ended_at)));
-  // Not a landmark: the thread's one "Analysis run" region is the run the
-  // stream follows.
   return (
     <Card data-testid="past-run" className="@container">
       <div className="px-4 pt-3 pb-2.5 max-sm:px-3">
         <TopLine
-          mark={<StatusMark tone={tone} />}
-          label={scrub(words)}
+          mark={<StatusMark tone={status === "paused" ? "paused" : "running"} />}
+          label={scrub(fallback.charAt(0).toUpperCase() + fallback.slice(1))}
           rest=""
-          time={time}
+          time=""
           link={null}
           labelKey="past"
           rise={false}

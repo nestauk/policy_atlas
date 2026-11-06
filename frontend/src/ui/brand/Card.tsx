@@ -58,8 +58,9 @@ export type StatusTone = keyof typeof STATUS_MARK_TONES;
  * Args:
  *   tone: Which state the mark shows.
  *   breathing: True while updates are arriving (the caller's freshness
- *     rule); only a live mark breathes, and it holds still under reduced
- *     motion.
+ *     rule); only a live mark breathes (opacity to 0.25 and scale to 0.8,
+ *     `anim-breathe-mark`; owner, round 11), and it holds still under
+ *     reduced motion.
  */
 export function StatusMark({
   tone,
@@ -76,7 +77,7 @@ export function StatusMark({
         // its colour over 150 ms (round 9).
         "inline-block size-1.5 flex-none transition-colors duration-150 ease-[ease]",
         STATUS_MARK_TONES[tone],
-        breathing && tone === "running" && "anim-breathe",
+        breathing && tone === "running" && "anim-breathe-mark",
         className,
       )}
       {...props}

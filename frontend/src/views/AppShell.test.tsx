@@ -310,7 +310,10 @@ describe("AppShell — the live layer without a status bar (task 058; owner 2026
     act(() => {
       sseState.handlers?.onDisconnected?.();
     });
-    expect(screen.getByText(/Reconnecting to live updates/)).toBeInTheDocument();
+    // Owner, round 11: in the run status bar's frame, after the rail, never
+    // a full-width band over it.
+    expect(within(screen.getByTestId("run-status-bar")).getByText(/Reconnecting to live updates/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Reconnecting to live updates/)).toHaveLength(1);
   });
 
   it("is not in the public task view", () => {
@@ -470,8 +473,18 @@ describe("AppShell — the task-settings popover (task 033 phase 10c, contract �
   it("owner: shows Rename and Archive", async () => {
     taskState.isOwner = true;
     await openTaskSettings();
-    expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Archive" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Rename" })).toHaveFocus();
+    expect(screen.getByRole("menuitem", { name: "Archive" })).toBeInTheDocument();
+  });
+
+  // Owner, round 11: the capability is plain Grey text after the name, no chip.
+  it("sets the capability after the name in plain grey, not as a chip", () => {
+    taskState.isOwner = true;
+    renderShell(`/tasks/${TASK_ID}`);
+    const bar = screen.getByRole("navigation", { name: "Task" });
+    const kind = within(bar).getByText(/Evidence search|Options scoping/);
+    expect(kind).toHaveClass("text-grey", "text-meta");
+    expect(kind.className).not.toMatch(/border|bg-|uppercase/);
   });
 
   it("non-owner: hides the settings gear itself, not just the items inside it — an empty popover is not a fix", () => {
@@ -479,8 +492,8 @@ describe("AppShell — the task-settings popover (task 033 phase 10c, contract �
     renderShell(`/tasks/${TASK_ID}`);
     expect(screen.queryByRole("button", { name: "Task settings" })).not.toBeInTheDocument();
     // With the trigger gone, Rename and Archive can never be reached either.
-    expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Archive" })).not.toBeInTheDocument();
   });
 });
 

@@ -297,12 +297,36 @@
     opacity: 1;
   }
   50% {
-    /* 0.5 trough: the yellow dot on white nearly vanished at 0.35 (task 058 design review). */
-    opacity: 0.5;
+    /* 0.25 trough (owner, round 11: the 0.5 pulse was too subtle to read
+       as live); the blue square and the Line 2 bars both stay visible. */
+    opacity: 0.25;
   }
 }
 @utility anim-breathe {
   animation: breathe 1.6s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* The live status mark (task 058, owner round 11): the 6 px blue square
+   breathes on the same 1.6 s rhythm and to the same 0.25 trough, and alone
+   also shrinks to 0.8 of its size at the trough, so a mark that small reads
+   as alive. The words beside it keep `anim-breathe-soft`; placeholder bars
+   and skeletons keep `breathe`. Still under reduced motion. */
+@keyframes breathe-mark {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+}
+@utility anim-breathe-mark {
+  animation: breathe-mark 1.6s ease-in-out infinite;
   @media (prefers-reduced-motion: reduce) {
     animation: none;
   }

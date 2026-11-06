@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { Outlet, useLocation, useParams } from "react-router";
 
 import { useArchiveTask, useUpdateTask } from "../api/mutations";
@@ -7,11 +7,9 @@ import { useAuth } from "../auth";
 import { capabilityLabel } from "../lib/capabilities";
 import { TitleMarkerProvider } from "../lib/title";
 import { scrub } from "../lib/scrub";
-import { Button } from "../ui/brand/Button";
 import { StatusMark } from "../ui/brand/Card";
 import { cn } from "../ui/brand/cn";
 import { LifecycleBar, LifecycleBottomBar } from "../ui/brand/LifecycleBar";
-import { ReconnectingBanner } from "../ui/feedback/ReconnectingBanner";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
 import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
 import { lifecycleTabs, publicLifecycleTabs, sourcesLanding, withChat, withSourcesLanding } from "./lifecycle";
@@ -32,185 +30,62 @@ import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
 import { PlanDocument } from "./workspace/PlanDocument";
 import { ToastProvider, useToast } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
-import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
+import { NameMenu } from "./NameMenu";
 
-/** Task settings affordance (028 F.5): rename + archive, wired to the
- *  existing task mutations — the task-card pattern,
- *  condensed into the header popover. Rename saves inline; archive takes an
- *  explicit confirm step before the mutation fires. Visibility moved to the
- *  Share page (`ShareView`). */
-function TaskSettingsMenu({
+/**
+ * The task header's left side (task 058, owner round 11): the name at the
+ * Title size with the capability after it on one baseline, in plain Grey
+ * ("Options scoping", "Evidence search"; task 044, X12: a colleague can tell
+ * the two kinds apart without opening the plan), and the owner's menu
+ * (Rename, Archive) behind the chevron. Rename and archive are owner-only
+ * (task 033 phase 10c, contract § 11 / rubric 37), so a colleague sees no
+ * chevron at all. Visibility lives on the Share page.
+ */
+function TaskName({
   taskId,
-  taskName,
+  name,
+  capability,
   isOwner,
 }: {
   taskId: string;
-  taskName: string;
+  name: string;
+  capability: string | null | undefined;
   isOwner: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [confirmingArchive, setConfirmingArchive] = useState(false);
-  const [draftName, setDraftName] = useState(taskName);
   const update = useUpdateTask(taskId);
   const archive = useArchiveTask(taskId);
   const toast = useToast();
-
-  // Non-owner (task 033 phase 10c, contract § 11 / rubric 37): every item
-  // inside this popover is owner-gated — a non-owner has nothing to do here
-  // at all, so the trigger itself must not render. Rev 1 of this gate
-  // covered only the items, leaving a colleague a gear that opened onto an
-  // empty popover.
-  if (!isOwner) return null;
-
-  const reset = () => {
-    setEditing(false);
-    setConfirmingArchive(false);
-    setDraftName(taskName);
-  };
-
-  const saveRename = () => {
-    const name = draftName.trim();
-    if (!name) return;
-    update.mutate(
-      { name },
-      {
-        onSuccess: () => setEditing(false),
-        onError: () =>
-          toast.toast({
-            title: "Rename failed",
-            description: "The task couldn't be renamed. Try again.",
-            tone: "error",
-          }),
-      },
-    );
-  };
-
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) reset();
-      }}
-    >
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label={COPY.taskSettings}
-          title={COPY.taskSettings}
-          className="cursor-pointer text-grey hover:text-navy"
-        >
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 24 24"
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 space-y-3">
-        {editing ? (
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              saveRename();
-            }}
-          >
-            <label className="sr-only" htmlFor="task-settings-name">
-              {TASK.one} name
-            </label>
-            <input
-              id="task-settings-name"
-              autoFocus
-              value={draftName}
-              onChange={(event) => setDraftName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") reset();
-              }}
-              className="w-full border border-line-2 bg-paper px-2 py-1.5 text-meta font-bold text-navy"
-            />
-            {update.isError && (
-              <p role="alert" className="mt-2 text-body text-red">
-                The task couldn't be renamed. Try again.
-              </p>
-            )}
-            <div className="mt-3 flex gap-2">
-              <Button type="submit" size="sm" disabled={!draftName.trim() || update.isPending}>
-                Save name
-              </Button>
-              <Button type="button" variant="ghost" size="sm" onClick={reset}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <>
-            {/* Rename and archive are owner-only mutations (task 033 phase
-                10c, contract § 11 / rubric 37) — hidden entirely for a
-                non-owner. Rev 1 of this menu shipped these ungated: a
-                colleague would see Rename, click, and get "The task
-                couldn't be renamed." */}
-            {isOwner && (
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="block w-full cursor-pointer text-left text-meta font-semibold text-navy hover:text-blue"
-              >
-                Rename
-              </button>
-            )}
-            {isOwner && archive.isError && (
-              <p role="alert" className="text-body text-red">
-                The task couldn't be archived. Try again.
-              </p>
-            )}
-            {isOwner &&
-              (confirmingArchive ? (
-                <div className="space-y-2 text-body text-grey">
-                  <p>Archiving removes this task from your active tasks.</p>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      disabled={archive.isPending}
-                      onClick={() =>
-                        archive.mutate(undefined, {
-                          onSuccess: () => setOpen(false),
-                          onError: () =>
-                            toast.toast({
-                              title: "Archive failed",
-                              description: "The task couldn't be archived. Try again.",
-                              tone: "error",
-                            }),
-                        })
-                      }
-                    >
-                      Confirm archive
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setConfirmingArchive(false)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setConfirmingArchive(true)}
-                  className="block w-full cursor-pointer text-left text-meta font-semibold text-navy hover:text-blue"
-                >
-                  Archive
-                </button>
-              ))}
-          </>
-        )}
-      </PopoverContent>
-    </Popover>
+    <NameMenu
+      name={name}
+      label={COPY.taskSettings}
+      fieldLabel={`${TASK.one} name`}
+      // On a phone the name takes its own line and the capability and the
+      // chevron follow under it, so the name keeps the width.
+      titleClassName="text-title font-bold text-navy max-md:basis-full max-md:text-heading"
+      after={<span className="shrink-0 whitespace-nowrap text-meta text-grey">{capabilityLabel(capability)}</span>}
+      canEdit={isOwner}
+      pending={update.isPending || archive.isPending}
+      rename={(next, done) =>
+        update.mutate({ name: next }, { onSuccess: done.onSuccess, onError: done.onError })
+      }
+      renameError={`The ${TASK.lower} couldn't be renamed. Try again.`}
+      archive={(_, done) =>
+        archive.mutate(undefined, {
+          onSuccess: done.onSuccess,
+          onError: () => {
+            done.onError();
+            toast.toast({
+              title: "Archive failed",
+              description: `The ${TASK.lower} couldn't be archived. Try again.`,
+              tone: "error",
+            });
+          },
+        })
+      }
+      archiveSentence={`Archiving removes this ${TASK.lower} from your active ${TASK.lowerMany}.`}
+      archiveError={`The ${TASK.lower} couldn't be archived. Try again.`}
+    />
   );
 }
 
@@ -363,14 +238,6 @@ function ShellPlanPanel({ taskId }: { taskId: string }) {
   );
 }
 
-/** The mounted reconnect banner (task 058, N15): shows while the live
- *  connection is lapsed. */
-function LiveReconnectingBanner() {
-  const live = useTaskLive();
-  if (live === null) return null;
-  return <ReconnectingBanner connectionStatus={live.stream.connectionStatus} />;
-}
-
 /** App chrome: global controls always; task stages on a second bar. */
 export function AppShell() {
   const { taskId } = useParams();
@@ -504,22 +371,13 @@ export function AppShell() {
       </NavBar>
       {base !== null && (
         <NavBar aria-label={TASK.one} className="shrink-0 bg-ground">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             {task.data !== undefined && (
               <>
-                <span className="truncate text-lead font-semibold text-navy">
-                  {scrub(task.data.name)}
-                </span>
-                {/* The kind of work this task is (task 044, X12; Frame board):
-                    "Options scoping" or "Evidence search", read straight off
-                    the row so a colleague never has to open the plan to tell
-                    the two kinds apart. */}
-                <span className={cn(CAPTION_LABEL_CLASS, "shrink-0")}>
-                  {capabilityLabel(task.data.capability)}
-                </span>
-                <TaskSettingsMenu
+                <TaskName
                   taskId={task.data.task_id}
-                  taskName={task.data.name}
+                  name={task.data.name}
+                  capability={task.data.capability}
                   isOwner={task.data.is_owner}
                 />
               </>
@@ -537,7 +395,6 @@ export function AppShell() {
           </div>
         </NavBar>
       )}
-      {liveShell && <LiveReconnectingBanner />}
       <SensitiveInfoBanner />
       {/* The Agent overlay beside every task view outside the Agent tab
           (029 rev 3.4, 038 V8): the Agent tab hosts the conversation list
@@ -564,7 +421,9 @@ export function AppShell() {
             rail hides and the column is the full width. */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* The run status bar under the tabs on every tab but Agent (task 058,
-              owner rounds 7 and 8): it opens the Task Agent. */}
+              owner rounds 7 and 8): it opens the Task Agent. While the live
+              stream reconnects its frame carries the reconnecting line
+              (owner, round 11), so the line never runs under the rail. */}
           {liveShell && <RunStatusBar />}
           <div
             data-testid={footerInScrollPane ? "task-scroll-pane" : undefined}

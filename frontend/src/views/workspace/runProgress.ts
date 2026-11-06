@@ -1,4 +1,4 @@
-import type { PlanDraft, RunStatus, StageEntry, StageLiveness } from "../../store";
+import type { PlanDraft, RunStatus, StageEntry, StageLiveness, TaskAgentThreadRun } from "../../store";
 import { isScoping } from "../scopingActivity";
 
 /** How a step row reads: done, in progress, still to come, or ended badly. */
@@ -188,6 +188,34 @@ function rowState(
   return waiting && live && index === lastActive ? "progress" : "done";
 }
 
+/**
+ * A thread run's steps (`RunOut.stages`, owner round 11: what
+ * `stage.started` and `stage.completed` carried, read back from the event
+ * log) as the trace's stage entries, for `cardRows`, so an earlier walk's
+ * card folds its steps as the ended card does. Empty when the read carries
+ * none. A step's wall time is the server's `seconds`, else its end less its
+ * start.
+ */
+export function threadRunStages(run: TaskAgentThreadRun): StageEntry[] {
+  return (run.stages ?? []).map((step) => {
+    const startedAt = step.started_at ?? "";
+    const start = parsed(startedAt);
+    const end = parsed(step.ended_at ?? undefined);
+    const seconds =
+      typeof step.seconds === "number" ? step.seconds : start !== null && end !== null ? Math.max(0, (end - start) / 1000) : null;
+    const entry: StageEntry = {
+      stage: step.stage,
+      label: step.label,
+      status: step.status,
+      startedAt,
+      seconds,
+      summary: step.summary ?? {},
+    };
+    if (step.counts !== undefined) entry.counts = step.counts;
+    return entry;
+  });
+}
+
 /** The row being worked on now, else the last row that has run. */
 export function currentRow(rows: CardRow[]): CardRow | null {
   return (
@@ -262,13 +290,17 @@ export function rowLiveness(
  * Searching and Screening to Sources, Classifying to the landscape, Mapping
  * to the themes, Writing to the report.
  *
- * A scoping walk links too (round 10, lead ruling D4). The baseline walk
- * maps as an Evidence search does, its Writing row pointing at the baseline
- * ("Baseline →"). A longlist walk's step in progress, from Suggesting
- * options on, points at the longlist being built ("Longlist →", the Result
- * tab's default view); its done rows point nowhere, the ended card's
- * "Read it →" being the walk's one destination. The other scoping walks
- * (an added option's search, the shortlist walk) link nothing.
+ * A scoping walk links too (round 10, lead ruling D4; owner, round 11).
+ * The baseline walk maps as an Evidence search does, its Writing row
+ * pointing at the baseline ("Baseline →"). A longlist walk searches,
+ * screens and classifies as an Evidence search does, so those rows take the
+ * Evidence search's links, running and done: Searching and Screening to
+ * Sources, Classifying to the landscape. Its step in progress from
+ * Suggesting options on points at the longlist being built ("Longlist →",
+ * the Result tab's default view); those steps' done rows point nowhere, the
+ * ended card's "Read it →" being the walk's one destination. Reading the
+ * linked search links nothing. The other scoping walks (an added option's
+ * search, the shortlist walk) link nothing.
  */
 export function rowLink(
   row: CardRow,
@@ -279,31 +311,34 @@ export function rowLink(
   kind: WalkKind,
   hasFindings: boolean,
 ): { href: string; label: string } | null {
+  const has = (stage: string) => row.stages.includes(stage);
+  const searched = has("acquire") || has("screen");
+  const classified = has("classify") || has("appraise");
   if (kind === "longlist") {
+    if (row.state !== "progress" && row.state !== "done") return null;
+    if (searched) return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
+    if (classified) return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
     return row.state === "progress" && !row.stages.every((stage) => stage === "inherit")
       ? { href: `/tasks/${taskId}/result`, label: "Longlist" }
       : null;
   }
   if (kind !== "evidence_search" && kind !== "baseline") return null;
-  const has = (stage: string) => row.stages.includes(stage);
   const written =
     kind === "baseline"
       ? { href: `/tasks/${taskId}/result?view=baseline`, label: "Baseline" }
       : { href: `/tasks/${taskId}/result`, label: "Report" };
   if (row.state === "progress") {
-    if (has("acquire") || has("screen")) return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
-    if (has("classify") || has("appraise")) return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
+    if (searched) return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
+    if (classified) return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
     if (has("characterise")) return { href: `/tasks/${taskId}/sources`, label: "Themes" };
     if (has("synthesise")) return written;
     return null;
   }
   if (row.state !== "done") return null;
-  if (has("acquire") || has("screen")) return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
+  if (searched) return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
   // Mapping's output is the themes (the Sources tab's first view; owner, polish round 2).
   if (has("characterise")) return { href: `/tasks/${taskId}/sources`, label: "Themes" };
-  if (has("classify") || has("appraise")) {
-    return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
-  }
+  if (classified) return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
   if (has("extract") && hasFindings) return { href: `/tasks/${taskId}/sources/findings`, label: "Findings" };
   if (has("synthesise")) return written;
   return null;
@@ -347,7 +382,10 @@ export function traceWords(
     return isOwner ? "Paused · a check-in is waiting on you" : ["Paused", row?.label].filter(Boolean).join(" · ");
   }
   const doing = state === "stalled" ? STALLED_LINE : detail;
-  return [row?.label, doing].filter((part): part is string => Boolean(part)).join(" · ");
+  // A step verb that repeats the row's label ("Classifying · Classifying")
+  // says nothing twice (owner round 11, via the mock's scoping walk).
+  const detailWords = doing !== null && doing.trim().toLowerCase() === (row?.label ?? "").trim().toLowerCase() ? null : doing;
+  return [row?.label, detailWords].filter((part): part is string => Boolean(part)).join(" · ");
 }
 
 /** A degraded shortlist walk's ended words: it proposed nothing. */

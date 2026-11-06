@@ -167,7 +167,7 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
     // One mark turns per block, the header's (lead, round 6): the step in
     // progress takes the 6 px blue square, breathing while updates arrive.
     expect(now.querySelector("[data-live-mark]")).toBeNull();
-    expect(now.querySelector("[data-tone]")).toHaveClass("bg-blue", "size-1.5", "anim-breathe");
+    expect(now.querySelector("[data-tone]")).toHaveClass("bg-blue", "size-1.5", "anim-breathe-mark");
     expect(screen.getByRole("region", { name: "Analysis run" }).querySelectorAll("[data-live-mark]")).toHaveLength(1);
     expect(rowOf("Writing").querySelector("[data-tone]")).toHaveClass("bg-line-2");
     // A hairline spine through the marks, and a hairline rule between rows.
@@ -269,7 +269,7 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
       vi.advanceTimersByTime(2_000);
     });
     expect(within(rowOf("Classifying")).getByTestId("row-activity")).not.toHaveClass("anim-breathe-soft");
-    expect(rowOf("Classifying").querySelector("[data-tone]")).not.toHaveClass("anim-breathe");
+    expect(rowOf("Classifying").querySelector("[data-tone]")).not.toHaveClass("anim-breathe-mark");
   });
 
   it("holds the activity line still while paused", () => {
@@ -419,7 +419,7 @@ describe("RunTrace — paused", () => {
     vi.useFakeTimers({ now: NOW });
     render(trace({ status: "paused" }));
     expect(mark()).toHaveClass("bg-orange", "size-1.5");
-    expect(mark()).not.toHaveClass("anim-breathe");
+    expect(mark()).not.toHaveClass("anim-breathe-mark");
     expect(liveMark()).toBeNull();
     expect(flat(header().textContent)).toMatch(/^Paused · a check-in is waiting on you6 min 12 s$/);
     // Nothing turns while the run waits on a person: the step's mark is the
@@ -552,27 +552,85 @@ describe("PastRunLine — a run the stream is not following", () => {
       ...overrides,
     }) as TaskAgentThreadRun;
 
-  // Owner, round 8: a past run is the same folded card, with no steps to show.
-  it("is the same card folded to its status word and its wall time, with no Show steps, no steps and no link", () => {
-    const { container } = render(<PastRunLine run={run({})} />);
-    expect(container).toHaveTextContent(/^Report ready14 min$/);
+  const past = (props: Partial<ComponentProps<typeof PastRunLine>> & { run: TaskAgentThreadRun }) =>
+    render(
+      <MemoryRouter>
+        <PastRunLine taskId={TASK_ID} {...props} />
+      </MemoryRouter>,
+    );
+  const withStages = (overrides: Partial<TaskAgentThreadRun>) =>
+    run({
+      ...overrides,
+      // The read's steps (owner, round 11): what stage.started and
+      // stage.completed carried, from the event log.
+      stages: [
+        { stage: "acquire", label: "Searching", status: "completed", started_at: "2026-11-04T10:00:00Z", ended_at: "2026-11-04T10:01:00Z", summary: { acquired: 312 }, counts: [{ value: 312, noun: "found" }] },
+        { stage: "screen", label: "Screening", status: "completed", started_at: "2026-11-04T10:01:00Z", ended_at: "2026-11-04T10:02:30Z", summary: { relevant: 118 }, counts: [] },
+        { stage: "synthesise", label: "Writing", status: "completed", started_at: "2026-11-04T10:05:00Z", ended_at: "2026-11-04T10:14:00Z", summary: {} },
+      ],
+    } as Partial<TaskAgentThreadRun>);
+
+  // Owner, round 8: a past run is the same folded card; round 11: with the
+  // link its walk ended with, so the thread keeps a way to what it made.
+  it("is the ended card: its finish words, its wall time and Read it, not a landmark", () => {
+    const { container } = past({ run: run({}) });
+    expect(container).toHaveTextContent(/^Report ready14 min\s·Read it →$/);
     expect(screen.getByTestId("past-run")).toHaveClass("border", "border-line-2", "bg-paper");
     expect(screen.queryByRole("region", { name: "Analysis run" })).toBeNull();
+    expect(container.querySelector('[role="status"]')).toBeNull();
     expect(screen.getByText("Report ready")).toHaveClass("uppercase", "font-extrabold", "text-grey");
-    expect(container.querySelector("button")).toBeNull();
-    expect(container.querySelector("a")).toBeNull();
+    expect(screen.getByRole("link", { name: "Read it →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
     expect(container.querySelector("[data-tone]")).toHaveClass("bg-green");
   });
 
-  it("words its finish from its own walk", () => {
-    const { container } = render(<PastRunLine run={run({ purpose: "longlist" })} capability="options_scoping" />);
-    expect(container).toHaveTextContent(/^The longlist is ready14 min$/);
+  it("has no Show steps when the read carries no steps", () => {
+    const { container } = past({ run: run({}) });
+    expect(container.querySelector("button")).toBeNull();
   });
 
-  it("reads a bad ending with the red mark", () => {
-    const { container } = render(<PastRunLine run={run({ status: "failed" })} />);
+  it("words its finish from its own walk and links to what that walk made", () => {
+    const { container } = past({ run: run({ purpose: "longlist" }), capability: "options_scoping" });
+    expect(container).toHaveTextContent(/^The longlist is ready14 min\s·Read it →$/);
+    expect(screen.getByRole("link", { name: "Read it →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result?view=longlist`);
+  });
+
+  it("links a past baseline walk to the baseline, so the thread keeps a way to it after the longlist starts", () => {
+    past({ run: run({ purpose: "baseline" }), capability: "options_scoping" });
+    expect(screen.getByText("The baseline is ready")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Read it →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result?view=baseline`);
+  });
+
+  it("folds its steps behind Show steps, as the ended card does, with their counts, times and links", async () => {
+    const user = userEvent.setup();
+    past({ run: withStages({ purpose: "baseline" }), capability: "options_scoping" });
+    const toggle = screen.getByRole("button", { name: "Show steps" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(screen.getByRole("button", { name: "Hide steps" })).toHaveAttribute("aria-expanded", "true");
+    const steps = within(screen.getByRole("list", { name: "Run steps" })).getAllByRole("listitem");
+    expect(steps.map((step) => step.getAttribute("data-state"))).toEqual(["done", "done", "done"]);
+    expect(steps[0]).toHaveTextContent("Searching");
+    expect(steps[0]).toHaveTextContent("312 found · 1 min");
+    expect(within(steps[0]).getByRole("link", { name: "Sources →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
+    expect(steps[1]).toHaveTextContent("1 min 30 s");
+    expect(within(steps[2]).getByRole("link", { name: "Baseline →" })).toHaveAttribute(
+      "href",
+      `/tasks/${TASK_ID}/result?view=baseline`,
+    );
+  });
+
+  it("reads a bad ending with the red mark and no link", () => {
+    const { container } = past({ run: run({ status: "failed" }) });
     expect(container).toHaveTextContent(/^Failed14 min$/);
     expect(container.querySelector("[data-tone]")).toHaveClass("bg-red");
+    expect(container.querySelector("a")).toBeNull();
+  });
+
+  it("keeps a listed run that has not ended to its status word, with no link", () => {
+    const { container } = past({ run: run({ status: "paused", ended_at: null }) });
+    expect(container.querySelector("a")).toBeNull();
+    expect(container.querySelector("button")).toBeNull();
+    expect(container.querySelector("[data-tone]")).toHaveClass("bg-orange");
   });
 });
 

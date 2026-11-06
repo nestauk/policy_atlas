@@ -7,6 +7,7 @@ import { useNow } from "../lib/freshness";
 import { createInitialRunStreamState } from "../store";
 import { LiveMark, StatusMark } from "../ui/brand/Card";
 import { cn } from "../ui/brand/cn";
+import { ReconnectingContent } from "../ui/feedback/ReconnectingBanner";
 import { useMountedTraces, useTaskLive } from "./taskLive";
 import {
   isTaskAgentConversation,
@@ -74,7 +75,7 @@ export function onLinkedView(pathname: string, href: string, search = ""): boole
 /** What changed since the last render, so a tab switch can set the status bar at
  *  a cut while a run starting or ending, or the sidebar taking the Task
  *  Agent, still eases it (the animation sweep's entry 9). */
-type Cause = { open: boolean; ticking: boolean; agentInSidebar: boolean; instant: boolean };
+type Cause = { open: boolean; ticking: boolean; agentInSidebar: boolean; reconnecting: boolean; instant: boolean };
 
 /**
  * The run status bar (task 058, owner rounds 7 and 8): under the lifecycle tabs
@@ -112,7 +113,13 @@ export function RunStatusBar() {
   // words, so the status bar steps aside; it returns when the sidebar shuts or
   // shows another conversation (lead, round 8).
   const agentInSidebar = wide && isTaskAgentConversation(activeConversationId, conversations.data?.data ?? []);
-  const open = live !== null && live.tab !== null && live.tab !== "agent" && ticking && !agentInSidebar;
+  const onPage = live !== null && live.tab !== null && live.tab !== "agent";
+  // A lapsed stream takes the bar's frame on every tab but Agent (owner,
+  // round 11): the reconnecting line replaces the bar's words, after the
+  // rail, and the words come back when the stream returns. The Agent tab
+  // shows it at the top of the Task Agent's column instead.
+  const reconnecting = onPage && stream.connectionStatus === "reconnecting";
+  const open = (onPage && ticking && !agentInSidebar) || reconnecting;
   const nowMs = useNow(open);
   const { words, row, paused } = useRunWords(stream, live?.isOwner ?? false);
   const traces = useMountedTraces();
@@ -122,16 +129,22 @@ export function RunStatusBar() {
   // A tab switch is navigation, seen tens of times a day: the status bar opens or
   // closes at a cut then. It eases when the run starts or ends or the
   // sidebar takes the Task Agent (sweep entry 9).
-  const [cause, setCause] = useState<Cause>({ open, ticking, agentInSidebar, instant: true });
+  const [cause, setCause] = useState<Cause>({ open, ticking, agentInSidebar, reconnecting, instant: true });
   if (cause.open !== open) {
     setCause({
       open,
       ticking,
       agentInSidebar,
-      instant: cause.ticking === ticking && cause.agentInSidebar === agentInSidebar,
+      reconnecting,
+      instant:
+        cause.ticking === ticking && cause.agentInSidebar === agentInSidebar && cause.reconnecting === reconnecting,
     });
-  } else if (cause.ticking !== ticking || cause.agentInSidebar !== agentInSidebar) {
-    setCause({ ...cause, ticking, agentInSidebar });
+  } else if (
+    cause.ticking !== ticking ||
+    cause.agentInSidebar !== agentInSidebar ||
+    cause.reconnecting !== reconnecting
+  ) {
+    setCause({ ...cause, ticking, agentInSidebar, reconnecting });
   }
 
   // The step in progress's own view (owner, round 9): "Sources →",
@@ -174,6 +187,11 @@ export function RunStatusBar() {
     setLast(now);
   }
   const shown = now ?? last;
+  // What the frame last said, so it folds away with that line: the
+  // reconnecting line or the bar's words.
+  const [lastReconnecting, setLastReconnecting] = useState(reconnecting);
+  if (open && lastReconnecting !== reconnecting) setLastReconnecting(reconnecting);
+  const showReconnecting = open ? reconnecting : lastReconnecting;
 
   const openTaskAgent = () => {
     if (sidebarAvailable()) {
@@ -196,7 +214,9 @@ export function RunStatusBar() {
         )}
       >
         <div className="min-h-0 overflow-hidden">
-          {shown !== null && (
+          {showReconnecting ? (
+            <ReconnectingContent />
+          ) : shown !== null && (
             // Two controls on one bar (owner, round 9): the words open the
             // Task Agent; the link after the time opens the step's view.
             <div className="flex items-stretch border-b border-line bg-paper text-meta leading-[1.55rem]">

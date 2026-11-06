@@ -30,7 +30,7 @@ import { BRAND_MARK_SIZE } from "../../ui/brand/foldMark";
 import { FoldMarkAnimated } from "../../ui/brand/FoldMarkAnimated";
 import { cn } from "../../ui/brand/cn";
 import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
-import { ReauthRedirect } from "../../ui/feedback";
+import { ReauthRedirect, ReconnectingBanner } from "../../ui/feedback";
 import { Arrival, ArrivalProvider, useArrives, useFirstPaintDone } from "../../ui/motion/arrivals";
 import { prefersReducedMotion } from "../../ui/motion/motion";
 import { useEasedHeight } from "../streamPacing";
@@ -508,20 +508,25 @@ function AnsweredCheckIns({
   ));
 }
 
-/** A past run in the thread: its folded line (status word and wall time)
- *  and the check-ins it answered. The event-log echoes ("Executed a search
+/** A past run in the thread: the ended card (its finish, wall time and
+ *  link, its steps folded when the read carries them; round 11) and the
+ *  check-ins it answered. The event-log echoes ("Executed a search
  *  query × 55", "Recorded a steering decision") that used to sit here are
  *  audit rows for the History tab, not conversation (owner, 2026-11-05). */
 function RunBlock({
+  taskId,
   run,
   stages,
   answered,
   checkIns,
   capability,
+  hasFindings,
 }: {
+  taskId: string;
   run: TaskAgentThreadRun;
   stages: StageEntry[];
   capability?: string | null;
+  hasFindings: boolean;
   answered: ResolvedDecision[];
   checkIns: ReturnType<typeof useCheckIns>["data"];
 }) {
@@ -529,7 +534,7 @@ function RunBlock({
     <div className="space-y-6">
       {/* Its words follow its own run's kind (task 045, A8), never the live stream's. */}
       <Arrival arrivalId={`run:${run.capability_run_id}`}>
-        <PastRunLine run={run} capability={capability} />
+        <PastRunLine run={run} taskId={taskId} capability={capability} hasFindings={hasFindings} />
       </Arrival>
       <AnsweredCheckIns answered={answered} checkIns={checkIns} stages={stages} />
     </div>
@@ -760,6 +765,10 @@ export function TaskAgentPane({
 
   return (
     <section aria-label="Task Agent conversation" className="flex h-full min-h-0 flex-col">
+      {/* A lapsed stream on the Agent tab (owner, round 11): the run status
+          bar's reconnecting line, at the top of this column so it starts
+          after the rail. In the sidebar the page's own bar carries it. */}
+      {!compact && <ReconnectingBanner connectionStatus={stream.connectionStatus} />}
       {/* The scroll region spans the whole pane so its scrollbar sits at the
           pane's edge like every other tab's; the reading column is inside. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -845,6 +854,8 @@ export function TaskAgentPane({
             ) : (
               <RunBlock
                 key={`run-${item.run.capability_run_id}`}
+                taskId={taskId}
+                hasFindings={hasFindings}
                 run={item.run}
                 capability={planQuery.data?.capability}
                 stages={stream.stages}
