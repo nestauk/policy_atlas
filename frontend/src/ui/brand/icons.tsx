@@ -173,6 +173,27 @@ export function ArrowDownIcon(props: IconProps) {
   );
 }
 
+/** Download: an arrow into a tray (the sources' Download CSV, round 12). */
+export function DownloadIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M8 2.5v7.5M4.75 6.75 8 10l3.25-3.25" />
+      <path d="M3 13h10" />
+    </Glyph>
+  );
+}
+
+/** More: a list row's own menu (Rename, Add to project, Archive; owner,
+ *  round 12). Three dots across the grid's middle, drawn as round-capped
+ *  zero-length strokes so they take the module's stroke weight. */
+export function MoreIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M3.5 8h0M8 8h0M12.5 8h0" strokeWidth="2.25" />
+    </Glyph>
+  );
+}
+
 /** Points right; rotate with a class when a disclosure is open. */
 export function ChevronIcon(props: IconProps) {
   return (
@@ -186,6 +207,18 @@ export function CloseIcon(props: IconProps) {
   return (
     <Glyph {...props}>
       <path d="M4 4l8 8M12 4l-8 8" />
+    </Glyph>
+  );
+}
+
+/** About: the "i" after a heading whose tooltip says what the block is
+ *  (the option card's What it would take, round 12). */
+export function InfoIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 7.25v3.75" />
+      <path d="M8 4.9v.1" />
     </Glyph>
   );
 }
