@@ -451,6 +451,7 @@ describe("planSteps (task 058, N18)", () => {
     expect(optionNeedsWords({ id: "refine", label: "Refine it", primary: false })).toBe(true);
     expect(optionNeedsWords({ id: "change", label: "Change", primary: false })).toBe(true);
     expect(optionNeedsWords({ id: "i_have_some", label: "I have some", primary: false })).toBe(true);
+    expect(optionNeedsWords({ id: "my_own_words", label: "Something else", primary: false })).toBe(true);
     expect(optionNeedsWords({ id: "national_too", label: "Also national", primary: false })).toBe(false);
     expect(optionNeedsWords({ id: "confirm", label: "Looks right", primary: true })).toBe(false);
   });

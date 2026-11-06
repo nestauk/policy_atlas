@@ -446,10 +446,11 @@ function EditableChip({
 /**
  * Option ids the planners reserve for "let me say it in my own words"
  * (`task_agent_prompt.py`: refine, change; `task_agent_scoping_prompt.py`:
- * i_have_some). Choosing one opens a short input inside the card with its own
+ * i_have_some, and my_own_words on the settings and constraints parts,
+ * owner round 12). Choosing one opens a short input inside the card with its own
  * Send; every other option is a choice and sends at once.
  */
-const WORDS_OPTION_IDS = new Set(["refine", "change", "i_have_some"]);
+const WORDS_OPTION_IDS = new Set(["refine", "change", "i_have_some", "my_own_words"]);
 
 /** Whether choosing this option asks the user for words rather than sending. */
 export function optionNeedsWords(option: PartOption): boolean {

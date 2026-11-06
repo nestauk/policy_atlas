@@ -55,7 +55,7 @@ from policy_atlas.runtime.task_agent_prompt import (
     PartProposalWire,
 )
 
-TASK_AGENT_SCOPING_PROMPT_VERSION = "task_agent_scoping_v6"
+TASK_AGENT_SCOPING_PROMPT_VERSION = "task_agent_scoping_v7"
 
 # Reasoning model: the cap covers reasoning and output tokens.
 SCOPING_MAX_OUTPUT_TOKENS = 16_384
@@ -650,7 +650,10 @@ already has in mind: exactly two options — id 'none_yet', label "None yet
 — build the longlist from the literature", the primary; id 'i_have_some',
 label "I have some" — after which the user names them in their own
 words), 'depth', 'appetite'. Options per part: 2-4 buttons with exactly
-one primary, except 'depth' which has none.
+one primary, except 'depth' which has none. On 'settings' and
+'constraints' the LAST option is always id 'my_own_words', label
+"Something else", never the primary: choosing it opens a box for the
+user's own words, so never answer that choice with more buttons.
 
 Binding mechanics:
 

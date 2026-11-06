@@ -39,5 +39,5 @@
   "backend/src/policy_atlas/runtime/longlist_verbs_prompt.py": "df6bbff96ecf87b185da7f1e782fbe1881f22c253850ff8eda84da4e1236391c",
   "backend/src/policy_atlas/runtime/option_design_prompt.py": "5e2a957edc580f84670574ddeccd9bbd0528bb26f6ea6607f0249cbece34973c",
   "backend/src/policy_atlas/runtime/task_agent_prompt.py": "1968366ba63adb3e57fc51c3721458a8cb885c236a906da9f26ad9afe81dc722",
-  "backend/src/policy_atlas/runtime/task_agent_scoping_prompt.py": "2b1806a1f8bbfba77a2037664b96db77711b33a0b9656a00f47dfac4912f4425"
+  "backend/src/policy_atlas/runtime/task_agent_scoping_prompt.py": "2249cd15af69d5f71c3febd882d0e3af665ef5f3259bc2770d8796b76ab85ed5"
 }
