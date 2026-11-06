@@ -242,6 +242,15 @@ export interface RunStreamState {
    *  are assigned to them (`characterise.themes`). Absent until then;
    *  cleared when a new run starts (task 058, round 9). */
   liveThemes?: LiveTheme[];
+  /** The longlist walk's options once its clustering has found them, in
+   *  order, before sources are assigned to them (`characterise.themes` with
+   *  `stage: "longlist"`; the residual pass replaces the list). Absent until
+   *  then; cleared when a new run starts (task 058, round 11). */
+  liveOptions?: LiveTheme[];
+  /** The longlist walk's themes once found, in order, before options are
+   *  assigned to them (`characterise.themes` with `stage: "theme"`). Absent
+   *  until then; cleared when a new run starts (task 058, round 11). */
+  liveOptionThemes?: LiveTheme[];
   /** Transient: latest tick per stage. Never sequence-gated, never replayed
    *  (a fresh mount/reconnect starts this slice empty regardless of
    *  cursor). */

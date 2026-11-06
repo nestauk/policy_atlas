@@ -28,6 +28,7 @@ from policy_atlas.api.contract import (
     ClaimOut,
     CoverageBackendDetailOut,
     CoverageOut,
+    CoveragePassOut,
     CoverageQueryOut,
     CoverageSnapshotOut,
     DecisionOut,
@@ -83,6 +84,7 @@ from policy_atlas.api.contract import (
 from policy_atlas.api.contract.read_models import EvaluatedCountryOut, PlaceSentenceOut
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
 from policy_atlas.api.read_models import history
+from policy_atlas.api.stage_vocabulary import activity
 from policy_atlas.core.schema import (
     GROUPING_FACETS,
     OPTION_SHORTLIST_STATES,
@@ -2731,6 +2733,19 @@ def _public_backend_name(value: str) -> str | None:
     return {"openalex": "OpenAlex", "overton": "Overton"}.get(value)
 
 
+#: The search verbs that are passes, not written queries (round 11): the pass
+#: kind and its finished words (``ACTIVITY`` keys, many and one).
+_PASS_WORDS: dict[str, tuple[Literal["citations", "lookup"], str, str]] = {
+    "fetch_citations": (
+        "citations",
+        "search.citations_followed",
+        "search.citations_followed_one",
+    ),
+    "fetch_references": ("lookup", "search.works_looked_up", "search.works_looked_up_one"),
+    "fetch_by_id": ("lookup", "search.documents_looked_up", "search.documents_looked_up_one"),
+}
+
+
 def _acquire_run_ids(
     conn: Connection, task_id: uuid.UUID, evidence_scope_id: uuid.UUID
 ) -> list[uuid.UUID]:
@@ -2812,7 +2827,7 @@ def _backend_details(
     """
     events = (
         conn.execute(
-            select(event_log.c.payload)
+            select(event_log.c.run_id, event_log.c.payload)
             .where(
                 event_log.c.task_id == task_id,
                 event_log.c.run_id.in_(run_ids),
@@ -2824,13 +2839,16 @@ def _backend_details(
             # between identical requests.
             .order_by(event_log.c.sequence)
         )
-        .scalars()
         .all()
         if run_ids
         else []
     )
     queries: dict[str, list[CoverageQueryOut]] = {name: [] for name in backend_names}
-    for payload in events:
+    # Round 11: a citations or lookup pass is many id calls; it is one row,
+    # named in words, in the order the passes ran (one per run, backend and
+    # verb). Before, its calls were listed as queries, their ids as the text.
+    passes: dict[tuple[Any, str, str], tuple[set[str], int]] = {}
+    for run_id, payload in events:
         if not isinstance(payload, Mapping):
             continue
         backend = payload.get("backend")
@@ -2838,7 +2856,21 @@ def _backend_details(
         query, results = payload.get("query"), payload.get("result_count")
         if name not in queries or not isinstance(query, str) or not isinstance(results, int):
             continue
+        verb = payload.get("verb")
+        if verb in _PASS_WORDS:
+            key = (run_id, name, verb)
+            ids, total = passes.get(key, (set(), 0))
+            ids.update(part for part in query.split("|") if part)
+            passes[key] = (ids, total + results)
+            continue
         queries[name].append(CoverageQueryOut(query=query, results=results))
+    pass_rows: dict[str, list[CoveragePassOut]] = {name: [] for name in backend_names}
+    for (_run_id, name, verb), (ids, total) in passes.items():
+        kind, many, one = _PASS_WORDS[verb]
+        words = activity(one) if len(ids) == 1 else activity(many, count=len(ids))
+        pass_rows[name].append(
+            CoveragePassOut.model_validate({"pass": kind, "query": words, "results": total})
+        )
     effective = effective_screen_rows()
     relevance_rows = (
         conn.execute(
@@ -2868,9 +2900,11 @@ def _backend_details(
     return [
         CoverageBackendDetailOut(
             backend=name,
-            results=sum(query.results for query in queries[name]),
+            results=sum(query.results for query in queries[name])
+            + sum(row.results for row in pass_rows[name]),
             relevant=relevant[name],
             queries=queries[name],
+            passes=pass_rows[name],
         )
         for name in backend_names
     ]

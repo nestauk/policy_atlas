@@ -160,6 +160,8 @@ def test_with_two_user_places_three_are_filled(conn: Connection) -> None:
     backend = StubLonglistBackend()
     _, summary = _shortlist(walk, backend)
     assert summary["filled"] == 3 and summary["kept"] == 2
+    # The run page's count is the shortlist after the step, not the places kept.
+    assert summary["shortlisted"] == 5
     states = _states(walk)
     assert states["A"] == states["B"] == ("added_by_you", None)  # user places untouched
     picked = [name for name, (state, _) in states.items() if state == "proposed"]
@@ -314,6 +316,8 @@ def test_suggest_more_fills_up_to_five_or_one_more(
     backend = StubLonglistBackend()
     _, summary = _shortlist(walk, backend, suggest=True)
     assert summary["filled"] == filled
+    # Suggest more keeps the earlier picks, so they count too.
+    assert summary["shortlisted"] == places + filled
     states = _states(walk)
     # The earlier picks stay; the candidates were only the options without a place.
     for i, name in enumerate(names[:places]):
@@ -482,6 +486,7 @@ def test_the_event_carries_the_whole_proposal(conn: Connection) -> None:
     assert summary == {
         "filled": 1,
         "kept": 1,
+        "shortlisted": 2,
         "set_aside": 0,
         "cleared": 0,
         "input_chars": summary["input_chars"],

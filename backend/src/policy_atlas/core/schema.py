@@ -143,6 +143,8 @@ project = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
     Column("visibility", Text, nullable=False, server_default="private"),
+    # When the owner archived it; NULL while in use (task 058, round 11).
+    Column("archived_at", DateTime(timezone=True), nullable=True),
     CheckConstraint("visibility IN ('org', 'private')", name="ck_project_visibility"),
     Index("ix_project_org_visibility", "org_id", "visibility"),
 )

@@ -150,6 +150,28 @@ export function useArchiveTask(taskId: string) {
   });
 }
 
+/** `POST /api/v1/projects/{id}/archive` (task 058, round 11): the owner
+ *  archives a project. It leaves the default Projects list and is listed
+ *  under `status: "archived"`; its tasks are left as they are. Archiving an
+ *  archived project changes nothing. */
+export function useArchiveProject(projectId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error, response } = await client.POST(
+        "/api/v1/projects/{project_id}/archive",
+        { params: { path: { project_id: projectId } } },
+      );
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
 /**
  * `PATCH /api/v1/projects/{id}` — rename, re-describe, or (supplying
  * `visibility`) run the server's i.4 visibility cascade onto every member

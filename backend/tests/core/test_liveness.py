@@ -414,7 +414,7 @@ def test_memory_untouched_for_ten_minutes_expires() -> None:
 
         hub.sweep()
         memory = hub._tasks[TASK]
-        assert list(memory.stages) == ["screen"]
+        assert list(memory.stages) == [("screen", None)]
         assert memory.draft is None
 
         clock.now = MEMORY_TTL_SECONDS * 3
@@ -491,11 +491,11 @@ def test_context_helpers_publish_for_the_bound_task_and_stage(
             )
             liveness.model_call_opened()
             liveness.model_call_opened()
-            assert hub._tasks[TASK].stages["classify"].open_calls == 2
+            assert hub._tasks[TASK].stages[("classify", None)].open_calls == 2
             liveness.model_call_closed()
-            assert hub._tasks[TASK].stages["classify"].open_calls == 1
+            assert hub._tasks[TASK].stages[("classify", None)].open_calls == 1
             liveness.model_call_closed()
-            assert hub._tasks[TASK].stages["classify"].open_calls == 0
+            assert hub._tasks[TASK].stages[("classify", None)].open_calls == 0
         ticks = _ticks(await _drain(queue))
         assert [(t.stage, t.activity, t.done, t.total, t.unit) for t in ticks] == [
             ("classify", "3 of 9 documents", 3, 9, "documents")
@@ -507,7 +507,7 @@ def test_context_helpers_publish_for_the_bound_task_and_stage(
             liveness.publish_verb("Classifying")
             liveness.model_call_opened()
         assert await _drain(queue) == []
-        assert None not in hub._tasks[TASK].stages
+        assert (None, None) not in hub._tasks[TASK].stages
 
     _run(body)
 
@@ -535,7 +535,7 @@ def test_a_held_tick_schedules_one_flush_per_key_and_an_open_call_one_sweep() ->
     # A due flush clears the hold; the timer's sweep reschedules while a call is open.
     clock.now = 1.0
     scheduled[0][1]()
-    assert hub._tasks[TASK].stages["classify"].pending is None
+    assert hub._tasks[TASK].stages[("classify", None)].pending is None
     scheduled[2][1]()
     assert len(scheduled) == 4 and scheduled[3][0] == HEARTBEAT_SECONDS
     hub.call_closed(TASK, "classify")
@@ -977,6 +977,36 @@ def test_themes_are_sent_once_found_and_a_snapshot_sends_the_latest() -> None:
     _run(body)
 
 
+def test_each_clustering_stage_keeps_its_own_names() -> None:
+    """Round 11: the longlist's options and themes sit beside characterise's themes."""
+
+    async def body() -> None:
+        hub, _clock = _hub()
+        queue = await hub.subscribe(TASK)
+        hub.publish_themes(TASK, themes=[("Attendance", None)])
+        hub.publish_themes(TASK, themes=[("Free breakfasts", "In school.")], stage="longlist")
+        sent = await _drain(queue)
+        assert [(m.stage, m.themes) for m in sent if isinstance(m, ThemesFound)] == [
+            ("characterise", (("Attendance", None),)),
+            ("longlist", (("Free breakfasts", "In school."),)),
+        ]
+        await hub.unsubscribe(TASK, queue)
+        # The residual pass sends the whole list again: it replaces the first.
+        hub.publish_themes(
+            TASK, themes=[("Free breakfasts", None), ("Tutoring", None)], stage="longlist"
+        )
+        hub.publish_themes(TASK, themes=[("Food", None)], stage="theme")
+        queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+        await hub.unsubscribe(TASK, queue)
+        assert [(m.stage, m.themes) for m in snapshot if isinstance(m, ThemesFound)] == [
+            ("characterise", (("Attendance", None),)),
+            ("longlist", (("Free breakfasts", None), ("Tutoring", None))),
+            ("theme", (("Food", None),)),
+        ]
+
+    _run(body)
+
+
 def test_queries_and_themes_are_forgotten_with_the_run_and_when_stale() -> None:
     async def body() -> None:
         hub, clock = _hub()
@@ -1026,6 +1056,32 @@ def test_queries_count_as_dropped_on_a_full_queue() -> None:
     _run(body)
 
 
+def test_a_walk_and_its_option_search_keep_their_own_lines_for_one_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Round 11: a tick names its walk, and two walks' ``acquire`` lines never coalesce."""
+
+    async def body() -> None:
+        hub, _clock = _hub()
+        monkeypatch.setattr(liveness, "tick_hub", hub)
+        walk, child = uuid.uuid4(), uuid.uuid4()
+        queue = await hub.subscribe(TASK)
+        with liveness.task_liveness(TASK, stage="acquire", run_id=walk):
+            liveness.publish_progress(activity="the walk's search")
+        with liveness.task_liveness(TASK, stage="acquire", run_id=child):
+            liveness.publish_progress(activity="the option's search")
+        sent = [m for m in await _drain(queue) if isinstance(m, Tick)]
+        # Both go out at once: each walk has its own coalescing window.
+        assert [(m.activity, m.run_id) for m in sent] == [
+            ("the walk's search", walk),
+            ("the option's search", child),
+        ]
+        hub.end_stage(TASK, "acquire", child)
+        assert list(hub._tasks[TASK].stages) == [("acquire", walk)]
+
+    _run(body)
+
+
 def test_context_helpers_publish_queries_and_themes_for_the_bound_task(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1039,7 +1095,9 @@ def test_context_helpers_publish_queries_and_themes_for_the_bound_task(
         with liveness.task_liveness(TASK, stage="acquire"):
             liveness.publish_search_query("openalex", "q", "topic", None)
             liveness.publish_themes([("A", None)])
+            liveness.publish_themes([("B", None)], stage="theme")
         sent = await _drain(queue)
-        assert [type(m) for m in sent] == [SearchQuery, ThemesFound]
+        assert [type(m) for m in sent] == [SearchQuery, ThemesFound, ThemesFound]
+        assert [m.stage for m in sent if isinstance(m, ThemesFound)] == ["characterise", "theme"]
 
     _run(body)

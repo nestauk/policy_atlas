@@ -653,7 +653,9 @@ def _characterise_clustering_policy(*, min_themes: int, max_themes: int) -> Clus
 
 def _publish_themes(labels: list[ClusterLabel]) -> None:
     """Show the themes found while sources are assigned to them (task 058, round 9)."""
-    liveness.publish_themes([(label.label, label.description or None) for label in labels])
+    liveness.publish_themes(
+        [(label.label, label.description or None) for label in labels], stage="characterise"
+    )
 
 
 def _forbidden_theme_reason(index: int, label: str) -> str | None:

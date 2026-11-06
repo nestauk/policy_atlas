@@ -659,6 +659,7 @@ def join_option_searches(
             done=finished,
             total=len(child_ids),
             unit="searches",
+            run_id=parent_id,
         )
         pending = [child for child in child_ids if not _ended(child, statuses.get(child))]
         if not pending or time.monotonic() >= deadline:
@@ -682,6 +683,9 @@ def join_option_searches(
             event_type="component.completed",
             payload={
                 "component": OPTION_SEARCHES_STAGE,
+                # The walk this stage belongs to: the event has no component
+                # run to name it (task 058, round 11).
+                "capability_run_id": str(parent_id),
                 "total": outcome.total,
                 "finished": outcome.finished,
                 "failed": outcome.failed,

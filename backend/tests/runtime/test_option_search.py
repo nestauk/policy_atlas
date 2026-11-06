@@ -316,6 +316,11 @@ def test_a_stub_longlist_walk_fans_out_after_suggest_and_joins_before_the_screen
             ("stage.started", "option_searches"),
             ("stage.completed", "option_searches"),
         ]
+        # Both name the walk (task 058, round 11): the events have no component
+        # run, so a null id would let them through any run filter.
+        assert {frame["capability_run_id"] for frame in frames} == {
+            str(outcome.capability_run_id)
+        }
         # The join's row also counts the sources the children acquired (task
         # 058, N2): the children's own acquire rows, never the parent's.
         parent_runs = {step.run_id for step in outcome.steps}
@@ -734,6 +739,7 @@ def test_the_join_publishes_finished_searches_and_acquired_sources(
                 "done": 2,
                 "total": 3,
                 "unit": "searches",
+                "run_id": parent,
             },
         )
         with engine.connect() as conn:
@@ -745,6 +751,7 @@ def test_the_join_publishes_finished_searches_and_acquired_sources(
             )
         assert completed == {
             "component": "option_searches",
+            "capability_run_id": str(parent),
             "total": 3,
             "finished": 2,
             "failed": 1,

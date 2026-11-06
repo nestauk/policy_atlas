@@ -489,10 +489,12 @@ def test_tick_without_counts_sends_them_as_null() -> None:
         "section",
         "heartbeat",
         "dropped",
+        "capability_run_id",
         "occurred_at",
     }
     assert (data["done"], data["total"], data["unit"]) == (None, None, None)
     assert data["section"] is None
+    assert data["capability_run_id"] is None
     assert data["heartbeat"] is False
     assert data["dropped"] == 0
     stageless = _tick_data(
@@ -501,6 +503,13 @@ def test_tick_without_counts_sends_them_as_null() -> None:
         )
     )
     assert stageless["stage"] is None
+
+
+def test_a_tick_names_its_walk() -> None:
+    """Round 11: an option search's tick carries its own walk, so the page can drop it."""
+    walk = uuid.uuid4()
+    tick = Tick(stage="acquire", activity="Searching", occurred_at=datetime.now(UTC), run_id=walk)
+    assert _tick_data(_encode_ephemeral(tick))["capability_run_id"] == str(walk)
 
 
 def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path) -> None:
@@ -2089,10 +2098,24 @@ def test_encode_ephemeral_names_the_search_query_and_themes_frames() -> None:
     assert encoded.startswith("event: characterise.themes\ndata: ")
     themes = adapter.validate_python(json.loads(encoded.split("data: ", 1)[1]))
     assert isinstance(themes, CharacteriseThemesFrame)
+    assert themes.stage == "characterise"
     assert [(t.label, t.description) for t in themes.themes] == [
         ("Attendance", "Who comes."),
         ("Costs", None),
     ]
+
+    # Round 11: the longlist walk's options and themes use the same frame.
+    encoded = _encode_ephemeral(
+        ThemesFound(
+            themes=(("Free breakfasts", None),),
+            occurred_at=datetime.now(UTC),
+            stage="longlist",
+        )
+    )
+    options = adapter.validate_python(json.loads(encoded.split("data: ", 1)[1]))
+    assert isinstance(options, CharacteriseThemesFrame)
+    assert options.stage == "longlist"
+    assert [t.label for t in options.themes] == ["Free breakfasts"]
 
 
 def test_sse_search_queries_and_themes_stream_and_a_reconnect_gets_them(

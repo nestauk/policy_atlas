@@ -129,6 +129,9 @@ class ProjectOut(BaseModel):
             name, or a rendering derived from their subject when they have no
             identity row yet. **Never an email** (contract § 3b). `None` when
             the row has no owner at all.
+        archived_at: When the owner archived the project, or `None` while it
+            is in use (task 058, round 11). Archiving leaves its tasks as
+            they are.
     """
 
     project_id: uuid.UUID
@@ -139,3 +142,4 @@ class ProjectOut(BaseModel):
     visibility: Visibility
     is_owner: bool
     owner_display: str | None
+    archived_at: datetime | None = None

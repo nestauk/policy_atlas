@@ -285,7 +285,7 @@ def shortlist_scope(
         backend: The model seam (the longlist backend's proposal call).
 
     Returns:
-        ``{"filled", "kept", "set_aside", "cleared", "input_chars",
+        ``{"filled", "kept", "shortlisted", "set_aside", "cleared", "input_chars",
         "document_lines_cut", "baseline_chars_cut", "attempts", "input_tokens",
         "output_tokens"}``; the runner adds ``"component": "shortlist"`` to the
         ``component.completed`` event.
@@ -519,17 +519,19 @@ def shortlist_scope(
         )
         .values(shortlist={"note": note, "provenance": provenance})
     )
-    current_places = conn.execute(
-        select(
-            option.c.option_id,
-            option.c.name,
-            option.c.shortlist_state,
-            option.c.shortlist_reason,
+    current_places = list(
+        conn.execute(
+            select(
+                option.c.option_id,
+                option.c.name,
+                option.c.shortlist_state,
+                option.c.shortlist_reason,
+            )
+            .where(option.c.task_id == task_id)
+            .where(option.c.merged_into_option_id.is_(None))
+            .where(option.c.shortlist_state.in_(("added_by_you", "proposed")))
+            .order_by(option.c.shortlist_state, option.c.name)
         )
-        .where(option.c.task_id == task_id)
-        .where(option.c.merged_into_option_id.is_(None))
-        .where(option.c.shortlist_state.in_(("added_by_you", "proposed")))
-        .order_by(option.c.shortlist_state, option.c.name)
     )
     events.append(
         conn,
@@ -560,6 +562,9 @@ def shortlist_scope(
     summary = {
         "filled": len(picks),
         "kept": len(kept_rows),
+        # The shortlist after the step (the reader's places, the picks and,
+        # for Suggest more, the earlier picks that stay): the run page's count.
+        "shortlisted": len(current_places),
         "set_aside": len(set_aside_rows),
         "cleared": cleared,
         "input_chars": input_chars,

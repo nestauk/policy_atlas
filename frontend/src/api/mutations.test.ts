@@ -9,6 +9,7 @@ import {
   TaskAgentStreamInterruptedError,
   consumeTaskAgentStream,
   taskNameFromQuestion,
+  useArchiveProject,
   useCreateTask,
   useUpdateProject,
   useUpdateTask,
@@ -103,6 +104,40 @@ describe("cross-family cache invalidation (task 033 phase 10a)", () => {
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(["projects"]);
     expect(invalidatedKeys).toContainEqual(["tasks"]);
+  });
+
+  it("useArchiveProject posts the archive route and refreshes the projects (round 11)", async () => {
+    const fetchMock = vi.fn(async (input: Request | string | URL) => {
+      // The request is read back from the mock's calls below.
+      void input;
+      return new Response(
+        JSON.stringify({
+          project_id: "p1",
+          name: "Housing",
+          description: null,
+          created_at: "2026-01-01T00:00:00Z",
+          task_count: 2,
+          visibility: "private",
+          is_owner: true,
+          owner_display: "Ada Lovelace",
+          archived_at: "2026-11-06T10:00:00Z",
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useArchiveProject("p1"), { wrapper: wrapper(queryClient) });
+    result.current.mutate();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const request = fetchMock.mock.calls[0]![0] as Request;
+    expect(request.method).toBe("POST");
+    expect(new URL(request.url).pathname).toBe("/api/v1/projects/p1/archive");
+    expect(result.current.data?.archived_at).toBe("2026-11-06T10:00:00Z");
+    expect(invalidateSpy.mock.calls.map((call) => call[0]?.queryKey)).toContainEqual(["projects"]);
   });
 
   it("useUpdateTask invalidates both the task and project families", async () => {

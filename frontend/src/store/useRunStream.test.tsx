@@ -133,6 +133,7 @@ describe("RunStreamProvider / useRunStream", () => {
   const tick = (stage: "ingest" | "classify"): SseFrame => ({
     type: "tick",
     activity: "Reading full texts",
+    capability_run_id: null,
     stage,
     done: null,
     total: null,

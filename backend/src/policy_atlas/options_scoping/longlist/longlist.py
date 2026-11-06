@@ -1238,6 +1238,17 @@ def _option_policy(max_labels: int) -> ClusteringPolicy:
         log_event_prefix="longlist",
         max_concurrent_batches=MAX_CONCURRENT_BATCHES,
         progress_key="longlist.batches",
+        on_labels=_publish_options,
+    )
+
+
+def _publish_options(labels: list[ClusterLabel]) -> None:
+    """Show the options found while sources are assigned to them (task 058, round 11).
+
+    The residual pass sends the whole list again, which replaces the first.
+    """
+    liveness.publish_themes(
+        [(label.label, label.description or None) for label in labels], stage="longlist"
     )
 
 

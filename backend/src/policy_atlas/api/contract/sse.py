@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from .check_ins import CheckInOut
 from .common import StageKey
-from .runs import RunStatus
+from .runs import RunStatus, StageCount
 from .task_agent import PlanDraft, ScopingPlanDraft
 from .tasks import TaskStatus
 
@@ -69,13 +69,6 @@ class StageStartedFrame(_StageFrameBase):
     stage: StageKey
     label: str
     blurb: str
-
-
-class StageCount(BaseModel):
-    """One count a done row shows, with its noun: `312 found` (task 058, N17)."""
-
-    value: int
-    noun: str
 
 
 class StageCompletedFrame(_StageFrameBase):
@@ -256,6 +249,10 @@ class TickFrame(BaseModel):
             changed.
         dropped: The hub's dropped-tick counter for this task (slow
             subscriber evictions), for the silent-gap measure (N25).
+        capability_run_id: The walk the line belongs to (round 11): a
+            longlist walk's option searches are walks of their own and run
+            the same stages, so the page keeps the tracked walk's lines only.
+            Null when the server could not tell.
     """
 
     type: Literal["tick"]
@@ -268,6 +265,7 @@ class TickFrame(BaseModel):
     section: str | None = None
     heartbeat: bool = False
     dropped: int = 0
+    capability_run_id: uuid.UUID | None = None
     occurred_at: datetime
 
 
@@ -446,16 +444,20 @@ class LiveTheme(BaseModel):
 
 
 class CharacteriseThemesFrame(BaseModel):
-    """Ephemeral: the themes found, before sources are assigned to them (round 9).
+    """Ephemeral: the names a clustering found, before units are assigned (rounds 9, 11).
 
-    Sent once the characterise stage has found its themes, in the order
-    found; the saved characterisation brings them with their document counts
-    when the stage ends. A reconnect gets them again. Display-only: never
-    persisted, no `id:` line, no `sequence`.
+    Sent once a clustering stage has found its names, in the order found:
+    `characterise` its themes (sources into themes), `longlist` its options
+    (sources into options; the residual pass sends the whole list again) and
+    `theme` its themes (options into themes). The saved result brings them
+    with their counts when the stage ends. A reconnect gets each stage's
+    latest again. Display-only: never persisted, no `id:` line, no
+    `sequence`.
     """
 
     type: Literal["characterise.themes"]
     ephemeral: Literal[True] = True
+    stage: Literal["characterise", "longlist", "theme"]
     themes: list[LiveTheme]
     occurred_at: datetime
 

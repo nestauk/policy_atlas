@@ -17,7 +17,10 @@ until the run ends (task 058, round 8). While the search runs, each query is
 passed on as it goes out and again when it comes back, and after the
 characterise stage finds its themes, their names are passed on before the
 sources are assigned to them; the hub keeps both for a newly connected
-browser until the run ends (task 058, round 9).
+browser until the run ends (task 058, round 9). The longlist walk's two
+clusterings pass on their names the same way: the options found while
+sources are assigned to them, then the themes found while options are
+(round 11), each kept under its stage.
 
 Nothing here is saved to the database. The durable record stays in
 ``event_log``; these messages may be lost (a full queue drops its oldest
@@ -67,6 +70,11 @@ type TickSource = Literal["loop", "hook"]
 #: One source as the page names it: ``(source_id, title)``.
 type SourceRef = tuple[str, str]
 type DeltaMode = Literal["append", "replace"]
+#: The stages that publish the names their clustering found (rounds 9 and 11).
+type ThemesStage = Literal["characterise", "longlist", "theme"]
+#: A stage's memory is kept per walk too (round 11): a longlist walk's own
+#: search and its option searches' searches are all ``acquire``.
+type _StageKey = tuple[str | None, uuid.UUID | None]
 type Schedule = Callable[[float, Callable[[], None]], None]
 
 
@@ -85,6 +93,8 @@ class Tick:
         heartbeat: ``True`` when this is a repeat sent while a model call is open.
         dropped: How many messages for this task had been dropped from full
             subscriber queues when this tick was sent.
+        run_id: The walk the line belongs to (a longlist walk's option search
+            is its own walk), or ``None`` when unknown (round 11).
     """
 
     stage: str | None
@@ -96,6 +106,7 @@ class Tick:
     section: str | None = None
     heartbeat: bool = False
     dropped: int = 0
+    run_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,19 +253,24 @@ class SearchQuery:
 
 @dataclass(frozen=True, slots=True)
 class ThemesFound:
-    """The characterise stage's themes, found before sources are assigned to them (round 9).
+    """Names a clustering found, before units are assigned to them (rounds 9 and 11).
 
-    Display-only: the saved characterisation brings the themes with their
-    document counts.
+    The characterise stage's themes (sources into themes), the longlist
+    stage's options (sources into options) and the theme stage's themes
+    (options into themes). Display-only: the saved result brings them with
+    their counts.
 
     Attributes:
         themes: ``(label, description)`` pairs in the order found; the
             description may be ``None``.
         occurred_at: When the message was sent.
+        stage: The stage that found them: ``characterise``, ``longlist`` or
+            ``theme``.
     """
 
     themes: tuple[tuple[str, str | None], ...]
     occurred_at: datetime
+    stage: ThemesStage = "characterise"
 
 
 type HubMessage = (
@@ -320,7 +336,7 @@ class _TaskMemory:
     """Everything the hub keeps for one task."""
 
     run_id: uuid.UUID | None = None
-    stages: dict[str | None, _StageMemory] = field(default_factory=dict)
+    stages: dict[_StageKey, _StageMemory] = field(default_factory=dict)
     draft: _Draft | None = None
     pending_delta: _PendingDelta | None = None
     #: The run's source notes so far, in the order written (round 8).
@@ -330,13 +346,14 @@ class _TaskMemory:
     #: the order first sent; each holds its latest message (round 9).
     search_queries: dict[tuple[str, str, str], SearchQuery] = field(default_factory=dict)
     search_queries_at: float = 0.0
-    #: The characterise stage's themes, once found (round 9).
-    themes: ThemesFound | None = None
+    #: The names each clustering stage found, once found, by stage (rounds 9
+    #: and 11), in the order first found.
+    themes: dict[str, ThemesFound] = field(default_factory=dict)
     themes_at: float = 0.0
 
     def keeps_run_lists(self) -> bool:
         """Whether the run's source notes, search queries or themes are remembered."""
-        return bool(self.source_notes or self.search_queries or self.themes is not None)
+        return bool(self.source_notes or self.search_queries or self.themes)
 
 
 def _now_utc() -> datetime:
@@ -434,8 +451,8 @@ class TickHub:
                     and now - memory.search_queries_at < MEMORY_TTL_SECONDS
                 ):
                     snapshot.extend(memory.search_queries.values())
-                if memory.themes is not None and now - memory.themes_at < MEMORY_TTL_SECONDS:
-                    snapshot.append(memory.themes)
+                if memory.themes and now - memory.themes_at < MEMORY_TTL_SECONDS:
+                    snapshot.extend(memory.themes.values())
                 for stage_memory in memory.stages.values():
                     last = stage_memory.last
                     if last is None or now - stage_memory.updated_at >= MEMORY_TTL_SECONDS:
@@ -509,8 +526,9 @@ class TickHub:
         unit: str | None = None,
         section: str | None = None,
         source: TickSource = "loop",
+        run_id: uuid.UUID | None = None,
     ) -> None:
-        """Publish one activity line, coalesced per task and stage.
+        """Publish one activity line, coalesced per task, walk and stage.
 
         The first tick in a :data:`COALESCE_SECONDS` window is sent at once;
         later ones in the window are held, each replacing the one before, and
@@ -528,6 +546,7 @@ class TickHub:
             section: The section being written, or ``None``.
             source: ``"loop"`` for a stage loop's line, ``"hook"`` for the
                 model-call wrapper's verb.
+            run_id: The walk the line belongs to, or ``None``.
         """
         tick = Tick(
             stage=stage,
@@ -537,11 +556,13 @@ class TickHub:
             total=total,
             unit=unit,
             section=section,
+            run_id=run_id,
         )
+        key: _StageKey = (stage, run_id)
         with self._lock:
             now = self._clock()
             memory = self._tasks.setdefault(task_id, _TaskMemory())
-            entry = memory.stages.setdefault(stage, _StageMemory())
+            entry = memory.stages.setdefault(key, _StageMemory())
             if source == "hook":
                 current_source = (
                     entry.pending_source
@@ -562,31 +583,37 @@ class TickHub:
                 entry.flush_scheduled = True
                 self._schedule(
                     max(entry.pending_due - now, 0.0),
-                    partial(self._timer_flush_stage, task_id, stage),
+                    partial(self._timer_flush_stage, task_id, key),
                 )
 
-    def call_opened(self, task_id: uuid.UUID, stage: str) -> None:
-        """Mark a model call as open for the task and stage (heartbeats start).
+    def call_opened(
+        self, task_id: uuid.UUID, stage: str, run_id: uuid.UUID | None = None
+    ) -> None:
+        """Mark a model call as open for the task, walk and stage (heartbeats start).
 
         Args:
             task_id: The task.
             stage: Public stage key.
+            run_id: The walk, or ``None``.
         """
         with self._lock:
             memory = self._tasks.setdefault(task_id, _TaskMemory())
-            memory.stages.setdefault(stage, _StageMemory()).open_calls += 1
+            memory.stages.setdefault((stage, run_id), _StageMemory()).open_calls += 1
             self._schedule_sweep()
 
-    def call_closed(self, task_id: uuid.UUID, stage: str) -> None:
-        """Mark a model call as closed for the task and stage.
+    def call_closed(
+        self, task_id: uuid.UUID, stage: str, run_id: uuid.UUID | None = None
+    ) -> None:
+        """Mark a model call as closed for the task, walk and stage.
 
         Args:
             task_id: The task.
             stage: Public stage key.
+            run_id: The walk, or ``None``.
         """
         with self._lock:
             memory = self._tasks.get(task_id)
-            entry = memory.stages.get(stage) if memory is not None else None
+            entry = memory.stages.get((stage, run_id)) if memory is not None else None
             if entry is not None and entry.open_calls > 0:
                 entry.open_calls -= 1
 
@@ -828,18 +855,26 @@ class TickHub:
             self._fan_out(task_id, message)
 
     def publish_themes(
-        self, task_id: uuid.UUID, *, themes: Sequence[tuple[str, str | None]]
+        self,
+        task_id: uuid.UUID,
+        *,
+        themes: Sequence[tuple[str, str | None]],
+        stage: ThemesStage = "characterise",
     ) -> None:
-        """Send the themes found, and remember them for a reconnect until the run ends.
+        """Send the names a clustering found, and remember them until the run ends.
+
+        A second message for the same stage replaces the first (the longlist's
+        residual pass sends the whole list again).
 
         Args:
             task_id: The task.
             themes: ``(label, description)`` pairs in the order found.
+            stage: The stage that found them.
         """
-        message = ThemesFound(themes=tuple(themes), occurred_at=_now_utc())
+        message = ThemesFound(themes=tuple(themes), occurred_at=_now_utc(), stage=stage)
         with self._lock:
             memory = self._tasks.setdefault(task_id, _TaskMemory())
-            memory.themes = message
+            memory.themes[stage] = message
             memory.themes_at = self._clock()
             self._fan_out(task_id, message)
 
@@ -907,7 +942,9 @@ class TickHub:
             del self._tasks[task_id]
             self._dropped.pop(task_id, None)
 
-    def end_stage(self, task_id: uuid.UUID, stage: str) -> None:
+    def end_stage(
+        self, task_id: uuid.UUID, stage: str, run_id: uuid.UUID | None = None
+    ) -> None:
         """Forget one stage's tick, held tick and open calls.
 
         Ending ``synthesise`` also forgets the section draft (with its sources,
@@ -921,7 +958,7 @@ class TickHub:
             memory = self._tasks.get(task_id)
             if memory is None:
                 return
-            memory.stages.pop(stage, None)
+            memory.stages.pop((stage, run_id), None)
             if stage == "synthesise":
                 memory.draft = None
                 memory.pending_delta = None
@@ -934,7 +971,7 @@ class TickHub:
         with self._lock:
             now = self._clock()
             for task_id, memory in list(self._tasks.items()):
-                for stage, entry in list(memory.stages.items()):
+                for key, entry in list(memory.stages.items()):
                     if entry.pending is None:
                         continue
                     if now >= entry.pending_due:
@@ -943,7 +980,7 @@ class TickHub:
                         entry.flush_scheduled = True
                         self._schedule(
                             entry.pending_due - now,
-                            partial(self._timer_flush_stage, task_id, stage),
+                            partial(self._timer_flush_stage, task_id, key),
                         )
                 pending = memory.pending_delta
                 if pending is None:
@@ -967,7 +1004,7 @@ class TickHub:
         with self._lock:
             now = self._clock()
             for task_id, memory in list(self._tasks.items()):
-                for stage, entry in list(memory.stages.items()):
+                for key, entry in list(memory.stages.items()):
                     if (
                         entry.open_calls > 0
                         and entry.last is not None
@@ -987,7 +1024,7 @@ class TickHub:
                     if entry.last is not None and now - entry.updated_at >= MEMORY_TTL_SECONDS:
                         entry.last = None
                     if entry.last is None and entry.pending is None and entry.open_calls == 0:
-                        del memory.stages[stage]
+                        del memory.stages[key]
                 draft = memory.draft
                 if draft is not None and now - draft.updated_at >= MEMORY_TTL_SECONDS:
                     memory.draft = None
@@ -1001,8 +1038,8 @@ class TickHub:
                     and now - memory.search_queries_at >= MEMORY_TTL_SECONDS
                 ):
                     memory.search_queries = {}
-                if memory.themes is not None and now - memory.themes_at >= MEMORY_TTL_SECONDS:
-                    memory.themes = None
+                if memory.themes and now - memory.themes_at >= MEMORY_TTL_SECONDS:
+                    memory.themes = {}
                 if (
                     not memory.stages
                     and memory.draft is None
@@ -1097,10 +1134,10 @@ class TickHub:
 
     # Timer callbacks (run on a timer thread) -----------------------------
 
-    def _timer_flush_stage(self, task_id: uuid.UUID, stage: str | None) -> None:
+    def _timer_flush_stage(self, task_id: uuid.UUID, key: _StageKey) -> None:
         with self._lock:
             memory = self._tasks.get(task_id)
-            entry = memory.stages.get(stage) if memory is not None else None
+            entry = memory.stages.get(key) if memory is not None else None
             if entry is not None:
                 entry.flush_scheduled = False
         self.flush()
@@ -1127,25 +1164,33 @@ def _timer_schedule(delay_s: float, fn: Callable[[], None]) -> None:
 
 _task_id: ContextVar[uuid.UUID | None] = ContextVar("liveness_task_id", default=None)
 _stage: ContextVar[str | None] = ContextVar("liveness_stage", default=None)
+_run_id: ContextVar[uuid.UUID | None] = ContextVar("liveness_run_id", default=None)
 tick_hub = TickHub(schedule=_timer_schedule)
 
 
 @contextmanager
-def task_liveness(task_id: uuid.UUID, *, stage: str | None = None) -> Iterator[None]:
-    """Bind the task (and the public stage key, when known) for the publishers below.
+def task_liveness(
+    task_id: uuid.UUID, *, stage: str | None = None, run_id: uuid.UUID | None = None
+) -> Iterator[None]:
+    """Bind the task (and the stage key and walk, when known) for the publishers below.
 
     Args:
         task_id: The task whose work runs inside the block.
         stage: The public stage key, when the block is one stage's work.
+        run_id: The walk the work belongs to, when known: its ticks carry it,
+            so a longlist walk's page can tell its option searches' lines
+            from its own (round 11).
 
     Yields:
         Nothing; the binding lasts until the block exits.
     """
     task_token = _task_id.set(task_id)
     stage_token = _stage.set(stage)
+    run_token = _run_id.set(run_id)
     try:
         yield
     finally:
+        _run_id.reset(run_token)
         _stage.reset(stage_token)
         _task_id.reset(task_token)
 
@@ -1191,6 +1236,7 @@ def publish_progress(
         unit=unit,
         section=section,
         source="loop",
+        run_id=_run_id.get(),
     )
 
 
@@ -1207,7 +1253,9 @@ def publish_verb(activity: str) -> None:
     stage = _stage.get()
     if task_id is None or stage is None:
         return
-    tick_hub.publish_tick(task_id, stage=stage, activity=activity, source="hook")
+    tick_hub.publish_tick(
+        task_id, stage=stage, activity=activity, source="hook", run_id=_run_id.get()
+    )
 
 
 def model_call_opened() -> None:
@@ -1215,7 +1263,7 @@ def model_call_opened() -> None:
     task_id = _task_id.get()
     stage = _stage.get()
     if task_id is not None and stage is not None:
-        tick_hub.call_opened(task_id, stage)
+        tick_hub.call_opened(task_id, stage, _run_id.get())
 
 
 def model_call_closed() -> None:
@@ -1223,7 +1271,7 @@ def model_call_closed() -> None:
     task_id = _task_id.get()
     stage = _stage.get()
     if task_id is not None and stage is not None:
-        tick_hub.call_closed(task_id, stage)
+        tick_hub.call_closed(task_id, stage, _run_id.get())
 
 
 def publish_section_delta(index: int, text: str, *, mode: DeltaMode = "append") -> None:
@@ -1323,15 +1371,18 @@ def publish_search_query(
         )
 
 
-def publish_themes(themes: Sequence[tuple[str, str | None]]) -> None:
-    """Publish the themes found for the bound task (no-op when unbound).
+def publish_themes(
+    themes: Sequence[tuple[str, str | None]], *, stage: ThemesStage = "characterise"
+) -> None:
+    """Publish the names a clustering found for the bound task (no-op when unbound).
 
     Args:
         themes: ``(label, description)`` pairs in the order found.
+        stage: The stage that found them (rounds 9 and 11).
     """
     task_id = _task_id.get()
     if task_id is not None:
-        tick_hub.publish_themes(task_id, themes=themes)
+        tick_hub.publish_themes(task_id, themes=themes, stage=stage)
 
 
 def clear_section_draft() -> None:

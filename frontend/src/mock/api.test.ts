@@ -4,6 +4,7 @@ import { consumeEventStream } from "../api/sse";
 import type { SseFrame } from "../api/sseFrame";
 import { mockFetch, resetMockScenario, setMockMe, setMockPace } from "./api";
 import {
+  STAGE_PRESENTATION,
   MOCK_CHAT_CITATION_CHUNK_ID,
   MOCK_CHAT_CITATION_QUOTE,
   MOCK_CHECK_IN_ID,
@@ -350,6 +351,34 @@ describe("mock API", () => {
       const { data } = await response.json() as { data: { project_id: string }[] };
       expect(data).toHaveLength(1);
       expect(data[0].project_id).toBe(MOCK_PROJECT_ID);
+    });
+
+    it("archives a project: it leaves the default list, is listed as archived, and stays readable (round 11)", async () => {
+      resetMockScenario();
+      const archived = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/archive`, { method: "POST" });
+      expect(archived.status).toBe(200);
+      const stamp = (await archived.json() as { archived_at: string | null }).archived_at;
+      expect(stamp).not.toBeNull();
+      const again = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/archive`, { method: "POST" });
+      expect((await again.json() as { archived_at: string | null }).archived_at).toBe(stamp);
+      const ids = async (status?: string) => {
+        const response = await mockFetch(`http://localhost/api/v1/projects${status === undefined ? "" : `?status=${status}`}`);
+        return ((await response.json()) as { data: { project_id: string }[] }).data.map((row) => row.project_id);
+      };
+      expect(await ids()).toEqual([]);
+      expect(await ids("archived")).toEqual([MOCK_PROJECT_ID]);
+      expect(await ids("all")).toEqual([MOCK_PROJECT_ID]);
+      expect((await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}`)).status).toBe(200);
+    });
+
+    it("the saved coverage names its citation pass in words, beside the written queries (round 11)", async () => {
+      resetMockScenario();
+      const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/coverage`);
+      const coverage = (await response.json()) as {
+        backends_detail: { backend: string; passes?: { pass: string; query: string; results: number }[] }[];
+      };
+      const openalex = coverage.backends_detail.find((detail) => detail.backend === "OpenAlex")!;
+      expect(openalex.passes).toEqual([{ pass: "citations", query: "Followed citations from 50 sources", results: 184 }]);
     });
 
     it("GET /projects/{id} resolves the fixture and 404s for an unknown id", async () => {
@@ -740,7 +769,7 @@ describe("mock API", () => {
       expect(ticks.length).toBeGreaterThan(10);
       for (const entry of ticks) {
         expect(Object.keys(entry).sort()).toEqual(
-          ["activity", "done", "dropped", "ephemeral", "heartbeat", "occurred_at", "section", "stage", "total", "type", "unit"],
+          ["activity", "capability_run_id", "done", "dropped", "ephemeral", "heartbeat", "occurred_at", "section", "stage", "total", "type", "unit"],
         );
         expect(entry.dropped).toBe(0);
         expect(entry).not.toHaveProperty("sequence");
@@ -1081,9 +1110,35 @@ describe("mock API", () => {
 
         const parent = ofType(frames, "stage.started").find((frame) => frame.stage === "inherit")!.capability_run_id!;
         const parentStages = ofType(frames, "stage.started").filter((frame) => frame.capability_run_id === parent);
+        // The walk's own search runs while its option searches do, then the
+        // pooled sources are screened and classified (round 11, as the server).
         expect(parentStages.map((frame) => frame.stage)).toEqual([
-          "inherit", "suggest", "option_searches", "extract_interventions", "longlist", "option_profile", "constrain", "theme", "shortlist",
+          "inherit", "suggest", "option_searches", "acquire", "screen", "classify", "appraise",
+          "extract_interventions", "longlist", "option_profile", "constrain", "theme", "shortlist",
         ]);
+        // Each walk tick names the walk, and none only repeats its row's label
+        // (round 11).
+        const walkTicks = ofType(frames, "tick").filter((frame) => frame.capability_run_id === parent);
+        expect(walkTicks.length).toBeGreaterThan(0);
+        expect(ofType(frames, "tick").every((frame) => frame.capability_run_id === parent || frame.capability_run_id === null)).toBe(true);
+        expect(walkTicks.filter((frame) => frame.stage !== null && frame.activity === STAGE_PRESENTATION[frame.stage][0])).toEqual([]);
+        // The names each clustering found, before its batches (round 11).
+        const names = ofType(frames, "characterise.themes");
+        expect(names.map((frame) => frame.stage)).toEqual(["longlist", "theme"]);
+        expect(names[0]!.themes).toHaveLength(13);
+        expect(names[1]!.themes.map((theme) => theme.label)).toEqual(["Conditionality and support", "A universal offer"]);
+        // The shortlist row counts the shortlist after the step (round 11).
+        const shortlisted = ofType(frames, "stage.completed").find((frame) => frame.stage === "shortlist")!;
+        expect(shortlisted.counts?.[0]?.noun).toBe("shortlisted");
+        // Each walk on the runs read carries its own steps; a child's stay with it.
+        const runs = (await (await mockFetch(`${base}/runs`)).json()) as {
+          data: { capability_run_id: string; stages?: { stage: string; status: string }[] }[];
+        };
+        const walkRun = runs.data.find((run) => run.capability_run_id === parent)!;
+        expect(walkRun.stages?.map((step) => step.stage)).toEqual(parentStages.map((frame) => frame.stage));
+        expect(walkRun.stages?.every((step) => step.status === "completed")).toBe(true);
+        const childRun = runs.data.find((run) => run.capability_run_id !== parent && run.capability_run_id.startsWith("b1000000"))!;
+        expect(childRun.stages?.map((step) => step.stage)).toEqual(["acquire"]);
         expect(parentStages.find((frame) => frame.stage === "option_searches")?.label).toBe("Searching for each option");
 
         const childIds = ofType(frames, "run.status")

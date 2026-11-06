@@ -322,19 +322,30 @@ def test_labels_are_handed_over_after_discovery_and_before_assignment(
     assert order == ["labels", "assign"]
     assert seen == [["A", "B"]]
 
-    # The characterise stage publishes them as the themes found; the others do not.
+    # The characterise stage publishes its themes, the longlist its options and
+    # the theme stage its themes, each under its stage (round 11); grouping
+    # findings publishes nothing.
     from policy_atlas.core import liveness
     from policy_atlas.evidence_search.corpus.characterise import _characterise_clustering_policy
     from policy_atlas.evidence_search.group.group import _group_policy
     from policy_atlas.options_scoping.longlist.longlist import _option_policy
     from policy_atlas.options_scoping.theme.theme import _theme_policy
 
-    published: list[list[tuple[str, str | None]]] = []
-    monkeypatch.setattr(liveness, "publish_themes", lambda themes: published.append(list(themes)))
-    policy = _characterise_clustering_policy(min_themes=2, max_themes=6)
-    assert policy.on_labels is not None
-    policy.on_labels([labels[0], ClusterLabel(label="B", description="")])
-    assert published == [[("A", "Alpha"), ("B", None)]]
+    published: list[tuple[str, list[tuple[str, str | None]]]] = []
+
+    def record(themes: list[tuple[str, str | None]], *, stage: str) -> None:
+        published.append((stage, list(themes)))
+
+    monkeypatch.setattr(liveness, "publish_themes", record)
+    found = [labels[0], ClusterLabel(label="B", description="")]
+    for policy in (
+        _characterise_clustering_policy(min_themes=2, max_themes=6),
+        _option_policy(8),
+        _theme_policy(4),
+    ):
+        assert policy.on_labels is not None
+        policy.on_labels(found)
+    assert published == [
+        (stage, [("A", "Alpha"), ("B", None)]) for stage in ("characterise", "longlist", "theme")
+    ]
     assert _group_policy(unit_count=10).on_labels is None
-    assert _option_policy(8).on_labels is None
-    assert _theme_policy(4).on_labels is None

@@ -30,6 +30,7 @@ import pytest
 from alembic import command
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
@@ -321,7 +322,8 @@ def test_the_revisions_round_trip(engine: Engine) -> None:
 
         command.upgrade(cfg, "head")
         with engine.begin() as conn:
-            assert _current_revision(conn) == REV3
+            # Head, which later revisions may move past rev3.
+            assert _current_revision(conn) == ScriptDirectory.from_config(cfg).get_current_head()
             columns = _columns(conn, "chunk_embedding")
             assert {"embedding", "tokens"} <= set(columns)
             assert "vector" not in columns

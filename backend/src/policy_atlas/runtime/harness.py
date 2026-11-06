@@ -995,14 +995,19 @@ def run_harness(
     # run_harness call dispatches to exactly one node (routed by config.component),
     # and it is the direct caller of node-level component work.
     stage = STAGE_BY_REGISTRY.get(registry_component_for(config.component))
+    # The walk this component run belongs to, so its ticks name it (round 11):
+    # a longlist walk's option searches run the same stages as the walk.
+    walk_id = conn.execute(
+        select(runs.c.capability_run_id).where(runs.c.run_id == run_id)
+    ).scalar_one_or_none()
     try:
         with liveness.task_liveness(
-            task_id, stage=stage
+            task_id, stage=stage, run_id=walk_id
         ), structlog.contextvars.bound_contextvars(
             task_id=str(task_id), run_id=str(run_id), component=config.component,
         ):
             final: HarnessState = graph.invoke(initial)
     finally:
         if stage is not None:
-            liveness.tick_hub.end_stage(task_id, stage)
+            liveness.tick_hub.end_stage(task_id, stage, walk_id)
     return {"summary": final.get("summary"), "error": final.get("error")}

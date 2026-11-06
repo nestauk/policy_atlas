@@ -677,17 +677,40 @@ class CoverageQueryOut(BaseModel):
     results: int
 
 
+class CoveragePassOut(BaseModel):
+    """One citations or lookup pass of a finished search (task 058, round 11).
+
+    Args:
+        pass_: `citations` (the works citing the best-connected sources) or
+            `lookup` (cited works or documents fetched by id). Serialised as
+            `pass`.
+        query: The pass in words, as a finished search names it: "Followed
+            citations from 40 sources", "Looked up 120 cited works",
+            "Looked up 30 cited documents". Never its ids.
+        results: The records the pass's calls returned.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, serialize_by_alias=True)
+
+    pass_: Literal["citations", "lookup"] = Field(alias="pass")
+    query: str
+    results: int
+
+
 class CoverageBackendDetailOut(BaseModel):
     """Post-run source counts for one public backend.
 
     ``relevant`` is deliberately task-wide in C.1; per-query relevance
-    was not recorded and is therefore absent.
+    was not recorded and is therefore absent. ``queries`` are the written
+    searches (topic and semantic); ``passes`` the citations and lookup passes
+    in the order they ran (round 11). ``results`` counts both.
     """
 
     backend: str
     results: int
     relevant: int
     queries: list[CoverageQueryOut] = Field(default_factory=list)
+    passes: list[CoveragePassOut] = Field(default_factory=list)
 
 
 class ChunkContextOut(BaseModel):

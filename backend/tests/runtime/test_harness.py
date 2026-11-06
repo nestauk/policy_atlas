@@ -73,10 +73,12 @@ def test_run_harness_binds_and_ends_the_component_stage(
 ) -> None:
     class _RecordingHub:
         def __init__(self) -> None:
-            self.ended: list[tuple[uuid.UUID, str]] = []
+            self.ended: list[tuple[uuid.UUID, str, uuid.UUID | None]] = []
 
-        def end_stage(self, task_id: uuid.UUID, stage: str) -> None:
-            self.ended.append((task_id, stage))
+        def end_stage(
+            self, task_id: uuid.UUID, stage: str, run_id: uuid.UUID | None = None
+        ) -> None:
+            self.ended.append((task_id, stage, run_id))
 
         def publish_tick(self, task_id: uuid.UUID, **kwargs: Any) -> None:
             pass
@@ -94,7 +96,8 @@ def test_run_harness_binds_and_ends_the_component_stage(
         conn, config=config, task_id=pid, run_id=rid, provider=StubEchoProvider()
     )
 
-    assert hub.ended == [(pid, "acquire")]
+    # The component run has no walk here; a walk's run passes its id (round 11).
+    assert hub.ended == [(pid, "acquire", None)]
 
 
 def test_run_lifecycle_failed_on_component_error(conn: Connection) -> None:

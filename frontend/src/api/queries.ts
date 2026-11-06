@@ -70,9 +70,12 @@ interface TasksQuery {
   page_size?: number;
 }
 
-/** `GET /api/v1/projects` filters (task 033 phase 10a adds `scope`). */
+/** `GET /api/v1/projects` filters (task 033 phase 10a adds `scope`; task
+ *  058 round 11 adds `status`: `active`, the server's default, hides archived
+ *  projects; `archived` lists only those; `all` both). */
 interface ProjectsQuery {
   scope?: "all" | "mine";
+  status?: "active" | "archived" | "all";
   page?: number;
   page_size?: number;
 }

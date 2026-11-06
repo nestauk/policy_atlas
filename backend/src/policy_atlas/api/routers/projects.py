@@ -11,6 +11,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
+import structlog
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import case, func, select, update
 from sqlalchemy.engine import Connection, RowMapping
@@ -40,6 +41,8 @@ from policy_atlas.api.routers.access import (
 )
 from policy_atlas.api.routers.common import resolve_owner_display
 from policy_atlas.core.schema import app_user, project, project_membership, task
+
+log = structlog.get_logger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/projects",
@@ -199,6 +202,7 @@ def _project_out(
         visibility=row["visibility"],
         is_owner=row["owner_user_id"] == user_id,
         owner_display=owner_display,
+        archived_at=row["archived_at"],
     )
 
 
@@ -210,6 +214,9 @@ def list_projects(
     owner_email: Annotated[str | None, Query(max_length=OWNER_EMAIL_MAX)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
+    status_filter: Annotated[
+        Literal["active", "archived", "all"], Query(alias="status")
+    ] = "active",
 ) -> Page[ProjectOut]:
     """List the projects the caller may see, with a derived task count.
 
@@ -225,6 +232,8 @@ def list_projects(
             `tasks.list_tasks`.
         page: 1-indexed page number.
         page_size: Rows per page, server-capped.
+        status_filter: `active` (default: not archived), `archived` or `all`
+            (task 058, round 11), as `GET /tasks` takes it.
 
     Returns:
         One page of projects.
@@ -237,6 +246,10 @@ def list_projects(
         scoped.predicate,
         owner_email_filter(conn, project, user_id=user.user_id, owner_email=owner_email),
     ]
+    if status_filter == "active":
+        where.append(project.c.archived_at.is_(None))
+    elif status_filter == "archived":
+        where.append(project.c.archived_at.is_not(None))
     total = conn.execute(select(func.count()).select_from(project).where(*where)).scalar_one()
     rows = conn.execute(
         select(*project.c, app_user.c.display_name.label("owner_display_name"))
@@ -378,6 +391,53 @@ def get_project(
         counts.get(project_id, 0),
         user_id=user.user_id,
         owner_display=resolve_owner_display(conn, access.row["owner_user_id"]),
+    )
+
+
+@router.post("/{project_id}/archive", response_model=ProjectOut)
+def archive_project(
+    project_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> ProjectOut:
+    """Archive a project (task 058, round 11), as `POST /tasks/{id}/archive` does a task.
+
+    Owner only. The project leaves the default list (`status=active`) and is
+    listed under `status=archived`; it stays readable by id. Its tasks are
+    left as they are: they keep their membership and stay on the Tasks list.
+    Archiving an archived project changes nothing and keeps its first time.
+
+    Args:
+        project_id: The project to archive.
+        user: The authenticated caller.
+        conn: Open database connection.
+
+    Returns:
+        The project with its `archived_at`.
+
+    Raises:
+        HTTPException: 404 when the project is unreadable, 403 when it is
+            readable but not owned.
+    """
+    access = accessible_project(
+        conn, project_id=project_id, user_id=user.user_id, write=True, for_update=True
+    )
+    if access.row["archived_at"] is None:
+        conn.execute(
+            update(project)
+            .where(project.c.project_id == project_id)
+            .values(archived_at=datetime.now(UTC))
+        )
+        log.info("project.archived", project_id=str(project_id), actor=user.user_id)
+    row = conn.execute(
+        select(project).where(project.c.project_id == project_id)
+    ).mappings().one()
+    counts = _task_counts(conn, [project_id], user_id=user.user_id)
+    return _project_out(
+        row,
+        counts.get(project_id, 0),
+        user_id=user.user_id,
+        owner_display=resolve_owner_display(conn, row["owner_user_id"]),
     )
 
 

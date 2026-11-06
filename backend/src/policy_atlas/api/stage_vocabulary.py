@@ -103,7 +103,7 @@ STAGE_COUNTS: dict[StageKey, tuple[tuple[str, str], ...]] = {
     "option_profile": (("profiled", "profiled"),),
     "constrain": (("excluded", "excluded"),),
     "theme": (("themes", "themes"),),
-    "shortlist": (("kept", "shortlisted"),),
+    "shortlist": (("shortlisted", "shortlisted"),),
 }
 
 #: The plain verb shown while a model call of this route step is in flight and
@@ -197,6 +197,14 @@ ACTIVITY: dict[str, str] = {
     "search.lookup_works_one": "Looking up 1 cited work",
     "search.lookup_documents": "Looking up {count:,} cited documents",
     "search.lookup_documents_one": "Looking up 1 cited document",
+    # round 11: the same passes once the search has ended, as the saved
+    # coverage names them
+    "search.citations_followed": "Followed citations from {count:,} sources",
+    "search.citations_followed_one": "Followed citations from 1 source",
+    "search.works_looked_up": "Looked up {count:,} cited works",
+    "search.works_looked_up_one": "Looked up 1 cited work",
+    "search.documents_looked_up": "Looked up {count:,} cited documents",
+    "search.documents_looked_up_one": "Looked up 1 cited document",
     # loops with a known total: "n of M <unit>"
     "screen.full_texts": "reading {done} of {total} full texts for relevance",
     "classify.progress": "{done:,} of {total:,} classified",

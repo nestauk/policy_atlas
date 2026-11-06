@@ -63,6 +63,11 @@ def test_ingest_stage_words_and_registry_mapping() -> None:
     assert stage_for_payload({"component": "ingest_full_text"}) == "ingest"
 
 
+def test_the_shortlist_row_counts_the_shortlist_after_the_step() -> None:
+    """Round 11: the done row reads the shortlist, not the places kept before it."""
+    assert STAGE_COUNTS["shortlist"] == (("shortlisted", "shortlisted"),)
+
+
 def test_every_route_step_has_a_verb() -> None:
     """Every configured model-call step has one fixed activity verb."""
     route_file = Path(__file__).resolve().parents[2] / "src/policy_atlas/model_routes.toml"

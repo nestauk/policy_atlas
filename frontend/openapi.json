@@ -825,7 +825,7 @@
         "type": "object"
       },
       "CharacteriseThemesFrame": {
-        "description": "Ephemeral: the themes found, before sources are assigned to them (round 9).\n\nSent once the characterise stage has found its themes, in the order\nfound; the saved characterisation brings them with their document counts\nwhen the stage ends. A reconnect gets them again. Display-only: never\npersisted, no `id:` line, no `sequence`.",
+        "description": "Ephemeral: the names a clustering found, before units are assigned (rounds 9, 11).\n\nSent once a clustering stage has found its names, in the order found:\n`characterise` its themes (sources into themes), `longlist` its options\n(sources into options; the residual pass sends the whole list again) and\n`theme` its themes (options into themes). The saved result brings them\nwith their counts when the stage ends. A reconnect gets each stage's\nlatest again. Display-only: never persisted, no `id:` line, no\n`sequence`.",
         "properties": {
           "ephemeral": {
             "const": true,
@@ -836,6 +836,15 @@
           "occurred_at": {
             "format": "date-time",
             "title": "Occurred At",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "characterise",
+              "longlist",
+              "theme"
+            ],
+            "title": "Stage",
             "type": "string"
           },
           "themes": {
@@ -853,6 +862,7 @@
         },
         "required": [
           "type",
+          "stage",
           "themes",
           "occurred_at"
         ],
@@ -1948,11 +1958,18 @@
         "type": "object"
       },
       "CoverageBackendDetailOut": {
-        "description": "Post-run source counts for one public backend.\n\n``relevant`` is deliberately task-wide in C.1; per-query relevance\nwas not recorded and is therefore absent.",
+        "description": "Post-run source counts for one public backend.\n\n``relevant`` is deliberately task-wide in C.1; per-query relevance\nwas not recorded and is therefore absent. ``queries`` are the written\nsearches (topic and semantic); ``passes`` the citations and lookup passes\nin the order they ran (round 11). ``results`` counts both.",
         "properties": {
           "backend": {
             "title": "Backend",
             "type": "string"
+          },
+          "passes": {
+            "items": {
+              "$ref": "#/components/schemas/CoveragePassOut"
+            },
+            "title": "Passes",
+            "type": "array"
           },
           "queries": {
             "items": {
@@ -2009,6 +2026,34 @@
           "sentence"
         ],
         "title": "CoverageOut",
+        "type": "object"
+      },
+      "CoveragePassOut": {
+        "description": "One citations or lookup pass of a finished search (task 058, round 11).\n\nArgs:\n    pass_: `citations` (the works citing the best-connected sources) or\n        `lookup` (cited works or documents fetched by id). Serialised as\n        `pass`.\n    query: The pass in words, as a finished search names it: \"Followed\n        citations from 40 sources\", \"Looked up 120 cited works\",\n        \"Looked up 30 cited documents\". Never its ids.\n    results: The records the pass's calls returned.",
+        "properties": {
+          "pass": {
+            "enum": [
+              "citations",
+              "lookup"
+            ],
+            "title": "Pass",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "results": {
+            "title": "Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pass",
+          "query",
+          "results"
+        ],
+        "title": "CoveragePassOut",
         "type": "object"
       },
       "CoverageQueryOut": {
@@ -6252,8 +6297,20 @@
         "type": "object"
       },
       "ProjectOut": {
-        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    description: Current description, or `None` if not set.\n    created_at: When the project was created.\n    task_count: How many active tasks **the caller may read, in the\n        caller's own organisation** are assigned to this project,\n        derived per request and never cached on the row (contract \u00a7 8).\n        A colleague's private member is not counted, and an\n        administrator's count stays their own organisation's count rather\n        than a cross-organisation sum.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all.",
+        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    description: Current description, or `None` if not set.\n    created_at: When the project was created.\n    task_count: How many active tasks **the caller may read, in the\n        caller's own organisation** are assigned to this project,\n        derived per request and never cached on the row (contract \u00a7 8).\n        A colleague's private member is not counted, and an\n        administrator's count stays their own organisation's count rather\n        than a cross-organisation sum.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all.\n    archived_at: When the owner archived the project, or `None` while it\n        is in use (task 058, round 11). Archiving leaves its tasks as\n        they are.",
         "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -6462,7 +6519,7 @@
         "type": "object"
       },
       "RunOut": {
-        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    task_id: Owning task.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.\n    artefact_id: The artefact this walk wrote, or `None` when it wrote\n        none (it has not reached synthesise, or ended before it). A\n        scoping walk that carries one produced a baseline, whatever its\n        terminal status (task 044 review, C5/C6).\n    parent_capability_run_id: The walk that dispatched this one (a longlist\n        walk's option search), or `None` for a parentless walk (task 045).\n    purpose: The walk's intent-record purpose (`baseline`, `longlist`,\n        `targeted`, ...), or `None` for an Evidence search walk.",
+        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    task_id: Owning task.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.\n    artefact_id: The artefact this walk wrote, or `None` when it wrote\n        none (it has not reached synthesise, or ended before it). A\n        scoping walk that carries one produced a baseline, whatever its\n        terminal status (task 044 review, C5/C6).\n    parent_capability_run_id: The walk that dispatched this one (a longlist\n        walk's option search), or `None` for a parentless walk (task 045).\n    purpose: The walk's intent-record purpose (`baseline`, `longlist`,\n        `targeted`, ...), or `None` for an Evidence search walk.\n    stages: The walk's own steps in the order started (task 058, round\n        11), on the list and the one-run reads; empty elsewhere.",
         "properties": {
           "artefact_id": {
             "anyOf": [
@@ -6525,6 +6582,13 @@
             ],
             "title": "Purpose"
           },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/RunStageOut"
+            },
+            "title": "Stages",
+            "type": "array"
+          },
           "started_at": {
             "format": "date-time",
             "title": "Started At",
@@ -6558,6 +6622,116 @@
           "started_at"
         ],
         "title": "RunOut",
+        "type": "object"
+      },
+      "RunStageOut": {
+        "description": "One step of a walk, as its stage frames told it (task 058, round 11).\n\nThe walk's own steps only: an option search's steps belong to that child\nwalk, not to the longlist walk that dispatched it. The same words the\n`stage.started` and `stage.completed` frames carry, so a walk that has\nended renders its rows as the live one did.\n\nArgs:\n    stage: The public stage key.\n    label: The row's label.\n    status: `started` (no end recorded), `completed`, `failed` or\n        `skipped`.\n    started_at: When the step started, or `None` when only its end is\n        recorded.\n    ended_at: When it ended, or `None` while started.\n    summary: The done row's scalar counts (`stage.completed.summary`),\n        or `{\"reason\": ...}` for a failed or skipped step.\n    counts: The counts the done row shows, each with its noun.\n    seconds: The step's wall time, when recorded.",
+        "properties": {
+          "counts": {
+            "items": {
+              "$ref": "#/components/schemas/StageCount"
+            },
+            "title": "Counts",
+            "type": "array"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "stage": {
+            "enum": [
+              "acquire",
+              "screen",
+              "classify",
+              "appraise",
+              "ingest",
+              "characterise",
+              "select",
+              "extract",
+              "group",
+              "synthesise",
+              "inherit",
+              "suggest",
+              "option_searches",
+              "extract_interventions",
+              "longlist",
+              "option_profile",
+              "constrain",
+              "theme",
+              "shortlist"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "started",
+              "completed",
+              "failed",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "required": [
+          "stage",
+          "label",
+          "status"
+        ],
+        "title": "RunStageOut",
         "type": "object"
       },
       "RunStatusFrame": {
@@ -9358,11 +9532,24 @@
         "type": "object"
       },
       "TickFrame": {
-        "description": "Ephemeral activity frame (task 058, D2): what the model is doing now.\n\nNever persisted, never state-bearing, carries no `id:` line \u2014 so it has\nno `sequence` field at all (unlike every other frame type). One set of\nfields for every stage.\n\nArgs:\n    stage: The stage the activity belongs to.\n    activity: The activity line, in the server's plain voice; the client\n        shows it as it is.\n    done: Items finished so far, or null when the stage has no honest\n        count (no total known before its loop started).\n    total: The total known before the loop started, or null.\n    unit: What `done` and `total` count (`documents`, `batches`,\n        `searches`, `sections`), or null with no count.\n    section: The writer's section line (\"Section 3 of 7 \u00b7 Costs\"), or\n        null outside writing.\n    heartbeat: True when the hub repeated the current tick because a\n        model call is still in flight (every 10 s), not because anything\n        changed.\n    dropped: The hub's dropped-tick counter for this task (slow\n        subscriber evictions), for the silent-gap measure (N25).",
+        "description": "Ephemeral activity frame (task 058, D2): what the model is doing now.\n\nNever persisted, never state-bearing, carries no `id:` line \u2014 so it has\nno `sequence` field at all (unlike every other frame type). One set of\nfields for every stage.\n\nArgs:\n    stage: The stage the activity belongs to.\n    activity: The activity line, in the server's plain voice; the client\n        shows it as it is.\n    done: Items finished so far, or null when the stage has no honest\n        count (no total known before its loop started).\n    total: The total known before the loop started, or null.\n    unit: What `done` and `total` count (`documents`, `batches`,\n        `searches`, `sections`), or null with no count.\n    section: The writer's section line (\"Section 3 of 7 \u00b7 Costs\"), or\n        null outside writing.\n    heartbeat: True when the hub repeated the current tick because a\n        model call is still in flight (every 10 s), not because anything\n        changed.\n    dropped: The hub's dropped-tick counter for this task (slow\n        subscriber evictions), for the silent-gap measure (N25).\n    capability_run_id: The walk the line belongs to (round 11): a\n        longlist walk's option searches are walks of their own and run\n        the same stages, so the page keeps the tracked walk's lines only.\n        Null when the server could not tell.",
         "properties": {
           "activity": {
             "title": "Activity",
             "type": "string"
+          },
+          "capability_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Capability Run Id"
           },
           "done": {
             "anyOf": [
@@ -10212,7 +10399,7 @@
     },
     "/api/v1/projects": {
       "get": {
-        "description": "List the projects the caller may see, with a derived task count.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows, and for an administrator every\n        row in every organisation \u2014 or `mine` for owner-only.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`, as does a value longer\n        than `OWNER_EMAIL_MAX` or one carrying no `@` \u2014 see\n        `tasks.list_tasks`.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n\nReturns:\n    One page of projects.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
+        "description": "List the projects the caller may see, with a derived task count.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows, and for an administrator every\n        row in every organisation \u2014 or `mine` for owner-only.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`, as does a value longer\n        than `OWNER_EMAIL_MAX` or one carrying no `@` \u2014 see\n        `tasks.list_tasks`.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n    status_filter: `active` (default: not archived), `archived` or `all`\n        (task 058, round 11), as `GET /tasks` takes it.\n\nReturns:\n    One page of projects.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
         "operationId": "list_projects_api_v1_projects_get",
         "parameters": [
           {
@@ -10267,6 +10454,21 @@
               "minimum": 1,
               "title": "Page Size",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "active",
+              "enum": [
+                "active",
+                "archived",
+                "all"
+              ],
+              "title": "Status",
+              "type": "string"
             }
           }
         ],
@@ -10449,6 +10651,55 @@
           }
         ],
         "summary": "Update Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/archive": {
+      "post": {
+        "description": "Archive a project (task 058, round 11), as `POST /tasks/{id}/archive` does a task.\n\nOwner only. The project leaves the default list (`status=active`) and is\nlisted under `status=archived`; it stays readable by id. Its tasks are\nleft as they are: they keep their membership and stay on the Tasks list.\nArchiving an archived project changes nothing and keeps its first time.\n\nArgs:\n    project_id: The project to archive.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The project with its `archived_at`.\n\nRaises:\n    HTTPException: 404 when the project is unreadable, 403 when it is\n        readable but not owned.",
+        "operationId": "archive_project_api_v1_projects__project_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Archive Project",
         "tags": [
           "projects"
         ]

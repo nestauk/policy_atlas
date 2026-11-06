@@ -83,11 +83,15 @@ class _RecordingHub:
     def publish_tick(self, task_id: uuid.UUID, **kwargs: Any) -> None:
         self.events.append(("verb", {"task_id": task_id, **kwargs}))
 
-    def call_opened(self, task_id: uuid.UUID, stage: str) -> None:
-        self.events.append(("opened", {"task_id": task_id, "stage": stage}))
+    def call_opened(
+        self, task_id: uuid.UUID, stage: str, run_id: uuid.UUID | None = None
+    ) -> None:
+        self.events.append(("opened", {"task_id": task_id, "stage": stage, "run_id": run_id}))
 
-    def call_closed(self, task_id: uuid.UUID, stage: str) -> None:
-        self.events.append(("closed", {"task_id": task_id, "stage": stage}))
+    def call_closed(
+        self, task_id: uuid.UUID, stage: str, run_id: uuid.UUID | None = None
+    ) -> None:
+        self.events.append(("closed", {"task_id": task_id, "stage": stage, "run_id": run_id}))
 
 
 def _timeout() -> openai.APITimeoutError:
@@ -299,6 +303,8 @@ def test_liveness_hooks_publish_the_step_verb_and_bracket_the_call(
         "stage": "classify",
         "activity": "Classifying",
         "source": "hook",
+        # No walk bound here; a walk's component run binds its id (round 11).
+        "run_id": None,
     }
     assert all("done" not in payload for _event, payload in hub.events)
     assert all("total" not in payload for _event, payload in hub.events)

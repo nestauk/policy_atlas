@@ -299,3 +299,54 @@ def test_omitting_project_ids_leaves_membership_unchanged(tmp_path: Path) -> Non
         assert renamed.status_code == 200, renamed.text
         assert renamed.json()["name"] == "Renamed only"
         assert renamed.json()["project_ids"] == [project_id]
+
+
+def test_an_archived_project_leaves_the_default_list_and_keeps_its_tasks(
+    tmp_path: Path,
+) -> None:
+    """Task 058, round 11: archive hides a project by default; its tasks stay."""
+    with api_client(tmp_path) as (client, owner, other):
+        kept = client.post("/api/v1/projects", headers=owner, json={"name": "Kept"}).json()
+        gone = client.post("/api/v1/projects", headers=owner, json={"name": "Gone"}).json()
+        assert gone["archived_at"] is None
+        task_id = create_task(client, owner)
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}",
+            headers=owner,
+            json={"project_ids": [gone["project_id"]]},
+        )
+        assert patched.status_code == 200, patched.text
+
+        archived = client.post(f"/api/v1/projects/{gone['project_id']}/archive", headers=owner)
+        assert archived.status_code == 200, archived.text
+        stamp = archived.json()["archived_at"]
+        assert stamp is not None
+        assert archived.json()["task_count"] == 1
+        # Again: nothing changes, the first time stands.
+        again = client.post(f"/api/v1/projects/{gone['project_id']}/archive", headers=owner)
+        assert again.status_code == 200 and again.json()["archived_at"] == stamp
+
+        def names(status: str | None) -> list[str]:
+            params = {} if status is None else {"status": status}
+            listed = client.get("/api/v1/projects", headers=owner, params=params)
+            assert listed.status_code == 200, listed.text
+            return sorted(row["name"] for row in listed.json()["data"])
+
+        assert names(None) == ["Kept"]
+        assert names("active") == ["Kept"]
+        assert names("archived") == ["Gone"]
+        assert names("all") == ["Gone", "Kept"]
+        assert kept["archived_at"] is None
+
+        # Still readable by id, and its task is untouched.
+        assert client.get(f"/api/v1/projects/{gone['project_id']}", headers=owner).json()[
+            "archived_at"
+        ] == stamp
+        task = client.get(f"/api/v1/tasks/{task_id}", headers=owner).json()
+        assert task["status"] == "active"
+        assert task["project_ids"] == [gone["project_id"]]
+
+        # Someone who cannot read it gets the opaque 404 and changes nothing.
+        refused = client.post(f"/api/v1/projects/{kept['project_id']}/archive", headers=other)
+        assert refused.status_code == 404
+        assert names(None) == ["Kept"]

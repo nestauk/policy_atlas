@@ -321,6 +321,8 @@ export function resetMockScenario() {
   for (const optionId of mockLonglistExtraOptionIds.splice(0)) delete mockLonglistOptionCards[optionId];
   resetMockLonglistWalks();
   resetMockShortlist();
+  mockWalkStages = {};
+  mockWalkStageFramesSeen = new Set();
 }
 
 function currentMockScenario(requestUrl: URL): MockScenario {
@@ -720,7 +722,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/runs`)) {
     // Newest first, as the API lists them: the longlist walks (task 045)
     // were all opened after the baseline walk.
-    const walks = [...mockLonglistWalks, ...(currentRun ? [currentRun] : [])];
+    const walks = [...mockLonglistWalks, ...(currentRun ? [currentRun] : [])].map(withStages);
     // `parentless` (A13): the task's own walks only, never an option search.
     const parentless = url.searchParams.get("parentless") === "true";
     return json(
@@ -750,7 +752,24 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
 
   // --- Identity + projects (task 033 phase 10a) -------------------------
   if (method === "GET" && path.endsWith("/api/v1/me")) return json(currentMe);
-  if (method === "GET" && path.endsWith("/api/v1/projects")) return json(page(mockProjects));
+  if (method === "GET" && path.endsWith("/api/v1/projects")) {
+    // `status` (task 058, round 11): active by default, as the server lists.
+    const status = url.searchParams.get("status") ?? "active";
+    const listed = mockProjects.filter((project) =>
+      status === "all" ? true : status === "archived" ? project.archived_at != null : project.archived_at == null,
+    );
+    return json(page(listed));
+  }
+  const projectArchiveMatch = /\/api\/v1\/projects\/([^/]+)\/archive$/.exec(path);
+  if (method === "POST" && projectArchiveMatch) {
+    const found = mockProjects.find((project) => project.project_id === projectArchiveMatch[1]);
+    if (found === undefined) return json({ detail: "resource not found" }, 404);
+    if (!found.is_owner) return json({ error: { code: "forbidden", message: "action is not permitted" } }, 403);
+    // Again changes nothing; the first time stands. Its tasks are untouched.
+    const archived = { ...found, archived_at: found.archived_at ?? new Date().toISOString() };
+    mockProjects = mockProjects.map((project) => (project.project_id === archived.project_id ? archived : project));
+    return json(archived);
+  }
   const projectDetailMatch = /\/api\/v1\/projects\/([^/]+)$/.exec(path);
   if (method === "GET" && projectDetailMatch) {
     const found = mockProjects.find((project) => project.project_id === projectDetailMatch[1]);
@@ -1322,7 +1341,10 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
   return new ReadableStream<Uint8Array>({
     async start(controller) {
       await runStarted.promise;
-      const emit = (frame: SseFrame) => controller.enqueue(encoder.encode(toSse(frame)));
+      const emit = (frame: SseFrame) => {
+        recordWalkStage(frame);
+        controller.enqueue(encoder.encode(toSse(frame)));
+      };
 
       if (mockTask.capability === "options_scoping") {
         await scopingBaselineWalk(emit, nextSequence);
@@ -1419,7 +1441,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       emitTick(tick("characterise", "Finding themes"));
       emitTick(tick("characterise", "Finding themes", { heartbeat: true }));
       await wait(MOCK_TICK_MS);
-      emitTick({ type: "characterise.themes", ephemeral: true, themes: mockLiveThemes, occurred_at: frameTime() });
+      emitTick({ type: "characterise.themes", ephemeral: true, stage: "characterise", themes: mockLiveThemes, occurred_at: frameTime() });
       for (const done of [1, 2, 3]) {
         emitTick(tick("characterise", `Assigning themes · batch ${done} of 3`, { done, total: 3, unit: "batches" }));
         await wait(MOCK_TICK_MS);
@@ -1630,7 +1652,7 @@ function sectionLine(index: number): string {
 function tick(
   stage: StageKey,
   activity: string,
-  extra: { done?: number; total?: number; unit?: string; section?: string; heartbeat?: boolean } = {},
+  extra: { done?: number; total?: number; unit?: string; section?: string; heartbeat?: boolean; runId?: string | null } = {},
 ): SseFrame {
   return {
     type: "tick",
@@ -1643,6 +1665,8 @@ function tick(
     section: extra.section ?? null,
     heartbeat: extra.heartbeat ?? false,
     dropped: 0,
+    // The walk the line belongs to (round 11); null applies to any walk.
+    capability_run_id: extra.runId ?? null,
     occurred_at: frameTime(),
   };
 }
@@ -1917,6 +1941,40 @@ function mockFinishedWalkLonglist(): components["schemas"]["LonglistOut"] {
 let mockScopingPlanVersion = 1;
 /** The longlist walks opened so far, newest first. */
 let mockLonglistWalks: RunOut[] = [];
+
+/** Each walk's steps as its stage frames told them, for `RunOut.stages`
+ *  (task 058, round 11): folded as the server folds them, a child's steps
+ *  under the child. A frame seen before (a second connection replaying the
+ *  same script) changes nothing. */
+let mockWalkStages: Record<string, RunOut["stages"]> = {};
+let mockWalkStageFramesSeen = new Set<string>();
+
+function recordWalkStage(frame: SseFrame) {
+  if (frame.type !== "stage.started" && frame.type !== "stage.completed" && frame.type !== "stage.failed") return;
+  const walk = frame.capability_run_id;
+  if (walk == null) return;
+  const key = `${walk}:${frame.type}:${frame.stage}:${frame.sequence}`;
+  if (mockWalkStageFramesSeen.has(key)) return;
+  mockWalkStageFramesSeen.add(key);
+  const entries = [...(mockWalkStages[walk] ?? [])];
+  if (frame.type === "stage.started") {
+    entries.push({ stage: frame.stage, label: frame.label, status: "started", started_at: frame.occurred_at, ended_at: null, summary: {}, counts: [], seconds: null });
+  } else {
+    const ended: NonNullable<RunOut["stages"]>[number] =
+      frame.type === "stage.completed"
+        ? { stage: frame.stage, label: frame.label, status: "completed", started_at: null, ended_at: frame.occurred_at, summary: frame.summary ?? {}, counts: frame.counts ?? [], seconds: frame.seconds ?? null }
+        : { stage: frame.stage, label: frame.label, status: frame.skipped ? "skipped" : "failed", started_at: null, ended_at: frame.occurred_at, summary: { reason: frame.reason }, counts: [], seconds: null };
+    const open = entries.findLastIndex((entry) => entry.stage === frame.stage && entry.status === "started");
+    if (open === -1) entries.push(ended);
+    else entries[open] = { ...ended, started_at: entries[open].started_at };
+  }
+  mockWalkStages = { ...mockWalkStages, [walk]: entries };
+}
+
+/** A walk as `GET /runs` lists it: with its steps. */
+function withStages(walk: RunOut): RunOut {
+  return { ...walk, stages: mockWalkStages[walk.capability_run_id] ?? [] };
+}
 /** Walks opened but not yet streamed. */
 let mockLonglistPending: string[] = [];
 let mockLonglistWake = createDeferred();
@@ -2013,7 +2071,18 @@ async function mockLonglistWalk(
   emit: (frame: SseFrame) => void,
   nextSequence: () => number,
 ) {
-  const counts = mockWalkLonglist(foldMockOptionRows(seedMockOptionRows()), "shortlist").counts;
+  const finalList = mockWalkLonglist(foldMockOptionRows(seedMockOptionRows()), "shortlist");
+  const counts = finalList.counts;
+  /** The names a clustering found, sent before its batches (round 11). */
+  const names = (stage: "longlist" | "theme", found: { name: string; description?: string | null }[]) => {
+    emit({
+      type: "characterise.themes",
+      ephemeral: true,
+      stage,
+      themes: found.map((entry) => ({ label: entry.name, description: entry.description ?? null })),
+      occurred_at: frameTime(),
+    });
+  };
   const planVersion = mockLonglistWalks.find((walk) => walk.capability_run_id === walkId)?.plan_version ?? 1;
   const begin = (stage: StageKey) => {
     emit(stageStarted(stage, nextSequence(), walkId));
@@ -2022,10 +2091,17 @@ async function mockLonglistWalk(
   const finish = (stage: StageKey, summary: Record<string, number>) =>
     emit(stageCompleted(stage, summary, nextSequence(), walkId));
   /** A stage that only ticks: one tick per line, then the stage completes. */
-  const runStage = async (stage: StageKey, lines: StageTick[], summary: Record<string, number>, onDone?: () => void) => {
+  const runStage = async (
+    stage: StageKey,
+    lines: StageTick[],
+    summary: Record<string, number>,
+    onDone?: () => void,
+    onStart?: () => void,
+  ) => {
     begin(stage);
+    onStart?.();
     for (const line of lines) {
-      emit(tick(stage, line.activity, line));
+      emit(tick(stage, line.activity, { ...line, runId: walkId }));
       await pace(MOCK_TICK_MS);
     }
     onDone?.();
@@ -2034,13 +2110,24 @@ async function mockLonglistWalk(
 
   emit(runStatus("running", nextSequence(), walkId));
   await pace(1200);
-  await runStage("inherit", [{ activity: "Reading the linked search" }], { documents: 42, links: 1 });
-  await runStage("suggest", [{ activity: "Suggesting options" }], { suggested: MOCK_OPTION_COUNT, from_report: 2 }, () => {
+  // No line that only repeats the row's label (round 11): these steps send none.
+  await runStage("inherit", [], { documents: 42, links: 1 });
+  await runStage("suggest", [], { suggested: MOCK_OPTION_COUNT, from_report: 2 }, () => {
     mockOptionRows = seedMockOptionRows();
   });
 
   // The option searches: one child walk per option, run through a pool of ten.
+  // While they run, the walk runs its own broad search, as the server's walk
+  // does between the fan-out and the join (task 058, round 11): two rows live
+  // at once, both the walk's.
   begin("option_searches");
+  const ownSearch = (async () => {
+    emit(stageStarted("acquire", nextSequence(), walkId));
+    await pace(MOCK_TICK_MS);
+    emit(tick("acquire", "keeping 120 of 240 candidates", { done: 120, total: 240, unit: "candidates", runId: walkId }));
+    await pace(MOCK_TICK_MS);
+    emit(stageCompleted("acquire", { acquired: 240 }, nextSequence(), walkId));
+  })();
   const patchRow = (index: number, patch: Partial<components["schemas"]["OptionProgressOut"]>) => {
     mockOptionRows = mockOptionRows.map((row, at) => (at === index ? { ...row, ...patch } : row));
   };
@@ -2094,6 +2181,7 @@ async function mockLonglistWalk(
         done: finished,
         total: MOCK_OPTION_COUNT,
         unit: "searches",
+        runId: walkId,
       }));
       return;
     }
@@ -2111,6 +2199,7 @@ async function mockLonglistWalk(
       done: finished,
       total: MOCK_OPTION_COUNT,
       unit: "searches",
+      runId: walkId,
     }));
   };
   const worker = async () => {
@@ -2120,8 +2209,12 @@ async function mockLonglistWalk(
       await searchOption(index);
     }
   };
-  await Promise.all(Array.from({ length: 10 }, worker));
+  await Promise.all([...Array.from({ length: 10 }, worker), ownSearch]);
   finish("option_searches", { total: MOCK_OPTION_COUNT, finished, failed, sources });
+  // After the join, the walk screens and classifies the pooled sources.
+  await runStage("screen", [{ activity: "screening 400 of 2,410 abstracts", done: 400, total: 2410, unit: "abstracts" }], { relevant: 2410 });
+  await runStage("classify", [{ activity: "1,200 of 2,410 classified", done: 1200, total: 2410, unit: "documents" }], { classified: 2410 });
+  await runStage("appraise", [], {});
 
   await runStage("extract_interventions", [
     { activity: "900 of 2,410 abstracts read", done: 900, total: 2410, unit: "documents" },
@@ -2135,7 +2228,7 @@ async function mockLonglistWalk(
     mockOptionRows = foldMockOptionRows(mockOptionRows);
     mockLonglistWalkStage = "longlist";
     mockLonglistBuilding = false;
-  });
+  }, () => names("longlist", finalList.options ?? []));
   await runStage("option_profile", [
     { activity: "Typing options · batch 1 of 1", done: 1, total: 1, unit: "batches" },
     { activity: `Writing place sentences · ${counts.options} of ${counts.options} options`, done: counts.options, total: counts.options, unit: "options" },
@@ -2151,13 +2244,13 @@ async function mockLonglistWalk(
     { activity: "Assigning options to themes · batch 1 of 1", done: 1, total: 1, unit: "batches" },
   ], { themes: counts.themes }, () => {
     mockLonglistWalkStage = "theme";
-  });
+  }, () => names("theme", finalList.themes ?? []));
   // Hold the themed build a moment, so it can be seen before the shortlist.
   await pace(1500);
   const placed = Object.values(mockLonglistOptionCards).filter(
     (option) => option.shortlist?.state === "proposed" || option.shortlist?.state === "added_by_you",
   ).length;
-  await runStage("shortlist", [{ activity: "Choosing the shortlist" }], { kept: placed }, () => {
+  await runStage("shortlist", [{ activity: "Choosing the shortlist" }], { shortlisted: placed }, () => {
     mockLonglistWalkStage = "shortlist";
   });
   // The walk is over: the finished longlist takes over, the same options the

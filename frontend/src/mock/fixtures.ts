@@ -61,7 +61,7 @@ export const STAGE_COUNTS: Record<StageKey, ReadonlyArray<readonly [string, stri
   option_profile: [["profiled", "profiled"]],
   constrain: [["excluded", "excluded"]],
   theme: [["themes", "themes"]],
-  shortlist: [["kept", "shortlisted"]],
+  shortlist: [["shortlisted", "shortlisted"]],
 };
 
 /** The card row each stage belongs to: classify and appraise share one row;
@@ -184,6 +184,7 @@ export const mockProject: components["schemas"]["ProjectOut"] = {
   visibility: "org",
   is_owner: true,
   owner_display: "Ada Lovelace",
+  archived_at: null,
 };
 
 /**
@@ -960,13 +961,16 @@ export const mockCoverage: components["schemas"]["CoverageOut"] = {
       // The real coverage read model serves PUBLIC backend names — the
       // fixture matches so the label mapping is exercised as shipped.
       backend: "OpenAlex",
-      results: 86,
+      results: 270,
       relevant: 30,
       queries: [
         { query: "childhood obesity school intervention UK", results: 34 },
         { query: "primary school food environment obesity", results: 28 },
         { query: "active travel school children obesity", results: 24 },
       ],
+      // The live search's citations pass, worded for a finished search
+      // (round 11): the saved coverage names its passes in the order run.
+      passes: [{ pass: "citations", query: "Followed citations from 50 sources", results: 184 }],
     },
     {
       backend: "Overton",
@@ -976,6 +980,7 @@ export const mockCoverage: components["schemas"]["CoverageOut"] = {
         { query: "Tower Hamlets school food policy", results: 19 },
         { query: "UK childhood obesity local strategy", results: 23 },
       ],
+      passes: [],
     },
   ],
 };

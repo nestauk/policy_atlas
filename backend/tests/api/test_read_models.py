@@ -2618,3 +2618,72 @@ def test_strength_sort_puts_unrated_after_scored_and_before_unappraised() -> Non
         tiers = [item.appraisal_tier for item, _score in ordered]
         scored = ["Weak", "Very strong"] if direction == "asc" else ["Very strong", "Weak"]
         assert tiers == [*scored, "Unrated", None]
+
+
+def test_coverage_names_each_citation_and_lookup_pass_in_words(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Task 058, round 11: a pass is one row in words, never its ids as queries.
+
+    The id calls of one pass (one run, backend and verb) fold into one row,
+    counted by distinct ids, in the order the passes ran; the written
+    queries stay as they were and ``results`` counts both.
+    """
+    with api_client(tmp_path) as (client, owner, _other):
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_read_model_ladder(engine, task_id)
+        try:
+            with engine.begin() as conn:
+                run_id = conn.execute(
+                    select(search_coverage_record.c.acquired_by_run_id).where(
+                        search_coverage_record.c.task_id == task_id
+                    )
+                ).scalar_one()
+                conn.execute(
+                    update(search_coverage_record)
+                    .where(search_coverage_record.c.task_id == task_id)
+                    .values(
+                        backends=[
+                            {"backend": "openalex", "trust_class": "academic"},
+                            {"backend": "overton", "trust_class": "policy"},
+                        ]
+                    )
+                )
+
+                def call(backend: str, verb: str, query: str, results: int) -> None:
+                    events.append(
+                        conn,
+                        task_id=task_id,
+                        run_id=run_id,
+                        event_type="search.executed",
+                        payload={
+                            "backend": backend,
+                            "verb": verb,
+                            "query": query,
+                            "result_count": results,
+                        },
+                    )
+
+                call("openalex", "search", "school meals attainment", 40)
+                call("openalex", "fetch_references", "W1|W2", 2)
+                call("openalex", "fetch_references", "W3", 1)
+                # Forward pages repeat their ids: counted once.
+                call("openalex", "fetch_citations", "W1|W2", 100)
+                call("openalex", "fetch_citations", "W1|W2", 30)
+                call("overton", "fetch_by_id", "doc-1", 1)
+
+            coverage = client.get(f"/api/v1/tasks/{task_id}/coverage", headers=owner).json()
+            details = {row["backend"]: row for row in coverage["backends_detail"]}
+            openalex = details["OpenAlex"]
+            assert [query["query"] for query in openalex["queries"]] == ["school meals attainment"]
+            assert openalex["passes"] == [
+                {"pass": "lookup", "query": "Looked up 3 cited works", "results": 3},
+                {"pass": "citations", "query": "Followed citations from 2 sources", "results": 130},
+            ]
+            assert openalex["results"] == 40 + 3 + 130
+            assert details["Overton"]["passes"] == [
+                {"pass": "lookup", "query": "Looked up 1 cited document", "results": 1}
+            ]
+        finally:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)

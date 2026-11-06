@@ -200,6 +200,8 @@ export interface paths {
          *             `tasks.list_tasks`.
          *         page: 1-indexed page number.
          *         page_size: Rows per page, server-capped.
+         *         status_filter: `active` (default: not archived), `archived` or `all`
+         *             (task 058, round 11), as `GET /tasks` takes it.
          *
          *     Returns:
          *         One page of projects.
@@ -308,6 +310,43 @@ export interface paths {
          *             readable but not owned.
          */
         patch: operations["update_project_api_v1_projects__project_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Project
+         * @description Archive a project (task 058, round 11), as `POST /tasks/{id}/archive` does a task.
+         *
+         *     Owner only. The project leaves the default list (`status=active`) and is
+         *     listed under `status=archived`; it stays readable by id. Its tasks are
+         *     left as they are: they keep their membership and stay on the Tasks list.
+         *     Archiving an archived project changes nothing and keeps its first time.
+         *
+         *     Args:
+         *         project_id: The project to archive.
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *
+         *     Returns:
+         *         The project with its `archived_at`.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the project is unreadable, 403 when it is
+         *             readable but not owned.
+         */
+        post: operations["archive_project_api_v1_projects__project_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/tasks": {
@@ -1825,12 +1864,15 @@ export interface components {
         };
         /**
          * CharacteriseThemesFrame
-         * @description Ephemeral: the themes found, before sources are assigned to them (round 9).
+         * @description Ephemeral: the names a clustering found, before units are assigned (rounds 9, 11).
          *
-         *     Sent once the characterise stage has found its themes, in the order
-         *     found; the saved characterisation brings them with their document counts
-         *     when the stage ends. A reconnect gets them again. Display-only: never
-         *     persisted, no `id:` line, no `sequence`.
+         *     Sent once a clustering stage has found its names, in the order found:
+         *     `characterise` its themes (sources into themes), `longlist` its options
+         *     (sources into options; the residual pass sends the whole list again) and
+         *     `theme` its themes (options into themes). The saved result brings them
+         *     with their counts when the stage ends. A reconnect gets each stage's
+         *     latest again. Display-only: never persisted, no `id:` line, no
+         *     `sequence`.
          */
         CharacteriseThemesFrame: {
             /**
@@ -1844,6 +1886,11 @@ export interface components {
              * Format: date-time
              */
             occurred_at: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "characterise" | "longlist" | "theme";
             /** Themes */
             themes: components["schemas"]["LiveTheme"][];
             /**
@@ -2435,11 +2482,15 @@ export interface components {
          * @description Post-run source counts for one public backend.
          *
          *     ``relevant`` is deliberately task-wide in C.1; per-query relevance
-         *     was not recorded and is therefore absent.
+         *     was not recorded and is therefore absent. ``queries`` are the written
+         *     searches (topic and semantic); ``passes`` the citations and lookup passes
+         *     in the order they ran (round 11). ``results`` counts both.
          */
         CoverageBackendDetailOut: {
             /** Backend */
             backend: string;
+            /** Passes */
+            passes?: components["schemas"]["CoveragePassOut"][];
             /** Queries */
             queries?: components["schemas"]["CoverageQueryOut"][];
             /** Relevant */
@@ -2466,6 +2517,30 @@ export interface components {
             };
             /** Sentence */
             sentence: string;
+        };
+        /**
+         * CoveragePassOut
+         * @description One citations or lookup pass of a finished search (task 058, round 11).
+         *
+         *     Args:
+         *         pass_: `citations` (the works citing the best-connected sources) or
+         *             `lookup` (cited works or documents fetched by id). Serialised as
+         *             `pass`.
+         *         query: The pass in words, as a finished search names it: "Followed
+         *             citations from 40 sources", "Looked up 120 cited works",
+         *             "Looked up 30 cited documents". Never its ids.
+         *         results: The records the pass's calls returned.
+         */
+        CoveragePassOut: {
+            /**
+             * Pass
+             * @enum {string}
+             */
+            pass: "citations" | "lookup";
+            /** Query */
+            query: string;
+            /** Results */
+            results: number;
         };
         /**
          * CoverageQueryOut
@@ -4518,8 +4593,13 @@ export interface components {
          *             name, or a rendering derived from their subject when they have no
          *             identity row yet. **Never an email** (contract § 3b). `None` when
          *             the row has no owner at all.
+         *         archived_at: When the owner archived the project, or `None` while it
+         *             is in use (task 058, round 11). Archiving leaves its tasks as
+         *             they are.
          */
         ProjectOut: {
+            /** Archived At */
+            archived_at?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -4666,6 +4746,8 @@ export interface components {
          *             walk's option search), or `None` for a parentless walk (task 045).
          *         purpose: The walk's intent-record purpose (`baseline`, `longlist`,
          *             `targeted`, ...), or `None` for an Evidence search walk.
+         *         stages: The walk's own steps in the order started (task 058, round
+         *             11), on the list and the one-run reads; empty elsewhere.
          */
         RunOut: {
             /** Artefact Id */
@@ -4688,6 +4770,8 @@ export interface components {
             plan_version: number;
             /** Purpose */
             purpose?: string | null;
+            /** Stages */
+            stages?: components["schemas"]["RunStageOut"][];
             /**
              * Started At
              * Format: date-time
@@ -4703,6 +4787,54 @@ export interface components {
              * Format: uuid
              */
             task_id: string;
+        };
+        /**
+         * RunStageOut
+         * @description One step of a walk, as its stage frames told it (task 058, round 11).
+         *
+         *     The walk's own steps only: an option search's steps belong to that child
+         *     walk, not to the longlist walk that dispatched it. The same words the
+         *     `stage.started` and `stage.completed` frames carry, so a walk that has
+         *     ended renders its rows as the live one did.
+         *
+         *     Args:
+         *         stage: The public stage key.
+         *         label: The row's label.
+         *         status: `started` (no end recorded), `completed`, `failed` or
+         *             `skipped`.
+         *         started_at: When the step started, or `None` when only its end is
+         *             recorded.
+         *         ended_at: When it ended, or `None` while started.
+         *         summary: The done row's scalar counts (`stage.completed.summary`),
+         *             or `{"reason": ...}` for a failed or skipped step.
+         *         counts: The counts the done row shows, each with its noun.
+         *         seconds: The step's wall time, when recorded.
+         */
+        RunStageOut: {
+            /** Counts */
+            counts?: components["schemas"]["StageCount"][];
+            /** Ended At */
+            ended_at?: string | null;
+            /** Label */
+            label: string;
+            /** Seconds */
+            seconds?: number | null;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
+            /** Started At */
+            started_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "started" | "completed" | "failed" | "skipped";
+            /** Summary */
+            summary?: {
+                [key: string]: number | string;
+            };
         };
         /**
          * RunStatusFrame
@@ -6099,10 +6231,19 @@ export interface components {
          *             changed.
          *         dropped: The hub's dropped-tick counter for this task (slow
          *             subscriber evictions), for the silent-gap measure (N25).
+         *         capability_run_id: The walk the line belongs to (round 11): a
+         *             longlist walk's option searches are walks of their own and run
+         *             the same stages, so the page keeps the tracked walk's lines only.
+         *             Null when the server could not tell.
          */
         TickFrame: {
             /** Activity */
             activity: string;
+            /**
+             * Capability Run Id
+             * @default null
+             */
+            capability_run_id: string | null;
             /**
              * Done
              * @default null
@@ -6602,6 +6743,7 @@ export interface operations {
                 owner_email?: string | null;
                 page?: number;
                 page_size?: number;
+                status?: "active" | "archived" | "all";
             };
             header?: never;
             path?: never;
@@ -6707,6 +6849,37 @@ export interface operations {
                 "application/json": components["schemas"]["ProjectUpdate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_project_api_v1_projects__project_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

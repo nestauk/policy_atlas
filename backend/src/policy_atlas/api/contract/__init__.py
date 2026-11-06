@@ -75,6 +75,7 @@ from .read_models import (
     ClaimType,
     CoverageBackendDetailOut,
     CoverageOut,
+    CoveragePassOut,
     CoverageQueryOut,
     CoverageSnapshotOut,
     DecisionOut,
@@ -144,7 +145,7 @@ from .read_models import (
     ThemeRefOut,
     ThemeSourceOut,
 )
-from .runs import RunCreate, RunOut, RunStatus
+from .runs import RunCreate, RunOut, RunStageOut, RunStatus, StageCount
 from .sse import (
     ArtefactSectionCardFrame,
     ArtefactSectionClaimFrame,
@@ -170,7 +171,6 @@ from .sse import (
     SectionSpan,
     SseFrame,
     StageCompletedFrame,
-    StageCount,
     StageFailedFrame,
     StageStartedFrame,
     TaskUpdatedFrame,
@@ -338,6 +338,7 @@ __all__ = [
     "CountryGroupDraft",
     "CoverageOut",
     "CoverageBackendDetailOut",
+    "CoveragePassOut",
     "CoverageQueryOut",
     "CoverageSnapshotOut",
     "CompletedEvent",
@@ -436,6 +437,7 @@ __all__ = [
     "ReferenceOut",
     "RunCreate",
     "RunOut",
+    "RunStageOut",
     "RunStatus",
     "RunStatusFrame",
     "ScopeConstraintsDraft",

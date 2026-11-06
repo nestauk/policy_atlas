@@ -734,6 +734,7 @@ def test_sse_round9_search_query_and_themes_frames() -> None:
     themes = _adapter().validate_python(
         {
             "type": "characterise.themes",
+            "stage": "characterise",
             "occurred_at": _now().isoformat(),
             "themes": [
                 {"label": "Attendance", "description": "Who comes."},
@@ -744,6 +745,7 @@ def test_sse_round9_search_query_and_themes_frames() -> None:
     assert isinstance(themes, CharacteriseThemesFrame)
     assert not hasattr(themes, "sequence")
     assert [theme.label for theme in themes.themes] == ["Attendance", "Costs"]
+    assert themes.stage == "characterise"
 
 
 def test_sse_frame_unknown_type_rejected() -> None:

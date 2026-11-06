@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { SseFrame } from "../api/sseFrame";
 import { hasTerminalPartialLiveArtefact, reduceRunStreamFrame } from "./reducer";
 import { createInitialRunStreamState } from "./types";
-import type { CheckInOut, PlanDraft, RunStreamState } from "./types";
+import type { CheckInOut, PlanDraft, RunStreamState, StageEntry } from "./types";
 
 const TASK_RUN_ID = "11111111-1111-1111-1111-111111111111";
 const CHECK_IN_ID = "22222222-2222-2222-2222-222222222222";
@@ -133,6 +133,7 @@ function tick(overrides: Partial<TickFrame> = {}): TickFrame {
     section: null,
     heartbeat: false,
     dropped: 0,
+    capability_run_id: null,
     occurred_at: "2026-07-21T10:02:00Z",
     ephemeral: true,
     ...overrides,
@@ -786,6 +787,7 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
   it("themes arrive once found, a repeat replaces them, and they go with the run (round 9)", () => {
     const themes = (labels: string[]): SseFrame => ({
       type: "characterise.themes",
+      stage: "characterise",
       themes: labels.map((label, i) => ({ label, description: i === 0 ? null : `About ${label}.` })),
       occurred_at: "2026-07-28T10:00:40Z",
       ephemeral: true,
@@ -816,6 +818,44 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
       sequence: 99,
     });
     expect(state.liveThemes).toBeUndefined();
+  });
+
+  it("the longlist's options and themes land beside the search's themes, each by its stage (round 11)", () => {
+    const names = (stage: "characterise" | "longlist" | "theme", labels: string[]): SseFrame => ({
+      type: "characterise.themes",
+      stage,
+      themes: labels.map((label) => ({ label, description: null })),
+      occurred_at: "2026-07-28T10:00:40Z",
+      ephemeral: true,
+    });
+    let state = fold(createInitialRunStreamState(), writingFrames());
+    state = reduceRunStreamFrame(state, names("characterise", ["Attendance"]));
+    state = reduceRunStreamFrame(state, names("longlist", ["Free breakfasts", "Tutoring"]));
+    expect(state.liveOptions?.map((option) => option.label)).toEqual(["Free breakfasts", "Tutoring"]);
+    expect(state.liveOptionThemes).toBeUndefined();
+    // The residual pass sends the whole list again: it replaces the first.
+    state = reduceRunStreamFrame(state, names("longlist", ["Free breakfasts", "Tutoring", "Mentoring"]));
+    state = reduceRunStreamFrame(state, names("theme", ["Food", "Learning"]));
+    expect(state.liveOptions?.map((option) => option.label)).toEqual(["Free breakfasts", "Tutoring", "Mentoring"]);
+    expect(state.liveOptionThemes?.map((theme) => theme.label)).toEqual(["Food", "Learning"]);
+    expect(state.liveThemes?.map((theme) => theme.label)).toEqual(["Attendance"]);
+    // A new top-level run starts without any of them.
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: TASK_RUN_ID,
+      status: "succeeded",
+      occurred_at: "2026-07-28T10:04:00Z",
+      sequence: 98,
+    });
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: OTHER_RUN_ID,
+      status: "running",
+      occurred_at: "2026-07-28T10:05:00Z",
+      sequence: 99,
+    });
+    expect(state.liveOptions).toBeUndefined();
+    expect(state.liveOptionThemes).toBeUndefined();
   });
 
   it("an intro slot keeps its role and completes with its prose (round 8)", () => {
@@ -1285,6 +1325,89 @@ describe("reduceRunStreamFrame — child walks", () => {
     });
     expect(state.stages.map((entry) => entry.stage)).toEqual(["suggest"]);
     expect(state.lastSequence).toBe(3);
+  });
+
+  // Round 11 (owner: "Searching for each option" and "Searching" both live).
+  // The order a page load mid-walk replays, taken from the owner's live run
+  // (2026-11-06): the longlist walk dispatches its option searches, then runs
+  // its own broad search while they run, and joins them before screening.
+  // The two live rows are both the walk's; the children's searches stay out.
+  it("replays a longlist walk mid-search: its own search beside its option searches, no child rows", () => {
+    const BASELINE_RUN_ID = "5e284cf5-0000-4000-8000-000000000000";
+    const WALK = "fe6cd29c-e072-4e52-b518-f80c6476ffe2";
+    const CHILD_A = "74e8be1a-0000-4000-8000-000000000001";
+    const CHILD_B = "eb7d0890-0000-4000-8000-000000000002";
+    const at = "2026-11-06T09:10:00Z";
+    const started = (stage: StageEntry["stage"], sequence: number, runId: string | null): SseFrame => ({
+      type: "stage.started",
+      capability_run_id: runId,
+      stage,
+      label: stage,
+      blurb: "",
+      occurred_at: at,
+      sequence,
+    });
+    const status = (runId: string, value: "running" | "succeeded", sequence: number): SseFrame => ({
+      type: "run.status",
+      capability_run_id: runId,
+      status: value,
+      occurred_at: at,
+      sequence,
+    });
+    const replay: SseFrame[] = [
+      status(BASELINE_RUN_ID, "running", 2),
+      started("acquire", 3, BASELINE_RUN_ID),
+      status(BASELINE_RUN_ID, "succeeded", 194),
+      status(WALK, "running", 195),
+      started("inherit", 196, WALK),
+      started("suggest", 202, WALK),
+      status(CHILD_A, "running", 208),
+      status(CHILD_B, "running", 209),
+      started("acquire", 210, CHILD_B),
+      started("acquire", 213, CHILD_A),
+      started("option_searches", 235, WALK),
+      started("acquire", 246, WALK),
+    ];
+    const state = fold(createInitialRunStreamState(), replay);
+    expect(state.run?.id).toBe(WALK);
+    expect(state.childRunIds).toEqual([CHILD_A, CHILD_B]);
+    expect(state.stages.map((entry) => entry.stage)).toEqual(["inherit", "suggest", "option_searches", "acquire"]);
+    // The walk-level row before round 11 named no walk; it still applies.
+    const unnamed = fold(createInitialRunStreamState(), [...replay.slice(0, 10), started("option_searches", 235, null)]);
+    expect(unnamed.stages.map((entry) => entry.stage)).toEqual(["inherit", "suggest", "option_searches"]);
+  });
+
+  // Round 11: a child's tick names the child; it never lands on the walk's
+  // own Searching row or the run status bar.
+  it("drops a tick that names a different run than the tracked one", () => {
+    const CHILD_ID = "44444444-4444-4444-4444-444444444444";
+    const tick = (activity: string, runId: string | null): SseFrame => ({
+      type: "tick",
+      ephemeral: true,
+      stage: "acquire",
+      activity,
+      done: null,
+      total: null,
+      unit: null,
+      section: null,
+      heartbeat: false,
+      dropped: 0,
+      capability_run_id: runId,
+      occurred_at: "2026-09-22T10:00:02Z",
+    });
+    let state = reduceRunStreamFrame(createInitialRunStreamState(), {
+      type: "run.status",
+      capability_run_id: TASK_RUN_ID,
+      status: "running",
+      occurred_at: "2026-09-22T10:00:00Z",
+      sequence: 1,
+    });
+    state = reduceRunStreamFrame(state, tick("the walk's search", TASK_RUN_ID));
+    state = reduceRunStreamFrame(state, tick("an option's search", CHILD_ID));
+    expect(state.liveness.acquire?.activity).toBe("the walk's search");
+    // A tick that names no walk (an older server) still applies.
+    state = reduceRunStreamFrame(state, tick("unnamed", null));
+    expect(state.liveness.acquire?.activity).toBe("unnamed");
   });
 
   // A9: a child's late terminal frame, after the walk has finished, must not

@@ -34,18 +34,23 @@ import {
  * `artefact.section_card` appends to its `cards` (task 058, round 7);
  * `artefact.source_note` adds to the run's `liveSourceNotes`, one per source
  * (round 8); `search.query` adds or updates a row of `liveSearchQueries` and
- * `characterise.themes` sets `liveThemes` (round 9). A replay carries none of them, so folding a replay rebuilds
+ * `characterise.themes` sets `liveThemes`, `liveOptions` or
+ * `liveOptionThemes` by its `stage` (rounds 9 and 11). A replay carries none of them, so folding a replay rebuilds
  * `prose` and `citations` alone.
  */
 /** Task 045 (A3): a stage frame names its walk; one from a different walk
  *  than the tracked run (a longlist walk's option search) is not this
- *  timeline's. A frame without a run id (older events) still applies. */
+ *  timeline's. A frame without a run id (older events) still applies. Ticks
+ *  name their walk too (round 11). */
 export function isOtherRunsStage(state: RunStreamState, runId: string | null): boolean {
   return runId !== null && state.run !== null && runId !== state.run.id;
 }
 
 export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): RunStreamState {
   if (frame.type === "tick") {
+    // A tick names its walk (round 11): a longlist walk's option searches run
+    // `acquire` too, and their lines are not the tracked walk's.
+    if (isOtherRunsStage(state, frame.capability_run_id ?? null)) return state;
     const key = frame.stage ?? GLOBAL_LIVENESS_KEY;
     const entry: StageLiveness = {
       activity: frame.activity,
@@ -153,10 +158,11 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
   }
 
   if (frame.type === "characterise.themes") {
-    return {
-      ...state,
-      liveThemes: frame.themes.map((theme) => ({ label: theme.label, description: theme.description })),
-    };
+    // One frame, three stages (round 11): the Evidence search's themes, the
+    // longlist's options and the longlist's themes, each in its own slot.
+    const names = frame.themes.map((theme) => ({ label: theme.label, description: theme.description }));
+    const slot = frame.stage === "longlist" ? "liveOptions" : frame.stage === "theme" ? "liveOptionThemes" : "liveThemes";
+    return { ...state, [slot]: names };
   }
 
   if (frame.type === "artefact.section_revising") {
@@ -245,6 +251,8 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         delete next.liveSourceNotes;
         delete next.liveSearchQueries;
         delete next.liveThemes;
+        delete next.liveOptions;
+        delete next.liveOptionThemes;
       }
       return next;
     }
