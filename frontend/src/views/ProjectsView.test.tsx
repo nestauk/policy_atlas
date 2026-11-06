@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +14,8 @@ vi.mock("../api/queries", async (importOriginal) => ({
   useMe: vi.fn(),
   useProject: vi.fn(),
   useProjects: vi.fn(),
+  // The Projects list is paged (round 12).
+  useProjectsPaged: vi.fn(),
   useTasks: vi.fn(),
   // A project's own list is paged (round 10).
   useTasksPaged: vi.fn(),
@@ -34,11 +36,19 @@ function pagedResult(rows: unknown[], extra: Record<string, unknown> = {}) {
   } as unknown as ReturnType<typeof queries.useTasksPaged>;
 }
 
+/** The Projects list's pages as the infinite query's result (round 12). */
+function projectPages(rows: unknown[], extra: Record<string, unknown> = {}) {
+  return pagedResult(rows, extra) as unknown as ReturnType<typeof queries.useProjectsPaged>;
+}
+
 vi.mock("../api/mutations", () => ({
   useCreateProject: vi.fn(),
   useUpdateProject: vi.fn(),
   // The project page's title menu (round 11, the workspace builder's).
   useArchiveProject: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  // A project's task rows carry their own menu (round 12).
+  useUpdateTask: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useArchiveTask: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 
 const PROJECT_ID = "project-1";
@@ -100,6 +110,7 @@ beforeEach(() => {
   vi.mocked(queries.useProjects).mockReturnValue(
     { data: { data: [] }, isPending: false } as unknown as ReturnType<typeof queries.useProjects>,
   );
+  vi.mocked(queries.useProjectsPaged).mockReturnValue(projectPages([]));
   vi.mocked(mutations.useUpdateProject).mockReturnValue(
     { mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useUpdateProject>,
   );
@@ -122,10 +133,25 @@ describe("ProjectDetailView — the project_id filter (task 033 phase 10a)", () 
   });
 });
 
-describe("ProjectsView — the tasks-overview page size (task 033 phase 10a)", () => {
-  it("raises the global tasks page beyond the 50-row default, since ProjectOut carries no last-task-updated field to use instead", () => {
+// Round 12: the server orders the projects by `last_activity_at` and sends it
+// on every row, so the page asks for no task list of its own, keeps the
+// server's order (a "Show more" page lands below) and dates each row by it.
+describe("ProjectsView — the server's last activity (round 12)", () => {
+  it("asks for no task list, keeps the server's order and dates rows by last_activity_at", () => {
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(
+      projectPages([
+        { ...PROJECT_ROW, project_id: "p-a", name: "Older by creation", created_at: "2025-01-01T00:00:00Z", last_activity_at: "2026-03-04T10:00:00Z" },
+        { ...PROJECT_ROW, project_id: "p-b", name: "Newer by creation", created_at: "2026-02-01T00:00:00Z", last_activity_at: "2026-02-01T00:00:00Z" },
+      ]),
+    );
     renderList();
-    expect(queries.useTasks).toHaveBeenCalledWith({ page_size: 200 });
+    expect(queries.useTasks).not.toHaveBeenCalled();
+    const links = screen.getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual([
+      expect.stringContaining("Older by creation"),
+      expect.stringContaining("Newer by creation"),
+    ]);
+    expect(links[0].querySelector("time")).toHaveAttribute("dateTime", "2026-03-04T10:00:00Z");
   });
 });
 
@@ -133,14 +159,9 @@ describe("ProjectsView — the Organisation/Mine switcher (task 033 phase 10b)",
   it("rubric 14 dark launch: hides the switcher when /me has no organisation", () => {
     renderList();
     expect(screen.queryByRole("tablist", { name: "Scope" })).not.toBeInTheDocument();
-    // The 200-row page size is a deliberate fix shared by every caller,
-    // enrolled or not — it is not part of the dark-launch invariant. What
-    // rubric 14 actually pins is that an unenrolled caller's call carries no
-    // org affordance at all: no `scope` param, enrolled or not.
-    expect(queries.useTasks).toHaveBeenCalledWith({ page_size: 200 });
-    expect(queries.useTasks).not.toHaveBeenCalledWith(
-      expect.objectContaining({ scope: expect.anything() }),
-    );
+    // Rubric 14: an unenrolled caller's list carries no org affordance at
+    // all, so no `scope` param.
+    expect(queries.useProjectsPaged).toHaveBeenCalledWith(undefined);
   });
 
   it("shows the switcher when enrolled, defaulting to Mine, and drives scope", async () => {
@@ -156,13 +177,11 @@ describe("ProjectsView — the Organisation/Mine switcher (task 033 phase 10b)",
     );
     const user = userEvent.setup();
     renderList();
-    expect(queries.useProjects).toHaveBeenCalledWith({ scope: "mine" });
-    expect(queries.useTasks).toHaveBeenCalledWith({ page_size: 200, scope: "mine" });
+    expect(queries.useProjectsPaged).toHaveBeenCalledWith({ scope: "mine" });
     expect(screen.getByRole("tab", { name: "Mine" })).toHaveAttribute("aria-selected", "true");
 
     await user.click(screen.getByRole("tab", { name: "Organisation" }));
-    expect(queries.useProjects).toHaveBeenCalledWith({ scope: "all" });
-    expect(queries.useTasks).toHaveBeenCalledWith({ page_size: 200, scope: "all" });
+    expect(queries.useProjectsPaged).toHaveBeenCalledWith({ scope: "all" });
   });
 
   it("shows the admin wider-list notice only for admin + Organisation scope", async () => {
@@ -209,24 +228,20 @@ describe("ProjectsView — the Organisation/Mine switcher (task 033 phase 10b)",
         },
       } as unknown as ReturnType<typeof queries.useMe>,
     );
-    vi.mocked(queries.useProjects).mockReturnValue(
-      {
-        data: {
-          data: [
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(
+      projectPages([
             {
               project_id: "orphan-1",
               name: "Orphan task",
               description: null,
               created_at: "2026-01-01T00:00:00Z",
+              last_activity_at: "2026-01-01T00:00:00Z",
               task_count: 0,
               visibility: "org",
               is_owner: false,
               owner_display: null,
             },
-          ],
-        },
-        isPending: false,
-      } as unknown as ReturnType<typeof queries.useProjects>,
+      ]),
     );
     const user = userEvent.setup();
     renderList();
@@ -258,8 +273,8 @@ describe("ProjectsView — the Archived toggle", () => {
     expect(toggle()).toHaveClass("text-caption");
     expect(screen.queryByRole("heading", { name: "Archived" })).not.toBeInTheDocument();
     expect(toggle()).toHaveAccessibleName("Show archived");
-    expect(queries.useProjects).toHaveBeenCalledWith({ scope: "mine" });
-    expect(queries.useProjects).not.toHaveBeenCalledWith(expect.objectContaining({ status: expect.anything() }));
+    expect(queries.useProjectsPaged).toHaveBeenCalledWith({ scope: "mine" });
+    expect(queries.useProjectsPaged).not.toHaveBeenCalledWith(expect.objectContaining({ status: expect.anything() }));
   });
 
   it("asks for the archived projects of the open scope, and keeps the toggle across scopes", async () => {
@@ -270,12 +285,12 @@ describe("ProjectsView — the Archived toggle", () => {
     expect(toggle()).toHaveAccessibleName("Hide archived");
     expect(toggle()).toHaveAccessibleName("Hide archived");
     expect(screen.getByRole("heading", { level: 2, name: "Archived" })).toBeInTheDocument();
-    expect(queries.useProjects).toHaveBeenCalledWith({ scope: "mine", status: "archived" });
+    expect(queries.useProjectsPaged).toHaveBeenCalledWith({ scope: "mine", status: "archived" });
     await user.click(screen.getByRole("tab", { name: "Organisation" }));
     expect(toggle()).toHaveAccessibleName("Hide archived");
-    expect(queries.useProjects).toHaveBeenCalledWith({ scope: "all", status: "archived" });
+    expect(queries.useProjectsPaged).toHaveBeenCalledWith({ scope: "all", status: "archived" });
     await user.click(toggle());
-    expect(queries.useProjects).toHaveBeenLastCalledWith({ scope: "all" });
+    expect(queries.useProjectsPaged).toHaveBeenLastCalledWith({ scope: "all" });
   });
 
   it("says 'No archived projects' when the open scope has none", async () => {
@@ -286,13 +301,13 @@ describe("ProjectsView — the Archived toggle", () => {
   });
 
   it("gives a reader with no organisation the toggle without a scope", async () => {
-    vi.mocked(queries.useProjects).mockClear();
+    vi.mocked(queries.useProjectsPaged).mockClear();
     const user = userEvent.setup();
     renderList();
-    expect(queries.useProjects).toHaveBeenCalledWith(undefined);
+    expect(queries.useProjectsPaged).toHaveBeenCalledWith(undefined);
     await user.click(toggle());
-    expect(queries.useProjects).toHaveBeenCalledWith({ status: "archived" });
-    expect(queries.useProjects).not.toHaveBeenCalledWith(expect.objectContaining({ scope: expect.anything() }));
+    expect(queries.useProjectsPaged).toHaveBeenCalledWith({ status: "archived" });
+    expect(queries.useProjectsPaged).not.toHaveBeenCalledWith(expect.objectContaining({ scope: expect.anything() }));
   });
 });
 
@@ -350,6 +365,7 @@ const PROJECT_ROW = {
   name: "Child health, Tower Hamlets",
   description: null,
   created_at: "2026-01-01T00:00:00Z",
+  last_activity_at: "2026-01-01T00:00:00Z",
   task_count: 3,
   visibility: "org",
   is_owner: true,
@@ -402,9 +418,7 @@ describe("ProjectsView — the page header and list (lists polish)", () => {
   });
 
   it("loads into the list's own frame", () => {
-    vi.mocked(queries.useProjects).mockReturnValue(
-      { data: undefined, isPending: true } as unknown as ReturnType<typeof queries.useProjects>,
-    );
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(projectPages([], { data: undefined, isPending: true }));
     renderList();
     const skeleton = screen.getByRole("list", { name: "Loading projects" });
     expect(skeleton.querySelectorAll("li")).toHaveLength(5);
@@ -421,9 +435,7 @@ describe("ProjectsView — the page header and list (lists polish)", () => {
         },
       } as unknown as ReturnType<typeof queries.useMe>,
     );
-    vi.mocked(queries.useProjects).mockReturnValue(
-      { data: { data: [PROJECT_ROW] }, isPending: false } as unknown as ReturnType<typeof queries.useProjects>,
-    );
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(projectPages([PROJECT_ROW]));
     const user = userEvent.setup();
     renderList();
     // Mine: the reader's own list, no owner column (round 10, P6).
@@ -528,6 +540,7 @@ describe("ProjectDetailView — arriving from the Projects list (lists polish)",
           name: "Housing",
           description: "Supply and affordability.",
           created_at: "2026-01-01T00:00:00Z",
+          last_activity_at: "2026-01-01T00:00:00Z",
           task_count: 2,
           visibility: "org",
           is_owner: true,
@@ -557,8 +570,8 @@ describe("ProjectDetailView — arriving from the Projects list (lists polish)",
 describe("ProjectsView — a list that failed to load (lead ruling, 2026-11-05)", () => {
   it("says so in the list's frame with a 40 px ghost Try again that refetches", async () => {
     const refetch = vi.fn();
-    vi.mocked(queries.useProjects).mockReturnValue(
-      { data: undefined, isPending: false, isError: true, refetch } as unknown as ReturnType<typeof queries.useProjects>,
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(
+      projectPages([], { data: undefined, isPending: false, isError: true, refetch }),
     );
     const user = userEvent.setup();
     renderList();
@@ -597,5 +610,198 @@ describe("ProjectDetailView — Show more", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(200);
     await user.click(screen.getByRole("button", { name: "Show more" }));
     expect(fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Round 12 (lead): the Projects list pages at 20 like the Tasks list, with
+// the same "Show more" at the foot's left and the archived toggle at its right.
+describe("ProjectsView — Show more", () => {
+  const project = (index: number) => ({
+    ...PROJECT_ROW,
+    project_id: `p-${index}`,
+    name: `Project ${index}`,
+  });
+
+  it("asks for the next page of the open list, beside the archived toggle", async () => {
+    const fetchNextPage = vi.fn();
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(
+      projectPages(Array.from({ length: 20 }, (_, index) => project(index)), { hasNextPage: true, fetchNextPage }),
+    );
+    const user = userEvent.setup();
+    renderList();
+    expect(screen.getAllByRole("listitem")).toHaveLength(20);
+    const showMore = screen.getByRole("button", { name: "Show more" });
+    // One foot row: Show more first, then the toggle.
+    expect(showMore.parentElement).toContainElement(screen.getByRole("button", { name: "Show archived" }));
+    await user.click(showMore);
+    expect(fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("has no Show more when the server holds nothing more, and keeps the toggle", () => {
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(projectPages([project(1)]));
+    renderList();
+    expect(screen.queryByRole("button", { name: "Show more" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show archived" })).toBeInTheDocument();
+  });
+
+  it("holds Show more disabled while the next page is on its way", () => {
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(
+      projectPages([project(1)], { hasNextPage: true, isFetchingNextPage: true }),
+    );
+    renderList();
+    expect(screen.getByRole("button", { name: "Show more" })).toBeDisabled();
+  });
+
+  it("drops a project listed twice across two pages", () => {
+    vi.mocked(queries.useProjectsPaged).mockReturnValue({
+      ...projectPages([]),
+      data: {
+        pages: [
+          { data: [project(1), project(2)], pagination: { page: 1, page_size: 2, total_items: 3, has_more: true } },
+          { data: [project(2), project(3)], pagination: { page: 2, page_size: 2, total_items: 3, has_more: false } },
+        ],
+      },
+    } as unknown as ReturnType<typeof queries.useProjectsPaged>);
+    renderList();
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  it("keeps the rows and offers Retry under them when a later page fails", async () => {
+    const fetchNextPage = vi.fn();
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(
+      projectPages([project(1)], {
+        isError: true,
+        isFetchNextPageError: true,
+        hasNextPage: true,
+        fetchNextPage,
+      }),
+    );
+    const user = userEvent.setup();
+    renderList();
+    expect(screen.getByRole("link", { name: /Project 1/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show more" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Round 12: a project opened from the paged list has its name on the first
+// frame, read from the list's pages in the cache.
+describe("ProjectDetailView — the name from the paged list", () => {
+  it("reads the project from the Projects list's pages while its own request runs", () => {
+    vi.mocked(queries.useProject).mockReturnValue(
+      { data: undefined, isPending: true, isError: false } as unknown as ReturnType<typeof queries.useProject>,
+    );
+    const client = new QueryClient();
+    client.setQueryData(queries.queryKeys.projectsPaged({ scope: "mine" }), {
+      pages: [{ data: [{ ...PROJECT_ROW, project_id: PROJECT_ID, name: "Housing from the list" }] }],
+      pageParams: [1],
+    });
+    renderDetail(PROJECT_ID, client);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Housing from the list");
+  });
+});
+
+// Owner, round 12: rename and archive from the Projects list. Each owner's
+// row has the project page's menu beside its link.
+describe("ProjectsView — the row's menu (round 12)", () => {
+  const COLLEAGUE = { ...PROJECT_ROW, project_id: "p-2", name: "Grace's project", is_owner: false, owner_display: "Grace Hopper" };
+  const settings = () => screen.getByRole("button", { name: "Project settings: Child health, Tower Hamlets" });
+
+  it("gives only the owner's rows the control, beside the link and never inside it", () => {
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(projectPages([PROJECT_ROW, COLLEAGUE]));
+    renderList();
+    expect(settings().closest("a")).toBeNull();
+    expect(settings().closest("li")).toContainElement(screen.getByRole("link", { name: /^Child health, Tower Hamlets/ }));
+    expect(screen.queryByRole("button", { name: "Project settings: Grace's project" })).not.toBeInTheDocument();
+  });
+
+  it("renames on the row with Save name and Cancel", async () => {
+    const mutate = vi.fn((_body: unknown, options: { onSuccess: () => void }) => options.onSuccess());
+    vi.mocked(mutations.useUpdateProject).mockReturnValue(
+      { mutate, isPending: false } as unknown as ReturnType<typeof mutations.useUpdateProject>,
+    );
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(projectPages([PROJECT_ROW]));
+    const user = userEvent.setup();
+    renderList();
+    await user.click(settings());
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const field = screen.getByRole("textbox", { name: "Project name" });
+    expect(field).toHaveValue("Child health, Tower Hamlets");
+    expect(screen.queryByRole("link", { name: /^Child health, Tower Hamlets/ })).not.toBeInTheDocument();
+    await user.clear(field);
+    await user.type(field, "Child health, Hackney{Enter}");
+    expect(mutate).toHaveBeenCalledWith({ name: "Child health, Hackney" }, expect.anything());
+    await waitFor(() => expect(settings()).toHaveFocus());
+  });
+
+  it("archives after the confirm in words, and the row folds out of the list", async () => {
+    const mutate = vi.fn((_body: unknown, options: { onSuccess: () => void }) => options.onSuccess());
+    vi.mocked(mutations.useArchiveProject).mockReturnValue(
+      { mutate, isPending: false } as unknown as ReturnType<typeof mutations.useArchiveProject>,
+    );
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(projectPages([PROJECT_ROW]));
+    const user = userEvent.setup();
+    renderList();
+    await user.click(settings());
+    await user.click(screen.getByRole("menuitem", { name: "Archive" }));
+    expect(
+      screen.getByText("Archiving removes this project from your active projects. Its tasks stay as they are."),
+    ).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+    expect(mutate).toHaveBeenCalledTimes(1);
+    const fold = screen.getByRole("link", { name: /^Child health, Tower Hamlets/ }).closest("[data-leaving]");
+    expect(fold).toHaveClass("grid-rows-[0fr]", "opacity-0");
+    await waitFor(() =>
+      expect(screen.queryByRole("link", { name: /^Child health, Tower Hamlets/ })).not.toBeInTheDocument(),
+    );
+  });
+
+  it("says so in the menu when the archive fails, and keeps the row", async () => {
+    const mutate = vi.fn((_body: unknown, options: { onError: () => void }) => options.onError());
+    vi.mocked(mutations.useArchiveProject).mockReturnValue(
+      { mutate, isPending: false } as unknown as ReturnType<typeof mutations.useArchiveProject>,
+    );
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(projectPages([PROJECT_ROW]));
+    const user = userEvent.setup();
+    renderList();
+    await user.click(settings());
+    await user.click(screen.getByRole("menuitem", { name: "Archive" }));
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("The project couldn't be archived. Try again.");
+    expect(screen.getByRole("link", { name: /^Child health, Tower Hamlets/ })).toBeInTheDocument();
+  });
+
+  it("draws the three dots, and offers no Add to project on a project row", async () => {
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(projectPages([PROJECT_ROW]));
+    const user = userEvent.setup();
+    renderList();
+    expect(settings().querySelector("svg path")?.getAttribute("d")).toBe("M3.5 8h0M8 8h0M12.5 8h0");
+    await user.click(settings());
+    expect(screen.getByRole("menuitem", { name: "Rename" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Add to project/ })).not.toBeInTheDocument();
+  });
+
+  it("offers Rename only on an archived project", async () => {
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(
+      projectPages([{ ...PROJECT_ROW, archived_at: "2026-11-01T00:00:00Z" }]),
+    );
+    const user = userEvent.setup();
+    renderList();
+    await user.click(settings());
+    expect(screen.getByRole("menuitem", { name: "Rename" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Archive" })).not.toBeInTheDocument();
+  });
+});
+
+// Round 12: "Add to project" is a task's; the project page's own menu has
+// Rename and Archive only.
+describe("ProjectDetailView — the title's menu (round 12)", () => {
+  it("offers no Add to project", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(screen.getByRole("button", { name: "Project settings" }));
+    expect(screen.getByRole("menuitem", { name: "Rename" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Add to project/ })).not.toBeInTheDocument();
   });
 });

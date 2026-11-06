@@ -21,33 +21,76 @@ export const WIDE_PAGE_CLASS = `mx-auto w-full px-6 max-md:px-4 ${PAGE_COLUMN_MA
  * column lines up page to page.
  *
  * md and up: one 56 px line (14 px padding around a 28 px line box). The
- * task's name takes what the other columns leave (round 10: the status
- * column holds "Paused · waiting on you" and most first names, the date column "12 Oct 2025"),
- * and the owner, count and date columns share one tail (8rem, 5.5rem,
- * 5.5rem), so a project row's owner, task count and date sit exactly under a
- * task row's owner, source count and date.
+ * task's name takes every pixel the other columns leave (round 12). The task
+ * list's columns are one grid on the list, not on each row: every row is a
+ * subgrid of it (`taskListGridClass` on the `ul`, `taskListItemClass` on the
+ * `li`, the row's own `md:grid-cols-subgrid`), so the capability, status and
+ * owner tracks are `auto` and size to the widest value the list holds, not
+ * to the widest value any list could hold. The status cell carries 8 px of
+ * its own on the column gap, so its widest word stands 24 px from the owner
+ * (or the count); the owner's name starts there, left-aligned, capped at
+ * 8rem and ellipsed beyond it. The count and date tail stays fixed (5.5rem,
+ * 5.5rem), so a project row's task count and date end exactly under a task
+ * row's source count and date.
+ *
+ * Round 12's cause (owner: the gap between status and owner "is making the
+ * task names cramped"): the status column was a fixed 11.5rem, sized for
+ * "Paused · waiting on <first name>", and the owner a fixed 8rem with its
+ * name right-aligned, so a "Complete" row by "You" left ~230 px of white
+ * between the two words while the name was cut short.
+ * The project rows below keep their own fixed grid (one row per grid); their
+ * owner cell takes the same `rowOwnerCellClass`.
  *
  * Below md: two fixed lines, 84 px every row. Line 1 is the name alone
  * (24 px, truncated, never wrapped); line 2 (28 px) leads with the status
  * word and its live step, then the project, with the date at the right.
  * The capability, the owner and the source count drop on phones (lead
- * rulings P3, round 10); they stay on the task's own pages.
+ * rulings P3, round 10); they stay on the task's own pages. The list is not
+ * a grid there; each row is its own two-track grid.
  *
  * Press: the row deepens to Blue Tint the instant it is pressed and eases
  * back over the hover's 150 ms when released (round 10).
+ *
+ * The row's menu (round 12): every row keeps 48 px of right padding, where
+ * its owner's 40 px menu control sits as a sibling of the link
+ * (`ListRowMenu`), so every row's columns line up whether or not it has the
+ * control. The hover wash is the item's (`group` on the `li`), so pointing
+ * at the control keeps the row lit.
  */
 const ROW_BASE =
-  "grid min-h-14 items-center gap-x-4 px-4 py-3.5 no-underline hover:bg-blue-tint-2 " +
+  "grid min-h-14 items-center gap-x-4 pl-4 pr-12 py-3.5 no-underline group-hover:bg-blue-tint-2 " +
   "transition-colors duration-150 ease-[ease] active:bg-blue-tint active:duration-0 " +
   "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue " +
   "max-md:gap-x-3 max-md:gap-y-1";
 
-/** Task rows: name, kind, status, sources, date. */
-export const taskListRowGridClass = `${ROW_BASE} grid-cols-[minmax(0,1fr)_7.5rem_11.5rem_5.5rem_5.5rem] max-md:grid-cols-[minmax(0,1fr)_auto]`;
+/** The task list's `ul`: from md up, the one grid every row is a subgrid
+ *  of; its tracks are name, kind, status, sources, date. The date track is
+ *  8.5rem because a subgrid's padding sits in its edge tracks: the row's
+ *  48 px right padding (the room for the row's menu control, round 12)
+ *  plus the date's 5.5rem. (Literal class strings:
+ *  Tailwind finds classes by scanning the source.) */
+export const taskListGridClass =
+  "md:grid md:grid-cols-[minmax(0,1fr)_auto_auto_5.5rem_8.5rem] md:gap-x-4";
 
-/** Same grid, with an owner column before the source count (task 033 phase
- *  10b) — only used where the caller has decided to show `owner_display`. */
-export const taskListRowGridClassWithOwner = `${ROW_BASE} grid-cols-[minmax(0,1fr)_7.5rem_11.5rem_8rem_5.5rem_5.5rem] max-md:grid-cols-[minmax(0,1fr)_auto]`;
+/** The same grid with the owner (task 033 phase 10b) before the count. */
+export const taskListGridClassWithOwner =
+  "md:grid md:grid-cols-[minmax(0,1fr)_auto_auto_auto_5.5rem_8.5rem] md:gap-x-4";
+
+/** A task list's `li`: spans the list's grid and passes its tracks on. */
+export const taskListItemClass = "md:col-span-full md:grid md:grid-cols-subgrid";
+
+/** A task row: the list's tracks from md up (it must sit in the list's
+ *  grid), its own two tracks below md. */
+export const taskListRowGridClass = `${ROW_BASE} md:col-span-full md:grid-cols-subgrid max-md:grid-cols-[minmax(0,1fr)_auto]`;
+
+/** A task row's status cell from md up: at most the old fixed width, and
+ *  8 px on the 16 px gap, so 24 px to the next column. */
+export const rowStatusCellClass = "md:max-w-[11.5rem] md:box-content md:pr-2";
+
+/** A task row's owner cell: a name, so left-aligned, 24 px after the
+ *  widest status word on every row; capped at 8rem (the Projects page's
+ *  owner width) and ellipsed beyond it. */
+export const rowOwnerCellClass = "max-w-[8rem] truncate text-left text-meta leading-7 text-grey";
 
 /** Project rows: name, task count, date — on the task rows' tail. */
 export const projectListRowGridClass = `${ROW_BASE} grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] max-md:grid-cols-[minmax(0,1fr)_auto]`;
@@ -135,42 +178,4 @@ export function showOwnerColumn(
 export function newTaskHref(projectId?: string | null): string {
   if (projectId == null || projectId === "") return "/new";
   return `/new?${new URLSearchParams({ project: projectId }).toString()}`;
-}
-
-/**
- * When a project has tasks, its last activity is the newest task `updated_at`;
- * otherwise fall back to when the project row was created.
- */
-export function projectLastUpdated(
-  project: { project_id: string; created_at: string },
-  taskUpdatedAt: ReadonlyMap<string, string>,
-): string {
-  return taskUpdatedAt.get(project.project_id) ?? project.created_at;
-}
-
-/** Newest activity first — the sort order for the tasks list. */
-export function sortProjectsByLastUpdated<
-  T extends { project_id: string; created_at: string },
->(rows: readonly T[], taskUpdatedAt: ReadonlyMap<string, string>): T[] {
-  return [...rows].sort((left, right) =>
-    projectLastUpdated(right, taskUpdatedAt).localeCompare(
-      projectLastUpdated(left, taskUpdatedAt),
-    ),
-  );
-}
-
-/** Build a map of project id → newest assigned task `updated_at`. */
-export function newestTaskUpdateByProject(
-  tasks: ReadonlyArray<{ project_ids?: readonly string[] | null; updated_at: string }>,
-): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const task of tasks) {
-    for (const projectId of task.project_ids ?? []) {
-      const existing = map.get(projectId);
-      if (existing === undefined || task.updated_at > existing) {
-        map.set(projectId, task.updated_at);
-      }
-    }
-  }
-  return map;
 }

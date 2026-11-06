@@ -12,8 +12,9 @@ import {
   rowAccessibleName,
   rowFigureCellClass,
   rowNameCellClass,
+  rowOwnerCellClass,
+  rowStatusCellClass,
   taskListRowGridClass,
-  taskListRowGridClassWithOwner,
 } from "./listPageChrome";
 import { elapsedSeconds, formatMinutes } from "./workspace/runProgress";
 
@@ -52,7 +53,9 @@ type TaskListRowProps = {
   archived?: boolean;
 };
 
-/** One task row: name (optional project prefix), capability, aligned status, [owner], sources, date. */
+/** One task row: name (optional project prefix), capability, aligned status, [owner], sources, date.
+ *  From md up it is a subgrid of the list's grid (`taskListGridClass`), so
+ *  it must sit in `TaskListPanel`'s list. */
 export function TaskListRow({
   to,
   name,
@@ -115,7 +118,7 @@ export function TaskListRow({
     <Link
       to={to}
       aria-label={accessibleName}
-      className={showOwner ? taskListRowGridClassWithOwner : taskListRowGridClass}
+      className={taskListRowGridClass}
     >
       {/* The name cell: below md the whole first line, the name alone. From
           md up the project prefix and the name each truncate, the prefix at
@@ -134,12 +137,15 @@ export function TaskListRow({
         )}
         <span className="min-w-0 flex-1 truncate font-semibold text-navy">{safeName}</span>
       </span>
-      {/* The kind of work in plain Grey, one fixed column so the status
-          words line up below each other (round 10: not a chip). */}
+      {/* The kind of work in plain Grey, one column as wide as the widest
+          kind listed, so the status words line up below each other (round
+          10: not a chip). */}
       <span className="truncate text-meta leading-7 text-grey max-md:hidden">
         {capabilityLabel(capabilityKey)}
       </span>
-      <span className="flex min-w-0 items-center gap-1.5 text-meta leading-7 text-grey">
+      {/* The status column is as wide as the widest word listed, at most
+          the old 11.5rem, and stands 24 px from the owner (round 12). */}
+      <span className={`flex min-w-0 items-center gap-1.5 text-meta leading-7 text-grey ${rowStatusCellClass}`}>
         {/* Every row's mark is the 6 px square, so a running row's is the
             same size as a finished one's (owner, round 8): blue and
             breathing while the run is live. */}
@@ -163,7 +169,14 @@ export function TaskListRow({
           </span>
         )}
       </span>
-      {showOwner && <span className={`${rowFigureCellClass} max-md:hidden`}>{ownerCell}</span>}
+      {showOwner && (
+        <span
+          className={`${rowOwnerCellClass} max-md:hidden`}
+          title={safeOwner !== null && !isOwner ? safeOwner : undefined}
+        >
+          {ownerCell}
+        </span>
+      )}
       <span className={`${rowFigureCellClass} max-md:hidden`}>
         {/* null and 0 differ: null means no run has asked yet. A failed
             run's count says nothing about the evidence, so it reads as the

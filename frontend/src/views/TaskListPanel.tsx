@@ -1,12 +1,20 @@
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import type { components } from "../api/gen/types";
+import { useArchiveTask, useUpdateTask } from "../api/mutations";
 import type { useTasksPaged } from "../api/queries";
 import { COPY, TASK } from "../lib/vocabulary";
 import { Button } from "../ui/brand/Button";
 import { FindPopover, type FindItem } from "./FindPopover";
+import { RowFold, RowMenuControl, RowRenameField, useDepartingRows } from "./ListRowMenu";
+import { useAddToProjectStep } from "./NameMenu";
 import { taskDestination } from "./lifecycle";
-import { listFrameClass } from "./listPageChrome";
+import {
+  listFrameClass,
+  taskListGridClass,
+  taskListGridClassWithOwner,
+  taskListItemClass,
+} from "./listPageChrome";
 import { TaskListRow } from "./TaskListRow";
 import { hasLonglist, statusRun } from "./scopingActivity";
 
@@ -251,9 +259,10 @@ export function ListFootRow({ start, end }: { start?: ReactNode; end?: ReactNode
 
 /**
  * "Show more" (round 10): the outline button pagination uses. It holds its
- * place, disabled, while the next page is on its way.
+ * place, disabled, while the next page is on its way. The Tasks list and the
+ * Projects list both use it (round 12).
  */
-function ShowMore({ more, onShowMore }: { more: MoreTasks; onShowMore: () => void }) {
+export function ShowMore({ more, onShowMore }: { more: MoreTasks; onShowMore: () => void }) {
   return (
     <Button
       variant="outline"
@@ -264,6 +273,100 @@ function ShowMore({ more, onShowMore }: { more: MoreTasks; onShowMore: () => voi
     >
       Show more
     </Button>
+  );
+}
+
+/**
+ * One task row with its menu (owner, round 12): the row's link, and beside
+ * it, for the task's owner only, the control that opens Rename and Archive.
+ * Rename turns the row into the name's field; Archive, once confirmed,
+ * folds the row away (`onArchived`). An archived task offers Rename only.
+ */
+function TaskRowWithMenu({
+  row,
+  projectNames,
+  showProjectPrefix,
+  showOwner,
+  ownerlessLabel,
+  onArchived,
+}: {
+  row: TaskListItem;
+  projectNames?: ReadonlyMap<string, string>;
+  showProjectPrefix: boolean;
+  showOwner: boolean;
+  ownerlessLabel?: string;
+  onArchived: () => void;
+}) {
+  const update = useUpdateTask(row.task_id);
+  const archive = useArchiveTask(row.task_id);
+  const [editing, setEditing] = useState(false);
+  const control = useRef<HTMLButtonElement>(null);
+  const isOwner = row.is_owner ?? true;
+  const archived = row.status === "archived";
+  const pending = update.isPending || archive.isPending;
+  // The header's "Add to project", shared (owner, round 12).
+  const addToProject = useAddToProjectStep(row.project_ids, update);
+
+  if (editing) {
+    return (
+      <RowRenameField
+        name={row.name}
+        label={COPY.taskSettings}
+        fieldLabel={`${TASK.one} name`}
+        rename={(next, done) => update.mutate({ name: next }, { onSuccess: done.onSuccess, onError: done.onError })}
+        renameError={`The ${TASK.lower} couldn't be renamed. Try again.`}
+        pending={pending}
+        onClose={() => {
+          setEditing(false);
+          window.setTimeout(() => control.current?.focus(), 0);
+        }}
+      />
+    );
+  }
+
+  return (
+    <>
+      <TaskListRow
+        to={rowDestination(row)}
+        name={row.name}
+        capabilityKey={row.capability}
+        projectNames={showProjectPrefix ? projectNameList(row.project_ids, projectNames) : null}
+        showProjectPrefix={showProjectPrefix}
+        sourceCount={row.source_count}
+        updatedAt={row.updated_at}
+        latestRun={statusRun(row)}
+        activeRun={row.active_run}
+        isOwner={isOwner}
+        ownerName={row.owner_display ?? null}
+        showOwner={showOwner}
+        ownerlessLabel={ownerlessLabel}
+        archived={archived}
+      />
+      {isOwner && (
+        <RowMenuControl
+          label={COPY.taskSettings}
+          name={row.name}
+          controlRef={control}
+          pending={pending}
+          onRename={() => setEditing(true)}
+          archive={
+            archived
+              ? undefined
+              : (_, done) =>
+                  archive.mutate(undefined, {
+                    onSuccess: () => {
+                      done.onSuccess();
+                      onArchived();
+                    },
+                    onError: done.onError,
+                  })
+          }
+          archiveSentence={`Archiving removes this ${TASK.lower} from your active ${TASK.lowerMany}.`}
+          archiveError={`The ${TASK.lower} couldn't be archived. Try again.`}
+          steps={[addToProject]}
+        />
+      )}
+    </>
   );
 }
 
@@ -291,8 +394,11 @@ export function TaskListPanel({
     const from = focusFrom.current;
     if (from === null || rows.length <= from) return;
     focusFrom.current = null;
-    listRef.current?.querySelectorAll<HTMLAnchorElement>(":scope > li > a")[from]?.focus();
+    listRef.current?.querySelectorAll<HTMLAnchorElement>(":scope > li a[href]")[from]?.focus();
   }, [rows.length]);
+
+  // An archived row folds away where it stood (owner, round 12).
+  const { shown, depart } = useDepartingRows(rows, (row) => row.task_id);
 
   const foot = (start?: ReactNode) => <ListFootRow start={start} end={footEnd} />;
 
@@ -327,27 +433,23 @@ export function TaskListPanel({
 
   return (
     <>
-      <ul ref={listRef} role="list" className={listFrameClass}>
-        {rows.map((row) => (
-          <li key={row.task_id} className="border-b border-line last:border-b-0">
-            <TaskListRow
-              to={rowDestination(row)}
-              name={row.name}
-              capabilityKey={row.capability}
-              projectNames={
-                showProjectPrefix ? projectNameList(row.project_ids, projectNames) : null
-              }
-              showProjectPrefix={showProjectPrefix}
-              sourceCount={row.source_count}
-              updatedAt={row.updated_at}
-              latestRun={statusRun(row)}
-              activeRun={row.active_run}
-              isOwner={row.is_owner ?? true}
-              ownerName={row.owner_display ?? null}
-              showOwner={showOwner}
-              ownerlessLabel={ownerlessLabel}
-              archived={row.status === "archived"}
-            />
+      <ul
+        ref={listRef}
+        role="list"
+        className={`${listFrameClass} ${showOwner ? taskListGridClassWithOwner : taskListGridClass}`}
+      >
+        {shown.map(({ row, leaving }) => (
+          <li key={row.task_id} className={`${taskListItemClass} group border-b border-line last:border-b-0`}>
+            <RowFold leaving={leaving} subgrid>
+              <TaskRowWithMenu
+                row={row}
+                projectNames={projectNames}
+                showProjectPrefix={showProjectPrefix}
+                showOwner={showOwner}
+                ownerlessLabel={ownerlessLabel}
+                onArchived={() => depart(row.task_id)}
+              />
+            </RowFold>
           </li>
         ))}
       </ul>

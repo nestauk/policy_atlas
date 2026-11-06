@@ -149,7 +149,7 @@ describe("TaskListRow — layout (lists polish)", () => {
 
   it("deepens to Blue Tint the instant it is pressed (round 10)", () => {
     renderRow();
-    expect(screen.getByRole("link")).toHaveClass("active:bg-blue-tint", "active:duration-0", "hover:bg-blue-tint-2");
+    expect(screen.getByRole("link")).toHaveClass("active:bg-blue-tint", "active:duration-0", "group-hover:bg-blue-tint-2");
   });
 });
 
@@ -263,5 +263,16 @@ describe("TaskListRow — round 10 words and layout", () => {
     expect(time).toHaveTextContent("12 Oct 2025");
     expect(time).toHaveClass("text-meta");
     expect(time).not.toHaveClass("text-caption", "tabular-nums");
+  });
+});
+
+// Round 12: the owner column is capped at 8rem; a colleague's name cut by
+// the cap is whole in the hover text.
+describe("TaskListRow — the owner cell", () => {
+  it("gives a colleague's capped name its full form on hover", () => {
+    renderRow({ showOwner: true, isOwner: false, ownerName: "Bartholomew Featherstonehaugh" });
+    const owner = screen.getByText("Bartholomew Featherstonehaugh");
+    expect(owner).toHaveAttribute("title", "Bartholomew Featherstonehaugh");
+    expect(owner).toHaveClass("max-w-[8rem]", "truncate");
   });
 });

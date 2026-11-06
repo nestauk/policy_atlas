@@ -38,6 +38,13 @@ function asPaged(flat: Flat) {
   };
 }
 
+// The rows' own menu (round 12) runs the task's rename and archive.
+const taskMutations = vi.hoisted(() => ({ update: vi.fn(), archive: vi.fn() }));
+vi.mock("../api/mutations", () => ({
+  useUpdateTask: vi.fn(() => ({ mutate: taskMutations.update, isPending: false })),
+  useArchiveTask: vi.fn(() => ({ mutate: taskMutations.archive, isPending: false })),
+}));
+
 vi.mock("../api/queries", () => ({
   useMe: vi.fn(),
   useProjects: vi.fn(),
@@ -145,6 +152,31 @@ describe("TasksListView — the Organisation/Mine switcher (task 033 phase 10b, 
     expect(screen.queryByText("You")).not.toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Organisation" }));
     expect(screen.getByText("You")).toBeInTheDocument();
+  });
+
+  it("lays Organisation's rows on one grid with the owner track, Mine's without (round 12)", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(
+      {
+        data: {
+          user_id: "u1",
+          display_name: "Ada Lovelace",
+          organisation: { org_id: "org-1", name: "Dept" },
+          is_admin: false,
+        },
+      } as unknown as ReturnType<typeof queries.useMe>,
+    );
+    const user = userEvent.setup();
+    renderView();
+    const list = () => screen.getByRole("list");
+    expect(list()).toHaveClass("md:grid", "md:grid-cols-[minmax(0,1fr)_auto_auto_5.5rem_8.5rem]");
+    await user.click(screen.getByRole("tab", { name: "Organisation" }));
+    expect(list()).toHaveClass("md:grid", "md:grid-cols-[minmax(0,1fr)_auto_auto_auto_5.5rem_8.5rem]");
+    const item = within(list()).getAllByRole("listitem")[0];
+    expect(item).toHaveClass("md:grid-cols-subgrid", "md:col-span-full");
+    expect(within(item).getByRole("link")).toHaveClass("md:grid-cols-subgrid", "md:col-span-full");
+    // Capped and ellipsed; the reader's own "You" needs no hover text.
+    expect(within(item).getByText("You")).toHaveClass("max-w-[8rem]", "truncate", "text-left");
+    expect(within(item).getByText("You")).not.toHaveAttribute("title");
   });
 
   it("shows the admin wider-list notice only for admin + Organisation scope", async () => {
@@ -696,5 +728,182 @@ describe("TasksListView — Show more", () => {
     expect(alert).toHaveTextContent("Your tasks couldn't be loaded.");
     await user.click(within(alert).getByRole("button", { name: "Retry" }));
     expect(fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Owner, round 12: "There should be a way to delete or archive and rename
+// tasks and projects on the tasks/project lists." Each owner's row has the
+// headers' menu beside its link.
+describe("TasksListView — the row's menu (round 12)", () => {
+  const ENROLLED = {
+    data: { user_id: "u1", display_name: "Ada Lovelace", organisation: { org_id: "org-1", name: "Dept" }, is_admin: false },
+  } as unknown as ReturnType<typeof queries.useMe>;
+  const COLLEAGUE_ROW = { ...ROW, task_id: "task-2", name: "Grace's task", is_owner: false, owner_display: "Grace Hopper" };
+
+  beforeEach(() => {
+    taskMutations.update.mockReset();
+    taskMutations.archive.mockReset();
+  });
+
+  it("gives only the owner's rows the control, beside the link and never inside it", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
+    tasks.mockReturnValue({ data: { data: [ROW, COLLEAGUE_ROW] }, isPending: false, isError: false, refetch: vi.fn() } as unknown as Flat);
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole("tab", { name: "Organisation" }));
+    const control = screen.getByRole("button", { name: "Task settings: Healthier childhoods" });
+    expect(control.closest("a")).toBeNull();
+    expect(control.closest("li")).toContainElement(screen.getByRole("link", { name: /^Healthier childhoods/ }));
+    expect(screen.queryByRole("button", { name: "Task settings: Grace's task" })).not.toBeInTheDocument();
+    // Quiet until hovered or focused from md up; always there on a phone.
+    expect(control).toHaveClass("h-10", "w-10", "text-grey", "md:opacity-0", "md:group-hover:opacity-100", "md:group-focus-within:opacity-100");
+  });
+
+  it("renames on the row with Save name and Cancel, then gives focus back to the control", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
+    taskMutations.update.mockImplementation((_body: unknown, options: { onSuccess: () => void }) => options.onSuccess());
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole("button", { name: "Task settings: Healthier childhoods" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const field = screen.getByRole("textbox", { name: "Task name" });
+    expect(field).toHaveValue("Healthier childhoods");
+    expect(field).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    // The row is the field while it is edited: no link to follow.
+    expect(screen.queryByRole("link", { name: /^Healthier childhoods/ })).not.toBeInTheDocument();
+    await user.clear(field);
+    await user.type(field, "Healthier childhoods in Hackney");
+    await user.click(screen.getByRole("button", { name: "Save name" }));
+    expect(taskMutations.update).toHaveBeenCalledWith({ name: "Healthier childhoods in Hackney" }, expect.anything());
+    expect(screen.queryByRole("textbox", { name: "Task name" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Task settings: Healthier childhoods" })).toHaveFocus());
+  });
+
+  it("cancels a rename without saving", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole("button", { name: "Task settings: Healthier childhoods" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    await user.type(screen.getByRole("textbox", { name: "Task name" }), " 2");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(taskMutations.update).not.toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: /^Healthier childhoods/ })).toBeInTheDocument();
+  });
+
+  it("archives after the confirm in words, and the row folds out of the list", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
+    taskMutations.archive.mockImplementation((_body: unknown, options: { onSuccess: () => void }) => options.onSuccess());
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole("button", { name: "Task settings: Healthier childhoods" }));
+    await user.click(screen.getByRole("menuitem", { name: "Archive" }));
+    expect(screen.getByText("Archiving removes this task from your active tasks.")).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Keep it" })).toBeInTheDocument();
+    expect(taskMutations.archive).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+    expect(taskMutations.archive).toHaveBeenCalledTimes(1);
+    // It folds (height and opacity) where it stood, then leaves for good,
+    // even though the list still holds it until the refetch lands.
+    const fold = screen.getByRole("link", { name: /^Healthier childhoods/ }).closest("[data-leaving]");
+    expect(fold).toHaveClass("grid-rows-[0fr]", "opacity-0", "duration-200");
+    await waitFor(() => expect(screen.queryByRole("link", { name: /^Healthier childhoods/ })).not.toBeInTheDocument());
+  });
+
+  it("keeps the row on Keep it, and offers no Archive on an archived task", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole("button", { name: "Task settings: Healthier childhoods" }));
+    await user.click(screen.getByRole("menuitem", { name: "Archive" }));
+    await user.click(screen.getByRole("button", { name: "Keep it" }));
+    expect(taskMutations.archive).not.toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: /^Healthier childhoods/ })).toBeInTheDocument();
+
+    tasks.mockReturnValue({
+      data: { data: [{ ...ROW, status: "archived" }] }, isPending: false, isError: false, refetch: vi.fn(),
+    } as unknown as Flat);
+    await user.click(screen.getByRole("button", { name: "Show archived" }));
+    await user.click(screen.getByRole("button", { name: "Task settings: Healthier childhoods" }));
+    expect(screen.getByRole("menuitem", { name: "Rename" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Archive" })).not.toBeInTheDocument();
+  });
+});
+
+// Owner, round 12: the row's control is the three dots, not the headers'
+// chevron, and a task row's menu adds the task to a project (the Share
+// page's change, the header's same step).
+describe("TasksListView — the row's menu: the dots and Add to project (round 12)", () => {
+  const ENROLLED = {
+    data: { user_id: "u1", display_name: "Ada Lovelace", organisation: { org_id: "org-1", name: "Dept" }, is_admin: false },
+  } as unknown as ReturnType<typeof queries.useMe>;
+  const projectsOf = (rows: { project_id: string; name: string }[]) =>
+    ({ data: { data: rows } }) as unknown as ReturnType<typeof queries.useProjects>;
+
+  beforeEach(() => {
+    taskMutations.update.mockReset();
+  });
+
+  it("draws the three dots in the row's control", () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
+    renderView();
+    const control = screen.getByRole("button", { name: "Task settings: Healthier childhoods" });
+    const dots = control.querySelector("svg path");
+    expect(dots?.getAttribute("d")).toBe("M3.5 8h0M8 8h0M12.5 8h0");
+  });
+
+  it("adds the task to a project it is not in, through the app's dropdown, with Add and Cancel", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
+    vi.mocked(queries.useProjects).mockReturnValue(
+      projectsOf([
+        { project_id: "p-1", name: "Child health" },
+        { project_id: "p-2", name: "Net zero homes" },
+      ]),
+    );
+    tasks.mockReturnValue({
+      data: { data: [{ ...ROW, project_ids: ["p-1"] }] }, isPending: false, isError: false, refetch: vi.fn(),
+    } as unknown as Flat);
+    taskMutations.update.mockImplementation((_body: unknown, options: { onSuccess: () => void }) => options.onSuccess());
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole("button", { name: "Task settings: Healthier childhoods" }));
+    await user.click(screen.getByRole("menuitem", { name: "Add to project" }));
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Add to a project" }));
+    expect(screen.queryByRole("option", { name: "Child health" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "Net zero homes" }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(taskMutations.update).toHaveBeenCalledWith({ project_ids: ["p-1", "p-2"] }, expect.anything());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Task settings: Healthier childhoods" })).toHaveFocus());
+  });
+
+  it("says so in the step when the change is refused", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
+    vi.mocked(queries.useProjects).mockReturnValue(projectsOf([{ project_id: "p-2", name: "Net zero homes" }]));
+    taskMutations.update.mockImplementation((_body: unknown, options: { onError: () => void }) => options.onError());
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole("button", { name: "Task settings: Healthier childhoods" }));
+    await user.click(screen.getByRole("menuitem", { name: "Add to project" }));
+    await user.click(screen.getByRole("combobox", { name: "Add to a project" }));
+    await user.click(screen.getByRole("option", { name: "Net zero homes" }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("The projects couldn't be changed. Try again.");
+  });
+
+  it("disables the item, with its reason, when the task is in every project", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
+    vi.mocked(queries.useProjects).mockReturnValue(projectsOf([{ project_id: "p-1", name: "Child health" }]));
+    tasks.mockReturnValue({
+      data: { data: [{ ...ROW, project_ids: ["p-1"] }] }, isPending: false, isError: false, refetch: vi.fn(),
+    } as unknown as Flat);
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole("button", { name: "Task settings: Healthier childhoods" }));
+    const item = screen.getByRole("menuitem", { name: /Add to project/ });
+    expect(item).toBeDisabled();
+    expect(item).toHaveTextContent("Already in every project");
   });
 });

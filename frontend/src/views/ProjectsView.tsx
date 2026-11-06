@@ -1,10 +1,16 @@
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { queryKeys, useMe, useProject, useProjects, useTasks, useTasksPaged } from "../api/queries";
-import { useCreateProject, useUpdateProject } from "../api/mutations";
+import {
+  queryKeys,
+  useMe,
+  useProject,
+  useProjectsPaged,
+  useTasksPaged,
+} from "../api/queries";
+import { useArchiveProject, useCreateProject, useUpdateProject } from "../api/mutations";
 import { isConflictCode, conflictSentences } from "../lib/errors";
 import { Figures } from "../lib/figures";
 import { scrub } from "../lib/scrub";
@@ -24,15 +30,13 @@ import {
   formatListDate,
   listFrameClass,
   newTaskHref,
-  newestTaskUpdateByProject,
-  projectLastUpdated,
   projectListRowGridClass,
   projectListRowGridClassWithOwner,
   rowFigureCellClass,
   rowAccessibleName,
   rowNameCellClass,
+  rowOwnerCellClass,
   showOwnerColumn,
-  sortProjectsByLastUpdated,
 } from "./listPageChrome";
 import type { Scope } from "./ScopeSwitcher";
 import { ARCHIVED_HEADING_CLASS, ArchivedToggle, ScopeSwitcher } from "./ScopeSwitcher";
@@ -42,10 +46,13 @@ import {
   FindTasks,
   ListFootRow,
   ListSkeleton,
+  ShowMore,
   TaskListPanel,
   pagedTasks,
+  type MoreTasks,
 } from "./TaskListPanel";
 import { FindPopover } from "./FindPopover";
+import { RowFold, RowMenuControl, RowRenameField, useDepartingRows } from "./ListRowMenu";
 import { ProjectName } from "./NameMenu";
 import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
 
@@ -56,19 +63,10 @@ import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
  * shows a name and a count and stops there. Anything more would imply the
  * grouping has a state, which it does not.
  */
-/** `ProjectOut` carries a derived `task_count` but no last-task-updated
- *  timestamp, so this overview still leans on the global tasks page to
- *  derive "most recently active" per project (`newestTaskUpdateByProject`
- *  below) — asking per-project would be N+1 requests for a list page.
- *  Server page-size cap (`PAGE_SIZE_MAX`, web-api.md § Pagination): raised
- *  from the 50-row default so this remains an approximation rather than
- *  systematically wrong, not a fix — a workspace with more than 200 active
- *  tasks across projects can still miss a newer update that falls
- *  outside this page. `ProjectDetailView` does not share the *last-update*
- *  limitation: it fetches its own member list via `project_id`, which is
- *  exact up to the same 200-row cap (task 033 phase 10a) rather than the
- *  50-row default. */
-const PROJECTS_OVERVIEW_TASKS_PAGE_SIZE = 200;
+/** A project's own task list asks for the server's largest page (200,
+ *  `PAGE_SIZE_MAX`, web-api.md § Pagination) rather than the default, with
+ *  "Show more" past it (round 10). */
+const PROJECT_TASKS_PAGE_SIZE = 200;
 
 export function ProjectsView() {
   useDocumentTitle(PROJECT.many);
@@ -81,19 +79,33 @@ export function ProjectsView() {
   // projects of the open scope. Off, the queries are as before.
   const [archived, setArchived] = useState(false);
   const archivedFilter = archived ? { status: "archived" as const } : {};
-  const projects = useProjects(
+  // Paged by the server, 20 a page (round 12); "Show more" asks for the
+  // next page of the list on screen, as on Tasks.
+  const projects = useProjectsPaged(
     hasSwitcher ? { scope, ...archivedFilter } : archived ? archivedFilter : undefined,
   );
-  const tasksQuery = useTasks(
-    hasSwitcher
-      ? { page_size: PROJECTS_OVERVIEW_TASKS_PAGE_SIZE, scope }
-      : { page_size: PROJECTS_OVERVIEW_TASKS_PAGE_SIZE },
-  );
+  // The server orders the projects by their last activity
+  // (`last_activity_at`, round 12) and the page keeps its order, so a page
+  // that arrives with "Show more" lands below the rows already shown.
+  const { rows, more } = pagedProjects(projects);
   const create = useCreateProject();
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
-  const taskUpdatedAt = newestTaskUpdateByProject(tasksQuery.data?.data ?? []);
-  const rows = sortProjectsByLastUpdated(projects.data?.data ?? [], taskUpdatedAt);
+  // An archived row folds away where it stood (owner, round 12).
+  const { shown, depart } = useDepartingRows(rows, (project) => project.project_id);
+  // After "Show more", focus moves to the first project that arrived (as on
+  // Tasks), found by id: a project already listed is dropped from the new
+  // page, so the arrivals' position is not the old row count.
+  const listRef = useRef<HTMLUListElement>(null);
+  const listedBefore = useRef<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    const before = listedBefore.current;
+    if (before === null) return;
+    const index = rows.findIndex((project) => !before.has(project.project_id));
+    if (index === -1) return;
+    listedBefore.current = null;
+    listRef.current?.querySelectorAll<HTMLAnchorElement>(":scope > li a[href]")[index]?.focus();
+  }, [rows]);
   const showOwner = showOwnerColumn(hasSwitcher, rows, scope);
   const isAdminWideList = hasSwitcher && me.data?.is_admin === true && scope === "all";
   const ownerlessLabel = isAdminWideList ? TENANCY_COPY.noOrganisation : TENANCY_COPY.ownerlessRow;
@@ -125,7 +137,7 @@ export function ProjectsView() {
                 id: project.project_id,
                 label: project.name,
                 href: `/projects/${project.project_id}`,
-                updatedAt: projectLastUpdated(project, taskUpdatedAt),
+                updatedAt: project.last_activity_at,
               }))}
               copy={{ label: COPY.findProject, noun: PROJECT.lowerMany }}
               className="-mr-3"
@@ -185,14 +197,17 @@ export function ProjectsView() {
         {archived && <h2 className={ARCHIVED_HEADING_CLASS}>Archived</h2>}
         {projects.isPending && <ListSkeleton label={`Loading ${PROJECT.lowerMany}`} />}
 
-        {projects.isError && (
+        {/* A page after the first that fails keeps the rows and offers Retry
+            under them; only a failed first page replaces the list. */}
+        {projects.isError && !projects.isFetchNextPageError && (
           <ListError actionLabel="Try again" onRetry={() => void projects.refetch()}>
             Couldn&apos;t load your {PROJECT.lowerMany}.
           </ListError>
         )}
 
         {projects.data !== undefined &&
-          projects.data.data.length === 0 &&
+          !projects.isError &&
+          rows.length === 0 &&
           !creating &&
           (archived ? (
             <ListEmpty label={`No archived ${PROJECT.lowerMany}`} />
@@ -202,56 +217,46 @@ export function ProjectsView() {
             </ListEmpty>
           ))}
 
-        {(projects.data?.data.length ?? 0) > 0 && (
-          <ul role="list" className={listFrameClass}>
-            {rows.map((project) => {
-              const lastUpdated = projectLastUpdated(project, taskUpdatedAt);
-              const date = formatListDate(lastUpdated);
-              const owner = project.is_owner
-                ? "You"
-                : project.owner_display !== null
-                  ? scrub(project.owner_display)
-                  : ownerlessLabel;
-              const count =
-                project.task_count === 1
-                  ? `1 ${TASK.lower}`
-                  : `${project.task_count} ${TASK.lowerMany}`;
-              return (
-                <li key={project.project_id} className="border-b border-line last:border-b-0">
-                  <Link
-                    to={`/projects/${project.project_id}`}
-                    // Its content in order, as the task rows (round 10).
-                    aria-label={rowAccessibleName([
-                      scrub(project.name),
-                      showOwner && owner !== TENANCY_COPY.ownerlessRow ? owner : null,
-                      count,
-                      date,
-                    ])}
-                    className={showOwner ? projectListRowGridClassWithOwner : projectListRowGridClass}
-                  >
-                    <span
-                      className={`${rowNameCellClass} font-semibold text-navy max-md:col-span-2`}
-                    >
-                      {scrub(project.name)}
-                    </span>
-                    {showOwner && (
-                      <span className={`${rowFigureCellClass} max-md:hidden`}>{owner}</span>
-                    )}
-                    <span className={`${rowFigureCellClass} max-md:text-left`}>
-                      <Figures text={count} />
-                    </span>
-                    <time dateTime={lastUpdated} className={rowFigureCellClass}>
-                      <Figures text={date} />
-                    </time>
-                  </Link>
-                </li>
-              );
-            })}
+        {rows.length > 0 && (
+          <ul ref={listRef} role="list" className={listFrameClass}>
+            {shown.map(({ row: project, leaving }) => (
+              <li key={project.project_id} className="group border-b border-line last:border-b-0">
+                <RowFold leaving={leaving}>
+                  <ProjectRowWithMenu
+                    project={project}
+                    lastUpdated={project.last_activity_at}
+                    showOwner={showOwner}
+                    ownerlessLabel={ownerlessLabel}
+                    onArchived={() => depart(project.project_id)}
+                  />
+                </RowFold>
+              </li>
+            ))}
           </ul>
         )}
 
-        {/* The list's foot: the archived toggle, at the right (round 11). */}
+        {more.error && rows.length > 0 && (
+          <div className="mt-4">
+            <ListError actionLabel="Retry" onRetry={more.onRetry}>
+              Couldn&apos;t load your {PROJECT.lowerMany}.
+            </ListError>
+          </div>
+        )}
+
+        {/* The list's foot: "Show more" while the server holds more (round
+            12), the archived toggle at the right (round 11). */}
         <ListFootRow
+          start={
+            rows.length > 0 && more.hasMore && !more.error ? (
+              <ShowMore
+                more={more}
+                onShowMore={() => {
+                  listedBefore.current = new Set(rows.map((project) => project.project_id));
+                  more.onShowMore();
+                }}
+              />
+            ) : null
+          }
           end={<ArchivedToggle pressed={archived} onToggle={() => setArchived((on) => !on)} />}
         />
       </div>
@@ -262,6 +267,145 @@ export function ProjectsView() {
 type ProjectRow = components["schemas"]["ProjectOut"];
 
 /**
+ * One project row with its menu (owner, round 12): the row's link, and
+ * beside it, for the project's owner only, the control that opens Rename
+ * and Archive. Rename turns the row into the name's field; Archive, once
+ * confirmed, folds the row away (`onArchived`). An archived project offers
+ * Rename only.
+ */
+function ProjectRowWithMenu({
+  project,
+  lastUpdated,
+  showOwner,
+  ownerlessLabel,
+  onArchived,
+}: {
+  project: ProjectRow;
+  lastUpdated: string;
+  showOwner: boolean;
+  ownerlessLabel: string;
+  onArchived: () => void;
+}) {
+  const update = useUpdateProject(project.project_id);
+  const archive = useArchiveProject(project.project_id);
+  const [editing, setEditing] = useState(false);
+  const control = useRef<HTMLButtonElement>(null);
+  const pending = update.isPending || archive.isPending;
+  const label = `${PROJECT.one} settings`;
+  const date = formatListDate(lastUpdated);
+  const owner = project.is_owner
+    ? "You"
+    : project.owner_display !== null
+      ? scrub(project.owner_display)
+      : ownerlessLabel;
+  const count = project.task_count === 1 ? `1 ${TASK.lower}` : `${project.task_count} ${TASK.lowerMany}`;
+
+  if (editing) {
+    return (
+      <RowRenameField
+        name={project.name}
+        label={label}
+        fieldLabel={`${PROJECT.one} name`}
+        rename={(next, done) => update.mutate({ name: next }, { onSuccess: done.onSuccess, onError: done.onError })}
+        renameError={`The ${PROJECT.lower} couldn't be renamed. Try again.`}
+        pending={pending}
+        onClose={() => {
+          setEditing(false);
+          window.setTimeout(() => control.current?.focus(), 0);
+        }}
+      />
+    );
+  }
+
+  return (
+    <>
+      <Link
+        to={`/projects/${project.project_id}`}
+        // Its content in order, as the task rows (round 10).
+        aria-label={rowAccessibleName([
+          scrub(project.name),
+          showOwner && owner !== TENANCY_COPY.ownerlessRow ? owner : null,
+          count,
+          date,
+        ])}
+        className={showOwner ? projectListRowGridClassWithOwner : projectListRowGridClass}
+      >
+        <span className={`${rowNameCellClass} font-semibold text-navy max-md:col-span-2`}>
+          {scrub(project.name)}
+        </span>
+        {showOwner && <span className={`${rowOwnerCellClass} max-md:hidden`}>{owner}</span>}
+        <span className={`${rowFigureCellClass} max-md:text-left`}>
+          <Figures text={count} />
+        </span>
+        <time dateTime={lastUpdated} className={rowFigureCellClass}>
+          <Figures text={date} />
+        </time>
+      </Link>
+      {project.is_owner && (
+        <RowMenuControl
+          label={label}
+          name={project.name}
+          controlRef={control}
+          pending={pending}
+          onRename={() => setEditing(true)}
+          archive={
+            project.archived_at != null
+              ? undefined
+              : (_, done) =>
+                  archive.mutate(undefined, {
+                    onSuccess: () => {
+                      done.onSuccess();
+                      onArchived();
+                    },
+                    onError: done.onError,
+                  })
+          }
+          archiveSentence={`Archiving removes this ${PROJECT.lower} from your active ${PROJECT.lowerMany}. Its ${TASK.lowerMany} stay as they are.`}
+          archiveError={`The ${PROJECT.lower} couldn't be archived. Try again.`}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * A paged project list's rows and its foot, as `pagedTasks` for tasks: the
+ * pages in order, a project already listed dropped (one that changes
+ * between two requests can cross a page boundary).
+ *
+ * Args:
+ *   result: A `useProjectsPaged` result.
+ *
+ * Returns:
+ *   The loaded rows and the foot's state.
+ */
+function pagedProjects(result: ReturnType<typeof useProjectsPaged>): {
+  rows: ProjectRow[];
+  more: MoreTasks;
+} {
+  const seen = new Set<string>();
+  const rows: ProjectRow[] = [];
+  for (const page of result.data?.pages ?? []) {
+    for (const row of page.data) {
+      if (seen.has(row.project_id)) continue;
+      seen.add(row.project_id);
+      rows.push(row);
+    }
+  }
+  const askForNext = () => void result.fetchNextPage();
+  return {
+    rows,
+    more: {
+      hasMore: result.hasNextPage,
+      loading: result.isFetchingNextPage,
+      error: result.isFetchNextPageError,
+      onShowMore: askForNext,
+      onRetry: askForNext,
+    },
+  };
+}
+
+/**
  * The project's row from any Projects list already in the cache (every
  * scope), so a project opened from the Projects page has its name,
  * description and visibility on the first frame instead of after its own
@@ -269,12 +413,18 @@ type ProjectRow = components["schemas"]["ProjectOut"];
  * moves when the detail lands and replaces it.
  */
 function listedProject(client: QueryClient, projectId: string): ProjectRow | undefined {
-  const lists = client.getQueriesData<{ data: ProjectRow[] }>({
+  // Both shapes share the key's head: a picker's one page (`useProjects`)
+  // and the Projects page's pages (`useProjectsPaged`, round 12).
+  const lists = client.getQueriesData<{ data: ProjectRow[] } | { pages: { data: ProjectRow[] }[] }>({
     queryKey: queryKeys.projects().slice(0, 2),
   });
-  for (const [, page] of lists) {
-    const row = page?.data.find((candidate) => candidate.project_id === projectId);
-    if (row !== undefined) return row;
+  for (const [, cached] of lists) {
+    if (cached === undefined) continue;
+    const pages = "pages" in cached ? cached.pages : [cached];
+    for (const page of pages) {
+      const row = page.data.find((candidate) => candidate.project_id === projectId);
+      if (row !== undefined) return row;
+    }
   }
   return undefined;
 }
@@ -296,7 +446,7 @@ export function ProjectDetailView() {
   // Past the 200-row page, "Show more" asks for the next (round 10).
   const tasksQuery = useTasksPaged({
     project_id: projectId,
-    page_size: PROJECTS_OVERVIEW_TASKS_PAGE_SIZE,
+    page_size: PROJECT_TASKS_PAGE_SIZE,
   });
   const { rows: tasks, more } = pagedTasks(tasksQuery);
   const updateProject = useUpdateProject(projectId);
