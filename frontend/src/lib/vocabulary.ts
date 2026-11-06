@@ -88,24 +88,6 @@ export const COPY = {
 } as const;
 
 /**
- * Task 037 — the Share tab's public-link section (contract § R1, §
- * Public / private boundary). The warning states exactly what a public link
- * exposes, before the owner can turn it on.
- */
-export const PUBLIC_SHARE = {
-  heading: "Public link",
-  statusOn: "Shared publicly — anyone with the link can view.",
-  statusOff: "Not shared publicly.",
-  warning:
-    `Anyone on the internet with the public link can see this ${TASK.one}'s result and sources — including the source list and quoted excerpts from the underlying documents. They do not need to sign in.`,
-  turnOn: "Share publicly",
-  turnOff: "Stop sharing publicly",
-  copyLink: "Copy link",
-  copied: "Link copied",
-  toggleFailed: "Public sharing couldn't be changed. Try again.",
-} as const;
-
-/**
  * Task 033 phase 10b — organisation-tenancy chrome copy (contract § 11,
  * rubric 41). Lead-owned and binding: wired exactly, not rewritten.
  */

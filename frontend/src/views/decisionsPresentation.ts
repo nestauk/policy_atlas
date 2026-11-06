@@ -42,24 +42,3 @@ export function friendlyDecisionDetails(detail: Decision["detail"]): FriendlyDet
       : [];
   });
 }
-
-type PresentedDecision = Decision & { searchCount?: number };
-
-/** Collapse durable search events into one count without exposing their raw payloads. */
-export function groupSearchDecisions(entries: Decision[]): PresentedDecision[] {
-  const searchEntries = entries.filter((entry) => entry.kind === "search.executed");
-  if (searchEntries.length === 0) return entries;
-  const firstSearch = searchEntries[0];
-  const grouped: PresentedDecision = {
-    ...firstSearch,
-    kind: "search.executed.grouped",
-    summary: `Search terms used (${searchEntries.length} queries)`,
-    detail: null,
-    searchCount: searchEntries.length,
-  };
-  const firstIndex = entries.indexOf(firstSearch);
-  return entries.flatMap((entry, index) => {
-    if (entry.kind !== "search.executed") return [entry];
-    return index === firstIndex ? [grouped] : [];
-  });
-}

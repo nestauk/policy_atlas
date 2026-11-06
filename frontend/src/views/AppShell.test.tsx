@@ -673,6 +673,9 @@ describe("AppShell — the account menu (task 033 phase 10b, contract § 11 / ru
     };
     await openAccountMenu();
     expect(screen.getByText("Administrator")).toBeInTheDocument();
+    // Blue is the one pen (owner, round 10): the role is Grey, not Electric Blue.
+    expect(screen.getByText("Administrator")).toHaveClass("text-grey");
+    expect(screen.getByText("Administrator")).not.toHaveClass("text-blue");
   });
 
   it("truncates a long email with CSS rather than breaking the popover layout", async () => {

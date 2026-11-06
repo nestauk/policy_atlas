@@ -286,7 +286,7 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
                 : TENANCY_COPY.noOrganisation}
             </p>
             {me.data.is_admin && (
-              <p className="text-caption font-bold text-blue">{TENANCY_COPY.administrator}</p>
+              <p className="text-caption font-bold text-grey">{TENANCY_COPY.administrator}</p>
             )}
           </div>
         )}
