@@ -145,16 +145,21 @@ describe("the growing underline (owner, round 9)", () => {
   });
 });
 
-describe("the chip wave while claims are checked (owner, round 9)", () => {
-  it("breathes from the muted chip to the checked marker's blue look, 1.2 s, 150 ms apart", () => {
-    const keyframes = block(artefactCss, "@keyframes checking-breathe {");
+describe("the chip wave while claims are checked (owners, rounds 9 and 11)", () => {
+  it("pulses each chip narrowly to the checked marker's blue look with a halo, every 2 s, 350 ms apart", () => {
+    const keyframes = block(artefactCss, "@keyframes checking-pulse {");
     expect(keyframes).toContain("background-color: var(--color-blue-tint-2)");
     expect(keyframes).toContain("border-color: rgb(0 0 255 / 0.25)");
     expect(keyframes).toContain("color: rgb(0 0 255 / 0.8)");
+    expect(keyframes).toContain("box-shadow: 0 0 0 1px rgb(0 0 255 / 0.35)");
     expect(keyframes).not.toContain("opacity");
+    // A narrow pulse: muted to 25 %, in by 40 %, held to 50 %, out by 65 %
+    // (300 ms each way on a 2 s cycle).
+    expect(keyframes).toMatch(/0%,\s*25%,\s*65%,\s*100% \{/);
+    expect(keyframes).toMatch(/40%,\s*50% \{/);
     const rule = block(artefactCss, ".draft-checking .pending-mark {");
-    expect(rule).toContain("checking-breathe 1.2s ease-in-out infinite");
-    expect(rule).toContain("calc(var(--mark-at, 0) * 150ms)");
+    expect(rule).toContain("checking-pulse 2s ease-in-out infinite");
+    expect(rule).toContain("calc(var(--mark-at, 0) * 350ms)");
     expect(artefactCss).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.draft-checking \.pending-mark \{\s*animation: none;/);
   });
 });

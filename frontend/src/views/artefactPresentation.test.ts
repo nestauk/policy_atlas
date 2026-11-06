@@ -273,7 +273,7 @@ describe("artefactMarkdown", () => {
     expect(markdown).toMatch(/^1\. /m);
   });
 
-  it("bolds lead-colon key-findings bullets and lists most relevant sources after the body, before the references", () => {
+  it("bolds lead-colon key-findings bullets and lists most relevant sources at the end of the executive summary", () => {
     const markdown = artefactMarkdown({
       title: "Report",
       summary: "Takeaway.",
@@ -315,9 +315,11 @@ describe("artefactMarkdown", () => {
     });
     expect(markdown).toContain("- **Universal breakfast helped:** eleven of fifteen evaluations reported higher uptake.");
     expect(markdown).toContain("- No colon on this line.");
-    // In the page's order (round 10, D2): after the body, before the references.
-    expect(markdown.indexOf("### Most relevant sources")).toBeGreaterThan(markdown.indexOf("### What works"));
-    expect(markdown.indexOf("### Most relevant sources")).toBeLessThan(markdown.indexOf("### References"));
+    // In the page's order (owner, round 11): after the key findings, before
+    // the Full report and its body.
+    expect(markdown.indexOf("### Most relevant sources")).toBeGreaterThan(markdown.indexOf("### Key findings"));
+    expect(markdown.indexOf("### Most relevant sources")).toBeLessThan(markdown.indexOf("## Full report"));
+    expect(markdown.indexOf("### Most relevant sources")).toBeLessThan(markdown.indexOf("### What works"));
     expect(markdown).toContain("**A breakfast study**");
   });
 });

@@ -663,11 +663,11 @@ describe("the live page looks like the final page (task 058, owner round 7)", ()
     expect(within(section).getByText("Relevant examples from the cited evidence.")).toBeInTheDocument();
     const cards = within(section).getAllByRole("listitem");
     expect(cards).toHaveLength(1);
-    // Ruled entries on the sheet, not boxes; the title an h4 under the
-    // section's h3 (round 10, findings 5 and 7).
-    expect(cards[0].parentElement).toHaveClass("divide-y", "border-t");
-    expect(cards[0]).toHaveClass("py-4");
-    expect(cards[0]).not.toHaveClass("border", "p-4");
+    // Each case study in its ruled card (owner, round 11); the title an h4
+    // under the section's h3 (round 10, finding 5).
+    expect(cards[0].parentElement).toHaveClass("grid", "gap-3");
+    expect(cards[0].parentElement).not.toHaveClass("divide-y");
+    expect(cards[0]).toHaveClass("border", "border-line", "p-4");
     expect(within(cards[0]).getByRole("heading", { level: 4, name: "Leeds pilot" })).toHaveClass("font-bold");
     expect(cards[0]).toHaveTextContent("Take-up rose after direct payment.");
     expect(within(section).queryByTestId("placeholder-lines")).toBeNull();
@@ -994,17 +994,21 @@ describe("round 8: the Result tab while it is written (task 058, owner notes 202
     expect(within(block).getByText("Sources cited most often in this report.")).toBeInTheDocument();
     const items = within(block).getAllByRole("listitem");
     expect(items).toHaveLength(1);
-    expect(items[0]).toHaveClass("py-4", "anim-rise");
-    expect(items[0]).not.toHaveClass("border");
+    // In the case studies' ruled card (owner, round 11).
+    expect(items[0]).toHaveClass("border", "border-line", "p-4", "anim-rise");
     expect(within(items[0]).getByText("Smith 2023")).toHaveClass("font-bold");
     expect(within(items[0]).getByText("The largest trial of direct payment.")).toBeInTheDocument();
     // Not links yet, no chips yet.
     expect(within(block).queryByRole("button")).toBeNull();
     expect(within(block).queryByText(/Cited by/)).toBeNull();
-    // Supporting material after the full report's sections, as the report
-    // sets it (round 10, D2).
+    // The executive summary's last part, before the full report's sections,
+    // as the report sets it (owner, round 11).
     expect(
       block.compareDocumentPosition(screen.getByRole("heading", { name: "Costs" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      block.compareDocumentPosition(screen.getByRole("heading", { name: "Key findings" })) &
         Node.DOCUMENT_POSITION_PRECEDING,
     ).toBeTruthy();
     expect(within(screen.getByRole("navigation")).getByRole("link", { name: "Most relevant sources" })).toHaveAttribute(

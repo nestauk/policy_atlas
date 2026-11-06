@@ -168,8 +168,9 @@ function scrollSectionIntoView(id: string): void {
 }
 
 /** Contents-nav click: record the hash without the browser scrolling to a
- *  still-collapsed heading, then tell the matching section to expand. */
-function requestOpenSection(id: string): void {
+ *  still-collapsed heading, then tell the matching section to expand. The
+ *  facts line's in-page links use it too. */
+export function requestOpenSection(id: string): void {
   const next = `#${id}`;
   if (window.location.hash !== next) {
     history.replaceState(
@@ -645,8 +646,38 @@ export function gatheredSectionShows(landscape: {
   );
 }
 
+/** The method's tables (owner, round 11): ruled rows at Body, the label
+ *  left and the figure right-aligned in one column of tabular figures, every
+ *  table one width so the figures line up down the section. */
+const GATHERED_TABLE_CLASS = "w-full max-w-[32rem] border-t border-line text-body";
+const GATHERED_CAPTION_CLASS = "pb-1.5 text-left font-semibold text-navy";
+const GATHERED_ROW_CLASS = "border-b border-line";
+const GATHERED_LABEL_CELL_CLASS = "py-1.5 pr-6 text-left align-top font-normal text-ink";
+const GATHERED_COUNT_CELL_CLASS = "whitespace-nowrap py-1.5 text-right align-top text-navy";
+
+/**
+ * The run's stages from the search to the report, in the Landscape funnel's
+ * words (`FUNNEL_STAGES`), each with its count; a stage without one is left
+ * out. Five rows: found, relevant (screened in), full text, shortlisted,
+ * cited (owner, round 11).
+ */
+export function gatheredCounts(
+  funnel: { found?: number | null; relevant?: number | null; read_in_full?: number | null; selected?: number | null; cited?: number | null } | undefined,
+): Array<[label: string, count: number]> {
+  if (funnel == null) return [];
+  const rows: Array<[string, number | null | undefined]> = [
+    ["Found", funnel.found],
+    ["Relevant", funnel.relevant],
+    ["Full text", funnel.read_in_full],
+    ["Shortlisted", funnel.selected],
+    ["Cited", funnel.cited],
+  ];
+  return rows.filter((row): row is [string, number] => typeof row[1] === "number");
+}
+
 export function GatheredSection({ taskId, id }: { taskId: string; id: string }) {
   const [open, setOpen] = useState(false);
+  const headingId = useId();
   useOpenWhenNavigated(id, setOpen);
   useExpandForPrint(setOpen);
   useExpandAll(setOpen);
@@ -674,46 +705,70 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
     typeof funnel.data.cited === "number"
       ? `${funnel.data.found} found → ${funnel.data.relevant} included → ${funnel.data.cited} cited`
       : null;
+  const counts = gatheredCounts(funnel.data);
 
   if (!gatheredSectionShows(landscape)) return null;
 
+  // The figure alone takes tabular figures: under them some faces widen the
+  // space before the word as well.
+  const countCell = (count: number) => (
+    <>
+      <span className="tabular-nums">{count}</span> {count === 1 ? "document" : "documents"}
+    </>
+  );
   return (
     <section id={id} className="mt-12 border-t border-line pt-6">
       <DisclosureHeading level={2} open={open} onToggle={() => setOpen((value) => !value)}>
-        {GATHERED_SECTION_TITLE}
+        <span id={headingId}>{GATHERED_SECTION_TITLE}</span>
       </DisclosureHeading>
+      {/* Shut, the one line under the heading at the References' size. */}
       {!open && funnelLine !== null && (
-        <p className="mt-1.5 text-body text-grey">{funnelLine}</p>
+        <p className="mt-1.5 text-lead text-grey max-md:text-body">{funnelLine}</p>
       )}
       {!open && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}
       {open && (
-        <div className="mt-3 space-y-4">
-          {funnelLine !== null && (
-            <p className="text-body text-navy">
-              {funnelLine}
-              <span className="text-grey">
-                {" "}
-                · this section covers only the cited sources —{" "}
-                <Link to={`/tasks/${taskId}/sources/landscape`} className={LINK_CLASS}>
-                  the Landscape tab
-                </Link>{" "}
-                shows the whole search
-              </span>
-            </p>
+        <div className="mt-4 space-y-6">
+          {/* The search to the report, one stage a row, the numbers in one
+              column (owner, round 11); the stages carry the Landscape
+              funnel's names. */}
+          {counts.length > 0 && (
+            <table aria-labelledby={headingId} className={GATHERED_TABLE_CLASS}>
+              <tbody>
+                {counts.map(([label, count]) => (
+                  <tr key={label} className={GATHERED_ROW_CLASS}>
+                    <th scope="row" className={GATHERED_LABEL_CELL_CLASS}>
+                      {label}
+                    </th>
+                    <td className={cn(GATHERED_COUNT_CELL_CLASS, "tabular-nums")}>{count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
+          <p className="max-w-prose-measure text-body text-grey">
+            The rest of this section covers only the cited sources;{" "}
+            <Link to={`/tasks/${taskId}/sources/landscape`} className={LINK_CLASS}>
+              the Landscape tab
+            </Link>{" "}
+            shows the whole search.
+          </p>
           {distributions.map((row) => (
             <div key={row.label}>
-              <p className={LABEL_CLASS}>{row.label}</p>
-              <ul className="mt-1 space-y-0.5">
-                {row.entries.slice(0, 8).map(([label, count]) => (
-                  <li key={label} className="flex items-baseline gap-2 text-body text-navy">
-                    <span className="min-w-0 flex-1 truncate">{scrub(label)}</span>
-                    <span className="text-grey">{count === 1 ? "1 document" : `${count} documents`}</span>
-                  </li>
-                ))}
-              </ul>
+              <table className={GATHERED_TABLE_CLASS}>
+                <caption className={GATHERED_CAPTION_CLASS}>{row.label}</caption>
+                <tbody>
+                  {row.entries.slice(0, 8).map(([label, count]) => (
+                    <tr key={label} className={GATHERED_ROW_CLASS}>
+                      <th scope="row" className={GATHERED_LABEL_CELL_CLASS}>
+                        {scrub(label)}
+                      </th>
+                      <td className={cn(GATHERED_COUNT_CELL_CLASS, "text-grey")}>{countCell(count)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
               {row.label === "Where published" && (
-                <p className="mt-1 text-body text-grey">
+                <p className="mt-2 max-w-prose-measure text-body text-grey">
                   {/* Task 031: the read model reads the publishing venue's country only —
                       never the authors' affiliations, and never where the study was set. */}
                   The country of the publishing venue, when the database reports it — not where
@@ -723,30 +778,29 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
             </div>
           ))}
           {(cited?.themes ?? []).length > 0 && (
-            <div>
-              <p className={LABEL_CLASS}>Key themes</p>
-              <ul className="mt-1 space-y-0.5">
+            <table className={GATHERED_TABLE_CLASS}>
+              <caption className={GATHERED_CAPTION_CLASS}>Key themes</caption>
+              <tbody>
                 {(cited?.themes ?? []).map((theme) => (
-                  <li key={theme.name} className="flex items-baseline gap-2 text-body text-navy">
-                    <span className="min-w-0 flex-1 truncate">{scrub(theme.name)}</span>
+                  <tr key={theme.name} className={GATHERED_ROW_CLASS}>
+                    <th scope="row" className={GATHERED_LABEL_CELL_CLASS}>
+                      {scrub(theme.name)}
+                    </th>
                     {/* The counts at the list's size, one style beside the
                         distributions' (round 10, finding 11). */}
-                    {theme.theme_id != null ? (
-                      <Link
-                        to={`/tasks/${taskId}/sources/all?theme=${theme.theme_id}`}
-                        className={`${LINK_CLASS} shrink-0 text-body`}
-                      >
-                        {theme.size === 1 ? "1 document →" : `${theme.size} documents →`}
-                      </Link>
-                    ) : (
-                      <span className="shrink-0 text-body text-grey">
-                        {theme.size === 1 ? "1 document" : `${theme.size} documents`}
-                      </span>
-                    )}
-                  </li>
+                    <td className={GATHERED_COUNT_CELL_CLASS}>
+                      {theme.theme_id != null ? (
+                        <Link to={`/tasks/${taskId}/sources/all?theme=${theme.theme_id}`} className={LINK_CLASS}>
+                          {countCell(theme.size)} →
+                        </Link>
+                      ) : (
+                        <span className="text-grey">{countCell(theme.size)}</span>
+                      )}
+                    </td>
+                  </tr>
                 ))}
-              </ul>
-            </div>
+              </tbody>
+            </table>
           )}
         </div>
       )}

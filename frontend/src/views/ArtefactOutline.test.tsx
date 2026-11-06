@@ -316,11 +316,13 @@ describe("AnnotatedProse bullets (fork B)", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(screen.getByText("universal provision")).toHaveClass("citation-marker");
     expect(screen.getByText("universal provision").closest("li")).not.toBeNull();
-    // The bullet is the Navy square, not the blue running-step mark, and the
-    // items stand apart (round 10, finding 8).
+    // The bullet is the Electric Blue square again (owner, round 11), on the
+    // first line's baseline and raised to the x-height, and the items stand
+    // apart (round 10, finding 8).
     const bullet = screen.getAllByRole("listitem")[0].querySelector("[data-bullet]");
-    expect(bullet).toHaveClass("bg-navy");
-    expect(bullet).not.toHaveClass("bg-blue");
+    expect(bullet).toHaveClass("bg-blue", "size-1.5", "relative", "bottom-[calc(0.5ex_-_3px)]");
+    expect(bullet).not.toHaveClass("bg-navy", "mt-2");
+    expect(screen.getAllByRole("listitem")[0]).toHaveClass("flex", "items-baseline");
     expect(screen.getAllByRole("listitem")[0].parentElement).toHaveClass("space-y-3");
   });
 

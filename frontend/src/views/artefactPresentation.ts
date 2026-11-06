@@ -597,10 +597,10 @@ function sectionsInReportOrder(sections: MarkdownSection[]): MarkdownSection[] {
 }
 
 /**
- * The report as a markdown file, in the page's order (round 10): the
+ * The report as a markdown file, in the page's order (rounds 10 and 11): the
  * question as the title (the generated title when there is none), the
- * executive summary (key findings, case studies), the full report (its
- * opening paragraph and body sections), the most relevant sources, then the
+ * executive summary (key findings, case studies, the most relevant sources),
+ * the full report (its opening paragraph and body sections), then the
  * references in the citation form. Unverified summaries are omitted (same
  * honesty as the on-screen callout).
  *
@@ -650,6 +650,15 @@ export function artefactMarkdown(artefact: MarkdownArtefact, question?: string |
       }
     }
   }
+  // The executive summary's last part, as on the page (owner, round 11).
+  lines.push(
+    ...markdownMostRelevantSources(
+      mergeMostRelevantNotes(
+        mostRelevantSources(artefact.sections),
+        artefact.most_relevant_notes,
+      ),
+    ),
+  );
   if (fullReportSections.length > 0) {
     lines.push("## Full report", "");
     const intro = fullReportIntro(fullReportSections.length, artefact.full_report_intro);
@@ -662,15 +671,6 @@ export function artefactMarkdown(artefact: MarkdownArtefact, question?: string |
       if (prose !== "") lines.push(prose, "");
     }
   }
-  // Supporting material, just before the references, as on the page (D2).
-  lines.push(
-    ...markdownMostRelevantSources(
-      mergeMostRelevantNotes(
-        mostRelevantSources(artefact.sections),
-        artefact.most_relevant_notes,
-      ),
-    ),
-  );
   const references = [...(artefact.references ?? [])].sort((left, right) => left.n - right.n);
   if (references.length > 0) {
     lines.push("### References", "");

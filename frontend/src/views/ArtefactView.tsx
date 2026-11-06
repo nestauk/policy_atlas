@@ -47,7 +47,15 @@ import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
-import { REPORT_ACTIONS_CLASS, REPORT_TITLE_CLASS, ReportFacts, ReportKindRow, ReportPage, type ReportFact } from "./reportPage";
+import {
+  REPORT_ACTIONS_CLASS,
+  REPORT_DATELINE_CLASS,
+  REPORT_TITLE_CLASS,
+  ReportFacts,
+  ReportKindRow,
+  ReportPage,
+  type ReportFact,
+} from "./reportPage";
 import { usePublicView } from "./publicView";
 import {
   DisclosureHeading,
@@ -390,7 +398,7 @@ export function CitationProvenanceBlock({
       )}
       <div className="mt-3 space-y-2 text-body">
         {context.isPending && (
-          <p role="status" className="anim-breathe text-body text-grey">
+          <p role="status" className="anim-breathe-soft text-body text-grey">
             Loading surrounding context…
           </p>
         )}
@@ -1022,6 +1030,15 @@ function renderLeadColonBullet(
   );
 }
 
+/** A key finding: the bullet, then the text, on the first line's baseline. */
+const KEY_FINDING_ITEM_CLASS = "flex items-baseline gap-2";
+
+/** The key findings' 6 px square, its middle on the text's x-height at any
+ *  size (owner, round 11: it sat high): baseline alignment puts its bottom
+ *  edge on the baseline, then it rises by half an `ex` less half its
+ *  height, so its centre sits half an `ex` above the baseline. */
+const KEY_FINDING_BULLET_CLASS = "relative bottom-[calc(0.5ex_-_3px)] size-1.5 shrink-0";
+
 /**
  * Render a block's prose with its annotation layer IN the text: span-anchored
  * claims wrap their exact prose span (overlapping/oversize spans are skipped
@@ -1076,20 +1093,22 @@ export function AnnotatedProse({
     if (current.length > 0) bullets.push(current);
     return (
       <div className={`max-w-prose-measure ${REPORT_BODY_CLASS}`}>
-        {/* The bullet is a Navy square, not the blue running-step mark; the
-            items stand apart (round 10, finding 8). `data-bullet` prints it
-            as a border, since print drops backgrounds. */}
+        {/* The bullet is an Electric Blue square (owner, round 11, reversing
+            round 10's Navy) centred on the text's x-height
+            (`KEY_FINDING_BULLET_CLASS`); the items stand apart (round 10,
+            finding 8). `data-bullet` prints it as a border, since print
+            drops backgrounds. */}
         <ul className="list-none space-y-3">
           {bullets.map((bullet, bulletIndex) => {
             const isGap = bullet.some(
               (segment) => segment.kind === "claim" && segment.claim.claim_type === "gap",
             );
             return (
-              <li key={bulletIndex} className="flex gap-2">
+              <li key={bulletIndex} className={KEY_FINDING_ITEM_CLASS}>
                 <span
                   aria-hidden="true"
                   data-bullet={isGap ? "gap" : ""}
-                  className={`mt-2 h-1.5 w-1.5 shrink-0 ${isGap ? "bg-yellow" : "bg-navy"}`}
+                  className={`${KEY_FINDING_BULLET_CLASS} ${isGap ? "bg-yellow" : "bg-blue"}`}
                 />
                 <span>{renderLeadColonBullet(bullet, onOpenClaim, live)}</span>
               </li>
@@ -1175,7 +1194,7 @@ export function SourceDossier({
          *  resolved, the dossier query is disabled and pending forever —
          *  isPending would render a stuck (and duplicate) loading line. */}
         {((!byId && evidence.isPending) || dossier.isLoading) && (
-          <p role="status" className="anim-breathe text-body text-grey">
+          <p role="status" className="anim-breathe-soft text-body text-grey">
             Loading the dossier…
           </p>
         )}
@@ -1692,8 +1711,8 @@ function DraftProse({
       <div data-testid="draft-prose" aria-hidden={ariaHidden || undefined} className={rootClass}>
         <ul className="list-none space-y-3">
           {blocks.map((runs, at) => (
-            <li key={at} className="flex gap-2">
-              <span aria-hidden="true" data-bullet="" className="mt-2 h-1.5 w-1.5 shrink-0 bg-navy" />
+            <li key={at} className={KEY_FINDING_ITEM_CLASS}>
+              <span aria-hidden="true" data-bullet="" className={`${KEY_FINDING_BULLET_CLASS} bg-blue`} />
               <span>{render(runs, at)}</span>
             </li>
           ))}
@@ -2471,9 +2490,9 @@ function useLiveReport(
   const entries: SidebarEntry[] = [
     ...(report ? [{ kind: "part" as const, id: EXECUTIVE_SUMMARY_ANCHOR, title: "Executive summary" }] : []),
     ...front.map(({ section, id }) => ({ id, title: sectionNavLabel({ title: section.title }, Infinity) })),
+    ...(notes.length > 0 ? [{ id: "sources", title: "Most relevant sources" }] : []),
     ...(report && body.length > 0 ? [{ kind: "part" as const, id: FULL_REPORT_ANCHOR, title: "Full report" }] : []),
     ...body.map(({ section, id }) => ({ id, title: sectionNavLabel({ title: section.title }, Infinity) })),
-    ...(notes.length > 0 ? [{ id: "sources", title: "Most relevant sources" }] : []),
     ...(references.length > 0 ? [{ id: "references", title: "References" }] : []),
   ];
 
@@ -2570,6 +2589,9 @@ function useLiveReport(
       </h2>
     ) : null,
     ...front.map(renderSection),
+    // The executive summary's last part, as on the committed page (owner,
+    // round 11).
+    <div key="most-relevant">{notes.length > 0 && <MostRelevantSources live sources={liveTopSources(notes)} level={level} />}</div>,
     <FullReportExpandProvider key="full-report">
       {report && body.length > 0 && (
         <div id={FULL_REPORT_ANCHOR} className="mb-6 mt-10 border-t border-line pt-4">
@@ -2601,8 +2623,6 @@ function useLiveReport(
         </div>
       )}
       {body.map(renderSection)}
-      {/* Supporting material, just before the references (round 10, D2). */}
-      <div key="most-relevant">{notes.length > 0 && <MostRelevantSources live sources={liveTopSources(notes)} level={level} />}</div>
       {references.length > 0 && <ReferencesSection references={references} defaultOpen />}
     </FullReportExpandProvider>,
     sheet?.panel ?? null,
@@ -2824,6 +2844,12 @@ function CaseStudyCardProse({
  * reply, in the report's card layout, with no evidence chips until the
  * committed report brings them.
  */
+/** The case studies' and the most relevant sources' cards: each entry a
+ *  ruled card (a Line hairline, 16 px inside), 12 px apart (owner, round 11:
+ *  back in boxes, as before round 10). */
+const REPORT_CARD_LIST_CLASS = "mt-3 grid gap-3";
+const REPORT_CARD_CLASS = "border border-line p-4";
+
 function CaseStudiesSection({
   section,
   id,
@@ -2859,16 +2885,19 @@ function CaseStudiesSection({
       {cards.length === 0 ? (
         pending
       ) : (
-        // Ruled entries on the sheet, not boxes on it (round 10, finding 7).
-        <ul role="list" className="mt-3 divide-y divide-line border-t border-line">
+        // Each case study in its own ruled card (owner, round 11, reversing
+        // round 10's ruled entries).
+        <ul role="list" className={REPORT_CARD_LIST_CLASS}>
           {cards.map((card, at) => {
             const { strength, design, sinceYear } = cardEvidenceMeta(card);
             return (
-              <li key={`${at}:${card.title}`} className={`py-4 ${live ? "anim-rise" : ""}`}>
+              <li key={`${at}:${card.title}`} className={`${REPORT_CARD_CLASS} ${live ? "anim-rise" : ""}`}>
                 <CardHeading className="text-lead font-bold text-navy max-md:text-body">{scrub(card.title)}</CardHeading>
                 <CaseStudyCardProse card={card} onOpenClaim={onOpenClaim} live={live} />
-                {/* Empty while live; the chips fade in with the committed report. */}
-                <div className={`mt-2 flex flex-wrap gap-1.5 ${arriving}`}>
+                {/* Empty while live; the chips fade in with the committed
+                    report. Hidden while empty, so the card's foot is its
+                    16 px padding. */}
+                <div className={`mt-2 flex flex-wrap gap-1.5 empty:hidden ${arriving}`}>
                   {strength != null && (
                     <AppraisalChip label={strength} evidenceType={design} />
                   )}
@@ -2913,10 +2942,10 @@ function MostRelevantSources({
     <section id="sources" className="mb-9">
       <Heading className={REPORT_SECTION_HEADING_CLASS}>Most relevant sources</Heading>
       <p className={`mt-1.5 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{MOST_RELEVANT_SOURCES_INTRO}</p>
-      {/* Ruled entries, as the case studies (round 10, finding 7). */}
-      <ul role="list" className="mt-3 divide-y divide-line border-t border-line">
+      {/* In the case studies' ruled card (owner, round 11). */}
+      <ul role="list" className={REPORT_CARD_LIST_CLASS}>
         {sources.map((source) => (
-          <li key={source.sourceId} className={`py-4 ${live ? "anim-rise" : ""}`}>
+          <li key={source.sourceId} className={`${REPORT_CARD_CLASS} ${live ? "anim-rise" : ""}`}>
             <p className={`${REPORT_BODY_CLASS} font-bold`}>
               {live || onOpenDossier === undefined ? (
                 scrub(source.title)
@@ -3293,11 +3322,11 @@ function ArtefactReport() {
           index: firstBodyIndex + index,
         }));
 
-  // The facts line (round 10, finding 2 and C4): Sources, Published, Last
-  // updated; the study types are the method section's, not repeated here.
-  // Sources links into the sources view, filtered to the cited set
-  // (028 F.5): there is no `status=cited` value, so the cited count routes
-  // through the boolean `cited=true` param.
+  // The facts line (round 10, finding 2 and C4): Sources and Published;
+  // the study types are the method section's, not repeated here, and the
+  // date has its own line under the title (owner, round 11). The sources
+  // count opens this page's References (owner, round 11, replacing the
+  // Sources tab's cited filter of 028 F.5), when the report has any.
   const facts: ReportFact[] = [];
   if (typeof snapshot?.source_count === "number" && typeof snapshot?.included === "number") {
     // Transcription trap 3: `source_count` is the cited/reference count —
@@ -3305,7 +3334,7 @@ function ArtefactReport() {
     facts.push([
       "Sources",
       `${snapshot.source_count} cited out of ${snapshot.included} included`,
-      `/tasks/${taskId}/sources/all?cited=true`,
+      (data.references ?? []).length > 0 ? "#references" : null,
     ]);
   }
   if (citedYears.length > 0) {
@@ -3318,9 +3347,6 @@ function ArtefactReport() {
   // deliberately no author line: the backend has no author for an artefact,
   // and inventing one would have the report assert something nobody wrote.
   const lastUpdated = task.data?.latest_run?.ended_at;
-  if (lastUpdated != null) {
-    facts.push(["Last updated", reportDateLabel(lastUpdated, new Date(), true), null]);
-  }
 
   const topSources = mergeMostRelevantNotes(
     mostRelevantSources(sections),
@@ -3345,6 +3371,9 @@ function ArtefactReport() {
           id: sectionAnchor(section.title, index),
           title: sectionNavLabel(section, Infinity),
         })),
+        // The last part of the executive summary (owner, round 11, reversing
+        // round 10's D2).
+        ...(topSources.length > 0 ? [{ id: "sources", title: "Most relevant sources" }] : []),
         ...(bodySections.length > 0
           ? [{ kind: "part" as const, id: FULL_REPORT_ANCHOR, title: "Full report" }]
           : []),
@@ -3352,7 +3381,6 @@ function ArtefactReport() {
           id: sectionAnchor(section.title, index),
           title: sectionNavLabel(section, Infinity),
         })),
-        ...(topSources.length > 0 ? [{ id: "sources", title: "Most relevant sources" }] : []),
       ];
   const outlineEntries: SidebarEntry[] = [
     ...outlineHead,
@@ -3410,6 +3438,12 @@ function ArtefactReport() {
                 the download (round 10, D1). A baseline keeps its own title
                 ("Do nothing: …"), which says what the profile is. */}
             <h1 className={REPORT_TITLE_CLASS}>{scrub(baseline ? data.title : (question ?? data.title))}</h1>
+            {/* The date on its own line under the title (owner, round 11). */}
+            {lastUpdated != null && (
+              <p className={cn(REPORT_DATELINE_CLASS, arriving)}>
+                Last updated <time dateTime={lastUpdated}>{reportDateLabel(lastUpdated, new Date(), true)}</time>
+              </p>
+            )}
             {/* One action line under the title, then the facts (round 10,
                 finding 9). */}
             {!isPublicView && (
@@ -3444,6 +3478,23 @@ function ArtefactReport() {
 
           ...frontSections.map(renderSection),
 
+          /* The executive summary's last part, above the Full report (owner,
+             round 11, reversing round 10's D2). A baseline writes no
+             most-relevant-source notes and cites few sources per section,
+             so the report's "cited most often" block would rank two or
+             three documents as if that were a finding. Report only (task
+             044). */
+          <div key="most-relevant" className={swap.hadNotes ? "" : arriving}>
+            {baseline ? null : (
+              <MostRelevantSources
+                sources={topSources}
+                onOpenDossier={openDossier}
+                arrivingClass={swap.hadNotes ? arriving : ""}
+                level={level}
+              />
+            )}
+          </div>,
+
           /* Full report part */
           <FullReportExpandProvider key="full-report">
             {bodySections.length > 0 &&
@@ -3473,22 +3524,6 @@ function ArtefactReport() {
               ))}
 
             {bodySections.map(renderSection)}
-
-            {/* Supporting material, just before the references (round 10,
-                D2). A baseline writes no most-relevant-source notes and
-                cites few sources per section, so the report's "cited most
-                often" block would rank two or three documents as if that
-                were a finding. Report only (task 044). */}
-            <div key="most-relevant" className={swap.hadNotes ? "" : arriving}>
-              {baseline ? null : (
-                <MostRelevantSources
-                  sources={topSources}
-                  onOpenDossier={openDossier}
-                  arrivingClass={swap.hadNotes ? arriving : ""}
-                  level={level}
-                />
-              )}
-            </div>
 
             {(data.references ?? []).length > 0 && (
               <ReferencesSection references={data.references ?? []} onOpenReference={openDossier} />

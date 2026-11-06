@@ -142,7 +142,8 @@ type Landscape = { isError: boolean; data?: Record<string, unknown> };
 function renderReport({
   landscape = { isError: false, data: { years: { 2019: 1, 2024: 2 }, evidence_types: { "Systematic Review and Meta-Analysis": 2 } } },
   publicView = false,
-}: { landscape?: Landscape; publicView?: boolean } = {}) {
+  funnel,
+}: { landscape?: Landscape; publicView?: boolean; funnel?: Record<string, number> } = {}) {
   vi.mocked(queries.useTask).mockReturnValue({
     data: {
       task_id: TASK_ID,
@@ -160,7 +161,7 @@ function renderReport({
     typeof queries.useConversations
   >);
   vi.mocked(queries.useLandscape).mockReturnValue(landscape as unknown as ReturnType<typeof queries.useLandscape>);
-  vi.mocked(queries.useFunnel).mockReturnValue({ data: undefined } as ReturnType<typeof queries.useFunnel>);
+  vi.mocked(queries.useFunnel).mockReturnValue({ data: funnel } as unknown as ReturnType<typeof queries.useFunnel>);
   vi.mocked(queries.useApiClient).mockReturnValue({} as ReturnType<typeof queries.useApiClient>);
   vi.mocked(queries.usePlan).mockReturnValue({ data: null } as unknown as ReturnType<typeof queries.usePlan>);
   vi.mocked(queries.useRuns).mockReturnValue({ data: undefined } as unknown as ReturnType<typeof queries.useRuns>);
@@ -201,6 +202,8 @@ describe("the committed report page (task 058, round 10)", () => {
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    // An in-page link records its hash; the next page opens clean.
+    history.replaceState(null, "", "/");
   });
 
   it("titles the page with the question and puts both actions on one line above the facts", () => {
@@ -216,42 +219,55 @@ describe("the committed report page (task 058, round 10)", () => {
     expect(plan.parentElement?.compareDocumentPosition(facts)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
-  it("states the facts on one line: sources as a link, the years, the date with its year, no study types", () => {
+  it("states the facts on one line: sources linking to the references, the years, no study types", async () => {
+    const user = userEvent.setup();
     renderReport();
     const facts = document.querySelector("header dl") as HTMLElement;
     const pairs = [...facts.querySelectorAll("dt")].map((dt) => `${dt.textContent}: ${dt.nextElementSibling?.textContent}`);
-    expect(pairs).toEqual([
-      "Sources: 12 cited out of 118 included",
-      "Published: 2019–2024",
-      "Last updated: 5 November 2026",
-    ]);
-    expect(within(facts).getByRole("link", { name: "12 cited out of 118 included" })).toHaveAttribute(
-      "href",
-      `/tasks/${TASK_ID}/sources/all?cited=true`,
-    );
+    expect(pairs).toEqual(["Sources: 12 cited out of 118 included", "Published: 2019–2024"]);
+    // The count opens this page's References, not the Sources tab (owner,
+    // round 11).
+    const count = within(facts).getByRole("link", { name: "12 cited out of 118 included" });
+    expect(count).toHaveAttribute("href", "#references");
     expect(facts).toHaveClass("text-meta");
     expect(screen.queryByText("Study types")).toBeNull();
+    const references = screen.getByRole("region", { name: "References" });
+    expect(within(references).queryByRole("list")).toBeNull();
+    await user.click(count);
+    expect(within(references).getByRole("list")).toBeInTheDocument();
+    expect(window.location.hash).toBe("#references");
   });
 
-  it("orders the page and its contents: most relevant sources just before the references, then the method", () => {
+  it("puts the date on its own line under the title, with its year", () => {
+    renderReport();
+    const title = screen.getByRole("heading", { level: 1 });
+    const dateline = title.nextElementSibling as HTMLElement;
+    expect(dateline).toHaveTextContent("Last updated 5 November 2026");
+    expect(dateline).toHaveClass("text-meta", "text-grey");
+    expect(dateline.querySelector("time")).toHaveTextContent("5 November 2026");
+    expect(document.querySelector("header dl")).not.toHaveTextContent("Last updated");
+  });
+
+  it("orders the page and its contents: most relevant sources ending the executive summary, the method last", () => {
     renderReport();
     const nav = screen.getByRole("navigation", { name: "Contents" });
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Executive summary",
       "Key findings",
       "Case studies",
+      // Back above the Full report (owner, round 11).
+      "Most relevant sources",
       "Full report",
       // In full: the sidebar wraps a long title rather than cutting it.
       "What families said about the cost of a school meal in the cities",
-      "Most relevant sources",
       "References",
       "How the evidence was gathered",
     ]);
+    const cases = screen.getByRole("heading", { name: "Case studies" });
     const sources = screen.getByRole("heading", { name: "Most relevant sources" });
-    const references = screen.getByRole("heading", { name: "References" });
-    const body = screen.getByRole("heading", { name: /What families said/ });
-    expect(body.compareDocumentPosition(sources) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(sources.compareDocumentPosition(references) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const fullReport = screen.getByRole("heading", { name: "Full report" });
+    expect(cases.compareDocumentPosition(sources) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(sources.compareDocumentPosition(fullReport) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("leaves the method out of the contents when its section will not render", () => {
@@ -259,6 +275,29 @@ describe("the committed report page (task 058, round 10)", () => {
     const nav = screen.getByRole("navigation", { name: "Contents" });
     expect(within(nav).queryByRole("link", { name: "How the evidence was gathered" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "How the evidence was gathered" })).toBeNull();
+  });
+
+  it("sets the method's counts as a ruled table, the figures in one column, under one heading", async () => {
+    const user = userEvent.setup();
+    renderReport({ funnel: { found: 312, relevant: 118, quality_checked: 90, read_in_full: 64, selected: 40, cited: 12 } });
+    const method = screen.getByRole("heading", { level: 2, name: "How the evidence was gathered" });
+    const section = method.closest("section") as HTMLElement;
+    // Shut: the one line, at the References' size.
+    expect(within(section).getByText("312 found → 118 included → 12 cited")).toHaveClass("text-lead", "max-md:text-body");
+    await user.click(within(method).getByRole("button"));
+    const counts = within(section).getByRole("table", { name: "How the evidence was gathered" });
+    const rows = within(counts)
+      .getAllByRole("row")
+      .map((row) => [...row.children].map((cell) => cell.textContent).join(" "));
+    // The Landscape funnel's names; quality-checked is not one of the five.
+    expect(rows).toEqual(["Found 312", "Relevant 118", "Full text 64", "Shortlisted 40", "Cited 12"]);
+    expect(within(counts).getAllByRole("cell").every((cell) => cell.classList.contains("tabular-nums"))).toBe(true);
+    expect(within(counts).getAllByRole("cell").every((cell) => cell.classList.contains("text-right"))).toBe(true);
+    // The plain sentence stays; the distributions are tables with captions,
+    // not headings, so the outline keeps one heading for the section.
+    expect(section).toHaveTextContent("The rest of this section covers only the cited sources; the Landscape tab shows the whole search.");
+    expect(within(section).getByRole("table", { name: "Evidence types" })).toBeInTheDocument();
+    expect(within(section).getAllByRole("heading")).toHaveLength(1);
   });
 
   it("outlines parts as h2 and their sections as h3, collapsible headings holding their button", () => {
@@ -273,9 +312,9 @@ describe("the committed report page (task 058, round 10)", () => {
       "H3 Key findings",
       "H3 Case studies",
       "H4 Leeds pilot",
+      "H3 Most relevant sources",
       "H2 Full report",
       "H3 What families said about the cost of a school meal in the cities",
-      "H3 Most relevant sources",
       "H2 References",
       "H2 How the evidence was gathered",
     ]);
@@ -312,12 +351,17 @@ describe("the committed report page (task 058, round 10)", () => {
     expect(within(card).getByText("RCTs and quasi-experimental studies")).toBeInTheDocument();
     const sources = screen.getByRole("heading", { name: "Most relevant sources" }).closest("section") as HTMLElement;
     expect(within(sources).getByText("Systematic review and meta-analysis")).toBeInTheDocument();
-    // The source title is a link to its dossier, the entries ruled, not boxed.
+    // The source title is a link to its dossier; each entry in the case
+    // studies' ruled card (owner, round 11).
     expect(within(sources).getByRole("link", { name: "School meals trial" })).toHaveAttribute(
       "href",
       expect.stringContaining("source=src-7"),
     );
-    expect(within(sources).getByRole("list")).toHaveClass("divide-y", "border-t");
+    expect(within(sources).getByRole("list")).toHaveClass("grid", "gap-3");
+    for (const entry of within(sources).getAllByRole("listitem")) {
+      expect(entry).toHaveClass("border", "border-line", "p-4");
+    }
+    expect(card).toHaveClass("border", "border-line", "p-4");
   });
 
   it("folds the contents under the title block on a phone, closing once a section is chosen", async () => {

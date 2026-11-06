@@ -2,7 +2,7 @@ import { Children, isValidElement, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import { scrub } from "../lib/scrub";
-import { ContentsSidebar, MobileContents, type SidebarEntry } from "./ArtefactOutline";
+import { ContentsSidebar, MobileContents, requestOpenSection, type SidebarEntry } from "./ArtefactOutline";
 import { READING_COLUMN_MAX_W } from "./listPageChrome";
 import { PANE_LABEL_CLASS } from "../ui/brand/label";
 import { PROSE_LINK_CLASS } from "../ui/brand/inlineActions";
@@ -77,6 +77,10 @@ export function ReportKindRow({ kind, tag, children }: { kind: string; tag?: Rea
 export const REPORT_TITLE_CLASS =
   "mt-1 text-display font-extrabold tracking-[-0.5px] text-navy max-md:text-title";
 
+/** The report's date on its own line under the title, Meta Grey (owner,
+ *  round 11: "Last updated 5 November 2026" left the facts line). */
+export const REPORT_DATELINE_CLASS = "mt-1 text-meta text-grey";
+
 /** The title's actions on one line ("See the plan", "Ask about this
  *  analysis"), before the facts line (round 10, finding 9). */
 export const REPORT_ACTIONS_CLASS = "print-hide mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1";
@@ -87,7 +91,9 @@ export type ReportFact = [label: string, value: string, href: string | null];
  * The report's facts under its title (round 10, finding 2): one line of
  * label and value pairs at Meta size, the label in Grey and the value in
  * Navy, wrapping onto a second line on a phone. A value with somewhere to
- * go is a link. Not a row of tiles (DESIGN.md: no KPI tiles).
+ * go is a link: a route, or a part of this page ("#references", owner,
+ * round 11), which opens that part as the contents do. Not a row of tiles
+ * (DESIGN.md: no KPI tiles).
  */
 export function ReportFacts({ facts }: { facts: ReportFact[] }) {
   if (facts.length === 0) return null;
@@ -97,7 +103,18 @@ export function ReportFacts({ facts }: { facts: ReportFact[] }) {
         <div key={label} className="flex gap-1.5">
           <dt className="text-grey">{label}</dt>
           <dd className="text-navy">
-            {href !== null ? (
+            {href !== null && href.startsWith("#") ? (
+              <a
+                href={href}
+                onClick={(event) => {
+                  event.preventDefault();
+                  requestOpenSection(href.slice(1));
+                }}
+                className={PROSE_LINK_CLASS}
+              >
+                {scrub(value)}
+              </a>
+            ) : href !== null ? (
               <Link to={href} className={PROSE_LINK_CLASS}>
                 {scrub(value)}
               </Link>
